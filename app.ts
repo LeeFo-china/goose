@@ -20,6 +20,6 @@ app.ready(() => {
   console.log(app.printRoutes());
 });
 
-app.listen({ port: Number(process.env.PORT) }, (err) => {
+app.listen({ port: Number(process.env.PORT), host: "0.0.0.0" }, (err) => {
   if (err) throw err;
 });

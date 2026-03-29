@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { SupabaseDB } from "@/utils/supabase/index.ts";
+import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import type { Tables, Inserts } from "@/types/db";
 

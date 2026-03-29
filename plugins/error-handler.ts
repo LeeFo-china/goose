@@ -1,7 +1,7 @@
 // src/plugins/error-handler.ts
 import type { FastifyPluginAsync } from "fastify";
 import { AppError } from "../errors/app-error";
-import { fail } from "@/utils/response.ts";
+import { fail } from "@/utils/response";
 import { ErrorCodes } from "../errors/error-codes";
 
 const errorHandler: FastifyPluginAsync = async (app) => {
