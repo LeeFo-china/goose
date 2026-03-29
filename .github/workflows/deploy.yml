@@ -1,35 +1,21 @@
-name: Deploy Fastify App
+name: Deploy
 
 on:
   push:
-    branches:
-      - main  # 仅在推送到 main 分支时触发
+    branches: [main]
 
 jobs:
   deploy:
-    runs-on: centos8
-
+    runs-on: self-hosted    # 使用自托管 runner
+    
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Deploy to Server via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          script: |
-            # 进入项目目录
-            cd /home/github-deploy/_work
-            
-            # 拉取最新代码
-            git pull origin main
-            
-            # 安装依赖 (生产环境)
-            bun install
-            bun dev
-            # 使用 PM2 重启应用
-            # 如果是第一次部署，先执行 pm2 start src/index.js --name "fastify-app"
-            pm2 reload all
+      
+      - name: Deploy
+        run: |
+          cd /home/github-deploy/_work
+          git pull origin main
+          bun install
+          bun run build
+          pm2 restart goose
