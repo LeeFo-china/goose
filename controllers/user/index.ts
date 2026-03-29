@@ -44,7 +44,7 @@ export default class UserController {
       throw Errors.dbError("数据库查询失败!", error);
     }
 
-    reply.send({
+    return reply.send({
       id,
       name: "test user" + request.query.name,
       data,
@@ -75,6 +75,6 @@ export default class UserController {
       .eq("id", record_id)
       .select();
 
-    reply.send({ data, error });
+    return reply.send({ data, error });
   }
 }
