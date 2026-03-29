@@ -12,6 +12,7 @@
  "scripts": {
   "dev": "bun --watch app.ts",
   "start": "bun app.ts",
+  "build": "bun build app.ts --outdir dist --target node",
   "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
 },
   "dependencies": {

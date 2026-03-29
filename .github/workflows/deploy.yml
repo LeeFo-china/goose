@@ -17,5 +17,5 @@ jobs:
           cd /home/github-deploy/_work/goose
           git pull origin main
           bun install
-          bun run dev
-          pm2 restart goose
+          bun run build
+          pm2 start dist/app.js --name goose
