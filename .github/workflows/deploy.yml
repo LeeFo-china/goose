@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted    # 使用自托管 runner
+    runs-on: self-hosted    #使用自托管 runner
     
     steps:
       - name: Checkout
@@ -14,8 +14,8 @@ jobs:
       
       - name: Deploy
         run: |
-          cd /home/github-deploy/_work
+          cd /home/github-deploy/_work/goose
           git pull origin main
           bun install
-          bun run build
+          bun run dev
           pm2 restart goose
