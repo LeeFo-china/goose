@@ -41,7 +41,7 @@ export default class UserController {
     const { data, error } = await SupabaseDB.from("admins").select();
 
     if (error) {
-      throw Errors.dbError("数据库查询失败!!!", error);
+      throw Errors.dbError("数据库查询失败!", error);
     }
 
     reply.send({
