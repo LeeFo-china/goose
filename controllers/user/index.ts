@@ -20,7 +20,7 @@ export default class UserController {
       throw Errors.badRequest("缺少 id");
     }
 
-    const { data, error } = await SupabaseDB.from("admins").select();
+    const { data, error } = await SupabaseDB.from(customerTableName).select();
 
     if (error) {
       throw Errors.dbError("数据库查询失败!", error);
