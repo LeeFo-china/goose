@@ -52,7 +52,7 @@ export default class UserController {
     const record_id = request.params.id;
     const record_data = request.body;
 
-    const { data, error } = await SupabaseDB.from("n8n_chat_histories")
+    const { data, error } = await customerTable
       .update(record_data)
       .eq("id", record_id)
       .select();
