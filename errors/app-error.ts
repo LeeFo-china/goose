@@ -1,17 +1,23 @@
 // src/errors/app-error.ts
+// 自定义 AppError 类
 export class AppError extends Error {
-  public readonly isOperational = true;
+  statusCode: number;
+  code: string;
+  details?: unknown;
 
   constructor(
-    public statusCode: number,
-    public override message: string,
-    public code: string,
-    public details?: unknown,
+    statusCode: number,
+    message: string,
+    code: string,
+    details?: unknown,
   ) {
     super(message);
-    this.name = "AppError";
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
 
+    // 保持 instanceof 正确
     Object.setPrototypeOf(this, new.target.prototype);
-    Error.captureStackTrace(this);
+    Error.captureStackTrace(this, this.constructor);
   }
 }

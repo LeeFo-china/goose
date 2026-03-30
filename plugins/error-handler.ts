@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { AppError } from "../errors/app-error";
 import { fail } from "@/utils/response";
 import { ErrorCodes } from "../errors/error-codes";
+import { ZodError } from "zod";
 
 const errorHandler: FastifyPluginAsync = async (app) => {
   app.setErrorHandler((error, request, reply) => {
@@ -26,6 +27,22 @@ const errorHandler: FastifyPluginAsync = async (app) => {
       return reply
         .status(error.statusCode)
         .send(fail(error.message, error.code, requestId, error.details));
+    }
+
+    if (error instanceof ZodError) {
+      const fieldErrors: Record<string, string[]> = {};
+
+      for (const issue of error.issues) {
+        const key = issue.path.join(".") || "root";
+        if (!fieldErrors[key]) fieldErrors[key] = [];
+        fieldErrors[key].push(issue.message);
+      }
+
+      return reply.status(400).send({
+        status: "fail",
+        message: "参数校验失败",
+        errors: fieldErrors,
+      });
     }
 
     // ✅ schema 验证错误
