@@ -1,12 +1,13 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import type { Tables, Inserts } from "@/types/db";
+import type { Tables, Inserts, Updates } from "@/types/db";
 
 const customerTableName = "customers" as const;
 
 type Customer = Tables<typeof customerTableName>;
 type CustomerInsert = Inserts<typeof customerTableName>;
+type CustomerUpdate = Updates<typeof customerTableName>;
 const customerTable = SupabaseDB.from(customerTableName);
 
 export default class UserController {
@@ -45,7 +46,7 @@ export default class UserController {
   }
 
   static async updateUser(
-    request: FastifyRequest<GetUserParams>,
+    request: FastifyRequest<{ Params: CustomerUpdate }>,
     reply: FastifyReply,
   ) {
     const record_id = request.params.id;
