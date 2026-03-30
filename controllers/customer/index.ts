@@ -46,10 +46,12 @@ export default class UserController {
     reply: FastifyReply,
   ) {
     const { name, phone } = request.body;
-    const { data, error } = await customerTable.insert({
-      name,
-      phone,
-    });
+    const { data, error } = await customerTable
+      .insert({
+        name,
+        phone,
+      })
+      .select();
 
     // if (error) {
     //   throw Errors.dbError("数据库插入失败", error);
