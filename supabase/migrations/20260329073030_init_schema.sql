@@ -4,11 +4,12 @@ create extension if not exists "pgcrypto";
 create table if not exists departments (
   id uuid primary key default gen_random_uuid(),
   name varchar(50) not null,
-  code varchar(50) unique,  created_at timestamp default now()
+  code varchar(50) unique,
+  created_at timestamp default now()
 );
 
 -- 员工
-create table if not exists employees (
+create table if not exists  employees (
   id uuid primary key default gen_random_uuid(),
   name varchar(50),
   phone varchar(20),
