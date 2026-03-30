@@ -21,6 +21,7 @@ export default class UserController {
     }
 
     const { data, error } = await customerTable.select();
+    console.log("fetch data success!!");
 
     if (error) {
       throw Errors.dbError("数据库查询失败!", error);
