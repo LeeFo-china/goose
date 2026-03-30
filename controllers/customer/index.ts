@@ -56,7 +56,7 @@ export default class UserController {
     // if (error) {
     //   throw Errors.dbError("数据库插入失败", error);
     // }
-    return { data, error };
+    return reply.status(201).send({ data, error });
   }
 
   static async updateUser(
