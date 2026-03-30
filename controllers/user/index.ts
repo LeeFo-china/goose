@@ -9,28 +9,9 @@ type Customer = Tables<typeof customerTableName>;
 type CustomerInsert = Inserts<typeof customerTableName>;
 const customerTable = SupabaseDB.from(customerTableName);
 
-type GetUserParams = {
-  Params: {
-    id: string;
-  };
-  Querystring: {
-    name: string;
-  };
-  Body: {
-    session_id: string;
-    message: string;
-  };
-};
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-  createdAt?: string;
-};
-
 export default class UserController {
   static async getUser(
-    request: FastifyRequest<GetUserParams>,
+    request: FastifyRequest<{ Params: Customer }>,
     reply: FastifyReply,
   ) {
     const { id } = request.params;
@@ -46,7 +27,7 @@ export default class UserController {
 
     return reply.send({
       id,
-      name: "test user" + request.query.name,
+      name: "test user" + request.params.name,
       data,
     });
   }
