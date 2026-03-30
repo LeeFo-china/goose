@@ -43,6 +43,9 @@ export default class UserController {
       phone,
     });
 
+    if (error) {
+      throw Errors.dbError("数据库插入失败", error);
+    }
     return { data, error };
   }
 
