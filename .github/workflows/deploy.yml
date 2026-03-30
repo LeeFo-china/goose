@@ -23,7 +23,7 @@ jobs:
           #cd $GITHUB_WORKSPACE
           pwd
           # 4. 执行安装
-          #cp /home/github-deploy/_work/goose/.env .env
+          cp /home/github-deploy/_work/.env .env
           bun install
           
           # 5. 优化 PM2 启动命令：
