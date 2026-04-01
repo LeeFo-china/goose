@@ -1,4 +1,4 @@
-import type { FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyRequest, FastifyReply, FastifyInstance } from "fastify";
 import type { RouteHandlerMethod } from "fastify";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Errors } from "@/errors/error-factory";
@@ -14,7 +14,7 @@ export abstract class BaseController<
   protected tableName: string;
   protected createSchema: TCreate;
   protected updateSchema: TUpdate;
-  protected idParamSchema = z.object({ id: z.string().uuid("无效的 ID 格式") });
+  protected idParamSchema = z.object({ id: z.uuid("无效的 ID 格式") });
 
   constructor(tableName: string, createSchema: TCreate, updateSchema: TUpdate) {
     this.tableName = tableName;
@@ -88,4 +88,9 @@ export abstract class BaseController<
     if (error) throw Errors.dbError("更新失败", error);
     return { data };
   };
+
+  public abstract registerExtraRoutes: (
+    fastify: FastifyInstance,
+    tableName: string,
+  ) => Promise<void>;
 }

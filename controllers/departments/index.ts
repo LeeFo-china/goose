@@ -3,6 +3,7 @@ import {
   CreateDepartmentSchema,
   UpdateDepartmentSchema,
 } from "@/schema/departments";
+import type { FastifyInstance } from "fastify";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 // const employeeTable = SupabaseDB.from("departments");
@@ -14,6 +15,11 @@ class DepartmentController extends BaseController<
   constructor() {
     super("departments", CreateDepartmentSchema, UpdateDepartmentSchema);
   }
+
+  public override registerExtraRoutes = async (
+    app: FastifyInstance,
+    tableName: string,
+  ): Promise<void> => {};
 }
 
 export default new DepartmentController();

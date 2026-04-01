@@ -1,9 +1,11 @@
-import type { FastifyPluginAsync, FastifyReply, FastifyError } from "fastify";
+import type {
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyError,
+  FastifyInstance,
+} from "fastify";
 import { createResourceRoutes } from "./factory";
-import userRoutes from "./customer";
 
-import departments from "./departments";
-import projects from "./projects";
 import PaymentController from "@/controllers/payment";
 import ProjectController from "@/controllers/projects";
 import DepartmentController from "@/controllers/departments";

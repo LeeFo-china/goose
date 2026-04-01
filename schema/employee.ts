@@ -25,6 +25,16 @@ export const EmployeeBaseSchema = z.object({
 
   // 部门 ID：关联外键，校验 UUID
   department_id: z.string().uuid("无效的部门 ID").nullable().optional(),
+  // ✅ 修正为对象传参
+  avatar: z.url({ message: "头像地址格式不正确" }).nullable(),
+
+  // ✅ 修正为对象传参，并建议开启 offset 以适配 Supabase 的时区字符串
+  last_login_time: z.iso
+    .datetime({
+      message: "登录时间必须是有效的 ISO 8601 格式",
+      offset: true, // 允许 +08:00 这种时区偏移格式
+    })
+    .nullable(),
 
   // 角色：建议使用枚举，防止乱填
   role: z

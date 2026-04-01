@@ -14,7 +14,7 @@ import {
 } from "@/schema/customer";
 
 import { BaseController } from "@/controllers/BaseController";
-
+import type { FastifyInstance } from "fastify";
 import { IdParamSchema } from "@/schema/request";
 
 const customerTableName = "customers" as const;
@@ -29,6 +29,11 @@ class CustomerController extends BaseController<
   constructor() {
     super("customers", CreateCustomerSchema, UpdateCustomerSchema);
   }
+
+  public override registerExtraRoutes = async (
+    app: FastifyInstance,
+    tableName: string,
+  ): Promise<void> => {};
 }
 
 export default new CustomerController(); // 导出实例

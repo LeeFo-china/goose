@@ -75,27 +75,33 @@ export type Database = {
       }
       employees: {
         Row: {
+          avatar: string | null
           created_at: string | null
           department_id: string | null
           id: string
+          last_login_time: string | null
           name: string | null
           phone: string | null
           role: string | null
           status: string | null
         }
         Insert: {
+          avatar?: string | null
           created_at?: string | null
           department_id?: string | null
           id?: string
+          last_login_time?: string | null
           name?: string | null
           phone?: string | null
           role?: string | null
           status?: string | null
         }
         Update: {
+          avatar?: string | null
           created_at?: string | null
           department_id?: string | null
           id?: string
+          last_login_time?: string | null
           name?: string | null
           phone?: string | null
           role?: string | null

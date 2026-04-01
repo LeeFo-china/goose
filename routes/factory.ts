@@ -1,4 +1,8 @@
-import type { FastifyPluginAsync, RouteHandlerMethod } from "fastify";
+import type {
+  FastifyPluginAsync,
+  RouteHandlerMethod,
+  FastifyInstance,
+} from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 
 /**
@@ -26,5 +30,7 @@ export const createResourceRoutes = (
 
     // 兼容旧习惯的 PUT
     fastify.put(`/${resourceName}/:id`, controller.update);
+
+    await controller.registerExtraRoutes(fastify, resourceName);
   };
 };
