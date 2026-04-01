@@ -82,6 +82,7 @@ export type Database = {
           last_login_time: string | null
           name: string | null
           phone: string | null
+          post_id: string | null
           role: string | null
           status: string | null
         }
@@ -93,6 +94,7 @@ export type Database = {
           last_login_time?: string | null
           name?: string | null
           phone?: string | null
+          post_id?: string | null
           role?: string | null
           status?: string | null
         }
@@ -104,6 +106,7 @@ export type Database = {
           last_login_time?: string | null
           name?: string | null
           phone?: string | null
+          post_id?: string | null
           role?: string | null
           status?: string | null
         }
@@ -113,6 +116,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
@@ -151,6 +161,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      posts: {
+        Row: {
+          base_salary: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          salary_type: string | null
+          sort: number | null
+          status: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          base_salary?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          salary_type?: string | null
+          sort?: number | null
+          status?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          base_salary?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          salary_type?: string | null
+          sort?: number | null
+          status?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       projects: {
         Row: {

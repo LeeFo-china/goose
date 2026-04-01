@@ -11,6 +11,7 @@ import ProjectController from "@/controllers/projects";
 import DepartmentController from "@/controllers/departments";
 import EmployeeController from "@/controllers/employee";
 import CustomerController from "@/controllers/customer";
+import PostsController from "@/controllers/posts";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.get("/", async (request, reply) => {
@@ -21,6 +22,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("departments", DepartmentController));
   app.register(createResourceRoutes("payments", PaymentController));
   app.register(createResourceRoutes("projects", ProjectController));
+  app.register(createResourceRoutes("posts", PostsController));
 };
 
 export default indexRoutes;
