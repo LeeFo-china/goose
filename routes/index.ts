@@ -1,8 +1,8 @@
 import type {
-  FastifyPluginAsync,
-  FastifyReply,
   FastifyError,
   FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
 } from "fastify";
 import { createResourceRoutes } from "./factory";
 
@@ -12,11 +12,16 @@ import DepartmentController from "@/controllers/departments";
 import EmployeeController from "@/controllers/employee";
 import CustomerController from "@/controllers/customer";
 import PostsController from "@/controllers/posts";
+import { WeChatController } from "@/controllers/wechat";
+
+const wechat = new WeChatController();
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.get("/", async (request, reply) => {
     return { hello: "world" };
   });
+
+  wechat.register(app);
   app.register(createResourceRoutes("customers", CustomerController));
   app.register(createResourceRoutes("employees", EmployeeController));
   app.register(createResourceRoutes("departments", DepartmentController));

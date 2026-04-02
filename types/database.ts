@@ -81,10 +81,12 @@ export type Database = {
           id: string
           last_login_time: string | null
           name: string | null
+          openid: string | null
           phone: string | null
           post_id: string | null
           role: string | null
           status: string | null
+          user_id: string | null
         }
         Insert: {
           avatar?: string | null
@@ -93,10 +95,12 @@ export type Database = {
           id?: string
           last_login_time?: string | null
           name?: string | null
+          openid?: string | null
           phone?: string | null
           post_id?: string | null
           role?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Update: {
           avatar?: string | null
@@ -105,10 +109,12 @@ export type Database = {
           id?: string
           last_login_time?: string | null
           name?: string | null
+          openid?: string | null
           phone?: string | null
           post_id?: string | null
           role?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -165,6 +171,7 @@ export type Database = {
       posts: {
         Row: {
           base_salary: number | null
+          code: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -176,6 +183,7 @@ export type Database = {
         }
         Insert: {
           base_salary?: number | null
+          code?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -187,6 +195,7 @@ export type Database = {
         }
         Update: {
           base_salary?: number | null
+          code?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -249,6 +258,8 @@ export type Database = {
       }
     }
     Functions: {
+      create_auth_for_employee: { Args: { emp_id: string }; Returns: string }
+      get_home_dashboard_stats: { Args: { user_uuid: string }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
