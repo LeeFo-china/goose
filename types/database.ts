@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      customer_follow_ups: {
+        Row: {
+          content: string
+          created_at: string | null
+          customer_id: string | null
+          employee_id: string | null
+          id: string
+          next_follow_at: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          customer_id?: string | null
+          employee_id?: string | null
+          id?: string
+          next_follow_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          customer_id?: string | null
+          employee_id?: string | null
+          id?: string
+          next_follow_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_follow_ups_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_follow_ups_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string | null
@@ -23,6 +65,7 @@ export type Database = {
           phone: string | null
           source: string | null
           status: string | null
+          tags: Json | null
         }
         Insert: {
           created_at?: string | null
@@ -32,6 +75,7 @@ export type Database = {
           phone?: string | null
           source?: string | null
           status?: string | null
+          tags?: Json | null
         }
         Update: {
           created_at?: string | null
@@ -41,6 +85,7 @@ export type Database = {
           phone?: string | null
           source?: string | null
           status?: string | null
+          tags?: Json | null
         }
         Relationships: [
           {
@@ -207,6 +252,51 @@ export type Database = {
         }
         Relationships: []
       }
+      project_logs: {
+        Row: {
+          content: string | null
+          created_at: string
+          employee_id: string
+          id: string
+          images: Json | null
+          node_name: string
+          project_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          employee_id: string
+          id?: string
+          images?: Json | null
+          node_name: string
+          project_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          employee_id?: string
+          id?: string
+          images?: Json | null
+          node_name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           address: string | null
@@ -215,6 +305,7 @@ export type Database = {
           customer_id: string | null
           id: string
           name: string | null
+          property_id: string | null
           status: string | null
         }
         Insert: {
@@ -224,6 +315,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           name?: string | null
+          property_id?: string | null
           status?: string | null
         }
         Update: {
@@ -233,11 +325,63 @@ export type Database = {
           customer_id?: string | null
           id?: string
           name?: string | null
+          property_id?: string | null
           status?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      properties: {
+        Row: {
+          area: number | null
+          building_info: string | null
+          community: string
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          latitude: number | null
+          layout: string | null
+          longitude: number | null
+        }
+        Insert: {
+          area?: number | null
+          building_info?: string | null
+          community: string
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          latitude?: number | null
+          layout?: string | null
+          longitude?: number | null
+        }
+        Update: {
+          area?: number | null
+          building_info?: string | null
+          community?: string
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          latitude?: number | null
+          layout?: string | null
+          longitude?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"

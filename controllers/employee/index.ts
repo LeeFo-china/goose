@@ -25,6 +25,7 @@ class EmployeeController extends BaseController<
     app.get(`/${tableName}/withdepartment/:id`, this.getByIdwithDepartment);
     app.get(`/${tableName}/withdepartment`, this.getEmployeesWithDepartment);
     app.get(`/homeinfo`, this.getHomeInfoFromRpc);
+    
   };
 
   private getHomeInfoFromRpc: RouteHandlerMethod = async (request, reply) => {
