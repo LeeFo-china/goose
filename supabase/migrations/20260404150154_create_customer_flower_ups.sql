@@ -10,4 +10,5 @@ CREATE TABLE IF NOT EXISTS public.customer_follow_ups (
   content text NOT NULL,
   next_follow_at timestamptz, -- 关键：下次联系提醒时间
   created_at timestamptz DEFAULT now()
+  
 );

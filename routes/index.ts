@@ -1,3 +1,4 @@
+//职位控制器
 import type {
   FastifyError,
   FastifyInstance,
@@ -13,6 +14,7 @@ import EmployeeController from "@/controllers/employee";
 import CustomerController from "@/controllers/customer";
 import PostsController from "@/controllers/posts";
 import { WeChatController } from "@/controllers/wechat";
+import { RpcController } from "@/controllers/common/rpc/get_home_dashboard_stats";
 
 const wechat = new WeChatController();
 
@@ -22,6 +24,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   });
 
   wechat.register(app);
+  RpcController.register(app);
   app.register(createResourceRoutes("customers", CustomerController));
   app.register(createResourceRoutes("employees", EmployeeController));
   app.register(createResourceRoutes("departments", DepartmentController));
