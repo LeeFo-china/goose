@@ -5,7 +5,7 @@ import { z } from "zod";
  */
 export const ProjectBaseSchema = z.object({
   // ID 由数据库生成
-  id: z.string().uuid("无效的项目 ID").optional(),
+  id: z.uuid("无效的项目 ID").optional(),
 
   // 项目名称：不能为空
   name: z
@@ -23,7 +23,7 @@ export const ProjectBaseSchema = z.object({
     .optional(),
 
   // 客户 ID：关联 customers 表，必须是 UUID
-  customer_id: z.string().uuid("请选择有效的客户").nullable().optional(),
+  customer_id: z.uuid("请选择有效的客户").nullable().optional(),
 
   // 项目地址
   address: z.string().trim().nullable().optional(),
@@ -36,7 +36,7 @@ export const ProjectBaseSchema = z.object({
     .default("planning"),
 
   // 创建时间
-  created_at: z.string().datetime("无效的时间格式").nullable().optional(),
+  created_at: z.iso.datetime("无效的时间格式").nullable().optional(),
 });
 
 /**

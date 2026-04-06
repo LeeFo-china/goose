@@ -11,11 +11,6 @@ class ProjectController extends BaseController<
   constructor() {
     super("projects", CreateProjectSchema, UpdateProjectSchema);
   }
-
-  public override registerExtraRoutes = async (
-    app: FastifyInstance,
-    tableName: string,
-  ): Promise<void> => {};
 }
 
 export default new ProjectController();

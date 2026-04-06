@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const CustomerSchema = z.object({
   // id 通常是数据库自动生成的 UUID 或数字，这里假设是 UUID 字符串
-  id: z.string().uuid("无效的 ID 格式").optional(),
+  id: z.uuid("无效的 ID 格式").optional(),
 
   // name 允许为 null，且最少 1 个字符
   name: z.string().min(1, "名称不能为空").nullable().optional(),
@@ -22,7 +22,7 @@ export const CustomerSchema = z.object({
   status: z.string().nullable().optional(),
 
   // created_at 是 ISO 时间字符串格式
-  created_at: z.string().datetime().nullable().optional(),
+  created_at: z.iso.datetime().nullable().optional(),
 });
 
 // 导出类型供 TypeScript 使用

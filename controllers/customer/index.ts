@@ -1,15 +1,15 @@
-import type { FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import type { Tables, Inserts, Updates } from "@/types/db";
+import type { Inserts, Tables, Updates } from "@/types/db";
 import type {
   CreateCustomerSchemaType,
   CustomerSchemaType,
   UpdateCustomerSchemaType,
 } from "@/schema/customer";
 import {
-  CustomerSchema,
   CreateCustomerSchema,
+  CustomerSchema,
   UpdateCustomerSchema,
 } from "@/schema/customer";
 
@@ -24,16 +24,12 @@ const customerTableName = "customers" as const;
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
-  typeof UpdateCustomerSchema
+  typeof UpdateCustomerSchema,
+  typeof CustomerSchema
 > {
   constructor() {
     super("customers", CreateCustomerSchema, UpdateCustomerSchema);
   }
-
-  public override registerExtraRoutes = async (
-    app: FastifyInstance,
-    tableName: string,
-  ): Promise<void> => {};
 }
 
 export default new CustomerController(); // 导出实例

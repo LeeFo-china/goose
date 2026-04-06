@@ -11,11 +11,6 @@ class PaymentController extends BaseController<
   constructor() {
     super("payments", CreatePaymentSchema, UpdatePaymentSchema);
   }
-
-  public override registerExtraRoutes = async (
-    app: FastifyInstance,
-    tableName: string,
-  ): Promise<void> => {};
 }
 
 export default new PaymentController();

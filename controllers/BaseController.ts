@@ -1,22 +1,30 @@
-import type { FastifyRequest, FastifyReply, FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RouteHandlerMethod } from "fastify";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { z } from "zod";
+import { Get, registerRoutes } from "@/utils/decorators/route"; // 导入装饰器
+
+import { fail, ResponseHandler, success } from "@/utils/response";
 
 type TTableReturn = ReturnType<SupabaseClient["from"]>;
 
 export abstract class BaseController<
-  TCreate extends z.ZodTypeAny, // 创建时的 Zod Schema
-  TUpdate extends z.ZodTypeAny, // 更新时的 Zod Schema
+  TCreate extends z.ZodTypeAny = any, // 创建时的 Zod Schema
+  TUpdate extends z.ZodTypeAny = any, // 更新时的 Zod Schema
+  T = any,
 > {
   protected tableName: string;
-  protected createSchema: TCreate;
-  protected updateSchema: TUpdate;
+  protected createSchema: TCreate | null;
+  protected updateSchema: TUpdate | null;
   protected idParamSchema = z.object({ id: z.uuid("无效的 ID 格式") });
 
-  constructor(tableName: string, createSchema: TCreate, updateSchema: TUpdate) {
+  constructor(
+    tableName: string,
+    createSchema: TCreate | null = null,
+    updateSchema: TUpdate | null = null,
+  ) {
     this.tableName = tableName;
     this.createSchema = createSchema;
     this.updateSchema = updateSchema;
@@ -37,7 +45,7 @@ export abstract class BaseController<
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
-    return { data };
+    return ResponseHandler.success<T>(data);
   };
 
   /**
@@ -48,23 +56,27 @@ export abstract class BaseController<
       .select()
       .order("created_at", { ascending: false });
     if (error) throw Errors.dbError("列表查询失败", error);
-    return { data };
+    return ResponseHandler.success<T[]>(data);
   };
 
   /**
    * 创建记录
    */
   create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const result = this.createSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
+    if (!this.createSchema) {
+      Errors.badRequest("缺少参数类型 ：createSchema");
+    } else {
+      const result = this.createSchema.safeParse(request.body);
+      if (!result.success) throw Errors.fromZod(result.error);
 
-    const { data, error } = await await SupabaseDB.from(this.tableName)
-      .insert(result.data)
-      .select()
-      .single();
+      const { data, error } = await await SupabaseDB.from(this.tableName)
+        .insert(result.data)
+        .select()
+        .single();
 
-    if (error) throw Errors.dbError("创建失败", error);
-    return reply.status(201).send({ data });
+      if (error) throw Errors.dbError("创建失败", error);
+      return ResponseHandler.success<T>(data);
+    }
   };
 
   /**
@@ -76,21 +88,28 @@ export abstract class BaseController<
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     // 2. 校验 Body
-    const result = this.updateSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
 
-    const { data, error } = await await SupabaseDB.from(this.tableName)
-      .update(result.data)
-      .eq("id", idVerify.data.id)
-      .select()
-      .single();
+    if (!this.updateSchema) {
+      Errors.badRequest("确实参数schema: pdateSchema");
+    } else {
+      const result = this.updateSchema.safeParse(request.body);
+      if (!result.success) throw Errors.fromZod(result.error);
 
-    if (error) throw Errors.dbError("更新失败", error);
-    return { data };
+      const { data, error } = await await SupabaseDB.from(this.tableName)
+        .update(result.data)
+        .eq("id", idVerify.data.id)
+        .select()
+        .single();
+
+      if (error) throw Errors.dbError("更新失败", error);
+      return ResponseHandler.success<T>(data);
+    }
   };
 
-  public abstract registerExtraRoutes: (
+  public registerExtraRoutes = (
     fastify: FastifyInstance,
-    tableName: string,
-  ) => Promise<void>;
+    tableName: string = "",
+  ) => {
+    registerRoutes(fastify, this);
+  };
 }

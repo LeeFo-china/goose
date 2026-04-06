@@ -1,3 +1,4 @@
+import "reflect-metadata"; // 必须在第一行
 import Fastify from "fastify";
 import AutoLoad from "@fastify/autoload";
 import { fileURLToPath } from "url";

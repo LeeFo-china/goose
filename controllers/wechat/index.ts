@@ -1,27 +1,34 @@
 // supabase/functions/wechat-login/WeChatController.ts
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase";
-export class WeChatController {
-    constructor() {}
+import { BaseController } from "@/controllers/BaseController";
+import { any } from "zod";
+import { Get } from "@/utils/decorators/route";
+
+export class WeChatController extends BaseController {
+    constructor() {
+        super("rpc", any, any);
+    }
 
     /**
      * 路由注册插件方法
      * 按照 Fastify 插件规范，接受 fastify 实例作为参数
      */
-    async register(fastify: FastifyInstance) {
-        // 路由：通过 code 获取 openid
-        fastify.post("/auth/openid", this.getOpenId.bind(this));
+    // async register(fastify: FastifyInstance) {
+    //     // 路由：通过 code 获取 openid
+    //     fastify.post("/auth/openid", this.getOpenId.bind(this));
 
-        // 路由：验证微信服务器配置 (Token验证)
-        fastify.get("/auth/verify", this.verifyServer.bind(this));
+    //     // 路由：验证微信服务器配置 (Token验证)
+    //     fastify.get("/auth/verify", this.verifyServer.bind(this));
 
-        // 路由：获取微信 JS-SDK 签名 (如果以后做 H5 需要)
-        fastify.get("/auth/js-config", this.getJsConfig.bind(this));
-    }
+    //     // 路由：获取微信 JS-SDK 签名 (如果以后做 H5 需要)
+    //     fastify.get("/auth/js-config", this.getJsConfig.bind(this));
+    // }
 
     /**
      * 核心方法：Code 换取 OpenID
      */
+    @Get("/auth/openid")
     async getOpenId(request: FastifyRequest, reply: FastifyReply) {
         const { code } = request.body as { code: string };
 
@@ -70,3 +77,5 @@ export class WeChatController {
         return reply.send({ message: "Implementation pending" });
     }
 }
+
+export default new WeChatController();
