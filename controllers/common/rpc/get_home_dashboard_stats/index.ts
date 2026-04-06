@@ -27,7 +27,7 @@ export class RpcController {
         reply: FastifyReply,
     ) {
         const { data, error } = await SupabaseDB.getClient().rpc(
-            "get_home_dashboard_stats9",
+            "get_home_dashboard_stats",
         );
 
         if (error) {
