@@ -1,7 +1,9 @@
 // src/utils/response.ts
-export function success(data: unknown, requestId: string) {
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { ApiResponse } from "@/types/api";
+
+export function success(data: unknown, requestId?: string) {
   return {
-    success: true,
     data,
     requestId,
   };
@@ -20,4 +22,30 @@ export function fail(
     details,
     requestId,
   };
+}
+
+export class ResponseHandler {
+  /**
+   * 成功返回
+   */
+  static success<T>(data: T, message: string = "success"): ApiResponse<T> {
+    return {
+      data,
+      message,
+    };
+  }
+
+  /**
+   * 错误返回
+   */
+  static error(
+    message: string = "error",
+    error: any = null,
+  ): ApiResponse<null> {
+    return {
+      data: null,
+      message,
+      error,
+    };
+  }
 }

@@ -2,6 +2,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase";
 import { Errors } from "@/errors/error-factory";
+import { fail, ResponseHandler, success } from "@/utils/response";
+import type { ApiResponse, HomeStatsResponse } from "@/types/api";
 
 export class RpcController {
     /**
@@ -25,15 +27,19 @@ export class RpcController {
         reply: FastifyReply,
     ) {
         const { data, error } = await SupabaseDB.getClient().rpc(
-            "get_home_dashboard_stats",
+            "get_home_dashboard_stats9",
         );
 
         if (error) {
             // 保持你原有的错误处理逻辑
-            throw Errors.dbError("call rpc get_home_dashboard_stats error");
+            throw Errors.dbError(
+                "call rpc get_home_dashboard_stats error",
+            );
         }
 
         // Fastify 会自动将 Object 序列化为 JSON 返回
-        return data;
+
+        // return { data: data, error: null, message: "success" };
+        return ResponseHandler.success<HomeStatsResponse>(data);
     }
 }
