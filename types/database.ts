@@ -67,6 +67,7 @@ export type Database = {
           source: string | null
           status: string | null
           tags: Json | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -78,6 +79,7 @@ export type Database = {
           source?: string | null
           status?: string | null
           tags?: Json | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -89,6 +91,7 @@ export type Database = {
           source?: string | null
           status?: string | null
           tags?: Json | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -495,7 +498,7 @@ export type Database = {
     }
     Functions: {
       create_auth_for_employee: { Args: { emp_id: string }; Returns: string }
-      get_home_dashboard_stats: { Args: { user_uuid: string }; Returns: Json }
+      get_home_dashboard_stats: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

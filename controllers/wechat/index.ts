@@ -44,8 +44,10 @@ export class WeChatController extends BaseController {
                 body: { code },
             },
         );
-        console.log("this is get wechat openid");
-        console.log(data);
+
+        if (data.error) {
+            return ResponseHandler.error("获取openid失败", data.data);
+        }
         return ResponseHandler.success(data);
     }
 
