@@ -5,8 +5,6 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 
-console.log("Hello from Functions!");
-
 // Deno.serve(async (req) => {
 //   const { name } = await req.json()
 //   const data = {
@@ -21,8 +19,8 @@ console.log("Hello from Functions!");
 
 Deno.serve(async (req) => {
   const { code } = await req.json();
-  const APPID = "wxbac3b1e168fd968a";
-  const SECRET = "f653f31849c068eb96e09d9127c923fa";
+  const APPID = Deno.env.get("wechat_appid");
+  const SECRET = Deno.env.get("wechat_secret");
 
   // 调用微信接口换取 openid
   const response = await fetch(

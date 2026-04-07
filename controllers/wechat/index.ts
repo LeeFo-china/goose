@@ -3,11 +3,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase";
 import { BaseController } from "@/controllers/BaseController";
 import { any } from "zod";
-import { Get } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
+import { ResponseHandler } from "@/utils/response";
 
 export class WeChatController extends BaseController {
     constructor() {
-        super("rpc", any, any);
+        super("wechat");
     }
 
     /**
@@ -28,8 +29,9 @@ export class WeChatController extends BaseController {
     /**
      * 核心方法：Code 换取 OpenID
      */
-    @Get("/auth/openid")
+    @Post("/auth/openid")
     async getOpenId(request: FastifyRequest, reply: FastifyReply) {
+        //获取openid的js代码部署字supabase的边缘函数
         const { code } = request.body as { code: string };
 
         if (!code) {
@@ -44,7 +46,7 @@ export class WeChatController extends BaseController {
         );
         console.log("this is get wechat openid");
         console.log(data);
-        return data;
+        return ResponseHandler.success(data);
     }
 
     /**

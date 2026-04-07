@@ -38,41 +38,6 @@ export const Post = createRouteDecorator("post");
 export const Put = createRouteDecorator("put");
 export const Delete = createRouteDecorator("delete");
 
-/**
- * 自动注册工具：读取类上的元数据并注册到 Fastify
- */
-// export function registerRoutes(fastify: any, controller: any) {
-//     const routes: RouteDefinition[] =
-//         Reflect.getMetadata(ROUTE_METADATA, controller) || [];
-
-//     routes.forEach((route) => {
-//         fastify[route.method](route.path, (request: any, reply: any) => {
-//             // 调用类上的静态方法
-//             return controller[route.handlerName](request, reply);
-//         });
-//     });
-// }
-
-// export function registerRoutes(fastify: any, controller: any) {
-//     const routes: RouteDefinition[] =
-//         Reflect.getMetadata(ROUTE_METADATA, controller) || [];
-
-//     if (routes.length === 0) {
-//         console.warn(`未在 ${controller.name} 中发现有效的路由装饰器`);
-//     }
-
-//     routes.forEach((route) => {
-//         console.log(
-//             `正在绑定路由: [${route.method.toUpperCase()}] ${route.path}`,
-//         );
-
-//         fastify[route.method](route.path, async (request: any, reply: any) => {
-//             // 💡 关键：直接调用类的静态方法
-//             return await controller[route.handlerName](request, reply);
-//         });
-//     });
-// }
-
 export function registerRoutes(fastify: any, target: any) {
     // 💡 适配点：如果传入的是实例，取其构造函数；如果传入的是类，直接使用
     const controller = typeof target === "function"
