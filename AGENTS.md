@@ -65,3 +65,10 @@ supabase gen types typescript --project-id X > types/database.ts  # gen types
 - No src/ directory - files at root level
 - package.json "module": "index.ts" but entry is app.ts (mismatch)
 - Both bun.lock and pnpm-lock.yaml present (use bun)
+
+## STRICT RULES
+1. 禁止在 `controllers/` 以外的地方直接编写数据库逻辑。
+2. 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
+
+## MCP TOOLS MAPPING
+- Database Queries: `mcp:supabase:query`
