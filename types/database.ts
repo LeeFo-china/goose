@@ -398,30 +398,39 @@ export type Database = {
           budget: number | null
           created_at: string | null
           customer_id: string | null
+          designer_id: string | null
           id: string
           name: string | null
           property_id: string | null
+          start_date: string | null
           status: string | null
+          supervisor_id: string | null
         }
         Insert: {
           address?: string | null
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
+          designer_id?: string | null
           id?: string
           name?: string | null
           property_id?: string | null
+          start_date?: string | null
           status?: string | null
+          supervisor_id?: string | null
         }
         Update: {
           address?: string | null
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
+          designer_id?: string | null
           id?: string
           name?: string | null
           property_id?: string | null
+          start_date?: string | null
           status?: string | null
+          supervisor_id?: string | null
         }
         Relationships: [
           {
@@ -432,10 +441,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "projects_designer_id_fkey"
+            columns: ["designer_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "projects_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -499,6 +522,7 @@ export type Database = {
     Functions: {
       create_auth_for_employee: { Args: { emp_id: string }; Returns: string }
       get_home_dashboard_stats: { Args: never; Returns: Json }
+      get_project_create_page_data: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

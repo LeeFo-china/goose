@@ -6,7 +6,9 @@ import { z } from "zod";
 export const ProjectBaseSchema = z.object({
   // ID 由数据库生成
   id: z.uuid("无效的项目 ID").optional(),
-
+  designer_id: z.string().trim().nullable().optional(),
+  supervisor_id: z.string().trim().nullable().optional(),
+  start_date: z.string().trim().nullable().optional(),
   // 项目名称：不能为空
   name: z
     .string("项目名称不能为空")
