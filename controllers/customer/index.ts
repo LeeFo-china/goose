@@ -56,7 +56,7 @@ class CustomerController extends BaseController<
     // id = "e3cfba5b-9808-40f2-b931-e72c5d9f5873"
     const { data, error } = await SupabaseDB.from("customer_follow_ups")
       .select().eq(
-        "employee_id",
+        "customer_id",
         id,
       );
 
