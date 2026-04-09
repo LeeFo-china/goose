@@ -37,3 +37,28 @@ export const UpdateCustomerSchema = CustomerSchema.partial();
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
 export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;
 export type UpdateCustomerSchemaType = z.infer<typeof UpdateCustomerSchema>;
+
+export const FollowUpSchema = z.object({
+  // 主键 ID 通常由数据库生成，所以设为可选
+  id: z.string().uuid().optional(),
+
+  // 跟进内容：必填，且至少 2 个字，避免空话
+  content: z.string().min(2, { message: "跟进内容不能为空" }),
+
+  // 关联 ID：通常必填，但在某些特定草稿状态下可能为 null
+  customer_id: z.string().uuid().nullable().optional(),
+  employee_id: z.string().uuid().nullable().optional(),
+
+  // 时间字段：
+  // .nullable() 允许为 null
+  // .optional() 允许在 Insert 对象中不传该 key
+  next_follow_at: z.iso.datetime().nullable().optional(),
+  created_at: z.string().datetime().nullable().optional(),
+});
+
+const FollowUpInsertSchema = FollowUpSchema.omit({
+  id: true,
+  created_at: true,
+});
+// 导出类型推导
+export type FollowUpInsert = z.infer<typeof FollowUpInsertSchema>;

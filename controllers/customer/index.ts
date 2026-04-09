@@ -18,6 +18,7 @@ import type { FastifyInstance } from "fastify";
 import { IdParamSchema } from "@/schema/request";
 import { Get, Post, registerRoutes } from "@/utils/decorators/route";
 import { fail, ResponseHandler, success } from "@/utils/response";
+import type { FollowUpInsert } from "@/schema/customer";
 
 const customerTableName = "customers" as const;
 
@@ -43,7 +44,7 @@ class CustomerController extends BaseController<
     ).single();
 
     if (error) {
-      Errors.dbError("get customers data by id error", error);
+      throw Errors.dbError("get customers data by id error", error);
     }
 
     return ResponseHandler.success(data);
@@ -60,9 +61,24 @@ class CustomerController extends BaseController<
       ).single();
 
     if (error) {
-      Errors.dbError("get customers data by id error", error);
+      throw Errors.dbError("get customers data by id error", error);
     }
 
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/customers/:id/follow_ups")
+  async createCustomerFollowUpById(request: FastifyRequest, reply: any) {
+    const { id } = request.params as { id: string }; // ← 这里拿到 UUID
+    const followUpData = request.body as FollowUpInsert;
+    // id = "e3cfba5b-9808-40f2-b931-e72c5d9f5873"
+    const { data, error } = await SupabaseDB.from("customer_follow_ups")
+      .insert(followUpData);
+
+    if (error) {
+      throw Errors.dbError("create follow up data error", error);
+    }
+    console.log(error);
     return ResponseHandler.success(data);
   }
 }
