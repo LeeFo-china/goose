@@ -56,9 +56,9 @@ class CustomerController extends BaseController<
     // id = "e3cfba5b-9808-40f2-b931-e72c5d9f5873"
     const { data, error } = await SupabaseDB.from("customer_follow_ups")
       .select().eq(
-        "id",
+        "employee_id",
         id,
-      ).single();
+      );
 
     if (error) {
       throw Errors.dbError("get customers data by id error", error);
@@ -73,7 +73,7 @@ class CustomerController extends BaseController<
     const followUpData = request.body as FollowUpInsert;
     // id = "e3cfba5b-9808-40f2-b931-e72c5d9f5873"
     const { data, error } = await SupabaseDB.from("customer_follow_ups")
-      .insert(followUpData);
+      .insert(followUpData).select().single();
 
     if (error) {
       throw Errors.dbError("create follow up data error", error);
