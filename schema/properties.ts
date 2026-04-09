@@ -41,5 +41,5 @@ export const CreatePropertySchema = PropertySchema.omit({
 
 // 更新房产时的校验：所有字段设为可选，但 id 必须存在
 export const UpdatePropertySchema = PropertySchema.partial().extend({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });

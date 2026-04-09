@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-3d63f763-224c-4770-b2c9-06c9f85416bb"
+      }
+    },
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=unqhypivjkpwldhufpjc",
+      "enabled": true
+    },
+    "taroify": {
+      "type": "local",
+
+      "command": ["npx", "-y", "@taroify/mcp"],
+      "enabled": true,
+      "environment": {}
+    }
+  }
+}

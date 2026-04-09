@@ -18,13 +18,13 @@ import RpcController from "@/controllers/common/rpc/get_home_dashboard_stats";
 import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_project_create_page_data";
 import PropertyControlle from "@/controllers/properties";
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
+  //
   app.get("/", async (request, reply) => {
     return { hello: "world" };
   });
 
   WeChatController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
-
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));
   app.register(createResourceRoutes("employees", EmployeeController));
