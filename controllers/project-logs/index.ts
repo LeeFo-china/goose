@@ -19,13 +19,14 @@ class ProjectLogController extends BaseController<
     super("project_logs", CreateProjectLogSchema, UpdateProjectLogSchema);
   }
 
-  @Get("/project-logs/project/:projectId")
+  @Get("/project_logs")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
+    console.log(request.query);
     const paramSchema = z.object({
-      projectId: z.string().uuid("无效的项目 ID"),
+      project_id: z.uuid("无效的项目 ID!!!!!"),
     });
 
-    const verify = paramSchema.safeParse(request.params);
+    const verify = paramSchema.safeParse(request.query);
     if (!verify.success) throw Errors.fromZod(verify.error);
 
     const { data, error } = await SupabaseDB.from(this.tableName)
@@ -33,10 +34,12 @@ class ProjectLogController extends BaseController<
         *,
         employee:employees(id, name, avatar)
       `)
-      .eq("project_id", verify.data.projectId)
-      .order("created_at", { ascending: false });
+      .eq("project_id", verify.data.project_id);
 
-    if (error) throw Errors.dbError("查询项目日志失败", error);
+    if (error) {
+      console.log(error);
+      throw Errors.dbError("查询项目日志失败", error);
+    }
 
     return ResponseHandler.success<any[]>(data);
   }
