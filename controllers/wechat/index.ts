@@ -15,6 +15,12 @@ type WeChatSessionResponse = {
   errmsg?: string;
 };
 
+type WechatIdentityRow = {
+  auth_user_id: string;
+  openid: string;
+  unionid: string | null;
+};
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
@@ -31,25 +37,37 @@ export class WeChatController extends BaseController {
       throw Errors.fromZod(bodyResult.error);
     }
 
+    request.log.info({ requestId: request.id }, "[auth] receive code");
+
+    request.log.info({ requestId: request.id }, "[auth] call wechat jscode2session start");
     const wxData = await this.getWeChatSession(bodyResult.data.code);
+    request.log.info({ requestId: request.id, hasOpenid: Boolean(wxData.openid), hasUnionid: Boolean(wxData.unionid) }, "[auth] call wechat jscode2session result");
+
     if (!wxData.openid) {
       throw Errors.badRequest("微信登录失败，未获取到 openid");
     }
 
-    const { user: authUser, isNewUser } = await this.getOrCreateAuthUser(
+    request.log.info({ requestId: request.id, openid: wxData.openid }, "[auth] parsed openid");
+
+    const { userId, isNewUser } = await this.getOrCreateAuthUser(
+      request,
       wxData.openid,
       wxData.unionid,
     );
-    const roles = await this.getUserRoles(authUser.id);
+
+    const roles = await this.getUserRoles(userId);
+
+    request.log.info({ requestId: request.id, userId, roles }, "[auth] sign jwt start");
     const token = signToken({
-      sub: authUser.id,
+      sub: userId,
       openid: wxData.openid,
       roles,
     });
+    request.log.info({ requestId: request.id, userId }, "[auth] sign jwt result");
 
     return ResponseHandler.success({
       token,
-      user_id: authUser.id,
+      user_id: userId,
       roles,
       is_new_user: isNewUser,
     }, "登录成功");
@@ -80,16 +98,28 @@ export class WeChatController extends BaseController {
     return wxData;
   }
 
-  private async getOrCreateAuthUser(openid: string, unionid?: string) {
+  private async getOrCreateAuthUser(
+    request: FastifyRequest,
+    openid: string,
+    unionid?: string,
+  ) {
     const adminClient = SupabaseDB.getAdminClient();
-    const existingUser = await this.findAuthUserByOpenId(openid);
+    request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
+    const existingIdentity = await this.findIdentityByOpenId(openid);
 
-    if (existingUser) {
+    request.log.info(
+      { requestId: request.id, openid, found: Boolean(existingIdentity), authUserId: existingIdentity?.auth_user_id },
+      "[auth] query user by openid result",
+    );
+
+    if (existingIdentity) {
       return {
-        user: existingUser,
+        userId: existingIdentity.auth_user_id,
         isNewUser: false,
       };
     }
+
+    request.log.info({ requestId: request.id, openid }, "[auth] create visitor user start");
 
     const { data, error } = await adminClient.auth.admin.createUser({
       email: `${openid}@wechat.local`,
@@ -106,42 +136,42 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败", error);
     }
 
+    const { error: identityError } = await adminClient.from("wechat_identities").upsert({
+      auth_user_id: data.user.id,
+      openid,
+      unionid: unionid || null,
+    });
+
+    if (identityError) {
+      throw Errors.dbError("创建微信身份映射失败", identityError);
+    }
+
+    request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
+
     return {
-      user: data.user,
+      userId: data.user.id,
       isNewUser: true,
     };
   }
 
-  private async findAuthUserByOpenId(openid: string) {
+  private async findIdentityByOpenId(openid: string) {
     const adminClient = SupabaseDB.getAdminClient();
-    let page = 1;
-    const perPage = 200;
+    const { data, error } = await adminClient
+      .from("wechat_identities")
+      .select("auth_user_id, openid, unionid")
+      .eq("openid", openid)
+      .maybeSingle<WechatIdentityRow>();
 
-    while (true) {
-      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
-      if (error) {
-        const message = error.status === 401 || error.message === "User not allowed"
-          ? "查询微信用户失败，请检查 SUPABASE_SERVICE_ROLE_KEY 是否正确配置"
-          : "查询微信用户失败";
-
-        throw Errors.dbError(message, {
-          status: error.status,
-          name: error.name,
-          message: error.message,
-        });
-      }
-
-      const matchedUser = data.users.find((user) => user.user_metadata?.openid === openid);
-      if (matchedUser) {
-        return matchedUser;
-      }
-
-      if (data.users.length < perPage) {
-        return null;
-      }
-
-      page += 1;
+    if (error) {
+      throw Errors.dbError("查询微信用户失败", {
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        message: error.message,
+      });
     }
+
+    return data;
   }
 
   private async getUserRoles(userId: string) {
