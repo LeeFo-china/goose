@@ -26,9 +26,6 @@ export abstract class BaseController<
     this.updateSchema = updateSchema;
   }
 
-  /**
-   * 获取单条记录
-   */
   getById: RouteHandlerMethod = async (request, reply) => {
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
