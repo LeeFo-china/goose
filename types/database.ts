@@ -14,33 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      customer_follow_ups: {
+        Row: {
+          content: string
+          created_at: string | null
+          customer_id: string | null
+          employee_id: string | null
+          id: string
+          next_follow_at: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          customer_id?: string | null
+          employee_id?: string | null
+          id?: string
+          next_follow_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          customer_id?: string | null
+          employee_id?: string | null
+          id?: string
+          next_follow_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_follow_ups_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_follow_ups_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string | null
           id: string
+          last_follow_at: string | null
           name: string | null
           owner_id: string | null
           phone: string | null
           source: string | null
           status: string | null
+          tags: Json | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
+          last_follow_at?: string | null
           name?: string | null
           owner_id?: string | null
           phone?: string | null
           source?: string | null
           status?: string | null
+          tags?: Json | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          last_follow_at?: string | null
           name?: string | null
           owner_id?: string | null
           phone?: string | null
           source?: string | null
           status?: string | null
+          tags?: Json | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -75,31 +126,46 @@ export type Database = {
       }
       employees: {
         Row: {
+          avatar: string | null
           created_at: string | null
           department_id: string | null
           id: string
+          last_login_time: string | null
           name: string | null
+          openid: string | null
           phone: string | null
+          post_id: string | null
           role: string | null
           status: string | null
+          user_id: string | null
         }
         Insert: {
+          avatar?: string | null
           created_at?: string | null
           department_id?: string | null
           id?: string
+          last_login_time?: string | null
           name?: string | null
+          openid?: string | null
           phone?: string | null
+          post_id?: string | null
           role?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Update: {
+          avatar?: string | null
           created_at?: string | null
           department_id?: string | null
           id?: string
+          last_login_time?: string | null
           name?: string | null
+          openid?: string | null
           phone?: string | null
+          post_id?: string | null
           role?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -109,13 +175,96 @@ export type Database = {
             referencedRelation: "departments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "employees_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_requests: {
+        Row: {
+          amount: number
+          audit_log: Json | null
+          category: string
+          created_at: string | null
+          current_step_role: string | null
+          employee_id: string
+          evidence_images: Json | null
+          id: string
+          mode: string
+          payment_id: string | null
+          project_id: string | null
+          reason: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount?: number
+          audit_log?: Json | null
+          category: string
+          created_at?: string | null
+          current_step_role?: string | null
+          employee_id: string
+          evidence_images?: Json | null
+          id?: string
+          mode: string
+          payment_id?: string | null
+          project_id?: string | null
+          reason: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          audit_log?: Json | null
+          category?: string
+          created_at?: string | null
+          current_step_role?: string | null
+          employee_id?: string
+          evidence_images?: Json | null
+          id?: string
+          mode?: string
+          payment_id?: string | null
+          project_id?: string | null
+          reason?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_requests_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
         ]
       }
       payments: {
         Row: {
           amount: number | null
           created_at: string | null
+          evidence_images: Json | null
+          handled_by: string | null
           id: string
+          pay_date: string | null
           project_id: string | null
           status: string | null
           type: string | null
@@ -123,7 +272,10 @@ export type Database = {
         Insert: {
           amount?: number | null
           created_at?: string | null
+          evidence_images?: Json | null
+          handled_by?: string | null
           id?: string
+          pay_date?: string | null
           project_id?: string | null
           status?: string | null
           type?: string | null
@@ -131,14 +283,108 @@ export type Database = {
         Update: {
           amount?: number | null
           created_at?: string | null
+          evidence_images?: Json | null
+          handled_by?: string | null
           id?: string
+          pay_date?: string | null
           project_id?: string | null
           status?: string | null
           type?: string | null
         }
         Relationships: [
           {
+            foreignKeyName: "payments_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "payments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          base_salary: number | null
+          code: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          salary_type: string | null
+          sort: number | null
+          status: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          base_salary?: number | null
+          code?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          salary_type?: string | null
+          sort?: number | null
+          status?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          base_salary?: number | null
+          code?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          salary_type?: string | null
+          sort?: number | null
+          status?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      project_logs: {
+        Row: {
+          content: string | null
+          created_at: string
+          employee_id: string
+          id: string
+          images: Json | null
+          node_name: string
+          project_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          employee_id: string
+          id?: string
+          images?: Json | null
+          node_name: string
+          project_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          employee_id?: string
+          id?: string
+          images?: Json | null
+          node_name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_logs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -152,31 +398,108 @@ export type Database = {
           budget: number | null
           created_at: string | null
           customer_id: string | null
+          designer_id: string | null
           id: string
           name: string | null
+          property_id: string | null
+          start_date: string | null
           status: string | null
+          supervisor_id: string | null
         }
         Insert: {
           address?: string | null
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
+          designer_id?: string | null
           id?: string
           name?: string | null
+          property_id?: string | null
+          start_date?: string | null
           status?: string | null
+          supervisor_id?: string | null
         }
         Update: {
           address?: string | null
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
+          designer_id?: string | null
           id?: string
           name?: string | null
+          property_id?: string | null
+          start_date?: string | null
           status?: string | null
+          supervisor_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_designer_id_fkey"
+            columns: ["designer_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      properties: {
+        Row: {
+          area: number | null
+          building_info: string | null
+          community: string
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          latitude: number | null
+          layout: string | null
+          longitude: number | null
+        }
+        Insert: {
+          area?: number | null
+          building_info?: string | null
+          community: string
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          latitude?: number | null
+          layout?: string | null
+          longitude?: number | null
+        }
+        Update: {
+          area?: number | null
+          building_info?: string | null
+          community?: string
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          latitude?: number | null
+          layout?: string | null
+          longitude?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
@@ -197,6 +520,9 @@ export type Database = {
       }
     }
     Functions: {
+      create_auth_for_employee: { Args: { emp_id: string }; Returns: string }
+      get_home_dashboard_stats: { Args: never; Returns: Json }
+      get_project_create_page_data: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

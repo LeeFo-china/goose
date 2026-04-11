@@ -1,76 +1,79 @@
-import type { FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import type { Tables, Inserts, Updates } from "@/types/db";
+import {
+  CreateCustomerSchema,
+  UpdateCustomerSchema,
+} from "@/schema/customer";
+import { BaseController } from "@/controllers/BaseController";
+import { Get, Post } from "@/utils/decorators/route";
+import { ResponseHandler } from "@/utils/response";
+import type { FollowUpInsert } from "@/schema/customer";
 
-const customerTableName = "customers" as const;
+// 继承基类
+class CustomerController extends BaseController<
+  typeof CreateCustomerSchema,
+  typeof UpdateCustomerSchema
+> {
+  constructor() {
+    super("customers", CreateCustomerSchema, UpdateCustomerSchema);
+  }
 
-type Customer = Tables<typeof customerTableName>;
-type CustomerInsert = Inserts<typeof customerTableName>;
-type CustomerUpdate = Updates<typeof customerTableName>;
-const customerTable = SupabaseDB.from(customerTableName);
+  @Get("/customers/:id/detail")
+  async getCustomerById(request: FastifyRequest<{ Params: { id: string } }>) {
+    const { id } = request.params; // ← 这里拿到 UUID
+    const { data, error } = await SupabaseDB.from("customers").select().eq(
+      "id",
+      id,
+    ).single();
 
-export default class UserController {
-  static async getUserById(
-    request: FastifyRequest<{ Params: Customer }>,
-    reply: FastifyReply,
+    if (error) {
+      throw Errors.dbError("get customers data by id error", error);
+    }
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/customers/:id/follow_ups")
+  async getCustomerFollowUpById(
+    request: FastifyRequest<{ Params: { id: string } }>,
+  ) {
+    const { id } = request.params; // ← 这里拿到 UUID
+    const { data, error } = await SupabaseDB.from("customer_follow_ups")
+      .select().eq(
+        "customer_id",
+        id,
+      );
+
+    if (error) {
+      throw Errors.dbError("get customers data by id error", error);
+    }
+
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/customers/:id/follow_ups")
+  async createCustomerFollowUpById(
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: FollowUpInsert;
+    }>,
   ) {
     const { id } = request.params;
-
-    if (!id) {
-      throw Errors.badRequest("缺少 id");
-    }
-    const { data, error } = await customerTable.select().eq("id", id);
-
-    if (error) {
-      throw Errors.dbError("数据库查询失败!", error);
-    }
-
-    return { data };
-  }
-
-  static async getUser(request: FastifyRequest, reply: FastifyReply) {
-    const { data, error } = await customerTable.select();
-
-    if (error) {
-      throw Errors.dbError("数据库查询失败!", error);
-    }
-
-    return reply.send({
-      data,
-    });
-  }
-
-  static async postUser(
-    request: FastifyRequest<{ Body: CustomerInsert }>,
-    reply: FastifyReply,
-  ) {
-    const { name, phone } = request.body;
-    const { data, error } = await customerTable
+    const followUpData = request.body;
+    const { data, error } = await SupabaseDB.from("customer_follow_ups")
       .insert({
-        name,
-        phone,
+        ...followUpData,
+        customer_id: id,
       })
-      .select();
+      .select()
+      .single();
 
-    // if (error) {
-    //   throw Errors.dbError("数据库插入失败", error);
-    // }
-    return { data, error };
-  }
-
-  static async updateUser(
-    request: FastifyRequest<{ Params: CustomerUpdate }>,
-    reply: FastifyReply,
-  ) {
-    const record_id = request.params.id;
-    const record_data = request.body;
-
-    const { data, error } = await customerTable
-      .update(record_data)
-      .eq("id", record_id)
-      .select();
-
-    return reply.send({ data, error });
+    if (error) {
+      throw Errors.dbError("create follow up data error", error);
+    }
+    return ResponseHandler.success(data);
   }
 }
+
+export default new CustomerController(); // 导出实例

@@ -2,31 +2,45 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/customer]
 
 jobs:
   deploy:
-    runs-on: self-hosted    #使用自托管 runner
+    runs-on: self-hosted
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
        
+      # 使用官方 Action 设置 Bun 环境，比手动 export 更稳健
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Deploy
         run: |
-          # 2. 必须显式加载环境变量（关键：Self-hosted Runner 默认不带这些路径）
-          export PATH="$HOME/.bun/bin:$PATH"
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          # 1. 打印当前环境信息（方便排错）
+          echo "Deploying to $GITHUB_WORKSPACE"
+          whoami
+          
+          # 2. 复制环境变量
+          # 注意：请确保此路径在 runner 用户下可读。
+          # 如果 .env 在 runner 家目录下，建议改为：cp /home/runner/.env .env
+          cp /home/runner/.env .env || echo ".env file not found, skipping cp"
 
-          # 3. 使用环境变量 $GITHUB_WORKSPACE 自动定位目录
-          #cd $GITHUB_WORKSPACE
-          pwd
-          # 4. 执行安装
-          cp /home/github-deploy/_work/.env .env
+          # 3. 安装依赖
           bun install
           
-          # 5. 优化 PM2 启动命令：
-          # - 使用 reload 实现平滑重启
-          # - 如果是第一次运行，reload 失败则执行 start
-          pm2 reload goose || pm2 start app.ts --interpreter ~/.bun/bin/bun --name "goose"
+          # 4. 确保 PM2 在路径中
+          # 如果 pm2 是全局安装在 root 下的，runner 可能找不到。
+          # 建议用 runner 用户执行过：npm install -g pm2
+          export PATH="$(npm config get prefix)/bin:$PATH"
+
+          # 5. 平滑重启
+          # --interpreter 确保 PM2 知道如何处理 .ts 文件
+          # --name 确保唯一性
+          pm2 reload goose || pm2 start app.ts --interpreter $(which bun) --name "goose"
+          
+          # 6. 保存 PM2 状态，防止服务器重启后丢失
+          pm2 save
