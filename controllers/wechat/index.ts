@@ -24,10 +24,8 @@ type WechatIdentityRow = {
 type LegacyAuthUser = {
   id: string;
   email?: string | null;
-  user_metadata?: {
-    openid?: string;
-    unionid?: string | null;
-  } | null;
+  openid?: string | null;
+  unionid?: string | null;
 };
 
 const WeChatAuthBodySchema = z.object({
@@ -152,7 +150,7 @@ export class WeChatController extends BaseController {
         const { error: identityError } = await adminClient.from("wechat_identities").upsert({
           auth_user_id: legacyUser.id,
           openid,
-          unionid: unionid || legacyUser.user_metadata?.unionid || null,
+          unionid: unionid || legacyUser.unionid || null,
         });
 
         if (identityError) {
@@ -217,35 +215,21 @@ export class WeChatController extends BaseController {
 
   private async findLegacyAuthUser(openid: string) {
     const adminClient = SupabaseDB.getAdminClient();
-    const targetEmail = `${openid}@wechat.local`;
-    let page = 1;
-    const perPage = 200;
+    const { data, error } = await adminClient.rpc("find_auth_user_by_openid", {
+      p_openid: openid,
+    });
 
-    while (true) {
-      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
-
-      if (error) {
-        throw Errors.dbError("查询历史微信用户失败", {
-          status: error.status,
-          name: error.name,
-          message: error.message,
-        });
-      }
-
-      const matchedUser = (data.users as LegacyAuthUser[]).find((user) => {
-        return user.email === targetEmail || user.user_metadata?.openid === openid;
+    if (error) {
+      throw Errors.dbError("查询历史微信用户失败", {
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        message: error.message,
       });
-
-      if (matchedUser) {
-        return matchedUser;
-      }
-
-      if (data.users.length < perPage) {
-        return null;
-      }
-
-      page += 1;
     }
+
+    const rows = Array.isArray(data) ? (data as LegacyAuthUser[]) : [];
+    return rows[0] || null;
   }
 
   private async getUserRoles(userId: string) {
