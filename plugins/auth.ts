@@ -11,7 +11,7 @@ function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requ
 
 const authPlugin = (app: FastifyInstance) => {
   app.addHook("onRequest", async (request, reply) => {
-    const url = request.url.split("?")[0];
+    const url = request.url.split("?")[0] ?? "/";
 
     // 白名单接口必须跳过鉴权，否则前端无法完成首次登录和静默续签。
     if (publicRoutes.has(url)) {
