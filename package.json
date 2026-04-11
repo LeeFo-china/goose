@@ -1,6 +1,6 @@
 {
   "name": "gooes",
-  "module": "index.ts",
+  "module": "app.ts",
   "type": "module",
   "private": true,
   "devDependencies": {

@@ -11,8 +11,8 @@ import { BaseController } from "@/controllers/BaseController";
 import { CreateEmployeeSchema, UpdateEmployeeSchema } from "@/schema/employee";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import { Get, registerRoutes } from "@/utils/decorators/route";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { Get } from "@/utils/decorators/route";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
 
 /**
@@ -39,7 +39,7 @@ class EmployeeController extends BaseController<
      * 构造函数指定表名为 "employees"
      * BaseController 会自动处理该表的 CRUD 路由注册
      */
-    super("employees");
+    super("employees", CreateEmployeeSchema, UpdateEmployeeSchema);
   }
 
   // ==================== 基础 CRUD ====================

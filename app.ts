@@ -17,10 +17,12 @@ app.register(AutoLoad, {
   dir: join(__dirname, "routes"),
 });
 
-app.ready(() => {
-  console.log(app.printRoutes());
-});
-
 app.listen({ port: Number(process.env.PORT), host: "0.0.0.0" }, (err) => {
   if (err) throw err;
+  
+  if (process.env.NODE_ENV === "development") {
+    console.log("\n📋 Registered Routes:");
+    console.log(app.printRoutes());
+    console.log("\n");
+  }
 });

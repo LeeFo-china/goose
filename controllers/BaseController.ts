@@ -1,14 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RouteHandlerMethod } from "fastify";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { z } from "zod";
-import { Get, registerRoutes } from "@/utils/decorators/route"; // 导入装饰器
-
-import { fail, ResponseHandler, success } from "@/utils/response";
-
-type TTableReturn = ReturnType<SupabaseClient["from"]>;
+import { registerRoutes } from "@/utils/decorators/route";
+import { ResponseHandler } from "@/utils/response";
 
 export abstract class BaseController<
   TCreate extends z.ZodTypeAny = any, // 创建时的 Zod Schema
@@ -64,19 +60,19 @@ export abstract class BaseController<
    */
   create = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!this.createSchema) {
-      Errors.badRequest("缺少参数类型 ：createSchema");
-    } else {
-      const result = this.createSchema.safeParse(request.body);
-      if (!result.success) throw Errors.fromZod(result.error);
-
-      const { data, error } = await await SupabaseDB.from(this.tableName)
-        .insert(result.data)
-        .select()
-        .single();
-
-      if (error) throw Errors.dbError("创建失败", error);
-      return ResponseHandler.success<T>(data);
+      throw Errors.badRequest("缺少参数类型：createSchema");
     }
+
+    const result = this.createSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .insert(result.data)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("创建失败", error);
+    return ResponseHandler.success<T>(data);
   };
 
   /**
@@ -90,20 +86,20 @@ export abstract class BaseController<
     // 2. 校验 Body
 
     if (!this.updateSchema) {
-      Errors.badRequest("确实参数schema: pdateSchema");
-    } else {
-      const result = this.updateSchema.safeParse(request.body);
-      if (!result.success) throw Errors.fromZod(result.error);
-
-      const { data, error } = await await SupabaseDB.from(this.tableName)
-        .update(result.data)
-        .eq("id", idVerify.data.id)
-        .select()
-        .single();
-
-      if (error) throw Errors.dbError("更新失败", error);
-      return ResponseHandler.success<T>(data);
+      throw Errors.badRequest("缺少参数类型：updateSchema");
     }
+
+    const result = this.updateSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .update(result.data)
+      .eq("id", idVerify.data.id)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("更新失败", error);
+    return ResponseHandler.success<T>(data);
   };
 
   public registerExtraRoutes = (

@@ -5,22 +5,44 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "@supabase/functions-js/edge-runtime.d.ts";
 
-// Deno.serve(async (req) => {
-//   const { name } = await req.json()
-//   const data = {
-//     message: `Hello ${name}!`,
-//   }
+declare const Deno: {
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void;
+  env: {
+    get: (key: string) => string | undefined;
+  };
+};
 
-//   return new Response(
-//     JSON.stringify(data),
-//     { headers: { "Content-Type": "application/json" } },
-//   )
-// })
+type WechatLoginRequest = {
+  code?: string;
+};
 
-Deno.serve(async (req) => {
-  const { code } = await req.json();
+Deno.serve(async (req: Request) => {
+  const { code } = (await req.json()) as WechatLoginRequest;
   const APPID = Deno.env.get("wechat_appid");
   const SECRET = Deno.env.get("wechat_secret");
+
+  if (!code) {
+    return new Response(
+      JSON.stringify({ error: "missing_code", message: "缺少 code" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  if (!APPID || !SECRET) {
+    return new Response(
+      JSON.stringify({
+        error: "missing_wechat_config",
+        message: "缺少微信环境变量配置",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
 
   // 调用微信接口换取 openid
   const response = await fetch(
