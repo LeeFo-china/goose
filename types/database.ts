@@ -507,6 +507,27 @@ export type Database = {
           },
         ]
       }
+      wechat_identities: {
+        Row: {
+          auth_user_id: string
+          created_at: string
+          openid: string
+          unionid: string | null
+        }
+        Insert: {
+          auth_user_id: string
+          created_at?: string
+          openid: string
+          unionid?: string | null
+        }
+        Update: {
+          auth_user_id?: string
+          created_at?: string
+          openid?: string
+          unionid?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       all_public_tables: {

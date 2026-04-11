@@ -21,6 +21,15 @@ type WechatIdentityRow = {
   unionid: string | null;
 };
 
+type LegacyAuthUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: {
+    openid?: string;
+    unionid?: string | null;
+  } | null;
+};
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
@@ -132,8 +141,40 @@ export class WeChatController extends BaseController {
       },
     });
 
-    if (error || !data.user) {
+    if (error) {
+      request.log.error(
+        { requestId: request.id, openid, error: { message: error.message, status: error.status, name: error.name } },
+        "[auth] create visitor user failed",
+      );
+
+      const legacyUser = await this.findLegacyAuthUser(openid);
+      if (legacyUser) {
+        const { error: identityError } = await adminClient.from("wechat_identities").upsert({
+          auth_user_id: legacyUser.id,
+          openid,
+          unionid: unionid || legacyUser.user_metadata?.unionid || null,
+        });
+
+        if (identityError) {
+          throw Errors.dbError("补建微信身份映射失败", identityError);
+        }
+
+        request.log.info(
+          { requestId: request.id, openid, userId: legacyUser.id },
+          "[auth] repaired legacy identity mapping",
+        );
+
+        return {
+          userId: legacyUser.id,
+          isNewUser: false,
+        };
+      }
+
       throw Errors.dbError("创建微信用户失败", error);
+    }
+
+    if (!data.user) {
+      throw Errors.dbError("创建微信用户失败");
     }
 
     const { error: identityError } = await adminClient.from("wechat_identities").upsert({
@@ -172,6 +213,39 @@ export class WeChatController extends BaseController {
     }
 
     return data;
+  }
+
+  private async findLegacyAuthUser(openid: string) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const targetEmail = `${openid}@wechat.local`;
+    let page = 1;
+    const perPage = 200;
+
+    while (true) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+
+      if (error) {
+        throw Errors.dbError("查询历史微信用户失败", {
+          status: error.status,
+          name: error.name,
+          message: error.message,
+        });
+      }
+
+      const matchedUser = (data.users as LegacyAuthUser[]).find((user) => {
+        return user.email === targetEmail || user.user_metadata?.openid === openid;
+      });
+
+      if (matchedUser) {
+        return matchedUser;
+      }
+
+      if (data.users.length < perPage) {
+        return null;
+      }
+
+      page += 1;
+    }
   }
 
   private async getUserRoles(userId: string) {
