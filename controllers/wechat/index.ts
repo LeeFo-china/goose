@@ -120,7 +120,15 @@ export class WeChatController extends BaseController {
     while (true) {
       const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
       if (error) {
-        throw Errors.dbError("查询微信用户失败", error);
+        const message = error.status === 401 || error.message === "User not allowed"
+          ? "查询微信用户失败，请检查 SUPABASE_SERVICE_ROLE_KEY 是否正确配置"
+          : "查询微信用户失败";
+
+        throw Errors.dbError(message, {
+          status: error.status,
+          name: error.name,
+          message: error.message,
+        });
       }
 
       const matchedUser = data.users.find((user) => user.user_metadata?.openid === openid);

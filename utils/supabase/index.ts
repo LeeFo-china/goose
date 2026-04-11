@@ -1,33 +1,31 @@
-// import { createClient } from "@supabase/supabase-js";
-
-// export class SupabaseDB {
-//   private static instance = createClient(
-//     process.env.SUPABASE_URL!,
-//     process.env.SUPABASE_PUBLISH!,
-//   );
-
-//   static getClient() {
-//     return this.instance;
-//   }
-// }
-
 import { createClient } from "@supabase/supabase-js";
 
+function requireEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`缺少环境变量: ${name}`);
+  }
+
+  return value;
+}
+
+const supabaseUrl = requireEnv("SUPABASE_URL");
+const supabasePublishKey = requireEnv("SUPABASE_PUBLISH");
+const supabaseServiceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+
 export class SupabaseDB {
-  private static client = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_PUBLISH!,
-  );
+  private static client = createClient(supabaseUrl, supabasePublishKey);
 
   private static adminClient = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISH!,
+    supabaseUrl,
+    supabaseServiceRoleKey,
     {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
-    }
+    },
   );
 
   static from(table: string) {
@@ -42,5 +40,4 @@ export class SupabaseDB {
     return this.adminClient;
   }
 }
-
 
