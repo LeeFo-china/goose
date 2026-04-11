@@ -19,11 +19,11 @@ class ProjectLogController extends BaseController<
     super("project_logs", CreateProjectLogSchema, UpdateProjectLogSchema);
   }
 
-  @Get("/project_logs")
+  @Get("/project_logs/projects")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
     console.log(request.query);
     const paramSchema = z.object({
-      project_id: z.uuid("无效的项目 ID!!!!!"),
+      project_id: z.uuid("无效的项目 ID!!!!!, 必须提供project_id=xxxxxx"),
     });
 
     const verify = paramSchema.safeParse(request.query);
