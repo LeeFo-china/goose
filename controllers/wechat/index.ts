@@ -4,6 +4,20 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import { z } from "zod";
+import { signToken } from "@/utils/jwt";
+
+type WeChatSessionResponse = {
+  openid?: string;
+  session_key?: string;
+  unionid?: string;
+  errcode?: number;
+  errmsg?: string;
+};
+
+const WeChatAuthBodySchema = z.object({
+  code: z.string().trim().min(1, "缺少 code"),
+});
 
 export class WeChatController extends BaseController {
   constructor() {
@@ -11,18 +25,38 @@ export class WeChatController extends BaseController {
   }
 
   @Post("/auth")
-  async getOpenId(
-    request: FastifyRequest<
-      { Body: { code?: string; login_type?: "employee" | "customer" } }
-    >,
-    reply: FastifyReply,
-  ) {
-    const { code, login_type } = request.body ?? {};
-
-    if (!code) {
-      throw Errors.badRequest("缺少 code");
+  async getOpenId(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = WeChatAuthBodySchema.safeParse(request.body);
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
     }
 
+    const wxData = await this.getWeChatSession(bodyResult.data.code);
+    if (!wxData.openid) {
+      throw Errors.badRequest("微信登录失败，未获取到 openid");
+    }
+
+    const { user: authUser, isNewUser } = await this.getOrCreateAuthUser(
+      wxData.openid,
+      wxData.unionid,
+    );
+    const roles = await this.getUserRoles(authUser.id);
+    const token = signToken({
+      sub: authUser.id,
+      openid: wxData.openid,
+      roles,
+    });
+
+    return ResponseHandler.success({
+      token,
+      user_id: authUser.id,
+      roles,
+      is_new_user: isNewUser,
+    }, "登录成功");
+  }
+
+  // 这里必须保留注释：微信 code 只能短时且单次使用，接口失败原因需要在服务端集中兜底，前端才能稳定触发静默重登。
+  private async getWeChatSession(code: string) {
     const appId = process.env.WECHAT_APPID;
     const secret = process.env.WECHAT_SECRET;
 
@@ -34,99 +68,96 @@ export class WeChatController extends BaseController {
       `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${secret}&js_code=${code}&grant_type=authorization_code`,
     );
 
-    const wxData = await wxResponse.json() as any;
+    if (!wxResponse.ok) {
+      throw Errors.dbError("调用微信登录接口失败", { status: wxResponse.status });
+    }
 
+    const wxData = await wxResponse.json() as WeChatSessionResponse;
     if (wxData.errcode) {
-      throw Errors.badRequest(`微信接口错误: ${wxData.errmsg}`);
+      throw Errors.badRequest(`微信接口错误: ${wxData.errmsg || wxData.errcode}`);
     }
 
-    const openid = wxData.openid;
+    return wxData;
+  }
+
+  private async getOrCreateAuthUser(openid: string, unionid?: string) {
     const adminClient = SupabaseDB.getAdminClient();
+    const existingUser = await this.findAuthUserByOpenId(openid);
 
-    const email = `${openid}@wechat.local`;
-    const password = `${openid}#${secret.substring(0, 8)}`;
-
-    let authUser;
-    let authSession;
-
-    const { data: signInData, error: signInError } = await adminClient.auth
-      .signInWithPassword({
-        email,
-        password,
-      });
-
-    if (signInError) {
-      const { data: signUpData, error: signUpError } = await adminClient.auth
-        .admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { openid },
-        });
-
-      if (signUpError) {
-        throw Errors.dbError("创建用户失败", signUpError);
-      }
-
-      const { data: newSignInData, error: newSignInError } = await adminClient
-        .auth.signInWithPassword({
-          email,
-          password,
-        });
-
-      if (newSignInError) {
-        throw Errors.dbError("自动登录失败", newSignInError);
-      }
-
-      authUser = newSignInData.user;
-      authSession = newSignInData.session;
-    } else {
-      authUser = signInData.user;
-      authSession = signInData.session;
+    if (existingUser) {
+      return {
+        user: existingUser,
+        isNewUser: false,
+      };
     }
 
-    let businessRole = null;
-
-    if (login_type === "employee") {
-      const { data: empData } = await adminClient
-        .from("employees")
-        .select("*")
-        .eq("user_id", authUser?.id)
-        .single();
-
-      if (!empData) {
-        throw Errors.badRequest("未绑定员工账号，请联系管理员");
-      }
-      businessRole = empData;
-    } else if (login_type === "customer") {
-      const { data: custData } = await adminClient
-        .from("customers")
-        .select("*")
-        .eq("user_id", authUser?.id)
-        .single();
-
-      if (!custData) {
-        const { data: newCustData, error: custError } = await adminClient
-          .from("customers")
-          .insert({ user_id: authUser?.id })
-          .select()
-          .single();
-
-        if (custError) {
-          throw Errors.dbError("创建客户档案失败", custError);
-        }
-        businessRole = newCustData;
-      } else {
-        businessRole = custData;
-      }
-    }
-
-    return ResponseHandler.success({
-      session: authSession,
-      user: authUser,
-      role_info: businessRole,
-      login_type: login_type || "visitor",
+    const { data, error } = await adminClient.auth.admin.createUser({
+      email: `${openid}@wechat.local`,
+      password: crypto.randomUUID(),
+      email_confirm: true,
+      user_metadata: {
+        openid,
+        unionid: unionid || null,
+        source: "wechat_miniprogram",
+      },
     });
+
+    if (error || !data.user) {
+      throw Errors.dbError("创建微信用户失败", error);
+    }
+
+    return {
+      user: data.user,
+      isNewUser: true,
+    };
+  }
+
+  private async findAuthUserByOpenId(openid: string) {
+    const adminClient = SupabaseDB.getAdminClient();
+    let page = 1;
+    const perPage = 200;
+
+    while (true) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+      if (error) {
+        throw Errors.dbError("查询微信用户失败", error);
+      }
+
+      const matchedUser = data.users.find((user) => user.user_metadata?.openid === openid);
+      if (matchedUser) {
+        return matchedUser;
+      }
+
+      if (data.users.length < perPage) {
+        return null;
+      }
+
+      page += 1;
+    }
+  }
+
+  private async getUserRoles(userId: string) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const roles: string[] = [];
+
+    const [{ data: employeeData }, { data: customerData }] = await Promise.all([
+      adminClient.from("employees").select("id").eq("user_id", userId).limit(1),
+      adminClient.from("customers").select("id").eq("user_id", userId).limit(1),
+    ]);
+
+    if ((employeeData || []).length > 0) {
+      roles.push("employee");
+    }
+
+    if ((customerData || []).length > 0) {
+      roles.push("customer");
+    }
+
+    if (roles.length === 0) {
+      roles.push("visitor");
+    }
+
+    return roles;
   }
 
   async verifyServer(request: FastifyRequest, reply: FastifyReply) {

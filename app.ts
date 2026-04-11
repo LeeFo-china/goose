@@ -4,6 +4,7 @@ import AutoLoad from "@fastify/autoload";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import errorHandler from "./plugins/error-handler";
+import authPlugin from "./plugins/auth";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +13,7 @@ const app = Fastify({
   logger: true,
 });
 app.register(errorHandler);
-// 注册所有路由
+authPlugin(app);
 app.register(AutoLoad, {
   dir: join(__dirname, "routes"),
 });

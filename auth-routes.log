@@ -1,0 +1,48 @@
+{"level":30,"time":1775907266362,"pid":72820,"hostname":"leefodeMacBook-Pro.local","msg":"Server listening at http://127.0.0.1:3002"}
+{"level":30,"time":1775907266363,"pid":72820,"hostname":"leefodeMacBook-Pro.local","msg":"Server listening at http://192.168.0.106:3002"}
+
+📋 Registered Routes:
+└── / (GET, HEAD)
+    ├── auth (POST)
+    ├── home_stats (GET, HEAD)
+    ├── c
+    │   ├── reate_project_page (POST)
+    │   └── ustomers (GET, HEAD, POST)
+    │       └── /
+    │           └── :id (GET, HEAD, PATCH, PUT)
+    │               └── /
+    │                   ├── detail (GET, HEAD)
+    │                   └── follow_ups (GET, HEAD, POST)
+    ├── employees (GET, HEAD, POST)
+    │   └── /
+    │       ├── with
+    │       │   ├── department (GET, HEAD)
+    │       │   │   └── /
+    │       │   │       └── :id (GET, HEAD)
+    │       │   └── post (GET, HEAD)
+    │       └── :id (GET, HEAD, PATCH, PUT)
+    ├── departments (GET, HEAD, POST)
+    │   └── /
+    │       └── :id (GET, HEAD, PATCH, PUT)
+    └── p
+        ├── ayments (GET, HEAD, POST)
+        │   └── /
+        │       └── :id (GET, HEAD, PATCH, PUT)
+        ├── ro
+        │   ├── ject
+        │   │   ├── s (GET, HEAD, POST)
+        │   │   │   └── /
+        │   │   │       └── :id (GET, HEAD, PATCH, PUT)
+        │   │   ├── -logs (GET, HEAD, POST)
+        │   │   │   └── /
+        │   │   │       └── :id (GET, HEAD, PATCH, PUT)
+        │   │   └── _logs/projects (GET, HEAD)
+        │   └── perties (GET, HEAD, POST)
+        │       └── /
+        │           └── :id (GET, HEAD, PATCH, PUT)
+        └── osts (GET, HEAD, POST)
+            └── /
+                └── :id (GET, HEAD, PATCH, PUT)
+
+
+
