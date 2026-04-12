@@ -19,15 +19,16 @@ const encoder = new TextEncoder();
 
 function toBase64Url(value: string | Uint8Array) {
   const input = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
-  return input.toString("base64url");
+  return input.toString("base64url" as BufferEncoding);
 }
 
 function fromBase64Url(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
+  return Buffer.from(value, "base64url" as BufferEncoding).toString("utf8");
 }
 
 function parseExpiresIn(expiresIn: string) {
   const normalized = expiresIn.trim();
+  const defaultExpiresIn = 7 * 24 * 60 * 60;
 
   if (/^\d+$/.test(normalized)) {
     return Number(normalized);
@@ -35,11 +36,17 @@ function parseExpiresIn(expiresIn: string) {
 
   const match = normalized.match(/^(\d+)([smhd])$/i);
   if (!match) {
-    return 7 * 24 * 60 * 60;
+    return defaultExpiresIn;
   }
 
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
+  const [, rawAmount, rawUnit] = match;
+
+  if (!rawAmount || !rawUnit) {
+    return defaultExpiresIn;
+  }
+
+  const amount = Number(rawAmount);
+  const unit = rawUnit.toLowerCase();
 
   const multipliers: Record<string, number> = {
     s: 1,
@@ -48,7 +55,13 @@ function parseExpiresIn(expiresIn: string) {
     d: 24 * 60 * 60,
   };
 
-  return amount * multipliers[unit];
+  const multiplier = multipliers[unit];
+
+  if (!multiplier) {
+    return defaultExpiresIn;
+  }
+
+  return amount * multiplier;
 }
 
 function getJwtSecret() {
@@ -62,7 +75,7 @@ function getJwtSecret() {
 }
 
 function signRaw(content: string, secret: string) {
-  return createHmac("sha256", secret).update(content).digest("base64url");
+  return createHmac("sha256", secret).update(content).digest("base64url" as import("crypto").BinaryToTextEncoding);
 }
 
 export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
@@ -97,6 +110,10 @@ export function verifyToken(token: string) {
   }
 
   const [encodedHeader, encodedPayload, signature] = parts;
+  if (!encodedHeader || !encodedPayload || !signature) {
+    return null;
+  }
+
   const expectedSignature = signRaw(`${encodedHeader}.${encodedPayload}`, secret);
   if (signature.length !== expectedSignature.length) {
     return null;

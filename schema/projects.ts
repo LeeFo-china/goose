@@ -9,6 +9,15 @@ export const ProjectBaseSchema = z.object({
   designer_id: z.string().trim().nullable().optional(),
   supervisor_id: z.string().trim().nullable().optional(),
   start_date: z.string().trim().nullable().optional(),
+  style_tags: z
+    .array(z.string().trim().min(1, "风格标签不能为空"))
+    .max(20, "风格标签不能超过 20 个")
+    .optional(),
+  visibility_status: z
+    .enum(["inherit", "public", "hidden"], {
+      message: "无效的展示状态",
+    })
+    .default("inherit"),
   // 项目名称：不能为空
   name: z
     .string("项目名称不能为空")
@@ -31,11 +40,21 @@ export const ProjectBaseSchema = z.object({
   address: z.string().trim().nullable().optional(),
 
   // 项目状态：建议使用枚举约束
-  status: z
-    .enum(["planning", "in_progress", "completed", "on_hold"], {
-      message: "无效的项目状态",
-    })
-    .default("planning"),
+  status: z.enum([
+    "lead",
+    "measure",
+    "quoted",
+    "negotiating",
+    "signed",
+    "designing",
+    "constructing",
+    "acceptance",
+    "completed",
+    "after_sale",
+    "invalid",
+  ], {
+    message: "无效的客户状态",
+  }).default("lead"),
 
   // 创建时间
   created_at: z.iso.datetime("无效的时间格式").nullable().optional(),
