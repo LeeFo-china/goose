@@ -7,6 +7,7 @@ import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
 import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
+import { sendSmsCode } from "@/services/sms";
 
 type WeChatSessionResponse = {
   openid?: string;
@@ -137,6 +138,20 @@ export class WeChatController extends BaseController {
 
     if (error) {
       throw Errors.dbError("保存验证码失败", error);
+    }
+
+    try {
+      await sendSmsCode(phone, code, scene);
+    } catch (smsError) {
+      await adminClient
+        .from("sms_verification_codes")
+        .delete()
+        .eq("phone", phone)
+        .eq("scene", scene)
+        .eq("code", code)
+        .eq("status", "pending");
+
+      throw Errors.dbError("发送验证码失败", smsError);
     }
 
     request.log.info({ requestId: request.id, phone, scene, code }, "[auth] sms verification code generated");
@@ -396,6 +411,10 @@ export class WeChatController extends BaseController {
     }
 
     const customer = data[0];
+    if (!customer) {
+      throw Errors.badRequest("该手机号未绑定客户身份");
+    }
+
     if (customer.user_id && customer.user_id !== authUserId) {
       throw Errors.badRequest("该客户档案已绑定其他账号");
     }
@@ -430,6 +449,10 @@ export class WeChatController extends BaseController {
     }
 
     const employee = data[0];
+    if (!employee) {
+      throw Errors.badRequest("该手机号未绑定员工身份");
+    }
+
     if (employee.user_id && employee.user_id !== authUserId) {
       throw Errors.badRequest("该员工档案已绑定其他账号");
     }

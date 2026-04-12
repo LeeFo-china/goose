@@ -16,6 +16,11 @@
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
   },
   "dependencies": {
+    "@alicloud/credentials": "^2.4.4",
+    "@alicloud/dysmsapi20170525": "4.5.1",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/tea-typescript": "^1.8.0",
+    "@alicloud/tea-util": "^1.4.11",
     "@fastify/autoload": "^6.3.1",
     "@supabase/supabase-js": "^2.100.0",
     "fastify": "^5.8.4",
