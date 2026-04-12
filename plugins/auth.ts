@@ -3,7 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
 
-const publicRoutes = new Set(["/", "/auth"]);
+const publicRoutes = new Set(["/", "/auth", "/auth/send-code"]);
 
 function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requestId: string) {
   return fail(appError.message, appError.code, requestId, appError.details);

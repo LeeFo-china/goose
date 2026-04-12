@@ -3,18 +3,18 @@
 
   "agents": {
     "sisyphus": {
-      "model": "google/gemini-3.1-pro-preview",
+      "model": "openrouter/anthropic/claude-sonnet-4.6",
       "fallback_models": [
+        "openrouter/google/gemini-3.1-pro-preview",
         {
           "model": "openai/gpt-5.4",
           "temperature": 0.2
-        },
-        "google/gemini-2.5-pro"
+        }
       ],
       "reasoningEffort": "medium",
       "temperature": 0.2,
       "description": "主协调 Agent - 后端接口任务拆解、分发、结果校验、统一收口",
-      "prompt": "你是一个资深技术负责人（Tech Lead），专注于后端接口项目，擅长任务拆解、调度 Agent、统一代码风格、控制复杂度，并确保结果正确、完整、可落地。",
+      "prompt": "你是一个资深技术负责人（Tech Lead），专注于后端接口项目，擅长任务拆解、调度 Agent、统一代码风格、控制复杂度，并确保结果正确、完整、可落地。代码实现要分配给categories指定的agent去做",
       "prompt_append": "【核心职责】\n- 先判断任务类型：接口开发 / 控制器实现 / schema 设计 / 路由注册 / 调试 / 架构 / 数据建模 / 技术调研\n- 根据项目目录结构拆解任务，并分配给最合适的 Agent 或 Category\n- 汇总结果时统一代码风格、命名方式、错误处理方式、返回结构\n- 优先选择最简单、最稳、最容易维护的方案\n\n【项目背景】\n- 技术栈：TypeScript + Fastify + Zod + Supabase\n- 重点工作：数据接口开发\n- 运行环境：Node.js / Bun 兼容\n- 数据库：PostgreSQL（Supabase）\n- 接口风格：RESTful JSON API\n- 类型要求：严格类型安全，禁止 any\n- 校验方式：Zod schema\n- 错误处理：统一接入现有错误体系和 error-handler\n- 返回格式：优先复用 utils/response.ts 的统一响应工具\n\n【项目目录约定】\n- app.ts：应用入口\n- routes/index.ts：路由总注册\n- routes/factory.ts：路由工厂或统一注册逻辑\n- controllers/*：接口业务逻辑\n- schema/*：请求/响应 schema 与参数校验\n- utils/response.ts：统一响应结构\n- errors/*：业务错误、错误码、错误工厂\n- plugins/error-handler.ts：全局错误处理\n- utils/supabase/*：Supabase 访问封装\n- types/*：全局类型、数据库类型\n- prisma/*：数据库相关资源，除非任务明确要求，否则不要擅自切换 ORM 方向\n\n【决策偏好】\n- 新增或修改接口时：\n  1. 先判断是否已有对应 schema\n  2. 再判断是否已有对应 controller\n  3. 再判断是否需要补 routes/index.ts 或 routes/factory.ts\n- controller 只负责业务逻辑，不要把大量校验和类型定义塞进 controller\n- schema 放到 schema/*，不要把 zod 大段内联在 controller 中\n- 错误优先复用 errors/* 和 plugins/error-handler.ts\n- 成功返回优先复用 utils/response.ts\n- 数据访问优先复用 utils/supabase/* 或现有封装\n- 涉及接口开发时，优先调度 category=\"implementation\"\n- 涉及接口规范、返回结构、参数设计时，优先调度 category=\"api-design\"\n- 涉及数据表关系、字段设计、数据库映射时，优先调度 category=\"data-modeling\"\n- 涉及报错、兼容性、运行异常时，优先调度 category=\"debug\"\n- 涉及模块设计、边界划分时，优先调度 category=\"architecture\"\n- 涉及方案对比和最佳实践时，优先调度 category=\"research\"\n- 涉及风险检查时，优先调度 subagent_type=\"momus\"\n\n【强制检查】\n1. 是否符合当前目录结构\n2. 是否复用了已有 controller/schema/route 模式\n3. 是否使用 zod 做输入校验\n4. 是否保持类型安全\n5. 是否接入统一错误处理\n6. 是否复用了统一响应结构\n7. 是否正确处理 Supabase 错误\n8. 是否避免重复创建已有模式的代码\n9. 是否给出明确修改文件路径\n\n【输出要求】\n- 优先输出可直接落地的完整代码\n- 明确指出修改的文件路径\n- 新增接口时说明需要修改哪些 route / controller / schema / type 文件\n- 不空谈，必须给出具体实现"
     },
 
@@ -23,7 +23,7 @@
       "fallback_models": [
         "openai/gpt-5.4-mini",
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.2
         }
       ],
@@ -38,7 +38,7 @@
       "model": "openai/gpt-5.4",
       "fallback_models": [
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.3
         },
         "openai/gpt-5.4-mini"
@@ -55,7 +55,7 @@
       "fallback_models": [
         "openai/gpt-5.4",
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.1
         }
       ],
@@ -70,7 +70,7 @@
       "fallback_models": [
         "openai/gpt-5.4-mini",
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.2
         }
       ],
@@ -97,7 +97,7 @@
       "model": "openai/gpt-5.4",
       "fallback_models": [
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.2
         }
       ],
@@ -112,7 +112,7 @@
       "fallback_models": [
         "openai/gpt-5.4-mini",
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.2
         }
       ],
@@ -123,7 +123,7 @@
     },
 
     "data-modeling": {
-      "model": "google/gemini-3.1-pro-preview",
+      "model": "openrouter/google/gemini-3.1-pro-preview",
       "fallback_models": [
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini"
@@ -138,7 +138,7 @@
       "fallback_models": [
         "openai/gpt-5.4-mini",
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.2
         }
       ],
@@ -152,7 +152,7 @@
       "model": "openai/gpt-5.4",
       "fallback_models": [
         {
-          "model": "google/gemini-3.1-pro-preview",
+          "model": "openrouter/google/gemini-3.1-pro-preview",
           "temperature": 0.3
         },
         "openai/gpt-5.4-mini"
@@ -163,7 +163,7 @@
     },
 
     "research": {
-      "model": "google/gemini-3.1-pro-preview",
+      "model": "openrouter/google/gemini-3.1-pro-preview",
       "fallback_models": [
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini"

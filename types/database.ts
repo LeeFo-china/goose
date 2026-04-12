@@ -132,7 +132,6 @@ export type Database = {
           id: string
           last_login_time: string | null
           name: string | null
-          openid: string | null
           phone: string | null
           post_id: string | null
           role: string | null
@@ -146,7 +145,6 @@ export type Database = {
           id?: string
           last_login_time?: string | null
           name?: string | null
-          openid?: string | null
           phone?: string | null
           post_id?: string | null
           role?: string | null
@@ -160,7 +158,6 @@ export type Database = {
           id?: string
           last_login_time?: string | null
           name?: string | null
-          openid?: string | null
           phone?: string | null
           post_id?: string | null
           role?: string | null
@@ -507,6 +504,42 @@ export type Database = {
           },
         ]
       }
+      sms_verification_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expired_at: string
+          id: string
+          phone: string
+          request_ip: string | null
+          scene: string
+          status: string
+          verified_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expired_at: string
+          id?: string
+          phone: string
+          request_ip?: string | null
+          scene: string
+          status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expired_at?: string
+          id?: string
+          phone?: string
+          request_ip?: string | null
+          scene?: string
+          status?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       wechat_identities: {
         Row: {
           auth_user_id: string
@@ -542,6 +575,15 @@ export type Database = {
     }
     Functions: {
       create_auth_for_employee: { Args: { emp_id: string }; Returns: string }
+      find_auth_user_by_openid: {
+        Args: { p_openid: string }
+        Returns: {
+          email: string
+          id: string
+          openid: string
+          unionid: string
+        }[]
+      }
       get_home_dashboard_stats: { Args: never; Returns: Json }
       get_project_create_page_data: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
