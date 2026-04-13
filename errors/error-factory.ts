@@ -46,7 +46,11 @@ export const Errors = {
 
   notFound: (msg: string) => new AppError(404, msg, ErrorCodes.USER_NOT_FOUND),
 
-  unauthorized: () => new AppError(401, "未授权", ErrorCodes.UNAUTHORIZED),
+  unauthorized: (
+    msg: string = "未授权",
+    code: string = ErrorCodes.UNAUTHORIZED,
+    details?: unknown,
+  ) => new AppError(401, msg, code, details),
 
   forbidden: () => new AppError(403, "无权限", ErrorCodes.FORBIDDEN),
 

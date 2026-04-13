@@ -10,6 +10,13 @@ export type JwtPayload = {
   exp?: number;
 };
 
+export type VerifyTokenResult =
+  | { valid: true; payload: JwtPayload }
+  | {
+    valid: false;
+    reason: "malformed" | "signature_mismatch" | "header_invalid" | "payload_invalid" | "expired";
+  };
+
 type JwtHeader = {
   alg: "HS256";
   typ: "JWT";
@@ -101,22 +108,22 @@ export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-export function verifyToken(token: string) {
+export function verifyToken(token: string): VerifyTokenResult {
   const secret = getJwtSecret();
   const parts = token.split(".");
 
   if (parts.length !== 3) {
-    return null;
+    return { valid: false, reason: "malformed" };
   }
 
   const [encodedHeader, encodedPayload, signature] = parts;
   if (!encodedHeader || !encodedPayload || !signature) {
-    return null;
+    return { valid: false, reason: "malformed" };
   }
 
   const expectedSignature = signRaw(`${encodedHeader}.${encodedPayload}`, secret);
   if (signature.length !== expectedSignature.length) {
-    return null;
+    return { valid: false, reason: "signature_mismatch" };
   }
 
   const isValidSignature = timingSafeEqual(
@@ -125,20 +132,24 @@ export function verifyToken(token: string) {
   );
 
   if (!isValidSignature) {
-    return null;
+    return { valid: false, reason: "signature_mismatch" };
   }
 
   const header = JSON.parse(fromBase64Url(encodedHeader)) as JwtHeader;
   if (header.alg !== "HS256" || header.typ !== "JWT") {
-    return null;
+    return { valid: false, reason: "header_invalid" };
   }
 
   const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
   const now = Math.floor(Date.now() / 1000);
 
-  if (!payload.sub || !payload.openid || !payload.exp || payload.exp <= now) {
-    return null;
+   if (payload.exp && payload.exp <= now) {
+    return { valid: false, reason: "expired" };
   }
 
-  return payload;
+  if (!payload.sub || !payload.openid || !payload.exp) {
+    return { valid: false, reason: "payload_invalid" };
+  }
+
+  return { valid: true, payload };
 }
