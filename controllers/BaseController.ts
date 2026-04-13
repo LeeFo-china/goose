@@ -5,6 +5,7 @@ import { SupabaseDB } from "@/utils/supabase/index";
 import { z } from "zod";
 import { registerRoutes } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import { PaginationQuerySchema } from "@/schema/request";
 
 export abstract class BaseController<
   TCreate extends z.ZodTypeAny = any, // 创建时的 Zod Schema
@@ -15,6 +16,7 @@ export abstract class BaseController<
   protected createSchema: TCreate | null;
   protected updateSchema: TUpdate | null;
   protected idParamSchema = z.object({ id: z.uuid("无效的 ID 格式") });
+  protected paginationQuerySchema = PaginationQuerySchema;
 
   constructor(
     tableName: string,
@@ -45,11 +47,28 @@ export abstract class BaseController<
    * 获取列表
    */
   list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const { data, error } = await await SupabaseDB.from(this.tableName)
-      .select()
-      .order("created_at", { ascending: false });
+    const queryResult = this.paginationQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const { page, pageSize } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await SupabaseDB.from(this.tableName)
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
     if (error) throw Errors.dbError("列表查询失败", error);
-    return ResponseHandler.success<T[]>(data);
+    return ResponseHandler.success({
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    });
   };
 
   /**

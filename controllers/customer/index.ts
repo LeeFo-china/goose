@@ -9,6 +9,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FollowUpInsert } from "@/schema/customer";
+import { PaginationQuerySchema } from "@/schema/request";
 
 // 继承基类
 class CustomerController extends BaseController<
@@ -36,20 +37,39 @@ class CustomerController extends BaseController<
 
   @Get("/customers/:id/follow_ups")
   async getCustomerFollowUpById(
-    request: FastifyRequest<{ Params: { id: string } }>,
+    request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>,
   ) {
     const { id } = request.params; // ← 这里拿到 UUID
-    const { data, error } = await SupabaseDB.from("customer_follow_ups")
-      .select().eq(
+    const queryResult = PaginationQuerySchema.safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const { page, pageSize } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await SupabaseDB.from("customer_follow_ups")
+      .select("*", { count: "exact" }).eq(
         "customer_id",
         id,
-      );
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       throw Errors.dbError("get customers data by id error", error);
     }
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    });
   }
 
   @Post("/customers/:id/follow_ups")
