@@ -5,6 +5,9 @@ import { Errors } from "@/errors/error-factory";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { PaginationQuerySchema } from "@/schema/request";
+import { ProjectListQuerySchema } from "@/schema/projects";
+import { projectSer } from "@/services/projects";
 
 class ProjectController extends BaseController<
   typeof CreateProjectSchema,
@@ -15,6 +18,7 @@ class ProjectController extends BaseController<
   }
 
   @Get("/projects/frontend-visible")
+  //获取游客页可以展示的项目
   async getFrontendVisibleProjects(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -36,6 +40,15 @@ class ProjectController extends BaseController<
     }
 
     return ResponseHandler.success(data, "查询成功");
+  }
+
+  @Get("/projects/status")
+  async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = ProjectListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    console.log(queryResult.data);
+    const data = await projectSer.getProjectsByStatus(queryResult.data);
+    return ResponseHandler.success(data);
   }
 }
 
