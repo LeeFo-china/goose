@@ -10,13 +10,6 @@ export type JwtPayload = {
   exp?: number;
 };
 
-export type VerifyTokenResult =
-  | { valid: true; payload: JwtPayload }
-  | {
-    valid: false;
-    reason: "malformed" | "signature_mismatch" | "header_invalid" | "payload_invalid" | "expired";
-  };
-
 type JwtHeader = {
   alg: "HS256";
   typ: "JWT";
@@ -25,17 +18,18 @@ type JwtHeader = {
 const encoder = new TextEncoder();
 
 function toBase64Url(value: string | Uint8Array) {
-  const input = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
-  return input.toString("base64url" as BufferEncoding);
+  const input = typeof value === "string"
+    ? Buffer.from(value)
+    : Buffer.from(value);
+  return input.toString("base64url");
 }
 
 function fromBase64Url(value: string) {
-  return Buffer.from(value, "base64url" as BufferEncoding).toString("utf8");
+  return Buffer.from(value, "base64url").toString("utf8");
 }
 
 function parseExpiresIn(expiresIn: string) {
   const normalized = expiresIn.trim();
-  const defaultExpiresIn = 7 * 24 * 60 * 60;
 
   if (/^\d+$/.test(normalized)) {
     return Number(normalized);
@@ -43,17 +37,11 @@ function parseExpiresIn(expiresIn: string) {
 
   const match = normalized.match(/^(\d+)([smhd])$/i);
   if (!match) {
-    return defaultExpiresIn;
+    return 7 * 24 * 60 * 60;
   }
 
-  const [, rawAmount, rawUnit] = match;
-
-  if (!rawAmount || !rawUnit) {
-    return defaultExpiresIn;
-  }
-
-  const amount = Number(rawAmount);
-  const unit = rawUnit.toLowerCase();
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
 
   const multipliers: Record<string, number> = {
     s: 1,
@@ -62,27 +50,25 @@ function parseExpiresIn(expiresIn: string) {
     d: 24 * 60 * 60,
   };
 
-  const multiplier = multipliers[unit];
-
-  if (!multiplier) {
-    return defaultExpiresIn;
-  }
-
-  return amount * multiplier;
+  return amount * multipliers[unit];
 }
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {
-    throw new AppError(500, "缺少 JWT_SECRET 环境变量", ErrorCodes.INTERNAL_ERROR);
+    throw new AppError(
+      500,
+      "缺少 JWT_SECRET 环境变量",
+      ErrorCodes.INTERNAL_ERROR,
+    );
   }
 
   return secret;
 }
 
 function signRaw(content: string, secret: string) {
-  return createHmac("sha256", secret).update(content).digest("base64url" as import("crypto").BinaryToTextEncoding);
+  return createHmac("sha256", secret).update(content).digest("base64url");
 }
 
 export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
@@ -108,22 +94,21 @@ export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-export function verifyToken(token: string): VerifyTokenResult {
+export function verifyToken(token: string) {
   const secret = getJwtSecret();
   const parts = token.split(".");
 
   if (parts.length !== 3) {
-    return { valid: false, reason: "malformed" };
+    return null;
   }
 
   const [encodedHeader, encodedPayload, signature] = parts;
-  if (!encodedHeader || !encodedPayload || !signature) {
-    return { valid: false, reason: "malformed" };
-  }
-
-  const expectedSignature = signRaw(`${encodedHeader}.${encodedPayload}`, secret);
+  const expectedSignature = signRaw(
+    `${encodedHeader}.${encodedPayload}`,
+    secret,
+  );
   if (signature.length !== expectedSignature.length) {
-    return { valid: false, reason: "signature_mismatch" };
+    return null;
   }
 
   const isValidSignature = timingSafeEqual(
@@ -132,24 +117,20 @@ export function verifyToken(token: string): VerifyTokenResult {
   );
 
   if (!isValidSignature) {
-    return { valid: false, reason: "signature_mismatch" };
+    return null;
   }
 
   const header = JSON.parse(fromBase64Url(encodedHeader)) as JwtHeader;
   if (header.alg !== "HS256" || header.typ !== "JWT") {
-    return { valid: false, reason: "header_invalid" };
+    return null;
   }
 
   const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
   const now = Math.floor(Date.now() / 1000);
 
-   if (payload.exp && payload.exp <= now) {
-    return { valid: false, reason: "expired" };
+  if (!payload.sub || !payload.openid || !payload.exp || payload.exp <= now) {
+    return null;
   }
 
-  if (!payload.sub || !payload.openid || !payload.exp) {
-    return { valid: false, reason: "payload_invalid" };
-  }
-
-  return { valid: true, payload };
+  return payload;
 }

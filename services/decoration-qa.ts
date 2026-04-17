@@ -82,7 +82,7 @@ function getSystemPrompt() {
   return `${customPrompt}\n\n${DEFAULT_SYSTEM_PROMPT}${JSON_OUTPUT_PROMPT}`;
 }
 
-function getOpenRouterHeaders() {
+function getOpenRouterHeaders(): Record<string, string> {
   const endpoint = getAiEndpoint();
 
   if (!endpoint.includes("openrouter.ai")) {
@@ -164,15 +164,16 @@ async function requestQaResult(
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getAiRequestTimeoutMs());
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+    ...getOpenRouterHeaders(),
+  };
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        ...getOpenRouterHeaders(),
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });

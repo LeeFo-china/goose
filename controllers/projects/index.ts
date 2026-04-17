@@ -46,7 +46,6 @@ class ProjectController extends BaseController<
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-    console.log(queryResult.data);
     const data = await projectSer.getProjectsByStatus(queryResult.data);
     return ResponseHandler.success(data);
   }

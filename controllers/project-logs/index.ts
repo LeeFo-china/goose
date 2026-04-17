@@ -10,6 +10,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { ResponseHandler } from "@/utils/response";
+import { ProjectLogQuerySchema } from "@/schema/project-logs";
 
 class ProjectLogController extends BaseController<
   typeof CreateProjectLogSchema,
@@ -21,27 +22,36 @@ class ProjectLogController extends BaseController<
 
   @Get("/project_logs/projects")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
-    console.log(request.query);
-    const paramSchema = z.object({
-      project_id: z.uuid("无效的项目 ID!!!!!, 必须提供project_id=xxxxxx"),
-    });
-
-    const verify = paramSchema.safeParse(request.query);
+    const verify = ProjectLogQuerySchema.safeParse(request.query);
     if (!verify.success) throw Errors.fromZod(verify.error);
-
-    const { data, error } = await SupabaseDB.from(this.tableName)
-      .select(`
+    const { page, pageSize, project_id } = verify.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    console.log("this page is : ", verify.data);
+    const { data, error, count } = await SupabaseDB.from(this.tableName)
+      .select(
+        `
         *,
-        employee:employees(id, name, avatar)
-      `)
-      .eq("project_id", verify.data.project_id);
+        employee:employees!project_logs_employee_id_fkey(id, name, avatar)
+      `,
+        { count: "exact" },
+      )
+      .eq("project_id", project_id).range(from, to);
 
     if (error) {
       console.log(error);
       throw Errors.dbError("查询项目日志失败", error);
     }
 
-    return ResponseHandler.success<any[]>(data);
+    return {
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
   }
 }
 

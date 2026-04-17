@@ -43,15 +43,13 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
-    const result = verifyToken(token);
-    if (!result.valid) {
-      const error = getTokenError(
-        result.reason === "expired" ? "expired" : "invalid",
-      );
+    const payload = verifyToken(token);
+    if (!payload) {
+      const error = getTokenError("invalid");
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
-    request.user = result.payload;
+    request.user = payload;
   });
 };
 
