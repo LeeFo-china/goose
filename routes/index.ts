@@ -18,6 +18,7 @@ import RpcController from "@/controllers/common/rpc/get_home_dashboard_stats";
 import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_project_create_page_data";
 import PropertyControlle from "@/controllers/properties";
 import ProjectLogController from "@/controllers/project-logs";
+import ProjectLogCommentsController from "@/controllers/project-log-comments";
 import AiController from "@/controllers/ai";
 import UploadController from "@/controllers/uploads";
 
@@ -30,6 +31,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   WeChatController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
+  ProjectLogCommentsController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));

@@ -166,6 +166,7 @@ Authorization: Bearer <token>
 - `data.list`：日志列表
 - `data.pagination`：分页信息
 - `images`：返回的是可直接预览的 URL 数组
+- `comment_count`：该条日志当前评论数量，前端可直接用于显示评论角标
 
 ---
 
@@ -335,6 +336,7 @@ await Promise.all([
 - 上传接口返回 `url` 和 `path`，创建日志时优先传 `path`
 - 如果前端误传了 Supabase public URL，后端当前也能兼容
 - 日志列表和创建接口返回的 `images` 都是可直接预览的 URL
+- 日志列表接口每条记录都带 `comment_count`
 - 更新图片接口传的是“保留图片列表”
 - 删除日志会同时删除关联图片
 - 日历接口只负责打点，不返回日志详情

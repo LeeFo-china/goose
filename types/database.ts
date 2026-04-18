@@ -344,6 +344,60 @@ export type Database = {
         }
         Relationships: []
       }
+      project_log_comments: {
+        Row: {
+          author_id: string
+          author_type: string
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          log_id: string
+          parent_id: string | null
+          rating: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          author_id: string
+          author_type: string
+          content: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          log_id: string
+          parent_id?: string | null
+          rating?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          author_id?: string
+          author_type?: string
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          log_id?: string
+          parent_id?: string | null
+          rating?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_log_comments_log_id_fkey"
+            columns: ["log_id"]
+            isOneToOne: false
+            referencedRelation: "project_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_log_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "project_log_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_logs: {
         Row: {
           content: string | null

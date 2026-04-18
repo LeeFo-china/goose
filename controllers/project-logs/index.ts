@@ -43,6 +43,12 @@ type ProjectLogRow = Tables<"project_logs"> & {
     avatar: string | null;
   } | null;
 };
+type ProjectLogCommentCountRow = {
+  log_id: string;
+};
+type ProjectLogListItem = ReturnType<ProjectLogController["normalizeProjectLogRow"]> & {
+  comment_count: number;
+};
 
 class ProjectLogController extends BaseController<
   typeof CreateProjectLogSchema,
@@ -79,8 +85,13 @@ class ProjectLogController extends BaseController<
       throw Errors.dbError("查询项目日志失败", error);
     }
 
+    const rows = (data || []) as ProjectLogRow[];
+    const list = await this.attachCommentCounts(
+      this.normalizeProjectLogRows(rows),
+    );
+
     return ResponseHandler.success({
-      list: this.normalizeProjectLogRows((data || []) as ProjectLogRow[]),
+      list,
       pagination: {
         page,
         pageSize,
@@ -367,6 +378,34 @@ class ProjectLogController extends BaseController<
     if (error) {
       throw Errors.dbError("删除日志图片失败", error);
     }
+  }
+
+  private async attachCommentCounts(rows: ReturnType<ProjectLogController["normalizeProjectLogRows"]>): Promise<ProjectLogListItem[]> {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const logIds = rows.map((row) => row.id);
+    const { data, error } = await SupabaseDB.from("project_log_comments")
+      .select("log_id")
+      .in("log_id", logIds)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw Errors.dbError("查询日志评论数量失败", error);
+    }
+
+    const countMap = new Map<string, number>();
+    ((data || []) as ProjectLogCommentCountRow[]).forEach((item) => {
+      const currentCount = countMap.get(item.log_id) || 0;
+      const nextCount = currentCount + 1;
+      countMap.set(item.log_id, nextCount);
+    });
+
+    return rows.map((row) => ({
+      ...row,
+      comment_count: countMap.get(row.id) || 0,
+    }));
   }
 }
 

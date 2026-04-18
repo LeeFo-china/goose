@@ -80,6 +80,7 @@ export const ProjectLogQuerySchema = z.object({
     "https://picsum.photos/seed/log1/200/200"
   ],
   "created_at": "2026-04-08T07:24:49.720318+00:00",
+  "comment_count": 3,
   "employee": {
     "id": "387519de-3601-45bc-b4ee-da76627f04ea",
     "name": "员工20",
@@ -96,7 +97,8 @@ export const ProjectLogQuerySchema = z.object({
 - `data.pagination.total`：总条数
 - `data.pagination.totalPages`：总页数
 - `employee`：日志对应员工信息
-- `images`：日志图片数组，可能为空数组、`null` 或其他兼容结构，前端建议先做数组兜底
+- `images`：日志图片数组，实际返回为可直接预览的 URL 数组
+- `comment_count`：该条日志当前评论数量，包含根评论和回复评论，不包含已删除评论
 
 ### 成功响应示例
 
@@ -114,6 +116,7 @@ export const ProjectLogQuerySchema = z.object({
           "https://picsum.photos/seed/log1/200/200"
         ],
         "created_at": "2026-04-08T07:24:49.720318+00:00",
+        "comment_count": 3,
         "employee": {
           "id": "387519de-3601-45bc-b4ee-da76627f04ea",
           "name": "员工20",
@@ -175,8 +178,9 @@ type ProjectLogItem = {
   employee_id: string;
   node_name: string;
   content: string | null;
-  images: string[] | null;
+  images: string[];
   created_at: string;
+  comment_count: number;
   employee: ProjectLogEmployee | null;
 };
 
@@ -213,6 +217,7 @@ const pagination = res.data.pagination;
 const safeList = (res.data.list || []).map((item) => ({
   ...item,
   images: Array.isArray(item.images) ? item.images : [],
+  comment_count: typeof item.comment_count === "number" ? item.comment_count : 0,
 }));
 ```
 
@@ -222,5 +227,6 @@ const safeList = (res.data.list || []).map((item) => ({
 
 - 当前接口按 `created_at` 倒序返回
 - 当前查询会联表返回日志创建员工的 `id`、`name`、`avatar`
+- 当前接口会为每条日志附带 `comment_count`
 - 前端做分页时，直接使用 `data.pagination.total` 和 `data.pagination.totalPages`
 - 如果后续要支持“全部项目日志列表”，需要后端先调整 `project_id` 的查询逻辑，再开放前端不传该参数
