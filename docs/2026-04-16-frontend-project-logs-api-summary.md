@@ -27,13 +27,11 @@ Authorization: Bearer <token>
 | `page` | `number` | 否 | 页码，从 `1` 开始，默认 `1` |
 | `pageSize` | `number` | 否 | 每页条数，默认 `20`，最大 `100` |
 
-> 说明：虽然当前 schema 中 `project_id` 写的是 `.optional()`，但接口实现实际会按 `project_id` 过滤查询。前端对接时应始终传 `project_id`，不要省略。
-
 ### 参数校验规则
 
 ```ts
 export const ProjectLogQuerySchema = z.object({
-  project_id: z.uuid("无效的项目ID").optional(),
+  project_id: z.string().uuid("无效的项目ID"),
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
   pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(100, "每页条数不能超过 100").default(20),
 });
@@ -222,7 +220,7 @@ const safeList = (res.data.list || []).map((item) => ({
 
 ## 5. 补充说明
 
-- 当前接口按数据库默认返回顺序返回，控制器里暂未显式指定排序字段
+- 当前接口按 `created_at` 倒序返回
 - 当前查询会联表返回日志创建员工的 `id`、`name`、`avatar`
 - 前端做分页时，直接使用 `data.pagination.total` 和 `data.pagination.totalPages`
 - 如果后续要支持“全部项目日志列表”，需要后端先调整 `project_id` 的查询逻辑，再开放前端不传该参数

@@ -40,15 +40,21 @@ function parseExpiresIn(expiresIn: string) {
     return 7 * 24 * 60 * 60;
   }
 
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
+  const amountPart = match[1];
+  const unitPart = match[2];
+  if (!amountPart || !unitPart) {
+    return 7 * 24 * 60 * 60;
+  }
 
-  const multipliers: Record<string, number> = {
+  const multipliers = {
     s: 1,
     m: 60,
     h: 60 * 60,
     d: 24 * 60 * 60,
-  };
+  } as const;
+
+  const amount = Number(amountPart);
+  const unit = unitPart.toLowerCase() as keyof typeof multipliers;
 
   return amount * multipliers[unit];
 }
@@ -102,7 +108,11 @@ export function verifyToken(token: string) {
     return null;
   }
 
-  const [encodedHeader, encodedPayload, signature] = parts;
+  const [encodedHeader, encodedPayload, signature] = parts as [
+    string,
+    string,
+    string,
+  ];
   const expectedSignature = signRaw(
     `${encodedHeader}.${encodedPayload}`,
     secret,

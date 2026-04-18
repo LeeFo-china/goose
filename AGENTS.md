@@ -67,8 +67,21 @@ supabase gen types typescript --project-id X > types/database.ts  # gen types
 - Both bun.lock and pnpm-lock.yaml present (use bun)
 
 ## STRICT RULES
-1. 禁止在 `controllers/` 以外的地方直接编写数据库逻辑。
-2. 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
+
+错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
+ - controller
+      - 只处理 HTTP
+      - 读 request
+      - 校验参数
+      - 调用 service
+      - 包装 ResponseHandler.success
+  - service
+      - 编排业务逻辑
+      - 组合查询条件
+      - 调 repository / rpc client
+      - 做领域层数据转换
+  - repository / gateway
+      - 直接访问 Supabase / SQL / RPC
 
 ## MCP TOOLS MAPPING
 - Database Queries: `mcp:supabase:query`

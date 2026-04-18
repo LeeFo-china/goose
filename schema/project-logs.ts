@@ -22,8 +22,7 @@ export type CreateProjectLogInput = z.infer<typeof CreateProjectLogSchema>;
 export type UpdateProjectLogInput = z.infer<typeof UpdateProjectLogSchema>;
 
 export const ProjectLogQuerySchema = z.object({
-  // 使用 .uuid() 增加格式校验，.optional() 替代 undefined
-  project_id: z.uuid("无效的项目ID").optional(),
+  project_id: z.string().uuid("无效的项目ID"),
 
   // z.coerce 会自动执行 Number(val)，解决 string | number 的模糊定义
   page: z.coerce
@@ -41,5 +40,10 @@ export const ProjectLogQuerySchema = z.object({
     .default(20),
 });
 
-// 自动生成类型定义，替代原始的 interface
 export type ProjectLogQueryType = z.infer<typeof ProjectLogQuerySchema>;
+
+export const ProjectLogCalendarQuerySchema = z.object({
+  project_id: z.string().uuid("无效的项目ID"),
+});
+
+export type ProjectLogCalendarQueryType = z.infer<typeof ProjectLogCalendarQuerySchema>;

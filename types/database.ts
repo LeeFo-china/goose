@@ -401,7 +401,9 @@ export type Database = {
           property_id: string | null
           start_date: string | null
           status: string | null
+          style_tags: Json
           supervisor_id: string | null
+          visibility_status: string
         }
         Insert: {
           address?: string | null
@@ -414,7 +416,9 @@ export type Database = {
           property_id?: string | null
           start_date?: string | null
           status?: string | null
+          style_tags?: Json
           supervisor_id?: string | null
+          visibility_status?: string
         }
         Update: {
           address?: string | null
@@ -427,7 +431,9 @@ export type Database = {
           property_id?: string | null
           start_date?: string | null
           status?: string | null
+          style_tags?: Json
           supervisor_id?: string | null
+          visibility_status?: string
         }
         Relationships: [
           {
@@ -586,6 +592,14 @@ export type Database = {
       }
       get_home_dashboard_stats: { Args: never; Returns: Json }
       get_project_create_page_data: { Args: never; Returns: Json }
+      get_project_log_calendar: {
+        Args: { project_uuid: string; timezone_name?: string }
+        Returns: {
+          count: number
+          date: string
+          node_name: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

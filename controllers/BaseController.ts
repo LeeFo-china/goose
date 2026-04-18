@@ -34,8 +34,8 @@ export abstract class BaseController<
 
     const { data, error } = await SupabaseDB.from(this.tableName)
       .select()
-      .eq("id", idVerify.data.id)
-      .single();
+      .eq("user_id", idVerify.data.id)
+      .maybeSingle();
 
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
