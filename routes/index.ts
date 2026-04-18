@@ -19,6 +19,7 @@ import GetProjectCreatePageDataController from "@/controllers/common/rpc/get_pro
 import PropertyControlle from "@/controllers/properties";
 import ProjectLogController from "@/controllers/project-logs";
 import AiController from "@/controllers/ai";
+import UploadController from "@/controllers/uploads";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -28,6 +29,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
 
   WeChatController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
+  UploadController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));

@@ -11,6 +11,7 @@
         "@alicloud/tea-typescript": "^1.8.0",
         "@alicloud/tea-util": "^1.4.11",
         "@fastify/autoload": "^6.3.1",
+        "@fastify/multipart": "^10.0.0",
         "@supabase/supabase-js": "^2.100.0",
         "fastify": "^5.8.4",
         "fastify-cli": "^7.4.1",
@@ -65,6 +66,8 @@
 
     "@fastify/autoload": ["@fastify/autoload@6.3.1", "https://registry.npmmirror.com/@fastify/autoload/-/autoload-6.3.1.tgz", {}, "sha512-0fsG+lO3m5yEZVjXKpltCe+2eHhM6rfAPQhvlGUgLUFTw/N2wA9WqPTObMtrF3oUCUrxbSDv60HlUIoh+aFM1A=="],
 
+    "@fastify/busboy": ["@fastify/busboy@3.2.0", "https://registry.npmmirror.com/@fastify/busboy/-/busboy-3.2.0.tgz", {}, "sha512-m9FVDXU3GT2ITSe0UaMA5rU3QkfC/UXtCU8y0gSN/GugTqtVldOBWIB5V6V3sbmenVZUIpU6f+mPEO2+m5iTaA=="],
+
     "@fastify/deepmerge": ["@fastify/deepmerge@3.2.1", "https://registry.npmmirror.com/@fastify/deepmerge/-/deepmerge-3.2.1.tgz", {}, "sha512-N5Oqvltoa2r9z1tbx4xjky0oRR60v+T47Ic4J1ukoVQcptLOrIdRnCSdTGmOmajZuHVKlTnfcmrjyqsGEW1ztA=="],
 
     "@fastify/error": ["@fastify/error@4.2.0", "https://registry.npmmirror.com/@fastify/error/-/error-4.2.0.tgz", {}, "sha512-RSo3sVDXfHskiBZKBPRgnQTtIqpi/7zhJOEmAxCiBcM7d0uwdGdxLlsCaLzGs8v8NnxIRlfG0N51p5yFaOentQ=="],
@@ -74,6 +77,8 @@
     "@fastify/forwarded": ["@fastify/forwarded@3.0.1", "https://registry.npmmirror.com/@fastify/forwarded/-/forwarded-3.0.1.tgz", {}, "sha512-JqDochHFqXs3C3Ml3gOY58zM7OqO9ENqPo0UqAjAjH8L01fRZqwX9iLeX34//kiJubF7r2ZQHtBRU36vONbLlw=="],
 
     "@fastify/merge-json-schemas": ["@fastify/merge-json-schemas@0.2.1", "https://registry.npmmirror.com/@fastify/merge-json-schemas/-/merge-json-schemas-0.2.1.tgz", { "dependencies": { "dequal": "^2.0.3" } }, "sha512-OA3KGBCy6KtIvLf8DINC5880o5iBlDX4SxzLQS8HorJAbqluzLRn80UXU0bxZn7UOFhFgpRJDasfwn9nG4FG4A=="],
+
+    "@fastify/multipart": ["@fastify/multipart@10.0.0", "https://registry.npmmirror.com/@fastify/multipart/-/multipart-10.0.0.tgz", { "dependencies": { "@fastify/busboy": "^3.0.0", "@fastify/deepmerge": "^3.0.0", "@fastify/error": "^4.0.0", "fastify-plugin": "^5.0.0", "secure-json-parse": "^4.0.0" } }, "sha512-pUx3Z1QStY7E7kwvDTIvB6P+rF5lzP+iqPgZyJyG3yBJVPvQaZxzDHYbQD89rbY0ciXrMOyGi8ezHDVexLvJDA=="],
 
     "@fastify/proxy-addr": ["@fastify/proxy-addr@5.1.0", "https://registry.npmmirror.com/@fastify/proxy-addr/-/proxy-addr-5.1.0.tgz", { "dependencies": { "@fastify/forwarded": "^3.0.0", "ipaddr.js": "^2.1.0" } }, "sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw=="],
 

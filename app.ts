@@ -1,6 +1,7 @@
 import "reflect-metadata"; // 必须在第一行
 import Fastify from "fastify";
 import AutoLoad from "@fastify/autoload";
+import multipart from "@fastify/multipart";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import errorHandler from "./plugins/error-handler";
@@ -11,6 +12,12 @@ const __dirname = dirname(__filename);
 
 const app = Fastify({
   logger: true,
+});
+app.register(multipart, {
+  limits: {
+    files: 9,
+    fileSize: 10 * 1024 * 1024,
+  },
 });
 app.register(errorHandler);
 authPlugin(app);

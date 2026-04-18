@@ -1,19 +1,27 @@
 import { BaseController } from "@/controllers/BaseController";
 import {
+  CreateProjectLogRequestSchema,
+  type CreateProjectLogRequestType,
   CreateProjectLogSchema,
+  ProjectLogIdParamSchema,
+  type ProjectLogIdParamType,
   ProjectLogCalendarQuerySchema,
   type ProjectLogCalendarQueryType,
   type ProjectLogQueryType,
   type ProjectLogType,
+  UpdateProjectLogImagesRequestSchema,
+  type UpdateProjectLogImagesRequestType,
   UpdateProjectLogSchema,
 } from "@/schema/project-logs";
-import { Get } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { ResponseHandler } from "@/utils/response";
 import { ProjectLogQuerySchema } from "@/schema/project-logs";
+import type { Tables } from "@/types/database";
+
+const PROJECT_LOGS_BUCKET = "project-logs";
 
 type ProjectLogCalendarItem = {
   date: string;
@@ -27,6 +35,15 @@ type ProjectLogCalendarRow = {
   node_name: string | null;
 };
 
+type EmployeeUserRow = Pick<Tables<"employees">, "id" | "user_id">;
+type ProjectLogRow = Tables<"project_logs"> & {
+  employee?: {
+    id: string;
+    name: string;
+    avatar: string | null;
+  } | null;
+};
+
 class ProjectLogController extends BaseController<
   typeof CreateProjectLogSchema,
   typeof UpdateProjectLogSchema
@@ -34,6 +51,10 @@ class ProjectLogController extends BaseController<
   constructor() {
     super("project_logs", CreateProjectLogSchema, UpdateProjectLogSchema);
   }
+
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    return this.handleCreate(request, reply);
+  };
 
   @Get("/project_logs/projects")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
@@ -59,7 +80,7 @@ class ProjectLogController extends BaseController<
     }
 
     return ResponseHandler.success({
-      list: data || [],
+      list: this.normalizeProjectLogRows((data || []) as ProjectLogRow[]),
       pagination: {
         page,
         pageSize,
@@ -97,6 +118,255 @@ class ProjectLogController extends BaseController<
       project_id,
       list,
     });
+  }
+
+  @Post("/project_logs")
+  async createWithUnderscore(request: FastifyRequest, reply: FastifyReply) {
+    return this.handleCreate(request, reply);
+  }
+
+  @Delete("/project_logs/:id")
+  async deleteWithUnderscore(request: FastifyRequest, reply: FastifyReply) {
+    const log = await this.getOwnedProjectLog(request);
+    await this.removeStorageObjects(this.extractStoragePaths(log.images));
+
+    const { error } = await SupabaseDB.from(this.tableName)
+      .delete()
+      .eq("id", log.id);
+
+    if (error) {
+      throw Errors.dbError("删除项目日志失败", error);
+    }
+
+    return ResponseHandler.success({
+      id: log.id,
+    });
+  }
+
+  @Patch("/project_logs/:id/images")
+  async updateImages(request: FastifyRequest, reply: FastifyReply) {
+    const log = await this.getOwnedProjectLog(request);
+    const bodyResult = UpdateProjectLogImagesRequestSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const payload: UpdateProjectLogImagesRequestType = bodyResult.data;
+    const nextImages = this.normalizeStoredImages(payload.images);
+    const currentImages = this.extractStoragePaths(log.images);
+    const nextImageSet = new Set(nextImages);
+    const removedImages = currentImages.filter((item) => !nextImageSet.has(item));
+
+    await this.removeStorageObjects(removedImages);
+
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .update({
+        images: nextImages,
+      })
+      .eq("id", log.id)
+      .select(
+        `
+        *,
+        employee:employees!project_logs_employee_id_fkey(id, name, avatar)
+      `,
+      )
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新项目日志图片失败", error);
+    }
+
+    return ResponseHandler.success(
+      this.normalizeProjectLogRow(data as ProjectLogRow),
+    );
+  }
+
+  private async handleCreate(request: FastifyRequest, reply: FastifyReply) {
+    const result = CreateProjectLogRequestSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const userId = request.user?.sub;
+    if (!userId) {
+      throw Errors.unauthorized("未登录或登录状态无效");
+    }
+
+    const employeeId = await this.getEmployeeIdByUserId(userId);
+    const payload: CreateProjectLogRequestType = result.data;
+    const images = this.normalizeStoredImages(payload.images);
+
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .insert({
+        project_id: payload.project_id,
+        employee_id: employeeId,
+        node_name: payload.node_name,
+        content: payload.content ?? null,
+        images,
+      })
+      .select(
+        `
+        *,
+        employee:employees!project_logs_employee_id_fkey(id, name, avatar)
+      `,
+      )
+      .single();
+
+    if (error) {
+      throw Errors.dbError("创建项目日志失败", error);
+    }
+
+    return ResponseHandler.success(
+      this.normalizeProjectLogRow(data as ProjectLogRow),
+    );
+  }
+
+  private async getEmployeeIdByUserId(userId: string) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const { data, error } = await adminClient
+      .from("employees")
+      .select("id, user_id")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle<EmployeeUserRow>();
+
+    if (error) {
+      throw Errors.dbError("查询当前员工身份失败", error);
+    }
+
+    if (!data?.id) {
+      throw Errors.forbidden();
+    }
+
+    return data.id;
+  }
+
+  private async getOwnedProjectLog(request: FastifyRequest) {
+    const paramResult = ProjectLogIdParamSchema.safeParse(request.params);
+    if (!paramResult.success) throw Errors.fromZod(paramResult.error);
+
+    const userId = request.user?.sub;
+    if (!userId) {
+      throw Errors.unauthorized("未登录或登录状态无效");
+    }
+
+    const employeeId = await this.getEmployeeIdByUserId(userId);
+    const { id }: ProjectLogIdParamType = paramResult.data;
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .select(
+        `
+        *,
+        employee:employees!project_logs_employee_id_fkey(id, name, avatar)
+      `,
+      )
+      .eq("id", id)
+      .maybeSingle<ProjectLogRow>();
+
+    if (error) {
+      throw Errors.dbError("查询项目日志失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("项目日志不存在");
+    }
+
+    if (data.employee_id !== employeeId) {
+      throw Errors.forbidden();
+    }
+
+    return data;
+  }
+
+  private normalizeStoredImages(images?: string[]) {
+    if (!images || images.length === 0) {
+      return [];
+    }
+
+    return images.map((item) => this.toStoragePath(item));
+  }
+
+  private extractStoragePaths(images: ProjectLogRow["images"]) {
+    if (!Array.isArray(images)) {
+      return [];
+    }
+
+    return images
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => this.toStoragePath(item));
+  }
+
+  private normalizeProjectLogRows(rows: ProjectLogRow[]) {
+    return rows.map((row) => this.normalizeProjectLogRow(row));
+  }
+
+  private normalizeProjectLogRow(row: ProjectLogRow) {
+    return {
+      ...row,
+      images: this.toPublicImageUrls(row.images),
+    };
+  }
+
+  private toPublicImageUrls(images: ProjectLogRow["images"]) {
+    if (!Array.isArray(images)) {
+      return [];
+    }
+
+    return images
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => {
+        if (this.isHttpUrl(item)) {
+          return item;
+        }
+
+        return SupabaseDB.getAdminClient()
+          .storage
+          .from(PROJECT_LOGS_BUCKET)
+          .getPublicUrl(item)
+          .data.publicUrl;
+      });
+  }
+
+  private toStoragePath(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return trimmed;
+    }
+
+    if (!this.isHttpUrl(trimmed)) {
+      return trimmed.replace(new RegExp(`^${PROJECT_LOGS_BUCKET}/`), "");
+    }
+
+    try {
+      const url = new URL(trimmed);
+      const marker = `/storage/v1/object/public/${PROJECT_LOGS_BUCKET}/`;
+      const markerIndex = url.pathname.indexOf(marker);
+
+      if (markerIndex === -1) {
+        return trimmed;
+      }
+
+      return decodeURIComponent(
+        url.pathname.slice(markerIndex + marker.length),
+      );
+    } catch {
+      return trimmed;
+    }
+  }
+
+  private isHttpUrl(value: string) {
+    return value.startsWith("http://") || value.startsWith("https://");
+  }
+
+  private async removeStorageObjects(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+
+    const uniquePaths = [...new Set(paths)];
+    const { error } = await SupabaseDB.getAdminClient()
+      .storage
+      .from(PROJECT_LOGS_BUCKET)
+      .remove(uniquePaths);
+
+    if (error) {
+      throw Errors.dbError("删除日志图片失败", error);
+    }
   }
 }
 

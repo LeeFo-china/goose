@@ -23,6 +23,7 @@
     "@alicloud/tea-typescript": "^1.8.0",
     "@alicloud/tea-util": "^1.4.11",
     "@fastify/autoload": "^6.3.1",
+    "@fastify/multipart": "^10.0.0",
     "@supabase/supabase-js": "^2.100.0",
     "fastify": "^5.8.4",
     "fastify-cli": "^7.4.1",

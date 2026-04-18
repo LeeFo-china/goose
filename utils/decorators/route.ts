@@ -5,7 +5,7 @@ const ROUTE_METADATA = Symbol("route_metadata");
 
 interface RouteDefinition {
     path: string;
-    method: "get" | "post" | "put" | "delete";
+    method: "get" | "post" | "put" | "patch" | "delete";
     handlerName: string | symbol;
 }
 
@@ -36,6 +36,7 @@ export function createRouteDecorator(method: string) {
 export const Get = createRouteDecorator("get");
 export const Post = createRouteDecorator("post");
 export const Put = createRouteDecorator("put");
+export const Patch = createRouteDecorator("patch");
 export const Delete = createRouteDecorator("delete");
 
 export function registerRoutes(fastify: any, target: any) {
