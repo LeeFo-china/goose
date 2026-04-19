@@ -21,6 +21,9 @@ import ProjectLogController from "@/controllers/project-logs";
 import ProjectLogCommentsController from "@/controllers/project-log-comments";
 import AiController from "@/controllers/ai";
 import UploadController from "@/controllers/uploads";
+import ExternalReferrersController from "@/controllers/external-referrers";
+import ProjectReferralsController from "@/controllers/project-referrals";
+import ExpenseRequestsController from "@/controllers/expense-requests";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -38,7 +41,10 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("employees", EmployeeController));
   app.register(createResourceRoutes("departments", DepartmentController));
   app.register(createResourceRoutes("payments", PaymentController));
+  app.register(createResourceRoutes("expense-requests", ExpenseRequestsController));
   app.register(createResourceRoutes("projects", ProjectController));
+  app.register(createResourceRoutes("external-referrers", ExternalReferrersController));
+  app.register(createResourceRoutes("project-referrals", ProjectReferralsController));
   app.register(createResourceRoutes("project-logs", ProjectLogController));
   app.register(createResourceRoutes("posts", PostsController));
   app.register(createResourceRoutes("properties", PropertyControlle));

@@ -8,6 +8,11 @@ import { z } from "zod";
 import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
+import type {
+  AuthTargetRole,
+  SmsScene,
+  SmsVerificationStatus,
+} from "@gooes/domain";
 
 type WeChatSessionResponse = {
   openid?: string;
@@ -33,9 +38,9 @@ type LegacyAuthUser = {
 type SmsVerificationCodeRow = {
   id: string;
   phone: string;
-  scene: "bind_customer" | "bind_employee";
+  scene: SmsScene;
   code: string;
-  status: "pending" | "verified" | "expired";
+  status: SmsVerificationStatus;
   expired_at: string;
   verified_at: string | null;
   created_at: string;
@@ -171,8 +176,11 @@ export class WeChatController extends BaseController {
     }
 
     const adminClient = SupabaseDB.getAdminClient();
-    const { phone, code, target_role } = bodyResult.data;
-    const scene = target_role === "customer" ? "bind_customer" : "bind_employee";
+    const { phone, code } = bodyResult.data;
+    const target_role: AuthTargetRole = bodyResult.data.target_role;
+    const scene: SmsScene = target_role === "customer"
+      ? "bind_customer"
+      : "bind_employee";
 
     const verificationRecord = await this.getValidVerificationCode(phone, scene, code);
     if (!verificationRecord) {
@@ -367,7 +375,7 @@ export class WeChatController extends BaseController {
 
   private async getValidVerificationCode(
     phone: string,
-    scene: "bind_customer" | "bind_employee",
+    scene: SmsScene,
     code: string,
   ) {
     const adminClient = SupabaseDB.getAdminClient();

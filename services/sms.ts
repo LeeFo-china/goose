@@ -2,8 +2,7 @@ import Dysmsapi20170525, { SendSmsRequest } from "@alicloud/dysmsapi20170525";
 import { Config } from "@alicloud/openapi-client";
 import Credential, { Config as CredentialConfig } from "@alicloud/credentials";
 import { RuntimeOptions } from "@alicloud/tea-util";
-
-export type SmsScene = "bind_customer" | "bind_employee";
+import type { SmsScene } from "@gooes/domain";
 
 type SmsProvider = "mock" | "disabled" | "aliyun";
 

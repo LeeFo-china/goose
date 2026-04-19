@@ -1,4 +1,5 @@
 import type { DecorationQaRequestInput } from "@/schema/ai";
+import type { AiMessageRole } from "@gooes/domain";
 
 type DecorationQaResult = {
   answer: string;
@@ -19,7 +20,7 @@ type OpenAiChatResponse = {
 type OpenAiRequestBody = {
   model: string;
   temperature: number;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: AiMessageRole | "system"; content: string }>;
   response_format?: { type: "json_object" };
 };
 
@@ -196,7 +197,7 @@ export async function askDecorationQa(input: DecorationQaRequestInput): Promise<
   const endpoint = getAiEndpoint();
   const systemPrompt = getSystemPrompt();
 
-  const messages = [
+  const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: systemPrompt },
     ...input.history,
     { role: "user", content: input.question },

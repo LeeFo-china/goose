@@ -13,6 +13,7 @@
 - 分页加载
 - 当前已选摘要展示
 - 清空当前选择
+- 设计师 / 项目监理按 `scene` 传参请求员工列表
 
 所以后端只需要确认并实现列表查询能力，不需要前端再改交互。
 
@@ -47,20 +48,20 @@ GET /customers?page=1&pageSize=10&keyword=138
 ### 员工列表
 
 ```http
-GET /employees?page=1&pageSize=10&keyword=李
-GET /employees?page=1&pageSize=10&keyword=139
+GET /employees?page=1&pageSize=10&keyword=李&scene=project_designer
+GET /employees?page=1&pageSize=10&keyword=139&scene=project_supervisor
 ```
 
 ---
 
 ## 3. 查询参数约定
 
-| 参数 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `page` | `number` | 否 | 页码，默认 `1` |
-| `pageSize` | `number` | 否 | 每页条数，默认 `10` |
-| `keyword` | `string` | 否 | 按姓名 / 手机号模糊搜索 |
-| `scene` | `string` | 否 | 仅员工接口使用，按业务场景过滤 |
+| 参数       | 类型     | 必填 | 说明                           |
+| :--------- | :------- | :--- | :----------------------------- |
+| `page`     | `number` | 否   | 页码，默认 `1`                 |
+| `pageSize` | `number` | 否   | 每页条数，默认 `10`            |
+| `keyword`  | `string` | 否   | 按姓名 / 手机号模糊搜索        |
+| `scene`    | `string` | 否   | 仅员工接口使用，按业务场景过滤 |
 
 ---
 
@@ -87,9 +88,7 @@ or phone ilike %keyword%
 
 ## 5. 员工角色过滤建议
 
-第一版前端虽然已经能工作，但“设计师”和“项目监理”当前共用 `/employees`，如果后端不区分角色，列表会混在一起，体验会越来越差。
-
-推荐直接在现有 `/employees` 上增加业务场景过滤参数，而不是新开接口。
+当前前端已经按业务场景透传 `scene`，后端只需要按该参数过滤员工候选集，不需要前端再改交互。
 
 ### 推荐方案
 
@@ -103,12 +102,10 @@ GET /employees?page=1&pageSize=10&keyword=王&scene=project_supervisor
 - `project_designer`
 - `project_supervisor`
 
-推荐原因：
+当前前端实际传参规则：
 
-- 前端改动最小
-- 后端可以内部自由映射角色、岗位、部门
-- 不把内部角色规则直接暴露给前端
-- 后续扩展其他员工选择场景也更方便
+- 设计师选择弹层：`scene=project_designer`
+- 项目监理选择弹层：`scene=project_supervisor`
 
 如果你们后端已经有稳定的角色枚举，也可以改成：
 
@@ -220,7 +217,7 @@ offset ...
 
 ## 10. 推荐结论
 
-推荐后端最终支持：
+当前前端联调目标：
 
 ```http
 GET /customers?page=1&pageSize=10&keyword=张三

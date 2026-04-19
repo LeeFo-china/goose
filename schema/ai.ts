@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { AI_MESSAGE_ROLE_VALUES } from "@gooes/domain";
 
 export const DecorationQaHistoryItemSchema = z.object({
-  role: z.enum(["user", "assistant"], {
+  role: z.enum(AI_MESSAGE_ROLE_VALUES, {
     message: "历史消息角色无效",
   }),
   content: z.string().trim().min(1, "历史消息内容不能为空"),

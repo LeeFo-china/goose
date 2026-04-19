@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  EMPLOYEE_ROLE_VALUES,
+  EMPLOYEE_STATUS_VALUES,
+} from "@gooes/domain";
 
 /**
  * 基础员工 Schema
@@ -38,13 +42,13 @@ export const EmployeeBaseSchema = z.object({
 
   // 角色：建议使用枚举，防止乱填
   role: z
-    .enum(["admin", "manager", "staff", "intern"], {
+    .enum(EMPLOYEE_ROLE_VALUES, {
       message: "请选择有效的员工角色",
     })
-    .default("staff"),
+    .default("employee"),
 
   // 状态
-  status: z.enum(["active", "inactive", "suspended"]).default("active"),
+  status: z.enum(EMPLOYEE_STATUS_VALUES).default("active"),
 
   // 创建时间：只读，通常不从前端传入
   created_at: z.string().datetime().nullable().optional(),
