@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PaginationQuerySchema } from "./request";
 
 /**
  * Property (房产/工地地址) 校验 Schema
@@ -43,3 +44,9 @@ export const CreatePropertySchema = PropertySchema.omit({
 export const UpdatePropertySchema = PropertySchema.partial().extend({
   id: z.uuid(),
 });
+
+export const PropertyListQuerySchema = PaginationQuerySchema.extend({
+  customer_id: z.uuid("无效的客户 ID 格式").optional(),
+});
+
+export type PropertyListQuery = z.infer<typeof PropertyListQuerySchema>;

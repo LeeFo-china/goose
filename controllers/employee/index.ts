@@ -7,6 +7,8 @@
  * @module controllers/employee
  */
 
+import type { RouteHandlerMethod } from "fastify";
+
 import { BaseController } from "@/controllers/BaseController";
 import { CreateEmployeeSchema, UpdateEmployeeSchema } from "@/schema/employee";
 import { SupabaseDB } from "@/utils/supabase/index";
@@ -28,7 +30,7 @@ import { ResponseHandler } from "@/utils/response";
  * - GET    /employees/withdepartment/:id   - 获取单个员工 (带部门信息)
  * - GET    /employees/withpost             - 获取员工列表 (带职位信息)
  *
- * @extends BaseController<CreateEmployeeSchema, UpdateEmployeeSchema>
+ * @extends BaseController <CreateEmployeeSchema, UpdateEmployeeSchema>
  */
 class EmployeeController extends BaseController<
   typeof CreateEmployeeSchema,
@@ -159,6 +161,21 @@ class EmployeeController extends BaseController<
     if (error) throw Errors.dbError("查询失败", error);
     return ResponseHandler.success(data);
   }
+
+  override getById: RouteHandlerMethod = async (request, reply) => {
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const { data, error } = await SupabaseDB.from(this.tableName)
+      .select()
+      .eq("user_id", idVerify.data.id)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询失败", error);
+    if (!data) throw Errors.dbError("查询记录不存在", error);
+
+    return ResponseHandler.success(data);
+  };
 }
 
 /**

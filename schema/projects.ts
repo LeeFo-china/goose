@@ -1,23 +1,15 @@
 import { z } from "zod";
 // project.schema.ts
 import { PaginationQuerySchema } from "./request";
+import {
+  PROJECT_STATUS_VALUES,
+  PROJECT_REFERRAL_RATE_BPS_MAX,
+  PROJECT_REFERRAL_RATE_BPS_MIN,
+  PROJECT_VISIBILITY_STATUS_VALUES,
+} from "@gooes/domain";
 /**
  * 基础项目 Schema
  */
-
-// 1. 先定义原始数组（加上 as const 是关键，让它变为字面量类型）
-export const PROJECT_STATUS_VALUES = [
-  "lead", // 线索
-  "negotiating", // 谈单中
-  "signed", // 已签约
-  "designing", // 设计中
-  "constructing", // 施工中
-  "on_hold", // 暂停中
-  "acceptance", // 验收中
-  "completed", // 已完工
-  "after_sale", // 售后中
-  "invalid", // 无效客户
-] as const;
 
 // 2. 转换为 Zod Enum
 export const ProjectStatusSchema = z.enum(PROJECT_STATUS_VALUES, {
@@ -35,7 +27,7 @@ export const ProjectBaseSchema = z.object({
     .max(20, "风格标签不能超过 20 个")
     .optional(),
   visibility_status: z
-    .enum(["inherit", "public", "hidden"], {
+    .enum(PROJECT_VISIBILITY_STATUS_VALUES, {
       message: "无效的展示状态",
     })
     .default("inherit"),
@@ -51,6 +43,12 @@ export const ProjectBaseSchema = z.object({
   budget: z.coerce
     .number("预算必须是数字")
     .min(0, "预算不能为负数")
+    .nullable()
+    .optional(),
+
+  signed_amount: z.coerce
+    .number("签约金额必须是数字")
+    .min(0, "签约金额不能为负数")
     .nullable()
     .optional(),
 
@@ -93,3 +91,15 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;
+
+export const ProjectResourceListQuerySchema = PaginationQuerySchema.extend({
+  id: z.uuid("无效的项目 ID").optional(),
+});
+
+export type ProjectResourceListQuery = z.infer<typeof ProjectResourceListQuerySchema>;
+
+export const ProjectReferralRateSchema = z.coerce
+  .number("提成比例必须是数字")
+  .int("提成比例必须是整数基点")
+  .min(PROJECT_REFERRAL_RATE_BPS_MIN, `提成比例不能低于 ${PROJECT_REFERRAL_RATE_BPS_MIN}`)
+  .max(PROJECT_REFERRAL_RATE_BPS_MAX, `提成比例不能高于 ${PROJECT_REFERRAL_RATE_BPS_MAX}`);

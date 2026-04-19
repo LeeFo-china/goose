@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  PAYMENT_STATUS_VALUES,
+  PAYMENT_TYPE_VALUES,
+} from "@gooes/domain";
 
 /**
  * 基础支付/款项 Schema
@@ -15,17 +19,17 @@ export const PaymentBaseSchema = z.object({
 
   // 支付状态：例如 已支付、待支付、已退款
   status: z
-    .enum(["pending", "completed", "failed", "refunded"], {
+    .enum(PAYMENT_STATUS_VALUES, {
       message: "无效的支付状态",
     })
     .default("pending"),
 
   // 支付类型：例如 预付款、尾款、进度款，或者 微信、支付宝、银行转账
   type: z
-    .enum(["prepayment", "progress", "final", "other"], {
+    .enum(PAYMENT_TYPE_VALUES, {
       message: "请选择有效的支付类型",
     })
-    .default("prepayment"),
+    .default("deposit"),
 
   // 创建时间
   created_at: z.string().datetime("无效的时间格式").nullable().optional(),

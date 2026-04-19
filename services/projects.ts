@@ -1,9 +1,11 @@
 import {
     type ProjectListQuery,
     ProjectListQuerySchema,
+    type UpdateProjectInput,
 } from "@/schema/projects";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
+import { projectRepository } from "@/repositories/projects";
 
 class ProjectService {
     async getProjectsByStatus(param: ProjectListQuery) {
@@ -31,7 +33,6 @@ class ProjectService {
             customer:customers!projects_customer_id_fkey(
               id,
               name,
-           
               phone
             ),
         
@@ -74,6 +75,25 @@ class ProjectService {
     }
 
     async searchProjectsByName() {
+    }
+
+    async updateProject(id: string, input: UpdateProjectInput) {
+        const existing = await projectRepository.findById(id);
+
+        if (!existing) {
+            throw Errors.badRequest("项目不存在");
+        }
+
+        const nextStatus = input.status ?? existing.status;
+        const nextSignedAmount = input.signed_amount ?? existing.signed_amount;
+
+        if (nextStatus === "signed") {
+            if (nextSignedAmount == null || Number(nextSignedAmount) <= 0) {
+                throw Errors.badRequest("项目签约时必须提供有效的 signed_amount");
+            }
+        }
+
+        return projectRepository.update(id, input);
     }
 }
 

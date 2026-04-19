@@ -16,6 +16,14 @@
     "README.md"
   ],
   "sideEffects": false,
+<<<<<<< HEAD
+=======
+  "scripts": {
+    "clean": "rm -rf dist *.tgz",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm && tsc -p tsconfig.json",
+    "prepack": "bun run clean && bun run build"
+  },
+>>>>>>> refactor/project-create
   "publishConfig": {
     "access": "restricted"
   }

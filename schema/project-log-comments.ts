@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES } from "@gooes/domain";
 
 export const ProjectLogCommentBaseSchema = z.object({
   id: z.string().uuid("无效的评论ID").optional(),
   log_id: z.string().uuid("无效的日志ID"),
   parent_id: z.string().uuid("无效的父评论ID").nullable().optional(),
-  author_type: z.enum(["employee", "customer"], {
+  author_type: z.enum(PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES, {
     message: "评论作者身份无效",
   }),
   author_id: z.string().uuid("无效的评论作者ID"),

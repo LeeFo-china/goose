@@ -2,7 +2,7 @@
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext"],
-    "types": ["bun-types"],
+    "types": ["bun"],
     // "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
@@ -33,7 +33,8 @@
 
     "paths": {
       "@/*": ["./*"],
-      
+      "@gooes/domain": ["./packages/domain/src/index.ts"],
+      "@gooes/domain/*": ["./packages/domain/src/*"]
     },
   }
 }

@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       customer_follow_ups: {
@@ -181,12 +206,175 @@ export type Database = {
           },
         ]
       }
+      expense_request_approvals: {
+        Row: {
+          action: string
+          approver_id: string | null
+          comment: string | null
+          created_at: string
+          expense_request_id: string
+          id: string
+          step: string
+        }
+        Insert: {
+          action: string
+          approver_id?: string | null
+          comment?: string | null
+          created_at?: string
+          expense_request_id: string
+          id?: string
+          step: string
+        }
+        Update: {
+          action?: string
+          approver_id?: string | null
+          comment?: string | null
+          created_at?: string
+          expense_request_id?: string
+          id?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_request_approvals_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_approvals_expense_request_id_fkey"
+            columns: ["expense_request_id"]
+            isOneToOne: false
+            referencedRelation: "expense_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_request_items: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          evidence_images: Json
+          expense_request_id: string
+          id: string
+          invoice_no: string | null
+          occurred_at: string | null
+          remark: string | null
+          updated_at: string
+          vendor_name: string | null
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          evidence_images?: Json
+          expense_request_id: string
+          id?: string
+          invoice_no?: string | null
+          occurred_at?: string | null
+          remark?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          evidence_images?: Json
+          expense_request_id?: string
+          id?: string
+          invoice_no?: string | null
+          occurred_at?: string | null
+          remark?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_request_items_expense_request_id_fkey"
+            columns: ["expense_request_id"]
+            isOneToOne: false
+            referencedRelation: "expense_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_request_settlements: {
+        Row: {
+          created_at: string
+          evidence_images: Json
+          expense_request_id: string
+          id: string
+          method: string
+          paid_amount: number
+          paid_at: string
+          paid_by: string | null
+          payee_account: string | null
+          payee_bank: string | null
+          payee_name: string
+          remark: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          evidence_images?: Json
+          expense_request_id: string
+          id?: string
+          method: string
+          paid_amount: number
+          paid_at: string
+          paid_by?: string | null
+          payee_account?: string | null
+          payee_bank?: string | null
+          payee_name: string
+          remark?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          evidence_images?: Json
+          expense_request_id?: string
+          id?: string
+          method?: string
+          paid_amount?: number
+          paid_at?: string
+          paid_by?: string | null
+          payee_account?: string | null
+          payee_bank?: string | null
+          payee_name?: string
+          remark?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_request_settlements_expense_request_id_fkey"
+            columns: ["expense_request_id"]
+            isOneToOne: true
+            referencedRelation: "expense_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_settlements_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_requests: {
         Row: {
           amount: number
+          approved_at: string | null
+          assignee_id: string | null
           audit_log: Json | null
-          category: string
+          cancelled_at: string | null
+          category: string | null
+          completed_at: string | null
           created_at: string | null
+          current_step: string
           current_step_role: string | null
           employee_id: string
           evidence_images: Json | null
@@ -194,15 +382,26 @@ export type Database = {
           mode: string
           payment_id: string | null
           project_id: string | null
-          reason: string
+          reason: string | null
+          rejected_at: string | null
+          rejected_reason: string | null
+          request_no: string | null
           status: string
+          submitted_at: string | null
+          title: string | null
+          total_amount: number
           updated_at: string | null
         }
         Insert: {
           amount?: number
+          approved_at?: string | null
+          assignee_id?: string | null
           audit_log?: Json | null
-          category: string
+          cancelled_at?: string | null
+          category?: string | null
+          completed_at?: string | null
           created_at?: string | null
+          current_step?: string
           current_step_role?: string | null
           employee_id: string
           evidence_images?: Json | null
@@ -210,15 +409,26 @@ export type Database = {
           mode: string
           payment_id?: string | null
           project_id?: string | null
-          reason: string
+          reason?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          request_no?: string | null
           status?: string
+          submitted_at?: string | null
+          title?: string | null
+          total_amount?: number
           updated_at?: string | null
         }
         Update: {
           amount?: number
+          approved_at?: string | null
+          assignee_id?: string | null
           audit_log?: Json | null
-          category?: string
+          cancelled_at?: string | null
+          category?: string | null
+          completed_at?: string | null
           created_at?: string | null
+          current_step?: string
           current_step_role?: string | null
           employee_id?: string
           evidence_images?: Json | null
@@ -226,11 +436,24 @@ export type Database = {
           mode?: string
           payment_id?: string | null
           project_id?: string | null
-          reason?: string
+          reason?: string | null
+          rejected_at?: string | null
+          rejected_reason?: string | null
+          request_no?: string | null
           status?: string
+          submitted_at?: string | null
+          title?: string | null
+          total_amount?: number
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "expense_requests_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expense_requests_employee_id_fkey"
             columns: ["employee_id"]
@@ -253,6 +476,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      external_referrers: {
+        Row: {
+          alipay_account: string | null
+          bank_account: string | null
+          bank_name: string | null
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          remark: string | null
+          status: string
+          updated_at: string
+          wechat_account: string | null
+        }
+        Insert: {
+          alipay_account?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          remark?: string | null
+          status?: string
+          updated_at?: string
+          wechat_account?: string | null
+        }
+        Update: {
+          alipay_account?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          remark?: string | null
+          status?: string
+          updated_at?: string
+          wechat_account?: string | null
+        }
+        Relationships: []
       }
       payments: {
         Row: {
@@ -443,6 +708,85 @@ export type Database = {
           },
         ]
       }
+      project_referrals: {
+        Row: {
+          base_amount: number | null
+          calculated_at: string | null
+          commission_amount: number | null
+          created_at: string
+          id: string
+          paid_at: string | null
+          paid_by: string | null
+          paid_evidence_images: Json
+          paid_remark: string | null
+          project_id: string
+          rate_bps: number
+          recalculated_at: string | null
+          referrer_id: string
+          remark: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          base_amount?: number | null
+          calculated_at?: string | null
+          commission_amount?: number | null
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_evidence_images?: Json
+          paid_remark?: string | null
+          project_id: string
+          rate_bps: number
+          recalculated_at?: string | null
+          referrer_id: string
+          remark?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          base_amount?: number | null
+          calculated_at?: string | null
+          commission_amount?: number | null
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_evidence_images?: Json
+          paid_remark?: string | null
+          project_id?: string
+          rate_bps?: number
+          recalculated_at?: string | null
+          referrer_id?: string
+          remark?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_referrals_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_referrals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "external_referrers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           address: string | null
@@ -453,6 +797,7 @@ export type Database = {
           id: string
           name: string | null
           property_id: string | null
+          signed_amount: number | null
           start_date: string | null
           status: string | null
           style_tags: Json
@@ -468,6 +813,7 @@ export type Database = {
           id?: string
           name?: string | null
           property_id?: string | null
+          signed_amount?: number | null
           start_date?: string | null
           status?: string | null
           style_tags?: Json
@@ -483,6 +829,7 @@ export type Database = {
           id?: string
           name?: string | null
           property_id?: string | null
+          signed_amount?: number | null
           start_date?: string | null
           status?: string | null
           style_tags?: Json
@@ -655,6 +1002,10 @@ export type Database = {
         }[]
       }
       is_admin: { Args: never; Returns: boolean }
+      recalculate_project_referral: {
+        Args: { p_project_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
@@ -783,6 +1134,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

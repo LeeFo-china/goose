@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  CUSTOMER_SOURCE_VALUES,
+  CUSTOMER_STATUS_VALUES,
+} from "@gooes/domain";
 
 export const CustomerSchema = z.object({
   // id 通常是数据库自动生成的 UUID 或数字，这里假设是 UUID 字符串
@@ -18,8 +22,12 @@ export const CustomerSchema = z.object({
   owner_id: z.string().uuid("无效的所有者 ID").nullable().optional(),
 
   // source 和 status 建议使用枚举（Enum）或者简单的字符串
-  source: z.string().nullable().optional(),
-  status: z.string().nullable().optional(),
+  source: z.enum(CUSTOMER_SOURCE_VALUES, {
+    message: "无效的客户来源",
+  }).nullable().optional(),
+  status: z.enum(CUSTOMER_STATUS_VALUES, {
+    message: "无效的客户状态",
+  }).nullable().optional(),
 
   // created_at 是 ISO 时间字符串格式
   created_at: z.iso.datetime().nullable().optional(),

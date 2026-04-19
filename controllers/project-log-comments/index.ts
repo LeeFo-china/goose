@@ -11,6 +11,7 @@ import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { Tables } from "@/types/database";
+import type { ProjectLogCommentAuthorType } from "@gooes/domain";
 
 type EmployeeAuthor = Pick<Tables<"employees">, "id" | "name" | "avatar" | "user_id">;
 type CustomerAuthor = Pick<Tables<"customers">, "id" | "name" | "user_id">;
@@ -24,6 +25,12 @@ type CommentAuthor = {
 
 type ProjectLogCommentResponseItem = ProjectLogCommentRow & {
   author: CommentAuthor | null;
+};
+
+type ResolvedCommentAuthor = {
+  author_type: ProjectLogCommentAuthorType;
+  author_id: string;
+  profile: CommentAuthor;
 };
 
 class ProjectLogCommentsController extends BaseController {
@@ -103,7 +110,9 @@ class ProjectLogCommentsController extends BaseController {
     });
   }
 
-  private async resolveCurrentAuthor(request: FastifyRequest) {
+  private async resolveCurrentAuthor(
+    request: FastifyRequest,
+  ): Promise<ResolvedCommentAuthor> {
     const userId = request.user?.sub;
     if (!userId) {
       throw Errors.unauthorized("未登录或登录状态无效");

@@ -3,6 +3,7 @@ import {
   EMPLOYEE_ROLE_VALUES,
   EMPLOYEE_STATUS_VALUES,
 } from "@gooes/domain";
+<<<<<<< HEAD
 
 const optionalNullableDateTime = (message: string) =>
   z.preprocess((value) => {
@@ -19,6 +20,8 @@ const optionalNullableDateTime = (message: string) =>
     message,
     offset: true,
   }).nullable().optional());
+=======
+>>>>>>> refactor/project-create
 
 /**
  * 基础员工 Schema
@@ -63,9 +66,13 @@ export const EmployeeBaseSchema = z.object({
     .default("employee"),
 
   // 状态
+<<<<<<< HEAD
   status: z.enum(EMPLOYEE_STATUS_VALUES, {
     message: "请选择有效的员工状态",
   }).default("active"),
+=======
+  status: z.enum(EMPLOYEE_STATUS_VALUES).default("active"),
+>>>>>>> refactor/project-create
 
   // 创建时间：只读，通常不从前端传入
   created_at: z.string().datetime().nullable().optional(),
