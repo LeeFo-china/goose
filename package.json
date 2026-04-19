@@ -3,6 +3,9 @@
   "module": "app.ts",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest"
@@ -17,6 +20,7 @@
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
   },
   "dependencies": {
+    "@gooes/domain": "workspace:*",
     "@alicloud/credentials": "^2.4.4",
     "@alicloud/dysmsapi20170525": "4.5.1",
     "@alicloud/openapi-client": "^0.4.15",

@@ -1,4 +1,24 @@
 import { z } from "zod";
+import {
+  EMPLOYEE_ROLE_VALUES,
+  EMPLOYEE_STATUS_VALUES,
+} from "@gooes/domain";
+
+const optionalNullableDateTime = (message: string) =>
+  z.preprocess((value) => {
+    if (value == null) {
+      return null;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      return null;
+    }
+
+    return value;
+  }, z.iso.datetime({
+    message,
+    offset: true,
+  }).nullable().optional());
 
 /**
  * 基础员工 Schema
@@ -25,26 +45,27 @@ export const EmployeeBaseSchema = z.object({
 
   // 部门 ID：关联外键，校验 UUID
   department_id: z.string().uuid("无效的部门 ID").nullable().optional(),
+  // 职位 ID：关联外键，校验 UUID
+  post_id: z.string().uuid("无效的职位 ID").nullable().optional(),
   // ✅ 修正为对象传参
   avatar: z.url({ message: "头像地址格式不正确" }).nullable(),
 
-  // ✅ 修正为对象传参，并建议开启 offset 以适配 Supabase 的时区字符串
-  last_login_time: z.iso
-    .datetime({
-      message: "登录时间必须是有效的 ISO 8601 格式",
-      offset: true, // 允许 +08:00 这种时区偏移格式
-    })
-    .nullable(),
+  // 新建员工时允许不传；传空字符串时按 null 处理
+  last_login_time: optionalNullableDateTime(
+    "登录时间必须是有效的 ISO 8601 格式",
+  ),
 
   // 角色：建议使用枚举，防止乱填
   role: z
-    .enum(["admin", "manager", "staff", "intern"], {
+    .enum(EMPLOYEE_ROLE_VALUES, {
       message: "请选择有效的员工角色",
     })
-    .default("staff"),
+    .default("employee"),
 
   // 状态
-  status: z.enum(["active", "inactive", "suspended"]).default("active"),
+  status: z.enum(EMPLOYEE_STATUS_VALUES, {
+    message: "请选择有效的员工状态",
+  }).default("active"),
 
   // 创建时间：只读，通常不从前端传入
   created_at: z.string().datetime().nullable().optional(),

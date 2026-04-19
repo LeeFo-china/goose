@@ -12,6 +12,7 @@
         "@alicloud/tea-util": "^1.4.11",
         "@fastify/autoload": "^6.3.1",
         "@fastify/multipart": "^10.0.0",
+        "@gooes/domain": "workspace:*",
         "@supabase/supabase-js": "^2.100.0",
         "fastify": "^5.8.4",
         "fastify-cli": "^7.4.1",
@@ -25,6 +26,10 @@
       "peerDependencies": {
         "typescript": "^5",
       },
+    },
+    "packages/domain": {
+      "name": "@gooes/domain",
+      "version": "1.2.0",
     },
   },
   "packages": {
@@ -81,6 +86,8 @@
     "@fastify/multipart": ["@fastify/multipart@10.0.0", "https://registry.npmmirror.com/@fastify/multipart/-/multipart-10.0.0.tgz", { "dependencies": { "@fastify/busboy": "^3.0.0", "@fastify/deepmerge": "^3.0.0", "@fastify/error": "^4.0.0", "fastify-plugin": "^5.0.0", "secure-json-parse": "^4.0.0" } }, "sha512-pUx3Z1QStY7E7kwvDTIvB6P+rF5lzP+iqPgZyJyG3yBJVPvQaZxzDHYbQD89rbY0ciXrMOyGi8ezHDVexLvJDA=="],
 
     "@fastify/proxy-addr": ["@fastify/proxy-addr@5.1.0", "https://registry.npmmirror.com/@fastify/proxy-addr/-/proxy-addr-5.1.0.tgz", { "dependencies": { "@fastify/forwarded": "^3.0.0", "ipaddr.js": "^2.1.0" } }, "sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw=="],
+
+    "@gooes/domain": ["@gooes/domain@workspace:packages/domain"],
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "https://registry.npmmirror.com/@pinojs/redact/-/redact-0.4.0.tgz", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
