@@ -5,6 +5,7 @@ export * from './department';
 export * from './employee';
 export * from './expense';
 export * from './payment';
+export * from './permission';
 export * from './post';
 export * from './project-log';
 export * from './project';

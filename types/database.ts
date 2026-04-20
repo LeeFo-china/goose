@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       customer_follow_ups: {
@@ -148,6 +123,90 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      employee_permission_overrides: {
+        Row: {
+          access_scope: string | null
+          created_at: string
+          effect: string
+          employee_id: string
+          id: string
+          permission_id: string
+          reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_scope?: string | null
+          created_at?: string
+          effect: string
+          employee_id: string
+          id?: string
+          permission_id: string
+          reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_scope?: string | null
+          created_at?: string
+          effect?: string
+          employee_id?: string
+          id?: string
+          permission_id?: string
+          reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_permission_overrides_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_permission_overrides_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_roles: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          role_id: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          role_id: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_roles_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employees: {
         Row: {
@@ -570,6 +629,42 @@ export type Database = {
           },
         ]
       }
+      permissions: {
+        Row: {
+          action: string
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          module: string
+          resource: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          module: string
+          resource: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          module?: string
+          resource?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       posts: {
         Row: {
           base_salary: number | null
@@ -911,6 +1006,75 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          access_scope: string
+          created_at: string
+          id: string
+          permission_id: string
+          role_id: string
+        }
+        Insert: {
+          access_scope?: string
+          created_at?: string
+          id?: string
+          permission_id: string
+          role_id: string
+        }
+        Update: {
+          access_scope?: string
+          created_at?: string
+          id?: string
+          permission_id?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sms_verification_codes: {
         Row: {
           code: string
@@ -1134,9 +1298,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

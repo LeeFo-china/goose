@@ -16,6 +16,8 @@ import {
 } from "@/schema/project-create-select";
 import type { Tables } from "@/types/database";
 import type { PostCode } from "@gooes/domain";
+import { authorizationService } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 
 type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
@@ -68,9 +70,131 @@ class ProjectController extends BaseController<
     super("projects", CreateProjectSchema, UpdateProjectSchema);
   }
 
-  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
+  private applyProjectIdsFilter(query: any, visibleProjectIds: string[] | null) {
+    if (visibleProjectIds === null) {
+      return query;
+    }
+
+    if (visibleProjectIds.length === 0) {
+      return query.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
+    return query.in("id", visibleProjectIds);
+  }
+
+  override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const queryResult = ProjectListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
+
+    const { page, pageSize, status, keyword } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    query = this.applyProjectIdsFilter(query, visibleProjectIds);
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const normalizedKeyword = keyword?.trim();
+    if (normalizedKeyword) {
+      query = query.or(
+        `name.ilike.%${normalizedKeyword}%,address.ilike.%${normalizedKeyword}%`,
+      );
+    }
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) throw Errors.dbError("列表查询失败", error);
+
+    return ResponseHandler.success({
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    });
+  };
+
+  override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.read",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
+      .select()
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询失败", error);
+    if (!data) throw Errors.dbError("查询记录不存在", error);
+
+    return ResponseHandler.success(data);
+  };
+
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "project.create");
+
+    if (!this.createSchema) {
+      throw Errors.badRequest("缺少参数类型：createSchema");
+    }
+
+    const result = this.createSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .insert(result.data)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("创建失败", error);
+    return ResponseHandler.success(data);
+  };
+
+  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
 
     if (!this.updateSchema) {
       throw Errors.badRequest("缺少参数类型：updateSchema");
@@ -110,8 +234,13 @@ class ProjectController extends BaseController<
 
   @Get("/projects/status")
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
     const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -155,6 +284,8 @@ class ProjectController extends BaseController<
         { count: "exact" },
       );
 
+    query = this.applyProjectIdsFilter(query, visibleProjectIds);
+
     if (status) {
       query = query.eq("status", status);
     }
@@ -188,6 +319,9 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "project.create");
+
     const queryResult = ProjectCreateSelectCustomerQuerySchema.safeParse(
       request.query,
     );
@@ -239,6 +373,9 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "project.create");
+
     const queryResult = ProjectCreateSelectEmployeeQuerySchema.safeParse(
       request.query,
     );

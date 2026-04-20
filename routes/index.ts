@@ -24,6 +24,9 @@ import UploadController from "@/controllers/uploads";
 import ExternalReferrersController from "@/controllers/external-referrers";
 import ProjectReferralsController from "@/controllers/project-referrals";
 import ExpenseRequestsController from "@/controllers/expense-requests";
+import RolesController from "@/controllers/roles";
+import PermissionsController from "@/controllers/permissions";
+import EmployeePermissionsController from "@/controllers/employee-permissions";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -35,6 +38,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);
+  EmployeePermissionsController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));
@@ -43,6 +47,8 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("payments", PaymentController));
   app.register(createResourceRoutes("expense-requests", ExpenseRequestsController));
   app.register(createResourceRoutes("projects", ProjectController));
+  app.register(createResourceRoutes("roles", RolesController));
+  app.register(createResourceRoutes("permissions", PermissionsController));
   app.register(createResourceRoutes("external-referrers", ExternalReferrersController));
   app.register(createResourceRoutes("project-referrals", ProjectReferralsController));
   app.register(createResourceRoutes("project-logs", ProjectLogController));

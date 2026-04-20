@@ -14,6 +14,7 @@ import { expenseRequestService } from "@/services/expense-requests";
 import { Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { authorizationService } from "@/services/authorization";
 
 class ExpenseRequestsController extends BaseController<
   typeof CreateExpenseRequestSchema,
@@ -27,25 +28,40 @@ class ExpenseRequestsController extends BaseController<
     );
   }
 
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const result = ExpenseRequestListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    const data = await expenseRequestService.listExpenseRequests(result.data);
+    const data = await expenseRequestService.listExpenseRequests(
+      authContext,
+      result.data,
+    );
     return ResponseHandler.success(data);
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     const data = await expenseRequestService.getExpenseRequestById(
+      authContext,
       idVerify.data.id,
     );
     return ResponseHandler.success(data);
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
     }
@@ -53,11 +69,15 @@ class ExpenseRequestsController extends BaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    const data = await expenseRequestService.createExpenseRequest(result.data);
+    const data = await expenseRequestService.createExpenseRequest(
+      authContext,
+      result.data,
+    );
     return ResponseHandler.success(data);
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -69,6 +89,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.updateExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -77,6 +98,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/submit")
   async submit(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -84,6 +106,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.submitExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -93,6 +116,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/approve")
   async approve(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -100,6 +124,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.approveExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -109,6 +134,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/reject")
   async reject(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -116,6 +142,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.rejectExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -125,6 +152,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/cancel")
   async cancel(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -132,6 +160,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.cancelExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -141,6 +170,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/pay")
   async pay(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -148,6 +178,7 @@ class ExpenseRequestsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.payExpenseRequest(
+      authContext,
       idVerify.data.id,
       result.data,
     );

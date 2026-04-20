@@ -7,8 +7,6 @@
  * @module controllers/employee
  */
 
-import type { RouteHandlerMethod } from "fastify";
-
 import { BaseController } from "@/controllers/BaseController";
 import { CreateEmployeeSchema, UpdateEmployeeSchema } from "@/schema/employee";
 import { SupabaseDB } from "@/utils/supabase/index";
@@ -16,6 +14,8 @@ import { Errors } from "@/errors/error-factory";
 import { Get } from "@/utils/decorators/route";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
+import { authorizationService } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 
 /**
  * 员工控制器类
@@ -43,6 +43,132 @@ class EmployeeController extends BaseController<
      */
     super("employees", CreateEmployeeSchema, UpdateEmployeeSchema);
   }
+
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
+  private applyEmployeeScope(query: any, scope: "self" | "department" | "assigned" | "all" | null, authContext: Awaited<ReturnType<EmployeeController["getRequiredAuthContext"]>>) {
+    if (!scope) {
+      throw Errors.forbidden();
+    }
+
+    if (scope === "all") {
+      return query;
+    }
+
+    if (scope === "department") {
+      if (!authContext.departmentId) {
+        return query.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      return query.eq("department_id", authContext.departmentId);
+    }
+
+    if (!authContext.employeeId) {
+      return query.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
+    return query.eq("id", authContext.employeeId);
+  }
+
+  override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const scope = accessPolicyService.assertPermission(
+      authContext,
+      "employee.read",
+    );
+
+    const queryResult = this.paginationQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const { page, pageSize } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    query = this.applyEmployeeScope(query, scope, authContext);
+
+    const { data, error, count } = await query.range(from, to);
+
+    if (error) throw Errors.dbError("列表查询失败", error);
+    return ResponseHandler.success({
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    });
+  };
+
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "employee.create");
+
+    if (!this.createSchema) {
+      throw Errors.badRequest("缺少参数类型：createSchema");
+    }
+
+    const result = this.createSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .insert(result.data)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("创建失败", error);
+    return ResponseHandler.success(data);
+  };
+
+  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "employee.update");
+
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const existing = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select("id, department_id")
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (existing.error) throw Errors.dbError("查询失败", existing.error);
+    if (!existing.data) throw Errors.badRequest("员工不存在");
+
+    if (!accessPolicyService.canAccessEmployee(authContext, existing.data, "employee.update")) {
+      throw Errors.forbidden();
+    }
+
+    if (!this.updateSchema) {
+      throw Errors.badRequest("缺少参数类型：updateSchema");
+    }
+
+    const result = this.updateSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .update(result.data)
+      .eq("id", idVerify.data.id)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("更新失败", error);
+    return ResponseHandler.success(data);
+  };
 
   // ==================== 基础 CRUD ====================
   // 继承自 BaseController:
@@ -78,12 +204,22 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const { data, error } = await SupabaseDB.from(this.tableName).select(`
+    const authContext = await this.getRequiredAuthContext(request);
+    const scope = accessPolicyService.assertPermission(
+      authContext,
+      "employee.read",
+    );
+
+    let query = SupabaseDB.getAdminClient().from(this.tableName).select(`
         *,
         department:departments (
           name
         )
       `);
+
+    query = this.applyEmployeeScope(query, scope, authContext);
+
+    const { data, error } = await query;
 
     if (error) throw Errors.dbError("查询失败", error);
     return ResponseHandler.success(data);
@@ -103,12 +239,14 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
+    const authContext = await this.getRequiredAuthContext(request);
+
     // 1. 校验 UUID 参数
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     // 2. 查询单条员工记录，联查部门信息
-    const { data, error } = await SupabaseDB.from(this.tableName)
+    const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
       .select(`
         *,
         department:departments (
@@ -121,6 +259,9 @@ class EmployeeController extends BaseController<
     // 3. 错误处理
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在");
+    if (!accessPolicyService.canAccessEmployee(authContext, data, "employee.read")) {
+      throw Errors.forbidden();
+    }
 
     return ResponseHandler.success(data);
   }
@@ -150,7 +291,13 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const { data, error } = await SupabaseDB.from(this.tableName).select(`
+    const authContext = await this.getRequiredAuthContext(request);
+    const scope = accessPolicyService.assertPermission(
+      authContext,
+      "employee.read",
+    );
+
+    let query = SupabaseDB.getAdminClient().from(this.tableName).select(`
         *,
         post:posts (
           code,
@@ -158,21 +305,38 @@ class EmployeeController extends BaseController<
         )
       `);
 
+    query = this.applyEmployeeScope(query, scope, authContext);
+
+    const { data, error } = await query;
+
     if (error) throw Errors.dbError("查询失败", error);
     return ResponseHandler.success(data);
   }
 
-  override getById: RouteHandlerMethod = async (request, reply) => {
+  override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const { data, error } = await SupabaseDB.from(this.tableName)
+    let { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
       .select()
-      .eq("user_id", idVerify.data.id)
+      .eq("id", idVerify.data.id)
       .maybeSingle();
+
+    if (!data && !error) {
+      const fallback = await SupabaseDB.getAdminClient().from(this.tableName)
+        .select()
+        .eq("user_id", idVerify.data.id)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
+    if (!accessPolicyService.canAccessEmployee(authContext, data, "employee.read")) {
+      throw Errors.forbidden();
+    }
 
     return ResponseHandler.success(data);
   };

@@ -4,14 +4,16 @@ import type {
   ApproveExpenseRequestInput,
   CancelExpenseRequestInput,
   CreateExpenseRequestInput,
-  ExpenseRequestItemInput,
   ExpenseRequestListQueryType,
+  ExpenseRequestItemInput,
   PayExpenseRequestInput,
   RejectExpenseRequestInput,
   SubmitExpenseRequestInput,
   UpdateExpenseRequestInput,
 } from "@/schema/expense-requests";
 import { SupabaseDB } from "@/utils/supabase/index";
+import type { AuthContext } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 
 function calculateTotalAmount(items: ExpenseRequestItemInput[]) {
   return Number(
@@ -52,6 +54,61 @@ function generateExpenseRequestNo() {
 }
 
 class ExpenseRequestService {
+  private ensureCurrentEmployee(
+    authContext: AuthContext,
+    employeeId: string,
+    permissionCode:
+      | "expense_request.create"
+      | "expense_request.submit"
+      | "expense_request.approve_manager"
+      | "expense_request.approve_finance"
+      | "expense_request.pay",
+  ) {
+    const scope = accessPolicyService.assertPermission(authContext, permissionCode);
+    if (scope === "all") {
+      return;
+    }
+
+    if (!authContext.employeeId || authContext.employeeId !== employeeId) {
+      throw Errors.forbidden();
+    }
+  }
+
+  private async assertCanReadExpenseRequest(
+    authContext: AuthContext,
+    record: { employee_id: string; assignee_id: string | null },
+  ) {
+    const visibility = await accessPolicyService.getVisibleExpenseFilters(
+      authContext,
+      "expense_request.read",
+    );
+
+    if (visibility.type === "all") {
+      return;
+    }
+
+    if (visibility.type === "none") {
+      throw Errors.forbidden();
+    }
+
+    const employeeIds = visibility.employeeIds;
+    if (visibility.type === "self") {
+      if (!employeeIds.includes(record.employee_id)) {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+
+    if (
+      employeeIds.includes(record.employee_id) ||
+      (record.assignee_id ? employeeIds.includes(record.assignee_id) : false)
+    ) {
+      return;
+    }
+
+    throw Errors.forbidden();
+  }
+
   private async assertEmployeeExists(id: string, message = "员工不存在") {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
@@ -88,7 +145,8 @@ class ExpenseRequestService {
     }
   }
 
-  async createExpenseRequest(input: CreateExpenseRequestInput) {
+  async createExpenseRequest(authContext: AuthContext, input: CreateExpenseRequestInput) {
+    this.ensureCurrentEmployee(authContext, input.employee_id, "expense_request.create");
     await this.assertEmployeeExists(input.employee_id);
     await this.assertProjectExists(input.project_id);
 
@@ -114,11 +172,22 @@ class ExpenseRequestService {
     );
   }
 
-  async updateExpenseRequest(id: string, input: UpdateExpenseRequestInput) {
+  async updateExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: UpdateExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
+
+    await this.assertCanReadExpenseRequest(authContext, existing);
+    this.ensureCurrentEmployee(
+      authContext,
+      existing.employee_id,
+      "expense_request.create",
+    );
 
     if (!["draft", "rejected"].includes(existing.status)) {
       throw Errors.badRequest("当前状态不允许修改费用申请");
@@ -147,11 +216,22 @@ class ExpenseRequestService {
     );
   }
 
-  async submitExpenseRequest(id: string, input: SubmitExpenseRequestInput) {
+  async submitExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: SubmitExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
+
+    await this.assertCanReadExpenseRequest(authContext, existing);
+    this.ensureCurrentEmployee(
+      authContext,
+      input.operator_id,
+      "expense_request.submit",
+    );
 
     if (!["draft", "rejected"].includes(existing.status)) {
       throw Errors.badRequest("当前状态不允许提交费用申请");
@@ -193,7 +273,11 @@ class ExpenseRequestService {
     return expenseRequestRepository.findById(updated.id);
   }
 
-  async approveExpenseRequest(id: string, input: ApproveExpenseRequestInput) {
+  async approveExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: ApproveExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -205,6 +289,20 @@ class ExpenseRequestService {
 
     if (!["manager_review", "finance_review"].includes(existing.current_step)) {
       throw Errors.badRequest("当前审批节点不允许通过");
+    }
+
+    if (existing.current_step === "manager_review") {
+      this.ensureCurrentEmployee(
+        authContext,
+        input.approver_id,
+        "expense_request.approve_manager",
+      );
+    } else {
+      this.ensureCurrentEmployee(
+        authContext,
+        input.approver_id,
+        "expense_request.approve_finance",
+      );
     }
 
     await this.assertEmployeeExists(input.approver_id, "审批人不存在");
@@ -235,7 +333,11 @@ class ExpenseRequestService {
     return expenseRequestRepository.findById(updated.id);
   }
 
-  async rejectExpenseRequest(id: string, input: RejectExpenseRequestInput) {
+  async rejectExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: RejectExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -243,6 +345,22 @@ class ExpenseRequestService {
 
     if (existing.status !== "pending") {
       throw Errors.badRequest("只有审批中的费用申请才能驳回");
+    }
+
+    if (existing.current_step === "manager_review") {
+      this.ensureCurrentEmployee(
+        authContext,
+        input.approver_id,
+        "expense_request.approve_manager",
+      );
+    } else if (existing.current_step === "finance_review") {
+      this.ensureCurrentEmployee(
+        authContext,
+        input.approver_id,
+        "expense_request.approve_finance",
+      );
+    } else {
+      throw Errors.badRequest("当前审批节点不允许驳回");
     }
 
     await this.assertEmployeeExists(input.approver_id, "审批人不存在");
@@ -267,11 +385,22 @@ class ExpenseRequestService {
     return expenseRequestRepository.findById(updated.id);
   }
 
-  async cancelExpenseRequest(id: string, input: CancelExpenseRequestInput) {
+  async cancelExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: CancelExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
+
+    await this.assertCanReadExpenseRequest(authContext, existing);
+    this.ensureCurrentEmployee(
+      authContext,
+      input.operator_id,
+      "expense_request.submit",
+    );
 
     if (!["draft", "pending", "rejected"].includes(existing.status)) {
       throw Errors.badRequest("当前状态不允许撤回费用申请");
@@ -298,11 +427,18 @@ class ExpenseRequestService {
     return expenseRequestRepository.findById(updated.id);
   }
 
-  async payExpenseRequest(id: string, input: PayExpenseRequestInput) {
+  async payExpenseRequest(
+    authContext: AuthContext,
+    id: string,
+    input: PayExpenseRequestInput,
+  ) {
     const existing = await expenseRequestRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
+
+    await this.assertCanReadExpenseRequest(authContext, existing);
+    this.ensureCurrentEmployee(authContext, input.paid_by, "expense_request.pay");
 
     if (existing.status !== "approved" || existing.current_step !== "payment") {
       throw Errors.badRequest("只有待打款的费用申请才能登记支付");
@@ -351,17 +487,26 @@ class ExpenseRequestService {
     return expenseRequestRepository.findById(id);
   }
 
-  async getExpenseRequestById(id: string) {
+  async getExpenseRequestById(authContext: AuthContext, id: string) {
     const data = await expenseRequestRepository.findById(id);
     if (!data) {
       throw Errors.badRequest("费用申请不存在");
     }
 
+    await this.assertCanReadExpenseRequest(authContext, data);
+
     return data;
   }
 
-  async listExpenseRequests(params: ExpenseRequestListQueryType) {
-    return expenseRequestRepository.list(params);
+  async listExpenseRequests(
+    authContext: AuthContext,
+    params: ExpenseRequestListQueryType,
+  ) {
+    const visibility = await accessPolicyService.getVisibleExpenseFilters(
+      authContext,
+      "expense_request.read",
+    );
+    return expenseRequestRepository.list(params, visibility);
   }
 }
 

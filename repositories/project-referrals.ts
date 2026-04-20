@@ -166,7 +166,10 @@ class ProjectReferralRepository {
     return data as unknown as ProjectReferralRecord;
   }
 
-  async list(params: ProjectReferralListQueryType) {
+  async list(
+    params: ProjectReferralListQueryType,
+    visibleProjectIds?: string[] | null,
+  ) {
     const { page, pageSize, status, project_id } = params;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -174,6 +177,22 @@ class ProjectReferralRepository {
     let query = SupabaseDB.from("project_referrals")
       .select(this.referralSelect, { count: "exact" })
       .order("created_at", { ascending: false });
+
+    if (visibleProjectIds) {
+      if (visibleProjectIds.length === 0) {
+        return {
+          list: [],
+          pagination: {
+            page,
+            pageSize,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      }
+
+      query = query.in("project_id", visibleProjectIds);
+    }
 
     if (status) {
       query = query.eq("status", status);

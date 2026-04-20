@@ -40,6 +40,25 @@ export { PAYMENT_STATUS_VALUES, PAYMENT_TYPE_VALUES } from './payment';
 export type { PaymentStatus, PaymentType } from './payment';
 
 export {
+  ACCESS_SCOPE_VALUES,
+  AccessScopeConfig,
+  PERMISSION_CODE_VALUES,
+  PermissionCodeConfig,
+  PERMISSION_OVERRIDE_EFFECT_VALUES,
+  PERMISSION_STATUS_VALUES,
+  PermissionStatusConfig,
+  ROLE_STATUS_VALUES,
+  RoleStatusConfig,
+} from './permission';
+export type {
+  AccessScope,
+  PermissionCode,
+  PermissionOverrideEffect,
+  PermissionStatus,
+  RoleStatus,
+} from './permission';
+
+export {
   POST_CODE_VALUES,
   POST_STATUS_VALUES,
   SALARY_TYPE_VALUES,

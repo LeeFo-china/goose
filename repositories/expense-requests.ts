@@ -75,6 +75,13 @@ type ExpenseRequestSettlementPayload = {
   remark?: string | null;
 };
 
+type ExpenseRequestVisibilityFilter =
+  | { type: "all"; employeeIds: string[] }
+  | { type: "none"; employeeIds: string[] }
+  | { type: "self"; employeeIds: string[] }
+  | { type: "assigned"; employeeIds: string[] }
+  | { type: "department"; employeeIds: string[] };
+
 class ExpenseRequestRepository {
   private summarySelect = `
     *,
@@ -306,7 +313,10 @@ class ExpenseRequestRepository {
     return !!data?.id;
   }
 
-  async list(params: ExpenseRequestListQueryType) {
+  async list(
+    params: ExpenseRequestListQueryType,
+    visibility?: ExpenseRequestVisibilityFilter,
+  ) {
     const {
       page,
       pageSize,
@@ -318,9 +328,6 @@ class ExpenseRequestRepository {
       current_step,
       keyword,
     } = params;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
     let query = SupabaseDB.getAdminClient()
       .from("expense_requests")
       .select(this.summarySelect, { count: "exact" })
@@ -356,19 +363,43 @@ class ExpenseRequestRepository {
       );
     }
 
-    const { data, error, count } = await query.range(from, to);
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询费用申请列表失败", error);
     }
 
+    let rows = ((data || []) as unknown) as ExpenseRequestRecord[];
+    if (visibility) {
+      if (visibility.type === "none") {
+        rows = [];
+      } else if (visibility.type === "self") {
+        rows = rows.filter((item) => visibility.employeeIds.includes(item.employee_id));
+      } else if (visibility.type === "assigned") {
+        rows = rows.filter((item) =>
+          visibility.employeeIds.includes(item.employee_id) ||
+          (item.assignee_id ? visibility.employeeIds.includes(item.assignee_id) : false)
+        );
+      } else if (visibility.type === "department") {
+        rows = rows.filter((item) =>
+          visibility.employeeIds.includes(item.employee_id) ||
+          (item.assignee_id ? visibility.employeeIds.includes(item.assignee_id) : false)
+        );
+      }
+    }
+
+    const total = rows.length;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize;
+    const paged = rows.slice(from, to);
+
     return {
-      list: data || [],
+      list: paged,
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
       },
     };
   }
