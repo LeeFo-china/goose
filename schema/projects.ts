@@ -7,13 +7,37 @@ import {
   PROJECT_REFERRAL_RATE_BPS_MIN,
   PROJECT_VISIBILITY_STATUS_VALUES,
 } from "@gooes/domain";
+
+function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (
+        normalized === "" ||
+        normalized === "undefined" ||
+        normalized === "null" ||
+        normalized === "all"
+      ) {
+        return undefined;
+      }
+
+      return normalized;
+    }
+
+    return value;
+  }, schema.optional());
+}
 /**
  * 基础项目 Schema
  */
 
 // 2. 转换为 Zod Enum
 export const ProjectStatusSchema = z.enum(PROJECT_STATUS_VALUES, {
-  message: "无效的客户状态",
+  message: "无效的项目状态",
 }).nullable().optional();
 
 export const ProjectBaseSchema = z.object({
@@ -89,10 +113,22 @@ export const ProjectOwnershipSchema = z.enum(["self", "all"], {
   message: "无效的归属筛选",
 }).optional();
 
+export const ProjectStatusFilterSchema = optionalQueryValue(
+  z.enum(PROJECT_STATUS_VALUES, {
+    message: "无效的项目状态",
+  }),
+);
+
+export const ProjectOwnershipFilterSchema = optionalQueryValue(
+  z.enum(["self", "all"], {
+    message: "无效的归属筛选",
+  }),
+);
+
 export const ProjectListQuerySchema = PaginationQuerySchema.extend({
-  status: ProjectStatusSchema, // 允许按状态过滤
-  keyword: z.string().optional(), // 允许关键词搜索
-  ownership: ProjectOwnershipSchema,
+  status: ProjectStatusFilterSchema, // 允许按状态过滤
+  keyword: optionalQueryValue(z.string()), // 允许关键词搜索
+  ownership: ProjectOwnershipFilterSchema,
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;

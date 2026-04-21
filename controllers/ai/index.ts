@@ -2,8 +2,15 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { Post } from "@/utils/decorators/route";
-import { DecorationQaRequestSchema } from "@/schema/ai";
-import { askDecorationQa } from "@/services/decoration-qa";
+import {
+  DecorationQaRequestSchema,
+  DecorationQaStreamRequestSchema,
+} from "@/schema/ai";
+import {
+  askDecorationQa,
+  serializeDecorationQaStreamEvent,
+  streamDecorationQa,
+} from "@/services/decoration-qa";
 
 class AiController extends BaseController {
   constructor() {
@@ -34,6 +41,57 @@ class AiController extends BaseController {
         message: "AI 服务繁忙，请稍后再试",
         statusCode: 500,
       });
+    }
+  }
+
+  @Post("/ai/decoration-qa/stream")
+  async decorationQaStream(request: FastifyRequest, reply: FastifyReply) {
+    const result = DecorationQaStreamRequestSchema.safeParse(request.body);
+
+    if (!result.success) {
+      throw Errors.fromZod(result.error);
+    }
+
+    reply.hijack();
+    reply.raw.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.setHeader("X-Accel-Buffering", "no");
+    reply.raw.flushHeaders?.();
+
+    const abortController = new AbortController();
+    request.raw.on("close", () => {
+      abortController.abort();
+    });
+
+    try {
+      await streamDecorationQa(
+        result.data,
+        async (event) => {
+          if (!reply.raw.writableEnded) {
+            reply.raw.write(serializeDecorationQaStreamEvent(event));
+          }
+        },
+        {
+          signal: abortController.signal,
+        },
+      );
+    } catch (error) {
+      request.log.error(
+        { err: error, requestId: request.id },
+        "[ai] decoration qa stream failed",
+      );
+
+      if (!reply.raw.writableEnded) {
+        reply.raw.write(serializeDecorationQaStreamEvent({
+          type: "error",
+          message: "AI 服务繁忙，请稍后再试",
+        }));
+      }
+    } finally {
+      if (!reply.raw.writableEnded) {
+        reply.raw.end();
+      }
     }
   }
 }

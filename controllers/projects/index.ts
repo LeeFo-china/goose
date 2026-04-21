@@ -127,6 +127,57 @@ class ProjectController extends BaseController<
     );
   }
 
+  private normalizeRelation<T extends Record<string, unknown>>(
+    value: unknown,
+    fallback: T,
+  ): T {
+    if (Array.isArray(value)) {
+      const first = value[0];
+      if (first && typeof first === "object") {
+        return { ...fallback, ...(first as T) };
+      }
+
+      return fallback;
+    }
+
+    if (value && typeof value === "object") {
+      return { ...fallback, ...(value as T) };
+    }
+
+    return fallback;
+  }
+
+  private serializeProjectListItem<T extends Record<string, unknown>>(row: T) {
+    return {
+      ...row,
+      customer: this.normalizeRelation(row.customer, {
+        id: null,
+        name: null,
+        phone: null,
+      }),
+      property: this.normalizeRelation(row.property, {
+        community: null,
+        building_info: null,
+        area: null,
+        layout: null,
+        latitude: null,
+        longitude: null,
+      }),
+      designer: this.normalizeRelation(row.designer, {
+        id: null,
+        name: null,
+        phone: null,
+        avatar: null,
+      }),
+      supervisor: this.normalizeRelation(row.supervisor, {
+        id: null,
+        name: null,
+        phone: null,
+        avatar: null,
+      }),
+    };
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -162,7 +213,9 @@ class ProjectController extends BaseController<
     if (error) throw Errors.dbError("列表查询失败", error);
 
     return ResponseHandler.success({
-      list: data || [],
+      list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
+        this.serializeProjectListItem(item)
+      ),
       pagination: {
         page,
         pageSize,
@@ -294,6 +347,7 @@ class ProjectController extends BaseController<
             name,
             status,
             budget,
+            start_date,
             address,
             created_at,
             designer:employees!projects_designer_id_fkey(
@@ -345,7 +399,9 @@ class ProjectController extends BaseController<
     if (error) throw Errors.dbError("列表查询失败", error);
 
     return ResponseHandler.success({
-      list: data || [],
+      list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
+        this.serializeProjectListItem(item)
+      ),
       pagination: {
         page,
         pageSize,
