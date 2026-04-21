@@ -5,6 +5,7 @@ import type {
   CreateRoleInput,
   EmployeePermissionOverrideInput,
   PermissionListQueryType,
+  RolePermissionAssignInput,
   RoleListQueryType,
   UpdatePermissionInput,
   UpdateRoleInput,
@@ -31,6 +32,10 @@ export type PermissionRecord = {
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type RolePermissionRecord = PermissionRecord & {
+  access_scope: string;
 };
 
 export type EmployeePermissionContextRecord = {
@@ -169,6 +174,44 @@ class PermissionRepository {
     }
 
     return (data as RoleRecord | null) ?? null;
+  }
+
+  async listRolePermissionRecords(roleId: string): Promise<RolePermissionRecord[]> {
+    const { data, error } = await this.adminClient
+      .from("role_permissions")
+      .select(`
+        access_scope,
+        permission:permissions (
+          id,
+          code,
+          module,
+          resource,
+          action,
+          description,
+          status,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq("role_id", roleId);
+
+    if (error) {
+      throw Errors.dbError("查询角色权限失败", error);
+    }
+
+    const rows = ((data || []) as unknown as Array<{
+      access_scope: string;
+      permission: PermissionRecord | null;
+    }>);
+
+    return rows
+      .filter((item): item is { access_scope: string; permission: PermissionRecord } =>
+        Boolean(item.permission)
+      )
+      .map((item) => ({
+        ...item.permission,
+        access_scope: item.access_scope,
+      }));
   }
 
   async createRole(input: CreateRoleInput): Promise<RoleRecord> {
@@ -389,6 +432,30 @@ class PermissionRepository {
     return ((data || []) as Array<{ role_id: string }>).map((item) => item.role_id);
   }
 
+  async listEmployeesByRoleId(roleId: string) {
+    const { data, error } = await this.adminClient
+      .from("employee_roles")
+      .select(`
+        employee:employees (
+          id,
+          user_id
+        )
+      `)
+      .eq("role_id", roleId);
+
+    if (error) {
+      throw Errors.dbError("查询角色关联员工失败", error);
+    }
+
+    const rows = ((data || []) as unknown as Array<{
+      employee: { id: string; user_id: string | null } | null;
+    }>);
+
+    return rows
+      .map((item) => item.employee)
+      .filter((item): item is { id: string; user_id: string | null } => Boolean(item));
+  }
+
   async listEmployeeIdsByDepartmentId(departmentId: string) {
     const { data, error } = await this.adminClient
       .from("employees")
@@ -567,6 +634,58 @@ class PermissionRepository {
     }
 
     return this.withRetry(() => this.listEmployeeRoles(employeeId));
+  }
+
+  async replaceRolePermissions(roleId: string, input: RolePermissionAssignInput) {
+    const targetPermissionIds = Array.from(new Set(input.permission_ids));
+    const existingRows = await this.withRetry(async () => {
+      const { data, error } = await this.adminClient
+        .from("role_permissions")
+        .select("permission_id, access_scope")
+        .eq("role_id", roleId);
+
+      if (error) {
+        throw Errors.dbError("查询角色权限失败", error);
+      }
+
+      return (data || []) as Array<{
+        permission_id: string;
+        access_scope: string;
+      }>;
+    });
+
+    const existingMap = new Map(
+      existingRows.map((item) => [item.permission_id, item.access_scope]),
+    );
+
+    const { error: deleteError } = await this.adminClient
+      .from("role_permissions")
+      .delete()
+      .eq("role_id", roleId);
+
+    if (deleteError) {
+      throw Errors.dbError("更新角色权限失败", deleteError);
+    }
+
+    if (targetPermissionIds.length === 0) {
+      return [] as RolePermissionRecord[];
+    }
+
+    const payload = targetPermissionIds.map((permissionId) => ({
+      role_id: roleId,
+      permission_id: permissionId,
+      access_scope: existingMap.get(permissionId) || "self",
+    }));
+
+    const { error: insertError } = await this.adminClient
+      .from("role_permissions")
+      .insert(payload);
+
+    if (insertError) {
+      throw Errors.dbError("更新角色权限失败", insertError);
+    }
+
+    return this.listRolePermissionRecords(roleId);
   }
 
   async upsertEmployeePermissionOverride(

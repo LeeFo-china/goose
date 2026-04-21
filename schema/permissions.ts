@@ -125,6 +125,12 @@ export const EmployeePermissionOverrideParamSchema = z.object({
   permission_id: z.uuid("无效的权限 ID"),
 });
 
+export const RolePermissionAssignSchema = z.object({
+  permission_ids: z.array(z.uuid("无效的权限 ID"))
+    .max(200, "权限数量不能超过 200")
+    .default([]),
+});
+
 export type RoleType = z.infer<typeof RoleBaseSchema>;
 export type CreateRoleInput = z.infer<typeof CreateRoleSchema>;
 export type UpdateRoleInput = z.infer<typeof UpdateRoleSchema>;
@@ -134,5 +140,6 @@ export type UpdatePermissionInput = z.infer<typeof UpdatePermissionSchema>;
 export type RoleListQueryType = z.infer<typeof RoleListQuerySchema>;
 export type PermissionListQueryType = z.infer<typeof PermissionListQuerySchema>;
 export type AssignEmployeeRolesInput = z.infer<typeof AssignEmployeeRolesSchema>;
+export type RolePermissionAssignInput = z.infer<typeof RolePermissionAssignSchema>;
 export type EmployeePermissionOverrideInput =
   z.infer<typeof EmployeePermissionOverrideSchema>;

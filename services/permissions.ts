@@ -6,6 +6,7 @@ import type {
   CreateRoleInput,
   EmployeePermissionOverrideInput,
   PermissionListQueryType,
+  RolePermissionAssignInput,
   RoleListQueryType,
   UpdatePermissionInput,
   UpdateRoleInput,
@@ -23,7 +24,13 @@ class PermissionService {
       throw Errors.badRequest("角色不存在");
     }
 
-    return data;
+    const permissions = await permissionRepository.listRolePermissionRecords(id);
+
+    return {
+      ...data,
+      permissions,
+      permission_count: permissions.length,
+    };
   }
 
   async createRole(input: CreateRoleInput) {
@@ -78,6 +85,38 @@ class PermissionService {
     return {
       roles,
       auth_context: context,
+    };
+  }
+
+  async replaceRolePermissions(roleId: string, input: RolePermissionAssignInput) {
+    const role = await permissionRepository.findRoleById(roleId);
+    if (!role) {
+      throw Errors.badRequest("角色不存在");
+    }
+
+    for (const permissionId of input.permission_ids) {
+      const permission = await permissionRepository.findPermissionById(permissionId);
+      if (!permission) {
+        throw Errors.badRequest("存在无效的权限 ID");
+      }
+    }
+
+    const permissions = await permissionRepository.replaceRolePermissions(
+      roleId,
+      input,
+    );
+
+    const employees = await permissionRepository.listEmployeesByRoleId(roleId);
+    for (const employee of employees) {
+      authorizationService.invalidateAuthContext({
+        authUserId: employee.user_id,
+        employeeId: employee.id,
+      });
+    }
+
+    return {
+      id: roleId,
+      permission_count: permissions.length,
     };
   }
 

@@ -2,10 +2,14 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateRoleSchema,
+  RolePermissionAssignSchema,
   RoleListQuerySchema,
   UpdateRoleSchema,
 } from "@/schema/permissions";
+import { accessPolicyService } from "@/services/access-policy";
+import { authorizationService } from "@/services/authorization";
 import { permissionService } from "@/services/permissions";
+import { Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -17,6 +21,14 @@ class RolesController extends BaseController<
     super("roles", CreateRoleSchema, UpdateRoleSchema);
   }
 
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const result = RoleListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
@@ -26,6 +38,9 @@ class RolesController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -62,6 +77,24 @@ class RolesController extends BaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Put("/roles/:id/permissions")
+  async replaceRolePermissions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const result = RolePermissionAssignSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await permissionService.replaceRolePermissions(
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
 }
 
 export default new RolesController();
