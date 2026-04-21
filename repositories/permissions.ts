@@ -637,26 +637,7 @@ class PermissionRepository {
   }
 
   async replaceRolePermissions(roleId: string, input: RolePermissionAssignInput) {
-    const targetPermissionIds = Array.from(new Set(input.permission_ids));
-    const existingRows = await this.withRetry(async () => {
-      const { data, error } = await this.adminClient
-        .from("role_permissions")
-        .select("permission_id, access_scope")
-        .eq("role_id", roleId);
-
-      if (error) {
-        throw Errors.dbError("查询角色权限失败", error);
-      }
-
-      return (data || []) as Array<{
-        permission_id: string;
-        access_scope: string;
-      }>;
-    });
-
-    const existingMap = new Map(
-      existingRows.map((item) => [item.permission_id, item.access_scope]),
-    );
+    const targetPermissions = input.permissions;
 
     const { error: deleteError } = await this.adminClient
       .from("role_permissions")
@@ -667,14 +648,14 @@ class PermissionRepository {
       throw Errors.dbError("更新角色权限失败", deleteError);
     }
 
-    if (targetPermissionIds.length === 0) {
+    if (targetPermissions.length === 0) {
       return [] as RolePermissionRecord[];
     }
 
-    const payload = targetPermissionIds.map((permissionId) => ({
+    const payload = targetPermissions.map((item) => ({
       role_id: roleId,
-      permission_id: permissionId,
-      access_scope: existingMap.get(permissionId) || "self",
+      permission_id: item.permission_id,
+      access_scope: item.access_scope,
     }));
 
     const { error: insertError } = await this.adminClient

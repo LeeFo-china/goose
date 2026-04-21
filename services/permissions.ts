@@ -94,8 +94,18 @@ class PermissionService {
       throw Errors.badRequest("角色不存在");
     }
 
-    for (const permissionId of input.permission_ids) {
-      const permission = await permissionRepository.findPermissionById(permissionId);
+    const targetPermissions = input.permissions;
+    const seenPermissionIds = new Set<string>();
+    for (const item of targetPermissions) {
+      if (seenPermissionIds.has(item.permission_id)) {
+        throw Errors.badRequest("权限列表中存在重复的权限 ID");
+      }
+
+      seenPermissionIds.add(item.permission_id);
+
+      const permission = await permissionRepository.findPermissionById(
+        item.permission_id,
+      );
       if (!permission) {
         throw Errors.badRequest("存在无效的权限 ID");
       }
