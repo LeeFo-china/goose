@@ -5,6 +5,13 @@ import {
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
 
+export const CustomerEmbeddedPropertySchema = z.object({
+  community: z.string().min(1, "小区名称不能为空").max(100, "名称过长"),
+  building_info: z.string().nullable().optional(),
+  area: z.number().positive("面积必须大于0").nullable().or(z.literal(0)).optional(),
+  layout: z.string().nullable().optional(),
+});
+
 export const CustomerSchema = z.object({
   // id 通常是数据库自动生成的 UUID 或数字，这里假设是 UUID 字符串
   id: z.uuid("无效的 ID 格式").optional(),
@@ -39,9 +46,12 @@ export const CustomerSchema = z.object({
 export const CreateCustomerSchema = CustomerSchema.extend({
   name: z.string().min(1, "创建时必须填写姓名"),
   phone: z.string().regex(/^1[3-9]\d{9}$/, "创建时必须填写正确的手机号"),
+  property: CustomerEmbeddedPropertySchema.optional(),
 });
 
-export const UpdateCustomerSchema = CustomerSchema.partial();
+export const UpdateCustomerSchema = CustomerSchema.partial().extend({
+  property: CustomerEmbeddedPropertySchema.optional(),
+});
 
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
 export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;

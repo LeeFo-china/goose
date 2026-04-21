@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import {
@@ -9,16 +10,40 @@ import {
 import { BaseController } from "@/controllers/BaseController";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FollowUpInsert } from "@/schema/customer";
+import type {
+  CreateCustomerSchemaType,
+  FollowUpInsert,
+  UpdateCustomerSchemaType,
+} from "@/schema/customer";
 import { PaginationQuerySchema } from "@/schema/request";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+
+type CustomerPropertyPayload =
+  | CreateCustomerSchemaType["property"]
+  | UpdateCustomerSchemaType["property"];
+
+type PrimaryPropertySummary = {
+  id: string;
+  community: string;
+  building_info: string | null;
+  layout: string | null;
+  area: number | null;
+};
 
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
   typeof UpdateCustomerSchema
 > {
+  private propertySummarySelect = `
+    id,
+    community,
+    building_info,
+    layout,
+    area
+  `;
+
   private customerSelect = `
     *,
     owner:employees!customers_owner_id_fkey(
@@ -69,6 +94,112 @@ class CustomerController extends BaseController<
       ...row,
       owner,
       owner_name: owner?.name ?? null,
+    };
+  }
+
+  private splitCustomerPayload<T extends { property?: CustomerPropertyPayload }>(
+    payload: T,
+  ) {
+    const { property, ...customerPayload } = payload;
+    return {
+      customerPayload,
+      propertyPayload: property,
+    };
+  }
+
+  private async getPrimaryCustomerPropertySummary(customerId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("properties")
+      .select(this.propertySummarySelect)
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户主房产失败", error);
+    }
+
+    return (data as PrimaryPropertySummary | null) ?? null;
+  }
+
+  private async getCustomerPropertySummaries(customerId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("properties")
+      .select(this.propertySummarySelect)
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户房产摘要失败", error);
+    }
+
+    return data || [];
+  }
+
+  private async upsertCustomerPrimaryProperty(
+    customerId: string,
+    propertyPayload: CustomerPropertyPayload | undefined,
+  ) {
+    if (!propertyPayload) {
+      return this.getPrimaryCustomerPropertySummary(customerId);
+    }
+
+    const primaryProperty = await this.getPrimaryCustomerPropertySummary(customerId);
+
+    if (primaryProperty?.id) {
+      const { error } = await SupabaseDB.getAdminClient()
+        .from("properties")
+        .update(propertyPayload)
+        .eq("id", primaryProperty.id);
+
+      if (error) {
+        throw Errors.dbError("更新客户主房产失败", error);
+      }
+    } else {
+      const { error } = await SupabaseDB.getAdminClient()
+        .from("properties")
+        .insert({
+          id: randomUUID(),
+          customer_id: customerId,
+          ...propertyPayload,
+        });
+
+      if (error) {
+        throw Errors.dbError("创建客户主房产失败", error);
+      }
+    }
+
+    return this.getPrimaryCustomerPropertySummary(customerId);
+  }
+
+  private async buildCustomerDetailResponse(
+    customer: { owner?: unknown; owner_id: string | null; id: string },
+    options?: {
+      primaryProperty?: PrimaryPropertySummary | null;
+      includeProperties?: boolean;
+    },
+  ) {
+    const primaryProperty = options?.primaryProperty ?? await this.getPrimaryCustomerPropertySummary(
+      customer.id,
+    );
+    const properties = options?.includeProperties
+      ? await this.getCustomerPropertySummaries(customer.id)
+      : undefined;
+
+    return {
+      ...this.serializeCustomer(customer),
+      property_id: primaryProperty?.id ?? null,
+      community: primaryProperty?.community ?? null,
+      building_info: primaryProperty?.building_info ?? null,
+      layout: primaryProperty?.layout ?? null,
+      area: primaryProperty?.area ?? null,
+      ...(options?.includeProperties
+        ? {
+          properties: properties || [],
+          property_count: (properties || []).length,
+        }
+        : {}),
     };
   }
 
@@ -182,9 +313,10 @@ class CustomerController extends BaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
+    const { customerPayload, propertyPayload } = this.splitCustomerPayload(result.data);
     const payload = {
-      ...result.data,
-      owner_id: result.data.owner_id ?? authContext.employeeId ?? null,
+      ...customerPayload,
+      owner_id: customerPayload.owner_id ?? authContext.employeeId ?? null,
     };
 
     if (
@@ -202,8 +334,15 @@ class CustomerController extends BaseController<
       .single();
 
     if (error) throw Errors.dbError("创建失败", error);
+    const customer = (data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+    const primaryProperty = await this.upsertCustomerPrimaryProperty(
+      customer.id,
+      propertyPayload,
+    );
     return ResponseHandler.success(
-      this.serializeCustomer((data as unknown) as { owner?: unknown; owner_id: string | null }),
+      await this.buildCustomerDetailResponse(customer, {
+        primaryProperty,
+      }),
     );
   };
 
@@ -233,12 +372,14 @@ class CustomerController extends BaseController<
       throw Errors.badRequest("客户不存在");
     }
 
-    const payload = result.data;
+    const { customerPayload, propertyPayload } = this.splitCustomerPayload(result.data);
+    const payload = customerPayload;
+    const hasPropertyUpdate = propertyPayload !== undefined;
     const hasOwnerUpdate = payload.owner_id !== undefined;
     const ownerChanged = hasOwnerUpdate && payload.owner_id !== existing.data.owner_id;
     const hasNonOwnerUpdates = Object.keys(payload).some((key) => key !== "owner_id");
 
-    if (hasNonOwnerUpdates) {
+    if (hasNonOwnerUpdates || hasPropertyUpdate) {
       const canAccess = await accessPolicyService.canAccessCustomer(
         authContext,
         (existing.data as unknown) as { owner_id: string | null },
@@ -279,16 +420,38 @@ class CustomerController extends BaseController<
       }
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .update(payload)
-      .eq("id", idVerify.data.id)
-      .select(this.customerSelect)
-      .single();
+    let customer: { owner?: unknown; owner_id: string | null; id: string } | null = null;
 
-    if (error) throw Errors.dbError("更新失败", error);
+    if (Object.keys(payload).length > 0) {
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("customers")
+        .update(payload)
+        .eq("id", idVerify.data.id)
+        .select(this.customerSelect)
+        .single();
+
+      if (error) throw Errors.dbError("更新失败", error);
+      customer = (data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+    } else {
+      const current = await SupabaseDB.getAdminClient()
+        .from("customers")
+        .select(this.customerSelect)
+        .eq("id", idVerify.data.id)
+        .maybeSingle();
+
+      if (current.error) throw Errors.dbError("查询客户失败", current.error);
+      if (!current.data) throw Errors.badRequest("客户不存在");
+      customer = (current.data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+    }
+
+    const primaryProperty = await this.upsertCustomerPrimaryProperty(
+      customer.id,
+      propertyPayload,
+    );
     return ResponseHandler.success(
-      this.serializeCustomer((data as unknown) as { owner?: unknown; owner_id: string | null }),
+      await this.buildCustomerDetailResponse(customer, {
+        primaryProperty,
+      }),
     );
   };
 
@@ -317,7 +480,12 @@ class CustomerController extends BaseController<
     }
 
     return ResponseHandler.success(
-      this.serializeCustomer((data as unknown) as { owner?: unknown; owner_id: string | null }),
+      await this.buildCustomerDetailResponse(
+        (data as unknown) as { owner?: unknown; owner_id: string | null; id: string },
+        {
+          includeProperties: true,
+        },
+      ),
     );
   }
 
