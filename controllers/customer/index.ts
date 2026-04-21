@@ -3,6 +3,7 @@ import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateCustomerSchema,
+  CustomerListQuerySchema,
   UpdateCustomerSchema,
 } from "@/schema/customer";
 import { BaseController } from "@/controllers/BaseController";
@@ -87,10 +88,10 @@ class CustomerController extends BaseController<
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
-    const queryResult = this.paginationQuerySchema.safeParse(request.query);
+    const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize } = queryResult.data;
+    const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -110,6 +111,17 @@ class CustomerController extends BaseController<
       } else {
         query = query.in("owner_id", visibleOwnerIds);
       }
+    }
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const normalizedKeyword = keyword?.trim();
+    if (normalizedKeyword) {
+      query = query.or(
+        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
+      );
     }
 
     const { data, error, count } = await query.range(from, to);

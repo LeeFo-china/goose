@@ -3,6 +3,7 @@ import {
   EMPLOYEE_ROLE_VALUES,
   EMPLOYEE_STATUS_VALUES,
 } from "@gooes/domain";
+import { PaginationQuerySchema } from "./request";
 
 const optionalNullableDateTime = (message: string) =>
   z.preprocess((value) => {
@@ -90,3 +91,12 @@ export const UpdateEmployeeSchema = CreateEmployeeSchema.partial();
 export type EmployeeType = z.infer<typeof EmployeeBaseSchema>;
 export type CreateEmployeeInput = z.infer<typeof CreateEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof UpdateEmployeeSchema>;
+
+export const EmployeeListQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum(EMPLOYEE_STATUS_VALUES, {
+    message: "请选择有效的员工状态",
+  }).nullable().optional(),
+  keyword: z.string().trim().optional(),
+});
+
+export type EmployeeListQueryType = z.infer<typeof EmployeeListQuerySchema>;

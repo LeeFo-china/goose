@@ -3,6 +3,7 @@ import {
   CUSTOMER_SOURCE_VALUES,
   CUSTOMER_STATUS_VALUES,
 } from "@gooes/domain";
+import { PaginationQuerySchema } from "./request";
 
 export const CustomerSchema = z.object({
   // id 通常是数据库自动生成的 UUID 或数字，这里假设是 UUID 字符串
@@ -45,6 +46,15 @@ export const UpdateCustomerSchema = CustomerSchema.partial();
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
 export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;
 export type UpdateCustomerSchemaType = z.infer<typeof UpdateCustomerSchema>;
+
+export const CustomerListQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum(CUSTOMER_STATUS_VALUES, {
+    message: "无效的客户状态",
+  }).nullable().optional(),
+  keyword: z.string().trim().optional(),
+});
+
+export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;
 
 export const FollowUpSchema = z.object({
   // 主键 ID 通常由数据库生成，所以设为可选

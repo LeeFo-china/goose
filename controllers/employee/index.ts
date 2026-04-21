@@ -8,7 +8,11 @@
  */
 
 import { BaseController } from "@/controllers/BaseController";
-import { CreateEmployeeSchema, UpdateEmployeeSchema } from "@/schema/employee";
+import {
+  CreateEmployeeSchema,
+  EmployeeListQuerySchema,
+  UpdateEmployeeSchema,
+} from "@/schema/employee";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import { Get } from "@/utils/decorators/route";
@@ -83,10 +87,10 @@ class EmployeeController extends BaseController<
       "employee.read",
     );
 
-    const queryResult = this.paginationQuerySchema.safeParse(request.query);
+    const queryResult = EmployeeListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize } = queryResult.data;
+    const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -96,6 +100,17 @@ class EmployeeController extends BaseController<
       .order("created_at", { ascending: false });
 
     query = this.applyEmployeeScope(query, scope, authContext);
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const normalizedKeyword = keyword?.trim();
+    if (normalizedKeyword) {
+      query = query.or(
+        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
+      );
+    }
 
     const { data, error, count } = await query.range(from, to);
 
