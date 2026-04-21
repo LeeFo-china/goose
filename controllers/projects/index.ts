@@ -66,6 +66,32 @@ class ProjectController extends BaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
 > {
+  private projectListSelect = `
+    id,
+    name,
+    status,
+    budget,
+    start_date,
+    created_at,
+    address,
+    customer:customers!projects_customer_id_fkey(
+      id,
+      name
+    ),
+    property:properties!projects_property_id_fkey(
+      community,
+      building_info
+    ),
+    designer:employees!projects_designer_id_fkey(
+      id,
+      name
+    ),
+    supervisor:employees!projects_supervisor_id_fkey(
+      id,
+      name
+    )
+  `;
+
   constructor() {
     super("projects", CreateProjectSchema, UpdateProjectSchema);
   }
@@ -106,7 +132,7 @@ class ProjectController extends BaseController<
 
     let query = SupabaseDB.getAdminClient()
       .from("projects")
-      .select("*", { count: "exact" })
+      .select(this.projectListSelect, { count: "exact" })
       .order("created_at", { ascending: false });
 
     query = this.applyProjectIdsFilter(query, visibleProjectIds);
@@ -158,7 +184,13 @@ class ProjectController extends BaseController<
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...data,
+      can_write_log: accessPolicyService.canWriteProjectLog(authContext, {
+        designer_id: data.designer_id ?? null,
+        supervisor_id: data.supervisor_id ?? null,
+      }),
+    });
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {

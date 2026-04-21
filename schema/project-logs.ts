@@ -13,6 +13,7 @@ export const ProjectLogBaseSchema = z.object({
 export const CreateProjectLogSchema = ProjectLogBaseSchema.omit({
   id: true,
   created_at: true,
+  employee_id: true,
 });
 
 export const UpdateProjectLogSchema = CreateProjectLogSchema.partial();

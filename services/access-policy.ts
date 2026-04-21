@@ -85,6 +85,20 @@ class AccessPolicyService {
     return visibleProjectIds.includes(projectId);
   }
 
+  canWriteProjectLog(
+    authContext: AuthContext,
+    project: { designer_id: string | null; supervisor_id: string | null },
+  ) {
+    if (!authContext.employeeId) {
+      return false;
+    }
+
+    return (
+      project.designer_id === authContext.employeeId ||
+      project.supervisor_id === authContext.employeeId
+    );
+  }
+
   async getVisibleCustomerOwnerIds(
     authContext: AuthContext,
     permissionCode: string,
