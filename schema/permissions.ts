@@ -98,6 +98,10 @@ export const RoleListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export const PermissionListQuerySchema = PaginationQuerySchema.extend({
+  pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(
+    200,
+    "每页条数不能超过 200",
+  ).default(20),
   status: optionalQueryValue(PermissionStatusSchema),
   module: optionalQueryValue(z.string().trim().max(100, "模块名过长")),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
