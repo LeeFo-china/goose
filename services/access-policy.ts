@@ -68,6 +68,41 @@ class AccessPolicyService {
     });
   }
 
+  async getOwnedProjectIds(authContext: AuthContext) {
+    if (!authContext.employeeId) {
+      return [] as string[];
+    }
+
+    return permissionRepository.listVisibleProjectIds({
+      scope: "self",
+      employeeId: authContext.employeeId,
+      departmentId: authContext.departmentId,
+    });
+  }
+
+  async getVisibleProjectIdsByOwnership(
+    authContext: AuthContext,
+    permissionCode: string,
+    ownership?: "self" | "all",
+  ): Promise<string[] | null> {
+    const visibleProjectIds = await this.getVisibleProjectIds(
+      authContext,
+      permissionCode,
+    );
+
+    if (ownership !== "self") {
+      return visibleProjectIds;
+    }
+
+    const ownedProjectIds = await this.getOwnedProjectIds(authContext);
+    if (visibleProjectIds === null) {
+      return ownedProjectIds;
+    }
+
+    const visibleSet = new Set(visibleProjectIds);
+    return ownedProjectIds.filter((id) => visibleSet.has(id));
+  }
+
   async canAccessProject(
     authContext: AuthContext,
     projectId: string,

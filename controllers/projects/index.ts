@@ -116,14 +116,24 @@ class ProjectController extends BaseController<
     return query.in("id", visibleProjectIds);
   }
 
+  private async getProjectListVisibleIds(
+    request: FastifyRequest,
+    ownership?: "self" | "all",
+  ) {
+    return accessPolicyService.getVisibleProjectIdsByOwnership(
+      await this.getRequiredAuthContext(request),
+      "project.read",
+      ownership,
+    );
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
-      authContext,
-      "project.read",
+    const visibleProjectIds = await this.getProjectListVisibleIds(
+      request,
+      queryResult.data.ownership,
     );
 
     const { page, pageSize, status, keyword } = queryResult.data;
@@ -266,12 +276,11 @@ class ProjectController extends BaseController<
 
   @Get("/projects/status")
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
-      authContext,
-      "project.read",
+    const visibleProjectIds = await this.getProjectListVisibleIds(
+      request,
+      queryResult.data.ownership,
     );
     const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;

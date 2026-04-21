@@ -85,9 +85,14 @@ export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 // 3. 从 Zod 自动推导出 TypeScript 类型 (这样你就不需要手动写 type ProjectStatus = ...)
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;
 
+export const ProjectOwnershipSchema = z.enum(["self", "all"], {
+  message: "无效的归属筛选",
+}).optional();
+
 export const ProjectListQuerySchema = PaginationQuerySchema.extend({
   status: ProjectStatusSchema, // 允许按状态过滤
   keyword: z.string().optional(), // 允许关键词搜索
+  ownership: ProjectOwnershipSchema,
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;
