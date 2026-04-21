@@ -328,6 +328,26 @@ employeeId === designer_id || employeeId === supervisor_id
 
 当前也已按 `project.read` 做后端校验。
 
+### 5. `GET /project_log_comments`
+
+当前员工侧也已按所属日志对应项目的 `project.read` 做后端校验。
+
+也就是说：
+
+- 只要当前员工能看该项目
+- 即使 `can_write_log = false`
+- 仍然可以查看日志评论列表
+
+### 6. `POST /project_log_comments`
+
+当前员工侧也已按所属日志对应项目的 `project.read` 做后端校验。
+
+也就是说：
+
+- 只要当前员工能看该项目
+- 即使不是项目成员、不能写施工跟进
+- 仍然可以回复评论
+
 ## 本次后端改动
 
 对应代码：
@@ -341,6 +361,8 @@ employeeId === designer_id || employeeId === supervisor_id
 - `controllers/project-logs/index.ts`
   - 重写 `create`
   - 对日志列表 / 日历补项目读权限校验
+- `controllers/project-log-comments/index.ts`
+  - 对评论列表 / 评论回复补项目读权限校验
 
 ## 更新后的前端接入建议
 
@@ -360,9 +382,71 @@ employeeId === designer_id || employeeId === supervisor_id
 
 虽然当前后端成员口径与这条规则一致，但后端已经给出了稳定字段，前端应优先使用后端布尔结果。
 
+如果：
+
+- `project.read = true`
+- 但 `can_write_log = false`
+
+在“项目详情页”这个页面里，前端应把当前员工视为：
+
+- 可以看
+- 但除评论板块外不可操作
+
+前端页面建议保留可用：
+
+- 项目日志列表
+- 评论板块
+- 评论回复
+- 按日期筛选日志
+
+前端页面建议隐藏或禁用：
+
+- “添加日志”
+- 编辑/删除日志类按钮
+- 进入写施工跟进页的入口
+- 项目签约
+- 项目介绍费“去配置”
+- 项目详情页里的其他任何按钮和可写交互
+
+也就是说，在项目详情页里应按这个页面级规则处理：
+
+- `project.read`
+  - 决定这个页面能不能进入、能不能看日志/评论/日历
+- `can_write_log`
+  - 当前阶段同时作为“是否为项目成员”的前端判定
+  - 只要是 `false`
+  - 这个详情页除评论板块外，其它交互都不要开放
+
+这里要区分两层语义：
+
+- 页面交互口径
+  - 非项目成员在项目详情页只保留评论能力
+- 后端接口权限口径
+  - `project.update`
+  - `project_referral.read`
+  - `project_referral.manage`
+
+后端这些权限码仍然存在，是给独立业务接口和其他页面使用的；  
+但在“项目详情页”上，不应继续单独拿它们决定按钮显隐，否则就会出现：
+
+- 不是项目成员
+- 但还能点“项目签约”
+- 还能点“去配置”
+
+这种与当前产品规则冲突的结果。
+
+所以项目详情页正确显隐建议应改成：
+
+- 先看 `project.read`
+  - 没有就整个页面不展示
+- 再看 `can_write_log`
+  - 为 `false`：只保留评论板块相关交互
+  - 为 `true`：再按具体业务权限展示其它按钮
+
 ## 当前一句话结论
 
 这条规则现在已经由后端做稳了：
 
 - 项目详情可直接返回 `can_write_log`
 - 非项目成员即使绕过前端，也不能成功 `POST /project_logs`
+- 非项目成员只要有 `project.read`，仍然可以看日志、看评论、按日期筛选并回复评论

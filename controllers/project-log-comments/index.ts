@@ -12,6 +12,8 @@ import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { Tables } from "@/types/database";
 import type { ProjectLogCommentAuthorType } from "@gooes/domain";
+import { authorizationService } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 
 type EmployeeAuthor = Pick<Tables<"employees">, "id" | "name" | "avatar" | "user_id">;
 type CustomerAuthor = Pick<Tables<"customers">, "id" | "name" | "user_id">;
@@ -33,9 +35,22 @@ type ResolvedCommentAuthor = {
   profile: CommentAuthor;
 };
 
+type ProjectLogAccessInfo = {
+  id: string;
+  project_id: string;
+};
+
 class ProjectLogCommentsController extends BaseController {
   constructor() {
     super("project_log_comments");
+  }
+
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
   }
 
   @Post("/project_log_comments")
@@ -46,7 +61,7 @@ class ProjectLogCommentsController extends BaseController {
     const author = await this.resolveCurrentAuthor(request);
     const payload: CreateProjectLogCommentInput = result.data;
 
-    await this.ensureLogExists(payload.log_id);
+    await this.assertProjectLogReadable(request, payload.log_id, author.author_type);
     if (payload.parent_id) {
       await this.ensureParentComment(payload.log_id, payload.parent_id);
     }
@@ -90,7 +105,8 @@ class ProjectLogCommentsController extends BaseController {
     if (!result.success) throw Errors.fromZod(result.error);
 
     const { log_id }: ProjectLogCommentsQueryType = result.data;
-    await this.ensureLogExists(log_id);
+    const viewer = await this.resolveCurrentAuthor(request);
+    await this.assertProjectLogReadable(request, log_id, viewer.author_type);
 
     const { data, error } = await SupabaseDB.from("project_log_comments")
       .select("*")
@@ -161,11 +177,12 @@ class ProjectLogCommentsController extends BaseController {
     throw Errors.forbidden();
   }
 
-  private async ensureLogExists(logId: string) {
-    const { data, error } = await SupabaseDB.from("project_logs")
-      .select("id")
+  private async getProjectLogAccessInfo(logId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id")
       .eq("id", logId)
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<ProjectLogAccessInfo>();
 
     if (error) {
       throw Errors.dbError("查询项目日志失败", error);
@@ -174,6 +191,31 @@ class ProjectLogCommentsController extends BaseController {
     if (!data?.id) {
       throw Errors.badRequest("施工日志不存在");
     }
+
+    return data;
+  }
+
+  private async assertProjectLogReadable(
+    request: FastifyRequest,
+    logId: string,
+    authorType: ProjectLogCommentAuthorType,
+  ) {
+    const log = await this.getProjectLogAccessInfo(logId);
+    if (authorType !== "employee") {
+      return log;
+    }
+
+    const authContext = await this.getRequiredAuthContext(request);
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      log.project_id,
+      "project.read",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    return log;
   }
 
   private async ensureParentComment(logId: string, parentId: string) {
