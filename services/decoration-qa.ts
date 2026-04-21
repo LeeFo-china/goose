@@ -103,19 +103,61 @@ const STREAM_OUTPUT_PROMPT = `
 你必须直接输出自然语言答案正文，不要输出 JSON，不要输出 markdown 代码块，不要输出多余前缀。
 回答结束时不要再补“如需我继续”等收尾套话。`;
 
-function requireAiEnv(name: string) {
-  const value = process.env[name]?.trim();
+function firstNonEmptyEnv(names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function requireAiEnv(names: string[], label: string) {
+  const value = firstNonEmptyEnv(names);
 
   if (!value) {
-    throw Errors.dbError(`缺少 AI 环境变量: ${name}`);
+    throw Errors.dbError(`缺少 AI 环境变量: ${label}`);
   }
 
   return value;
 }
 
 function getAiEndpoint() {
-  return process.env.AI_CHAT_COMPLETIONS_URL?.trim()
-    || "https://api.openai.com/v1/chat/completions";
+  return firstNonEmptyEnv([
+    "AI_CHAT_COMPLETIONS_URL",
+    "DEEPSEEK_CHAT_COMPLETIONS_URL",
+  ])
+    || (process.env.DEEPSEEK_API_KEY?.trim()
+      ? "https://api.deepseek.com/chat/completions"
+      : "https://api.openai.com/v1/chat/completions");
+}
+
+function getAiApiKey() {
+  const endpoint = getAiEndpoint();
+  const envNames = endpoint.includes("api.deepseek.com")
+    ? ["DEEPSEEK_API_KEY", "AI_API_KEY"]
+    : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
+
+  return requireAiEnv(envNames, "AI_API_KEY / DEEPSEEK_API_KEY");
+}
+
+function getAiModel() {
+  const endpoint = getAiEndpoint();
+  const envNames = endpoint.includes("api.deepseek.com")
+    ? ["DEEPSEEK_MODEL", "AI_MODEL"]
+    : ["AI_MODEL", "DEEPSEEK_MODEL"];
+  const explicit = firstNonEmptyEnv(envNames);
+  if (explicit) {
+    return explicit;
+  }
+
+  if (endpoint.includes("api.deepseek.com")) {
+    return "deepseek-chat";
+  }
+
+  throw Errors.dbError("缺少 AI 环境变量: AI_MODEL / DEEPSEEK_MODEL");
 }
 
 function getAiRequestTimeoutMs() {
@@ -363,8 +405,8 @@ function parseSseEvent(line: string) {
 export async function askDecorationQa(
   input: DecorationQaRequestInput,
 ): Promise<DecorationQaResult> {
-  const apiKey = requireAiEnv("AI_API_KEY");
-  const model = requireAiEnv("AI_MODEL");
+  const apiKey = getAiApiKey();
+  const model = getAiModel();
   const endpoint = getAiEndpoint();
 
   const messages = buildMessages(input.question, input.history, getSystemPrompt());
@@ -408,8 +450,8 @@ export async function streamDecorationQa(
     signal?: AbortSignal;
   },
 ) {
-  const apiKey = requireAiEnv("AI_API_KEY");
-  const model = requireAiEnv("AI_MODEL");
+  const apiKey = getAiApiKey();
+  const model = getAiModel();
   const endpoint = getAiEndpoint();
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
 

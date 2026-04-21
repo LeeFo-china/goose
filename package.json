@@ -20,7 +20,6 @@
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
   },
   "dependencies": {
-    "@gooes/domain": "workspace:*",
     "@alicloud/credentials": "^2.4.4",
     "@alicloud/dysmsapi20170525": "4.5.1",
     "@alicloud/openapi-client": "^0.4.15",
@@ -28,9 +27,11 @@
     "@alicloud/tea-util": "^1.4.11",
     "@fastify/autoload": "^6.3.1",
     "@fastify/multipart": "^10.0.0",
+    "@gooes/domain": "workspace:*",
     "@supabase/supabase-js": "^2.100.0",
     "fastify": "^5.8.4",
     "fastify-cli": "^7.4.1",
+    "openai": "^6.34.0",
     "reflect-metadata": "^0.2.2",
     "zod": "^4.3.6"
   }

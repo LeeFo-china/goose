@@ -12,11 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
        
-      # 使用官方 Action 设置 Bun 环境，比手动 export 更稳健
+      # 使用官方 Action 设置 Bun 环境，比手动 export 更稳健 dd
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+
 
       - name: Deploy
         run: |

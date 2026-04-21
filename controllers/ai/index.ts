@@ -60,8 +60,10 @@ class AiController extends BaseController {
     reply.raw.flushHeaders?.();
 
     const abortController = new AbortController();
-    request.raw.on("close", () => {
-      abortController.abort();
+    reply.raw.on("close", () => {
+      if (!reply.raw.writableEnded) {
+        abortController.abort();
+      }
     });
 
     try {
