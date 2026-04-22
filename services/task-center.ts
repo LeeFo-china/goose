@@ -144,7 +144,7 @@ class TaskCenterService {
   private async buildProjectLogTodos(authContext: AuthContext) {
     if (
       !authContext.employeeId ||
-      !accessPolicyService.hasPermission(authContext, "project.read")
+      !accessPolicyService.hasPermission(authContext, "project_log.create")
     ) {
       return [] as TaskCenterTodoItem[];
     }

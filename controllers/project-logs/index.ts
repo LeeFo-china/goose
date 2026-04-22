@@ -29,10 +29,8 @@ type ProjectLogCalendarRow = {
   node_name: string | null;
 };
 
-type ProjectMemberInfo = {
+type ProjectRecord = {
   id: string;
-  designer_id: string | null;
-  supervisor_id: string | null;
 };
 
 class ProjectLogController extends BaseController<
@@ -51,10 +49,10 @@ class ProjectLogController extends BaseController<
     return authContext;
   }
 
-  private async getProjectMemberInfo(projectId: string) {
+  private async getProject(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, designer_id, supervisor_id")
+      .select("id")
       .eq("id", projectId)
       .maybeSingle();
 
@@ -66,7 +64,7 @@ class ProjectLogController extends BaseController<
       throw Errors.badRequest("项目不存在");
     }
 
-    return data as ProjectMemberInfo;
+    return data as ProjectRecord;
   }
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -83,8 +81,12 @@ class ProjectLogController extends BaseController<
       throw Errors.forbidden();
     }
 
-    const project = await this.getProjectMemberInfo(result.data.project_id);
-    const canWriteLog = accessPolicyService.canWriteProjectLog(authContext, project);
+    await this.getProject(result.data.project_id);
+    const canWriteLog = await accessPolicyService.canAccessProject(
+      authContext,
+      result.data.project_id,
+      "project_log.create",
+    );
     if (!canWriteLog) {
       throw Errors.forbidden("只有项目成员才可以写施工跟进");
     }

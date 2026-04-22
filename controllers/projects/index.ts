@@ -247,13 +247,7 @@ class ProjectController extends BaseController<
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
-    return ResponseHandler.success({
-      ...data,
-      can_write_log: accessPolicyService.canWriteProjectLog(authContext, {
-        designer_id: data.designer_id ?? null,
-        supervisor_id: data.supervisor_id ?? null,
-      }),
-    });
+    return ResponseHandler.success(data);
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {

@@ -1,5 +1,16 @@
 # 项目施工跟进成员权限对接摘要
 
+> 已废弃：这份文档基于旧口径 `can_write_log`。
+>
+> 当前请改看新的统一权限模型文档：
+> [2026-04-22-project-log-permission-model-unification-summary.md](/Users/leefo/Public/work/orange/docs/2026-04-22-project-log-permission-model-unification-summary.md:1)
+>
+> 最新口径：
+> - 不再返回 `can_write_log`
+> - 统一走 `/auth/me/permissions`
+> - 施工日志写入权限改为 `project_log.create`
+> - 项目详情页除评论板块外的其它交互，也统一按 `project_log.create` 收口
+
 ## 目标
 
 实现这条规则：

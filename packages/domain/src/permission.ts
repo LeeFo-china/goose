@@ -33,6 +33,7 @@ export const PERMISSION_CODE_VALUES = [
   'project.create',
   'project.update',
   'project.delete',
+  'project_log.create',
   'employee.read',
   'employee.create',
   'employee.update',
@@ -104,6 +105,10 @@ export const PermissionCodeConfig: Record<
   'project.create': { label: '新建项目', module: 'project' },
   'project.update': { label: '编辑项目', module: 'project' },
   'project.delete': { label: '删除项目', module: 'project' },
+  'project_log.create': {
+    label: '新建施工日志',
+    module: 'project_log',
+  },
   'employee.read': { label: '查看员工', module: 'employee' },
   'employee.create': { label: '新建员工', module: 'employee' },
   'employee.update': { label: '编辑员工', module: 'employee' },
