@@ -17,6 +17,8 @@ import { ProjectLogQuerySchema } from "@/schema/project-logs";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 
+const PROJECT_LOGS_BUCKET = "project-logs";
+
 type ProjectLogCalendarItem = {
   date: string;
   count: number;
@@ -67,6 +69,35 @@ class ProjectLogController extends BaseController<
     return data as ProjectRecord;
   }
 
+  private normalizeProjectLogImages(images: unknown) {
+    if (!Array.isArray(images)) {
+      return [];
+    }
+
+    return images
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        if (/^https?:\/\//i.test(item)) {
+          return item;
+        }
+
+        return SupabaseDB.getAdminClient()
+          .storage
+          .from(PROJECT_LOGS_BUCKET)
+          .getPublicUrl(item)
+          .data.publicUrl;
+      });
+  }
+
+  private serializeProjectLog<T extends Record<string, unknown>>(row: T) {
+    return {
+      ...row,
+      images: this.normalizeProjectLogImages(row.images),
+    };
+  }
+
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
 
@@ -109,7 +140,9 @@ class ProjectLogController extends BaseController<
       throw Errors.dbError("创建项目日志失败", error);
     }
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      this.serializeProjectLog((data || {}) as Record<string, unknown>),
+    );
   };
 
   @Get("/project_logs/projects")
@@ -145,7 +178,9 @@ class ProjectLogController extends BaseController<
     }
 
     return ResponseHandler.success({
-      list: data || [],
+      list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
+        this.serializeProjectLog(item)
+      ),
       pagination: {
         page,
         pageSize,
