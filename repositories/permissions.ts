@@ -496,21 +496,54 @@ class PermissionRepository {
       return [] as string[];
     }
 
-    const inClause = visibleIds.join(",");
-    const filter = params.scope === "department"
-      ? `designer_id.in.(${inClause}),supervisor_id.in.(${inClause})`
-      : `designer_id.eq.${params.employeeId},supervisor_id.eq.${params.employeeId}`;
+    const [memberResult, customerResult] = await Promise.all([
+      this.adminClient
+        .from("project_members")
+        .select("project_id")
+        .in("employee_id", visibleIds)
+        .is("deleted_at", null),
+      this.adminClient
+        .from("customers")
+        .select("id")
+        .in("owner_id", visibleIds),
+    ]);
 
-    const { data, error } = await this.adminClient
-      .from("projects")
-      .select("id")
-      .or(filter);
-
-    if (error) {
-      throw Errors.dbError("查询项目权限范围失败", error);
+    if (memberResult.error) {
+      throw Errors.dbError("查询项目权限范围失败", memberResult.error);
     }
 
-    return ((data || []) as Array<{ id: string }>).map((item) => item.id);
+    if (customerResult.error) {
+      throw Errors.dbError("查询项目权限范围失败", customerResult.error);
+    }
+
+    const projectIdSet = new Set(
+      ((memberResult.data || []) as Array<{ project_id: string | null }>)
+        .map((item) => item.project_id)
+        .filter((item): item is string => Boolean(item)),
+    );
+
+    const customerIds = ((customerResult.data || []) as Array<{ id: string }>)
+      .map((item) => item.id)
+      .filter(Boolean);
+
+    if (customerIds.length > 0) {
+      const { data, error } = await this.adminClient
+        .from("projects")
+        .select("id")
+        .in("customer_id", customerIds);
+
+      if (error) {
+        throw Errors.dbError("查询项目权限范围失败", error);
+      }
+
+      ((data || []) as Array<{ id: string }>).forEach((item) => {
+        if (item.id) {
+          projectIdSet.add(item.id);
+        }
+      });
+    }
+
+    return [...projectIdSet];
   }
 
   async listRolePermissions(roleIds: string[]) {

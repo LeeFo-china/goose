@@ -2,10 +2,15 @@ import { BaseController } from "@/controllers/BaseController";
 import { CreateProjectSchema, UpdateProjectSchema } from "@/schema/projects";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import { Get } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ProjectListQuerySchema } from "@/schema/projects";
+import {
+  CreateProjectMemberSchema,
+  ProjectListQuerySchema,
+  ProjectMemberParamsSchema,
+  UpdateProjectMemberSchema,
+} from "@/schema/projects";
 import { projectSer } from "@/services/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
@@ -15,9 +20,14 @@ import {
   type ProjectCreateSelectEmployeeScene,
 } from "@/schema/project-create-select";
 import type { Tables } from "@/types/database";
-import type { PostCode } from "@gooes/domain";
+import {
+  PROJECT_MEMBER_ROLE_CONFIG,
+  type PostCode,
+  type ProjectMemberRoleCode,
+} from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { projectMemberService } from "@/services/project-members";
 
 type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
@@ -62,6 +72,24 @@ type ProjectCreateEmployeeOption = {
   post_name: string | null;
 };
 
+type ProjectMemberEmployeeSummary = {
+  id: string;
+  name: string | null;
+  avatar: string | null;
+  phone: string | null;
+};
+
+type ProjectMemberSummary = {
+  id: string;
+  employee_id: string;
+  role_code: ProjectMemberRoleCode;
+  role_name: string;
+  is_primary: boolean;
+  sort_order: number;
+  employee: ProjectMemberEmployeeSummary | null;
+  is_virtual?: boolean;
+};
+
 class ProjectController extends BaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
@@ -89,6 +117,43 @@ class ProjectController extends BaseController<
     supervisor:employees!projects_supervisor_id_fkey(
       id,
       name
+    )
+  `;
+
+  private projectDetailSelect = `
+    *,
+    customer:customers!projects_customer_id_fkey(
+      id,
+      name,
+      phone,
+      owner_id,
+      owner:employees!customers_owner_id_fkey(
+        id,
+        name,
+        avatar,
+        phone
+      )
+    ),
+    property:properties!projects_property_id_fkey(
+      id,
+      community,
+      building_info,
+      layout,
+      area,
+      latitude,
+      longitude
+    ),
+    designer:employees!projects_designer_id_fkey(
+      id,
+      name,
+      avatar,
+      phone
+    ),
+    supervisor:employees!projects_supervisor_id_fkey(
+      id,
+      name,
+      avatar,
+      phone
     )
   `;
 
@@ -145,6 +210,115 @@ class ProjectController extends BaseController<
     }
 
     return fallback;
+  }
+
+  private serializeProjectMember(item: {
+    id: string;
+    employee_id: string;
+    role_code: ProjectMemberRoleCode;
+    role_name: string | null;
+    is_primary: boolean;
+    sort_order: number | null;
+    employee: ProjectMemberEmployeeSummary | null;
+    is_virtual?: boolean;
+  }): ProjectMemberSummary {
+    const roleConfig = PROJECT_MEMBER_ROLE_CONFIG[item.role_code];
+
+    return {
+      id: item.id,
+      employee_id: item.employee_id,
+      role_code: item.role_code,
+      role_name: item.role_name ?? roleConfig.label,
+      is_primary: item.is_primary,
+      sort_order: item.sort_order ?? roleConfig.sortOrder,
+      employee: item.employee,
+      ...(item.is_virtual ? { is_virtual: true } : {}),
+    };
+  }
+
+  private async getProjectMembersForDetail(project: Record<string, unknown>) {
+    const projectId = typeof project.id === "string" ? project.id : "";
+    if (!projectId) {
+      return [] as ProjectMemberSummary[];
+    }
+
+    const members = await projectMemberService.listProjectMembers(projectId);
+    const customer = this.normalizeRelation(project.customer, {
+      id: null,
+      name: null,
+      phone: null,
+      owner_id: null,
+      owner: null,
+    });
+    const customerOwner = projectMemberService.buildDerivedCustomerOwnerMember({
+      projectId,
+      employee: this.normalizeRelation(customer.owner, {
+        id: null,
+        name: null,
+        avatar: null,
+        phone: null,
+      }),
+    });
+
+    return [
+      ...(customerOwner ? [this.serializeProjectMember(customerOwner)] : []),
+      ...members.map((item) => this.serializeProjectMember(item)),
+    ].sort((a, b) => {
+      if (a.sort_order !== b.sort_order) {
+        return a.sort_order - b.sort_order;
+      }
+
+      if (a.is_primary !== b.is_primary) {
+        return a.is_primary ? -1 : 1;
+      }
+
+      return a.role_name.localeCompare(b.role_name, "zh-CN");
+    });
+  }
+
+  private async serializeProjectDetailItem(row: Record<string, unknown>) {
+    const normalizedCustomer = this.normalizeRelation(row.customer, {
+      id: null,
+      name: null,
+      phone: null,
+      owner_id: null,
+      owner: null,
+    });
+
+    return {
+      ...row,
+      customer: {
+        ...normalizedCustomer,
+        owner: this.normalizeRelation(normalizedCustomer.owner, {
+          id: null,
+          name: null,
+          avatar: null,
+          phone: null,
+        }),
+      },
+      property: this.normalizeRelation(row.property, {
+        id: null,
+        community: null,
+        building_info: null,
+        area: null,
+        layout: null,
+        latitude: null,
+        longitude: null,
+      }),
+      designer: this.normalizeRelation(row.designer, {
+        id: null,
+        name: null,
+        phone: null,
+        avatar: null,
+      }),
+      supervisor: this.normalizeRelation(row.supervisor, {
+        id: null,
+        name: null,
+        phone: null,
+        avatar: null,
+      }),
+      members: await this.getProjectMembersForDetail(row),
+    };
   }
 
   private serializeProjectListItem<T extends Record<string, unknown>>(row: T) {
@@ -240,14 +414,16 @@ class ProjectController extends BaseController<
     }
 
     const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
-      .select()
+      .select(this.projectDetailSelect)
       .eq("id", idVerify.data.id)
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询失败", error);
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.serializeProjectDetailItem((data || {}) as Record<string, unknown>),
+    );
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -268,6 +444,10 @@ class ProjectController extends BaseController<
       .single();
 
     if (error) throw Errors.dbError("创建失败", error);
+    await projectMemberService.syncLegacyProjectMembers(data.id, {
+      designer_id: result.data.designer_id,
+      supervisor_id: result.data.supervisor_id,
+    });
     return ResponseHandler.success(data);
   };
 
@@ -293,8 +473,120 @@ class ProjectController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await projectSer.updateProject(idVerify.data.id, result.data);
+    await projectMemberService.syncLegacyProjectMembers(idVerify.data.id, {
+      designer_id: result.data.designer_id,
+      supervisor_id: result.data.supervisor_id,
+    });
     return ResponseHandler.success(data);
   };
+
+  @Get("/projects/:id/members")
+  async getProjectMembers(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.read",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select(this.projectDetailSelect)
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询项目成员失败", error);
+    if (!data) throw Errors.badRequest("项目不存在");
+
+    const members = await this.getProjectMembersForDetail(
+      (data || {}) as Record<string, unknown>,
+    );
+    return ResponseHandler.success({
+      list: members,
+    });
+  }
+
+  @Post("/projects/:id/members")
+  async createProjectMember(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const result = CreateProjectMemberSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectMemberService.createProjectMember(
+      idVerify.data.id,
+      result.data,
+    );
+
+    return ResponseHandler.success(this.serializeProjectMember(data));
+  }
+
+  @Patch("/projects/:id/members/:memberId")
+  async updateProjectMember(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const paramsResult = ProjectMemberParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      paramsResult.data.id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const result = UpdateProjectMemberSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectMemberService.updateProjectMember(
+      paramsResult.data.id,
+      paramsResult.data.memberId,
+      result.data,
+    );
+
+    return ResponseHandler.success(this.serializeProjectMember(data));
+  }
+
+  @Delete("/projects/:id/members/:memberId")
+  async deleteProjectMember(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const paramsResult = ProjectMemberParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      paramsResult.data.id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    await projectMemberService.deleteProjectMember(
+      paramsResult.data.id,
+      paramsResult.data.memberId,
+    );
+
+    return ResponseHandler.success({ success: true });
+  }
 
   @Get("/projects/frontend-visible")
   //获取游客页可以展示的项目

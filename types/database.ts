@@ -806,6 +806,60 @@ export type Database = {
           },
         ]
       }
+      project_members: {
+        Row: {
+          created_at: string | null
+          deleted_at: string | null
+          employee_id: string
+          id: string
+          is_primary: boolean
+          project_id: string
+          role_code: string
+          role_name: string | null
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          deleted_at?: string | null
+          employee_id: string
+          id?: string
+          is_primary?: boolean
+          project_id: string
+          role_code: string
+          role_name?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          deleted_at?: string | null
+          employee_id?: string
+          id?: string
+          is_primary?: boolean
+          project_id?: string
+          role_code?: string
+          role_name?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_referrals: {
         Row: {
           base_amount: number | null

@@ -2,6 +2,7 @@ import { z } from "zod";
 // project.schema.ts
 import { PaginationQuerySchema } from "./request";
 import {
+  PROJECT_MEMBER_ROLE_CODE_VALUES,
   PROJECT_STATUS_VALUES,
   PROJECT_REFERRAL_RATE_BPS_MAX,
   PROJECT_REFERRAL_RATE_BPS_MIN,
@@ -78,6 +79,7 @@ export const ProjectBaseSchema = z.object({
 
   // 客户 ID：关联 customers 表，必须是 UUID
   customer_id: z.uuid("请选择有效的客户").nullable().optional(),
+  property_id: z.uuid("请选择有效的房产").nullable().optional(),
 
   // 项目地址
   address: z.string().trim().nullable().optional(),
@@ -144,3 +146,43 @@ export const ProjectReferralRateSchema = z.coerce
   .int("提成比例必须是整数基点")
   .min(PROJECT_REFERRAL_RATE_BPS_MIN, `提成比例不能低于 ${PROJECT_REFERRAL_RATE_BPS_MIN}`)
   .max(PROJECT_REFERRAL_RATE_BPS_MAX, `提成比例不能高于 ${PROJECT_REFERRAL_RATE_BPS_MAX}`);
+
+export const ProjectMemberBaseSchema = z.object({
+  id: z.uuid("无效的项目成员 ID").optional(),
+  project_id: z.uuid("无效的项目 ID"),
+  employee_id: z.uuid("无效的员工 ID"),
+  role_code: z.enum(PROJECT_MEMBER_ROLE_CODE_VALUES, {
+    message: "无效的项目成员角色",
+  }),
+  role_name: z.string().trim().max(50, "角色名称过长").nullable().optional(),
+  is_primary: z.boolean().optional().default(false),
+  sort_order: z.coerce
+    .number("排序值必须是数字")
+    .int("排序值必须是整数")
+    .min(0, "排序值不能为负数")
+    .optional(),
+});
+
+export const CreateProjectMemberSchema = ProjectMemberBaseSchema.omit({
+  id: true,
+  project_id: true,
+});
+
+export const UpdateProjectMemberSchema = z.object({
+  employee_id: z.uuid("无效的员工 ID").optional(),
+  role_name: z.string().trim().max(50, "角色名称过长").nullable().optional(),
+  is_primary: z.boolean().optional(),
+  sort_order: z.coerce
+    .number("排序值必须是数字")
+    .int("排序值必须是整数")
+    .min(0, "排序值不能为负数")
+    .optional(),
+});
+
+export const ProjectMemberParamsSchema = z.object({
+  id: z.uuid("无效的项目 ID"),
+  memberId: z.uuid("无效的项目成员 ID"),
+});
+
+export type CreateProjectMemberInput = z.infer<typeof CreateProjectMemberSchema>;
+export type UpdateProjectMemberInput = z.infer<typeof UpdateProjectMemberSchema>;

@@ -58,3 +58,34 @@ export const PROJECT_CREATE_EMPLOYEE_SCENE_VALUES = [
 
 export type ProjectCreateEmployeeScene =
   (typeof PROJECT_CREATE_EMPLOYEE_SCENE_VALUES)[number];
+
+export const PROJECT_MEMBER_ROLE_CODE_VALUES = [
+  'customer_owner',
+  'designer',
+  'supervisor',
+  'construction_manager',
+] as const;
+
+export type ProjectMemberRoleCode =
+  (typeof PROJECT_MEMBER_ROLE_CODE_VALUES)[number];
+
+export interface ProjectMemberRoleConfigItem {
+  label: string;
+  sortOrder: number;
+}
+
+export const PROJECT_MEMBER_ROLE_CONFIG: Record<
+  ProjectMemberRoleCode,
+  ProjectMemberRoleConfigItem
+> = {
+  customer_owner: { label: '跟进员工', sortOrder: 10 },
+  designer: { label: '主案设计', sortOrder: 20 },
+  supervisor: { label: '施工管理', sortOrder: 30 },
+  construction_manager: { label: '施工经理', sortOrder: 40 },
+};
+
+export const isProjectMemberRoleCode = (
+  value: string | null | undefined,
+): value is ProjectMemberRoleCode =>
+  typeof value === 'string' &&
+  PROJECT_MEMBER_ROLE_CODE_VALUES.includes(value as ProjectMemberRoleCode);

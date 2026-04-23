@@ -79,11 +79,16 @@ export type {
 
 export {
   PROJECT_CREATE_EMPLOYEE_SCENE_VALUES,
+  PROJECT_MEMBER_ROLE_CODE_VALUES,
+  PROJECT_MEMBER_ROLE_CONFIG,
   PROJECT_STATUS_VALUES,
   PROJECT_VISIBILITY_STATUS_VALUES,
+  isProjectMemberRoleCode,
 } from './project';
 export type {
   ProjectCreateEmployeeScene,
+  ProjectMemberRoleCode,
+  ProjectMemberRoleConfigItem,
   ProjectStatus,
   ProjectVisibilityStatus,
 } from './project';
