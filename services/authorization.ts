@@ -8,6 +8,14 @@ export type EffectivePermission = {
   scope: "self" | "department" | "assigned" | "all";
 };
 
+export type AuthContextRole = {
+  id: string;
+  code: string;
+  name: string | null;
+  description: string | null;
+  status: string | null;
+};
+
 export type AuthContext = {
   authUserId: string;
   employeeId: string | null;
@@ -16,6 +24,7 @@ export type AuthContext = {
   departmentId: string | null;
   postId: string | null;
   roleCodes: string[];
+  roles: AuthContextRole[];
   permissions: EffectivePermission[];
 };
 
@@ -88,6 +97,13 @@ class AuthorizationService {
     ReturnType<typeof permissionRepository.getEmployeePermissionContextByAuthUserId>
   >, authUserId: string): AuthContext {
     const employee = input.employee;
+    const roles = input.roles.map((item) => ({
+      id: item.id,
+      code: item.code,
+      name: item.name ?? null,
+      description: item.description ?? null,
+      status: item.status ?? null,
+    }));
     const roleCodes = input.roles.map((item) => item.code);
 
     if (!employee) {
@@ -99,6 +115,7 @@ class AuthorizationService {
         departmentId: null,
         postId: null,
         roleCodes,
+        roles,
         permissions: [],
       };
     }
@@ -112,6 +129,7 @@ class AuthorizationService {
         departmentId: employee.department_id,
         postId: employee.post_id,
         roleCodes,
+        roles,
         permissions: PERMISSION_CODE_VALUES.map((code) => ({
           code,
           scope: "all" as const,
@@ -150,6 +168,7 @@ class AuthorizationService {
       departmentId: employee.department_id,
       postId: employee.post_id,
       roleCodes,
+      roles,
       permissions: Array.from(permissionMap.entries()).map(([code, scope]) => ({
         code,
         scope,
