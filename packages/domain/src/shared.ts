@@ -65,8 +65,17 @@ export {
 } from './post';
 export type { PostCode, PostStatus, SalaryType } from './post';
 
-export { PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES } from './project-log';
-export type { ProjectLogCommentAuthorType } from './project-log';
+export {
+  PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES,
+  PROJECT_LOG_STAGE_CODE_VALUES,
+  PROJECT_LOG_STAGE_CONFIG,
+  isProjectLogStageCode,
+} from './project-log';
+export type {
+  ProjectLogCommentAuthorType,
+  ProjectLogStageCode,
+  ProjectLogStageConfigItem,
+} from './project-log';
 
 export {
   PROJECT_CREATE_EMPLOYEE_SCENE_VALUES,

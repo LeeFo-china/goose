@@ -765,8 +765,9 @@ export type Database = {
           employee_id: string
           id: string
           images: Json | null
-          node_name: string
+          node_name: string | null
           project_id: string
+          stage_code: string | null
         }
         Insert: {
           content?: string | null
@@ -774,8 +775,9 @@ export type Database = {
           employee_id: string
           id?: string
           images?: Json | null
-          node_name: string
+          node_name?: string | null
           project_id: string
+          stage_code?: string | null
         }
         Update: {
           content?: string | null
@@ -783,8 +785,9 @@ export type Database = {
           employee_id?: string
           id?: string
           images?: Json | null
-          node_name?: string
+          node_name?: string | null
           project_id?: string
+          stage_code?: string | null
         }
         Relationships: [
           {
@@ -1162,7 +1165,8 @@ export type Database = {
         Returns: {
           count: number
           date: string
-          node_name: string
+          node_name: string | null
+          stage_code: string | null
         }[]
       }
       is_admin: { Args: never; Returns: boolean }

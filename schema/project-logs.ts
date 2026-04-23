@@ -1,11 +1,30 @@
 import { z } from "zod";
+import {
+  PROJECT_LOG_STAGE_CODE_VALUES,
+  type ProjectLogStageCode,
+} from "@gooes/domain";
+
+const NullableProjectLogNodeNameSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  },
+  z.string().trim().max(100, "节点补充不能超过 100 个字符").nullable().optional(),
+);
 
 export const ProjectLogBaseSchema = z.object({
   id: z.string().uuid("无效的日志 ID").optional(),
   project_id: z.string().uuid("请选择有效的项目"),
   employee_id: z.string().uuid("请选择有效的员工"),
-  node_name: z.string("节点名称不能为空").trim().min(1, "节点名称不能为空"),
-  content: z.string().trim().nullable().optional(),
+  stage_code: z.enum(PROJECT_LOG_STAGE_CODE_VALUES, {
+    message: "无效的施工阶段",
+  }),
+  node_name: NullableProjectLogNodeNameSchema,
+  content: z.string().trim().min(1, "日志内容不能为空"),
   images: z.any().nullable().optional(),
   created_at: z.string().datetime("无效的时间格式").optional(),
 });
@@ -48,3 +67,9 @@ export const ProjectLogCalendarQuerySchema = z.object({
 });
 
 export type ProjectLogCalendarQueryType = z.infer<typeof ProjectLogCalendarQuerySchema>;
+
+export const isProjectLogStageCode = (
+  value: string | null | undefined,
+): value is ProjectLogStageCode =>
+  typeof value === "string" &&
+  PROJECT_LOG_STAGE_CODE_VALUES.includes(value as ProjectLogStageCode);

@@ -16,18 +16,26 @@ import { ResponseHandler } from "@/utils/response";
 import { ProjectLogQuerySchema } from "@/schema/project-logs";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import {
+  PROJECT_LOG_STAGE_CONFIG,
+  isProjectLogStageCode,
+  type ProjectLogStageCode,
+} from "@gooes/domain";
 
 const PROJECT_LOGS_BUCKET = "project-logs";
 
 type ProjectLogCalendarItem = {
   date: string;
   count: number;
+  stage_code: ProjectLogStageCode | null;
+  stage_label: string | null;
   node_name: string | null;
 };
 
 type ProjectLogCalendarRow = {
   date: string;
   count: number | string;
+  stage_code: string | null;
   node_name: string | null;
 };
 
@@ -92,8 +100,16 @@ class ProjectLogController extends BaseController<
   }
 
   private serializeProjectLog<T extends Record<string, unknown>>(row: T) {
+    const stageCode = isProjectLogStageCode(
+      typeof row.stage_code === "string" ? row.stage_code : null,
+    )
+      ? row.stage_code
+      : null;
+
     return {
       ...row,
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
       images: this.normalizeProjectLogImages(row.images),
     };
   }
@@ -119,7 +135,7 @@ class ProjectLogController extends BaseController<
       "project_log.create",
     );
     if (!canWriteLog) {
-      throw Errors.forbidden("只有项目成员才可以写施工跟进");
+      throw Errors.forbidden("当前没有写施工日志权限");
     }
 
     const payload: CreateProjectLogInput = {
@@ -220,6 +236,12 @@ class ProjectLogController extends BaseController<
     const list: ProjectLogCalendarItem[] = rows.map((item) => ({
       date: item.date,
       count: Number(item.count),
+      stage_code: isProjectLogStageCode(item.stage_code)
+        ? item.stage_code
+        : null,
+      stage_label: isProjectLogStageCode(item.stage_code)
+        ? PROJECT_LOG_STAGE_CONFIG[item.stage_code].label
+        : null,
       node_name: item.node_name,
     }));
 
