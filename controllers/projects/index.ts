@@ -15,6 +15,8 @@ import { projectSer } from "@/services/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
   type ProjectCreateSelectCustomerQueryType,
+  ProjectMemberCandidateQuerySchema,
+  type ProjectMemberCandidateQueryType,
   ProjectCreateSelectEmployeeQuerySchema,
   type ProjectCreateSelectEmployeeQueryType,
   type ProjectCreateSelectEmployeeScene,
@@ -36,7 +38,7 @@ type ProjectCreateSelectCustomerRow = Pick<
 type ProjectCreateSelectEmployeeRow =
   & Pick<
     Tables<"employees">,
-    "id" | "name" | "phone" | "role"
+    "id" | "name" | "phone" | "role" | "avatar"
   >
   & {
     department:
@@ -57,6 +59,7 @@ type ProjectCreateEmployeeOption = {
   id: string;
   name: string | null;
   phone: string | null;
+  avatar: string | null;
   role_label: string | null;
   department: {
     id: string;
@@ -830,6 +833,86 @@ class ProjectController extends BaseController<
             id: item.id,
             name: item.name,
             phone: item.phone,
+            avatar: item.avatar ?? null,
+            role_label: item.role,
+            department: department
+              ? {
+                id: department.id,
+                name: department.name,
+              }
+              : null,
+            department_name: department?.name || null,
+            post: post
+              ? {
+                id: post.id,
+                name: post.name,
+                code: post.code,
+              }
+              : null,
+            post_code: post?.code || null,
+            post_name: post?.name || null,
+          };
+        });
+
+    return ResponseHandler.success({
+      list,
+      pagination: {
+        page,
+        pageSize,
+        total: result.count || 0,
+        totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
+      },
+    });
+  }
+
+  @Get("/projects/:id/member-candidates")
+  async getProjectMemberCandidates(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const queryResult = ProjectMemberCandidateQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const { page, pageSize, keyword, role_code } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const postCodes = this.getPostCodesByMemberRole(role_code);
+    const postIds = await this.getPostIdsByCodes(postCodes);
+    const result = await this.queryProjectCreateEmployees({
+      from,
+      to,
+      keyword,
+      postIds: postIds.length > 0 ? postIds : undefined,
+    });
+
+    const list: ProjectCreateEmployeeOption[] =
+      ((result.data || []) as ProjectCreateSelectEmployeeRow[])
+        .map((item) => {
+          const department = Array.isArray(item.department)
+            ? (item.department[0] ?? null)
+            : item.department;
+          const post = Array.isArray(item.post)
+            ? (item.post[0] ?? null)
+            : item.post;
+
+          return {
+            id: item.id,
+            name: item.name,
+            phone: item.phone,
+            avatar: item.avatar ?? null,
             role_label: item.role,
             department: department
               ? {
@@ -873,6 +956,40 @@ class ProjectController extends BaseController<
     return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
   }
 
+  private getPostCodesByMemberRole(
+    roleCode?: ProjectMemberCandidateQueryType["role_code"],
+  ): PostCode[] {
+    if (!roleCode) {
+      return [];
+    }
+
+    if (roleCode === "customer_owner" || roleCode === "sales_followup") {
+      return ["MARKETING_DIRECTOR", "SALES_CONSULTANT"];
+    }
+
+    if (roleCode === "designer") {
+      return ["INTERIOR_DESIGNER", "DESIGN_DIRECTOR"];
+    }
+
+    if (roleCode === "supervisor") {
+      return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+    }
+
+    if (roleCode === "construction_manager" || roleCode === "site_manager") {
+      return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+    }
+
+    if (roleCode === "budget_manager") {
+      return ["FINANCE_ACCOUNTANT"];
+    }
+
+    if (roleCode === "material_manager") {
+      return ["PROCURE_OFFICER"];
+    }
+
+    return [];
+  }
+
   private async getPostIdsByCodes(codes: PostCode[]) {
     if (codes.length === 0) {
       return [];
@@ -902,6 +1019,7 @@ class ProjectController extends BaseController<
         `
         id,
         name,
+        avatar,
         phone,
         role,
         department:departments!employees_department_id_fkey(id, name, code),
