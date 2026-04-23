@@ -170,6 +170,9 @@ export const CreateProjectMemberSchema = ProjectMemberBaseSchema.omit({
 
 export const UpdateProjectMemberSchema = z.object({
   employee_id: z.uuid("无效的员工 ID").optional(),
+  role_code: z.enum(PROJECT_MEMBER_ROLE_CODE_VALUES, {
+    message: "无效的项目成员角色",
+  }).optional(),
   role_name: z.string().trim().max(50, "角色名称过长").nullable().optional(),
   is_primary: z.boolean().optional(),
   sort_order: z.coerce

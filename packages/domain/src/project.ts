@@ -65,6 +65,10 @@ export const PROJECT_MEMBER_ROLE_CODE_VALUES = [
   'designer',
   'supervisor',
   'construction_manager',
+  'budget_manager',
+  'material_manager',
+  'site_manager',
+  'sales_followup',
 ] as const;
 
 export type ProjectMemberRoleCode =
@@ -73,16 +77,71 @@ export type ProjectMemberRoleCode =
 export interface ProjectMemberRoleConfigItem {
   label: string;
   sortOrder: number;
+  category: 'core' | 'extended';
+  isCore: boolean;
+  status: 'active' | 'inactive';
 }
 
 export const PROJECT_MEMBER_ROLE_CONFIG: Record<
   ProjectMemberRoleCode,
   ProjectMemberRoleConfigItem
 > = {
-  customer_owner: { label: '跟进员工', sortOrder: 10 },
-  designer: { label: '主案设计', sortOrder: 20 },
-  supervisor: { label: '施工管理', sortOrder: 30 },
-  construction_manager: { label: '施工经理', sortOrder: 40 },
+  customer_owner: {
+    label: '跟进员工',
+    sortOrder: 10,
+    category: 'core',
+    isCore: true,
+    status: 'active',
+  },
+  designer: {
+    label: '主案设计',
+    sortOrder: 20,
+    category: 'core',
+    isCore: true,
+    status: 'active',
+  },
+  supervisor: {
+    label: '施工管理',
+    sortOrder: 30,
+    category: 'core',
+    isCore: true,
+    status: 'active',
+  },
+  construction_manager: {
+    label: '施工经理',
+    sortOrder: 40,
+    category: 'core',
+    isCore: true,
+    status: 'active',
+  },
+  budget_manager: {
+    label: '预算员',
+    sortOrder: 50,
+    category: 'extended',
+    isCore: false,
+    status: 'active',
+  },
+  material_manager: {
+    label: '材料员',
+    sortOrder: 60,
+    category: 'extended',
+    isCore: false,
+    status: 'active',
+  },
+  site_manager: {
+    label: '现场管家',
+    sortOrder: 70,
+    category: 'extended',
+    isCore: false,
+    status: 'active',
+  },
+  sales_followup: {
+    label: '销售跟进',
+    sortOrder: 80,
+    category: 'extended',
+    isCore: false,
+    status: 'active',
+  },
 };
 
 export const isProjectMemberRoleCode = (

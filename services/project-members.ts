@@ -223,30 +223,52 @@ class ProjectMemberService {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接修改");
     }
 
+    const nextRoleCode = input.role_code ?? serializedExisting.role_code;
+    const isRoleCodeChanged = nextRoleCode !== serializedExisting.role_code;
+    if (nextRoleCode === "customer_owner") {
+      throw Errors.badRequest("跟进员工来自客户归属关系，不能直接修改");
+    }
+
     if (input.is_primary) {
       await projectMemberRepository.setRoleMembersNonPrimary(
         projectId,
-        serializedExisting.role_code,
+        nextRoleCode,
       );
     }
 
+    const nextRoleName = input.role_name !== undefined
+      ? this.getResolvedRoleName(nextRoleCode, input.role_name)
+      : isRoleCodeChanged
+      ? this.getResolvedRoleName(nextRoleCode, null)
+      : undefined;
+    const nextSortOrder = input.sort_order !== undefined
+      ? this.getResolvedSortOrder(nextRoleCode, input.sort_order)
+      : isRoleCodeChanged
+      ? this.getResolvedSortOrder(nextRoleCode, null)
+      : undefined;
+
     const row = await projectMemberRepository.update(projectId, memberId, {
       ...(input.employee_id ? { employee_id: input.employee_id } : {}),
-      ...(input.role_name !== undefined
-        ? {
-            role_name: this.getResolvedRoleName(
-              serializedExisting.role_code,
-              input.role_name,
-            ),
-          }
-        : {}),
+      ...(input.role_code ? { role_code: input.role_code } : {}),
+      ...(nextRoleName !== undefined ? { role_name: nextRoleName } : {}),
       ...(input.is_primary !== undefined ? { is_primary: input.is_primary } : {}),
-      ...(input.sort_order !== undefined
-        ? { sort_order: input.sort_order }
-        : {}),
+      ...(nextSortOrder !== undefined ? { sort_order: nextSortOrder } : {}),
     });
 
     const serialized = this.serializeMember(row);
+
+    if (
+      serializedExisting.is_primary &&
+      serializedExisting.role_code !== serialized.role_code &&
+      (serializedExisting.role_code === "designer" ||
+        serializedExisting.role_code === "supervisor")
+    ) {
+      await this.syncLegacyProjectColumn(
+        projectId,
+        serializedExisting.role_code,
+        null,
+      );
+    }
 
     if (serialized.role_code === "designer" || serialized.role_code === "supervisor") {
       if (serialized.is_primary) {

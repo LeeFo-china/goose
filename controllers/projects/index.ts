@@ -93,6 +93,15 @@ type ProjectMemberSummary = {
   is_virtual?: boolean;
 };
 
+type ProjectMemberRoleOption = {
+  role_code: ProjectMemberRoleCode;
+  role_name: string;
+  category: "core" | "extended";
+  is_core: boolean;
+  sort_order: number;
+  status: "active" | "inactive";
+};
+
 class ProjectController extends BaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
@@ -518,9 +527,28 @@ class ProjectController extends BaseController<
     const members = await this.getProjectMembersForDetail(
       (data || {}) as Record<string, unknown>,
     );
-    return ResponseHandler.success({
-      list: members,
-    });
+    return ResponseHandler.success(members);
+  }
+
+  @Get("/projects/member-roles")
+  async getProjectMemberRoles(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "project.read");
+
+    const list: ProjectMemberRoleOption[] = Object.entries(
+      PROJECT_MEMBER_ROLE_CONFIG,
+    )
+      .map(([roleCode, config]) => ({
+        role_code: roleCode as ProjectMemberRoleCode,
+        role_name: config.label,
+        category: config.category,
+        is_core: config.isCore,
+        sort_order: config.sortOrder,
+        status: config.status,
+      }))
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    return ResponseHandler.success(list);
   }
 
   @Post("/projects/:id/members")
