@@ -54,6 +54,7 @@ export type ProjectVisibilityStatus =
 export const PROJECT_CREATE_EMPLOYEE_SCENE_VALUES = [
   'project_designer',
   'project_supervisor',
+  'project_construction_manager',
 ] as const;
 
 export type ProjectCreateEmployeeScene =

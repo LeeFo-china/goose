@@ -81,11 +81,14 @@ type ProjectMemberEmployeeSummary = {
 
 type ProjectMemberSummary = {
   id: string;
+  project_id: string;
   employee_id: string;
   role_code: ProjectMemberRoleCode;
   role_name: string;
   is_primary: boolean;
   sort_order: number;
+  created_at: string | null;
+  updated_at?: string | null;
   employee: ProjectMemberEmployeeSummary | null;
   is_virtual?: boolean;
 };
@@ -214,11 +217,14 @@ class ProjectController extends BaseController<
 
   private serializeProjectMember(item: {
     id: string;
+    project_id: string;
     employee_id: string;
     role_code: ProjectMemberRoleCode;
     role_name: string | null;
     is_primary: boolean;
     sort_order: number | null;
+    created_at?: string | null;
+    updated_at?: string | null;
     employee: ProjectMemberEmployeeSummary | null;
     is_virtual?: boolean;
   }): ProjectMemberSummary {
@@ -226,11 +232,14 @@ class ProjectController extends BaseController<
 
     return {
       id: item.id,
+      project_id: item.project_id,
       employee_id: item.employee_id,
       role_code: item.role_code,
       role_name: item.role_name ?? roleConfig.label,
       is_primary: item.is_primary,
       sort_order: item.sort_order ?? roleConfig.sortOrder,
+      created_at: item.created_at ?? null,
+      updated_at: item.updated_at ?? null,
       employee: item.employee,
       ...(item.is_virtual ? { is_virtual: true } : {}),
     };
@@ -268,8 +277,10 @@ class ProjectController extends BaseController<
         return a.sort_order - b.sort_order;
       }
 
-      if (a.is_primary !== b.is_primary) {
-        return a.is_primary ? -1 : 1;
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA !== timeB) {
+        return timeA - timeB;
       }
 
       return a.role_name.localeCompare(b.role_name, "zh-CN");
@@ -825,6 +836,10 @@ class ProjectController extends BaseController<
   private getPostCodesByScene(scene: ProjectCreateSelectEmployeeScene): PostCode[] {
     if (scene === "project_designer") {
       return ["INTERIOR_DESIGNER", "DESIGN_DIRECTOR"];
+    }
+
+    if (scene === "project_construction_manager") {
+      return ["PROJECT_MANAGER"];
     }
 
     return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
