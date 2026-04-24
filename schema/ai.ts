@@ -17,6 +17,7 @@ export const DecorationQaStreamContextSchema = z.object({
   role: z.enum(["visitor", "customer", "employee"], {
     message: "上下文身份无效",
   }).default("visitor"),
+  project_id: z.string().uuid("无效的项目ID").optional(),
 }).optional();
 
 export const DecorationQaStreamRequestSchema = z.object({

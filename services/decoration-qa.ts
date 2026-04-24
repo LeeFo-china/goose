@@ -1,10 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
+import { SupabaseDB } from "@/utils/supabase";
 import type {
   DecorationQaRequestInput,
   DecorationQaStreamRequestInput,
 } from "@/schema/ai";
-import type { AiMessageRole } from "@gooes/domain";
+import type { Tables } from "@/types/database";
+import {
+  PROJECT_LOG_STAGE_CONFIG,
+  ProjectStatusConfig,
+  isProjectLogStageCode,
+  isProjectStatus,
+  type AiMessageRole,
+  type ProjectLogStageCode,
+} from "@gooes/domain";
 
 type DecorationQaResult = {
   answer: string;
@@ -102,6 +111,75 @@ const STREAM_OUTPUT_PROMPT = `
 
 你必须直接输出自然语言答案正文，不要输出 JSON，不要输出 markdown 代码块，不要输出多余前缀。
 回答结束时不要再补“如需我继续”等收尾套话。`;
+
+type CustomerContextRow = Pick<
+  Tables<"customers">,
+  "id" | "name" | "user_id"
+>;
+
+type ProjectQaProjectRow = {
+  id: string;
+  name: string | null;
+  status: string | null;
+  address: string | null;
+  start_date: string | null;
+  style_tags: unknown;
+  property: {
+    community: string | null;
+    building_info: string | null;
+    layout?: string | null;
+    area?: number | null;
+  } | {
+    community: string | null;
+    building_info: string | null;
+    layout?: string | null;
+    area?: number | null;
+  }[] | null;
+  designer: {
+    name: string | null;
+  } | {
+    name: string | null;
+  }[] | null;
+  supervisor: {
+    name: string | null;
+  } | {
+    name: string | null;
+  }[] | null;
+};
+
+type ProjectQaLogRow = {
+  stage_code: string | null;
+  node_name: string | null;
+  content: string | null;
+  created_at: string | null;
+};
+
+type CustomerProjectQaContext = {
+  customer_id: string;
+  customer_name: string | null;
+  project_id: string;
+  project_name: string | null;
+  status: string | null;
+  status_label: string | null;
+  address: string | null;
+  start_date: string | null;
+  style_tags: string[];
+  property: {
+    community: string | null;
+    building_info: string | null;
+    layout: string | null;
+    area: number | null;
+  } | null;
+  designer_name: string | null;
+  supervisor_name: string | null;
+  recent_logs: Array<{
+    stage_code: ProjectLogStageCode | null;
+    stage_label: string | null;
+    node_name: string | null;
+    content: string | null;
+    created_at: string | null;
+  }>;
+};
 
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
@@ -291,12 +369,244 @@ function buildMessages(
   question: string,
   history: DecorationQaRequestInput["history"],
   systemPrompt: string,
+  extraSystemMessages: string[] = [],
 ): OpenAiRequestBody["messages"] {
   return [
     { role: "system", content: systemPrompt },
+    ...extraSystemMessages.map((content) => ({
+      role: "system" as const,
+      content,
+    })),
     ...history,
     { role: "user", content: question },
   ];
+}
+
+function normalizeRelation<T extends Record<string, unknown>>(
+  value: unknown,
+  fallback: T,
+): T {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first && typeof first === "object") {
+      return { ...fallback, ...(first as T) };
+    }
+
+    return fallback;
+  }
+
+  if (value && typeof value === "object") {
+    return { ...fallback, ...(value as T) };
+  }
+
+  return fallback;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function getCustomerContextByAuthUserId(authUserId: string) {
+  const { data, error } = await SupabaseDB.getAdminClient()
+    .from("customers")
+    .select("id, name, user_id")
+    .eq("user_id", authUserId)
+    .limit(2);
+
+  if (error) {
+    throw Errors.dbError("查询客户身份失败", error);
+  }
+
+  const list = (data || []) as CustomerContextRow[];
+  if (list.length > 1) {
+    throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
+  }
+
+  if (!list[0]) {
+    throw Errors.forbidden();
+  }
+
+  return list[0];
+}
+
+async function buildCustomerProjectQaContext(
+  authUserId: string,
+  projectId: string,
+): Promise<CustomerProjectQaContext> {
+  const customer = await getCustomerContextByAuthUserId(authUserId);
+  const { data: projectData, error: projectError } = await SupabaseDB.getAdminClient()
+    .from("projects")
+    .select(`
+      id,
+      name,
+      status,
+      address,
+      start_date,
+      style_tags,
+      property:properties!projects_property_id_fkey(
+        community,
+        building_info,
+        layout,
+        area
+      ),
+      designer:employees!projects_designer_id_fkey(
+        name
+      ),
+      supervisor:employees!projects_supervisor_id_fkey(
+        name
+      )
+    `)
+    .eq("id", projectId)
+    .eq("customer_id", customer.id)
+    .maybeSingle();
+
+  if (projectError) {
+    throw Errors.dbError("查询客户项目上下文失败", projectError);
+  }
+
+  if (!projectData) {
+    throw Errors.forbidden();
+  }
+
+  const { data: logsData, error: logsError } = await SupabaseDB.getAdminClient()
+    .from("project_logs")
+    .select("stage_code, node_name, content, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (logsError) {
+    throw Errors.dbError("查询客户项目日志上下文失败", logsError);
+  }
+
+  const project = projectData as unknown as ProjectQaProjectRow;
+  const property = normalizeRelation(project.property, {
+    community: null,
+    building_info: null,
+    layout: null,
+    area: null,
+  });
+  const designer = normalizeRelation(project.designer, {
+    name: null,
+  });
+  const supervisor = normalizeRelation(project.supervisor, {
+    name: null,
+  });
+  const status = isProjectStatus(project.status) ? project.status : null;
+
+  return {
+    customer_id: customer.id,
+    customer_name: customer.name,
+    project_id: project.id,
+    project_name: project.name,
+    status,
+    status_label: status ? ProjectStatusConfig[status].label : null,
+    address: project.address,
+    start_date: project.start_date,
+    style_tags: normalizeStringArray(project.style_tags),
+    property: property.community || property.building_info || property.layout || property.area
+      ? {
+        community: typeof property.community === "string" ? property.community : null,
+        building_info: typeof property.building_info === "string"
+          ? property.building_info
+          : null,
+        layout: typeof property.layout === "string" ? property.layout : null,
+        area: typeof property.area === "number" ? property.area : null,
+      }
+      : null,
+    designer_name: typeof designer.name === "string" ? designer.name : null,
+    supervisor_name: typeof supervisor.name === "string" ? supervisor.name : null,
+    recent_logs: ((logsData || []) as ProjectQaLogRow[]).map((item) => {
+      const stageCode = isProjectLogStageCode(item.stage_code)
+        ? item.stage_code
+        : null;
+
+      return {
+        stage_code: stageCode,
+        stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+        node_name: item.node_name,
+        content: item.content,
+        created_at: item.created_at,
+      };
+    }),
+  };
+}
+
+function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
+  const lines: string[] = [
+    "以下是当前客户项目上下文，仅可基于这些已同步资料回答项目相关问题。",
+    "如果上下文不足，请明确说明“根据当前已同步的项目资料，暂时无法确认更多细节”。",
+    "不要虚构施工进度、团队成员、时间计划或未发生的项目节点。",
+    "",
+    "当前客户项目上下文：",
+    `- 客户名称：${context.customer_name || "未同步"}`,
+    `- 项目名称：${context.project_name || "未同步"}`,
+    `- 项目状态：${context.status_label || context.status || "未同步"}`,
+    `- 项目地址：${context.address || "未同步"}`,
+    `- 开工日期：${context.start_date || "未同步"}`,
+    `- 风格标签：${context.style_tags.length ? context.style_tags.join("、") : "未同步"}`,
+    `- 主案设计：${context.designer_name || "未同步"}`,
+    `- 施工管理：${context.supervisor_name || "未同步"}`,
+  ];
+
+  if (context.property) {
+    lines.push(
+      `- 房产信息：${[
+        context.property.community,
+        context.property.building_info,
+        context.property.layout,
+        context.property.area ? `${context.property.area}㎡` : null,
+      ].filter(Boolean).join("，") || "未同步"}`,
+    );
+  } else {
+    lines.push("- 房产信息：未同步");
+  }
+
+  if (context.recent_logs.length > 0) {
+    lines.push("- 最近施工日志：");
+    context.recent_logs.forEach((item, index) => {
+      const parts = [
+        item.created_at ? item.created_at.slice(0, 10) : null,
+        item.stage_label || item.stage_code,
+        item.node_name,
+        item.content,
+      ].filter(Boolean);
+
+      lines.push(`  ${index + 1}. ${parts.join(" - ")}`);
+    });
+  } else {
+    lines.push("- 最近施工日志：当前没有已同步的施工日志");
+  }
+
+  return lines.join("\n");
+}
+
+export async function resolveDecorationQaStreamSystemMessages(
+  input: DecorationQaStreamRequestInput,
+  authUserId?: string,
+) {
+  if (input.context?.role !== "customer") {
+    return [] as string[];
+  }
+
+  const projectId = input.context.project_id?.trim();
+  if (!projectId) {
+    return [] as string[];
+  }
+
+  if (!authUserId) {
+    throw Errors.unauthorized("缺少登录凭证");
+  }
+
+  const context = await buildCustomerProjectQaContext(authUserId, projectId);
+  return [formatCustomerProjectQaContext(context)];
 }
 
 async function requestQaResult(
@@ -330,11 +640,17 @@ async function requestQaResult(
 function createStreamRequestBody(
   input: DecorationQaStreamRequestInput,
   model: string,
+  extraSystemMessages: string[] = [],
 ): OpenAiRequestBody {
   return {
     model,
     temperature: 0.7,
-    messages: buildMessages(input.question, [], getStreamingSystemPrompt()),
+    messages: buildMessages(
+      input.question,
+      [],
+      getStreamingSystemPrompt(),
+      extraSystemMessages,
+    ),
     stream: true,
     stream_options: {
       include_usage: true,
@@ -447,6 +763,8 @@ export async function streamDecorationQa(
   input: DecorationQaStreamRequestInput,
   onEvent: (event: DecorationQaStreamEvent) => Promise<void> | void,
   options?: {
+    authUserId?: string;
+    extraSystemMessages?: string[];
     signal?: AbortSignal;
   },
 ) {
@@ -454,11 +772,13 @@ export async function streamDecorationQa(
   const model = getAiModel();
   const endpoint = getAiEndpoint();
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
+  const extraSystemMessages = options?.extraSystemMessages
+    || await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
 
   const streamRequest = await requestQaStream(
     endpoint,
     apiKey,
-    createStreamRequestBody(input, model),
+    createStreamRequestBody(input, model, extraSystemMessages),
     options?.signal,
   );
 

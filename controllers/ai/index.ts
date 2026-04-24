@@ -8,6 +8,7 @@ import {
 } from "@/schema/ai";
 import {
   askDecorationQa,
+  resolveDecorationQaStreamSystemMessages,
   serializeDecorationQaStreamEvent,
   streamDecorationQa,
 } from "@/services/decoration-qa";
@@ -52,6 +53,11 @@ class AiController extends BaseController {
       throw Errors.fromZod(result.error);
     }
 
+    const extraSystemMessages = await resolveDecorationQaStreamSystemMessages(
+      result.data,
+      request.user?.sub,
+    );
+
     reply.hijack();
     reply.raw.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
     reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
@@ -75,6 +81,8 @@ class AiController extends BaseController {
           }
         },
         {
+          authUserId: request.user?.sub,
+          extraSystemMessages,
           signal: abortController.signal,
         },
       );
