@@ -24,8 +24,13 @@ import {
 import type { Tables } from "@/types/database";
 import {
   PROJECT_MEMBER_ROLE_CONFIG,
+  PROJECT_LOG_STAGE_CONFIG,
+  ProjectStatusConfig,
+  isProjectLogStageCode,
+  isProjectStatus,
   type PostCode,
   type ProjectMemberRoleCode,
+  type ProjectLogStageCode,
 } from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
@@ -105,10 +110,92 @@ type ProjectMemberRoleOption = {
   status: "active" | "inactive";
 };
 
+type PublicProjectMemberSummary = {
+  id: string;
+  role_code: ProjectMemberRoleCode;
+  role_name: string;
+  employee_id: string;
+  employee_name: string | null;
+  avatar: string | null;
+  is_primary: boolean;
+  sort_order: number;
+};
+
+type PublicProjectLogSummary = {
+  id: string;
+  project_id: string;
+  stage_code: ProjectLogStageCode | null;
+  stage_label: string | null;
+  node_name: string | null;
+  content: string | null;
+  images: string[];
+  created_at: string | null;
+};
+
 class ProjectController extends BaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
 > {
+  private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
+
+  private publicProjectListSelect = `
+    id,
+    name,
+    status,
+    budget,
+    start_date,
+    created_at,
+    address,
+    style_tags,
+    visibility_status,
+    customer:customers!projects_customer_id_fkey(
+      id,
+      name
+    ),
+    property:properties!projects_property_id_fkey(
+      id,
+      community,
+      building_info,
+      area,
+      layout,
+      latitude,
+      longitude
+    ),
+    designer:employees!projects_designer_id_fkey(
+      id,
+      name,
+      avatar
+    ),
+    supervisor:employees!projects_supervisor_id_fkey(
+      id,
+      name,
+      avatar
+    )
+  `;
+
+  private publicProjectDetailSelect = `
+    id,
+    name,
+    status,
+    budget,
+    start_date,
+    address,
+    style_tags,
+    visibility_status,
+    customer:customers!projects_customer_id_fkey(
+      name
+    ),
+    property:properties!projects_property_id_fkey(
+      id,
+      community,
+      building_info,
+      layout,
+      area,
+      latitude,
+      longitude
+    )
+  `;
+
   private projectListSelect = `
     id,
     name,
@@ -227,6 +314,176 @@ class ProjectController extends BaseController<
     return fallback;
   }
 
+  private normalizeStringArray(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [] as string[];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private normalizeProjectLogImages(images: unknown) {
+    if (!Array.isArray(images)) {
+      return [] as string[];
+    }
+
+    return images
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        if (/^https?:\/\//i.test(item)) {
+          return item;
+        }
+
+        return SupabaseDB.getAdminClient()
+          .storage
+          .from("project-logs")
+          .getPublicUrl(item)
+          .data.publicUrl;
+      });
+  }
+
+  private isPublicProjectVisible(row: Record<string, unknown>) {
+    const visibilityStatus =
+      typeof row.visibility_status === "string" ? row.visibility_status : "inherit";
+    const status = typeof row.status === "string" ? row.status : null;
+
+    if (visibilityStatus === "hidden") {
+      return false;
+    }
+
+    if (visibilityStatus === "public") {
+      return true;
+    }
+
+    return status
+      ? this.publicProjectVisibleStatuses.includes(
+          status as (typeof this.publicProjectVisibleStatuses)[number],
+        )
+      : false;
+  }
+
+  private applyPublicProjectVisibilityQuery(query: any) {
+    return query
+      .neq("visibility_status", "hidden")
+      .or("status.in.(signed,constructing,completed),visibility_status.eq.public");
+  }
+
+  private serializePublicProjectMember(item: {
+    id: string;
+    role_code: ProjectMemberRoleCode;
+    role_name: string | null;
+    employee_id: string;
+    is_primary: boolean;
+    sort_order: number | null;
+    employee: ProjectMemberEmployeeSummary | null;
+  }): PublicProjectMemberSummary {
+    const roleConfig = PROJECT_MEMBER_ROLE_CONFIG[item.role_code];
+
+    return {
+      id: item.id,
+      role_code: item.role_code,
+      role_name: item.role_name ?? roleConfig.label,
+      employee_id: item.employee_id,
+      employee_name: item.employee?.name ?? null,
+      avatar: item.employee?.avatar ?? null,
+      is_primary: item.is_primary,
+      sort_order: item.sort_order ?? roleConfig.sortOrder,
+    };
+  }
+
+  private async getPublicProjectMembers(projectId: string) {
+    const members = await projectMemberService.listProjectMembers(projectId);
+    return members
+      .filter((item) => item.role_code !== "customer_owner")
+      .map((item) => this.serializePublicProjectMember(item));
+  }
+
+  private serializePublicProjectLog(row: Record<string, unknown>): PublicProjectLogSummary {
+    const rawStageCode = typeof row.stage_code === "string" ? row.stage_code : null;
+    const stageCode: ProjectLogStageCode | null = isProjectLogStageCode(rawStageCode)
+      ? rawStageCode
+      : null;
+
+    return {
+      id: typeof row.id === "string" ? row.id : "",
+      project_id: typeof row.project_id === "string" ? row.project_id : "",
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+      node_name: typeof row.node_name === "string" ? row.node_name : null,
+      content: typeof row.content === "string" ? row.content : null,
+      images: this.normalizeProjectLogImages(row.images),
+      created_at: typeof row.created_at === "string" ? row.created_at : null,
+    };
+  }
+
+  private async getPublicProjectLogs(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询公开项目日志失败", error);
+    }
+
+    return ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+      this.serializePublicProjectLog(item)
+    );
+  }
+
+  private buildPublicProjectCoverImages(logs: PublicProjectLogSummary[]) {
+    return Array.from(
+      new Set(
+        logs.flatMap((item) => item.images).filter(Boolean),
+      ),
+    ).slice(0, 6);
+  }
+
+  private async serializePublicProjectDetailItem(row: Record<string, unknown>) {
+    const normalizedProperty = this.normalizeRelation(row.property, {
+      id: null,
+      community: null,
+      building_info: null,
+      layout: null,
+      area: null,
+      latitude: null,
+      longitude: null,
+    });
+    const normalizedCustomer = this.normalizeRelation(row.customer, {
+      name: null,
+    });
+    const projectId = typeof row.id === "string" ? row.id : "";
+    const publicLogs = projectId ? await this.getPublicProjectLogs(projectId) : [];
+    const members = projectId ? await this.getPublicProjectMembers(projectId) : [];
+    const rawStatus = typeof row.status === "string" ? row.status : null;
+    const status = isProjectStatus(rawStatus) ? rawStatus : null;
+
+    return {
+      id: projectId,
+      name: typeof row.name === "string" ? row.name : null,
+      status,
+      status_label: status ? ProjectStatusConfig[status].label : null,
+      address: typeof row.address === "string" ? row.address : null,
+      latitude: normalizedProperty.latitude ?? null,
+      longitude: normalizedProperty.longitude ?? null,
+      budget: typeof row.budget === "number" ? row.budget : null,
+      start_date: typeof row.start_date === "string" ? row.start_date : null,
+      cover_images: this.buildPublicProjectCoverImages(publicLogs),
+      style_tags: this.normalizeStringArray(row.style_tags),
+      property: normalizedProperty,
+      customer: {
+        name: typeof normalizedCustomer.name === "string" ? normalizedCustomer.name : null,
+      },
+      members,
+    };
+  }
+
   private serializeProjectMember(item: {
     id: string;
     project_id: string;
@@ -271,14 +528,15 @@ class ProjectController extends BaseController<
       owner_id: null,
       owner: null,
     });
+    const customerOwnerRelation = this.normalizeRelation(customer.owner, {
+      id: "",
+      name: null,
+      avatar: null,
+      phone: null,
+    });
     const customerOwner = projectMemberService.buildDerivedCustomerOwnerMember({
       projectId,
-      employee: this.normalizeRelation(customer.owner, {
-        id: null,
-        name: null,
-        avatar: null,
-        phone: null,
-      }),
+      employee: customerOwnerRelation.id ? customerOwnerRelation : null,
     });
 
     return [
@@ -410,7 +668,7 @@ class ProjectController extends BaseController<
     if (error) throw Errors.dbError("列表查询失败", error);
 
     return ResponseHandler.success({
-      list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
+      list: ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
         this.serializeProjectListItem(item)
       ),
       pagination: {
@@ -445,7 +703,7 @@ class ProjectController extends BaseController<
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
     return ResponseHandler.success(
-      await this.serializeProjectDetailItem((data || {}) as Record<string, unknown>),
+      await this.serializeProjectDetailItem((data || {}) as unknown as Record<string, unknown>),
     );
   };
 
@@ -528,7 +786,7 @@ class ProjectController extends BaseController<
     if (!data) throw Errors.badRequest("项目不存在");
 
     const members = await this.getProjectMembersForDetail(
-      (data || {}) as Record<string, unknown>,
+      (data || {}) as unknown as Record<string, unknown>,
     );
     return ResponseHandler.success(members);
   }
@@ -636,23 +894,89 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const visibleStatuses = ["signed", "constructing", "completed"];
-
-    const { data, error } = await SupabaseDB.from(this.tableName)
-      .select(`
-    *,
-    property:properties(id, community),
-    designer:employees!projects_designer_id_fkey(id, name),
-    supervisor:employees!projects_supervisor_id_fkey(id, name)
-  `)
-      .in("status", visibleStatuses)
+    let query = SupabaseDB.from(this.tableName)
+      .select(this.publicProjectListSelect)
       .order("created_at", { ascending: false });
+    query = this.applyPublicProjectVisibilityQuery(query);
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询前端可展示项目失败", error);
     }
 
-    return ResponseHandler.success(data, "查询成功");
+    return ResponseHandler.success(
+      ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+        this.serializeProjectListItem(item)
+      ),
+      "查询成功",
+    );
+  }
+
+  @Get("/front/projects")
+  async getPublicProjects(request: FastifyRequest, reply: FastifyReply) {
+    let query = SupabaseDB.from(this.tableName)
+      .select(this.publicProjectListSelect)
+      .order("created_at", { ascending: false });
+    query = this.applyPublicProjectVisibilityQuery(query);
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询公开项目列表失败", error);
+    }
+
+    return ResponseHandler.success(
+      ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+        this.serializeProjectListItem(item)
+      ),
+    );
+  }
+
+  @Get("/front/projects/:id/logs")
+  async getPublicProjectLogsById(request: FastifyRequest, reply: FastifyReply) {
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select("id, status, visibility_status")
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询公开项目失败", error);
+    }
+    if (!data || !this.isPublicProjectVisible((data || {}) as unknown as Record<string, unknown>)) {
+      throw Errors.notFound("项目不存在");
+    }
+
+    return ResponseHandler.success(
+      await this.getPublicProjectLogs(idVerify.data.id),
+    );
+  }
+
+  @Get("/front/projects/:id")
+  async getPublicProjectById(request: FastifyRequest, reply: FastifyReply) {
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select(this.publicProjectDetailSelect)
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询公开项目详情失败", error);
+    }
+    if (!data || !this.isPublicProjectVisible((data || {}) as unknown as Record<string, unknown>)) {
+      throw Errors.notFound("项目不存在");
+    }
+
+    return ResponseHandler.success(
+      await this.serializePublicProjectDetailItem(
+        (data || {}) as unknown as Record<string, unknown>,
+      ),
+    );
   }
 
   @Get("/projects/status")

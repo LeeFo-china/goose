@@ -100,10 +100,11 @@ class ProjectLogController extends BaseController<
   }
 
   private serializeProjectLog<T extends Record<string, unknown>>(row: T) {
-    const stageCode = isProjectLogStageCode(
-      typeof row.stage_code === "string" ? row.stage_code : null,
+    const rawStageCode = typeof row.stage_code === "string" ? row.stage_code : null;
+    const stageCode: ProjectLogStageCode | null = isProjectLogStageCode(
+      rawStageCode,
     )
-      ? row.stage_code
+      ? rawStageCode
       : null;
 
     return {
@@ -135,10 +136,10 @@ class ProjectLogController extends BaseController<
       "project_log.create",
     );
     if (!canWriteLog) {
-      throw Errors.forbidden("当前没有写施工日志权限");
+      throw Errors.forbidden();
     }
 
-    const payload: CreateProjectLogInput = {
+    const payload = {
       ...result.data,
       employee_id: authContext.employeeId,
     };
