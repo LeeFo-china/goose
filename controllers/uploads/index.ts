@@ -18,7 +18,13 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
-const ALLOWED_UPLOAD_SCENES = ["project_log", "expense_request", "referral_payment", "employee_avatar"] as const;
+const ALLOWED_UPLOAD_SCENES = [
+  "project_log",
+  "expense_request",
+  "referral_payment",
+  "employee_avatar",
+  "customer_avatar",
+] as const;
 
 const UploadImageFieldSchema = z.object({
   scene: z.enum(ALLOWED_UPLOAD_SCENES, {
@@ -31,6 +37,8 @@ type UploadImageItem = {
   url: string;
   path: string;
 };
+
+type UploadScene = (typeof ALLOWED_UPLOAD_SCENES)[number];
 
 type PendingUploadFile = {
   buffer: Buffer;
@@ -81,7 +89,12 @@ class UploadController extends BaseController {
     }
 
     const uploadedFiles = await Promise.all(
-      files.map((file) => this.uploadSingleFile(file, fieldResult.data.project_id)),
+      files.map((file) =>
+        this.uploadSingleFile(file, {
+          projectId: fieldResult.data.project_id,
+          scene: fieldResult.data.scene ?? "project_log",
+        })
+      ),
     );
 
     return ResponseHandler.success({
@@ -89,7 +102,10 @@ class UploadController extends BaseController {
     });
   }
 
-  private async uploadSingleFile(file: PendingUploadFile, projectId?: string) {
+  private async uploadSingleFile(
+    file: PendingUploadFile,
+    options: { projectId?: string; scene: UploadScene },
+  ) {
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
     }
@@ -99,7 +115,7 @@ class UploadController extends BaseController {
     }
 
     const extension = this.getFileExtension(file);
-    const objectPath = this.buildObjectPath(projectId, extension);
+    const objectPath = this.buildObjectPath(options, extension);
 
     const { error } = await SupabaseDB.getAdminClient()
       .storage
@@ -124,12 +140,22 @@ class UploadController extends BaseController {
     };
   }
 
-  private buildObjectPath(projectId: string | undefined, extension: string) {
+  private buildObjectPath(
+    options: { projectId?: string; scene: UploadScene },
+    extension: string,
+  ) {
     const now = new Date();
     const year = String(now.getFullYear());
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
-    const prefix = projectId?.trim() || "unassigned";
+    const prefixByScene: Record<UploadScene, string> = {
+      project_log: options.projectId?.trim() || "unassigned",
+      expense_request: "expense-request",
+      referral_payment: "referral-payment",
+      employee_avatar: "employee-avatar",
+      customer_avatar: "customer-avatar",
+    };
+    const prefix = prefixByScene[options.scene];
 
     return `${prefix}/${year}/${month}/${day}/${randomUUID()}${extension}`;
   }

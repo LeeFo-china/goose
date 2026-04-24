@@ -1,11 +1,15 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
-import { Get } from "@/utils/decorators/route";
+import { Get, Patch } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { authorizationService } from "@/services/authorization";
 import { PaginationQuerySchema } from "@/schema/request";
+import {
+  AuthMeProfileUpdateSchema,
+  type AuthMeProfileUpdateInput,
+} from "@/schema/user-profile";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   ProjectStatusConfig,
@@ -15,7 +19,19 @@ import {
 } from "@gooes/domain";
 import type { Tables } from "@/types/database";
 
-type CustomerContextRow = Pick<Tables<"customers">, "id" | "name" | "user_id">;
+type CustomerContextRow = Pick<
+  Tables<"customers">,
+  "id" | "name" | "phone" | "user_id"
+>;
+
+type UserProfileRow = {
+  auth_user_id: string;
+  nickname: string | null;
+  avatar_path: string | null;
+  profile_completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 type CustomerProjectListItem = {
   id: string;
@@ -109,6 +125,22 @@ class CustomerSelfServiceController extends BaseController {
       .filter(Boolean);
   }
 
+  private getImagePublicUrl(path: string | null | undefined) {
+    if (!path) {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+
+    return SupabaseDB.getAdminClient()
+      .storage
+      .from(PROJECT_LOGS_BUCKET)
+      .getPublicUrl(path)
+      .data.publicUrl;
+  }
+
   private normalizeProjectLogImages(images: unknown) {
     if (!Array.isArray(images)) {
       return [] as string[];
@@ -119,15 +151,7 @@ class CustomerSelfServiceController extends BaseController {
       .map((item) => item.trim())
       .filter(Boolean)
       .map((item) => {
-        if (/^https?:\/\//i.test(item)) {
-          return item;
-        }
-
-        return SupabaseDB.getAdminClient()
-          .storage
-          .from(PROJECT_LOGS_BUCKET)
-          .getPublicUrl(item)
-          .data.publicUrl;
+        return this.getImagePublicUrl(item) || item;
       });
   }
 
@@ -137,7 +161,7 @@ class CustomerSelfServiceController extends BaseController {
   ) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, user_id")
+      .select("id, name, phone, user_id")
       .eq("user_id", authUserId)
       .limit(2);
 
@@ -156,6 +180,93 @@ class CustomerSelfServiceController extends BaseController {
     }
 
     return customer;
+  }
+
+  private async getUserProfileByAuthUserId(authUserId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("user_profiles")
+      .select("auth_user_id, nickname, avatar_path, profile_completed_at, created_at, updated_at")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询用户资料失败", error);
+    }
+
+    return (data as UserProfileRow | null) || null;
+  }
+
+  private serializeAuthProfile(
+    authUserId: string,
+    userProfile: UserProfileRow | null,
+    roles: string[],
+  ) {
+    return {
+      auth_user_id: authUserId,
+      nickname: userProfile?.nickname ?? null,
+      avatar: this.getImagePublicUrl(userProfile?.avatar_path),
+      avatar_path: userProfile?.avatar_path ?? null,
+      profile_completed: Boolean(userProfile?.profile_completed_at),
+      profile_completed_at: userProfile?.profile_completed_at ?? null,
+      roles,
+    };
+  }
+
+  private serializeCustomerProfile(
+    customer: CustomerContextRow,
+    userProfile: UserProfileRow | null,
+  ) {
+    return {
+      customer_id: customer.id,
+      auth_user_id: customer.user_id,
+      name: customer.name,
+      phone: customer.phone ?? null,
+      nickname: userProfile?.nickname ?? null,
+      avatar: this.getImagePublicUrl(userProfile?.avatar_path),
+      avatar_path: userProfile?.avatar_path ?? null,
+      profile_completed: Boolean(userProfile?.profile_completed_at),
+      profile_completed_at: userProfile?.profile_completed_at ?? null,
+    };
+  }
+
+  private async saveAuthUserProfile(
+    authUserId: string,
+    input: AuthMeProfileUpdateInput,
+  ) {
+    const current = await this.getUserProfileByAuthUserId(authUserId);
+    const nickname = input.nickname !== undefined
+      ? input.nickname
+      : current?.nickname ?? null;
+    const avatarPath = input.avatar_path !== undefined
+      ? input.avatar_path
+      : current?.avatar_path ?? null;
+    const shouldMarkCompleted = Boolean(nickname || avatarPath);
+    const profileCompletedAt = shouldMarkCompleted
+      ? current?.profile_completed_at ?? new Date().toISOString()
+      : null;
+
+    if (!current && !shouldMarkCompleted) {
+      return null;
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("user_profiles")
+      .upsert({
+        auth_user_id: authUserId,
+        nickname,
+        avatar_path: avatarPath,
+        profile_completed_at: profileCompletedAt,
+      }, {
+        onConflict: "auth_user_id",
+      })
+      .select("auth_user_id, nickname, avatar_path, profile_completed_at, created_at, updated_at")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("保存用户资料失败", error);
+    }
+
+    return data as UserProfileRow;
   }
 
   private serializeCustomerProjectListItem(row: CustomerProjectListItem) {
@@ -267,13 +378,61 @@ class CustomerSelfServiceController extends BaseController {
   async getCustomerContext(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = await this.getRequiredAuthUserId(request);
     const customer = await this.getCustomerProfileByAuthUserId(authUserId);
+    const userProfile = await this.getUserProfileByAuthUserId(authUserId);
 
     return ResponseHandler.success({
       auth_user_id: authUserId,
       customer_id: customer?.id ?? null,
       customer_name: customer?.name ?? null,
       has_customer_profile: Boolean(customer),
+      nickname: userProfile?.nickname ?? null,
+      avatar: this.getImagePublicUrl(userProfile?.avatar_path),
+      profile_completed: Boolean(userProfile?.profile_completed_at),
     });
+  }
+
+  @Get("/auth/me/profile")
+  async getAuthMeProfile(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const userProfile = await this.getUserProfileByAuthUserId(authUserId);
+    const roles = Array.isArray(request.user?.roles)
+      ? request.user.roles.filter((item): item is string => typeof item === "string")
+      : [];
+
+    return ResponseHandler.success(
+      this.serializeAuthProfile(authUserId, userProfile, roles),
+    );
+  }
+
+  @Patch("/auth/me/profile")
+  async patchAuthMeProfile(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const verify = AuthMeProfileUpdateSchema.safeParse(request.body);
+    if (!verify.success) {
+      throw Errors.fromZod(verify.error);
+    }
+
+    const userProfile = await this.saveAuthUserProfile(authUserId, verify.data);
+    const roles = Array.isArray(request.user?.roles)
+      ? request.user.roles.filter((item): item is string => typeof item === "string")
+      : [];
+
+    return ResponseHandler.success(
+      this.serializeAuthProfile(authUserId, userProfile, roles),
+    );
+  }
+
+  @Get("/customer/profile")
+  async getCustomerProfile(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+      required: true,
+    });
+    const userProfile = await this.getUserProfileByAuthUserId(authUserId);
+
+    return ResponseHandler.success(
+      this.serializeCustomerProfile(customer!, userProfile),
+    );
   }
 
   @Get("/customer/projects")
