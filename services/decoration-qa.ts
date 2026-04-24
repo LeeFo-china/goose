@@ -181,6 +181,58 @@ type CustomerProjectQaContext = {
   }>;
 };
 
+const PROJECT_STAGE_REMINDER_PROMPTS: Partial<
+  Record<ProjectLogStageCode, string[]>
+> = {
+  measure: [
+    "提醒客户确认量房尺寸、功能需求和预算边界，避免后续频繁改方案。",
+    "提醒客户尽快确认平面布局和核心设备需求，减少设计返工。",
+  ],
+  demolition: [
+    "提醒客户关注拆改范围是否与方案一致，承重墙和高风险结构改动必须以现场专业评估为准。",
+    "提醒客户提前确认垃圾清运、邻里沟通和施工时间安排。",
+  ],
+  plumbing_electrical: [
+    "提醒客户尽快确认插座、开关、灯位和水路点位，后期改动成本会明显上升。",
+    "提醒客户保留好水电施工照片和验收记录，方便后续维护。",
+  ],
+  tiling: [
+    "提醒客户确认瓷砖铺贴方向、对缝方式、地漏坡度和门槛石细节。",
+    "提醒客户关注空鼓、阴阳角和排水顺畅情况，必要时安排现场复核。",
+  ],
+  woodwork: [
+    "提醒客户确认柜体尺寸、收口方式、五金和插座避让细节。",
+    "提醒客户尽量在封板前完成隐蔽位置复核，避免后续拆改。",
+  ],
+  painting: [
+    "提醒客户确认色号、墙面找平效果和成品保护，避免后续补漆色差。",
+    "提醒客户关注通风时间和干燥周期，不要急于安排后续安装。",
+  ],
+  installation: [
+    "提醒客户确认灯具、洁具、开关面板和定制成品的到场顺序，避免安装冲突。",
+    "提醒客户在安装阶段重点检查成品保护和设备调试情况。",
+  ],
+  completion: [
+    "提醒客户整理竣工验收清单，逐项确认功能、观感和遗留问题。",
+    "提醒客户保留水电图、设备说明书和售后联系方式，方便后续使用维护。",
+  ],
+};
+
+const PROJECT_STATUS_REMINDER_PROMPTS: Partial<Record<string, string[]>> = {
+  designing: [
+    "提醒客户尽快确认平面方案、主材方向和预算边界，减少进入施工后的变更成本。",
+  ],
+  constructing: [
+    "提醒客户关注当前施工节点的验收和材料到场衔接，避免因为确认不及时影响工期。",
+  ],
+  acceptance: [
+    "提醒客户按验收清单逐项确认，并把遗留问题记录清楚后再安排收尾。",
+  ],
+  after_sale: [
+    "提醒客户把具体问题、发生位置和时间记录清楚，方便售后快速定位处理。",
+  ],
+};
+
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
     const value = process.env[name]?.trim();
@@ -540,10 +592,16 @@ async function buildCustomerProjectQaContext(
 }
 
 function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
+  const latestLogWithStage = context.recent_logs.find((item) => item.stage_code);
+  const reminderPrompts = latestLogWithStage?.stage_code
+    ? (PROJECT_STAGE_REMINDER_PROMPTS[latestLogWithStage.stage_code] || [])
+    : (context.status ? (PROJECT_STATUS_REMINDER_PROMPTS[context.status] || []) : []);
   const lines: string[] = [
     "以下是当前客户项目上下文，仅可基于这些已同步资料回答项目相关问题。",
     "如果上下文不足，请明确说明“根据当前已同步的项目资料，暂时无法确认更多细节”。",
     "不要虚构施工进度、团队成员、时间计划或未发生的项目节点。",
+    "如果用户在询问当前项目相关问题，除直接回答外，请尽量结合当前施工进度或项目状态，自然补充 1-3 条温馨提醒事项。",
+    "温馨提醒必须贴近当前阶段，不能脱离当前项目上下文泛泛而谈。",
     "",
     "当前客户项目上下文：",
     `- 客户名称：${context.customer_name || "未同步"}`,
@@ -583,6 +641,15 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
     });
   } else {
     lines.push("- 最近施工日志：当前没有已同步的施工日志");
+  }
+
+  if (reminderPrompts.length > 0) {
+    lines.push("- 当前阶段温馨提醒参考：");
+    reminderPrompts.forEach((item, index) => {
+      lines.push(`  ${index + 1}. ${item}`);
+    });
+  } else {
+    lines.push("- 当前阶段温馨提醒参考：当前未同步到足够阶段信息，请谨慎提醒并说明依据有限");
   }
 
   return lines.join("\n");
