@@ -195,7 +195,7 @@ class ProjectMemberService {
       project_id: projectId,
       employee_id: input.employee_id,
       role_code: input.role_code,
-      role_name,
+      role_name: roleName,
       is_primary: input.is_primary ?? false,
       sort_order: sortOrder,
     });
