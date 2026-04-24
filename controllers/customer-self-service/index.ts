@@ -1,10 +1,10 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
+import { projectMemberService } from "@/services/project-members";
 import { Get, Patch } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { authorizationService } from "@/services/authorization";
 import { PaginationQuerySchema } from "@/schema/request";
 import {
   AuthMeProfileUpdateSchema,
@@ -16,6 +16,7 @@ import {
   isProjectLogStageCode,
   isProjectStatus,
   type ProjectLogStageCode,
+  type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import type { Tables } from "@/types/database";
 
@@ -77,6 +78,25 @@ type CustomerProjectLogRow = {
   content: string | null;
   images: unknown;
   created_at: string | null;
+};
+
+type CustomerProjectMemberSummary = {
+  id: string;
+  project_id: string;
+  employee_id: string;
+  role_code: ProjectMemberRoleCode;
+  role_name: string;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string | null;
+  updated_at?: string | null;
+  employee: {
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    phone: string | null;
+  } | null;
+  is_virtual?: boolean;
 };
 
 const PROJECT_LOGS_BUCKET = "project-logs";
@@ -333,6 +353,49 @@ class CustomerSelfServiceController extends BaseController {
     };
   }
 
+  private serializeCustomerProjectMember(item: CustomerProjectMemberSummary) {
+    return {
+      id: item.id,
+      project_id: item.project_id,
+      employee_id: item.employee_id,
+      role_code: item.role_code,
+      role_name: item.role_name,
+      is_primary: item.is_primary,
+      sort_order: item.sort_order,
+      created_at: item.created_at,
+      updated_at: item.updated_at ?? null,
+      employee: item.employee
+        ? {
+          id: item.employee.id,
+          name: item.employee.name ?? null,
+          avatar: item.employee.avatar ?? null,
+          phone: item.employee.phone ?? null,
+        }
+        : null,
+      ...(item.is_virtual ? { is_virtual: true } : {}),
+    };
+  }
+
+  private async serializeCustomerProjectDetailItem(row: CustomerProjectListItem) {
+    const projectId = typeof row.id === "string" ? row.id : "";
+    const base = this.serializeCustomerProjectListItem(row);
+    if (!projectId) {
+      return {
+        ...base,
+        members: [] as ReturnType<typeof this.serializeCustomerProjectMember>[],
+      };
+    }
+
+    const members = await projectMemberService.listProjectMembers(projectId);
+
+    return {
+      ...base,
+      members: members.map((item) =>
+        this.serializeCustomerProjectMember(item as CustomerProjectMemberSummary)
+      ),
+    };
+  }
+
   private async getOwnedProject(projectId: string, customerId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("projects")
@@ -504,7 +567,7 @@ class CustomerSelfServiceController extends BaseController {
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     return ResponseHandler.success(
-      this.serializeCustomerProjectListItem(
+      await this.serializeCustomerProjectDetailItem(
         await this.getOwnedProject(idVerify.data.id, customer!.id),
       ),
     );
