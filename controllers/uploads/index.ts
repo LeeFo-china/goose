@@ -10,6 +10,7 @@ import { z } from "zod";
 
 const PROJECT_LOGS_BUCKET = "project-logs";
 const MAX_UPLOAD_FILES = 9;
+const MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -17,9 +18,12 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
+const ALLOWED_UPLOAD_SCENES = ["project_log", "expense_request", "referral_payment", "employee_avatar"] as const;
 
 const UploadImageFieldSchema = z.object({
-  scene: z.string().trim().optional(),
+  scene: z.enum(ALLOWED_UPLOAD_SCENES, {
+    message: "无效的上传场景",
+  }).optional(),
   project_id: z.string().uuid("无效的项目ID").optional(),
 });
 
@@ -88,6 +92,10 @@ class UploadController extends BaseController {
   private async uploadSingleFile(file: PendingUploadFile, projectId?: string) {
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
+    }
+
+    if (file.buffer.length > MAX_UPLOAD_FILE_SIZE) {
+      throw Errors.badRequest("单张图片不能超过 2MB");
     }
 
     const extension = this.getFileExtension(file);
