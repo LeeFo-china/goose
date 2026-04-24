@@ -40,6 +40,11 @@ type ProjectLogAccessInfo = {
   project_id: string;
 };
 
+type ProjectOwnerInfo = {
+  id: string;
+  customer_id: string | null;
+};
+
 class ProjectLogCommentsController extends BaseController {
   constructor() {
     super("project_log_comments");
@@ -61,7 +66,7 @@ class ProjectLogCommentsController extends BaseController {
     const author = await this.resolveCurrentAuthor(request);
     const payload: CreateProjectLogCommentInput = result.data;
 
-    await this.assertProjectLogReadable(request, payload.log_id, author.author_type);
+    await this.assertProjectLogReadable(request, payload.log_id, author);
     if (payload.parent_id) {
       await this.ensureParentComment(payload.log_id, payload.parent_id);
     }
@@ -72,6 +77,10 @@ class ProjectLogCommentsController extends BaseController {
 
     if (payload.parent_id && payload.rating != null) {
       throw Errors.badRequest("回复评论不允许评分");
+    }
+
+    if (author.author_type === "customer" && !payload.parent_id && payload.rating != null) {
+      await this.ensureCustomerRatingUniqueness(payload.log_id, author.author_id);
     }
 
     const insertPayload = {
@@ -106,7 +115,7 @@ class ProjectLogCommentsController extends BaseController {
 
     const { log_id }: ProjectLogCommentsQueryType = result.data;
     const viewer = await this.resolveCurrentAuthor(request);
-    await this.assertProjectLogReadable(request, log_id, viewer.author_type);
+    await this.assertProjectLogReadable(request, log_id, viewer);
 
     const { data, error } = await SupabaseDB.from("project_log_comments")
       .select("*")
@@ -133,6 +142,9 @@ class ProjectLogCommentsController extends BaseController {
     if (!userId) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
+    const tokenRoles = Array.isArray(request.user?.roles)
+      ? request.user.roles.filter((item): item is string => typeof item === "string")
+      : [];
 
     const adminClient = SupabaseDB.getAdminClient();
     const [{ data: employee }, { data: customer }] = await Promise.all([
@@ -149,6 +161,30 @@ class ProjectLogCommentsController extends BaseController {
         .limit(1)
         .maybeSingle<CustomerAuthor>(),
     ]);
+
+    if (tokenRoles.includes("customer") && customer?.id) {
+      return {
+        author_type: "customer" as const,
+        author_id: customer.id,
+        profile: {
+          id: customer.id,
+          name: customer.name,
+          avatar: null,
+        },
+      };
+    }
+
+    if (tokenRoles.includes("employee") && employee?.id) {
+      return {
+        author_type: "employee" as const,
+        author_id: employee.id,
+        profile: {
+          id: employee.id,
+          name: employee.name,
+          avatar: employee.avatar,
+        },
+      };
+    }
 
     if (employee?.id) {
       return {
@@ -198,10 +234,24 @@ class ProjectLogCommentsController extends BaseController {
   private async assertProjectLogReadable(
     request: FastifyRequest,
     logId: string,
-    authorType: ProjectLogCommentAuthorType,
+    author: ResolvedCommentAuthor,
   ) {
     const log = await this.getProjectLogAccessInfo(logId);
-    if (authorType !== "employee") {
+    if (author.author_type === "customer") {
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("projects")
+        .select("id, customer_id")
+        .eq("id", log.project_id)
+        .maybeSingle<ProjectOwnerInfo>();
+
+      if (error) {
+        throw Errors.dbError("查询项目归属失败", error);
+      }
+
+      if (!data?.id || data.customer_id !== author.author_id) {
+        throw Errors.forbidden();
+      }
+
       return log;
     }
 
@@ -216,6 +266,28 @@ class ProjectLogCommentsController extends BaseController {
     }
 
     return log;
+  }
+
+  private async ensureCustomerRatingUniqueness(logId: string, customerId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_log_comments")
+      .select("id")
+      .eq("log_id", logId)
+      .eq("author_type", "customer")
+      .eq("author_id", customerId)
+      .is("parent_id", null)
+      .not("rating", "is", null)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (error) {
+      throw Errors.dbError("查询客户评分记录失败", error);
+    }
+
+    if (data?.id) {
+      throw Errors.badRequest("每条施工日志仅允许评分一次");
+    }
   }
 
   private async ensureParentComment(logId: string, parentId: string) {

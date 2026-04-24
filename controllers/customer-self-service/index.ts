@@ -80,6 +80,16 @@ type CustomerProjectLogRow = {
   created_at: string | null;
 };
 
+type ProjectLogCommentAggregateRow = {
+  id: string;
+  log_id: string;
+  parent_id: string | null;
+  author_type: string;
+  author_id: string;
+  rating: number | null;
+  created_at: string | null;
+};
+
 type CustomerProjectMemberSummary = {
   id: string;
   project_id: string;
@@ -353,6 +363,56 @@ class CustomerSelfServiceController extends BaseController {
     };
   }
 
+  private buildProjectLogAggregates(
+    rows: ProjectLogCommentAggregateRow[],
+    customerId: string,
+  ) {
+    const aggregates = new Map<string, {
+      comment_count: number;
+      rating_count: number;
+      rating_sum: number;
+      my_rating: number | null;
+      my_rating_created_at: string | null;
+    }>();
+
+    for (const row of rows) {
+      const current = aggregates.get(row.log_id) || {
+        comment_count: 0,
+        rating_count: 0,
+        rating_sum: 0,
+        my_rating: null,
+        my_rating_created_at: null,
+      };
+
+      current.comment_count += 1;
+
+      if (typeof row.rating === "number") {
+        current.rating_count += 1;
+        current.rating_sum += row.rating;
+
+        if (
+          row.author_type === "customer" &&
+          row.author_id === customerId &&
+          row.parent_id == null
+        ) {
+          const nextCreatedAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+          const currentCreatedAt = current.my_rating_created_at
+            ? new Date(current.my_rating_created_at).getTime()
+            : 0;
+
+          if (nextCreatedAt >= currentCreatedAt) {
+            current.my_rating = row.rating;
+            current.my_rating_created_at = row.created_at;
+          }
+        }
+      }
+
+      aggregates.set(row.log_id, current);
+    }
+
+    return aggregates;
+  }
+
   private serializeCustomerProjectMember(item: CustomerProjectMemberSummary) {
     return {
       id: item.id,
@@ -594,10 +654,49 @@ class CustomerSelfServiceController extends BaseController {
       throw Errors.dbError("查询客户项目日志失败", error);
     }
 
+    const logs = (data || []) as unknown as CustomerProjectLogRow[];
+    const logIds = logs.map((item) => item.id);
+    let aggregateMap = new Map<string, {
+      comment_count: number;
+      rating_count: number;
+      rating_sum: number;
+      my_rating: number | null;
+      my_rating_created_at: string | null;
+    }>();
+
+    if (logIds.length > 0) {
+      const { data: comments, error: commentsError } = await SupabaseDB.from(
+        "project_log_comments",
+      )
+        .select("id, log_id, parent_id, author_type, author_id, rating, created_at")
+        .in("log_id", logIds)
+        .is("deleted_at", null);
+
+      if (commentsError) {
+        throw Errors.dbError("查询日志评论聚合失败", commentsError);
+      }
+
+      aggregateMap = this.buildProjectLogAggregates(
+        (comments || []) as ProjectLogCommentAggregateRow[],
+        customer!.id,
+      );
+    }
+
     return ResponseHandler.success({
-      list: ((data || []) as unknown as CustomerProjectLogRow[]).map((item) =>
-        this.serializeCustomerProjectLog(item)
-      ),
+      list: logs.map((item) => {
+        const base = this.serializeCustomerProjectLog(item);
+        const aggregate = aggregateMap.get(item.id);
+
+        return {
+          ...base,
+          comment_count: aggregate?.comment_count ?? 0,
+          rating_count: aggregate?.rating_count ?? 0,
+          average_rating: aggregate?.rating_count
+            ? Number((aggregate.rating_sum / aggregate.rating_count).toFixed(1))
+            : null,
+          my_rating: aggregate?.my_rating ?? null,
+        };
+      }),
     });
   }
 }
