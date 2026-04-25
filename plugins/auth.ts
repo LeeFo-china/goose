@@ -6,6 +6,22 @@ import { fail } from "@/utils/response";
 
 const publicRoutes = new Set(["/", "/auth", "/auth/send-code"]);
 
+function isPublicRoute(method: string, url: string) {
+  if (publicRoutes.has(url)) {
+    return true;
+  }
+
+  if (method === "GET" && url.startsWith("/share-campaigns/")) {
+    return true;
+  }
+
+  if (method === "POST" && url === "/share-campaigns/open") {
+    return true;
+  }
+
+  return false;
+}
+
 function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requestId: string) {
   return fail(appError.message, appError.code, requestId, appError.details);
 }
@@ -25,13 +41,14 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
 const authPlugin = (app: FastifyInstance) => {
   app.addHook("onRequest", async (request, reply) => {
     const url = request.url.split("?")[0] ?? "/";
+    const method = request.method.toUpperCase();
 
-    // 白名单接口必须跳过鉴权，否则前端无法完成首次登录和静默续签。
-    if (publicRoutes.has(url)) {
+    const authorization = request.headers.authorization;
+
+    if (isPublicRoute(method, url) && !authorization) {
       return;
     }
 
-    const authorization = request.headers.authorization;
     if (!authorization?.startsWith("Bearer ")) {
       const error = getTokenError("missing");
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));

@@ -5,6 +5,10 @@ export const CustomerProjectLogShareParamsSchema = z.object({
   logId: z.uuid("无效的日志ID"),
 });
 
+export const CustomerProjectLogShareTokenParamsSchema = z.object({
+  shareToken: z.string().trim().min(1, "无效的分享 token").max(100, "无效的分享 token"),
+});
+
 export const CustomerProjectLogShareStyleSchema = z.enum(
   ["warm", "concise", "life"],
   {
@@ -19,9 +23,31 @@ export const CustomerProjectLogShareLengthSchema = z.enum(
   },
 );
 
+export const CustomerProjectLogShareChannelSchema = z.enum(
+  ["timeline"],
+  {
+    message: "无效的分享渠道",
+  },
+);
+
+export const CustomerProjectLogShareSourceSchema = z.enum(
+  ["qrcode", "poster"],
+  {
+    message: "无效的分享来源",
+  },
+);
+
 export const GenerateCustomerProjectLogShareCopySchema = z.object({
   style: CustomerProjectLogShareStyleSchema.default("warm"),
   length: CustomerProjectLogShareLengthSchema.default("short"),
+});
+
+export const GetCustomerProjectLogShareCardQuerySchema = z.object({
+  share_token: z.string().trim().max(100, "分享 token 过长").optional(),
+});
+
+export const CreateCustomerProjectLogShareCampaignSchema = z.object({
+  channel: CustomerProjectLogShareChannelSchema.default("timeline"),
 });
 
 export const CustomerProjectLogShareRecordActionSchema = z.enum(
@@ -37,12 +63,37 @@ export const CreateCustomerProjectLogShareRecordSchema = z.object({
   action: CustomerProjectLogShareRecordActionSchema,
 });
 
+export const OpenCustomerProjectLogShareCampaignSchema = z.object({
+  share_token: z.string().trim().min(1, "无效的分享 token").max(100, "无效的分享 token"),
+  source: CustomerProjectLogShareSourceSchema.default("qrcode"),
+});
+
+export const AssistCustomerProjectLogShareCampaignSchema = z.object({
+  share_token: z.string().trim().min(1, "无效的分享 token").max(100, "无效的分享 token"),
+  source: CustomerProjectLogShareSourceSchema.default("qrcode"),
+});
+
 export type CustomerProjectLogShareParams = z.infer<
   typeof CustomerProjectLogShareParamsSchema
+>;
+export type CustomerProjectLogShareTokenParams = z.infer<
+  typeof CustomerProjectLogShareTokenParamsSchema
 >;
 export type GenerateCustomerProjectLogShareCopyInput = z.infer<
   typeof GenerateCustomerProjectLogShareCopySchema
 >;
+export type GetCustomerProjectLogShareCardQuery = z.infer<
+  typeof GetCustomerProjectLogShareCardQuerySchema
+>;
+export type CreateCustomerProjectLogShareCampaignInput = z.infer<
+  typeof CreateCustomerProjectLogShareCampaignSchema
+>;
 export type CreateCustomerProjectLogShareRecordInput = z.infer<
   typeof CreateCustomerProjectLogShareRecordSchema
+>;
+export type OpenCustomerProjectLogShareCampaignInput = z.infer<
+  typeof OpenCustomerProjectLogShareCampaignSchema
+>;
+export type AssistCustomerProjectLogShareCampaignInput = z.infer<
+  typeof AssistCustomerProjectLogShareCampaignSchema
 >;

@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
+import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
+  AssistCustomerProjectLogShareCampaignInput,
   CreateCustomerProjectLogShareRecordInput,
+  CreateCustomerProjectLogShareCampaignInput,
   GenerateCustomerProjectLogShareCopyInput,
+  GetCustomerProjectLogShareCardQuery,
+  OpenCustomerProjectLogShareCampaignInput,
 } from "@/schema/customer-project-log-share";
 import { SupabaseDB } from "@/utils/supabase";
 import {
@@ -81,6 +86,27 @@ const PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_SHARE_REWARD_TITLE = "专属到店礼";
 const DEFAULT_SHARE_REWARD_REMARK = "凭分享图到店可领取";
 
+type ShareCampaignSummary = {
+  id: string;
+  share_token: string;
+  status: CustomerProjectLogShareCampaignRow["status"];
+  target_assist_count: number;
+  assist_count: number;
+  assist_uv: number;
+  remaining_count: number;
+};
+
+type CampaignOwnerRow = {
+  id: string;
+  name: string | null;
+  user_id: string | null;
+};
+
+type UserProfileRow = {
+  auth_user_id: string;
+  nickname: string | null;
+};
+
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
     const value = process.env[name]?.trim();
@@ -122,6 +148,16 @@ function getAiModel() {
   }
 
   return endpoint.includes("api.deepseek.com") ? "deepseek-chat" : "";
+}
+
+function getCustomerProjectLogShareTargetAssistCount() {
+  const raw = process.env.CUSTOMER_LOG_SHARE_TARGET_ASSIST_COUNT?.trim();
+  const parsed = raw ? Number(raw) : NaN;
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return 10;
 }
 
 function normalizeRelation<T extends Record<string, unknown>>(
@@ -194,6 +230,14 @@ function buildShareRewardCode(input: {
     .toUpperCase();
 
   return `MJ-${dateCode}-${suffix}`;
+}
+
+function buildCampaignRewardTitle(targetAssistCount: number) {
+  return `${targetAssistCount}人助力解锁${DEFAULT_SHARE_REWARD_TITLE}`;
+}
+
+function buildShareToken() {
+  return `st_${randomUUID().replace(/-/g, "")}`;
 }
 
 function buildCopyPrompt(
@@ -282,6 +326,20 @@ function parseCopiesResult(rawContent: string, context: CustomerProjectLogShareC
 }
 
 class CustomerProjectLogShareService {
+  private buildCampaignSummary(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ): ShareCampaignSummary {
+    return {
+      id: campaign.id,
+      share_token: campaign.share_token,
+      status: campaign.status,
+      target_assist_count: campaign.target_assist_count,
+      assist_count: campaign.assist_count,
+      assist_uv: campaign.assist_uv,
+      remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
+    };
+  }
+
   private async getCustomerByAuthUserId(authUserId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
@@ -303,6 +361,42 @@ class CustomerProjectLogShareService {
     }
 
     return list[0];
+  }
+
+  private async getCustomerById(customerId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, name, user_id")
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户信息失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("分享活动所属客户不存在");
+    }
+
+    return data as CampaignOwnerRow;
+  }
+
+  private async getUserProfileByAuthUserId(authUserId: string | null) {
+    if (!authUserId) {
+      return null;
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("user_profiles")
+      .select("auth_user_id, nickname")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询用户资料失败", error);
+    }
+
+    return (data || null) as UserProfileRow | null;
   }
 
   private async getOwnedProjectLogContext(
@@ -448,22 +542,184 @@ class CustomerProjectLogShareService {
     }
   }
 
+  private async ensureShareCampaign(
+    context: CustomerProjectLogShareContext,
+    input?: CreateCustomerProjectLogShareCampaignInput,
+  ) {
+    const existing = await customerProjectLogShareCampaignRepository.findActiveByOwner({
+      customer_id: context.customer_id,
+      project_id: context.project_id,
+      log_id: context.log_id,
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await customerProjectLogShareCampaignRepository.create({
+        share_token: buildShareToken(),
+        customer_id: context.customer_id,
+        project_id: context.project_id,
+        log_id: context.log_id,
+        channel: input?.channel ?? "timeline",
+        target_assist_count: getCustomerProjectLogShareTargetAssistCount(),
+        poster_generated_at: new Date().toISOString(),
+      });
+    } catch {
+      const fallback = await customerProjectLogShareCampaignRepository.findActiveByOwner({
+        customer_id: context.customer_id,
+        project_id: context.project_id,
+        log_id: context.log_id,
+      });
+      if (fallback) {
+        return fallback;
+      }
+
+      throw Errors.dbError("创建分享活动失败");
+    }
+  }
+
+  private async getCampaignByToken(shareToken: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findByShareToken(shareToken);
+    if (!campaign) {
+      throw Errors.badRequest("分享活动不存在");
+    }
+
+    return campaign;
+  }
+
+  private async resolveShareCampaignForOwnedLog(input: {
+    authUserId: string;
+    projectId: string;
+    logId: string;
+    shareToken?: string;
+    channel?: string;
+  }) {
+    const context = await this.getOwnedProjectLogContext(
+      input.authUserId,
+      input.projectId,
+      input.logId,
+    );
+
+    if (input.shareToken) {
+      const campaign = await this.getCampaignByToken(input.shareToken);
+      if (
+        campaign.customer_id !== context.customer_id
+        || campaign.project_id !== context.project_id
+        || campaign.log_id !== context.log_id
+      ) {
+        throw Errors.badRequest("分享活动与当前日志不匹配");
+      }
+
+      return { context, campaign };
+    }
+
+    const campaign = await this.ensureShareCampaign(context, {
+      channel: input.channel === "timeline" ? "timeline" : "timeline",
+    });
+    return { context, campaign };
+  }
+
+  private async buildCampaignPublicDetail(shareToken: string) {
+    const campaign = await this.getCampaignByToken(shareToken);
+    const owner = await this.getCustomerById(campaign.customer_id);
+    const userProfile = await this.getUserProfileByAuthUserId(owner.user_id);
+    const { data: projectData, error: projectError } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select(`
+        id,
+        name,
+        status,
+        style_tags,
+        property:properties!projects_property_id_fkey(
+          community,
+          building_info
+        )
+      `)
+      .eq("id", campaign.project_id)
+      .maybeSingle();
+
+    if (projectError) {
+      throw Errors.dbError("查询分享项目失败", projectError);
+    }
+
+    if (!projectData) {
+      throw Errors.badRequest("分享活动对应项目不存在");
+    }
+
+    const { data: logData, error: logError } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .eq("id", campaign.log_id)
+      .maybeSingle();
+
+    if (logError) {
+      throw Errors.dbError("查询分享日志失败", logError);
+    }
+
+    if (!logData) {
+      throw Errors.badRequest("分享活动对应日志不存在");
+    }
+
+    const project = projectData as unknown as CustomerProjectRow;
+    const log = logData as CustomerProjectLogRow;
+    const property = normalizeRelation(project.property, {
+      community: null,
+      building_info: null,
+    });
+    const stageCode = isProjectLogStageCode(log.stage_code) ? log.stage_code : null;
+
+    return {
+      campaign,
+      customer_nickname: userProfile?.nickname || owner.name || "业主",
+      project_name: project.name,
+      project_style_tags: normalizeStringArray(project.style_tags),
+      property_community: typeof property.community === "string" ? property.community : null,
+      property_building_info: typeof property.building_info === "string"
+        ? property.building_info
+        : null,
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+      node_name: log.node_name,
+      log_content: log.content,
+      log_images: normalizeProjectLogImages(log.images),
+    };
+  }
+
   async generateShareCopies(
     authUserId: string,
     projectId: string,
     logId: string,
     input: GenerateCustomerProjectLogShareCopyInput,
   ) {
-    const context = await this.getOwnedProjectLogContext(authUserId, projectId, logId);
+    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+      authUserId,
+      projectId,
+      logId,
+      channel: "timeline",
+    });
     const copies = await this.requestAiCopies(context, input);
 
     return {
       copies,
+      campaign: this.buildCampaignSummary(campaign),
     };
   }
 
-  async getShareCard(authUserId: string, projectId: string, logId: string) {
-    const context = await this.getOwnedProjectLogContext(authUserId, projectId, logId);
+  async getShareCard(
+    authUserId: string,
+    projectId: string,
+    logId: string,
+    query?: GetCustomerProjectLogShareCardQuery,
+  ) {
+    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+      authUserId,
+      projectId,
+      logId,
+      shareToken: query?.share_token,
+      channel: "timeline",
+    });
     return {
       project_name: context.project_name,
       stage_code: context.stage_code,
@@ -473,13 +729,155 @@ class CustomerProjectLogShareService {
       images: context.log_images,
       style_tags: context.project_style_tags,
       designer_name: context.designer_name,
-      share_reward_title: DEFAULT_SHARE_REWARD_TITLE,
+      share_reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
       share_reward_code: buildShareRewardCode({
         customerId: context.customer_id,
         projectId: context.project_id,
         logId: context.log_id,
       }),
       share_reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      share_token: campaign.share_token,
+      campaign: this.buildCampaignSummary(campaign),
+    };
+  }
+
+  async getOrCreateShareCampaign(
+    authUserId: string,
+    projectId: string,
+    logId: string,
+    input: CreateCustomerProjectLogShareCampaignInput,
+  ) {
+    const { campaign } = await this.resolveShareCampaignForOwnedLog({
+      authUserId,
+      projectId,
+      logId,
+      channel: input.channel,
+    });
+
+    return this.buildCampaignSummary(campaign);
+  }
+
+  async getShareCampaignDetail(shareToken: string) {
+    const detail = await this.buildCampaignPublicDetail(shareToken);
+    const campaign = detail.campaign;
+
+    return {
+      campaign_id: campaign.id,
+      share_token: campaign.share_token,
+      status: campaign.status,
+      project_name: detail.project_name,
+      stage_code: detail.stage_code,
+      stage_label: detail.stage_label,
+      log_title: detail.node_name || detail.stage_label || "施工日志更新",
+      log_content: detail.log_content,
+      images: detail.log_images,
+      customer_nickname: detail.customer_nickname,
+      assist_count: campaign.assist_count,
+      target_assist_count: campaign.target_assist_count,
+      remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
+      reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
+      reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+    };
+  }
+
+  async openShareCampaign(
+    input: OpenCustomerProjectLogShareCampaignInput,
+    visitor: {
+      authUserId?: string;
+      openid?: string | null;
+      ip?: string | null;
+    },
+  ) {
+    const campaign = await this.getCampaignByToken(input.share_token);
+    await customerProjectLogShareCampaignRepository.createOpen({
+      campaign_id: campaign.id,
+      share_token: campaign.share_token,
+      visitor_auth_user_id: visitor.authUserId ?? null,
+      visitor_openid: visitor.openid ?? null,
+      visitor_device_id: null,
+      visitor_ip: visitor.ip ?? null,
+      source: input.source,
+    });
+
+    return {
+      campaign_id: campaign.id,
+      share_token: campaign.share_token,
+      assist_count: campaign.assist_count,
+      target_assist_count: campaign.target_assist_count,
+      remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
+      status: campaign.status,
+    };
+  }
+
+  async assistShareCampaign(
+    input: AssistCustomerProjectLogShareCampaignInput,
+    helper: {
+      authUserId: string;
+      openid?: string | null;
+      ip?: string | null;
+    },
+  ) {
+    const campaign = await this.getCampaignByToken(input.share_token);
+
+    if (campaign.status !== "active") {
+      if (campaign.status === "achieved") {
+        throw Errors.badRequest("当前活动已达标");
+      }
+
+      if (campaign.status === "reward_claimed") {
+        throw Errors.badRequest("当前活动奖励已领取");
+      }
+
+      throw Errors.badRequest("当前活动已关闭");
+    }
+
+    const owner = await this.getCustomerById(campaign.customer_id);
+    if (owner.user_id && owner.user_id === helper.authUserId) {
+      throw Errors.badRequest("不能给自己助力");
+    }
+
+    const existingAssist = await customerProjectLogShareCampaignRepository.findAssist({
+      campaign_id: campaign.id,
+      helper_auth_user_id: helper.authUserId,
+      helper_openid: helper.openid ?? null,
+    });
+    if (existingAssist) {
+      throw Errors.badRequest("你已经助力过了");
+    }
+
+    await customerProjectLogShareCampaignRepository.createAssist({
+      campaign_id: campaign.id,
+      share_token: campaign.share_token,
+      helper_auth_user_id: helper.authUserId,
+      helper_openid: helper.openid ?? null,
+      helper_device_id: null,
+      helper_ip: helper.ip ?? null,
+      source: input.source,
+    });
+
+    const assistCount = await customerProjectLogShareCampaignRepository.countAssists(campaign.id);
+    const nextStatus = assistCount >= campaign.target_assist_count ? "achieved" : "active";
+    const updatedCampaign = await customerProjectLogShareCampaignRepository.updateMetrics({
+      id: campaign.id,
+      assist_count: assistCount,
+      assist_uv: assistCount,
+      status: nextStatus,
+      achieved_at: nextStatus === "achieved"
+        ? (campaign.achieved_at || new Date().toISOString())
+        : null,
+    });
+
+    return {
+      success: true,
+      campaign_id: updatedCampaign.id,
+      share_token: updatedCampaign.share_token,
+      status: updatedCampaign.status,
+      assist_count: updatedCampaign.assist_count,
+      target_assist_count: updatedCampaign.target_assist_count,
+      remaining_count: Math.max(
+        updatedCampaign.target_assist_count - updatedCampaign.assist_count,
+        0,
+      ),
     };
   }
 
@@ -489,8 +887,13 @@ class CustomerProjectLogShareService {
     logId: string,
     input: CreateCustomerProjectLogShareRecordInput,
   ) {
-    const context = await this.getOwnedProjectLogContext(authUserId, projectId, logId);
-    return customerProjectLogShareRepository.create({
+    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+      authUserId,
+      projectId,
+      logId,
+      channel: "timeline",
+    });
+    const record = await customerProjectLogShareRepository.create({
       customer_id: context.customer_id,
       project_id: context.project_id,
       log_id: context.log_id,
@@ -498,6 +901,15 @@ class CustomerProjectLogShareService {
       selected_copy_text: input.copy_text ?? null,
       action: input.action,
     });
+
+    if (input.action === "save_image") {
+      await customerProjectLogShareCampaignRepository.touchPosterSavedAt(campaign.id);
+    }
+
+    return {
+      ...record,
+      campaign: this.buildCampaignSummary(campaign),
+    };
   }
 }
 
