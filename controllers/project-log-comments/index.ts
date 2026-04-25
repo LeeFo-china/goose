@@ -79,8 +79,18 @@ class ProjectLogCommentsController extends BaseController {
       throw Errors.badRequest("回复评论不允许评分");
     }
 
-    if (author.author_type === "customer" && !payload.parent_id && payload.rating != null) {
-      await this.ensureCustomerRatingUniqueness(payload.log_id, author.author_id);
+    let resolvedRating: number | null = null;
+    if (author.author_type === "customer" && !payload.parent_id) {
+      resolvedRating = payload.rating ?? null;
+      if (resolvedRating != null) {
+        const hasExistingRating = await this.hasCustomerExistingRating(
+          payload.log_id,
+          author.author_id,
+        );
+        if (hasExistingRating) {
+          resolvedRating = null;
+        }
+      }
     }
 
     const insertPayload = {
@@ -89,9 +99,7 @@ class ProjectLogCommentsController extends BaseController {
       author_type: author.author_type,
       author_id: author.author_id,
       content: payload.content,
-      rating: author.author_type === "customer" && !payload.parent_id
-        ? payload.rating ?? null
-        : null,
+      rating: resolvedRating,
     };
 
     const { data, error } = await SupabaseDB.from("project_log_comments")
@@ -268,7 +276,7 @@ class ProjectLogCommentsController extends BaseController {
     return log;
   }
 
-  private async ensureCustomerRatingUniqueness(logId: string, customerId: string) {
+  private async hasCustomerExistingRating(logId: string, customerId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_log_comments")
       .select("id")
@@ -285,9 +293,7 @@ class ProjectLogCommentsController extends BaseController {
       throw Errors.dbError("查询客户评分记录失败", error);
     }
 
-    if (data?.id) {
-      throw Errors.badRequest("每条施工日志仅允许评分一次");
-    }
+    return Boolean(data?.id);
   }
 
   private async ensureParentComment(logId: string, parentId: string) {
