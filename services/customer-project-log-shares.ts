@@ -250,6 +250,23 @@ function buildShareToken() {
   return `st_${randomUUID().replace(/-/g, "")}`;
 }
 
+function normalizeShareToken(input: string) {
+  const value = input.trim();
+  if (!value) {
+    return value;
+  }
+
+  if (value.startsWith("st_")) {
+    return value;
+  }
+
+  return `st_${value}`;
+}
+
+function buildMiniProgramScene(shareToken: string) {
+  return normalizeShareToken(shareToken).replace(/^st_/, "").slice(0, 32);
+}
+
 function buildCopyPrompt(
   context: CustomerProjectLogShareContext,
   input: GenerateCustomerProjectLogShareCopyInput,
@@ -627,7 +644,9 @@ class CustomerProjectLogShareService {
   }
 
   private async getCampaignByToken(shareToken: string) {
-    const campaign = await customerProjectLogShareCampaignRepository.findByShareToken(shareToken);
+    const campaign = await customerProjectLogShareCampaignRepository.findByShareToken(
+      normalizeShareToken(shareToken),
+    );
     if (!campaign) {
       throw Errors.badRequest("分享活动不存在");
     }
@@ -798,7 +817,7 @@ class CustomerProjectLogShareService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          scene: shareToken,
+          scene: buildMiniProgramScene(shareToken),
           page: getWechatShareCampaignPage(),
           check_path: false,
           env_version: "release",
