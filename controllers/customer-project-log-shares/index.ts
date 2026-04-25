@@ -33,6 +33,17 @@ class CustomerProjectLogSharesController extends BaseController {
     return request.user?.sub;
   }
 
+  private buildAbsoluteUrl(request: FastifyRequest, path: string) {
+    const proto = (request.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim()
+      || request.protocol
+      || "https";
+    const host = request.headers["x-forwarded-host"] as string | undefined
+      || request.headers.host
+      || "sock.goodcms.cn";
+
+    return `${proto}://${host}${path}`;
+  }
+
   @Post("/customer/projects/:projectId/logs/:logId/share-copy")
   async generateShareCopy(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = this.getRequiredAuthUserId(request);
@@ -67,7 +78,14 @@ class CustomerProjectLogSharesController extends BaseController {
       queryResult.data,
     );
 
-    return ResponseHandler.success(data);
+    const shareToken = typeof data.share_token === "string" ? data.share_token : "";
+
+    return ResponseHandler.success({
+      ...data,
+      share_qrcode_url: shareToken
+        ? this.buildAbsoluteUrl(request, `/share-campaigns/${encodeURIComponent(shareToken)}/qrcode`)
+        : null,
+    });
   }
 
   @Post("/customer/projects/:projectId/logs/:logId/share-campaign")
@@ -152,6 +170,20 @@ class CustomerProjectLogSharesController extends BaseController {
     );
 
     return ResponseHandler.success(data);
+  }
+
+  @Get("/share-campaigns/:shareToken/qrcode")
+  async getShareCampaignQrcode(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = CustomerProjectLogShareTokenParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const buffer = await customerProjectLogShareService.getShareCampaignQrcodeBuffer(
+      paramsResult.data.shareToken,
+    );
+
+    reply.header("Content-Type", "image/png");
+    reply.header("Cache-Control", "public, max-age=300");
+    return reply.send(buffer);
   }
 }
 

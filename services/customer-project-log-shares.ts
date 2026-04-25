@@ -85,6 +85,12 @@ type GeneratedShareCopy = {
 const PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_SHARE_REWARD_TITLE = "专属到店礼";
 const DEFAULT_SHARE_REWARD_REMARK = "凭分享图到店可领取";
+const DEFAULT_SHARE_CAMPAIGN_PAGE = "pages/share-campaign/index";
+
+let cachedWechatAccessToken: {
+  token: string;
+  expiresAt: number;
+} | null = null;
 
 type ShareCampaignSummary = {
   id: string;
@@ -148,6 +154,10 @@ function getAiModel() {
   }
 
   return endpoint.includes("api.deepseek.com") ? "deepseek-chat" : "";
+}
+
+function getWechatShareCampaignPage() {
+  return process.env.WECHAT_SHARE_CAMPAIGN_PAGE?.trim() || DEFAULT_SHARE_CAMPAIGN_PAGE;
 }
 
 function getCustomerProjectLogShareTargetAssistCount() {
@@ -379,6 +389,42 @@ class CustomerProjectLogShareService {
     }
 
     return data as CampaignOwnerRow;
+  }
+
+  private async getWechatAccessToken() {
+    if (cachedWechatAccessToken && cachedWechatAccessToken.expiresAt > Date.now() + 60_000) {
+      return cachedWechatAccessToken.token;
+    }
+
+    const appId = process.env.WECHAT_APPID?.trim();
+    const secret = process.env.WECHAT_SECRET?.trim();
+    if (!appId || !secret) {
+      throw Errors.badRequest("服务器未配置微信参数");
+    }
+
+    const response = await fetch(
+      `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${secret}`,
+    );
+    if (!response.ok) {
+      throw Errors.dbError("获取微信 access_token 失败", { status: response.status });
+    }
+
+    const result = await response.json() as {
+      access_token?: string;
+      expires_in?: number;
+      errcode?: number;
+      errmsg?: string;
+    };
+    if (!result.access_token) {
+      throw Errors.dbError("获取微信 access_token 失败", result);
+    }
+
+    cachedWechatAccessToken = {
+      token: result.access_token,
+      expiresAt: Date.now() + ((result.expires_in || 7200) * 1000),
+    };
+
+    return result.access_token;
   }
 
   private async getUserProfileByAuthUserId(authUserId: string | null) {
@@ -739,6 +785,43 @@ class CustomerProjectLogShareService {
       share_token: campaign.share_token,
       campaign: this.buildCampaignSummary(campaign),
     };
+  }
+
+  async getShareCampaignQrcodeBuffer(shareToken: string) {
+    await this.getCampaignByToken(shareToken);
+    const accessToken = await this.getWechatAccessToken();
+    const response = await fetch(
+      `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${accessToken}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scene: shareToken,
+          page: getWechatShareCampaignPage(),
+          check_path: false,
+          env_version: "release",
+        }),
+      },
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      throw Errors.dbError("生成分享二维码失败", { status: response.status });
+    }
+
+    if (contentType.includes("application/json")) {
+      const result = await response.json();
+      throw Errors.dbError("生成分享二维码失败", result);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) {
+      throw Errors.dbError("生成分享二维码失败");
+    }
+
+    return buffer;
   }
 
   async getOrCreateShareCampaign(
