@@ -46,7 +46,7 @@ class ProjectReferralService {
       input.project_id,
       "project_referral.manage",
     );
-    if (!canAccessProject && authContext.systemRole !== "admin") {
+    if (!canAccessProject) {
       throw Errors.forbidden();
     }
 
@@ -70,7 +70,7 @@ class ProjectReferralService {
       existing.project_id,
       "project_referral.manage",
     );
-    if (!canAccessProject && authContext.systemRole !== "admin") {
+    if (!canAccessProject) {
       throw Errors.forbidden();
     }
 
@@ -124,7 +124,7 @@ class ProjectReferralService {
       projectId,
       "project_referral.read",
     );
-    if (!canAccessProject && authContext.systemRole !== "admin") {
+    if (!canAccessProject) {
       throw Errors.forbidden();
     }
 
@@ -154,7 +154,7 @@ class ProjectReferralService {
       data.project_id,
       "project_referral.read",
     );
-    if (!canAccessProject && authContext.systemRole !== "admin") {
+    if (!canAccessProject) {
       throw Errors.forbidden();
     }
 

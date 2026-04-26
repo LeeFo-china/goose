@@ -1,6 +1,5 @@
 import { Errors } from "@/errors/error-factory";
 import { permissionRepository } from "@/repositories/permissions";
-import type { EmployeeRole } from "@gooes/domain";
 import { PERMISSION_CODE_VALUES } from "@gooes/domain";
 
 export type EffectivePermission = {
@@ -19,7 +18,6 @@ export type AuthContextRole = {
 export type AuthContext = {
   authUserId: string;
   employeeId: string | null;
-  systemRole: EmployeeRole | null;
   employeeStatus: string | null;
   departmentId: string | null;
   postId: string | null;
@@ -110,7 +108,6 @@ class AuthorizationService {
       return {
         authUserId,
         employeeId: null,
-        systemRole: null,
         employeeStatus: null,
         departmentId: null,
         postId: null,
@@ -120,11 +117,10 @@ class AuthorizationService {
       };
     }
 
-    if (employee.role === "admin") {
+    if (roleCodes.includes("system_admin")) {
       return {
         authUserId,
         employeeId: employee.id,
-        systemRole: employee.role,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
         postId: employee.post_id,
@@ -163,7 +159,6 @@ class AuthorizationService {
     return {
       authUserId,
       employeeId: employee.id,
-      systemRole: employee.role as EmployeeRole | null,
       employeeStatus: employee.status,
       departmentId: employee.department_id,
       postId: employee.post_id,
