@@ -26,6 +26,7 @@ type CommentAuthor = {
 };
 
 type ProjectLogCommentResponseItem = ProjectLogCommentRow & {
+  images: string[];
   author: CommentAuthor | null;
 };
 
@@ -100,6 +101,7 @@ class ProjectLogCommentsController extends BaseController {
       author_id: author.author_id,
       content: payload.content,
       rating: resolvedRating,
+      images: this.normalizeImages(payload.images),
     };
 
     const { data, error } = await SupabaseDB.from("project_log_comments")
@@ -374,8 +376,21 @@ class ProjectLogCommentsController extends BaseController {
   private attachAuthor(row: ProjectLogCommentRow, author: CommentAuthor | null): ProjectLogCommentResponseItem {
     return {
       ...row,
+      images: this.normalizeImages((row as ProjectLogCommentRow & { images?: unknown }).images),
       author,
     };
+  }
+
+  private normalizeImages(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 9);
   }
 }
 

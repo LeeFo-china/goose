@@ -712,6 +712,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           id: string
+          images: string[]
           log_id: string
           parent_id: string | null
           rating: number | null
@@ -724,6 +725,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           id?: string
+          images?: string[]
           log_id: string
           parent_id?: string | null
           rating?: number | null
@@ -736,6 +738,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           id?: string
+          images?: string[]
           log_id?: string
           parent_id?: string | null
           rating?: number | null
