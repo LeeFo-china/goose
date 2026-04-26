@@ -6,6 +6,7 @@ import { customerProjectLogShareRepository } from "@/repositories/customer-proje
 import type {
   AssistCustomerProjectLogShareCampaignInput,
   ClaimCustomerProjectLogShareCampaignInput,
+  ClaimCustomerProjectLogShareVoucherInput,
   CreateCustomerProjectLogShareRecordInput,
   CreateCustomerProjectLogShareCampaignInput,
   GenerateCustomerProjectLogShareCopyInput,
@@ -88,6 +89,7 @@ const PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_SHARE_REWARD_TITLE = "专属到店礼";
 const DEFAULT_SHARE_REWARD_REMARK = "凭分享图到店可领取";
 const DEFAULT_SHARE_CAMPAIGN_PAGE = "pages/share-campaign/index";
+const DEFAULT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE = "pages/share-campaign-claim-voucher/index";
 
 let cachedWechatAccessToken: {
   token: string;
@@ -142,6 +144,14 @@ type RecentHelperSummary = {
   assisted_at: string | null;
 };
 
+type RewardClaimVoucherStatus = "active" | "claimed" | "expired" | "invalid";
+
+type RewardClaimVoucherPayload = {
+  voucher_token: string;
+  status: RewardClaimVoucherStatus;
+  expires_at: string | null;
+};
+
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
     const value = process.env[name]?.trim();
@@ -187,6 +197,11 @@ function getAiModel() {
 
 function getWechatShareCampaignPage() {
   return process.env.WECHAT_SHARE_CAMPAIGN_PAGE?.trim() || DEFAULT_SHARE_CAMPAIGN_PAGE;
+}
+
+function getWechatShareCampaignClaimVoucherPage() {
+  return process.env.WECHAT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE?.trim()
+    || DEFAULT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE;
 }
 
 function getCustomerProjectLogShareTargetAssistCount() {
@@ -287,6 +302,10 @@ function buildRewardClaimCode(campaign: Pick<CustomerProjectLogShareCampaignRow,
   return `MJ-CLAIM-${dateCode}-${suffix}`;
 }
 
+function buildRewardClaimVoucherToken() {
+  return `rcv_${randomUUID().replace(/-/g, "")}`;
+}
+
 function getDefaultRewardClaimInstruction(targetAssistCount: number) {
   return `邀请满${targetAssistCount}位好友助力后，到店出示领奖码领取礼品`;
 }
@@ -323,6 +342,23 @@ function normalizeShareToken(input: string) {
 
 function buildMiniProgramScene(shareToken: string) {
   return normalizeShareToken(shareToken).replace(/^st_/, "").slice(0, 32);
+}
+
+function normalizeVoucherToken(input: string) {
+  const value = input.trim();
+  if (!value) {
+    return value;
+  }
+
+  if (value.startsWith("rcv_")) {
+    return value;
+  }
+
+  return `rcv_${value}`;
+}
+
+function buildVoucherMiniProgramScene(voucherToken: string) {
+  return normalizeVoucherToken(voucherToken).replace(/^rcv_/, "").slice(0, 32);
 }
 
 function buildCopyPrompt(
@@ -571,6 +607,90 @@ class CustomerProjectLogShareService {
     });
   }
 
+  private getVoucherExpiresAt(campaign: CustomerProjectLogShareCampaignRow) {
+    if (campaign.reward_claim_voucher_expires_at) {
+      return campaign.reward_claim_voucher_expires_at;
+    }
+
+    if (!campaign.achieved_at) {
+      return null;
+    }
+
+    const base = new Date(campaign.achieved_at);
+    if (Number.isNaN(base.getTime())) {
+      return null;
+    }
+
+    base.setDate(base.getDate() + 7);
+    return base.toISOString();
+  }
+
+  private getRewardClaimVoucherStatus(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ): RewardClaimVoucherStatus | null {
+    if (!campaign.reward_claim_voucher_token) {
+      return null;
+    }
+
+    if (campaign.status === "reward_claimed" || campaign.reward_claim_status === "claimed") {
+      return "claimed";
+    }
+
+    if (campaign.status === "closed") {
+      return "invalid";
+    }
+
+    const expiresAt = this.getVoucherExpiresAt(campaign);
+    if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
+      return "expired";
+    }
+
+    if (campaign.status === "achieved") {
+      return "active";
+    }
+
+    return "invalid";
+  }
+
+  private buildRewardClaimVoucherPayload(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ): RewardClaimVoucherPayload | null {
+    const status = this.getRewardClaimVoucherStatus(campaign);
+    if (!status || !campaign.reward_claim_voucher_token) {
+      return null;
+    }
+
+    return {
+      voucher_token: campaign.reward_claim_voucher_token,
+      status,
+      expires_at: this.getVoucherExpiresAt(campaign),
+    };
+  }
+
+  private async ensureCampaignRewardClaimVoucher(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ) {
+    if (campaign.status !== "achieved" && campaign.status !== "reward_claimed") {
+      return campaign;
+    }
+
+    const nextVoucherToken = campaign.reward_claim_voucher_token || buildRewardClaimVoucherToken();
+    const nextVoucherExpiresAt = this.getVoucherExpiresAt(campaign);
+
+    if (
+      nextVoucherToken === campaign.reward_claim_voucher_token
+      && nextVoucherExpiresAt === campaign.reward_claim_voucher_expires_at
+    ) {
+      return campaign;
+    }
+
+    return customerProjectLogShareCampaignRepository.updateRewardMetadata({
+      id: campaign.id,
+      reward_claim_voucher_token: nextVoucherToken,
+      reward_claim_voucher_expires_at: nextVoucherExpiresAt,
+    });
+  }
+
   private serializeRecentHelpers(
     rows: Array<{
       helper_name: string | null;
@@ -592,6 +712,13 @@ class CustomerProjectLogShareService {
     });
 
     return this.serializeRecentHelpers(result.list);
+  }
+
+  private async ensureCampaignPhase2Metadata(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ) {
+    const withRewardMetadata = await this.ensureCampaignRewardMetadata(campaign);
+    return this.ensureCampaignRewardClaimVoucher(withRewardMetadata);
   }
 
   private async buildViewerAssistInfo(
@@ -822,7 +949,7 @@ class CustomerProjectLogShareService {
 
     return {
       customer,
-      campaign: await this.ensureCampaignRewardMetadata(campaign),
+      campaign: await this.ensureCampaignPhase2Metadata(campaign),
     };
   }
 
@@ -1080,7 +1207,7 @@ class CustomerProjectLogShareService {
 
     return {
       copies,
-      campaign: this.buildCampaignSummary(await this.ensureCampaignRewardMetadata(campaign)),
+      campaign: this.buildCampaignSummary(await this.ensureCampaignPhase2Metadata(campaign)),
     };
   }
 
@@ -1097,7 +1224,7 @@ class CustomerProjectLogShareService {
       shareToken: query?.share_token,
       channel: "timeline",
     });
-    const finalCampaign = await this.ensureCampaignRewardMetadata(campaign);
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
 
     return {
       project_name: context.project_name,
@@ -1157,6 +1284,54 @@ class CustomerProjectLogShareService {
     return buffer;
   }
 
+  async getRewardClaimVoucherQrcodeBuffer(voucherToken: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
+      normalizeVoucherToken(voucherToken),
+    );
+    if (!campaign) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+    if (!finalCampaign.reward_claim_voucher_token) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const accessToken = await this.getWechatAccessToken();
+    const response = await fetch(
+      `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${accessToken}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
+          page: getWechatShareCampaignClaimVoucherPage(),
+          check_path: false,
+          env_version: "release",
+        }),
+      },
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      throw Errors.dbError("生成领取凭证二维码失败", { status: response.status });
+    }
+
+    if (contentType.includes("application/json")) {
+      const result = await response.json();
+      throw Errors.dbError("生成领取凭证二维码失败", result);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) {
+      throw Errors.dbError("生成领取凭证二维码失败");
+    }
+
+    return buffer;
+  }
+
   async getOrCreateShareCampaign(
     authUserId: string,
     projectId: string,
@@ -1170,7 +1345,7 @@ class CustomerProjectLogShareService {
       channel: input.channel,
     });
 
-    return this.buildCampaignSummary(await this.ensureCampaignRewardMetadata(campaign));
+    return this.buildCampaignSummary(await this.ensureCampaignPhase2Metadata(campaign));
   }
 
   async getShareCampaignDetail(
@@ -1179,7 +1354,7 @@ class CustomerProjectLogShareService {
   ) {
     const detail = await this.buildCampaignPublicDetail(shareToken);
     const owner = await this.getCustomerById(detail.campaign.customer_id);
-    const campaign = await this.ensureCampaignRewardMetadata(detail.campaign);
+    const campaign = await this.ensureCampaignPhase2Metadata(detail.campaign);
     const viewerInfo = await this.buildViewerAssistInfo(campaign, owner, viewer);
     const recentHelpers = await this.getRecentHelpers(campaign.id, 3);
 
@@ -1248,7 +1423,7 @@ class CustomerProjectLogShareService {
       ip?: string | null;
     },
   ) {
-    const campaign = await this.ensureCampaignRewardMetadata(
+    const campaign = await this.ensureCampaignPhase2Metadata(
       await this.getCampaignByToken(input.share_token),
     );
 
@@ -1399,7 +1574,7 @@ class CustomerProjectLogShareService {
       customer_id: customer.id,
       project_id: projectId,
       limit: 20,
-    })).map((item) => this.ensureCampaignRewardMetadata(item));
+    })).map((item) => this.ensureCampaignPhase2Metadata(item));
     const resolvedCampaigns = await Promise.all(campaigns);
 
     const claimRewardCampaign = resolvedCampaigns.find((item) =>
@@ -1462,6 +1637,7 @@ class CustomerProjectLogShareService {
     const { campaign } = await this.getOwnedCampaignById(authUserId, campaignId);
     const detail = await this.buildCampaignPublicDetail(campaign.share_token);
     const recentHelpers = await this.getRecentHelpers(campaign.id, 3);
+    const rewardClaimVoucher = this.buildRewardClaimVoucherPayload(campaign);
 
     return {
       campaign_id: campaign.id,
@@ -1484,6 +1660,7 @@ class CustomerProjectLogShareService {
       reward_claim_instruction: campaign.reward_claim_instruction,
       reward_claim_channel: campaign.reward_claim_channel,
       reward_claimed_at: campaign.reward_claimed_at,
+      reward_claim_voucher: rewardClaimVoucher,
       recent_helpers: recentHelpers,
     };
   }
@@ -1527,12 +1704,83 @@ class CustomerProjectLogShareService {
     };
   }
 
+  async getVoucherMetaForEmployeeClaim(voucherToken: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
+      normalizeVoucherToken(voucherToken),
+    );
+    if (!campaign) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+    return {
+      id: finalCampaign.id,
+      project_id: finalCampaign.project_id,
+      status: finalCampaign.status,
+      reward_claim_voucher_token: finalCampaign.reward_claim_voucher_token,
+    };
+  }
+
+  async getEmployeeVoucherDetail(voucherToken: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
+      normalizeVoucherToken(voucherToken),
+    );
+    if (!campaign) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+    const detail = await this.buildCampaignPublicDetail(finalCampaign.share_token);
+    const owner = await this.getCustomerById(finalCampaign.customer_id);
+    const voucher = this.buildRewardClaimVoucherPayload(finalCampaign);
+    const voucherStatus = voucher?.status || "invalid";
+
+    let canClaim = true;
+    let claimBlockReason: "already_claimed" | "voucher_expired" | "campaign_not_achieved" | "campaign_closed" | "voucher_invalid" | null = null;
+
+    if (!voucher) {
+      canClaim = false;
+      claimBlockReason = "voucher_invalid";
+    } else if (voucher.status === "claimed") {
+      canClaim = false;
+      claimBlockReason = "already_claimed";
+    } else if (voucher.status === "expired") {
+      canClaim = false;
+      claimBlockReason = "voucher_expired";
+    } else if (finalCampaign.status === "closed") {
+      canClaim = false;
+      claimBlockReason = "campaign_closed";
+    } else if (finalCampaign.status !== "achieved") {
+      canClaim = false;
+      claimBlockReason = "campaign_not_achieved";
+    }
+
+    return {
+      voucher_token: finalCampaign.reward_claim_voucher_token,
+      campaign_id: finalCampaign.id,
+      project_id: finalCampaign.project_id,
+      status: finalCampaign.status,
+      reward_claim_status: finalCampaign.reward_claim_status,
+      claim_code: finalCampaign.reward_claim_code,
+      customer_name: maskDisplayName(owner.name),
+      project_name: detail.project_name,
+      reward_title: buildCampaignRewardTitle(finalCampaign.target_assist_count),
+      reward_claim_channel: finalCampaign.reward_claim_channel,
+      reward_claim_instruction: finalCampaign.reward_claim_instruction,
+      can_claim: canClaim,
+      claim_block_reason: claimBlockReason,
+      claimed_at: finalCampaign.reward_claimed_at,
+      expires_at: voucher?.expires_at || null,
+      voucher_status: voucherStatus,
+    };
+  }
+
   async claimCampaignReward(
     campaignId: string,
     employeeId: string,
     input: ClaimCustomerProjectLogShareCampaignInput,
   ) {
-    const campaign = await this.ensureCampaignRewardMetadata(
+    const campaign = await this.ensureCampaignPhase2Metadata(
       await customerProjectLogShareCampaignRepository.findById(campaignId)
       || (() => {
         throw Errors.badRequest("分享活动不存在");
@@ -1561,6 +1809,58 @@ class CustomerProjectLogShareService {
     });
 
     return {
+      campaign_id: updatedCampaign.id,
+      status: updatedCampaign.status,
+      reward_claim_status: updatedCampaign.reward_claim_status,
+      reward_claimed_at: updatedCampaign.reward_claimed_at,
+    };
+  }
+
+  async claimCampaignRewardByVoucher(
+    voucherToken: string,
+    employeeId: string,
+    input: ClaimCustomerProjectLogShareVoucherInput,
+  ) {
+    const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
+      normalizeVoucherToken(voucherToken),
+    );
+    if (!campaign) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+    const voucher = this.buildRewardClaimVoucherPayload(finalCampaign);
+    if (!voucher || !finalCampaign.reward_claim_voucher_token) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    if (voucher.status === "claimed" || finalCampaign.reward_claim_status === "claimed") {
+      throw Errors.badRequest("当前活动奖励已领取");
+    }
+
+    if (voucher.status === "expired") {
+      throw Errors.badRequest("领取凭证已过期");
+    }
+
+    if (finalCampaign.status === "closed") {
+      throw Errors.badRequest("当前活动已关闭");
+    }
+
+    if (finalCampaign.status !== "achieved") {
+      throw Errors.badRequest("当前活动未达到领奖状态");
+    }
+
+    const updatedCampaign = await customerProjectLogShareCampaignRepository.updateRewardMetadata({
+      id: finalCampaign.id,
+      status: "reward_claimed",
+      reward_claim_status: "claimed",
+      reward_claim_channel: input.channel,
+      reward_claimed_at: new Date().toISOString(),
+      reward_claimed_by_employee_id: employeeId,
+    });
+
+    return {
+      voucher_token: finalCampaign.reward_claim_voucher_token,
       campaign_id: updatedCampaign.id,
       status: updatedCampaign.status,
       reward_claim_status: updatedCampaign.reward_claim_status,

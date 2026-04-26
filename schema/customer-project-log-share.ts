@@ -18,6 +18,10 @@ export const CustomerProjectLogShareCampaignIdParamsSchema = z.object({
   campaignId: z.uuid("无效的活动ID"),
 });
 
+export const CustomerProjectLogShareVoucherTokenParamsSchema = z.object({
+  voucherToken: z.string().trim().min(1, "无效的领取凭证 token").max(100, "无效的领取凭证 token"),
+});
+
 export const CustomerProjectLogShareStyleSchema = z.enum(
   ["warm", "concise", "life"],
   {
@@ -104,6 +108,11 @@ export const ClaimCustomerProjectLogShareCampaignSchema = z.object({
   remark: z.string().trim().max(200, "备注过长").nullable().optional(),
 });
 
+export const ClaimCustomerProjectLogShareVoucherSchema = z.object({
+  channel: CustomerProjectLogShareClaimChannelSchema.default("store"),
+  remark: z.string().trim().max(200, "备注过长").nullable().optional(),
+});
+
 export type CustomerProjectLogShareParams = z.infer<
   typeof CustomerProjectLogShareParamsSchema
 >;
@@ -112,6 +121,9 @@ export type CustomerProjectLogShareProjectIdParams = z.infer<
 >;
 export type CustomerProjectLogShareCampaignIdParams = z.infer<
   typeof CustomerProjectLogShareCampaignIdParamsSchema
+>;
+export type CustomerProjectLogShareVoucherTokenParams = z.infer<
+  typeof CustomerProjectLogShareVoucherTokenParamsSchema
 >;
 export type CustomerProjectLogShareTokenParams = z.infer<
   typeof CustomerProjectLogShareTokenParamsSchema
@@ -139,4 +151,7 @@ export type CustomerProjectLogShareHelpersQuery = z.infer<
 >;
 export type ClaimCustomerProjectLogShareCampaignInput = z.infer<
   typeof ClaimCustomerProjectLogShareCampaignSchema
+>;
+export type ClaimCustomerProjectLogShareVoucherInput = z.infer<
+  typeof ClaimCustomerProjectLogShareVoucherSchema
 >;

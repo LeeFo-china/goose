@@ -5,12 +5,14 @@ import { authorizationService } from "@/services/authorization";
 import {
   AssistCustomerProjectLogShareCampaignSchema,
   ClaimCustomerProjectLogShareCampaignSchema,
+  ClaimCustomerProjectLogShareVoucherSchema,
   CreateCustomerProjectLogShareCampaignSchema,
   CreateCustomerProjectLogShareRecordSchema,
   CustomerProjectLogShareCampaignIdParamsSchema,
   CustomerProjectLogShareHelpersQuerySchema,
   CustomerProjectLogShareProjectIdParamsSchema,
   CustomerProjectLogShareTokenParamsSchema,
+  CustomerProjectLogShareVoucherTokenParamsSchema,
   CustomerProjectLogShareParamsSchema,
   GenerateCustomerProjectLogShareCopySchema,
   GetCustomerProjectLogShareCardQuerySchema,
@@ -196,6 +198,20 @@ class CustomerProjectLogSharesController extends BaseController {
     return reply.send(buffer);
   }
 
+  @Get("/share-campaign-claim-vouchers/:voucherToken/qrcode")
+  async getRewardClaimVoucherQrcode(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = CustomerProjectLogShareVoucherTokenParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const buffer = await customerProjectLogShareService.getRewardClaimVoucherQrcodeBuffer(
+      paramsResult.data.voucherToken,
+    );
+
+    reply.header("Content-Type", "image/png");
+    reply.header("Cache-Control", "public, max-age=300");
+    return reply.send(buffer);
+  }
+
   @Get("/customer/projects/:projectId/share-campaigns/summary")
   async getCustomerProjectCampaignSummary(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = this.getRequiredAuthUserId(request);
@@ -221,7 +237,22 @@ class CustomerProjectLogSharesController extends BaseController {
       paramsResult.data.campaignId,
     );
 
-    return ResponseHandler.success(data);
+    const voucherToken = data.reward_claim_voucher?.voucher_token;
+
+    return ResponseHandler.success({
+      ...data,
+      reward_claim_voucher: data.reward_claim_voucher
+        ? {
+          ...data.reward_claim_voucher,
+          qrcode_url: voucherToken
+            ? this.buildAbsoluteUrl(
+              request,
+              `/share-campaign-claim-vouchers/${encodeURIComponent(voucherToken)}/qrcode`,
+            )
+            : null,
+        }
+        : null,
+    });
   }
 
   @Get("/customer/share-campaigns/:campaignId/helpers")
@@ -265,6 +296,60 @@ class CustomerProjectLogSharesController extends BaseController {
 
     const data = await customerProjectLogShareService.claimCampaignReward(
       paramsResult.data.campaignId,
+      authContext.employeeId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/share-campaign-claim-vouchers/:voucherToken")
+  async getEmployeeRewardClaimVoucherDetail(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = CustomerProjectLogShareVoucherTokenParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const voucher = await customerProjectLogShareService.getVoucherMetaForEmployeeClaim(
+      paramsResult.data.voucherToken,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      voucher.project_id,
+      "project.update",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const data = await customerProjectLogShareService.getEmployeeVoucherDetail(
+      paramsResult.data.voucherToken,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/employee/share-campaign-claim-vouchers/:voucherToken/claim")
+  async claimRewardByVoucher(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = CustomerProjectLogShareVoucherTokenParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = ClaimCustomerProjectLogShareVoucherSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const voucher = await customerProjectLogShareService.getVoucherMetaForEmployeeClaim(
+      paramsResult.data.voucherToken,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      voucher.project_id,
+      "project.update",
+    );
+    if (!hasAccess || !authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const data = await customerProjectLogShareService.claimCampaignRewardByVoucher(
+      paramsResult.data.voucherToken,
       authContext.employeeId,
       bodyResult.data,
     );

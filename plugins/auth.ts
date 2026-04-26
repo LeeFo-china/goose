@@ -15,6 +15,13 @@ function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/share-campaign-claim-vouchers/")
+  ) {
+    return true;
+  }
+
   if (method === "POST" && url === "/share-campaigns/open") {
     return true;
   }

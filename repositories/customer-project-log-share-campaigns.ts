@@ -18,6 +18,8 @@ export type CustomerProjectLogShareCampaignRow = {
   reward_claim_channel: string | null;
   reward_claim_requested_at: string | null;
   reward_claimed_by_employee_id: string | null;
+  reward_claim_voucher_token: string | null;
+  reward_claim_voucher_expires_at: string | null;
   closed_reason: string | null;
   latest_opened_at: string | null;
   latest_assisted_at: string | null;
@@ -91,6 +93,20 @@ class CustomerProjectLogShareCampaignRepository {
 
     if (error) {
       throw Errors.dbError("查询分享活动失败", error);
+    }
+
+    return (data || null) as CustomerProjectLogShareCampaignRow | null;
+  }
+
+  async findByVoucherToken(voucherToken: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .select("*")
+      .eq("reward_claim_voucher_token", voucherToken)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询领取凭证失败", error);
     }
 
     return (data || null) as CustomerProjectLogShareCampaignRow | null;
@@ -195,6 +211,8 @@ class CustomerProjectLogShareCampaignRepository {
     reward_claim_requested_at?: string | null;
     reward_claimed_at?: string | null;
     reward_claimed_by_employee_id?: string | null;
+    reward_claim_voucher_token?: string | null;
+    reward_claim_voucher_expires_at?: string | null;
     status?: CustomerProjectLogShareCampaignRow["status"];
     closed_reason?: string | null;
   }) {
@@ -208,6 +226,8 @@ class CustomerProjectLogShareCampaignRepository {
         reward_claim_requested_at: input.reward_claim_requested_at,
         reward_claimed_at: input.reward_claimed_at,
         reward_claimed_by_employee_id: input.reward_claimed_by_employee_id,
+        reward_claim_voucher_token: input.reward_claim_voucher_token,
+        reward_claim_voucher_expires_at: input.reward_claim_voucher_expires_at,
         status: input.status,
         closed_reason: input.closed_reason,
       })
