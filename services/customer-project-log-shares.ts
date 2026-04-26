@@ -4,6 +4,11 @@ import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
+import {
+  marketingCampaignRepository,
+  type MarketingCampaignProjectScopeRow,
+  type MarketingCampaignRow,
+} from "@/repositories/marketing-campaigns";
 import { projectShareCampaignConfigRepository, type ProjectShareCampaignConfigRow } from "@/repositories/project-share-campaign-configs";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
@@ -16,6 +21,13 @@ import type {
   GetCustomerProjectLogShareCardQuery,
   OpenCustomerProjectLogShareCampaignInput,
 } from "@/schema/customer-project-log-share";
+import type {
+  CreateMarketingCampaignInput,
+  MarketingCampaignInstanceListQuery,
+  MarketingCampaignListQuery,
+  MarketingCampaignStatusUpdateInput,
+  UpdateMarketingCampaignInput,
+} from "@/schema/marketing-center-campaign";
 import type {
   EmployeeShareCampaignListQuery,
   EmployeeShareCampaignStatsSummaryQuery,
@@ -163,7 +175,10 @@ type RewardClaimVoucherPayload = {
 };
 
 type EffectiveShareCampaignConfig = {
-  config_id: string;
+  config_id: string | null;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  campaign_type: string;
   enabled: boolean;
   config_status: ProjectShareCampaignConfigRow["config_status"];
   config_mode: ProjectShareCampaignConfigRow["config_mode"];
@@ -177,6 +192,13 @@ type EffectiveShareCampaignConfig = {
   valid_from: string | null;
   valid_until: string | null;
   auto_close_on_expire: boolean;
+  allow_create_when_existing_active: boolean;
+  default_display_title: string | null;
+  default_display_subtitle: string | null;
+};
+
+type MarketingCampaignConfigPayload = {
+  target_assist_count: number;
   allow_create_when_existing_active: boolean;
   default_display_title: string | null;
   default_display_subtitle: string | null;
@@ -780,6 +802,9 @@ class CustomerProjectLogShareService {
   ): EffectiveShareCampaignConfig {
     return {
       config_id: config.id,
+      campaign_id: null,
+      campaign_name: null,
+      campaign_type: "share_assist",
       enabled: config.enabled,
       config_status: config.config_status,
       config_mode: config.config_mode,
@@ -797,6 +822,55 @@ class CustomerProjectLogShareService {
       allow_create_when_existing_active: config.allow_create_when_existing_active,
       default_display_title: config.default_display_title,
       default_display_subtitle: config.default_display_subtitle,
+    };
+  }
+
+  private parseMarketingCampaignConfigPayload(payload: Record<string, unknown> | null): MarketingCampaignConfigPayload {
+    const targetAssistCount = typeof payload?.target_assist_count === "number"
+      ? payload.target_assist_count
+      : getCustomerProjectLogShareTargetAssistCount();
+
+    return {
+      target_assist_count: Number.isInteger(targetAssistCount) && targetAssistCount > 0
+        ? targetAssistCount
+        : getCustomerProjectLogShareTargetAssistCount(),
+      allow_create_when_existing_active: Boolean(payload?.allow_create_when_existing_active),
+      default_display_title: typeof payload?.default_display_title === "string"
+        ? payload.default_display_title.trim() || null
+        : null,
+      default_display_subtitle: typeof payload?.default_display_subtitle === "string"
+        ? payload.default_display_subtitle.trim() || null
+        : null,
+    };
+  }
+
+  private buildEffectiveConfigFromMarketingCampaign(
+    campaign: MarketingCampaignRow,
+  ): EffectiveShareCampaignConfig {
+    const payload = this.parseMarketingCampaignConfigPayload(campaign.config_payload);
+
+    return {
+      config_id: null,
+      campaign_id: campaign.id,
+      campaign_name: campaign.name,
+      campaign_type: campaign.campaign_type,
+      enabled: campaign.enabled,
+      config_status: campaign.status,
+      config_mode: "custom",
+      template_id: null,
+      template_name: null,
+      target_assist_count: payload.target_assist_count,
+      reward_title: campaign.reward_title?.trim() || buildDefaultConfigRewardTitle(payload.target_assist_count),
+      reward_remark: campaign.reward_remark?.trim() || DEFAULT_SHARE_REWARD_REMARK,
+      reward_claim_instruction: campaign.reward_claim_instruction?.trim()
+        || getDefaultRewardClaimInstruction(payload.target_assist_count),
+      reward_claim_channel: campaign.reward_claim_channel?.trim() || "store",
+      valid_from: campaign.valid_from,
+      valid_until: campaign.valid_until,
+      auto_close_on_expire: campaign.auto_close_on_expire,
+      allow_create_when_existing_active: payload.allow_create_when_existing_active,
+      default_display_title: payload.default_display_title,
+      default_display_subtitle: payload.default_display_subtitle,
     };
   }
 
@@ -839,6 +913,45 @@ class CustomerProjectLogShareService {
     return null;
   }
 
+  private getMarketingCampaignBlockReason(
+    campaign: MarketingCampaignRow | null,
+  ): "config_missing" | "config_disabled" | "config_paused" | "config_closed" | "config_expired" | null {
+    if (!campaign) {
+      return "config_missing";
+    }
+
+    if (!campaign.enabled) {
+      return "config_disabled";
+    }
+
+    if (campaign.status === "paused") {
+      return "config_paused";
+    }
+
+    if (campaign.status === "closed") {
+      return "config_closed";
+    }
+
+    if (campaign.status !== "active") {
+      return "config_disabled";
+    }
+
+    const now = Date.now();
+    if (campaign.valid_from && new Date(campaign.valid_from).getTime() > now) {
+      return "config_disabled";
+    }
+
+    if (
+      campaign.valid_until
+      && new Date(campaign.valid_until).getTime() < now
+      && campaign.auto_close_on_expire
+    ) {
+      return "config_expired";
+    }
+
+    return null;
+  }
+
   private throwConfigBlocked(
     reason:
       | NonNullable<ReturnType<CustomerProjectLogShareService["getConfigBlockReason"]>>
@@ -861,6 +974,50 @@ class CustomerProjectLogShareService {
     return projectShareCampaignConfigRepository.findByProjectId(projectId);
   }
 
+  private isProjectInMarketingCampaignScope(
+    campaign: MarketingCampaignRow,
+    scopes: MarketingCampaignProjectScopeRow[],
+    projectId: string,
+  ) {
+    const related = scopes.filter((item) => item.campaign_id === campaign.id);
+    if (campaign.target_scope_type === "project_list") {
+      return related.some((item) => item.scope_mode === "include" && item.project_id === projectId);
+    }
+
+    return !related.some((item) => item.scope_mode === "exclude" && item.project_id === projectId);
+  }
+
+  private async getMatchingMarketingCampaign(
+    projectId: string,
+    campaignType: "share_assist" = "share_assist",
+  ) {
+    const campaigns = await marketingCampaignRepository.listActiveByType(campaignType);
+    if (!campaigns.length) {
+      return null;
+    }
+
+    const scopes = await marketingCampaignRepository.listScopesByCampaignIds(
+      campaigns.map((item) => item.id),
+    );
+
+    const matched = campaigns.find((campaign) => {
+      const blockReason = this.getMarketingCampaignBlockReason(campaign);
+      if (blockReason) {
+        return false;
+      }
+      return this.isProjectInMarketingCampaignScope(campaign, scopes, projectId);
+    }) || null;
+
+    if (!matched) {
+      return null;
+    }
+
+    return {
+      campaign: matched,
+      scopes: scopes.filter((item) => item.campaign_id === matched.id),
+    };
+  }
+
   private async getEffectiveProjectConfig(projectId: string) {
     const config = await this.getProjectConfig(projectId);
     const blockReason = this.getConfigBlockReason(config);
@@ -868,6 +1025,29 @@ class CustomerProjectLogShareService {
       raw: config,
       blockReason,
       effective: config && !blockReason ? this.buildEffectiveConfig(config) : null,
+    };
+  }
+
+  private async getEffectiveShareCampaignConfig(projectId: string) {
+    const matchedCampaign = await this.getMatchingMarketingCampaign(projectId, "share_assist");
+    if (matchedCampaign) {
+      const blockReason = this.getMarketingCampaignBlockReason(matchedCampaign.campaign);
+      return {
+        source: "marketing_campaign" as const,
+        rawCampaign: matchedCampaign.campaign,
+        rawLegacyConfig: null,
+        blockReason,
+        effective: !blockReason ? this.buildEffectiveConfigFromMarketingCampaign(matchedCampaign.campaign) : null,
+      };
+    }
+
+    const legacyConfig = await this.getEffectiveProjectConfig(projectId);
+    return {
+      source: "legacy_project_config" as const,
+      rawCampaign: null,
+      rawLegacyConfig: legacyConfig.raw,
+      blockReason: legacyConfig.blockReason,
+      effective: legacyConfig.effective,
     };
   }
 
@@ -1198,7 +1378,7 @@ class CustomerProjectLogShareService {
     context: CustomerProjectLogShareContext,
     input?: CreateCustomerProjectLogShareCampaignInput,
   ) {
-    const configResult = await this.getEffectiveProjectConfig(context.project_id);
+    const configResult = await this.getEffectiveShareCampaignConfig(context.project_id);
     if (!configResult.effective) {
       this.throwConfigBlocked(configResult.blockReason || "config_missing");
     }
@@ -1237,6 +1417,8 @@ class CustomerProjectLogShareService {
 
     try {
       return await customerProjectLogShareCampaignRepository.create({
+        campaign_id: configResult.effective.campaign_id,
+        campaign_type: configResult.effective.campaign_type,
         share_token: buildShareToken(),
         customer_id: context.customer_id,
         project_id: context.project_id,
@@ -1793,7 +1975,7 @@ class CustomerProjectLogShareService {
 
   async getCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
     const { customer } = await this.getOwnedProject(authUserId, projectId);
-    const configResult = await this.getEffectiveProjectConfig(projectId);
+    const configResult = await this.getEffectiveShareCampaignConfig(projectId);
     const campaigns = (await customerProjectLogShareCampaignRepository.listByProject({
       customer_id: customer.id,
       project_id: projectId,
@@ -1816,8 +1998,10 @@ class CustomerProjectLogShareService {
       return {
         project_id: projectId,
         display_mode: configResult.effective ? "empty" as const : "disabled" as const,
-        config_enabled: Boolean(configResult.raw?.enabled),
-        config_status: configResult.raw?.config_status || null,
+        config_enabled: configResult.rawCampaign
+          ? Boolean(configResult.rawCampaign.enabled)
+          : Boolean(configResult.rawLegacyConfig?.enabled),
+        config_status: configResult.rawCampaign?.status || configResult.rawLegacyConfig?.config_status || null,
         recommended_log: null,
         focus_campaign: null,
       };
@@ -1851,8 +2035,10 @@ class CustomerProjectLogShareService {
     return {
       project_id: projectId,
       display_mode: displayMode,
-      config_enabled: Boolean(configResult.raw?.enabled),
-      config_status: configResult.raw?.config_status || null,
+      config_enabled: configResult.rawCampaign
+        ? Boolean(configResult.rawCampaign.enabled)
+        : Boolean(configResult.rawLegacyConfig?.enabled),
+      config_status: configResult.rawCampaign?.status || configResult.rawLegacyConfig?.config_status || null,
       recommended_log: recommendedLog,
       focus_campaign: focusCampaign
         ? {
@@ -2031,6 +2217,343 @@ class CustomerProjectLogShareService {
       projectIds: visibleProjectIds,
       projectId: query.projectId,
       customerId: query.customerId,
+      status: query.status,
+      rewardClaimStatus: query.rewardClaimStatus,
+      keyword: query.keyword,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+
+    return {
+      list: result.list.map((item) => ({
+        campaign_id: item.instance_id,
+        marketing_campaign_id: item.campaign_id,
+        campaign_type: item.campaign_type,
+        project_id: item.project_id,
+        project_name: item.project_name,
+        customer_id: item.customer_id,
+        customer_name: item.customer_name,
+        log_id: item.log_id,
+        log_title: item.log_title,
+        status: item.status,
+        reward_claim_status: item.reward_claim_status,
+        assist_count: item.assist_count,
+        target_assist_count: item.target_assist_count,
+        reward_title: item.reward_title,
+        reward_remark: item.reward_remark,
+        share_token: item.share_token,
+        started_at: item.started_at,
+        valid_until: item.valid_until,
+        last_assisted_at: item.last_assisted_at,
+        reward_claim_code: item.reward_claim_code,
+        reward_claim_instruction: item.reward_claim_instruction,
+        reward_claim_channel: item.reward_claim_channel,
+        reward_claimed_at: item.reward_claimed_at,
+        reward_claim_voucher_token: item.reward_claim_voucher_token,
+        reward_claim_voucher_expires_at: item.reward_claim_voucher_expires_at,
+        remaining_count: Math.max(item.target_assist_count - item.assist_count, 0),
+      })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: result.total,
+        totalPages: result.total ? Math.ceil(result.total / query.pageSize) : 0,
+      },
+    };
+  }
+
+  private async getScopeProjectMap(projectIds: string[]) {
+    if (!projectIds.length) {
+      return new Map<string, { id: string; name: string | null }>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id,name")
+      .in("id", projectIds);
+    if (error) {
+      throw Errors.dbError("查询活动范围项目失败", error);
+    }
+
+    return new Map(
+      ((data || []) as Array<{ id: string; name: string | null }>).map((item) => [item.id, item]),
+    );
+  }
+
+  private campaignVisibleToEmployee(
+    campaign: MarketingCampaignRow,
+    scopes: MarketingCampaignProjectScopeRow[],
+    visibleProjectIds: string[],
+  ) {
+    if (!visibleProjectIds.length) {
+      return false;
+    }
+
+    if (campaign.target_scope_type === "project_list") {
+      const includeIds = scopes
+        .filter((item) => item.scope_mode === "include")
+        .map((item) => item.project_id);
+      return includeIds.some((item) => visibleProjectIds.includes(item));
+    }
+
+    const excluded = new Set(
+      scopes.filter((item) => item.scope_mode === "exclude").map((item) => item.project_id),
+    );
+    return visibleProjectIds.some((item) => !excluded.has(item));
+  }
+
+  private async getMarketingCampaignOrThrow(id: string) {
+    const campaign = await marketingCampaignRepository.findById(id);
+    if (!campaign) {
+      throw Errors.business(404, "营销活动不存在", ErrorCodes.SHARE_CAMPAIGN_NOT_FOUND);
+    }
+    return campaign;
+  }
+
+  private buildMarketingCampaignConfigPayload(
+    input: CreateMarketingCampaignInput | UpdateMarketingCampaignInput,
+  ) {
+    return {
+      target_assist_count: input.config_payload.target_assist_count,
+      allow_create_when_existing_active: input.config_payload.allow_create_when_existing_active,
+      default_display_title: input.config_payload.default_display_title ?? null,
+      default_display_subtitle: input.config_payload.default_display_subtitle ?? null,
+    };
+  }
+
+  private buildMarketingCampaignScopeRows(
+    input: CreateMarketingCampaignInput | UpdateMarketingCampaignInput,
+  ) {
+    if (input.target_scope_type === "project_list") {
+      return input.include_project_ids.map((project_id) => ({
+        scope_mode: "include" as const,
+        project_id,
+      }));
+    }
+
+    return input.exclude_project_ids.map((project_id) => ({
+      scope_mode: "exclude" as const,
+      project_id,
+    }));
+  }
+
+  async listMarketingCampaigns(
+    authContext: AuthContext,
+    query: MarketingCampaignListQuery,
+  ) {
+    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    )) || [];
+    const result = await marketingCampaignRepository.list({
+      campaignType: query.campaign_type,
+      status: query.status,
+      keyword: query.keyword,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+
+    const scopes = await marketingCampaignRepository.listScopesByCampaignIds(
+      result.list.map((item) => item.id),
+    );
+
+    const visible = result.list.filter((campaign) =>
+      this.campaignVisibleToEmployee(
+        campaign,
+        scopes.filter((item) => item.campaign_id === campaign.id),
+        visibleProjectIds,
+      )
+    );
+
+    return {
+      list: visible.map((campaign) => ({
+        id: campaign.id,
+        campaign_type: campaign.campaign_type,
+        name: campaign.name,
+        status: campaign.status,
+        enabled: campaign.enabled,
+        target_scope_type: campaign.target_scope_type,
+        valid_from: campaign.valid_from,
+        valid_until: campaign.valid_until,
+      })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: visible.length,
+        totalPages: visible.length ? Math.ceil(visible.length / query.pageSize) : 0,
+      },
+    };
+  }
+
+  async getMarketingCampaignDetail(authContext: AuthContext, campaignId: string) {
+    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    )) || [];
+    const campaign = await this.getMarketingCampaignOrThrow(campaignId);
+    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+
+    if (!this.campaignVisibleToEmployee(campaign, scopes, visibleProjectIds)) {
+      throw Errors.forbidden();
+    }
+
+    const payload = this.parseMarketingCampaignConfigPayload(campaign.config_payload);
+    const projectMap = await this.getScopeProjectMap(scopes.map((item) => item.project_id));
+    const instanceSummary = await customerProjectLogShareCampaignRepository.countByMarketingCampaignStatus(
+      campaignId,
+    );
+
+    return {
+      id: campaign.id,
+      campaign_type: campaign.campaign_type,
+      name: campaign.name,
+      status: campaign.status,
+      enabled: campaign.enabled,
+      target_scope_type: campaign.target_scope_type,
+      valid_from: campaign.valid_from,
+      valid_until: campaign.valid_until,
+      auto_close_on_expire: campaign.auto_close_on_expire,
+      reward_title: campaign.reward_title,
+      reward_remark: campaign.reward_remark,
+      reward_claim_instruction: campaign.reward_claim_instruction,
+      reward_claim_channel: campaign.reward_claim_channel,
+      config_payload: payload,
+      exclude_project_ids: scopes
+        .filter((item) => item.scope_mode === "exclude")
+        .map((item) => item.project_id),
+      include_project_ids: scopes
+        .filter((item) => item.scope_mode === "include")
+        .map((item) => item.project_id),
+      scopes: scopes.map((item) => ({
+        scope_mode: item.scope_mode,
+        project_id: item.project_id,
+        project_name: projectMap.get(item.project_id)?.name || null,
+      })),
+      summary: instanceSummary,
+    };
+  }
+
+  async createMarketingCampaign(
+    authContext: AuthContext,
+    input: CreateMarketingCampaignInput,
+  ) {
+    const scopeRows = this.buildMarketingCampaignScopeRows(input);
+    if (scopeRows.length) {
+      const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+        authContext,
+        "project.update",
+      )) || [];
+      const invalid = scopeRows.some((item) => !visibleProjectIds.includes(item.project_id));
+      if (invalid) {
+        throw Errors.forbidden();
+      }
+    }
+
+    const campaign = await marketingCampaignRepository.create({
+      campaign_type: input.campaign_type,
+      name: input.name,
+      enabled: input.enabled,
+      status: input.status,
+      target_scope_type: input.target_scope_type,
+      valid_from: input.valid_from ?? null,
+      valid_until: input.valid_until ?? null,
+      auto_close_on_expire: input.auto_close_on_expire,
+      reward_title: input.reward_title ?? null,
+      reward_remark: input.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? null,
+      config_payload: this.buildMarketingCampaignConfigPayload(input),
+      created_by_employee_id: authContext.employeeId,
+      updated_by_employee_id: authContext.employeeId,
+    });
+
+    await marketingCampaignRepository.replaceScopes(campaign.id, scopeRows);
+    return this.getMarketingCampaignDetail(authContext, campaign.id);
+  }
+
+  async updateMarketingCampaign(
+    authContext: AuthContext,
+    campaignId: string,
+    input: UpdateMarketingCampaignInput,
+  ) {
+    const existing = await this.getMarketingCampaignOrThrow(campaignId);
+    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.update",
+    )) || [];
+    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
+      throw Errors.forbidden();
+    }
+
+    const scopeRows = this.buildMarketingCampaignScopeRows(input);
+    if (scopeRows.length) {
+      const invalid = scopeRows.some((item) => !visibleProjectIds.includes(item.project_id));
+      if (invalid) {
+        throw Errors.forbidden();
+      }
+    }
+
+    await marketingCampaignRepository.update({
+      id: campaignId,
+      campaign_type: input.campaign_type,
+      name: input.name,
+      enabled: input.enabled,
+      status: input.status,
+      target_scope_type: input.target_scope_type,
+      valid_from: input.valid_from ?? null,
+      valid_until: input.valid_until ?? null,
+      auto_close_on_expire: input.auto_close_on_expire,
+      reward_title: input.reward_title ?? null,
+      reward_remark: input.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? null,
+      config_payload: this.buildMarketingCampaignConfigPayload(input),
+      updated_by_employee_id: authContext.employeeId,
+    });
+    await marketingCampaignRepository.replaceScopes(campaignId, scopeRows);
+    return this.getMarketingCampaignDetail(authContext, campaignId);
+  }
+
+  async updateMarketingCampaignStatus(
+    authContext: AuthContext,
+    campaignId: string,
+    input: MarketingCampaignStatusUpdateInput,
+  ) {
+    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.update",
+    )) || [];
+    const existing = await this.getMarketingCampaignOrThrow(campaignId);
+    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
+      throw Errors.forbidden();
+    }
+
+    await marketingCampaignRepository.updateStatus(campaignId, input.status, authContext.employeeId);
+    return this.getMarketingCampaignDetail(authContext, campaignId);
+  }
+
+  async listMarketingCampaignInstances(
+    authContext: AuthContext,
+    campaignId: string,
+    query: MarketingCampaignInstanceListQuery,
+  ) {
+    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    )) || [];
+    const campaign = await this.getMarketingCampaignOrThrow(campaignId);
+    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    if (!this.campaignVisibleToEmployee(campaign, scopes, visibleProjectIds)) {
+      throw Errors.forbidden();
+    }
+
+    const result = await customerProjectLogShareCampaignRepository.listForEmployee({
+      campaignId,
+      projectIds: visibleProjectIds,
       status: query.status,
       rewardClaimStatus: query.rewardClaimStatus,
       keyword: query.keyword,

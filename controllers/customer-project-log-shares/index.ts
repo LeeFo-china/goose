@@ -20,6 +20,15 @@ import {
 } from "@/schema/customer-project-log-share";
 import { customerProjectLogShareService } from "@/services/customer-project-log-shares";
 import {
+  CreateMarketingCampaignSchema,
+  MarketingCampaignIdParamsSchema,
+  MarketingCampaignInstanceIdParamsSchema,
+  MarketingCampaignInstanceListQuerySchema,
+  MarketingCampaignListQuerySchema,
+  MarketingCampaignStatusUpdateSchema,
+  UpdateMarketingCampaignSchema,
+} from "@/schema/marketing-center-campaign";
+import {
   EmployeeProjectShareCampaignConfigParamsSchema,
   EmployeeShareCampaignListQuerySchema,
   EmployeeShareCampaignStatsSummaryQuerySchema,
@@ -409,7 +418,35 @@ class CustomerProjectLogSharesController extends BaseController {
 
   @Get("/employee/marketing-center/campaigns")
   async listMarketingCenterCampaigns(request: FastifyRequest, reply: FastifyReply) {
-    return this.listEmployeeShareCampaigns(request, reply);
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const queryResult = MarketingCampaignListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerProjectLogShareService.listMarketingCampaigns(
+      authContext,
+      queryResult.data,
+    );
+
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Post("/employee/marketing-center/campaigns")
+  async createMarketingCenterCampaign(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const bodyResult = CreateMarketingCampaignSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.createMarketingCampaign(
+      authContext,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Get("/employee/share-campaigns/stats/summary")
@@ -457,7 +494,35 @@ class CustomerProjectLogSharesController extends BaseController {
 
   @Get("/employee/marketing-center/campaigns/:campaignId")
   async getMarketingCenterCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
-    return this.getEmployeeShareCampaignDetail(request, reply);
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await customerProjectLogShareService.getMarketingCampaignDetail(
+      authContext,
+      paramsResult.data.campaignId,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Put("/employee/marketing-center/campaigns/:campaignId")
+  async updateMarketingCenterCampaign(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = UpdateMarketingCampaignSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.updateMarketingCampaign(
+      authContext,
+      paramsResult.data.campaignId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/employee/share-campaigns/:campaignId/status")
@@ -488,7 +553,20 @@ class CustomerProjectLogSharesController extends BaseController {
 
   @Post("/employee/marketing-center/campaigns/:campaignId/status")
   async postMarketingCenterCampaignStatus(request: FastifyRequest, reply: FastifyReply) {
-    return this.postEmployeeShareCampaignStatus(request, reply);
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = MarketingCampaignStatusUpdateSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.updateMarketingCampaignStatus(
+      authContext,
+      paramsResult.data.campaignId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Get("/employee/share-campaigns/:campaignId/helpers")
@@ -524,6 +602,110 @@ class CustomerProjectLogSharesController extends BaseController {
   @Get("/employee/marketing-center/campaigns/:campaignId/helpers")
   async listMarketingCenterCampaignHelpers(request: FastifyRequest, reply: FastifyReply) {
     return this.listEmployeeShareCampaignHelpers(request, reply);
+  }
+
+  @Get("/employee/marketing-center/campaigns/:campaignId/instances")
+  async listMarketingCenterCampaignInstances(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = MarketingCampaignInstanceListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerProjectLogShareService.listMarketingCampaignInstances(
+      authContext,
+      paramsResult.data.campaignId,
+      queryResult.data,
+    );
+
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Get("/employee/marketing-center/campaign-instances/:instanceId")
+  async getMarketingCenterCampaignInstanceDetail(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = MarketingCampaignInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.instanceId,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.read",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.getEmployeeShareCampaignDetail(
+      paramsResult.data.instanceId,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/employee/marketing-center/campaign-instances/:instanceId/helpers")
+  async listMarketingCenterCampaignInstanceHelpers(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = MarketingCampaignInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = CustomerProjectLogShareHelpersQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.instanceId,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.read",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.listEmployeeShareCampaignHelpers(
+      paramsResult.data.instanceId,
+      queryResult.data.page,
+      queryResult.data.pageSize,
+    );
+
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Post("/employee/marketing-center/campaign-instances/:instanceId/claim")
+  async claimMarketingCenterCampaignInstanceReward(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = MarketingCampaignInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = ClaimCustomerProjectLogShareCampaignSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.instanceId,
+    );
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.update",
+    );
+    if (!hasAccess || !authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const data = await customerProjectLogShareService.claimCampaignReward(
+      paramsResult.data.instanceId,
+      authContext.employeeId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/employee/share-campaigns/:campaignId/claim")

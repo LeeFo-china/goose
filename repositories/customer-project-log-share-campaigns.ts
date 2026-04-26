@@ -3,6 +3,8 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type CustomerProjectLogShareCampaignRow = {
   id: string;
+  campaign_id: string | null;
+  campaign_type: string;
   share_token: string;
   customer_id: string;
   project_id: string;
@@ -53,7 +55,9 @@ export type CustomerProjectLogShareAssistRow = {
 };
 
 export type EmployeeShareCampaignListRow = {
-  campaign_id: string;
+  instance_id: string;
+  campaign_id: string | null;
+  campaign_type: string;
   project_id: string;
   project_name: string | null;
   customer_id: string;
@@ -163,6 +167,8 @@ class CustomerProjectLogShareCampaignRepository {
   }
 
   async create(input: {
+    campaign_id: string | null;
+    campaign_type: string;
     share_token: string;
     customer_id: string;
     project_id: string;
@@ -180,6 +186,8 @@ class CustomerProjectLogShareCampaignRepository {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_log_share_campaigns")
       .insert({
+        campaign_id: input.campaign_id,
+        campaign_type: input.campaign_type,
         share_token: input.share_token,
         customer_id: input.customer_id,
         project_id: input.project_id,
@@ -478,6 +486,26 @@ class CustomerProjectLogShareCampaignRepository {
     };
   }
 
+  async countByMarketingCampaignStatus(campaignId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .select("status")
+      .eq("campaign_id", campaignId);
+
+    if (error) {
+      throw Errors.dbError("统计营销活动实例数量失败", error);
+    }
+
+    const list = (data || []) as Array<{ status: CustomerProjectLogShareCampaignRow["status"] }>;
+    return {
+      instance_count: list.length,
+      active_instance_count: list.filter((item) => item.status === "active").length,
+      achieved_instance_count: list.filter((item) => item.status === "achieved").length,
+      reward_claimed_count: list.filter((item) => item.status === "reward_claimed").length,
+      closed_instance_count: list.filter((item) => item.status === "closed").length,
+    };
+  }
+
   async findActiveByProject(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_log_share_campaigns")
@@ -496,6 +524,7 @@ class CustomerProjectLogShareCampaignRepository {
   }
 
   async listForEmployee(input: {
+    campaignId?: string;
     projectIds?: string[] | null;
     projectId?: string;
     customerId?: string;
@@ -511,6 +540,8 @@ class CustomerProjectLogShareCampaignRepository {
       .from("customer_log_share_campaigns")
       .select(`
         id,
+        campaign_id,
+        campaign_type,
         project_id,
         customer_id,
         log_id,
@@ -548,6 +579,9 @@ class CustomerProjectLogShareCampaignRepository {
 
     if (input.projectIds) {
       query = query.in("project_id", input.projectIds);
+    }
+    if (input.campaignId) {
+      query = query.eq("campaign_id", input.campaignId);
     }
     if (input.projectId) {
       query = query.eq("project_id", input.projectId);
@@ -590,7 +624,9 @@ class CustomerProjectLogShareCampaignRepository {
       const log = Array.isArray(item.log) ? item.log[0] : item.log;
 
       return {
-        campaign_id: String(item.id),
+        instance_id: String(item.id),
+        campaign_id: typeof item.campaign_id === "string" ? item.campaign_id : null,
+        campaign_type: typeof item.campaign_type === "string" ? item.campaign_type : "share_assist",
         project_id: String(item.project_id),
         project_name: project && typeof project === "object" && "name" in project
           ? (project.name as string | null)
@@ -656,6 +692,7 @@ class CustomerProjectLogShareCampaignRepository {
   }
 
   async getStatsSummary(input: {
+    campaignId?: string;
     projectIds?: string[] | null;
     projectId?: string;
     dateFrom?: string;
@@ -676,6 +713,9 @@ class CustomerProjectLogShareCampaignRepository {
     }
     if (input.projectIds) {
       query = query.in("project_id", input.projectIds);
+    }
+    if (input.campaignId) {
+      query = query.eq("campaign_id", input.campaignId);
     }
     if (input.projectId) {
       query = query.eq("project_id", input.projectId);
