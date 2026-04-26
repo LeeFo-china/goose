@@ -7,42 +7,55 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-       
-      # 使用官方 Action 设置 Bun 环境，比手动 export 更稳健 dd
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
 
+      - name: Setup runtime
+        shell: bash
+        run: |
+          set -euo pipefail
 
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            . "$NVM_DIR/nvm.sh"
+          fi
+
+          export PATH="$HOME/.bun/bin:$PATH"
+
+          echo "NODE_BIN=$(command -v node)" >> "$GITHUB_ENV"
+          echo "BUN_BIN=$(command -v bun)" >> "$GITHUB_ENV"
+          echo "PM2_BIN=$(command -v pm2)" >> "$GITHUB_ENV"
 
       - name: Deploy
+        shell: bash
         run: |
-          # 1. 打印当前环境信息（方便排错）
+          set -euo pipefail
+
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            . "$NVM_DIR/nvm.sh"
+          fi
+          export PATH="$HOME/.bun/bin:$PATH"
+
+          test -n "${NODE_BIN:-}"
+          test -n "${BUN_BIN:-}"
+          test -n "${PM2_BIN:-}"
+
           echo "Deploying to $GITHUB_WORKSPACE"
           whoami
-          
-          # 2. 复制环境变量
+          "$NODE_BIN" --version
+          "$BUN_BIN" --version
+          "$PM2_BIN" --version
 
-          # 如果 .env 在 runner 家目录下，建议改为：cp /home/runner/.env .env
-          # cp /home/runner/.env .env || echo ".env file not found, skipping cp"
           cp /home/ubuntu/actions-runner/.env .env || echo ".env file not found, skipping cp"
-          # 3. 安装依赖
-          bun install
-          
-          # 4. 确保 PM2 在路径中
-          # 如果 pm2 是全局安装在 root 下的，runner 可能找不到。
-          # 建议用 runner 用户执行过：npm install -g pm2
-          export PATH="$(npm config get prefix)/bin:$PATH"
 
-          # 5. 平滑重启
-          # --interpreter 确保 PM2 知道如何处理 .ts 文件
-          # --name 确保唯一性
-          pm2 reload goose || pm2 start app.ts --interpreter $(which bun) --name "goose"
-          
-          # 6. 保存 PM2 状态，防止服务器重启后丢失
-          pm2 save
+          "$BUN_BIN" install
+
+          "$PM2_BIN" reload goose || "$PM2_BIN" start app.ts --interpreter "$BUN_BIN" --name goose
+          "$PM2_BIN" save
+
+          sleep 3
+          ss -lntp | grep ':3000\b'
+          curl -fsS http://127.0.0.1:3000/
