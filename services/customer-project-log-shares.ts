@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
+import { accessPolicyService } from "@/services/access-policy";
+import type { AuthContext } from "@/services/authorization";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
+import { projectShareCampaignConfigRepository, type ProjectShareCampaignConfigRow } from "@/repositories/project-share-campaign-configs";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
   AssistCustomerProjectLogShareCampaignInput,
@@ -13,6 +16,13 @@ import type {
   GetCustomerProjectLogShareCardQuery,
   OpenCustomerProjectLogShareCampaignInput,
 } from "@/schema/customer-project-log-share";
+import type {
+  EmployeeShareCampaignListQuery,
+  EmployeeShareCampaignStatsSummaryQuery,
+  PostEmployeeShareCampaignStatusInput,
+  PostProjectShareCampaignConfigStatusInput,
+  PutProjectShareCampaignConfigInput,
+} from "@/schema/share-campaign-management";
 import { SupabaseDB } from "@/utils/supabase";
 import {
   PROJECT_LOG_STAGE_CONFIG,
@@ -152,6 +162,26 @@ type RewardClaimVoucherPayload = {
   expires_at: string | null;
 };
 
+type EffectiveShareCampaignConfig = {
+  config_id: string;
+  enabled: boolean;
+  config_status: ProjectShareCampaignConfigRow["config_status"];
+  config_mode: ProjectShareCampaignConfigRow["config_mode"];
+  template_id: string | null;
+  template_name: string | null;
+  target_assist_count: number;
+  reward_title: string;
+  reward_remark: string;
+  reward_claim_instruction: string;
+  reward_claim_channel: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  auto_close_on_expire: boolean;
+  allow_create_when_existing_active: boolean;
+  default_display_title: string | null;
+  default_display_subtitle: string | null;
+};
+
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
     const value = process.env[name]?.trim();
@@ -288,6 +318,18 @@ function buildShareRewardCode(input: {
 
 function buildCampaignRewardTitle(targetAssistCount: number) {
   return `${targetAssistCount}人助力解锁${DEFAULT_SHARE_REWARD_TITLE}`;
+}
+
+function buildDefaultConfigRewardTitle(targetAssistCount: number) {
+  return buildCampaignRewardTitle(targetAssistCount);
+}
+
+function getCampaignRewardTitle(campaign: Pick<CustomerProjectLogShareCampaignRow, "reward_title" | "target_assist_count">) {
+  return campaign.reward_title?.trim() || buildCampaignRewardTitle(campaign.target_assist_count);
+}
+
+function getCampaignRewardRemark(campaign: Pick<CustomerProjectLogShareCampaignRow, "reward_remark">) {
+  return campaign.reward_remark?.trim() || DEFAULT_SHARE_REWARD_REMARK;
 }
 
 function buildRewardClaimCode(campaign: Pick<CustomerProjectLogShareCampaignRow, "id" | "created_at">) {
@@ -721,6 +763,102 @@ class CustomerProjectLogShareService {
     return this.ensureCampaignRewardClaimVoucher(withRewardMetadata);
   }
 
+  private buildEffectiveConfig(
+    config: ProjectShareCampaignConfigRow,
+  ): EffectiveShareCampaignConfig {
+    return {
+      config_id: config.id,
+      enabled: config.enabled,
+      config_status: config.config_status,
+      config_mode: config.config_mode,
+      template_id: config.template_id,
+      template_name: null,
+      target_assist_count: config.target_assist_count,
+      reward_title: config.reward_title?.trim() || buildDefaultConfigRewardTitle(config.target_assist_count),
+      reward_remark: config.reward_remark?.trim() || DEFAULT_SHARE_REWARD_REMARK,
+      reward_claim_instruction: config.reward_claim_instruction?.trim()
+        || getDefaultRewardClaimInstruction(config.target_assist_count),
+      reward_claim_channel: config.reward_claim_channel?.trim() || "store",
+      valid_from: config.valid_from,
+      valid_until: config.valid_until,
+      auto_close_on_expire: config.auto_close_on_expire,
+      allow_create_when_existing_active: config.allow_create_when_existing_active,
+      default_display_title: config.default_display_title,
+      default_display_subtitle: config.default_display_subtitle,
+    };
+  }
+
+  private getConfigBlockReason(
+    config: ProjectShareCampaignConfigRow | null,
+  ): "config_missing" | "config_disabled" | "config_paused" | "config_closed" | "config_expired" | null {
+    if (!config) {
+      return "config_missing";
+    }
+
+    if (!config.enabled) {
+      return "config_disabled";
+    }
+
+    if (config.config_status === "paused") {
+      return "config_paused";
+    }
+
+    if (config.config_status === "closed") {
+      return "config_closed";
+    }
+
+    if (config.config_status !== "active") {
+      return "config_disabled";
+    }
+
+    const now = Date.now();
+    if (config.valid_from && new Date(config.valid_from).getTime() > now) {
+      return "config_disabled";
+    }
+
+    if (
+      config.valid_until
+      && new Date(config.valid_until).getTime() < now
+      && config.auto_close_on_expire
+    ) {
+      return "config_expired";
+    }
+
+    return null;
+  }
+
+  private throwConfigBlocked(
+    reason:
+      | NonNullable<ReturnType<CustomerProjectLogShareService["getConfigBlockReason"]>>
+      | "existing_active_campaign",
+    message?: string,
+  ): never {
+    throw Errors.business(
+      409,
+      message || "当前项目未开启助力活动",
+      reason === "config_missing"
+        ? ErrorCodes.SHARE_CAMPAIGN_CONFIG_NOT_FOUND
+        : ErrorCodes.SHARE_CAMPAIGN_CONFIG_BLOCKED,
+      {
+        block_reason: reason,
+      },
+    );
+  }
+
+  private async getProjectConfig(projectId: string) {
+    return projectShareCampaignConfigRepository.findByProjectId(projectId);
+  }
+
+  private async getEffectiveProjectConfig(projectId: string) {
+    const config = await this.getProjectConfig(projectId);
+    const blockReason = this.getConfigBlockReason(config);
+    return {
+      raw: config,
+      blockReason,
+      effective: config && !blockReason ? this.buildEffectiveConfig(config) : null,
+    };
+  }
+
   private async buildViewerAssistInfo(
     campaign: CustomerProjectLogShareCampaignRow,
     owner: CampaignOwnerRow,
@@ -1048,6 +1186,20 @@ class CustomerProjectLogShareService {
     context: CustomerProjectLogShareContext,
     input?: CreateCustomerProjectLogShareCampaignInput,
   ) {
+    const configResult = await this.getEffectiveProjectConfig(context.project_id);
+    if (!configResult.effective) {
+      this.throwConfigBlocked(configResult.blockReason || "config_missing");
+    }
+
+    if (!configResult.effective.allow_create_when_existing_active) {
+      const existingProjectActive = await customerProjectLogShareCampaignRepository.findActiveByProject(
+        context.project_id,
+      );
+      if (existingProjectActive && existingProjectActive.log_id !== context.log_id) {
+        this.throwConfigBlocked("existing_active_campaign", "当前项目已有进行中的助力活动");
+      }
+    }
+
     const existing = await customerProjectLogShareCampaignRepository.findActiveByOwner({
       customer_id: context.customer_id,
       project_id: context.project_id,
@@ -1064,8 +1216,14 @@ class CustomerProjectLogShareService {
         customer_id: context.customer_id,
         project_id: context.project_id,
         log_id: context.log_id,
+        config_id: configResult.effective.config_id,
         channel: input?.channel ?? "timeline",
-        target_assist_count: getCustomerProjectLogShareTargetAssistCount(),
+        target_assist_count: configResult.effective.target_assist_count,
+        reward_title: configResult.effective.reward_title,
+        reward_remark: configResult.effective.reward_remark,
+        reward_claim_instruction: configResult.effective.reward_claim_instruction,
+        reward_claim_channel: configResult.effective.reward_claim_channel,
+        valid_until: configResult.effective.valid_until,
         poster_generated_at: new Date().toISOString(),
       });
     } catch {
@@ -1235,13 +1393,13 @@ class CustomerProjectLogShareService {
       images: context.log_images,
       style_tags: context.project_style_tags,
       designer_name: context.designer_name,
-      share_reward_title: buildCampaignRewardTitle(finalCampaign.target_assist_count),
+      share_reward_title: getCampaignRewardTitle(finalCampaign),
       share_reward_code: buildShareRewardCode({
         customerId: context.customer_id,
         projectId: context.project_id,
         logId: context.log_id,
       }),
-      share_reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      share_reward_remark: getCampaignRewardRemark(finalCampaign),
       share_token: finalCampaign.share_token,
       campaign: this.buildCampaignSummary(finalCampaign),
     };
@@ -1373,8 +1531,8 @@ class CustomerProjectLogShareService {
       assist_count: campaign.assist_count,
       target_assist_count: campaign.target_assist_count,
       remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
-      reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
-      reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      reward_title: getCampaignRewardTitle(campaign),
+      reward_remark: getCampaignRewardRemark(campaign),
       reward_claim_instruction: campaign.reward_claim_instruction,
       viewer: viewerInfo,
       recent_helpers: recentHelpers,
@@ -1570,6 +1728,7 @@ class CustomerProjectLogShareService {
 
   async getCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
     const { customer } = await this.getOwnedProject(authUserId, projectId);
+    const configResult = await this.getEffectiveProjectConfig(projectId);
     const campaigns = (await customerProjectLogShareCampaignRepository.listByProject({
       customer_id: customer.id,
       project_id: projectId,
@@ -1592,6 +1751,8 @@ class CustomerProjectLogShareService {
       return {
         project_id: projectId,
         display_mode: "empty" as const,
+        config_enabled: Boolean(configResult.raw?.enabled),
+        config_status: configResult.raw?.config_status || null,
         recommended_log: null,
         focus_campaign: null,
       };
@@ -1618,16 +1779,20 @@ class CustomerProjectLogShareService {
         : focusCampaign.status === "reward_claimed"
           ? "reward_claimed"
           : "continue_campaign"
-      : "create_campaign";
+      : configResult.effective
+        ? "create_campaign"
+        : "empty";
 
     return {
       project_id: projectId,
       display_mode: displayMode,
+      config_enabled: Boolean(configResult.raw?.enabled),
+      config_status: configResult.raw?.config_status || null,
       recommended_log: recommendedLog,
       focus_campaign: focusCampaign
         ? {
           ...this.buildCampaignSummary(focusCampaign),
-          reward_title: buildCampaignRewardTitle(focusCampaign.target_assist_count),
+          reward_title: getCampaignRewardTitle(focusCampaign),
         }
         : null,
     };
@@ -1654,8 +1819,8 @@ class CustomerProjectLogShareService {
       assist_count: campaign.assist_count,
       target_assist_count: campaign.target_assist_count,
       remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
-      reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
-      reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      reward_title: getCampaignRewardTitle(campaign),
+      reward_remark: getCampaignRewardRemark(campaign),
       reward_claim_code: campaign.reward_claim_code,
       reward_claim_instruction: campaign.reward_claim_instruction,
       reward_claim_channel: campaign.reward_claim_channel,
@@ -1688,6 +1853,268 @@ class CustomerProjectLogShareService {
         total: result.count,
         totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
       },
+    };
+  }
+
+  async getEmployeeProjectCampaignConfig(projectId: string) {
+    const config = await this.getProjectConfig(projectId);
+    const summary = await customerProjectLogShareCampaignRepository.countByProjectStatus(projectId);
+
+    return {
+      project_id: projectId,
+      has_config: Boolean(config),
+      config: config
+        ? {
+          config_id: config.id,
+          enabled: config.enabled,
+          config_status: config.config_status,
+          config_mode: config.config_mode,
+          template_id: config.template_id,
+          template_name: null,
+          target_assist_count: config.target_assist_count,
+          reward_title: config.reward_title?.trim()
+            || buildDefaultConfigRewardTitle(config.target_assist_count),
+          reward_remark: config.reward_remark?.trim() || DEFAULT_SHARE_REWARD_REMARK,
+          reward_claim_instruction: config.reward_claim_instruction?.trim()
+            || getDefaultRewardClaimInstruction(config.target_assist_count),
+          reward_claim_channel: config.reward_claim_channel?.trim() || "store",
+          valid_from: config.valid_from,
+          valid_until: config.valid_until,
+          auto_close_on_expire: config.auto_close_on_expire,
+          allow_create_when_existing_active: config.allow_create_when_existing_active,
+          default_display_title: config.default_display_title,
+          default_display_subtitle: config.default_display_subtitle,
+        }
+        : null,
+      summary,
+    };
+  }
+
+  async saveEmployeeProjectCampaignConfig(
+    projectId: string,
+    employeeId: string | null,
+    input: PutProjectShareCampaignConfigInput,
+  ) {
+    const config = await projectShareCampaignConfigRepository.upsertByProjectId({
+      project_id: projectId,
+      config_status: input.config_status,
+      enabled: input.enabled,
+      template_id: input.template_id ?? null,
+      config_mode: input.config_mode,
+      target_assist_count: input.target_assist_count,
+      reward_title: input.reward_title ?? null,
+      reward_remark: input.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? null,
+      valid_from: input.valid_from ?? null,
+      valid_until: input.valid_until ?? null,
+      auto_close_on_expire: input.auto_close_on_expire,
+      allow_create_when_existing_active: input.allow_create_when_existing_active,
+      default_display_title: input.default_display_title ?? null,
+      default_display_subtitle: input.default_display_subtitle ?? null,
+      employee_id: employeeId,
+    });
+
+    return {
+      config_id: config.id,
+      project_id: config.project_id,
+      enabled: config.enabled,
+      config_status: config.config_status,
+      config_mode: config.config_mode,
+      updated_at: config.updated_at,
+    };
+  }
+
+  async updateEmployeeProjectCampaignConfigStatus(
+    projectId: string,
+    employeeId: string | null,
+    input: PostProjectShareCampaignConfigStatusInput,
+  ) {
+    const updated = await projectShareCampaignConfigRepository.updateStatusByProjectId(
+      projectId,
+      input.config_status,
+      employeeId,
+    );
+
+    if (!updated) {
+      throw Errors.business(
+        404,
+        "项目助力活动配置不存在",
+        ErrorCodes.SHARE_CAMPAIGN_CONFIG_NOT_FOUND,
+      );
+    }
+
+    return {
+      config_id: updated.id,
+      project_id: updated.project_id,
+      enabled: updated.enabled,
+      config_status: updated.config_status,
+      updated_at: updated.updated_at,
+    };
+  }
+
+  async listEmployeeShareCampaigns(
+    authContext: AuthContext,
+    query: EmployeeShareCampaignListQuery,
+  ) {
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
+
+    const result = await customerProjectLogShareCampaignRepository.listForEmployee({
+      projectIds: visibleProjectIds,
+      projectId: query.projectId,
+      customerId: query.customerId,
+      status: query.status,
+      rewardClaimStatus: query.rewardClaimStatus,
+      keyword: query.keyword,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+
+    return {
+      list: result.list.map((item) => ({
+        ...item,
+        remaining_count: Math.max(item.target_assist_count - item.assist_count, 0),
+      })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: result.total,
+        totalPages: result.total ? Math.ceil(result.total / query.pageSize) : 0,
+      },
+    };
+  }
+
+  async getEmployeeShareCampaignDetail(campaignId: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (!campaign) {
+      throw Errors.business(404, "助力活动不存在", ErrorCodes.SHARE_CAMPAIGN_NOT_FOUND);
+    }
+
+    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+    const detail = await this.buildCampaignPublicDetail(finalCampaign.share_token);
+    const owner = await this.getCustomerById(finalCampaign.customer_id);
+    const recentHelpers = await this.getRecentHelpers(finalCampaign.id, 3);
+    const voucher = this.buildRewardClaimVoucherPayload(finalCampaign);
+
+    return {
+      campaign_id: finalCampaign.id,
+      project_id: finalCampaign.project_id,
+      project_name: detail.project_name,
+      customer_id: finalCampaign.customer_id,
+      customer_name: owner.name,
+      log_id: finalCampaign.log_id,
+      log_title: detail.node_name || detail.stage_label || "施工日志更新",
+      status: finalCampaign.status,
+      reward_claim_status: finalCampaign.reward_claim_status,
+      assist_count: finalCampaign.assist_count,
+      target_assist_count: finalCampaign.target_assist_count,
+      remaining_count: Math.max(finalCampaign.target_assist_count - finalCampaign.assist_count, 0),
+      reward_title: getCampaignRewardTitle(finalCampaign),
+      reward_remark: getCampaignRewardRemark(finalCampaign),
+      reward_claim_instruction: finalCampaign.reward_claim_instruction,
+      reward_claim_channel: finalCampaign.reward_claim_channel,
+      reward_claim_code: finalCampaign.reward_claim_code,
+      reward_claimed_at: finalCampaign.reward_claimed_at,
+      voucher: voucher
+        ? {
+          voucher_token: voucher.voucher_token,
+          status: voucher.status,
+          expires_at: voucher.expires_at,
+        }
+        : null,
+      recent_helpers: recentHelpers,
+      started_at: finalCampaign.created_at,
+      valid_until: finalCampaign.valid_until,
+    };
+  }
+
+  async listEmployeeShareCampaignHelpers(campaignId: string, page: number, pageSize: number) {
+    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (!campaign) {
+      throw Errors.business(404, "助力活动不存在", ErrorCodes.SHARE_CAMPAIGN_NOT_FOUND);
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const result = await customerProjectLogShareCampaignRepository.listValidAssists({
+      campaign_id: campaign.id,
+      from,
+      to,
+    });
+
+    return {
+      list: this.serializeRecentHelpers(result.list),
+      pagination: {
+        page,
+        pageSize,
+        total: result.count,
+        totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
+      },
+    };
+  }
+
+  async updateEmployeeShareCampaignStatus(
+    campaignId: string,
+    input: PostEmployeeShareCampaignStatusInput,
+  ) {
+    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (!campaign) {
+      throw Errors.business(404, "助力活动不存在", ErrorCodes.SHARE_CAMPAIGN_NOT_FOUND);
+    }
+
+    if (campaign.status === "closed") {
+      throw Errors.business(409, "当前活动已关闭", ErrorCodes.SHARE_CAMPAIGN_ALREADY_CLOSED);
+    }
+
+    if (campaign.status === "reward_claimed") {
+      throw Errors.business(409, "已领奖活动不支持关闭", ErrorCodes.SHARE_CAMPAIGN_STATUS_INVALID);
+    }
+
+    const updated = await customerProjectLogShareCampaignRepository.updateStatus({
+      id: campaign.id,
+      status: input.status,
+      closed_reason: input.reason,
+    });
+
+    return {
+      campaign_id: updated.id,
+      status: updated.status,
+      reward_claim_status: updated.reward_claim_status,
+      closed_reason: updated.closed_reason,
+    };
+  }
+
+  async getEmployeeShareCampaignStatsSummary(
+    authContext: AuthContext,
+    query: EmployeeShareCampaignStatsSummaryQuery,
+  ) {
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
+
+    const summary = await customerProjectLogShareCampaignRepository.getStatsSummary({
+      projectIds: visibleProjectIds,
+      projectId: query.projectId,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+    });
+
+    return {
+      ...summary,
+      total_share_open_count: null,
+      total_share_save_count: null,
+      achievement_rate: summary.campaign_count
+        ? Number((summary.achieved_count / summary.campaign_count).toFixed(4))
+        : 0,
+      claim_rate: summary.achieved_count
+        ? Number((summary.reward_claimed_count / summary.achieved_count).toFixed(4))
+        : 0,
     };
   }
 
@@ -1764,7 +2191,7 @@ class CustomerProjectLogShareService {
       claim_code: finalCampaign.reward_claim_code,
       customer_name: maskDisplayName(owner.name),
       project_name: detail.project_name,
-      reward_title: buildCampaignRewardTitle(finalCampaign.target_assist_count),
+      reward_title: getCampaignRewardTitle(finalCampaign),
       reward_claim_channel: finalCampaign.reward_claim_channel,
       reward_claim_instruction: finalCampaign.reward_claim_instruction,
       can_claim: canClaim,

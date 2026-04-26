@@ -19,7 +19,17 @@ import {
   OpenCustomerProjectLogShareCampaignSchema,
 } from "@/schema/customer-project-log-share";
 import { customerProjectLogShareService } from "@/services/customer-project-log-shares";
+import {
+  EmployeeProjectShareCampaignConfigParamsSchema,
+  EmployeeShareCampaignListQuerySchema,
+  EmployeeShareCampaignStatsSummaryQuerySchema,
+  PostEmployeeShareCampaignStatusSchema,
+  PostProjectShareCampaignConfigStatusSchema,
+  PutProjectShareCampaignConfigSchema,
+  ShareCampaignManagementCampaignIdParamsSchema,
+} from "@/schema/share-campaign-management";
 import { Post, Get } from "@/utils/decorators/route";
+import { Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -226,6 +236,73 @@ class CustomerProjectLogSharesController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/employee/projects/:projectId/share-campaign-config")
+  async getEmployeeProjectShareCampaignConfig(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      paramsResult.data.projectId,
+      "project.read",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.getEmployeeProjectCampaignConfig(
+      paramsResult.data.projectId,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Put("/employee/projects/:projectId/share-campaign-config")
+  async putEmployeeProjectShareCampaignConfig(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PutProjectShareCampaignConfigSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      paramsResult.data.projectId,
+      "project.update",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.saveEmployeeProjectCampaignConfig(
+      paramsResult.data.projectId,
+      authContext.employeeId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/employee/projects/:projectId/share-campaign-config/status")
+  async postEmployeeProjectShareCampaignConfigStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PostProjectShareCampaignConfigStatusSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      paramsResult.data.projectId,
+      "project.update",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.updateEmployeeProjectCampaignConfigStatus(
+      paramsResult.data.projectId,
+      authContext.employeeId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
   @Get("/customer/share-campaigns/:campaignId")
   async getCustomerCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = this.getRequiredAuthUserId(request);
@@ -265,6 +342,112 @@ class CustomerProjectLogSharesController extends BaseController {
 
     const data = await customerProjectLogShareService.listCustomerCampaignHelpers(
       authUserId,
+      paramsResult.data.campaignId,
+      queryResult.data.page,
+      queryResult.data.pageSize,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/share-campaigns")
+  async listEmployeeShareCampaigns(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const queryResult = EmployeeShareCampaignListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerProjectLogShareService.listEmployeeShareCampaigns(
+      authContext,
+      queryResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/share-campaigns/stats/summary")
+  async getEmployeeShareCampaignStatsSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const queryResult = EmployeeShareCampaignStatsSummaryQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerProjectLogShareService.getEmployeeShareCampaignStatsSummary(
+      authContext,
+      queryResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/share-campaigns/:campaignId")
+  async getEmployeeShareCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.campaignId,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.read",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.getEmployeeShareCampaignDetail(
+      paramsResult.data.campaignId,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/employee/share-campaigns/:campaignId/status")
+  async postEmployeeShareCampaignStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PostEmployeeShareCampaignStatusSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.campaignId,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.update",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.updateEmployeeShareCampaignStatus(
+      paramsResult.data.campaignId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/share-campaigns/:campaignId/helpers")
+  async listEmployeeShareCampaignHelpers(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = CustomerProjectLogShareHelpersQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.campaignId,
+    );
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.read",
+    );
+    if (!hasAccess) throw Errors.forbidden();
+
+    const data = await customerProjectLogShareService.listEmployeeShareCampaignHelpers(
       paramsResult.data.campaignId,
       queryResult.data.page,
       queryResult.data.pageSize,
