@@ -1308,6 +1308,49 @@ class CustomerProjectLogShareService {
     return { context, campaign };
   }
 
+  private async resolveOptionalShareCampaignForOwnedLog(input: {
+    authUserId: string;
+    projectId: string;
+    logId: string;
+    shareToken?: string;
+  }) {
+    const context = await this.getOwnedProjectLogContext(
+      input.authUserId,
+      input.projectId,
+      input.logId,
+    );
+
+    if (input.shareToken) {
+      const campaign = await customerProjectLogShareCampaignRepository.findByShareToken(
+        normalizeShareToken(input.shareToken),
+      );
+      if (
+        campaign
+        && campaign.customer_id === context.customer_id
+        && campaign.project_id === context.project_id
+        && campaign.log_id === context.log_id
+      ) {
+        return {
+          context,
+          campaign: await this.ensureCampaignPhase2Metadata(campaign),
+        };
+      }
+
+      return { context, campaign: null };
+    }
+
+    const existing = await customerProjectLogShareCampaignRepository.findActiveByOwner({
+      customer_id: context.customer_id,
+      project_id: context.project_id,
+      log_id: context.log_id,
+    });
+
+    return {
+      context,
+      campaign: existing ? await this.ensureCampaignPhase2Metadata(existing) : null,
+    };
+  }
+
   private async buildCampaignPublicDetail(shareToken: string) {
     const campaign = await this.getCampaignByToken(shareToken);
     const owner = await this.getCustomerById(campaign.customer_id);
@@ -1380,17 +1423,15 @@ class CustomerProjectLogShareService {
     logId: string,
     input: GenerateCustomerProjectLogShareCopyInput,
   ) {
-    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+    const context = await this.getOwnedProjectLogContext(
       authUserId,
       projectId,
       logId,
-      channel: "timeline",
-    });
+    );
     const copies = await this.requestAiCopies(context, input);
 
     return {
       copies,
-      campaign: this.buildCampaignSummary(await this.ensureCampaignPhase2Metadata(campaign)),
     };
   }
 
@@ -1400,14 +1441,12 @@ class CustomerProjectLogShareService {
     logId: string,
     query?: GetCustomerProjectLogShareCardQuery,
   ) {
-    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+    const { context, campaign } = await this.resolveOptionalShareCampaignForOwnedLog({
       authUserId,
       projectId,
       logId,
       shareToken: query?.share_token,
-      channel: "timeline",
     });
-    const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
 
     return {
       project_name: context.project_name,
@@ -1418,15 +1457,17 @@ class CustomerProjectLogShareService {
       images: context.log_images,
       style_tags: context.project_style_tags,
       designer_name: context.designer_name,
-      share_reward_title: getCampaignRewardTitle(finalCampaign),
-      share_reward_code: buildShareRewardCode({
-        customerId: context.customer_id,
-        projectId: context.project_id,
-        logId: context.log_id,
-      }),
-      share_reward_remark: getCampaignRewardRemark(finalCampaign),
-      share_token: finalCampaign.share_token,
-      campaign: this.buildCampaignSummary(finalCampaign),
+      share_reward_title: campaign ? getCampaignRewardTitle(campaign) : null,
+      share_reward_code: campaign
+        ? (campaign.reward_claim_code || buildShareRewardCode({
+          customerId: context.customer_id,
+          projectId: context.project_id,
+          logId: context.log_id,
+        }))
+        : null,
+      share_reward_remark: campaign ? getCampaignRewardRemark(campaign) : null,
+      share_token: campaign?.share_token || null,
+      campaign: campaign ? this.buildCampaignSummary(campaign) : null,
     };
   }
 
@@ -1726,11 +1767,10 @@ class CustomerProjectLogShareService {
     logId: string,
     input: CreateCustomerProjectLogShareRecordInput,
   ) {
-    const { context, campaign } = await this.resolveShareCampaignForOwnedLog({
+    const { context, campaign } = await this.resolveOptionalShareCampaignForOwnedLog({
       authUserId,
       projectId,
       logId,
-      channel: "timeline",
     });
     const record = await customerProjectLogShareRepository.create({
       customer_id: context.customer_id,
@@ -1741,13 +1781,13 @@ class CustomerProjectLogShareService {
       action: input.action,
     });
 
-    if (input.action === "save_image") {
+    if (input.action === "save_image" && campaign) {
       await customerProjectLogShareCampaignRepository.touchPosterSavedAt(campaign.id);
     }
 
     return {
       ...record,
-      campaign: this.buildCampaignSummary(campaign),
+      campaign: campaign ? this.buildCampaignSummary(campaign) : null,
     };
   }
 
