@@ -34,6 +34,8 @@ import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 class CustomerProjectLogSharesController extends BaseController {
+  private readonly marketingCampaignType = "share_assist" as const;
+
   constructor() {
     super("customer-project-log-shares");
   }
@@ -60,6 +62,17 @@ class CustomerProjectLogSharesController extends BaseController {
       || "sock.goodcms.cn";
 
     return `${proto}://${host}${path}`;
+  }
+
+  private withCampaignType<T extends Record<string, unknown>>(data: T) {
+    return {
+      ...data,
+      campaign_type: this.marketingCampaignType,
+    };
+  }
+
+  private withCampaignTypeList<T extends Record<string, unknown>>(list: T[]) {
+    return list.map((item) => this.withCampaignType(item));
   }
 
   @Post("/customer/projects/:projectId/logs/:logId/share-copy")
@@ -121,7 +134,7 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/customer/projects/:projectId/logs/:logId/share-record")
@@ -157,7 +170,7 @@ class CustomerProjectLogSharesController extends BaseController {
       },
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/share-campaigns/assist")
@@ -175,7 +188,7 @@ class CustomerProjectLogSharesController extends BaseController {
       },
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Get("/share-campaigns/:shareToken")
@@ -191,7 +204,7 @@ class CustomerProjectLogSharesController extends BaseController {
       },
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Get("/share-campaigns/:shareToken/qrcode")
@@ -233,7 +246,12 @@ class CustomerProjectLogSharesController extends BaseController {
       paramsResult.data.projectId,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      focus_campaign: data.focus_campaign
+        ? this.withCampaignType(data.focus_campaign)
+        : null,
+    });
   }
 
   @Get("/employee/projects/:projectId/share-campaign-config")
@@ -252,7 +270,10 @@ class CustomerProjectLogSharesController extends BaseController {
     const data = await customerProjectLogShareService.getEmployeeProjectCampaignConfig(
       paramsResult.data.projectId,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      config: data.config ? this.withCampaignType(data.config) : null,
+    });
   }
 
   @Put("/employee/projects/:projectId/share-campaign-config")
@@ -276,7 +297,7 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/employee/projects/:projectId/share-campaign-config/status")
@@ -300,7 +321,22 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/employee/marketing-center/projects/:projectId/share-assist-config")
+  async getMarketingCenterProjectShareAssistConfig(request: FastifyRequest, reply: FastifyReply) {
+    return this.getEmployeeProjectShareCampaignConfig(request, reply);
+  }
+
+  @Put("/employee/marketing-center/projects/:projectId/share-assist-config")
+  async putMarketingCenterProjectShareAssistConfig(request: FastifyRequest, reply: FastifyReply) {
+    return this.putEmployeeProjectShareCampaignConfig(request, reply);
+  }
+
+  @Post("/employee/marketing-center/projects/:projectId/share-assist-config/status")
+  async postMarketingCenterProjectShareAssistConfigStatus(request: FastifyRequest, reply: FastifyReply) {
+    return this.postEmployeeProjectShareCampaignConfigStatus(request, reply);
   }
 
   @Get("/customer/share-campaigns/:campaignId")
@@ -317,7 +353,7 @@ class CustomerProjectLogSharesController extends BaseController {
     const voucherToken = data.reward_claim_voucher?.voucher_token;
 
     return ResponseHandler.success({
-      ...data,
+      ...this.withCampaignType(data),
       reward_claim_voucher: data.reward_claim_voucher
         ? {
           ...data.reward_claim_voucher,
@@ -347,7 +383,10 @@ class CustomerProjectLogSharesController extends BaseController {
       queryResult.data.pageSize,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
   }
 
   @Get("/employee/share-campaigns")
@@ -362,7 +401,15 @@ class CustomerProjectLogSharesController extends BaseController {
       queryResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Get("/employee/marketing-center/campaigns")
+  async listMarketingCenterCampaigns(request: FastifyRequest, reply: FastifyReply) {
+    return this.listEmployeeShareCampaigns(request, reply);
   }
 
   @Get("/employee/share-campaigns/stats/summary")
@@ -377,7 +424,12 @@ class CustomerProjectLogSharesController extends BaseController {
       queryResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/employee/marketing-center/campaigns/stats/summary")
+  async getMarketingCenterCampaignStatsSummary(request: FastifyRequest, reply: FastifyReply) {
+    return this.getEmployeeShareCampaignStatsSummary(request, reply);
   }
 
   @Get("/employee/share-campaigns/:campaignId")
@@ -400,7 +452,12 @@ class CustomerProjectLogSharesController extends BaseController {
       paramsResult.data.campaignId,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/employee/marketing-center/campaigns/:campaignId")
+  async getMarketingCenterCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
+    return this.getEmployeeShareCampaignDetail(request, reply);
   }
 
   @Post("/employee/share-campaigns/:campaignId/status")
@@ -426,7 +483,12 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Post("/employee/marketing-center/campaigns/:campaignId/status")
+  async postMarketingCenterCampaignStatus(request: FastifyRequest, reply: FastifyReply) {
+    return this.postEmployeeShareCampaignStatus(request, reply);
   }
 
   @Get("/employee/share-campaigns/:campaignId/helpers")
@@ -453,7 +515,15 @@ class CustomerProjectLogSharesController extends BaseController {
       queryResult.data.pageSize,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Get("/employee/marketing-center/campaigns/:campaignId/helpers")
+  async listMarketingCenterCampaignHelpers(request: FastifyRequest, reply: FastifyReply) {
+    return this.listEmployeeShareCampaignHelpers(request, reply);
   }
 
   @Post("/employee/share-campaigns/:campaignId/claim")
@@ -483,7 +553,12 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Post("/employee/marketing-center/campaigns/:campaignId/claim")
+  async claimMarketingCenterCampaignReward(request: FastifyRequest, reply: FastifyReply) {
+    return this.claimCampaignReward(request, reply);
   }
 
   @Get("/employee/share-campaign-claim-vouchers/:voucherToken")
@@ -508,7 +583,12 @@ class CustomerProjectLogSharesController extends BaseController {
       paramsResult.data.voucherToken,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/employee/marketing-center/claim-vouchers/:voucherToken")
+  async getMarketingCenterRewardClaimVoucherDetail(request: FastifyRequest, reply: FastifyReply) {
+    return this.getEmployeeRewardClaimVoucherDetail(request, reply);
   }
 
   @Post("/employee/share-campaign-claim-vouchers/:voucherToken/claim")
@@ -537,7 +617,12 @@ class CustomerProjectLogSharesController extends BaseController {
       bodyResult.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Post("/employee/marketing-center/claim-vouchers/:voucherToken/claim")
+  async claimMarketingCenterRewardByVoucher(request: FastifyRequest, reply: FastifyReply) {
+    return this.claimRewardByVoucher(request, reply);
   }
 }
 
