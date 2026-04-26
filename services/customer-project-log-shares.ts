@@ -687,11 +687,23 @@ class CustomerProjectLogShareService {
       return "expired";
     }
 
-    if (campaign.status === "achieved") {
+    if (this.isCampaignRewardClaimable(campaign)) {
       return "active";
     }
 
     return "invalid";
+  }
+
+  private isCampaignRewardClaimable(campaign: CustomerProjectLogShareCampaignRow) {
+    if (campaign.reward_claim_status === "claimed" || campaign.status === "reward_claimed") {
+      return false;
+    }
+
+    return Boolean(
+      campaign.status === "achieved"
+      || campaign.achieved_at
+      || campaign.assist_count >= campaign.target_assist_count,
+    );
   }
 
   private buildRewardClaimVoucherPayload(
@@ -712,7 +724,7 @@ class CustomerProjectLogShareService {
   private async ensureCampaignRewardClaimVoucher(
     campaign: CustomerProjectLogShareCampaignRow,
   ) {
-    if (campaign.status !== "achieved" && campaign.status !== "reward_claimed") {
+    if (!this.isCampaignRewardClaimable(campaign) && campaign.status !== "reward_claimed") {
       return campaign;
     }
 
@@ -1196,7 +1208,20 @@ class CustomerProjectLogShareService {
         context.project_id,
       );
       if (existingProjectActive && existingProjectActive.log_id !== context.log_id) {
-        this.throwConfigBlocked("existing_active_campaign", "当前项目已有进行中的助力活动");
+        const existingCampaign = await this.ensureCampaignPhase2Metadata(existingProjectActive);
+        throw Errors.business(
+          409,
+          "当前项目已有进行中的助力活动",
+          ErrorCodes.SHARE_CAMPAIGN_CONFIG_BLOCKED,
+          {
+            block_reason: "existing_active_campaign",
+            campaign_id: existingCampaign.id,
+            share_token: existingCampaign.share_token,
+            log_id: existingCampaign.log_id,
+            status: existingCampaign.status,
+            reward_claim_status: existingCampaign.reward_claim_status,
+          },
+        );
       }
     }
 
@@ -1737,7 +1762,7 @@ class CustomerProjectLogShareService {
     const resolvedCampaigns = await Promise.all(campaigns);
 
     const claimRewardCampaign = resolvedCampaigns.find((item) =>
-      item.status === "achieved" && item.reward_claim_status !== "claimed"
+      this.isCampaignRewardClaimable(item)
     ) || null;
     const activeCampaign = resolvedCampaigns.find((item) => item.status === "active") || null;
     const claimedCampaign = resolvedCampaigns.find((item) => item.status === "reward_claimed") || null;
@@ -1750,7 +1775,7 @@ class CustomerProjectLogShareService {
     if (!focusCampaign && !recentLog) {
       return {
         project_id: projectId,
-        display_mode: "empty" as const,
+        display_mode: configResult.effective ? "empty" as const : "disabled" as const,
         config_enabled: Boolean(configResult.raw?.enabled),
         config_status: configResult.raw?.config_status || null,
         recommended_log: null,
@@ -1781,7 +1806,7 @@ class CustomerProjectLogShareService {
           : "continue_campaign"
       : configResult.effective
         ? "create_campaign"
-        : "empty";
+        : "disabled";
 
     return {
       project_id: projectId,
@@ -2174,12 +2199,11 @@ class CustomerProjectLogShareService {
     } else if (voucher.status === "expired") {
       canClaim = false;
       claimBlockReason = "voucher_expired";
-    } else if (finalCampaign.status === "closed") {
+    } else if (!this.isCampaignRewardClaimable(finalCampaign)) {
       canClaim = false;
-      claimBlockReason = "campaign_closed";
-    } else if (finalCampaign.status !== "achieved") {
-      canClaim = false;
-      claimBlockReason = "campaign_not_achieved";
+      claimBlockReason = finalCampaign.status === "closed"
+        ? "campaign_closed"
+        : "campaign_not_achieved";
     }
 
     return {
@@ -2218,8 +2242,8 @@ class CustomerProjectLogShareService {
       throw Errors.badRequest("当前活动奖励已领取");
     }
 
-    if (campaign.status !== "achieved") {
-      throw Errors.badRequest("当前活动未达到领奖状态");
+    if (!this.isCampaignRewardClaimable(campaign)) {
+      throw Errors.badRequest(campaign.status === "closed" ? "当前活动已关闭" : "当前活动未达到领奖状态");
     }
 
     if (!campaign.reward_claim_code || input.claim_code !== campaign.reward_claim_code) {
@@ -2269,12 +2293,10 @@ class CustomerProjectLogShareService {
       throw Errors.badRequest("领取凭证已过期");
     }
 
-    if (finalCampaign.status === "closed") {
-      throw Errors.badRequest("当前活动已关闭");
-    }
-
-    if (finalCampaign.status !== "achieved") {
-      throw Errors.badRequest("当前活动未达到领奖状态");
+    if (!this.isCampaignRewardClaimable(finalCampaign)) {
+      throw Errors.badRequest(
+        finalCampaign.status === "closed" ? "当前活动已关闭" : "当前活动未达到领奖状态",
+      );
     }
 
     const updatedCampaign = await customerProjectLogShareCampaignRepository.updateRewardMetadata({
