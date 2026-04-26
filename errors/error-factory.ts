@@ -54,6 +54,13 @@ export const Errors = {
 
   forbidden: () => new AppError(403, "无权限", ErrorCodes.FORBIDDEN),
 
+  business: (
+    statusCode: number,
+    msg: string,
+    code: string,
+    details?: unknown,
+  ) => new AppError(statusCode, msg, code, details),
+
   dbError: (msg = "数据库错误", details?: unknown) =>
     new AppError(500, msg, ErrorCodes.DB_ERROR, details),
 };

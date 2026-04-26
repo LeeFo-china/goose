@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
   AssistCustomerProjectLogShareCampaignInput,
+  ClaimCustomerProjectLogShareCampaignInput,
   CreateCustomerProjectLogShareRecordInput,
   CreateCustomerProjectLogShareCampaignInput,
   GenerateCustomerProjectLogShareCopyInput,
@@ -100,6 +102,10 @@ type ShareCampaignSummary = {
   assist_count: number;
   assist_uv: number;
   remaining_count: number;
+  reward_claim_status: CustomerProjectLogShareCampaignRow["reward_claim_status"];
+  reward_claim_code: string | null;
+  reward_claim_instruction: string | null;
+  reward_claim_channel: string | null;
 };
 
 type CampaignOwnerRow = {
@@ -111,6 +117,29 @@ type CampaignOwnerRow = {
 type UserProfileRow = {
   auth_user_id: string;
   nickname: string | null;
+  avatar_path: string | null;
+};
+
+type ViewerAssistInfo = {
+  is_authenticated: boolean;
+  can_assist: boolean;
+  assist_block_reason:
+    | "not_authenticated"
+    | "already_assisted"
+    | "owner_self"
+    | "campaign_achieved"
+    | "reward_claimed"
+    | "campaign_closed"
+    | "risk_blocked"
+    | null;
+  has_assisted: boolean;
+  is_owner: boolean;
+};
+
+type RecentHelperSummary = {
+  helper_name: string;
+  helper_avatar: string | null;
+  assisted_at: string | null;
 };
 
 function firstNonEmptyEnv(names: string[]) {
@@ -246,6 +275,35 @@ function buildCampaignRewardTitle(targetAssistCount: number) {
   return `${targetAssistCount}人助力解锁${DEFAULT_SHARE_REWARD_TITLE}`;
 }
 
+function buildRewardClaimCode(campaign: Pick<CustomerProjectLogShareCampaignRow, "id" | "created_at">) {
+  const baseDate = new Date(campaign.created_at);
+  const dateCode = [
+    String(baseDate.getFullYear()),
+    String(baseDate.getMonth() + 1).padStart(2, "0"),
+    String(baseDate.getDate()).padStart(2, "0"),
+  ].join("");
+  const suffix = campaign.id.replace(/-/g, "").slice(0, 4).toUpperCase();
+
+  return `MJ-CLAIM-${dateCode}-${suffix}`;
+}
+
+function getDefaultRewardClaimInstruction(targetAssistCount: number) {
+  return `邀请满${targetAssistCount}位好友助力后，到店出示领奖码领取礼品`;
+}
+
+function maskDisplayName(value: string | null | undefined) {
+  const text = value?.trim() || "";
+  if (!text) {
+    return "好友";
+  }
+
+  if (text.length === 1) {
+    return `${text}*`;
+  }
+
+  return `${text.slice(0, 1)}*`;
+}
+
 function buildShareToken() {
   return `st_${randomUUID().replace(/-/g, "")}`;
 }
@@ -364,7 +422,27 @@ class CustomerProjectLogShareService {
       assist_count: campaign.assist_count,
       assist_uv: campaign.assist_uv,
       remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
+      reward_claim_status: campaign.reward_claim_status,
+      reward_claim_code: campaign.reward_claim_code,
+      reward_claim_instruction: campaign.reward_claim_instruction,
+      reward_claim_channel: campaign.reward_claim_channel,
     };
+  }
+
+  private getImagePublicUrl(path: string | null | undefined) {
+    if (!path) {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+
+    return SupabaseDB.getAdminClient()
+      .storage
+      .from(PROJECT_LOGS_BUCKET)
+      .getPublicUrl(path)
+      .data.publicUrl;
   }
 
   private async getCustomerByAuthUserId(authUserId: string) {
@@ -451,7 +529,7 @@ class CustomerProjectLogShareService {
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("user_profiles")
-      .select("auth_user_id, nickname")
+      .select("auth_user_id, nickname, avatar_path")
       .eq("auth_user_id", authUserId)
       .maybeSingle();
 
@@ -460,6 +538,170 @@ class CustomerProjectLogShareService {
     }
 
     return (data || null) as UserProfileRow | null;
+  }
+
+  private async ensureCampaignRewardMetadata(
+    campaign: CustomerProjectLogShareCampaignRow,
+  ) {
+    const nextRewardClaimStatus = campaign.reward_claim_status
+      || (campaign.status === "reward_claimed" ? "claimed" : "unclaimed");
+    const nextRewardClaimCode = campaign.reward_claim_code
+      || (campaign.status === "achieved" || campaign.status === "reward_claimed"
+        ? buildRewardClaimCode(campaign)
+        : null);
+    const nextRewardClaimInstruction = campaign.reward_claim_instruction
+      || getDefaultRewardClaimInstruction(campaign.target_assist_count);
+    const nextRewardClaimChannel = campaign.reward_claim_channel || "store";
+
+    if (
+      nextRewardClaimStatus === campaign.reward_claim_status
+      && nextRewardClaimCode === campaign.reward_claim_code
+      && nextRewardClaimInstruction === campaign.reward_claim_instruction
+      && nextRewardClaimChannel === campaign.reward_claim_channel
+    ) {
+      return campaign;
+    }
+
+    return customerProjectLogShareCampaignRepository.updateRewardMetadata({
+      id: campaign.id,
+      reward_claim_status: nextRewardClaimStatus,
+      reward_claim_code: nextRewardClaimCode,
+      reward_claim_instruction: nextRewardClaimInstruction,
+      reward_claim_channel: nextRewardClaimChannel,
+    });
+  }
+
+  private serializeRecentHelpers(
+    rows: Array<{
+      helper_name: string | null;
+      helper_avatar: string | null;
+      created_at: string | null;
+    }>,
+  ): RecentHelperSummary[] {
+    return rows.map((row) => ({
+      helper_name: maskDisplayName(row.helper_name),
+      helper_avatar: this.getImagePublicUrl(row.helper_avatar),
+      assisted_at: row.created_at,
+    }));
+  }
+
+  private async getRecentHelpers(campaignId: string, limit: number) {
+    const result = await customerProjectLogShareCampaignRepository.listValidAssists({
+      campaign_id: campaignId,
+      limit,
+    });
+
+    return this.serializeRecentHelpers(result.list);
+  }
+
+  private async buildViewerAssistInfo(
+    campaign: CustomerProjectLogShareCampaignRow,
+    owner: CampaignOwnerRow,
+    viewer?: { authUserId?: string | null; openid?: string | null },
+  ): Promise<ViewerAssistInfo> {
+    const isAuthenticated = Boolean(viewer?.authUserId);
+    if (!isAuthenticated || !viewer?.authUserId) {
+      return {
+        is_authenticated: false,
+        can_assist: false,
+        assist_block_reason: "not_authenticated",
+        has_assisted: false,
+        is_owner: false,
+      };
+    }
+
+    const isOwner = Boolean(owner.user_id && owner.user_id === viewer.authUserId);
+    if (isOwner) {
+      return {
+        is_authenticated: true,
+        can_assist: false,
+        assist_block_reason: "owner_self",
+        has_assisted: false,
+        is_owner: true,
+      };
+    }
+
+    if (campaign.status === "achieved") {
+      return {
+        is_authenticated: true,
+        can_assist: false,
+        assist_block_reason: "campaign_achieved",
+        has_assisted: false,
+        is_owner: false,
+      };
+    }
+
+    if (campaign.status === "reward_claimed") {
+      return {
+        is_authenticated: true,
+        can_assist: false,
+        assist_block_reason: "reward_claimed",
+        has_assisted: false,
+        is_owner: false,
+      };
+    }
+
+    if (campaign.status === "closed") {
+      return {
+        is_authenticated: true,
+        can_assist: false,
+        assist_block_reason: "campaign_closed",
+        has_assisted: false,
+        is_owner: false,
+      };
+    }
+
+    const existingAssist = await customerProjectLogShareCampaignRepository.findAssist({
+      campaign_id: campaign.id,
+      helper_auth_user_id: viewer.authUserId,
+      helper_openid: viewer.openid ?? null,
+    });
+
+    if (existingAssist) {
+      return {
+        is_authenticated: true,
+        can_assist: false,
+        assist_block_reason: "already_assisted",
+        has_assisted: true,
+        is_owner: false,
+      };
+    }
+
+    return {
+      is_authenticated: true,
+      can_assist: true,
+      assist_block_reason: null,
+      has_assisted: false,
+      is_owner: false,
+    };
+  }
+
+  private buildAssistBlockedError(input: {
+    statusCode: number;
+    code: string;
+    message: string;
+    campaign: CustomerProjectLogShareCampaignRow;
+    reason: NonNullable<ViewerAssistInfo["assist_block_reason"]>;
+  }) {
+    return Errors.business(
+      input.statusCode,
+      input.message,
+      input.code,
+      {
+        assist_result: "blocked",
+        assist_block_reason: input.reason,
+        campaign_id: input.campaign.id,
+        share_token: input.campaign.share_token,
+        status: input.campaign.status,
+        reward_claim_status: input.campaign.reward_claim_status,
+        assist_count: input.campaign.assist_count,
+        target_assist_count: input.campaign.target_assist_count,
+        remaining_count: Math.max(
+          input.campaign.target_assist_count - input.campaign.assist_count,
+          0,
+        ),
+      },
+    );
   }
 
   private async getOwnedProjectLogContext(
@@ -546,6 +788,76 @@ class CustomerProjectLogShareService {
       log_images: normalizeProjectLogImages(log.images),
       created_at: log.created_at,
     };
+  }
+
+  private async getOwnedProject(authUserId: string, projectId: string) {
+    const customer = await this.getCustomerByAuthUserId(authUserId);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, customer_id, name")
+      .eq("id", projectId)
+      .eq("customer_id", customer.id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户项目失败", error);
+    }
+
+    if (!data) {
+      throw Errors.forbidden();
+    }
+
+    return {
+      customer,
+      project: data as { id: string; customer_id: string; name: string | null },
+    };
+  }
+
+  private async getOwnedCampaignById(authUserId: string, campaignId: string) {
+    const customer = await this.getCustomerByAuthUserId(authUserId);
+    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (!campaign || campaign.customer_id !== customer.id) {
+      throw Errors.forbidden();
+    }
+
+    return {
+      customer,
+      campaign: await this.ensureCampaignRewardMetadata(campaign),
+    };
+  }
+
+  private async getProjectLogById(logId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .eq("id", logId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询施工日志失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("施工日志不存在");
+    }
+
+    return data as CustomerProjectLogRow;
+  }
+
+  private async getRecentImageProjectLog(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      throw Errors.dbError("查询项目施工日志失败", error);
+    }
+
+    const logs = (data || []) as CustomerProjectLogRow[];
+    return logs.find((item) => normalizeProjectLogImages(item.images).length > 0) || null;
   }
 
   private async requestAiCopies(
@@ -768,7 +1080,7 @@ class CustomerProjectLogShareService {
 
     return {
       copies,
-      campaign: this.buildCampaignSummary(campaign),
+      campaign: this.buildCampaignSummary(await this.ensureCampaignRewardMetadata(campaign)),
     };
   }
 
@@ -785,6 +1097,8 @@ class CustomerProjectLogShareService {
       shareToken: query?.share_token,
       channel: "timeline",
     });
+    const finalCampaign = await this.ensureCampaignRewardMetadata(campaign);
+
     return {
       project_name: context.project_name,
       stage_code: context.stage_code,
@@ -794,15 +1108,15 @@ class CustomerProjectLogShareService {
       images: context.log_images,
       style_tags: context.project_style_tags,
       designer_name: context.designer_name,
-      share_reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
+      share_reward_title: buildCampaignRewardTitle(finalCampaign.target_assist_count),
       share_reward_code: buildShareRewardCode({
         customerId: context.customer_id,
         projectId: context.project_id,
         logId: context.log_id,
       }),
       share_reward_remark: DEFAULT_SHARE_REWARD_REMARK,
-      share_token: campaign.share_token,
-      campaign: this.buildCampaignSummary(campaign),
+      share_token: finalCampaign.share_token,
+      campaign: this.buildCampaignSummary(finalCampaign),
     };
   }
 
@@ -856,17 +1170,24 @@ class CustomerProjectLogShareService {
       channel: input.channel,
     });
 
-    return this.buildCampaignSummary(campaign);
+    return this.buildCampaignSummary(await this.ensureCampaignRewardMetadata(campaign));
   }
 
-  async getShareCampaignDetail(shareToken: string) {
+  async getShareCampaignDetail(
+    shareToken: string,
+    viewer?: { authUserId?: string | null; openid?: string | null },
+  ) {
     const detail = await this.buildCampaignPublicDetail(shareToken);
-    const campaign = detail.campaign;
+    const owner = await this.getCustomerById(detail.campaign.customer_id);
+    const campaign = await this.ensureCampaignRewardMetadata(detail.campaign);
+    const viewerInfo = await this.buildViewerAssistInfo(campaign, owner, viewer);
+    const recentHelpers = await this.getRecentHelpers(campaign.id, 3);
 
     return {
       campaign_id: campaign.id,
       share_token: campaign.share_token,
       status: campaign.status,
+      reward_claim_status: campaign.reward_claim_status,
       project_name: detail.project_name,
       stage_code: detail.stage_code,
       stage_label: detail.stage_label,
@@ -879,6 +1200,9 @@ class CustomerProjectLogShareService {
       remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
       reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
       reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      reward_claim_instruction: campaign.reward_claim_instruction,
+      viewer: viewerInfo,
+      recent_helpers: recentHelpers,
     };
   }
 
@@ -891,6 +1215,7 @@ class CustomerProjectLogShareService {
     },
   ) {
     const campaign = await this.getCampaignByToken(input.share_token);
+    const now = new Date().toISOString();
     await customerProjectLogShareCampaignRepository.createOpen({
       campaign_id: campaign.id,
       share_token: campaign.share_token,
@@ -900,14 +1225,18 @@ class CustomerProjectLogShareService {
       visitor_ip: visitor.ip ?? null,
       source: input.source,
     });
+    const updated = await customerProjectLogShareCampaignRepository.touchLatestOpenedAt(
+      campaign.id,
+      now,
+    );
 
     return {
-      campaign_id: campaign.id,
-      share_token: campaign.share_token,
-      assist_count: campaign.assist_count,
-      target_assist_count: campaign.target_assist_count,
-      remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
-      status: campaign.status,
+      campaign_id: updated.id,
+      share_token: updated.share_token,
+      assist_count: updated.assist_count,
+      target_assist_count: updated.target_assist_count,
+      remaining_count: Math.max(updated.target_assist_count - updated.assist_count, 0),
+      status: updated.status,
     };
   }
 
@@ -919,23 +1248,49 @@ class CustomerProjectLogShareService {
       ip?: string | null;
     },
   ) {
-    const campaign = await this.getCampaignByToken(input.share_token);
+    const campaign = await this.ensureCampaignRewardMetadata(
+      await this.getCampaignByToken(input.share_token),
+    );
 
     if (campaign.status !== "active") {
       if (campaign.status === "achieved") {
-        throw Errors.badRequest("当前活动已达标");
+        throw this.buildAssistBlockedError({
+          statusCode: 409,
+          code: ErrorCodes.CAMPAIGN_ACHIEVED,
+          message: "当前活动已达标",
+          campaign,
+          reason: "campaign_achieved",
+        });
       }
 
       if (campaign.status === "reward_claimed") {
-        throw Errors.badRequest("当前活动奖励已领取");
+        throw this.buildAssistBlockedError({
+          statusCode: 409,
+          code: ErrorCodes.REWARD_CLAIMED,
+          message: "当前活动奖励已领取",
+          campaign,
+          reason: "reward_claimed",
+        });
       }
 
-      throw Errors.badRequest("当前活动已关闭");
+      throw this.buildAssistBlockedError({
+        statusCode: 409,
+        code: ErrorCodes.CAMPAIGN_CLOSED,
+        message: "当前活动已关闭",
+        campaign,
+        reason: "campaign_closed",
+      });
     }
 
     const owner = await this.getCustomerById(campaign.customer_id);
     if (owner.user_id && owner.user_id === helper.authUserId) {
-      throw Errors.badRequest("不能给自己助力");
+      throw this.buildAssistBlockedError({
+        statusCode: 403,
+        code: ErrorCodes.OWNER_SELF_NOT_ALLOWED,
+        message: "不能给自己助力",
+        campaign,
+        reason: "owner_self",
+      });
     }
 
     const existingAssist = await customerProjectLogShareCampaignRepository.findAssist({
@@ -944,8 +1299,19 @@ class CustomerProjectLogShareService {
       helper_openid: helper.openid ?? null,
     });
     if (existingAssist) {
-      throw Errors.badRequest("你已经助力过了");
+      throw this.buildAssistBlockedError({
+        statusCode: 409,
+        code: ErrorCodes.ALREADY_ASSISTED,
+        message: "你已经助力过了",
+        campaign,
+        reason: "already_assisted",
+      });
     }
+
+    const helperProfile = await this.getUserProfileByAuthUserId(helper.authUserId);
+    const helperName = helperProfile?.nickname || "好友";
+    const helperAvatar = this.getImagePublicUrl(helperProfile?.avatar_path) || null;
+    const now = new Date().toISOString();
 
     await customerProjectLogShareCampaignRepository.createAssist({
       campaign_id: campaign.id,
@@ -955,6 +1321,8 @@ class CustomerProjectLogShareService {
       helper_device_id: null,
       helper_ip: helper.ip ?? null,
       source: input.source,
+      helper_name: helperName,
+      helper_avatar: helperAvatar,
     });
 
     const assistCount = await customerProjectLogShareCampaignRepository.countAssists(campaign.id);
@@ -964,9 +1332,19 @@ class CustomerProjectLogShareService {
       assist_count: assistCount,
       assist_uv: assistCount,
       status: nextStatus,
+      latest_assisted_at: now,
       achieved_at: nextStatus === "achieved"
         ? (campaign.achieved_at || new Date().toISOString())
         : null,
+      reward_claim_status: nextStatus === "achieved"
+        ? (campaign.reward_claim_status === "claimed" ? "claimed" : "unclaimed")
+        : campaign.reward_claim_status,
+      reward_claim_code: nextStatus === "achieved"
+        ? (campaign.reward_claim_code || buildRewardClaimCode(campaign))
+        : campaign.reward_claim_code,
+      reward_claim_instruction: campaign.reward_claim_instruction
+        || getDefaultRewardClaimInstruction(campaign.target_assist_count),
+      reward_claim_channel: campaign.reward_claim_channel || "store",
     });
 
     return {
@@ -974,6 +1352,7 @@ class CustomerProjectLogShareService {
       campaign_id: updatedCampaign.id,
       share_token: updatedCampaign.share_token,
       status: updatedCampaign.status,
+      reward_claim_status: updatedCampaign.reward_claim_status,
       assist_count: updatedCampaign.assist_count,
       target_assist_count: updatedCampaign.target_assist_count,
       remaining_count: Math.max(
@@ -1011,6 +1390,181 @@ class CustomerProjectLogShareService {
     return {
       ...record,
       campaign: this.buildCampaignSummary(campaign),
+    };
+  }
+
+  async getCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
+    const { customer } = await this.getOwnedProject(authUserId, projectId);
+    const campaigns = (await customerProjectLogShareCampaignRepository.listByProject({
+      customer_id: customer.id,
+      project_id: projectId,
+      limit: 20,
+    })).map((item) => this.ensureCampaignRewardMetadata(item));
+    const resolvedCampaigns = await Promise.all(campaigns);
+
+    const claimRewardCampaign = resolvedCampaigns.find((item) =>
+      item.status === "achieved" && item.reward_claim_status !== "claimed"
+    ) || null;
+    const activeCampaign = resolvedCampaigns.find((item) => item.status === "active") || null;
+    const claimedCampaign = resolvedCampaigns.find((item) => item.status === "reward_claimed") || null;
+
+    const focusCampaign = claimRewardCampaign || activeCampaign || claimedCampaign;
+    const recentLog = focusCampaign
+      ? await this.getProjectLogById(focusCampaign.log_id)
+      : await this.getRecentImageProjectLog(projectId);
+
+    if (!focusCampaign && !recentLog) {
+      return {
+        project_id: projectId,
+        display_mode: "empty" as const,
+        recommended_log: null,
+        focus_campaign: null,
+      };
+    }
+
+    const recommendedLog = recentLog
+      ? {
+        log_id: recentLog.id,
+        log_title: recentLog.node_name
+          || (isProjectLogStageCode(recentLog.stage_code)
+            ? PROJECT_LOG_STAGE_CONFIG[recentLog.stage_code].label
+            : "施工日志更新"),
+        stage_label: isProjectLogStageCode(recentLog.stage_code)
+          ? PROJECT_LOG_STAGE_CONFIG[recentLog.stage_code].label
+          : null,
+        created_at: recentLog.created_at,
+        cover_image: normalizeProjectLogImages(recentLog.images)[0] || null,
+      }
+      : null;
+
+    const displayMode = focusCampaign
+      ? focusCampaign.status === "achieved" && focusCampaign.reward_claim_status !== "claimed"
+        ? "claim_reward"
+        : focusCampaign.status === "reward_claimed"
+          ? "reward_claimed"
+          : "continue_campaign"
+      : "create_campaign";
+
+    return {
+      project_id: projectId,
+      display_mode: displayMode,
+      recommended_log: recommendedLog,
+      focus_campaign: focusCampaign
+        ? {
+          ...this.buildCampaignSummary(focusCampaign),
+          reward_title: buildCampaignRewardTitle(focusCampaign.target_assist_count),
+        }
+        : null,
+    };
+  }
+
+  async getCustomerCampaignDetail(authUserId: string, campaignId: string) {
+    const { campaign } = await this.getOwnedCampaignById(authUserId, campaignId);
+    const detail = await this.buildCampaignPublicDetail(campaign.share_token);
+    const recentHelpers = await this.getRecentHelpers(campaign.id, 3);
+
+    return {
+      campaign_id: campaign.id,
+      share_token: campaign.share_token,
+      project_id: campaign.project_id,
+      log_id: campaign.log_id,
+      status: campaign.status,
+      reward_claim_status: campaign.reward_claim_status,
+      project_name: detail.project_name,
+      stage_code: detail.stage_code,
+      stage_label: detail.stage_label,
+      log_title: detail.node_name || detail.stage_label || "施工日志更新",
+      images: detail.log_images,
+      assist_count: campaign.assist_count,
+      target_assist_count: campaign.target_assist_count,
+      remaining_count: Math.max(campaign.target_assist_count - campaign.assist_count, 0),
+      reward_title: buildCampaignRewardTitle(campaign.target_assist_count),
+      reward_remark: DEFAULT_SHARE_REWARD_REMARK,
+      reward_claim_code: campaign.reward_claim_code,
+      reward_claim_instruction: campaign.reward_claim_instruction,
+      reward_claim_channel: campaign.reward_claim_channel,
+      reward_claimed_at: campaign.reward_claimed_at,
+      recent_helpers: recentHelpers,
+    };
+  }
+
+  async listCustomerCampaignHelpers(
+    authUserId: string,
+    campaignId: string,
+    page: number,
+    pageSize: number,
+  ) {
+    const { campaign } = await this.getOwnedCampaignById(authUserId, campaignId);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const result = await customerProjectLogShareCampaignRepository.listValidAssists({
+      campaign_id: campaign.id,
+      from,
+      to,
+    });
+
+    return {
+      list: this.serializeRecentHelpers(result.list),
+      pagination: {
+        page,
+        pageSize,
+        total: result.count,
+        totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
+      },
+    };
+  }
+
+  async getCampaignMetaForEmployeeClaim(campaignId: string) {
+    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (!campaign) {
+      throw Errors.badRequest("分享活动不存在");
+    }
+
+    return {
+      id: campaign.id,
+      project_id: campaign.project_id,
+      status: campaign.status,
+    };
+  }
+
+  async claimCampaignReward(
+    campaignId: string,
+    employeeId: string,
+    input: ClaimCustomerProjectLogShareCampaignInput,
+  ) {
+    const campaign = await this.ensureCampaignRewardMetadata(
+      await customerProjectLogShareCampaignRepository.findById(campaignId)
+      || (() => {
+        throw Errors.badRequest("分享活动不存在");
+      })(),
+    );
+
+    if (campaign.status === "reward_claimed" || campaign.reward_claim_status === "claimed") {
+      throw Errors.badRequest("当前活动奖励已领取");
+    }
+
+    if (campaign.status !== "achieved") {
+      throw Errors.badRequest("当前活动未达到领奖状态");
+    }
+
+    if (!campaign.reward_claim_code || input.claim_code !== campaign.reward_claim_code) {
+      throw Errors.badRequest("领奖码不匹配");
+    }
+
+    const updatedCampaign = await customerProjectLogShareCampaignRepository.updateRewardMetadata({
+      id: campaign.id,
+      status: "reward_claimed",
+      reward_claim_status: "claimed",
+      reward_claim_channel: input.channel,
+      reward_claimed_at: new Date().toISOString(),
+      reward_claimed_by_employee_id: employeeId,
+    });
+
+    return {
+      campaign_id: updatedCampaign.id,
+      status: updatedCampaign.status,
+      reward_claim_status: updatedCampaign.reward_claim_status,
+      reward_claimed_at: updatedCampaign.reward_claimed_at,
     };
   }
 }

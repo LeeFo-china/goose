@@ -12,6 +12,15 @@ export type CustomerProjectLogShareCampaignRow = {
   target_assist_count: number;
   assist_count: number;
   assist_uv: number;
+  reward_claim_status: "unclaimed" | "pending" | "claimed" | "expired";
+  reward_claim_code: string | null;
+  reward_claim_instruction: string | null;
+  reward_claim_channel: string | null;
+  reward_claim_requested_at: string | null;
+  reward_claimed_by_employee_id: string | null;
+  closed_reason: string | null;
+  latest_opened_at: string | null;
+  latest_assisted_at: string | null;
   poster_generated_at: string | null;
   poster_saved_at: string | null;
   achieved_at: string | null;
@@ -29,6 +38,11 @@ export type CustomerProjectLogShareAssistRow = {
   helper_device_id: string | null;
   helper_ip: string | null;
   source: string;
+  helper_name: string | null;
+  helper_avatar: string | null;
+  is_valid: boolean;
+  invalid_reason: string | null;
+  risk_level: string;
   created_at: string;
 };
 
@@ -68,6 +82,40 @@ class CustomerProjectLogShareCampaignRepository {
     return (data || null) as CustomerProjectLogShareCampaignRow | null;
   }
 
+  async findById(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询分享活动失败", error);
+    }
+
+    return (data || null) as CustomerProjectLogShareCampaignRow | null;
+  }
+
+  async listByProject(input: {
+    customer_id: string;
+    project_id: string;
+    limit?: number;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .select("*")
+      .eq("customer_id", input.customer_id)
+      .eq("project_id", input.project_id)
+      .order("created_at", { ascending: false })
+      .limit(input.limit ?? 20);
+
+    if (error) {
+      throw Errors.dbError("查询项目分享活动失败", error);
+    }
+
+    return (data || []) as CustomerProjectLogShareCampaignRow[];
+  }
+
   async create(input: {
     share_token: string;
     customer_id: string;
@@ -89,6 +137,7 @@ class CustomerProjectLogShareCampaignRepository {
         target_assist_count: input.target_assist_count,
         assist_count: 0,
         assist_uv: 0,
+        reward_claim_status: "unclaimed",
         poster_generated_at: input.poster_generated_at,
       })
       .select("*")
@@ -107,6 +156,11 @@ class CustomerProjectLogShareCampaignRepository {
     assist_uv: number;
     status: CustomerProjectLogShareCampaignRow["status"];
     achieved_at: string | null;
+    latest_assisted_at?: string | null;
+    reward_claim_status?: CustomerProjectLogShareCampaignRow["reward_claim_status"];
+    reward_claim_code?: string | null;
+    reward_claim_instruction?: string | null;
+    reward_claim_channel?: string | null;
   }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_log_share_campaigns")
@@ -115,6 +169,11 @@ class CustomerProjectLogShareCampaignRepository {
         assist_uv: input.assist_uv,
         status: input.status,
         achieved_at: input.achieved_at,
+        latest_assisted_at: input.latest_assisted_at,
+        reward_claim_status: input.reward_claim_status,
+        reward_claim_code: input.reward_claim_code,
+        reward_claim_instruction: input.reward_claim_instruction,
+        reward_claim_channel: input.reward_claim_channel,
       })
       .eq("id", input.id)
       .select("*")
@@ -122,6 +181,42 @@ class CustomerProjectLogShareCampaignRepository {
 
     if (error || !data) {
       throw Errors.dbError("更新分享活动统计失败", error);
+    }
+
+    return data as CustomerProjectLogShareCampaignRow;
+  }
+
+  async updateRewardMetadata(input: {
+    id: string;
+    reward_claim_status?: CustomerProjectLogShareCampaignRow["reward_claim_status"];
+    reward_claim_code?: string | null;
+    reward_claim_instruction?: string | null;
+    reward_claim_channel?: string | null;
+    reward_claim_requested_at?: string | null;
+    reward_claimed_at?: string | null;
+    reward_claimed_by_employee_id?: string | null;
+    status?: CustomerProjectLogShareCampaignRow["status"];
+    closed_reason?: string | null;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .update({
+        reward_claim_status: input.reward_claim_status,
+        reward_claim_code: input.reward_claim_code,
+        reward_claim_instruction: input.reward_claim_instruction,
+        reward_claim_channel: input.reward_claim_channel,
+        reward_claim_requested_at: input.reward_claim_requested_at,
+        reward_claimed_at: input.reward_claimed_at,
+        reward_claimed_by_employee_id: input.reward_claimed_by_employee_id,
+        status: input.status,
+        closed_reason: input.closed_reason,
+      })
+      .eq("id", input.id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      throw Errors.dbError("更新分享活动领奖信息失败", error);
     }
 
     return data as CustomerProjectLogShareCampaignRow;
@@ -139,6 +234,23 @@ class CustomerProjectLogShareCampaignRepository {
 
     if (error || !data) {
       throw Errors.dbError("更新分享海报保存时间失败", error);
+    }
+
+    return data as CustomerProjectLogShareCampaignRow;
+  }
+
+  async touchLatestOpenedAt(id: string, latestOpenedAt: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_campaigns")
+      .update({
+        latest_opened_at: latestOpenedAt,
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      throw Errors.dbError("更新最近打开时间失败", error);
     }
 
     return data as CustomerProjectLogShareCampaignRow;
@@ -183,6 +295,7 @@ class CustomerProjectLogShareCampaignRepository {
       .from("customer_log_share_assists")
       .select("*")
       .eq("campaign_id", input.campaign_id)
+      .eq("is_valid", true)
       .limit(1);
 
     if (input.helper_auth_user_id) {
@@ -209,6 +322,11 @@ class CustomerProjectLogShareCampaignRepository {
     helper_device_id: string | null;
     helper_ip: string | null;
     source: string;
+    helper_name: string | null;
+    helper_avatar: string | null;
+    is_valid?: boolean;
+    invalid_reason?: string | null;
+    risk_level?: string;
   }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_log_share_assists")
@@ -220,6 +338,11 @@ class CustomerProjectLogShareCampaignRepository {
         helper_device_id: input.helper_device_id,
         helper_ip: input.helper_ip,
         source: input.source,
+        helper_name: input.helper_name,
+        helper_avatar: input.helper_avatar,
+        is_valid: input.is_valid ?? true,
+        invalid_reason: input.invalid_reason ?? null,
+        risk_level: input.risk_level ?? "normal",
       })
       .select("*")
       .single();
@@ -235,13 +358,44 @@ class CustomerProjectLogShareCampaignRepository {
     const { count, error } = await SupabaseDB.getAdminClient()
       .from("customer_log_share_assists")
       .select("id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId);
+      .eq("campaign_id", campaignId)
+      .eq("is_valid", true);
 
     if (error) {
       throw Errors.dbError("统计助力人数失败", error);
     }
 
     return count || 0;
+  }
+
+  async listValidAssists(input: {
+    campaign_id: string;
+    limit?: number;
+    from?: number;
+    to?: number;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("customer_log_share_assists")
+      .select("*", { count: "exact" })
+      .eq("campaign_id", input.campaign_id)
+      .eq("is_valid", true)
+      .order("created_at", { ascending: false });
+
+    if (typeof input.from === "number" && typeof input.to === "number") {
+      query = query.range(input.from, input.to);
+    } else {
+      query = query.limit(input.limit ?? 20);
+    }
+
+    const { data, error, count } = await query;
+    if (error) {
+      throw Errors.dbError("查询助力好友失败", error);
+    }
+
+    return {
+      list: (data || []) as CustomerProjectLogShareAssistRow[],
+      count: count || 0,
+    };
   }
 }
 
