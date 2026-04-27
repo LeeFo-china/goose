@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  EMPLOYEE_ROLE_VALUES,
   EMPLOYEE_STATUS_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
@@ -55,13 +54,6 @@ export const EmployeeBaseSchema = z.object({
   last_login_time: optionalNullableDateTime(
     "登录时间必须是有效的 ISO 8601 格式",
   ),
-
-  // 角色：建议使用枚举，防止乱填
-  role: z
-    .enum(EMPLOYEE_ROLE_VALUES, {
-      message: "请选择有效的员工角色",
-    })
-    .default("employee"),
 
   // 状态
   status: z.enum(EMPLOYEE_STATUS_VALUES, {

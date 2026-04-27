@@ -85,9 +85,9 @@ type ExpenseRequestVisibilityFilter =
 class ExpenseRequestRepository {
   private summarySelect = `
     *,
-    employee:employees!expense_requests_employee_id_fkey(id, name, phone, role, status),
+    employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
     project:projects(id, name, status),
-    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, role, status),
+    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     settlement:expense_request_settlements(
       id,
       method,
@@ -99,9 +99,9 @@ class ExpenseRequestRepository {
 
   private detailSelect = `
     *,
-    employee:employees!expense_requests_employee_id_fkey(id, name, phone, role, status),
+    employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
     project:projects(id, name, status, signed_amount, customer_id),
-    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, role, status),
+    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     items:expense_request_items(
       id,
       occurred_at,
@@ -125,7 +125,6 @@ class ExpenseRequestRepository {
         id,
         name,
         phone,
-        role,
         status
       )
     ),
@@ -146,7 +145,6 @@ class ExpenseRequestRepository {
         id,
         name,
         phone,
-        role,
         status
       )
     )

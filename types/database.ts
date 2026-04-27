@@ -276,7 +276,6 @@ export type Database = {
           name: string | null
           phone: string | null
           post_id: string | null
-          role: string | null
           status: string | null
           user_id: string | null
         }
@@ -289,7 +288,6 @@ export type Database = {
           name?: string | null
           phone?: string | null
           post_id?: string | null
-          role?: string | null
           status?: string | null
           user_id?: string | null
         }
@@ -302,7 +300,6 @@ export type Database = {
           name?: string | null
           phone?: string | null
           post_id?: string | null
-          role?: string | null
           status?: string | null
           user_id?: string | null
         }

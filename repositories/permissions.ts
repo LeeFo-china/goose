@@ -42,7 +42,6 @@ export type EmployeePermissionContextRecord = {
   employee: {
     id: string;
     user_id: string | null;
-    role: string | null;
     status: string | null;
     department_id: string | null;
     post_id: string | null;
@@ -363,7 +362,7 @@ class PermissionRepository {
   async findEmployeeById(id: string) {
     const { data, error } = await this.adminClient
       .from("employees")
-      .select("id, user_id, role, status, department_id, post_id, name, phone")
+      .select("id, user_id, status, department_id, post_id, name, phone")
       .eq("id", id)
       .maybeSingle();
 
@@ -377,7 +376,7 @@ class PermissionRepository {
   async findEmployeeByAuthUserId(authUserId: string) {
     const { data, error } = await this.adminClient
       .from("employees")
-      .select("id, user_id, role, status, department_id, post_id, name, phone")
+      .select("id, user_id, status, department_id, post_id, name, phone")
       .eq("user_id", authUserId)
       .maybeSingle();
 

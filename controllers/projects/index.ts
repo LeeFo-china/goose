@@ -43,7 +43,7 @@ type ProjectCreateSelectCustomerRow = Pick<
 type ProjectCreateSelectEmployeeRow =
   & Pick<
     Tables<"employees">,
-    "id" | "name" | "phone" | "role" | "avatar"
+    "id" | "name" | "phone" | "avatar"
   >
   & {
     department:
@@ -1158,7 +1158,7 @@ class ProjectController extends BaseController<
             name: item.name,
             phone: item.phone,
             avatar: item.avatar ?? null,
-            role_label: item.role,
+            role_label: post?.name || null,
             department: department
               ? {
                 id: department.id,
@@ -1237,7 +1237,7 @@ class ProjectController extends BaseController<
             name: item.name,
             phone: item.phone,
             avatar: item.avatar ?? null,
-            role_label: item.role,
+            role_label: post?.name || null,
             department: department
               ? {
                 id: department.id,
@@ -1345,7 +1345,6 @@ class ProjectController extends BaseController<
         name,
         avatar,
         phone,
-        role,
         department:departments!employees_department_id_fkey(id, name, code),
         post:posts!employees_post_id_fkey(id, name, code)
       `,
