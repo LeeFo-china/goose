@@ -2285,8 +2285,12 @@ class CustomerProjectLogShareService {
   private campaignVisibleToEmployee(
     campaign: MarketingCampaignRow,
     scopes: MarketingCampaignProjectScopeRow[],
-    visibleProjectIds: string[],
+    visibleProjectIds: string[] | null,
   ) {
+    if (visibleProjectIds === null) {
+      return true;
+    }
+
     if (!visibleProjectIds.length) {
       return false;
     }
@@ -2343,10 +2347,10 @@ class CustomerProjectLogShareService {
     authContext: AuthContext,
     query: MarketingCampaignListQuery,
   ) {
-    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
-    )) || [];
+    );
     const result = await marketingCampaignRepository.list({
       campaignType: query.campaign_type,
       status: query.status,
@@ -2388,10 +2392,10 @@ class CustomerProjectLogShareService {
   }
 
   async getMarketingCampaignDetail(authContext: AuthContext, campaignId: string) {
-    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
-    )) || [];
+    );
     const campaign = await this.getMarketingCampaignOrThrow(campaignId);
     const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
 
@@ -2441,11 +2445,13 @@ class CustomerProjectLogShareService {
   ) {
     const scopeRows = this.buildMarketingCampaignScopeRows(input);
     if (scopeRows.length) {
-      const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+      const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
         authContext,
         "project.update",
-      )) || [];
-      const invalid = scopeRows.some((item) => !visibleProjectIds.includes(item.project_id));
+      );
+      const invalid = visibleProjectIds
+        ? scopeRows.some((item) => !visibleProjectIds.includes(item.project_id))
+        : false;
       if (invalid) {
         throw Errors.forbidden();
       }
@@ -2479,10 +2485,10 @@ class CustomerProjectLogShareService {
     input: UpdateMarketingCampaignInput,
   ) {
     const existing = await this.getMarketingCampaignOrThrow(campaignId);
-    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.update",
-    )) || [];
+    );
     const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
     if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
       throw Errors.forbidden();
@@ -2490,7 +2496,9 @@ class CustomerProjectLogShareService {
 
     const scopeRows = this.buildMarketingCampaignScopeRows(input);
     if (scopeRows.length) {
-      const invalid = scopeRows.some((item) => !visibleProjectIds.includes(item.project_id));
+      const invalid = visibleProjectIds
+        ? scopeRows.some((item) => !visibleProjectIds.includes(item.project_id))
+        : false;
       if (invalid) {
         throw Errors.forbidden();
       }
@@ -2522,10 +2530,10 @@ class CustomerProjectLogShareService {
     campaignId: string,
     input: MarketingCampaignStatusUpdateInput,
   ) {
-    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.update",
-    )) || [];
+    );
     const existing = await this.getMarketingCampaignOrThrow(campaignId);
     const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
     if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
@@ -2541,10 +2549,10 @@ class CustomerProjectLogShareService {
     campaignId: string,
     query: MarketingCampaignInstanceListQuery,
   ) {
-    const visibleProjectIds = (await accessPolicyService.getVisibleProjectIds(
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
-    )) || [];
+    );
     const campaign = await this.getMarketingCampaignOrThrow(campaignId);
     const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
     if (!this.campaignVisibleToEmployee(campaign, scopes, visibleProjectIds)) {
