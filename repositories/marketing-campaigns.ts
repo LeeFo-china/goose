@@ -20,6 +20,8 @@ export type MarketingCampaignRow = {
   reward_remark: string | null;
   reward_claim_instruction: string | null;
   reward_claim_channel: string | null;
+  template_id: string | null;
+  template_snapshot: Record<string, unknown> | null;
   config_payload: Record<string, unknown> | null;
   created_by_employee_id: string | null;
   updated_by_employee_id: string | null;
@@ -114,6 +116,8 @@ class MarketingCampaignRepository {
     reward_remark: string | null;
     reward_claim_instruction: string | null;
     reward_claim_channel: string | null;
+    template_id: string | null;
+    template_snapshot: Record<string, unknown> | null;
     config_payload: Record<string, unknown>;
     created_by_employee_id: string | null;
     updated_by_employee_id: string | null;
@@ -143,6 +147,8 @@ class MarketingCampaignRepository {
     reward_remark: string | null;
     reward_claim_instruction: string | null;
     reward_claim_channel: string | null;
+    template_id: string | null;
+    template_snapshot: Record<string, unknown> | null;
     config_payload: Record<string, unknown>;
     updated_by_employee_id: string | null;
   }) {
@@ -161,6 +167,8 @@ class MarketingCampaignRepository {
         reward_remark: input.reward_remark,
         reward_claim_instruction: input.reward_claim_instruction,
         reward_claim_channel: input.reward_claim_channel,
+        template_id: input.template_id,
+        template_snapshot: input.template_snapshot,
         config_payload: input.config_payload,
         updated_by_employee_id: input.updated_by_employee_id,
       })

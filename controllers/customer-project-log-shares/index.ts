@@ -21,12 +21,17 @@ import {
 import { customerProjectLogShareService } from "@/services/customer-project-log-shares";
 import {
   CreateMarketingCampaignSchema,
+  CreateMarketingCampaignTemplateSchema,
   MarketingCampaignIdParamsSchema,
   MarketingCampaignInstanceIdParamsSchema,
   MarketingCampaignInstanceListQuerySchema,
   MarketingCampaignListQuerySchema,
   MarketingCampaignStatusUpdateSchema,
+  MarketingCampaignTemplateIdParamsSchema,
+  MarketingCampaignTemplateListQuerySchema,
+  MarketingCampaignTemplateStatusUpdateSchema,
   UpdateMarketingCampaignSchema,
+  UpdateMarketingCampaignTemplateSchema,
 } from "@/schema/marketing-center-campaign";
 import {
   EmployeeProjectShareCampaignConfigParamsSchema,
@@ -432,6 +437,88 @@ class CustomerProjectLogSharesController extends BaseController {
       ...this.withCampaignType(data),
       list: this.withCampaignTypeList(data.list),
     });
+  }
+
+  @Get("/employee/marketing-center/templates")
+  async listMarketingCenterTemplates(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const queryResult = MarketingCampaignTemplateListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerProjectLogShareService.listMarketingCampaignTemplates(
+      queryResult.data,
+    );
+
+    return ResponseHandler.success({
+      ...this.withCampaignType(data),
+      list: this.withCampaignTypeList(data.list),
+    });
+  }
+
+  @Post("/employee/marketing-center/templates")
+  async createMarketingCenterTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const bodyResult = CreateMarketingCampaignTemplateSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.createMarketingCampaignTemplate(
+      authContext,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/employee/marketing-center/templates/:templateId")
+  async getMarketingCenterTemplateDetail(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.read");
+    const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await customerProjectLogShareService.getMarketingCampaignTemplateDetail(
+      paramsResult.data.templateId,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Put("/employee/marketing-center/templates/:templateId")
+  async updateMarketingCenterTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = UpdateMarketingCampaignTemplateSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.updateMarketingCampaignTemplate(
+      authContext,
+      paramsResult.data.templateId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Post("/employee/marketing-center/templates/:templateId/status")
+  async updateMarketingCenterTemplateStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "project.update");
+    const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = MarketingCampaignTemplateStatusUpdateSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.updateMarketingCampaignTemplateStatus(
+      authContext,
+      paramsResult.data.templateId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Post("/employee/marketing-center/campaigns")

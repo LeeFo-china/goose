@@ -9,6 +9,11 @@ import {
   type MarketingCampaignProjectScopeRow,
   type MarketingCampaignRow,
 } from "@/repositories/marketing-campaigns";
+import {
+  marketingCampaignTemplateRepository,
+  type MarketingCampaignTemplateRow,
+  type MarketingCampaignTemplateStatus,
+} from "@/repositories/marketing-campaign-templates";
 import { projectShareCampaignConfigRepository, type ProjectShareCampaignConfigRow } from "@/repositories/project-share-campaign-configs";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
@@ -23,10 +28,15 @@ import type {
 } from "@/schema/customer-project-log-share";
 import type {
   CreateMarketingCampaignInput,
+  CreateMarketingCampaignTemplateInput,
   MarketingCampaignInstanceListQuery,
   MarketingCampaignListQuery,
   MarketingCampaignStatusUpdateInput,
+  MarketingCampaignTemplateListQuery,
+  MarketingCampaignTemplateStatusUpdateInput,
+  MarketingCampaignUpsertInput,
   UpdateMarketingCampaignInput,
+  UpdateMarketingCampaignTemplateInput,
 } from "@/schema/marketing-center-campaign";
 import type {
   EmployeeShareCampaignListQuery,
@@ -130,6 +140,26 @@ type ShareCampaignSummary = {
   reward_claim_code: string | null;
   reward_claim_instruction: string | null;
   reward_claim_channel: string | null;
+};
+
+type MarketingCampaignTemplateSnapshot = {
+  id: string;
+  campaign_type: "share_assist";
+  name: string;
+  description: string | null;
+  status: MarketingCampaignTemplateStatus;
+  enabled: boolean;
+  default_target_scope_type: "all_projects" | "project_list";
+  reward_title: string | null;
+  reward_remark: string | null;
+  reward_claim_instruction: string | null;
+  reward_claim_channel: string | null;
+  config_payload: {
+    target_assist_count: number;
+    allow_create_when_existing_active: boolean;
+    default_display_title: string | null;
+    default_display_subtitle: string | null;
+  };
 };
 
 type CampaignOwnerRow = {
@@ -841,6 +871,84 @@ class CustomerProjectLogShareService {
       default_display_subtitle: typeof payload?.default_display_subtitle === "string"
         ? payload.default_display_subtitle.trim() || null
         : null,
+    };
+  }
+
+  private normalizeMarketingCampaignTemplateEnabled(status: MarketingCampaignTemplateStatus, enabled: boolean) {
+    return status === "disabled" ? false : enabled;
+  }
+
+  private buildMarketingCampaignTemplateSnapshot(
+    template: MarketingCampaignTemplateRow,
+  ): MarketingCampaignTemplateSnapshot {
+    return {
+      id: template.id,
+      campaign_type: template.campaign_type,
+      name: template.name,
+      description: template.description,
+      status: template.status,
+      enabled: template.enabled,
+      default_target_scope_type: template.default_target_scope_type,
+      reward_title: template.reward_title,
+      reward_remark: template.reward_remark,
+      reward_claim_instruction: template.reward_claim_instruction,
+      reward_claim_channel: template.reward_claim_channel,
+      config_payload: this.parseMarketingCampaignConfigPayload(template.config_payload),
+    };
+  }
+
+  private parseMarketingCampaignTemplateSnapshot(
+    value: Record<string, unknown> | null,
+  ): MarketingCampaignTemplateSnapshot | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const campaignType = value.campaign_type === "share_assist" ? "share_assist" : null;
+    const status = value.status === "draft" || value.status === "active" || value.status === "disabled"
+      ? value.status
+      : null;
+    const scopeType = value.default_target_scope_type === "project_list" ? "project_list" : "all_projects";
+
+    if (!campaignType || !status || typeof value.id !== "string" || typeof value.name !== "string") {
+      return null;
+    }
+
+    return {
+      id: value.id,
+      campaign_type: campaignType,
+      name: value.name,
+      description: typeof value.description === "string" ? value.description : null,
+      status,
+      enabled: Boolean(value.enabled),
+      default_target_scope_type: scopeType,
+      reward_title: typeof value.reward_title === "string" ? value.reward_title : null,
+      reward_remark: typeof value.reward_remark === "string" ? value.reward_remark : null,
+      reward_claim_instruction: typeof value.reward_claim_instruction === "string"
+        ? value.reward_claim_instruction
+        : null,
+      reward_claim_channel: typeof value.reward_claim_channel === "string"
+        ? value.reward_claim_channel
+        : null,
+      config_payload: this.parseMarketingCampaignConfigPayload(
+        typeof value.config_payload === "object" && value.config_payload !== null
+          ? value.config_payload as Record<string, unknown>
+          : null,
+      ),
+    };
+  }
+
+  private buildMarketingCampaignTemplateConfigPayload(
+    input:
+      | CreateMarketingCampaignTemplateInput
+      | UpdateMarketingCampaignTemplateInput
+      | MarketingCampaignUpsertInput,
+  ) {
+    return {
+      target_assist_count: input.config_payload.target_assist_count,
+      allow_create_when_existing_active: input.config_payload.allow_create_when_existing_active,
+      default_display_title: input.config_payload.default_display_title ?? null,
+      default_display_subtitle: input.config_payload.default_display_subtitle ?? null,
     };
   }
 
@@ -2316,19 +2424,73 @@ class CustomerProjectLogShareService {
     return campaign;
   }
 
-  private buildMarketingCampaignConfigPayload(
-    input: CreateMarketingCampaignInput | UpdateMarketingCampaignInput,
-  ) {
-    return {
-      target_assist_count: input.config_payload.target_assist_count,
-      allow_create_when_existing_active: input.config_payload.allow_create_when_existing_active,
-      default_display_title: input.config_payload.default_display_title ?? null,
-      default_display_subtitle: input.config_payload.default_display_subtitle ?? null,
+  private async getMarketingCampaignTemplateOrThrow(id: string) {
+    const template = await marketingCampaignTemplateRepository.findById(id);
+    if (!template) {
+      throw Errors.business(404, "营销模板不存在", ErrorCodes.MARKETING_TEMPLATE_NOT_FOUND);
+    }
+    return template;
+  }
+
+  private resolveMarketingCampaignCreateInput(
+    input: CreateMarketingCampaignInput,
+    template: MarketingCampaignTemplateRow | null,
+  ): MarketingCampaignUpsertInput {
+    const templatePayload = template
+      ? this.parseMarketingCampaignConfigPayload(template.config_payload)
+      : null;
+
+    const campaignType = template?.campaign_type ?? input.campaign_type;
+    const targetScopeType = input.target_scope_type
+      ?? template?.default_target_scope_type
+      ?? "all_projects";
+
+    const resolved: MarketingCampaignUpsertInput = {
+      campaign_type: campaignType,
+      name: input.name?.trim() || template?.name || "未命名营销活动",
+      enabled: typeof input.enabled === "boolean"
+        ? input.enabled
+        : template
+          ? template.status !== "disabled" && template.enabled
+          : true,
+      status: input.status ?? "draft",
+      target_scope_type: targetScopeType,
+      valid_from: input.valid_from ?? null,
+      valid_until: input.valid_until ?? null,
+      auto_close_on_expire: typeof input.auto_close_on_expire === "boolean"
+        ? input.auto_close_on_expire
+        : true,
+      reward_title: input.reward_title ?? template?.reward_title ?? null,
+      reward_remark: input.reward_remark ?? template?.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? template?.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? template?.reward_claim_channel ?? null,
+      exclude_project_ids: input.exclude_project_ids ?? [],
+      include_project_ids: input.include_project_ids ?? [],
+      config_payload: {
+        target_assist_count: input.config_payload?.target_assist_count
+          ?? templatePayload?.target_assist_count
+          ?? getCustomerProjectLogShareTargetAssistCount(),
+        allow_create_when_existing_active: input.config_payload?.allow_create_when_existing_active
+          ?? templatePayload?.allow_create_when_existing_active
+          ?? false,
+        default_display_title: input.config_payload?.default_display_title
+          ?? templatePayload?.default_display_title
+          ?? null,
+        default_display_subtitle: input.config_payload?.default_display_subtitle
+          ?? templatePayload?.default_display_subtitle
+          ?? null,
+      },
     };
+
+    if (resolved.target_scope_type === "project_list" && !resolved.include_project_ids.length) {
+      throw Errors.badRequest("项目范围为指定项目时必须提供 include_project_ids");
+    }
+
+    return resolved;
   }
 
   private buildMarketingCampaignScopeRows(
-    input: CreateMarketingCampaignInput | UpdateMarketingCampaignInput,
+    input: MarketingCampaignUpsertInput,
   ) {
     if (input.target_scope_type === "project_list") {
       return input.include_project_ids.map((project_id) => ({
@@ -2391,6 +2553,131 @@ class CustomerProjectLogShareService {
     };
   }
 
+  async listMarketingCampaignTemplates(
+    query: MarketingCampaignTemplateListQuery,
+  ) {
+    const result = await marketingCampaignTemplateRepository.list({
+      campaignType: query.campaign_type,
+      status: query.status,
+      keyword: query.keyword,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+
+    return {
+      list: result.list.map((template) => ({
+        id: template.id,
+        campaign_type: template.campaign_type,
+        name: template.name,
+        description: template.description,
+        status: template.status,
+        enabled: template.enabled,
+        is_builtin: template.is_builtin,
+        default_target_scope_type: template.default_target_scope_type,
+        reward_title: template.reward_title,
+        reward_claim_channel: template.reward_claim_channel,
+        updated_at: template.updated_at,
+      })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: result.total,
+        totalPages: result.total ? Math.ceil(result.total / query.pageSize) : 0,
+      },
+    };
+  }
+
+  async getMarketingCampaignTemplateDetail(templateId: string) {
+    const template = await this.getMarketingCampaignTemplateOrThrow(templateId);
+
+    return {
+      id: template.id,
+      campaign_type: template.campaign_type,
+      name: template.name,
+      description: template.description,
+      status: template.status,
+      enabled: template.enabled,
+      is_builtin: template.is_builtin,
+      default_target_scope_type: template.default_target_scope_type,
+      reward_title: template.reward_title,
+      reward_remark: template.reward_remark,
+      reward_claim_instruction: template.reward_claim_instruction,
+      reward_claim_channel: template.reward_claim_channel,
+      config_payload: this.parseMarketingCampaignConfigPayload(template.config_payload),
+      created_at: template.created_at,
+      updated_at: template.updated_at,
+    };
+  }
+
+  async createMarketingCampaignTemplate(
+    authContext: AuthContext,
+    input: CreateMarketingCampaignTemplateInput,
+  ) {
+    const normalizedEnabled = this.normalizeMarketingCampaignTemplateEnabled(input.status, input.enabled);
+    const template = await marketingCampaignTemplateRepository.create({
+      campaign_type: input.campaign_type,
+      name: input.name,
+      description: input.description ?? null,
+      status: input.status,
+      enabled: normalizedEnabled,
+      is_builtin: input.is_builtin,
+      default_target_scope_type: input.default_target_scope_type,
+      reward_title: input.reward_title ?? null,
+      reward_remark: input.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? null,
+      config_payload: this.buildMarketingCampaignTemplateConfigPayload(input),
+      created_by_employee_id: authContext.employeeId,
+      updated_by_employee_id: authContext.employeeId,
+    });
+
+    return {
+      id: template.id,
+    };
+  }
+
+  async updateMarketingCampaignTemplate(
+    authContext: AuthContext,
+    templateId: string,
+    input: UpdateMarketingCampaignTemplateInput,
+  ) {
+    await this.getMarketingCampaignTemplateOrThrow(templateId);
+    const normalizedEnabled = this.normalizeMarketingCampaignTemplateEnabled(input.status, input.enabled);
+
+    await marketingCampaignTemplateRepository.update({
+      id: templateId,
+      campaign_type: input.campaign_type,
+      name: input.name,
+      description: input.description ?? null,
+      status: input.status,
+      enabled: normalizedEnabled,
+      is_builtin: input.is_builtin,
+      default_target_scope_type: input.default_target_scope_type,
+      reward_title: input.reward_title ?? null,
+      reward_remark: input.reward_remark ?? null,
+      reward_claim_instruction: input.reward_claim_instruction ?? null,
+      reward_claim_channel: input.reward_claim_channel ?? null,
+      config_payload: this.buildMarketingCampaignTemplateConfigPayload(input),
+      updated_by_employee_id: authContext.employeeId,
+    });
+
+    return this.getMarketingCampaignTemplateDetail(templateId);
+  }
+
+  async updateMarketingCampaignTemplateStatus(
+    authContext: AuthContext,
+    templateId: string,
+    input: MarketingCampaignTemplateStatusUpdateInput,
+  ) {
+    await this.getMarketingCampaignTemplateOrThrow(templateId);
+    await marketingCampaignTemplateRepository.updateStatus(
+      templateId,
+      input.status,
+      authContext.employeeId,
+    );
+    return this.getMarketingCampaignTemplateDetail(templateId);
+  }
+
   async getMarketingCampaignDetail(authContext: AuthContext, campaignId: string) {
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
@@ -2404,6 +2691,10 @@ class CustomerProjectLogShareService {
     }
 
     const payload = this.parseMarketingCampaignConfigPayload(campaign.config_payload);
+    const templateSummary = campaign.template_id
+      ? await marketingCampaignTemplateRepository.findById(campaign.template_id)
+      : null;
+    const templateSnapshot = this.parseMarketingCampaignTemplateSnapshot(campaign.template_snapshot);
     const projectMap = await this.getScopeProjectMap(scopes.map((item) => item.project_id));
     const instanceSummary = await customerProjectLogShareCampaignRepository.countByMarketingCampaignStatus(
       campaignId,
@@ -2415,6 +2706,15 @@ class CustomerProjectLogShareService {
       name: campaign.name,
       status: campaign.status,
       enabled: campaign.enabled,
+      template_id: campaign.template_id,
+      template_summary: templateSummary
+        ? {
+          id: templateSummary.id,
+          name: templateSummary.name,
+          status: templateSummary.status,
+        }
+        : null,
+      template_snapshot: templateSnapshot,
       target_scope_type: campaign.target_scope_type,
       valid_from: campaign.valid_from,
       valid_until: campaign.valid_until,
@@ -2443,7 +2743,29 @@ class CustomerProjectLogShareService {
     authContext: AuthContext,
     input: CreateMarketingCampaignInput,
   ) {
-    const scopeRows = this.buildMarketingCampaignScopeRows(input);
+    const template = input.template_id
+      ? await this.getMarketingCampaignTemplateOrThrow(input.template_id)
+      : null;
+
+    if (template) {
+      if (template.campaign_type !== input.campaign_type) {
+        throw Errors.business(
+          400,
+          "模板活动类型与当前活动类型不一致",
+          ErrorCodes.MARKETING_TEMPLATE_CAMPAIGN_TYPE_MISMATCH,
+        );
+      }
+      if (template.status !== "active" || !template.enabled) {
+        throw Errors.business(
+          409,
+          "当前模板不可用于创建活动",
+          ErrorCodes.MARKETING_TEMPLATE_DISABLED,
+        );
+      }
+    }
+
+    const resolvedInput = this.resolveMarketingCampaignCreateInput(input, template);
+    const scopeRows = this.buildMarketingCampaignScopeRows(resolvedInput);
     if (scopeRows.length) {
       const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
         authContext,
@@ -2458,19 +2780,21 @@ class CustomerProjectLogShareService {
     }
 
     const campaign = await marketingCampaignRepository.create({
-      campaign_type: input.campaign_type,
-      name: input.name,
-      enabled: input.enabled,
-      status: input.status,
-      target_scope_type: input.target_scope_type,
-      valid_from: input.valid_from ?? null,
-      valid_until: input.valid_until ?? null,
-      auto_close_on_expire: input.auto_close_on_expire,
-      reward_title: input.reward_title ?? null,
-      reward_remark: input.reward_remark ?? null,
-      reward_claim_instruction: input.reward_claim_instruction ?? null,
-      reward_claim_channel: input.reward_claim_channel ?? null,
-      config_payload: this.buildMarketingCampaignConfigPayload(input),
+      campaign_type: resolvedInput.campaign_type,
+      name: resolvedInput.name,
+      enabled: resolvedInput.enabled,
+      status: resolvedInput.status,
+      target_scope_type: resolvedInput.target_scope_type,
+      valid_from: resolvedInput.valid_from ?? null,
+      valid_until: resolvedInput.valid_until ?? null,
+      auto_close_on_expire: resolvedInput.auto_close_on_expire,
+      reward_title: resolvedInput.reward_title ?? null,
+      reward_remark: resolvedInput.reward_remark ?? null,
+      reward_claim_instruction: resolvedInput.reward_claim_instruction ?? null,
+      reward_claim_channel: resolvedInput.reward_claim_channel ?? null,
+      template_id: template?.id ?? null,
+      template_snapshot: template ? this.buildMarketingCampaignTemplateSnapshot(template) : null,
+      config_payload: this.buildMarketingCampaignTemplateConfigPayload(resolvedInput),
       created_by_employee_id: authContext.employeeId,
       updated_by_employee_id: authContext.employeeId,
     });
@@ -2518,7 +2842,9 @@ class CustomerProjectLogShareService {
       reward_remark: input.reward_remark ?? null,
       reward_claim_instruction: input.reward_claim_instruction ?? null,
       reward_claim_channel: input.reward_claim_channel ?? null,
-      config_payload: this.buildMarketingCampaignConfigPayload(input),
+      template_id: existing.template_id,
+      template_snapshot: existing.template_snapshot,
+      config_payload: this.buildMarketingCampaignTemplateConfigPayload(input),
       updated_by_employee_id: authContext.employeeId,
     });
     await marketingCampaignRepository.replaceScopes(campaignId, scopeRows);
