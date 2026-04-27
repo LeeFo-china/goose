@@ -21,6 +21,7 @@ const ALLOWED_MIME_TYPES = new Set([
 const ALLOWED_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
+  "customer_follow_up_comment",
   "expense_request",
   "referral_payment",
   "employee_avatar",
@@ -152,6 +153,7 @@ class UploadController extends BaseController {
     const prefixByScene: Record<UploadScene, string> = {
       project_log: options.projectId?.trim() || "unassigned",
       project_log_comment: "project-log-comment",
+      customer_follow_up_comment: "customer-follow-up-comment",
       expense_request: "expense-request",
       referral_payment: "referral-payment",
       employee_avatar: "employee-avatar",

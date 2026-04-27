@@ -30,6 +30,7 @@ import EmployeePermissionsController from "@/controllers/employee-permissions";
 import TaskCenterController from "@/controllers/task-center";
 import CustomerSelfServiceController from "@/controllers/customer-self-service";
 import CustomerProjectLogSharesController from "@/controllers/customer-project-log-shares";
+import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up-comments";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -45,6 +46,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TaskCenterController.registerExtraRoutes(app);
   CustomerSelfServiceController.registerExtraRoutes(app);
   CustomerProjectLogSharesController.registerExtraRoutes(app);
+  CustomerFollowUpCommentsController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));

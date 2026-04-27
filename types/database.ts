@@ -56,6 +56,64 @@ export type Database = {
           },
         ]
       }
+      customer_follow_up_comments: {
+        Row: {
+          author_employee_id: string
+          content: string
+          created_at: string
+          follow_up_id: string
+          id: string
+          images: string[]
+          parent_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          author_employee_id: string
+          content: string
+          created_at?: string
+          follow_up_id: string
+          id?: string
+          images?: string[]
+          parent_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          author_employee_id?: string
+          content?: string
+          created_at?: string
+          follow_up_id?: string
+          id?: string
+          images?: string[]
+          parent_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_follow_up_comments_author_employee_id_fkey"
+            columns: ["author_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_follow_up_comments_follow_up_id_fkey"
+            columns: ["follow_up_id"]
+            isOneToOne: false
+            referencedRelation: "customer_follow_ups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_follow_up_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "customer_follow_up_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string | null

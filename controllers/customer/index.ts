@@ -18,6 +18,7 @@ import type {
 import { PaginationQuerySchema } from "@/schema/request";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
 
 type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
@@ -540,10 +541,15 @@ class CustomerController extends BaseController<
     }
 
     return ResponseHandler.success({
-      list: (((data || []) as unknown) as Array<{
-        employee?: unknown;
-        employee_id: string | null;
-      }>).map((item) => this.serializeFollowUp(item)),
+      list: await customerFollowUpCommentService.enrichFollowUpsWithCommentSummaries(
+        authContext,
+        customer.data,
+        (((data || []) as unknown) as Array<{
+          id: string;
+          employee?: unknown;
+          employee_id: string | null;
+        }>).map((item) => this.serializeFollowUp(item)),
+      ),
       pagination: {
         page,
         pageSize,
