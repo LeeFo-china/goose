@@ -14,6 +14,10 @@ import {
   type MarketingCampaignTemplateRow,
   type MarketingCampaignTemplateStatus,
 } from "@/repositories/marketing-campaign-templates";
+import {
+  customerAppointmentRewardCampaignRepository,
+  type CustomerAppointmentRewardCampaignRow,
+} from "@/repositories/customer-appointment-reward-campaigns";
 import { projectShareCampaignConfigRepository, type ProjectShareCampaignConfigRow } from "@/repositories/project-share-campaign-configs";
 import { customerProjectLogShareRepository } from "@/repositories/customer-project-log-shares";
 import type {
@@ -29,15 +33,22 @@ import type {
 import type {
   CreateMarketingCampaignInput,
   CreateMarketingCampaignTemplateInput,
+  AppointmentRewardConfigPayload,
   MarketingCampaignInstanceListQuery,
   MarketingCampaignListQuery,
   MarketingCampaignStatusUpdateInput,
+  ShareAssistConfigPayload,
   MarketingCampaignTemplateListQuery,
   MarketingCampaignTemplateStatusUpdateInput,
   MarketingCampaignUpsertInput,
   UpdateMarketingCampaignInput,
   UpdateMarketingCampaignTemplateInput,
 } from "@/schema/marketing-center-campaign";
+import type {
+  CustomerAppointmentRewardSubmitInput,
+  EmployeeAppointmentRewardArriveInput,
+  EmployeeAppointmentRewardClaimInput,
+} from "@/schema/appointment-reward";
 import type {
   EmployeeShareCampaignListQuery,
   EmployeeShareCampaignStatsSummaryQuery,
@@ -144,7 +155,7 @@ type ShareCampaignSummary = {
 
 type MarketingCampaignTemplateSnapshot = {
   id: string;
-  campaign_type: "share_assist";
+  campaign_type: "share_assist" | "appointment_reward";
   name: string;
   description: string | null;
   status: MarketingCampaignTemplateStatus;
@@ -154,12 +165,14 @@ type MarketingCampaignTemplateSnapshot = {
   reward_remark: string | null;
   reward_claim_instruction: string | null;
   reward_claim_channel: string | null;
-  config_payload: {
-    target_assist_count: number;
-    allow_create_when_existing_active: boolean;
-    default_display_title: string | null;
-    default_display_subtitle: string | null;
-  };
+  config_payload: Record<string, unknown>;
+};
+
+type AppointmentRewardSummary = {
+  reward_title: string | null;
+  reward_claim_instruction: string | null;
+  display_title: string | null;
+  display_subtitle: string | null;
 };
 
 type CampaignOwnerRow = {
@@ -222,13 +235,6 @@ type EffectiveShareCampaignConfig = {
   valid_from: string | null;
   valid_until: string | null;
   auto_close_on_expire: boolean;
-  allow_create_when_existing_active: boolean;
-  default_display_title: string | null;
-  default_display_subtitle: string | null;
-};
-
-type MarketingCampaignConfigPayload = {
-  target_assist_count: number;
   allow_create_when_existing_active: boolean;
   default_display_title: string | null;
   default_display_subtitle: string | null;
@@ -402,6 +408,18 @@ function buildRewardClaimVoucherToken() {
 
 function getDefaultRewardClaimInstruction(targetAssistCount: number) {
   return `邀请满${targetAssistCount}位好友助力后，到店出示领奖码领取礼品`;
+}
+
+function getAppointmentRewardTitle(value: string | null | undefined) {
+  return value?.trim() || "预约到店即可领取礼品";
+}
+
+function getAppointmentRewardClaimInstruction(value: string | null | undefined) {
+  return value?.trim() || "提交预约信息并到店后可领取礼品";
+}
+
+function normalizePhoneLike(value: string) {
+  return value.trim();
 }
 
 function maskDisplayName(value: string | null | undefined) {
@@ -855,7 +873,7 @@ class CustomerProjectLogShareService {
     };
   }
 
-  private parseMarketingCampaignConfigPayload(payload: Record<string, unknown> | null): MarketingCampaignConfigPayload {
+  private parseShareAssistConfigPayload(payload: Record<string, unknown> | null): ShareAssistConfigPayload {
     const targetAssistCount = typeof payload?.target_assist_count === "number"
       ? payload.target_assist_count
       : getCustomerProjectLogShareTargetAssistCount();
@@ -872,6 +890,34 @@ class CustomerProjectLogShareService {
         ? payload.default_display_subtitle.trim() || null
         : null,
     };
+  }
+
+  private parseAppointmentRewardConfigPayload(
+    payload: Record<string, unknown> | null,
+  ): AppointmentRewardConfigPayload {
+    const achievementMode = payload?.achievement_mode === "store_checkin"
+      ? "store_checkin"
+      : "appointment_submit";
+
+    return {
+      achievement_mode: achievementMode,
+      allow_one_active_per_customer: payload?.allow_one_active_per_customer === false ? false : true,
+      default_display_title: typeof payload?.default_display_title === "string"
+        ? payload.default_display_title.trim() || null
+        : null,
+      default_display_subtitle: typeof payload?.default_display_subtitle === "string"
+        ? payload.default_display_subtitle.trim() || null
+        : null,
+    };
+  }
+
+  private buildNormalizedMarketingCampaignConfigPayload(
+    campaignType: MarketingCampaignRow["campaign_type"] | MarketingCampaignTemplateRow["campaign_type"],
+    payload: Record<string, unknown> | null,
+  ) {
+    return campaignType === "appointment_reward"
+      ? this.parseAppointmentRewardConfigPayload(payload)
+      : this.parseShareAssistConfigPayload(payload);
   }
 
   private normalizeMarketingCampaignTemplateEnabled(status: MarketingCampaignTemplateStatus, enabled: boolean) {
@@ -893,7 +939,10 @@ class CustomerProjectLogShareService {
       reward_remark: template.reward_remark,
       reward_claim_instruction: template.reward_claim_instruction,
       reward_claim_channel: template.reward_claim_channel,
-      config_payload: this.parseMarketingCampaignConfigPayload(template.config_payload),
+      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+        template.campaign_type,
+        template.config_payload,
+      ),
     };
   }
 
@@ -904,7 +953,9 @@ class CustomerProjectLogShareService {
       return null;
     }
 
-    const campaignType = value.campaign_type === "share_assist" ? "share_assist" : null;
+    const campaignType = value.campaign_type === "share_assist" || value.campaign_type === "appointment_reward"
+      ? value.campaign_type
+      : null;
     const status = value.status === "draft" || value.status === "active" || value.status === "disabled"
       ? value.status
       : null;
@@ -930,7 +981,8 @@ class CustomerProjectLogShareService {
       reward_claim_channel: typeof value.reward_claim_channel === "string"
         ? value.reward_claim_channel
         : null,
-      config_payload: this.parseMarketingCampaignConfigPayload(
+      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+        campaignType,
         typeof value.config_payload === "object" && value.config_payload !== null
           ? value.config_payload as Record<string, unknown>
           : null,
@@ -944,18 +996,29 @@ class CustomerProjectLogShareService {
       | UpdateMarketingCampaignTemplateInput
       | MarketingCampaignUpsertInput,
   ) {
+    if (input.campaign_type === "appointment_reward") {
+      const payload = input.config_payload as AppointmentRewardConfigPayload;
+      return {
+        achievement_mode: payload.achievement_mode,
+        allow_one_active_per_customer: payload.allow_one_active_per_customer,
+        default_display_title: payload.default_display_title ?? null,
+        default_display_subtitle: payload.default_display_subtitle ?? null,
+      };
+    }
+
+    const payload = input.config_payload as ShareAssistConfigPayload;
     return {
-      target_assist_count: input.config_payload.target_assist_count,
-      allow_create_when_existing_active: input.config_payload.allow_create_when_existing_active,
-      default_display_title: input.config_payload.default_display_title ?? null,
-      default_display_subtitle: input.config_payload.default_display_subtitle ?? null,
+      target_assist_count: payload.target_assist_count,
+      allow_create_when_existing_active: payload.allow_create_when_existing_active,
+      default_display_title: payload.default_display_title ?? null,
+      default_display_subtitle: payload.default_display_subtitle ?? null,
     };
   }
 
   private buildEffectiveConfigFromMarketingCampaign(
     campaign: MarketingCampaignRow,
   ): EffectiveShareCampaignConfig {
-    const payload = this.parseMarketingCampaignConfigPayload(campaign.config_payload);
+    const payload = this.parseShareAssistConfigPayload(campaign.config_payload);
 
     return {
       config_id: null,
@@ -977,8 +1040,8 @@ class CustomerProjectLogShareService {
       valid_until: campaign.valid_until,
       auto_close_on_expire: campaign.auto_close_on_expire,
       allow_create_when_existing_active: payload.allow_create_when_existing_active,
-      default_display_title: payload.default_display_title,
-      default_display_subtitle: payload.default_display_subtitle,
+      default_display_title: payload.default_display_title ?? null,
+      default_display_subtitle: payload.default_display_subtitle ?? null,
     };
   }
 
@@ -1097,7 +1160,7 @@ class CustomerProjectLogShareService {
 
   private async getMatchingMarketingCampaign(
     projectId: string,
-    campaignType: "share_assist" = "share_assist",
+    campaignType: "share_assist" | "appointment_reward" = "share_assist",
   ) {
     const campaigns = await marketingCampaignRepository.listActiveByType(campaignType);
     if (!campaigns.length) {
@@ -1123,6 +1186,16 @@ class CustomerProjectLogShareService {
     return {
       campaign: matched,
       scopes: scopes.filter((item) => item.campaign_id === matched.id),
+    };
+  }
+
+  private buildAppointmentRewardSummary(campaign: MarketingCampaignRow): AppointmentRewardSummary {
+    const payload = this.parseAppointmentRewardConfigPayload(campaign.config_payload);
+    return {
+      reward_title: getAppointmentRewardTitle(campaign.reward_title),
+      reward_claim_instruction: getAppointmentRewardClaimInstruction(campaign.reward_claim_instruction),
+      display_title: payload.default_display_title || "预约到店可领取专属礼品",
+      display_subtitle: payload.default_display_subtitle || "提交预约信息并到店即可参与活动",
     };
   }
 
@@ -1376,6 +1449,24 @@ class CustomerProjectLogShareService {
       customer,
       project: data as { id: string; customer_id: string; name: string | null },
     };
+  }
+
+  private async getOwnedProjectById(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, customer_id, name")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("项目不存在");
+    }
+
+    return data as { id: string; customer_id: string; name: string | null };
   }
 
   private async getOwnedCampaignById(authUserId: string, campaignId: string) {
@@ -1846,6 +1937,54 @@ class CustomerProjectLogShareService {
     return buffer;
   }
 
+  async getAppointmentRewardClaimVoucherQrcodeBuffer(voucherToken: string) {
+    const campaign = await customerAppointmentRewardCampaignRepository.findByVoucherToken(
+      normalizeVoucherToken(voucherToken),
+    );
+    if (!campaign) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const finalCampaign = await this.ensureAppointmentRewardMetadata(campaign);
+    if (!finalCampaign.reward_claim_voucher_token) {
+      throw Errors.badRequest("领取凭证不存在");
+    }
+
+    const accessToken = await this.getWechatAccessToken();
+    const response = await fetch(
+      `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${accessToken}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
+          page: getWechatShareCampaignClaimVoucherPage(),
+          check_path: false,
+          env_version: "release",
+        }),
+      },
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      throw Errors.dbError("生成领取凭证二维码失败", { status: response.status });
+    }
+
+    if (contentType.includes("application/json")) {
+      const result = await response.json();
+      throw Errors.dbError("生成领取凭证二维码失败", result);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) {
+      throw Errors.dbError("生成领取凭证二维码失败");
+    }
+
+    return buffer;
+  }
+
   async getOrCreateShareCampaign(
     authUserId: string,
     projectId: string,
@@ -2215,6 +2354,185 @@ class CustomerProjectLogShareService {
     };
   }
 
+  async getOrCreateCustomerAppointmentRewardCampaign(authUserId: string, projectId: string) {
+    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
+    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+
+    if (!matched) {
+      throw Errors.business(
+        404,
+        "当前项目未命中预约奖励活动",
+        ErrorCodes.APPOINTMENT_REWARD_CAMPAIGN_NOT_FOUND,
+      );
+    }
+
+    const payload = this.parseAppointmentRewardConfigPayload(matched.campaign.config_payload);
+    let instance = await customerAppointmentRewardCampaignRepository.findByCampaignCustomerProject({
+      campaign_id: matched.campaign.id,
+      customer_id: customer.id,
+      project_id: project.id,
+    });
+
+    if (!instance) {
+      instance = await customerAppointmentRewardCampaignRepository.create({
+        campaign_id: matched.campaign.id,
+        customer_id: customer.id,
+        project_id: project.id,
+      });
+    }
+
+    const summary = this.buildAppointmentRewardSummary(matched.campaign);
+
+    return {
+      instance_id: instance.id,
+      campaign_id: matched.campaign.id,
+      campaign_type: "appointment_reward" as const,
+      status: instance.status,
+      reward_claim_status: instance.reward_claim_status,
+      project_id: project.id,
+      project_name: project.name,
+      reward_title: summary.reward_title,
+      reward_claim_instruction: summary.reward_claim_instruction,
+      display_title: summary.display_title,
+      display_subtitle: summary.display_subtitle,
+    };
+  }
+
+  async getCustomerAppointmentRewardCampaign(authUserId: string, projectId: string) {
+    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
+    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+
+    if (!matched) {
+      throw Errors.business(
+        404,
+        "当前项目未命中预约奖励活动",
+        ErrorCodes.APPOINTMENT_REWARD_CAMPAIGN_NOT_FOUND,
+      );
+    }
+
+    let instance = await customerAppointmentRewardCampaignRepository.findByCampaignCustomerProject({
+      campaign_id: matched.campaign.id,
+      customer_id: customer.id,
+      project_id: project.id,
+    });
+
+    if (instance) {
+      instance = await this.ensureAppointmentRewardMetadata(instance);
+    }
+
+    const summary = this.buildAppointmentRewardSummary(matched.campaign);
+    const voucher = instance ? this.buildAppointmentRewardVoucherPayload(instance) : null;
+
+    return {
+      instance_id: instance?.id ?? null,
+      campaign_id: matched.campaign.id,
+      campaign_type: "appointment_reward" as const,
+      status: instance?.status ?? "active",
+      reward_claim_status: instance?.reward_claim_status ?? "unclaimed",
+      project_id: project.id,
+      project_name: project.name,
+      appointment_name: instance?.appointment_name ?? null,
+      appointment_phone: instance?.appointment_phone ?? null,
+      appointment_time: instance?.appointment_time ?? null,
+      achieved_at: instance?.achieved_at ?? null,
+      reward_claimed_at: instance?.reward_claimed_at ?? null,
+      reward_title: summary.reward_title,
+      reward_claim_instruction: summary.reward_claim_instruction,
+      display_title: summary.display_title,
+      display_subtitle: summary.display_subtitle,
+      reward_claim_voucher: voucher,
+    };
+  }
+
+  async submitCustomerAppointmentRewardCampaign(
+    authUserId: string,
+    projectId: string,
+    input: CustomerAppointmentRewardSubmitInput,
+  ) {
+    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
+    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+
+    if (!matched) {
+      throw Errors.business(
+        404,
+        "当前项目未命中预约奖励活动",
+        ErrorCodes.APPOINTMENT_REWARD_CAMPAIGN_NOT_FOUND,
+      );
+    }
+
+    const appointmentTime = new Date(input.appointment_time);
+    if (Number.isNaN(appointmentTime.getTime())) {
+      throw Errors.business(
+        400,
+        "预约时间不合法",
+        ErrorCodes.APPOINTMENT_REWARD_INVALID_APPOINTMENT_TIME,
+      );
+    }
+
+    const payload = this.parseAppointmentRewardConfigPayload(matched.campaign.config_payload);
+
+    let instance = await customerAppointmentRewardCampaignRepository.findByCampaignCustomerProject({
+      campaign_id: matched.campaign.id,
+      customer_id: customer.id,
+      project_id: project.id,
+    });
+
+    if (!instance) {
+      instance = await customerAppointmentRewardCampaignRepository.create({
+        campaign_id: matched.campaign.id,
+        customer_id: customer.id,
+        project_id: project.id,
+      });
+    }
+
+    if (instance.status === "reward_claimed" || instance.reward_claim_status === "claimed") {
+      throw Errors.business(
+        409,
+        "当前预约奖励已领奖",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_CLAIMED,
+      );
+    }
+
+    if (instance.status === "achieved") {
+      throw Errors.business(
+        409,
+        "当前预约奖励已达成",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_ACHIEVED,
+      );
+    }
+
+    if (instance.appointment_name || instance.appointment_phone || instance.appointment_time) {
+      throw Errors.business(
+        409,
+        "当前预约奖励已提交预约信息",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_SUBMITTED,
+      );
+    }
+
+    instance = await customerAppointmentRewardCampaignRepository.update({
+      id: instance.id,
+      appointment_name: input.appointment_name,
+      appointment_phone: normalizePhoneLike(input.appointment_phone),
+      appointment_time: input.appointment_time,
+      status: payload.achievement_mode === "appointment_submit" ? "achieved" : "active",
+      reward_claim_status: "unclaimed",
+      achieved_at: payload.achievement_mode === "appointment_submit" ? new Date().toISOString() : null,
+      reward_claim_code: payload.achievement_mode === "appointment_submit" ? buildRewardClaimCode(instance) : null,
+      reward_claim_voucher_token: payload.achievement_mode === "appointment_submit"
+        ? buildRewardClaimVoucherToken()
+        : null,
+    });
+
+    instance = await this.ensureAppointmentRewardMetadata(instance);
+
+    return {
+      instance_id: instance.id,
+      status: instance.status,
+      reward_claim_status: instance.reward_claim_status,
+      achieved_at: instance.achieved_at,
+    };
+  }
+
   async getEmployeeProjectCampaignConfig(projectId: string) {
     const config = await this.getProjectConfig(projectId);
     const summary = await customerProjectLogShareCampaignRepository.countByProjectStatus(projectId);
@@ -2424,6 +2742,50 @@ class CustomerProjectLogShareService {
     return campaign;
   }
 
+  private buildAppointmentRewardVoucherPayload(
+    campaign: CustomerAppointmentRewardCampaignRow,
+  ) {
+    if (!campaign.reward_claim_voucher_token) {
+      return null;
+    }
+
+    const status = campaign.reward_claim_status === "claimed"
+      ? "claimed"
+      : campaign.status === "closed"
+        ? "expired"
+        : "active";
+
+    return {
+      voucher_token: campaign.reward_claim_voucher_token,
+      status,
+      expires_at: null as string | null,
+    };
+  }
+
+  private async ensureAppointmentRewardMetadata(
+    campaign: CustomerAppointmentRewardCampaignRow,
+  ) {
+    if (campaign.status !== "achieved" && campaign.status !== "reward_claimed") {
+      return campaign;
+    }
+
+    const rewardClaimCode = campaign.reward_claim_code || buildRewardClaimCode(campaign);
+    const voucherToken = campaign.reward_claim_voucher_token || buildRewardClaimVoucherToken();
+
+    if (
+      rewardClaimCode === campaign.reward_claim_code
+      && voucherToken === campaign.reward_claim_voucher_token
+    ) {
+      return campaign;
+    }
+
+    return customerAppointmentRewardCampaignRepository.update({
+      id: campaign.id,
+      reward_claim_code: rewardClaimCode,
+      reward_claim_voucher_token: voucherToken,
+    });
+  }
+
   private async getMarketingCampaignTemplateOrThrow(id: string) {
     const template = await marketingCampaignTemplateRepository.findById(id);
     if (!template) {
@@ -2437,7 +2799,10 @@ class CustomerProjectLogShareService {
     template: MarketingCampaignTemplateRow | null,
   ): MarketingCampaignUpsertInput {
     const templatePayload = template
-      ? this.parseMarketingCampaignConfigPayload(template.config_payload)
+      ? this.buildNormalizedMarketingCampaignConfigPayload(
+        template.campaign_type,
+        template.config_payload,
+      )
       : null;
 
     const campaignType = template?.campaign_type ?? input.campaign_type;
@@ -2466,20 +2831,35 @@ class CustomerProjectLogShareService {
       reward_claim_channel: input.reward_claim_channel ?? template?.reward_claim_channel ?? null,
       exclude_project_ids: input.exclude_project_ids ?? [],
       include_project_ids: input.include_project_ids ?? [],
-      config_payload: {
-        target_assist_count: input.config_payload?.target_assist_count
-          ?? templatePayload?.target_assist_count
-          ?? getCustomerProjectLogShareTargetAssistCount(),
-        allow_create_when_existing_active: input.config_payload?.allow_create_when_existing_active
-          ?? templatePayload?.allow_create_when_existing_active
-          ?? false,
-        default_display_title: input.config_payload?.default_display_title
-          ?? templatePayload?.default_display_title
-          ?? null,
-        default_display_subtitle: input.config_payload?.default_display_subtitle
-          ?? templatePayload?.default_display_subtitle
-          ?? null,
-      },
+      config_payload: campaignType === "appointment_reward"
+        ? {
+          achievement_mode: (input.config_payload as Partial<AppointmentRewardConfigPayload> | undefined)?.achievement_mode
+            ?? (templatePayload as AppointmentRewardConfigPayload | null)?.achievement_mode
+            ?? "appointment_submit",
+          allow_one_active_per_customer: (input.config_payload as Partial<AppointmentRewardConfigPayload> | undefined)?.allow_one_active_per_customer
+            ?? (templatePayload as AppointmentRewardConfigPayload | null)?.allow_one_active_per_customer
+            ?? true,
+          default_display_title: (input.config_payload as Partial<AppointmentRewardConfigPayload> | undefined)?.default_display_title
+            ?? (templatePayload as AppointmentRewardConfigPayload | null)?.default_display_title
+            ?? null,
+          default_display_subtitle: (input.config_payload as Partial<AppointmentRewardConfigPayload> | undefined)?.default_display_subtitle
+            ?? (templatePayload as AppointmentRewardConfigPayload | null)?.default_display_subtitle
+            ?? null,
+        }
+        : {
+          target_assist_count: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.target_assist_count
+            ?? (templatePayload as ShareAssistConfigPayload | null)?.target_assist_count
+            ?? getCustomerProjectLogShareTargetAssistCount(),
+          allow_create_when_existing_active: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.allow_create_when_existing_active
+            ?? (templatePayload as ShareAssistConfigPayload | null)?.allow_create_when_existing_active
+            ?? false,
+          default_display_title: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.default_display_title
+            ?? (templatePayload as ShareAssistConfigPayload | null)?.default_display_title
+            ?? null,
+          default_display_subtitle: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.default_display_subtitle
+            ?? (templatePayload as ShareAssistConfigPayload | null)?.default_display_subtitle
+            ?? null,
+        },
     };
 
     if (resolved.target_scope_type === "project_list" && !resolved.include_project_ids.length) {
@@ -2603,7 +2983,10 @@ class CustomerProjectLogShareService {
       reward_remark: template.reward_remark,
       reward_claim_instruction: template.reward_claim_instruction,
       reward_claim_channel: template.reward_claim_channel,
-      config_payload: this.parseMarketingCampaignConfigPayload(template.config_payload),
+      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+        template.campaign_type,
+        template.config_payload,
+      ),
       created_at: template.created_at,
       updated_at: template.updated_at,
     };
@@ -2690,15 +3073,14 @@ class CustomerProjectLogShareService {
       throw Errors.forbidden();
     }
 
-    const payload = this.parseMarketingCampaignConfigPayload(campaign.config_payload);
     const templateSummary = campaign.template_id
       ? await marketingCampaignTemplateRepository.findById(campaign.template_id)
       : null;
     const templateSnapshot = this.parseMarketingCampaignTemplateSnapshot(campaign.template_snapshot);
     const projectMap = await this.getScopeProjectMap(scopes.map((item) => item.project_id));
-    const instanceSummary = await customerProjectLogShareCampaignRepository.countByMarketingCampaignStatus(
-      campaignId,
-    );
+    const instanceSummary = campaign.campaign_type === "appointment_reward"
+      ? await customerAppointmentRewardCampaignRepository.countByMarketingCampaignStatus(campaignId)
+      : await customerProjectLogShareCampaignRepository.countByMarketingCampaignStatus(campaignId);
 
     return {
       id: campaign.id,
@@ -2723,7 +3105,10 @@ class CustomerProjectLogShareService {
       reward_remark: campaign.reward_remark,
       reward_claim_instruction: campaign.reward_claim_instruction,
       reward_claim_channel: campaign.reward_claim_channel,
-      config_payload: payload,
+      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+        campaign.campaign_type,
+        campaign.config_payload,
+      ),
       exclude_project_ids: scopes
         .filter((item) => item.scope_mode === "exclude")
         .map((item) => item.project_id),
@@ -2885,6 +3270,30 @@ class CustomerProjectLogShareService {
       throw Errors.forbidden();
     }
 
+    if (campaign.campaign_type === "appointment_reward") {
+      const result = await customerAppointmentRewardCampaignRepository.listForEmployee({
+        campaignId,
+        projectIds: visibleProjectIds,
+        status: query.status,
+        rewardClaimStatus: query.rewardClaimStatus,
+        keyword: query.keyword,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        page: query.page,
+        pageSize: query.pageSize,
+      });
+
+      return {
+        list: result.list,
+        pagination: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: result.total,
+          totalPages: result.total ? Math.ceil(result.total / query.pageSize) : 0,
+        },
+      };
+    }
+
     const result = await customerProjectLogShareCampaignRepository.listForEmployee({
       campaignId,
       projectIds: visibleProjectIds,
@@ -2908,6 +3317,163 @@ class CustomerProjectLogShareService {
         total: result.total,
         totalPages: result.total ? Math.ceil(result.total / query.pageSize) : 0,
       },
+    };
+  }
+
+  async getEmployeeAppointmentRewardCampaignDetail(instanceId: string) {
+    const instance = await customerAppointmentRewardCampaignRepository.findById(instanceId);
+    if (!instance) {
+      throw Errors.business(
+        404,
+        "预约奖励实例不存在",
+        ErrorCodes.APPOINTMENT_REWARD_INSTANCE_NOT_FOUND,
+      );
+    }
+
+    const campaign = await this.getMarketingCampaignOrThrow(instance.campaign_id);
+    const project = await this.getOwnedProjectById(instance.project_id);
+    const customer = await this.getCustomerById(instance.customer_id);
+    const finalInstance = await this.ensureAppointmentRewardMetadata(instance);
+    const voucher = this.buildAppointmentRewardVoucherPayload(finalInstance);
+
+    return {
+      instance_id: finalInstance.id,
+      campaign_id: finalInstance.campaign_id,
+      campaign_type: "appointment_reward" as const,
+      customer_id: finalInstance.customer_id,
+      customer_name: customer.name,
+      project_id: finalInstance.project_id,
+      project_name: project.name,
+      appointment_name: finalInstance.appointment_name,
+      appointment_phone: finalInstance.appointment_phone,
+      appointment_time: finalInstance.appointment_time,
+      status: finalInstance.status,
+      reward_claim_status: finalInstance.reward_claim_status,
+      reward_claim_code: finalInstance.reward_claim_code,
+      achieved_at: finalInstance.achieved_at,
+      reward_claimed_at: finalInstance.reward_claimed_at,
+      reward_title: getAppointmentRewardTitle(campaign.reward_title),
+      reward_claim_instruction: getAppointmentRewardClaimInstruction(campaign.reward_claim_instruction),
+      voucher: voucher
+        ? {
+          voucher_token: voucher.voucher_token,
+          status: voucher.status,
+          expires_at: voucher.expires_at,
+        }
+        : null,
+      created_at: finalInstance.created_at,
+      updated_at: finalInstance.updated_at,
+    };
+  }
+
+  async confirmEmployeeAppointmentRewardArrive(
+    instanceId: string,
+  ) {
+    const instance = await customerAppointmentRewardCampaignRepository.findById(instanceId);
+    if (!instance) {
+      throw Errors.business(
+        404,
+        "预约奖励实例不存在",
+        ErrorCodes.APPOINTMENT_REWARD_INSTANCE_NOT_FOUND,
+      );
+    }
+
+    if (instance.status === "reward_claimed" || instance.reward_claim_status === "claimed") {
+      throw Errors.business(
+        409,
+        "当前预约奖励已领奖",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_CLAIMED,
+      );
+    }
+
+    if (instance.status === "achieved") {
+      throw Errors.business(
+        409,
+        "当前预约奖励已达成",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_ACHIEVED,
+      );
+    }
+
+    const campaign = await this.getMarketingCampaignOrThrow(instance.campaign_id);
+    const payload = this.parseAppointmentRewardConfigPayload(campaign.config_payload);
+
+    if (payload.achievement_mode !== "store_checkin") {
+      throw Errors.business(
+        409,
+        "当前活动无需确认到店",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_ACHIEVED,
+      );
+    }
+
+    const updated = await customerAppointmentRewardCampaignRepository.update({
+      id: instance.id,
+      status: "achieved",
+      reward_claim_status: "unclaimed",
+      achieved_at: new Date().toISOString(),
+      reward_claim_code: instance.reward_claim_code || buildRewardClaimCode(instance),
+      reward_claim_voucher_token: instance.reward_claim_voucher_token || buildRewardClaimVoucherToken(),
+    });
+
+    return {
+      instance_id: updated.id,
+      status: updated.status,
+      reward_claim_status: updated.reward_claim_status,
+      achieved_at: updated.achieved_at,
+    };
+  }
+
+  async claimEmployeeAppointmentReward(
+    instanceId: string,
+    employeeId: string,
+    input: EmployeeAppointmentRewardClaimInput,
+  ) {
+    const instance = await customerAppointmentRewardCampaignRepository.findById(instanceId);
+    if (!instance) {
+      throw Errors.business(
+        404,
+        "预约奖励实例不存在",
+        ErrorCodes.APPOINTMENT_REWARD_INSTANCE_NOT_FOUND,
+      );
+    }
+
+    const finalInstance = await this.ensureAppointmentRewardMetadata(instance);
+    const campaign = await this.getMarketingCampaignOrThrow(finalInstance.campaign_id);
+    const payload = this.parseAppointmentRewardConfigPayload(campaign.config_payload);
+
+    if (finalInstance.status === "reward_claimed" || finalInstance.reward_claim_status === "claimed") {
+      throw Errors.business(
+        409,
+        "当前预约奖励已领奖",
+        ErrorCodes.APPOINTMENT_REWARD_ALREADY_CLAIMED,
+      );
+    }
+
+    if (finalInstance.status !== "achieved") {
+      throw Errors.business(
+        409,
+        payload.achievement_mode === "store_checkin"
+          ? "当前活动需确认到店后才能领奖"
+          : "当前预约奖励未达成",
+        payload.achievement_mode === "store_checkin"
+          ? ErrorCodes.APPOINTMENT_REWARD_STORE_CHECKIN_REQUIRED
+          : ErrorCodes.APPOINTMENT_REWARD_ALREADY_SUBMITTED,
+      );
+    }
+
+    const updated = await customerAppointmentRewardCampaignRepository.update({
+      id: finalInstance.id,
+      status: "reward_claimed",
+      reward_claim_status: "claimed",
+      reward_claimed_at: new Date().toISOString(),
+      reward_claimed_by_employee_id: employeeId,
+      reward_claim_channel: input.channel,
+    });
+
+    return {
+      instance_id: updated.id,
+      status: updated.status,
+      reward_claim_status: updated.reward_claim_status,
+      reward_claimed_at: updated.reward_claimed_at,
     };
   }
 
@@ -3041,16 +3607,27 @@ class CustomerProjectLogShareService {
   }
 
   async getCampaignMetaForEmployeeClaim(campaignId: string) {
-    const campaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
-    if (!campaign) {
-      throw Errors.badRequest("分享活动不存在");
+    const shareCampaign = await customerProjectLogShareCampaignRepository.findById(campaignId);
+    if (shareCampaign) {
+      return {
+        id: shareCampaign.id,
+        project_id: shareCampaign.project_id,
+        status: shareCampaign.status,
+        campaign_type: "share_assist" as const,
+      };
     }
 
-    return {
-      id: campaign.id,
-      project_id: campaign.project_id,
-      status: campaign.status,
-    };
+    const appointmentCampaign = await customerAppointmentRewardCampaignRepository.findById(campaignId);
+    if (appointmentCampaign) {
+      return {
+        id: appointmentCampaign.id,
+        project_id: appointmentCampaign.project_id,
+        status: appointmentCampaign.status,
+        campaign_type: "appointment_reward" as const,
+      };
+    }
+
+    throw Errors.badRequest("活动实例不存在");
   }
 
   async getVoucherMetaForEmployeeClaim(voucherToken: string) {

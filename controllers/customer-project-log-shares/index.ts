@@ -18,6 +18,12 @@ import {
   GetCustomerProjectLogShareCardQuerySchema,
   OpenCustomerProjectLogShareCampaignSchema,
 } from "@/schema/customer-project-log-share";
+import {
+  CustomerAppointmentRewardProjectIdParamsSchema,
+  CustomerAppointmentRewardSubmitSchema,
+  EmployeeAppointmentRewardArriveSchema,
+  EmployeeAppointmentRewardClaimSchema,
+} from "@/schema/appointment-reward";
 import { customerProjectLogShareService } from "@/services/customer-project-log-shares";
 import {
   CreateMarketingCampaignSchema,
@@ -81,11 +87,13 @@ class CustomerProjectLogSharesController extends BaseController {
   private withCampaignType<T extends Record<string, unknown>>(data: T) {
     return {
       ...data,
-      campaign_type: this.marketingCampaignType,
+      campaign_type: typeof data.campaign_type === "string"
+        ? data.campaign_type
+        : this.marketingCampaignType,
     };
   }
 
-  private withCampaignTypeList<T extends Record<string, unknown>>(list: T[]) {
+  private withCampaignTypeList(list: Array<Record<string, unknown>>) {
     return list.map((item) => this.withCampaignType(item));
   }
 
@@ -249,6 +257,20 @@ class CustomerProjectLogSharesController extends BaseController {
     return reply.send(buffer);
   }
 
+  @Get("/appointment-reward-claim-vouchers/:voucherToken/qrcode")
+  async getAppointmentRewardClaimVoucherQrcode(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = CustomerProjectLogShareVoucherTokenParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const buffer = await customerProjectLogShareService.getAppointmentRewardClaimVoucherQrcodeBuffer(
+      paramsResult.data.voucherToken,
+    );
+
+    reply.header("Content-Type", "image/png");
+    reply.header("Cache-Control", "public, max-age=300");
+    return reply.send(buffer);
+  }
+
   @Get("/customer/projects/:projectId/share-campaigns/summary")
   async getCustomerProjectCampaignSummary(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = this.getRequiredAuthUserId(request);
@@ -266,6 +288,66 @@ class CustomerProjectLogSharesController extends BaseController {
         ? this.withCampaignType(data.focus_campaign)
         : null,
     });
+  }
+
+  @Post("/customer/projects/:projectId/appointment-reward-campaign")
+  async createOrGetCustomerAppointmentRewardCampaign(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = this.getRequiredAuthUserId(request);
+    const paramsResult = CustomerAppointmentRewardProjectIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await customerProjectLogShareService.getOrCreateCustomerAppointmentRewardCampaign(
+      authUserId,
+      paramsResult.data.projectId,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Get("/customer/projects/:projectId/appointment-reward-campaign")
+  async getCustomerAppointmentRewardCampaign(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = this.getRequiredAuthUserId(request);
+    const paramsResult = CustomerAppointmentRewardProjectIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await customerProjectLogShareService.getCustomerAppointmentRewardCampaign(
+      authUserId,
+      paramsResult.data.projectId,
+    );
+
+    const voucherToken = data.reward_claim_voucher?.voucher_token;
+
+    return ResponseHandler.success(this.withCampaignType({
+      ...data,
+      reward_claim_voucher: data.reward_claim_voucher
+        ? {
+          ...data.reward_claim_voucher,
+          qrcode_url: voucherToken
+            ? this.buildAbsoluteUrl(
+              request,
+              `/appointment-reward-claim-vouchers/${encodeURIComponent(voucherToken)}/qrcode`,
+            )
+            : null,
+        }
+        : null,
+    }));
+  }
+
+  @Post("/customer/projects/:projectId/appointment-reward-campaign/submit")
+  async submitCustomerAppointmentRewardCampaign(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = this.getRequiredAuthUserId(request);
+    const paramsResult = CustomerAppointmentRewardProjectIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = CustomerAppointmentRewardSubmitSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerProjectLogShareService.submitCustomerAppointmentRewardCampaign(
+      authUserId,
+      paramsResult.data.projectId,
+      bodyResult.data,
+    );
+
+    return ResponseHandler.success(this.withCampaignType(data));
   }
 
   @Get("/employee/projects/:projectId/share-campaign-config")
@@ -399,7 +481,7 @@ class CustomerProjectLogSharesController extends BaseController {
 
     return ResponseHandler.success({
       ...this.withCampaignType(data),
-      list: this.withCampaignTypeList(data.list),
+      list: this.withCampaignTypeList(data.list as Array<Record<string, unknown>>),
     });
   }
 
@@ -728,9 +810,13 @@ class CustomerProjectLogSharesController extends BaseController {
     );
     if (!hasAccess) throw Errors.forbidden();
 
-    const data = await customerProjectLogShareService.getEmployeeShareCampaignDetail(
-      paramsResult.data.instanceId,
-    );
+    const data = campaign.campaign_type === "appointment_reward"
+      ? await customerProjectLogShareService.getEmployeeAppointmentRewardCampaignDetail(
+        paramsResult.data.instanceId,
+      )
+      : await customerProjectLogShareService.getEmployeeShareCampaignDetail(
+        paramsResult.data.instanceId,
+      );
 
     return ResponseHandler.success(this.withCampaignType(data));
   }
@@ -753,11 +839,21 @@ class CustomerProjectLogSharesController extends BaseController {
     );
     if (!hasAccess) throw Errors.forbidden();
 
-    const data = await customerProjectLogShareService.listEmployeeShareCampaignHelpers(
-      paramsResult.data.instanceId,
-      queryResult.data.page,
-      queryResult.data.pageSize,
-    );
+    const data = campaign.campaign_type === "appointment_reward"
+      ? {
+        list: [],
+        pagination: {
+          page: queryResult.data.page,
+          pageSize: queryResult.data.pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      }
+      : await customerProjectLogShareService.listEmployeeShareCampaignHelpers(
+        paramsResult.data.instanceId,
+        queryResult.data.page,
+        queryResult.data.pageSize,
+      );
 
     return ResponseHandler.success({
       ...this.withCampaignType(data),
@@ -765,12 +861,12 @@ class CustomerProjectLogSharesController extends BaseController {
     });
   }
 
-  @Post("/employee/marketing-center/campaign-instances/:instanceId/claim")
-  async claimMarketingCenterCampaignInstanceReward(request: FastifyRequest, reply: FastifyReply) {
+  @Post("/employee/marketing-center/campaign-instances/:instanceId/arrive")
+  async arriveMarketingCenterCampaignInstance(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
     const paramsResult = MarketingCampaignInstanceIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
-    const bodyResult = ClaimCustomerProjectLogShareCampaignSchema.safeParse(request.body);
+    const bodyResult = EmployeeAppointmentRewardArriveSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
@@ -786,11 +882,55 @@ class CustomerProjectLogSharesController extends BaseController {
       throw Errors.forbidden();
     }
 
-    const data = await customerProjectLogShareService.claimCampaignReward(
+    if (campaign.campaign_type !== "appointment_reward") {
+      throw Errors.badRequest("当前活动类型不支持确认到店");
+    }
+
+    const data = await customerProjectLogShareService.confirmEmployeeAppointmentRewardArrive(
       paramsResult.data.instanceId,
-      authContext.employeeId,
-      bodyResult.data,
     );
+
+    return ResponseHandler.success(this.withCampaignType(data));
+  }
+
+  @Post("/employee/marketing-center/campaign-instances/:instanceId/claim")
+  async claimMarketingCenterCampaignInstanceReward(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = MarketingCampaignInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const campaign = await customerProjectLogShareService.getCampaignMetaForEmployeeClaim(
+      paramsResult.data.instanceId,
+    );
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      campaign.project_id,
+      "project.update",
+    );
+    if (!hasAccess || !authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const data = campaign.campaign_type === "appointment_reward"
+      ? await (() => {
+        const bodyResult = EmployeeAppointmentRewardClaimSchema.safeParse(request.body);
+        if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+        return customerProjectLogShareService.claimEmployeeAppointmentReward(
+          paramsResult.data.instanceId,
+          authContext.employeeId!,
+          bodyResult.data,
+        );
+      })()
+      : await (() => {
+        const bodyResult = ClaimCustomerProjectLogShareCampaignSchema.safeParse(request.body);
+        if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+        return customerProjectLogShareService.claimCampaignReward(
+          paramsResult.data.instanceId,
+          authContext.employeeId!,
+          bodyResult.data,
+        );
+      })();
 
     return ResponseHandler.success(this.withCampaignType(data));
   }

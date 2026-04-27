@@ -4,7 +4,7 @@ import { SupabaseDB } from "@/utils/supabase";
 export type MarketingCampaignStatus = "draft" | "active" | "paused" | "closed";
 export type MarketingCampaignTargetScopeType = "all_projects" | "project_list";
 export type MarketingCampaignProjectScopeMode = "include" | "exclude";
-export type MarketingCampaignType = "share_assist";
+export type MarketingCampaignType = "share_assist" | "appointment_reward";
 
 export type MarketingCampaignRow = {
   id: string;
