@@ -8,6 +8,7 @@ import { z } from "zod";
 import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
+import { authorizationService } from "@/services/authorization";
 import type {
   AuthTargetRole,
   SmsScene,
@@ -192,6 +193,10 @@ export class WeChatController extends BaseController {
     } else {
       await this.bindEmployeeRole(request.user.sub, phone);
     }
+
+    authorizationService.invalidateAuthContext({
+      authUserId: request.user.sub,
+    });
 
     const { error: verifyError } = await adminClient
       .from("sms_verification_codes")
@@ -427,6 +432,16 @@ export class WeChatController extends BaseController {
       throw Errors.badRequest("该客户档案已绑定其他账号");
     }
 
+    const { error: cleanupError } = await adminClient
+      .from("customers")
+      .update({ user_id: null })
+      .eq("user_id", authUserId)
+      .neq("id", customer.id);
+
+    if (cleanupError) {
+      throw Errors.dbError("清理历史客户绑定失败", cleanupError);
+    }
+
     const { error: updateError } = await adminClient
       .from("customers")
       .update({ user_id: authUserId })
@@ -463,6 +478,16 @@ export class WeChatController extends BaseController {
 
     if (employee.user_id && employee.user_id !== authUserId) {
       throw Errors.badRequest("该员工档案已绑定其他账号");
+    }
+
+    const { error: cleanupError } = await adminClient
+      .from("employees")
+      .update({ user_id: null })
+      .eq("user_id", authUserId)
+      .neq("id", employee.id);
+
+    if (cleanupError) {
+      throw Errors.dbError("清理历史员工绑定失败", cleanupError);
     }
 
     const { error: updateError } = await adminClient
