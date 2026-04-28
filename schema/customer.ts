@@ -5,12 +5,55 @@ import {
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
 
-export const CustomerEmbeddedPropertySchema = z.object({
-  community: z.string().min(1, "小区名称不能为空").max(100, "名称过长"),
-  building_info: z.string().nullable().optional(),
+function normalizeOptionalText(value: unknown) {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized === "" ? null : normalized;
+  }
+
+  return value;
+}
+
+export const CustomerEmbeddedPropertySchema = z.preprocess((value) => {
+  if (value == null) {
+    return null;
+  }
+
+  return value;
+}, z.object({
+  community: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(100, "名称过长").nullable().optional(),
+  ),
+  building_info: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(200, "楼栋门牌过长").nullable().optional(),
+  ),
   area: z.number().positive("面积必须大于0").nullable().or(z.literal(0)).optional(),
-  layout: z.string().nullable().optional(),
-});
+  layout: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(100, "户型过长").nullable().optional(),
+  ),
+}).superRefine((input, ctx) => {
+  const hasCommunity = Boolean(input.community);
+  const hasOtherFields = Boolean(
+    input.building_info ||
+      input.layout ||
+      input.area !== undefined && input.area !== null,
+  );
+
+  if (!hasCommunity && hasOtherFields) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["community"],
+      message: "小区名称不能为空",
+    });
+  }
+}).nullable());
 
 export const CustomerSchema = z.object({
   // id 通常是数据库自动生成的 UUID 或数字，这里假设是 UUID 字符串

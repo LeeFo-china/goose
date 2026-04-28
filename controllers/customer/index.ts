@@ -34,6 +34,13 @@ type PrimaryPropertySummary = {
   area: number | null;
 };
 
+type NormalizedCustomerPropertyPayload = {
+  community: string;
+  building_info: string | null;
+  area: number | null;
+  layout: string | null;
+};
+
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
@@ -106,7 +113,35 @@ class CustomerController extends BaseController<
     const { property, ...customerPayload } = payload;
     return {
       customerPayload,
-      propertyPayload: property,
+      propertyPayload: this.normalizeCustomerPropertyPayload(property),
+    };
+  }
+
+  private normalizeCustomerPropertyPayload(
+    propertyPayload: CustomerPropertyPayload | undefined | null,
+  ): NormalizedCustomerPropertyPayload | undefined {
+    if (!propertyPayload) {
+      return undefined;
+    }
+
+    const community = propertyPayload.community?.trim() || null;
+    const buildingInfo = propertyPayload.building_info?.trim() || null;
+    const layout = propertyPayload.layout?.trim() || null;
+    const area = propertyPayload.area ?? null;
+
+    if (!community && !buildingInfo && !layout && area == null) {
+      return undefined;
+    }
+
+    if (!community) {
+      throw Errors.badRequest("小区名称不能为空");
+    }
+
+    return {
+      community,
+      building_info: buildingInfo,
+      layout,
+      area,
     };
   }
 
@@ -159,7 +194,7 @@ class CustomerController extends BaseController<
 
   private async upsertCustomerPrimaryProperty(
     customerId: string,
-    propertyPayload: CustomerPropertyPayload | undefined,
+    propertyPayload: NormalizedCustomerPropertyPayload | undefined,
   ) {
     if (!propertyPayload) {
       return this.getPrimaryCustomerPropertySummary(customerId);
