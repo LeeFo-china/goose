@@ -167,7 +167,7 @@ class TaskCenterRepository {
           name
         )
       `)
-      .in("status", ["draft", "rejected", "pending"])
+      .in("status", ["draft", "rejected", "pending", "approved"])
       .order("created_at", { ascending: false });
 
     if (error) {

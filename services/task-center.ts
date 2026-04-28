@@ -218,6 +218,10 @@ class TaskCenterService {
       authContext,
       "expense_request.approve_finance",
     );
+    const canPay = accessPolicyService.hasPermission(
+      authContext,
+      "expense_request.pay",
+    );
 
     return rows
       .filter((item) => this.isExpenseVisible(visibility, item))
@@ -289,6 +293,29 @@ class TaskCenterService {
             due_at: item.updated_at || item.created_at,
             created_at: item.created_at,
             action_label: "去审批",
+            target_url: `/packageEmployees/pages/expenseDetail/index?id=${item.id}`,
+            target_type: "expense_request" as const,
+            target_id: item.id,
+          }];
+        }
+
+        if (
+          canPay &&
+          item.status === "approved" &&
+          item.current_step === "payment"
+        ) {
+          return [{
+            id: `expense_request:${item.id}:payment`,
+            type: "expense_request" as const,
+            title: "费用申请待登记打款",
+            subtitle,
+            status: "pending" as const,
+            status_label: "待处理" as const,
+            priority: "high" as const,
+            priority_label: getPriorityLabel("high"),
+            due_at: item.updated_at || item.created_at,
+            created_at: item.created_at,
+            action_label: "去打款",
             target_url: `/packageEmployees/pages/expenseDetail/index?id=${item.id}`,
             target_type: "expense_request" as const,
             target_id: item.id,
