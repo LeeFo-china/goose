@@ -177,17 +177,30 @@ class AccessPolicyService {
       status: string | null;
     },
   ) {
-    const scope = this.assertPermission(authContext, "customer.assign_owner");
-    if (!scope || !authContext.employeeId) {
+    const canAccessCustomer = customer.owner_id
+      ? await this.canAccessCustomer(
+        authContext,
+        customer,
+        "customer.assign_owner",
+      )
+      : true;
+    if (!canAccessCustomer) {
       return false;
     }
 
-    const canAccessCustomer = await this.canAccessCustomer(
-      authContext,
-      customer,
-      "customer.assign_owner",
-    );
-    if (!canAccessCustomer) {
+    return this.canAssignCustomerOwnerTarget(authContext, targetEmployee);
+  }
+
+  canAssignCustomerOwnerTarget(
+    authContext: AuthContext,
+    targetEmployee: {
+      id: string;
+      department_id: string | null;
+      status: string | null;
+    },
+  ) {
+    const scope = this.assertPermission(authContext, "customer.assign_owner");
+    if (!scope || !authContext.employeeId) {
       return false;
     }
 

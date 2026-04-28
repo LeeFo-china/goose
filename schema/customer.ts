@@ -66,6 +66,35 @@ export const CustomerListQuerySchema = PaginationQuerySchema.extend({
 
 export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;
 
+export const BatchAssignCustomerOwnerModeSchema = z.enum(
+  ["only_unassigned", "overwrite"],
+  {
+    message: "无效的批量分配模式",
+  },
+);
+
+export const BatchAssignCustomerOwnerSchema = z.object({
+  customer_ids: z
+    .array(z.uuid("无效的客户 ID"))
+    .min(1, "至少选择 1 条客户")
+    .max(100, "单次最多分配 100 条客户"),
+  owner_id: z.uuid("无效的目标负责人 ID"),
+  mode: BatchAssignCustomerOwnerModeSchema,
+}).superRefine((value, ctx) => {
+  const uniqueIds = new Set(value.customer_ids);
+  if (uniqueIds.size !== value.customer_ids.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["customer_ids"],
+      message: "客户 ID 不能重复",
+    });
+  }
+});
+
+export type BatchAssignCustomerOwnerInput = z.infer<
+  typeof BatchAssignCustomerOwnerSchema
+>;
+
 export const FollowUpSchema = z.object({
   // 主键 ID 通常由数据库生成，所以设为可选
   id: z.string().uuid().optional(),
