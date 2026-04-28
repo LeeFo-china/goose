@@ -47,6 +47,15 @@ export type EmployeePermissionContextRecord = {
     post_id: string | null;
     name: string | null;
     phone: string | null;
+    avatar: string | null;
+    department:
+      | { name: string | null }
+      | Array<{ name: string | null }>
+      | null;
+    post:
+      | { name: string | null }
+      | Array<{ name: string | null }>
+      | null;
   } | null;
   roles: RoleRecord[];
   rolePermissions: Array<{
@@ -362,7 +371,18 @@ class PermissionRepository {
   async findEmployeeById(id: string) {
     const { data, error } = await this.adminClient
       .from("employees")
-      .select("id, user_id, status, department_id, post_id, name, phone")
+      .select(`
+        id,
+        user_id,
+        status,
+        department_id,
+        post_id,
+        name,
+        phone,
+        avatar,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
+      `)
       .eq("id", id)
       .maybeSingle();
 
@@ -376,7 +396,18 @@ class PermissionRepository {
   async findEmployeeByAuthUserId(authUserId: string) {
     const { data, error } = await this.adminClient
       .from("employees")
-      .select("id, user_id, status, department_id, post_id, name, phone")
+      .select(`
+        id,
+        user_id,
+        status,
+        department_id,
+        post_id,
+        name,
+        phone,
+        avatar,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
+      `)
       .eq("user_id", authUserId)
       .maybeSingle();
 

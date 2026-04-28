@@ -1,6 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { permissionRepository } from "@/repositories/permissions";
-import { PERMISSION_CODE_VALUES } from "@gooes/domain";
+import { isEmployeeOperableStatus, PERMISSION_CODE_VALUES } from "@gooes/domain";
 
 export type EffectivePermission = {
   code: string;
@@ -18,9 +18,13 @@ export type AuthContextRole = {
 export type AuthContext = {
   authUserId: string;
   employeeId: string | null;
+  employeeName: string | null;
   employeeStatus: string | null;
   departmentId: string | null;
+  departmentName: string | null;
   postId: string | null;
+  postName: string | null;
+  avatar: string | null;
   roleCodes: string[];
   roles: AuthContextRole[];
   permissions: EffectivePermission[];
@@ -91,6 +95,20 @@ class AuthorizationService {
     return scopeWeight[incoming] > scopeWeight[existing] ? incoming : existing;
   }
 
+  private getRelationName(
+    value:
+      | { name: string | null }
+      | Array<{ name: string | null }>
+      | null
+      | undefined,
+  ) {
+    if (Array.isArray(value)) {
+      return value[0]?.name ?? null;
+    }
+
+    return value?.name ?? null;
+  }
+
   private buildAuthContext(input: Awaited<
     ReturnType<typeof permissionRepository.getEmployeePermissionContextByAuthUserId>
   >, authUserId: string): AuthContext {
@@ -108,9 +126,33 @@ class AuthorizationService {
       return {
         authUserId,
         employeeId: null,
+        employeeName: null,
         employeeStatus: null,
         departmentId: null,
+        departmentName: null,
         postId: null,
+        postName: null,
+        avatar: null,
+        roleCodes,
+        roles,
+        permissions: [],
+      };
+    }
+
+    const departmentName = this.getRelationName(employee.department);
+    const postName = this.getRelationName(employee.post);
+
+    if (!isEmployeeOperableStatus(employee.status)) {
+      return {
+        authUserId,
+        employeeId: employee.id,
+        employeeName: employee.name ?? null,
+        employeeStatus: employee.status,
+        departmentId: employee.department_id,
+        departmentName,
+        postId: employee.post_id,
+        postName,
+        avatar: employee.avatar ?? null,
         roleCodes,
         roles,
         permissions: [],
@@ -121,9 +163,13 @@ class AuthorizationService {
       return {
         authUserId,
         employeeId: employee.id,
+        employeeName: employee.name ?? null,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
+        departmentName,
         postId: employee.post_id,
+        postName,
+        avatar: employee.avatar ?? null,
         roleCodes,
         roles,
         permissions: PERMISSION_CODE_VALUES.map((code) => ({
@@ -159,9 +205,13 @@ class AuthorizationService {
     return {
       authUserId,
       employeeId: employee.id,
+      employeeName: employee.name ?? null,
       employeeStatus: employee.status,
       departmentId: employee.department_id,
+      departmentName,
       postId: employee.post_id,
+      postName,
+      avatar: employee.avatar ?? null,
       roleCodes,
       roles,
       permissions: Array.from(permissionMap.entries()).map(([code, scope]) => ({

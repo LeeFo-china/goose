@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { permissionRepository } from "@/repositories/permissions";
+import { isEmployeeOperableStatus } from "@gooes/domain";
 
 class AccessPolicyService {
   hasPermission(authContext: AuthContext, permissionCode: string) {
@@ -190,7 +191,7 @@ class AccessPolicyService {
       return false;
     }
 
-    if (targetEmployee.status !== "active") {
+    if (!isEmployeeOperableStatus(targetEmployee.status)) {
       return false;
     }
 

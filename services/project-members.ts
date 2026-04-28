@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { permissionRepository } from "@/repositories/permissions";
 import { projectMemberRepository } from "@/repositories/project-members";
 import { projectRepository } from "@/repositories/projects";
 import type {
@@ -7,6 +8,7 @@ import type {
 } from "@/schema/projects";
 import {
   PROJECT_MEMBER_ROLE_CONFIG,
+  isEmployeeOperableStatus,
   isProjectMemberRoleCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
@@ -113,6 +115,19 @@ class ProjectMemberService {
     return project;
   }
 
+  private async assertEmployeeOperable(employeeId: string) {
+    const employee = await permissionRepository.findEmployeeById(employeeId);
+    if (!employee) {
+      throw Errors.badRequest("员工不存在");
+    }
+
+    if (!isEmployeeOperableStatus(employee.status)) {
+      throw Errors.badRequest("目标员工不是在职状态");
+    }
+
+    return employee;
+  }
+
   private getResolvedRoleName(roleCode: ProjectMemberRoleCode, roleName?: string | null) {
     const normalized = typeof roleName === "string" ? roleName.trim() : "";
     return normalized || PROJECT_MEMBER_ROLE_CONFIG[roleCode].label;
@@ -176,6 +191,7 @@ class ProjectMemberService {
 
   async createProjectMember(projectId: string, input: CreateProjectMemberInput) {
     await this.assertProjectExists(projectId);
+    await this.assertEmployeeOperable(input.employee_id);
 
     if (input.role_code === "customer_owner") {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接新增");
@@ -225,6 +241,8 @@ class ProjectMemberService {
 
     const nextRoleCode = input.role_code ?? serializedExisting.role_code;
     const isRoleCodeChanged = nextRoleCode !== serializedExisting.role_code;
+    const nextEmployeeId = input.employee_id ?? serializedExisting.employee_id;
+    await this.assertEmployeeOperable(nextEmployeeId);
     if (nextRoleCode === "customer_owner") {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接修改");
     }

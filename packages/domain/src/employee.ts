@@ -46,6 +46,10 @@ export const isEmployeeStatus = (
   typeof value === 'string' &&
   EMPLOYEE_STATUS_VALUES.includes(value as EmployeeStatus);
 
+export const isEmployeeOperableStatus = (
+  value: string | null | undefined,
+): value is 'active' => value === 'active';
+
 export const isEmployeeRole = (
   value: string | null | undefined,
 ): value is EmployeeRole =>
