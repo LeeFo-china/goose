@@ -25,6 +25,7 @@ export type PermissionOverrideEffect =
 
 export const PERMISSION_CODE_VALUES = [
   'dashboard.read',
+  'task_center.read',
   'customer.read',
   'customer.create',
   'customer.update',
@@ -94,6 +95,7 @@ export const PermissionCodeConfig: Record<
   { label: string; module: string }
 > = {
   'dashboard.read': { label: '查看工作台', module: 'dashboard' },
+  'task_center.read': { label: '查看待办中心', module: 'task_center' },
   'customer.read': { label: '查看客户', module: 'customer' },
   'customer.create': { label: '新建客户', module: 'customer' },
   'customer.update': { label: '编辑客户', module: 'customer' },
