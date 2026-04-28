@@ -369,6 +369,7 @@ export type Database = {
         Row: {
           amount: number
           category: string
+          category_code: string | null
           created_at: string
           evidence_images: Json
           expense_request_id: string
@@ -382,6 +383,7 @@ export type Database = {
         Insert: {
           amount: number
           category: string
+          category_code?: string | null
           created_at?: string
           evidence_images?: Json
           expense_request_id: string
@@ -395,6 +397,7 @@ export type Database = {
         Update: {
           amount?: number
           category?: string
+          category_code?: string | null
           created_at?: string
           evidence_images?: Json
           expense_request_id?: string
@@ -477,6 +480,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      expense_request_categories: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          is_builtin: boolean
+          name: string
+          remark: string | null
+          sort: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name: string
+          remark?: string | null
+          sort?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name?: string
+          remark?: string | null
+          sort?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       expense_requests: {
         Row: {

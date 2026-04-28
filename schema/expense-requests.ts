@@ -60,13 +60,30 @@ export const ExpenseSettlementMethodSchema = z.enum(
 export const ExpenseRequestItemSchema = z.object({
   id: z.uuid("无效的费用明细 ID").optional(),
   occurred_at: z.string().datetime("无效的费用发生时间").nullable().optional(),
-  category: z.string().trim().min(1, "费用分类不能为空").max(100, "费用分类过长"),
+  category_code: z.string().trim().min(1, "费用分类编码不能为空").max(
+    50,
+    "费用分类编码过长",
+  ).regex(/^[a-z0-9_]+$/, "费用分类编码格式不正确").nullable().optional(),
+  category: z.string().trim().min(1, "费用分类不能为空").max(100, "费用分类过长")
+    .nullable()
+    .optional(),
   amount: z.coerce.number("费用金额必须是数字").min(0, "费用金额不能为负数"),
   remark: z.string().trim().max(500, "费用说明过长").nullable().optional(),
   invoice_no: z.string().trim().max(100, "发票号过长").nullable().optional(),
   vendor_name: z.string().trim().max(200, "商户名称过长").nullable().optional(),
   evidence_images: z.array(z.string().trim().min(1, "凭证图片不能为空"))
     .default([]),
+}).superRefine((input, ctx) => {
+  const categoryCode = input.category_code?.trim();
+  const category = input.category?.trim();
+
+  if (!categoryCode && !category) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["category_code"],
+      message: "费用分类不能为空",
+    });
+  }
 });
 
 export const CreateExpenseRequestSchema = z.object({

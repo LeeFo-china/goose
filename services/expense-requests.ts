@@ -14,8 +14,14 @@ import type {
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { expenseRequestCategoryService } from "@/services/expense-request-categories";
 
-function calculateTotalAmount(items: ExpenseRequestItemInput[]) {
+type ResolvedExpenseRequestItemInput = ExpenseRequestItemInput & {
+  category: string;
+  category_code: string | null;
+};
+
+function calculateTotalAmount(items: Array<ExpenseRequestItemInput | ResolvedExpenseRequestItemInput>) {
   return Number(
     items.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(2),
   );
@@ -23,7 +29,7 @@ function calculateTotalAmount(items: ExpenseRequestItemInput[]) {
 
 function buildLegacyFields(
   title: string | null | undefined,
-  items: ExpenseRequestItemInput[],
+  items: Array<ExpenseRequestItemInput | ResolvedExpenseRequestItemInput>,
   totalAmount: number,
 ) {
   const firstItem = items[0];
@@ -54,6 +60,39 @@ function generateExpenseRequestNo() {
 }
 
 class ExpenseRequestService {
+  private async resolveItems(
+    items: ExpenseRequestItemInput[],
+  ): Promise<ResolvedExpenseRequestItemInput[]> {
+    return Promise.all(
+      items.map(async (item) => {
+        const categoryCode = item.category_code?.trim() || null;
+        if (categoryCode) {
+          const category =
+            await expenseRequestCategoryService.resolveActiveCategoryByCode(
+              categoryCode,
+            );
+
+          return {
+            ...item,
+            category: category.name,
+            category_code: category.code,
+          };
+        }
+
+        const categoryName = item.category?.trim();
+        if (!categoryName) {
+          throw Errors.badRequest("费用分类不能为空");
+        }
+
+        return {
+          ...item,
+          category: categoryName,
+          category_code: null,
+        };
+      }),
+    );
+  }
+
   private ensureCurrentEmployee(
     authContext: AuthContext,
     employeeId: string,
@@ -150,7 +189,7 @@ class ExpenseRequestService {
     await this.assertEmployeeExists(input.employee_id);
     await this.assertProjectExists(input.project_id);
 
-    const items = input.items || [];
+    const items = await this.resolveItems(input.items || []);
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() || null;
 
@@ -196,7 +235,8 @@ class ExpenseRequestService {
     await this.assertProjectExists(input.project_id);
 
     const items = input.items
-      ?? ((existing.items as ExpenseRequestItemInput[] | undefined) || []);
+      ? await this.resolveItems(input.items)
+      : (((existing.items as ResolvedExpenseRequestItemInput[] | undefined) || []));
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() ?? existing.title ?? null;
 
@@ -212,7 +252,7 @@ class ExpenseRequestService {
           : null,
         ...buildLegacyFields(title, items, totalAmount),
       },
-      input.items,
+      input.items ? items : undefined,
     );
   }
 
@@ -239,7 +279,7 @@ class ExpenseRequestService {
 
     await this.assertEmployeeExists(input.operator_id, "提交人不存在");
 
-    const items = (existing.items as ExpenseRequestItemInput[] | undefined) || [];
+    const items = (existing.items as ResolvedExpenseRequestItemInput[] | undefined) || [];
     if (items.length === 0) {
       throw Errors.badRequest("提交费用申请前至少需要一条费用明细");
     }

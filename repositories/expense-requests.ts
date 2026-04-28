@@ -1,9 +1,20 @@
 import { Errors } from "@/errors/error-factory";
 import type {
-  ExpenseRequestItemInput,
   ExpenseRequestListQueryType,
 } from "@/schema/expense-requests";
 import { SupabaseDB } from "@/utils/supabase/index";
+
+type ExpenseRequestItemMutationInput = {
+  id?: string;
+  occurred_at?: string | null;
+  category_code?: string | null;
+  category: string;
+  amount: number;
+  remark?: string | null;
+  invoice_no?: string | null;
+  vendor_name?: string | null;
+  evidence_images?: string[];
+};
 
 export type ExpenseRequestRecord = {
   id: string;
@@ -105,6 +116,7 @@ class ExpenseRequestRepository {
     items:expense_request_items(
       id,
       occurred_at,
+      category_code,
       category,
       amount,
       remark,
@@ -166,7 +178,7 @@ class ExpenseRequestRepository {
 
   async create(
     payload: ExpenseRequestMutationPayload,
-    items: ExpenseRequestItemInput[],
+    items: ExpenseRequestItemMutationInput[],
   ): Promise<ExpenseRequestRecord> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("expense_requests")
@@ -197,7 +209,7 @@ class ExpenseRequestRepository {
   async update(
     id: string,
     payload: ExpenseRequestMutationPayload,
-    items?: ExpenseRequestItemInput[],
+    items?: ExpenseRequestItemMutationInput[],
   ): Promise<ExpenseRequestRecord> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("expense_requests")
@@ -226,7 +238,7 @@ class ExpenseRequestRepository {
     return record;
   }
 
-  async replaceItems(id: string, items: ExpenseRequestItemInput[]) {
+  async replaceItems(id: string, items: ExpenseRequestItemMutationInput[]) {
     const { error: deleteError } = await SupabaseDB.getAdminClient()
       .from("expense_request_items")
       .delete()
@@ -243,6 +255,7 @@ class ExpenseRequestRepository {
     const payload = items.map((item) => ({
       expense_request_id: id,
       occurred_at: item.occurred_at ?? null,
+      category_code: item.category_code ?? null,
       category: item.category,
       amount: item.amount,
       remark: item.remark ?? null,

@@ -31,6 +31,7 @@ import TaskCenterController from "@/controllers/task-center";
 import CustomerSelfServiceController from "@/controllers/customer-self-service";
 import CustomerProjectLogSharesController from "@/controllers/customer-project-log-shares";
 import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up-comments";
+import ExpenseRequestCategoriesController from "@/controllers/expense-request-categories";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -54,6 +55,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("departments", DepartmentController));
   app.register(createResourceRoutes("payments", PaymentController));
   app.register(createResourceRoutes("expense-requests", ExpenseRequestsController));
+  app.register(createResourceRoutes("expense-request-categories", ExpenseRequestCategoriesController));
   app.register(createResourceRoutes("projects", ProjectController));
   app.register(createResourceRoutes("roles", RolesController));
   app.register(createResourceRoutes("permissions", PermissionsController));
