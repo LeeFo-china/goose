@@ -50,3 +50,29 @@ export const PropertyListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export type PropertyListQuery = z.infer<typeof PropertyListQuerySchema>;
+
+export const CustomerPropertyParamsSchema = z.object({
+  customerId: z.uuid("无效的客户 ID 格式"),
+});
+
+export const CustomerPropertyDetailParamsSchema = z.object({
+  customerId: z.uuid("无效的客户 ID 格式"),
+  propertyId: z.uuid("无效的房产 ID 格式"),
+});
+
+export const CreateCustomerPropertySchema = CreatePropertySchema.omit({
+  customer_id: true,
+}).extend({
+  set_as_primary: z.boolean().default(false),
+});
+
+export const UpdateCustomerPropertySchema = CreatePropertySchema.omit({
+  customer_id: true,
+}).partial();
+
+export type CreateCustomerPropertyInput = z.infer<
+  typeof CreateCustomerPropertySchema
+>;
+export type UpdateCustomerPropertyInput = z.infer<
+  typeof UpdateCustomerPropertySchema
+>;
