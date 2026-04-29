@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import {
@@ -27,6 +28,11 @@ import {
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
+import {
+  customerPhonePrivacyService,
+  type CustomerPhoneAction,
+  type CustomerPhonePrivacyContext,
+} from "@/services/customer-phone-privacy";
 import { ErrorCodes } from "@/errors/error-codes";
 
 type CustomerPropertyPayload =
@@ -56,8 +62,14 @@ type CustomerRowForResponse = {
   owner_id: string | null;
   id: string;
   source?: string | null;
+  phone?: string | null;
   douyin_screenshot_images?: unknown;
 };
+
+const CustomerPhoneActionBodySchema = z.object({
+  scene: z.string().trim().max(80, "场景过长").optional(),
+  reason: z.string().trim().max(200, "原因过长").optional(),
+});
 
 // 继承基类
 class CustomerController extends BaseController<
@@ -189,15 +201,39 @@ class CustomerController extends BaseController<
     }
   }
 
-  private serializeCustomer<T extends { owner?: unknown; owner_id: string | null; douyin_screenshot_images?: unknown }>(
+  private serializeCustomer<T extends {
+    id?: string;
+    owner?: unknown;
+    owner_id: string | null;
+    phone?: string | null;
+    douyin_screenshot_images?: unknown;
+  }>(
     row: T,
+    phonePrivacyContext?: CustomerPhonePrivacyContext,
   ) {
     const owner = this.normalizeOwner(row.owner) as
       | { id: string; name: string | null; phone: string | null }
       | null;
+    const phoneFields = row.id && phonePrivacyContext
+      ? customerPhonePrivacyService.serializeCustomerPhoneFields(
+        phonePrivacyContext,
+        {
+          id: row.id,
+          owner_id: row.owner_id,
+          phone: row.phone ?? null,
+        },
+      )
+      : {
+        phone: row.phone ?? null,
+        phone_masked: customerPhonePrivacyService.maskPhone(row.phone),
+        can_view_phone: false,
+        can_call_phone: false,
+        can_copy_phone: false,
+      };
 
     return {
       ...row,
+      ...phoneFields,
       owner,
       owner_name: owner?.name ?? null,
       douyin_screenshot_images: this.normalizeStoredDouyinScreenshotImages(
@@ -392,10 +428,11 @@ class CustomerController extends BaseController<
   }
 
   private async buildCustomerDetailResponse(
-    customer: { owner?: unknown; owner_id: string | null; id: string },
+    customer: CustomerRowForResponse,
     options?: {
       primaryProperty?: PrimaryPropertySummary | null;
       includeProperties?: boolean;
+      phonePrivacyContext?: CustomerPhonePrivacyContext;
     },
   ) {
     const primaryProperty = options?.primaryProperty ?? await this.getPrimaryCustomerPropertySummary(
@@ -406,7 +443,7 @@ class CustomerController extends BaseController<
       : undefined;
 
     return {
-      ...this.serializeCustomer(customer),
+      ...this.serializeCustomer(customer, options?.phonePrivacyContext),
       property_id: primaryProperty?.id ?? null,
       community: primaryProperty?.community ?? null,
       building_info: primaryProperty?.building_info ?? null,
@@ -673,8 +710,13 @@ class CustomerController extends BaseController<
     const { data, error, count } = await query.range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
+    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+      authContext,
+    );
     return ResponseHandler.success({
-      list: (((data || []) as unknown) as Array<{ owner?: unknown; owner_id: string | null }>).map((item) => this.serializeCustomer(item)),
+      list: (((data || []) as unknown) as CustomerRowForResponse[]).map((item) =>
+        this.serializeCustomer(item, phonePrivacyContext)
+      ),
       pagination: {
         page,
         pageSize,
@@ -713,7 +755,10 @@ class CustomerController extends BaseController<
     }
 
     return ResponseHandler.success(
-      this.serializeCustomer((data as unknown) as { owner?: unknown; owner_id: string | null }),
+      this.serializeCustomer(
+        (data as unknown) as CustomerRowForResponse,
+        await customerPhonePrivacyService.createPrivacyContext(authContext),
+      ),
     );
   };
 
@@ -766,6 +811,9 @@ class CustomerController extends BaseController<
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(customer, {
         primaryProperty,
+        phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+          authContext,
+        ),
       }),
     );
   };
@@ -904,6 +952,9 @@ class CustomerController extends BaseController<
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(customer, {
         primaryProperty,
+        phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+          authContext,
+        ),
       }),
     );
   };
@@ -1064,12 +1115,59 @@ class CustomerController extends BaseController<
 
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(
-        (data as unknown) as { owner?: unknown; owner_id: string | null; id: string },
+        (data as unknown) as CustomerRowForResponse,
         {
           includeProperties: true,
+          phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+            authContext,
+          ),
         },
       ),
     );
+  }
+
+  private async handleCustomerPhoneAction(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    action: CustomerPhoneAction,
+  ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const bodyResult = CustomerPhoneActionBodySchema.safeParse(request.body ?? {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerPhonePrivacyService.handlePhoneAction({
+      action,
+      authContext,
+      customerId: idVerify.data.id,
+      scene: bodyResult.data.scene,
+      reason: bodyResult.data.reason,
+      request,
+    });
+
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/customers/:id/phone/reveal")
+  async revealCustomerPhone(
+    request: FastifyRequest<{ Params: { id: string } }>,
+  ) {
+    return this.handleCustomerPhoneAction(request, "reveal");
+  }
+
+  @Post("/customers/:id/phone/call")
+  async callCustomerPhone(
+    request: FastifyRequest<{ Params: { id: string } }>,
+  ) {
+    return this.handleCustomerPhoneAction(request, "call");
+  }
+
+  @Post("/customers/:id/phone/copy")
+  async copyCustomerPhone(
+    request: FastifyRequest<{ Params: { id: string } }>,
+  ) {
+    return this.handleCustomerPhoneAction(request, "copy");
   }
 
   @Get("/customers/:id/follow_ups")

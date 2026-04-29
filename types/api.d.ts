@@ -18,7 +18,9 @@ export interface HomeDashboardSummary {
 export interface LatestCustomer {
     id: string;
     name: string;
-    phone: string;
+    phone: string | null;
+    phone_masked: string | null;
+    can_view_phone: boolean;
     status: string;
     created_at: string;
     owner_name: string; // 对应 RPC 中的 e.name

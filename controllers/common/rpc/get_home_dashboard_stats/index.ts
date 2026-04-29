@@ -6,6 +6,7 @@ import { Errors } from "@/errors/error-factory";
 import { fail, ResponseHandler, success } from "@/utils/response";
 import type { ApiResponse, HomeStatsResponse } from "@/types/api";
 import { BaseController } from "@/controllers/BaseController";
+import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 
 // export class RpcController {
 //     /**
@@ -62,6 +63,33 @@ export class RpcController extends BaseController {
         super("rpc");
     }
 
+    private maskLatestCustomerPhones(data: unknown) {
+        if (!data || typeof data !== "object") {
+            return data;
+        }
+
+        const response = data as {
+            latest_customers?: Array<Record<string, unknown>>;
+        };
+
+        if (!Array.isArray(response.latest_customers)) {
+            return data;
+        }
+
+        return {
+            ...response,
+            latest_customers: response.latest_customers.map((item) => {
+                const phone = typeof item.phone === "string" ? item.phone : null;
+                return {
+                    ...item,
+                    phone: null,
+                    phone_masked: customerPhonePrivacyService.maskPhone(phone),
+                    can_view_phone: false,
+                };
+            }),
+        };
+    }
+
     @Get("/home_stats")
     async get_home_dashboard_stats(
         request: FastifyRequest,
@@ -75,7 +103,9 @@ export class RpcController extends BaseController {
 
         if (error) throw Errors.dbError("call rpc error");
 
-        return ResponseHandler.success<HomeStatsResponse>(data);
+        return ResponseHandler.success<HomeStatsResponse>(
+            this.maskLatestCustomerPhones(data) as HomeStatsResponse,
+        );
     }
 }
 

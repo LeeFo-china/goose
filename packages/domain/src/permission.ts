@@ -30,6 +30,9 @@ export const PERMISSION_CODE_VALUES = [
   'customer.create',
   'customer.update',
   'customer.assign_owner',
+  'customer.phone.view',
+  'customer.phone.call',
+  'customer.phone.copy',
   'project.read',
   'project.create',
   'project.update',
@@ -101,6 +104,18 @@ export const PermissionCodeConfig: Record<
   'customer.update': { label: '编辑客户', module: 'customer' },
   'customer.assign_owner': {
     label: '分配客户负责人',
+    module: 'customer',
+  },
+  'customer.phone.view': {
+    label: '查看客户完整手机号',
+    module: 'customer',
+  },
+  'customer.phone.call': {
+    label: '拨打客户手机号',
+    module: 'customer',
+  },
+  'customer.phone.copy': {
+    label: '复制客户手机号',
     module: 'customer',
   },
   'project.read': { label: '查看项目', module: 'project' },

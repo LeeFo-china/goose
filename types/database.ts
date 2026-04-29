@@ -164,6 +164,75 @@ export type Database = {
           },
         ]
       }
+      customer_phone_access_logs: {
+        Row: {
+          action: string
+          auth_user_id: string | null
+          created_at: string
+          customer_id: string
+          employee_id: string | null
+          id: string
+          ip_address: string | null
+          openid: string | null
+          permission_code: string | null
+          permission_scope: string | null
+          phone_masked: string | null
+          reason: string | null
+          request_id: string | null
+          scene: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          auth_user_id?: string | null
+          created_at?: string
+          customer_id: string
+          employee_id?: string | null
+          id?: string
+          ip_address?: string | null
+          openid?: string | null
+          permission_code?: string | null
+          permission_scope?: string | null
+          phone_masked?: string | null
+          reason?: string | null
+          request_id?: string | null
+          scene?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          auth_user_id?: string | null
+          created_at?: string
+          customer_id?: string
+          employee_id?: string | null
+          id?: string
+          ip_address?: string | null
+          openid?: string | null
+          permission_code?: string | null
+          permission_scope?: string | null
+          phone_masked?: string | null
+          reason?: string | null
+          request_id?: string | null
+          scene?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_phone_access_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_phone_access_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           code: string | null

@@ -35,10 +35,14 @@ import {
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectMemberService } from "@/services/project-members";
+import {
+  customerPhonePrivacyService,
+  type CustomerPhonePrivacyContext,
+} from "@/services/customer-phone-privacy";
 
 type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
-  "id" | "name" | "phone"
+  "id" | "name" | "phone" | "owner_id"
 >;
 type ProjectCreateSelectEmployeeRow =
   & Pick<
@@ -58,6 +62,8 @@ type ProjectCreateCustomerOption = {
   id: string;
   name: string | null;
   phone: string | null;
+  phone_masked: string | null;
+  can_view_phone: boolean;
 };
 
 type ProjectCreateEmployeeOption = {
@@ -557,7 +563,10 @@ class ProjectController extends BaseController<
     });
   }
 
-  private async serializeProjectDetailItem(row: Record<string, unknown>) {
+  private async serializeProjectDetailItem(
+    row: Record<string, unknown>,
+    phonePrivacyContext?: CustomerPhonePrivacyContext,
+  ) {
     const normalizedCustomer = this.normalizeRelation(row.customer, {
       id: null,
       name: null,
@@ -565,11 +574,29 @@ class ProjectController extends BaseController<
       owner_id: null,
       owner: null,
     });
+    const customerPhoneFields =
+      typeof normalizedCustomer.id === "string" && phonePrivacyContext
+        ? customerPhonePrivacyService.serializeCustomerPhoneFields(
+          phonePrivacyContext,
+          {
+            id: normalizedCustomer.id,
+            owner_id: typeof normalizedCustomer.owner_id === "string"
+              ? normalizedCustomer.owner_id
+              : null,
+            phone: typeof normalizedCustomer.phone === "string"
+              ? normalizedCustomer.phone
+              : null,
+          },
+        )
+        : customerPhonePrivacyService.serializeMaskedPhoneOnly(
+          typeof normalizedCustomer.phone === "string" ? normalizedCustomer.phone : null,
+        );
 
     return {
       ...row,
       customer: {
         ...normalizedCustomer,
+        ...customerPhoneFields,
         owner: this.normalizeRelation(normalizedCustomer.owner, {
           id: null,
           name: null,
@@ -602,14 +629,40 @@ class ProjectController extends BaseController<
     };
   }
 
-  private serializeProjectListItem<T extends Record<string, unknown>>(row: T) {
+  private serializeProjectListItem<T extends Record<string, unknown>>(
+    row: T,
+    phonePrivacyContext?: CustomerPhonePrivacyContext,
+  ) {
+    const normalizedCustomer = this.normalizeRelation(row.customer, {
+      id: null,
+      name: null,
+      phone: null,
+      owner_id: null,
+    });
+    const customerPhoneFields =
+      typeof normalizedCustomer.id === "string" && phonePrivacyContext
+        ? customerPhonePrivacyService.serializeCustomerPhoneFields(
+          phonePrivacyContext,
+          {
+            id: normalizedCustomer.id,
+            owner_id: typeof normalizedCustomer.owner_id === "string"
+              ? normalizedCustomer.owner_id
+              : null,
+            phone: typeof normalizedCustomer.phone === "string"
+              ? normalizedCustomer.phone
+              : null,
+          },
+        )
+        : customerPhonePrivacyService.serializeMaskedPhoneOnly(
+          typeof normalizedCustomer.phone === "string" ? normalizedCustomer.phone : null,
+        );
+
     return {
       ...row,
-      customer: this.normalizeRelation(row.customer, {
-        id: null,
-        name: null,
-        phone: null,
-      }),
+      customer: {
+        ...normalizedCustomer,
+        ...customerPhoneFields,
+      },
       property: this.normalizeRelation(row.property, {
         community: null,
         building_info: null,
@@ -637,6 +690,7 @@ class ProjectController extends BaseController<
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
+    const authContext = await this.getRequiredAuthContext(request);
     const visibleProjectIds = await this.getProjectListVisibleIds(
       request,
       queryResult.data.ownership,
@@ -666,10 +720,13 @@ class ProjectController extends BaseController<
 
     const { data, error, count } = await query.range(from, to);
     if (error) throw Errors.dbError("列表查询失败", error);
+    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+      authContext,
+    );
 
     return ResponseHandler.success({
       list: ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
-        this.serializeProjectListItem(item)
+        this.serializeProjectListItem(item, phonePrivacyContext)
       ),
       pagination: {
         page,
@@ -703,7 +760,10 @@ class ProjectController extends BaseController<
     if (!data) throw Errors.dbError("查询记录不存在", error);
 
     return ResponseHandler.success(
-      await this.serializeProjectDetailItem((data || {}) as unknown as Record<string, unknown>),
+      await this.serializeProjectDetailItem(
+        (data || {}) as unknown as Record<string, unknown>,
+        await customerPhonePrivacyService.createPrivacyContext(authContext),
+      ),
     );
   };
 
@@ -983,6 +1043,7 @@ class ProjectController extends BaseController<
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const authContext = await this.getRequiredAuthContext(request);
     const visibleProjectIds = await this.getProjectListVisibleIds(
       request,
       queryResult.data.ownership,
@@ -1049,10 +1110,13 @@ class ProjectController extends BaseController<
       .range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
+    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+      authContext,
+    );
 
     return ResponseHandler.success({
       list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
-        this.serializeProjectListItem(item)
+        this.serializeProjectListItem(item, phonePrivacyContext)
       ),
       pagination: {
         page,
@@ -1082,7 +1146,7 @@ class ProjectController extends BaseController<
     const to = from + pageSize - 1;
 
     let query = SupabaseDB.from("customers")
-      .select("id, name, phone", { count: "exact" })
+      .select("id, name, phone, owner_id", { count: "exact" })
       .order("created_at", { ascending: false });
 
     const normalizedKeyword = keyword?.trim();
@@ -1103,7 +1167,9 @@ class ProjectController extends BaseController<
         .map((item) => ({
           id: item.id,
           name: item.name,
-          phone: item.phone,
+          phone: null,
+          phone_masked: customerPhonePrivacyService.maskPhone(item.phone),
+          can_view_phone: false,
         }));
 
     return ResponseHandler.success({
