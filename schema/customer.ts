@@ -79,6 +79,7 @@ export const CustomerSchema = z.object({
   status: z.enum(CUSTOMER_STATUS_VALUES, {
     message: "无效的客户状态",
   }).nullable().optional(),
+  douyin_screenshot_images: z.unknown().optional(),
 
   // created_at 是 ISO 时间字符串格式
   created_at: z.iso.datetime().nullable().optional(),

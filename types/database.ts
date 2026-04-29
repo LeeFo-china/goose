@@ -117,6 +117,7 @@ export type Database = {
       customers: {
         Row: {
           created_at: string | null
+          douyin_screenshot_images: string[]
           id: string
           last_follow_at: string | null
           name: string | null
@@ -129,6 +130,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          douyin_screenshot_images?: string[]
           id?: string
           last_follow_at?: string | null
           name?: string | null
@@ -141,6 +143,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          douyin_screenshot_images?: string[]
           id?: string
           last_follow_at?: string | null
           name?: string | null

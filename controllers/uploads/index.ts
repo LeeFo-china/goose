@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import { Post } from "@/utils/decorators/route";
 import { SupabaseDB } from "@/utils/supabase";
 import { ResponseHandler } from "@/utils/response";
@@ -26,6 +27,7 @@ const ALLOWED_UPLOAD_SCENES = [
   "referral_payment",
   "employee_avatar",
   "customer_avatar",
+  "customer_douyin_screenshot",
 ] as const;
 
 const UploadImageFieldSchema = z.object({
@@ -87,6 +89,18 @@ class UploadController extends BaseController {
 
     const fieldResult = UploadImageFieldSchema.safeParse(fields);
     if (!fieldResult.success) {
+      const hasInvalidScene = fieldResult.error.issues.some((issue) =>
+        issue.path[0] === "scene"
+      );
+      if (hasInvalidScene) {
+        throw Errors.business(
+          400,
+          "不支持的上传场景",
+          ErrorCodes.UPLOAD_SCENE_INVALID,
+          fieldResult.error.issues,
+        );
+      }
+
       throw Errors.fromZod(fieldResult.error);
     }
 
@@ -158,6 +172,7 @@ class UploadController extends BaseController {
       referral_payment: "referral-payment",
       employee_avatar: "employee-avatar",
       customer_avatar: "customer-avatar",
+      customer_douyin_screenshot: "customer-douyin-screenshots",
     };
     const prefix = prefixByScene[options.scene];
 

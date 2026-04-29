@@ -51,6 +51,14 @@ type NormalizedCustomerPropertyPayload = {
   layout: string | null;
 };
 
+type CustomerRowForResponse = {
+  owner?: unknown;
+  owner_id: string | null;
+  id: string;
+  source?: string | null;
+  douyin_screenshot_images?: unknown;
+};
+
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
@@ -106,7 +114,82 @@ class CustomerController extends BaseController<
     return owner ?? null;
   }
 
-  private serializeCustomer<T extends { owner?: unknown; owner_id: string | null }>(
+  private isObjectWithOwnKey<T extends object, K extends PropertyKey>(
+    value: T,
+    key: K,
+  ): value is T & Record<K, unknown> {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  }
+
+  private normalizeStoredDouyinScreenshotImages(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [] as string[];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private validateDouyinScreenshotImagesInput(value: unknown) {
+    if (value === undefined) {
+      return [] as string[];
+    }
+
+    if (!Array.isArray(value)) {
+      throw Errors.business(
+        400,
+        "抖音截图格式不正确",
+        ErrorCodes.DOUYIN_SCREENSHOT_INVALID,
+      );
+    }
+
+    if (value.length > 1) {
+      throw Errors.business(
+        400,
+        "抖音截图最多上传 1 张",
+        ErrorCodes.DOUYIN_SCREENSHOT_LIMIT_EXCEEDED,
+      );
+    }
+
+    const images = value.map((item) =>
+      typeof item === "string" ? item.trim() : ""
+    );
+    if (images.some((item) => !item)) {
+      throw Errors.business(
+        400,
+        "抖音截图格式不正确",
+        ErrorCodes.DOUYIN_SCREENSHOT_INVALID,
+      );
+    }
+
+    for (const image of images) {
+      try {
+        new URL(image);
+      } catch {
+        throw Errors.business(
+          400,
+          "抖音截图格式不正确",
+          ErrorCodes.DOUYIN_SCREENSHOT_INVALID,
+        );
+      }
+    }
+
+    return images;
+  }
+
+  private assertDouyinScreenshotRequired(images: string[]) {
+    if (images.length === 0) {
+      throw Errors.business(
+        400,
+        "抖音来源客户请上传抖音截图",
+        ErrorCodes.DOUYIN_SCREENSHOT_REQUIRED,
+      );
+    }
+  }
+
+  private serializeCustomer<T extends { owner?: unknown; owner_id: string | null; douyin_screenshot_images?: unknown }>(
     row: T,
   ) {
     const owner = this.normalizeOwner(row.owner) as
@@ -117,6 +200,9 @@ class CustomerController extends BaseController<
       ...row,
       owner,
       owner_name: owner?.name ?? null,
+      douyin_screenshot_images: this.normalizeStoredDouyinScreenshotImages(
+        row.douyin_screenshot_images,
+      ),
     };
   }
 
@@ -643,10 +729,19 @@ class CustomerController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const { customerPayload, propertyPayload } = this.splitCustomerPayload(result.data);
+    const douyinScreenshotImages = this.validateDouyinScreenshotImagesInput(
+      customerPayload.douyin_screenshot_images,
+    );
     const payload = {
       ...customerPayload,
       owner_id: customerPayload.owner_id ?? authContext.employeeId ?? null,
+      douyin_screenshot_images: customerPayload.source === "douyin"
+        ? douyinScreenshotImages
+        : [],
     };
+    if (payload.source === "douyin") {
+      this.assertDouyinScreenshotRequired(payload.douyin_screenshot_images);
+    }
 
     if (
       scope !== "all" &&
@@ -663,7 +758,7 @@ class CustomerController extends BaseController<
       .single();
 
     if (error) throw Errors.dbError("创建失败", error);
-    const customer = (data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+    const customer = (data as unknown) as CustomerRowForResponse;
     const primaryProperty = await this.upsertCustomerPrimaryProperty(
       customer.id,
       propertyPayload,
@@ -689,7 +784,7 @@ class CustomerController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id")
+      .select("id, owner_id, source, douyin_screenshot_images")
       .eq("id", idVerify.data.id)
       .maybeSingle();
 
@@ -703,6 +798,35 @@ class CustomerController extends BaseController<
 
     const { customerPayload, propertyPayload } = this.splitCustomerPayload(result.data);
     const payload = customerPayload;
+    const sourceTouched = this.isObjectWithOwnKey(payload, "source");
+    const screenshotTouched = this.isObjectWithOwnKey(
+      payload,
+      "douyin_screenshot_images",
+    );
+    const nextSource = sourceTouched
+      ? payload.source ?? null
+      : ((existing.data as { source?: string | null }).source ?? null);
+    const nextDouyinScreenshotImages = screenshotTouched
+      ? this.validateDouyinScreenshotImagesInput(
+        payload.douyin_screenshot_images,
+      )
+      : this.normalizeStoredDouyinScreenshotImages(
+        ((existing.data as unknown) as { douyin_screenshot_images?: unknown })
+          .douyin_screenshot_images,
+      );
+
+    if (nextSource === "douyin") {
+      if (sourceTouched || screenshotTouched) {
+        this.assertDouyinScreenshotRequired(nextDouyinScreenshotImages);
+      }
+
+      if (screenshotTouched || nextDouyinScreenshotImages.length > 0) {
+        payload.douyin_screenshot_images = nextDouyinScreenshotImages;
+      }
+    } else if (sourceTouched || screenshotTouched) {
+      payload.douyin_screenshot_images = [];
+    }
+
     const hasPropertyUpdate = propertyPayload !== undefined;
     const hasOwnerUpdate = payload.owner_id !== undefined;
     const ownerChanged = hasOwnerUpdate && payload.owner_id !== existing.data.owner_id;
@@ -749,7 +873,7 @@ class CustomerController extends BaseController<
       }
     }
 
-    let customer: { owner?: unknown; owner_id: string | null; id: string } | null = null;
+    let customer: CustomerRowForResponse | null = null;
 
     if (Object.keys(payload).length > 0) {
       const { data, error } = await SupabaseDB.getAdminClient()
@@ -760,7 +884,7 @@ class CustomerController extends BaseController<
         .single();
 
       if (error) throw Errors.dbError("更新失败", error);
-      customer = (data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+      customer = (data as unknown) as CustomerRowForResponse;
     } else {
       const current = await SupabaseDB.getAdminClient()
         .from("customers")
@@ -770,7 +894,7 @@ class CustomerController extends BaseController<
 
       if (current.error) throw Errors.dbError("查询客户失败", current.error);
       if (!current.data) throw Errors.badRequest("客户不存在");
-      customer = (current.data as unknown) as { owner?: unknown; owner_id: string | null; id: string };
+      customer = (current.data as unknown) as CustomerRowForResponse;
     }
 
     const primaryProperty = await this.upsertCustomerPrimaryProperty(
