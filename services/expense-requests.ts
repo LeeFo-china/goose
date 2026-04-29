@@ -5,6 +5,7 @@ import type {
   CancelExpenseRequestInput,
   CreateExpenseRequestInput,
   ExpenseRequestListQueryType,
+  ExpenseRequestTodoQueryType,
   ExpenseRequestItemInput,
   PayExpenseRequestInput,
   RejectExpenseRequestInput,
@@ -15,6 +16,15 @@ import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { expenseRequestCategoryService } from "@/services/expense-request-categories";
+
+type ExpenseRequestVisibilityFilter = Awaited<
+  ReturnType<typeof accessPolicyService.getVisibleExpenseFilters>
+>;
+
+type ExpenseRequestOperationPermission =
+  | "expense_request.approve_manager"
+  | "expense_request.approve_finance"
+  | "expense_request.pay";
 
 type ResolvedExpenseRequestItemInput = ExpenseRequestItemInput & {
   category: string;
@@ -146,6 +156,74 @@ class ExpenseRequestService {
     }
 
     throw Errors.forbidden();
+  }
+
+  private canAccessByVisibility(
+    visibility: ExpenseRequestVisibilityFilter,
+    record: { employee_id: string; assignee_id: string | null },
+  ) {
+    if (visibility.type === "all") {
+      return true;
+    }
+
+    if (visibility.type === "none") {
+      return false;
+    }
+
+    if (visibility.type === "self") {
+      return visibility.employeeIds.includes(record.employee_id);
+    }
+
+    return (
+      visibility.employeeIds.includes(record.employee_id) ||
+      (record.assignee_id ? visibility.employeeIds.includes(record.assignee_id) : false)
+    );
+  }
+
+  private async getVisibilityForPermission(
+    authContext: AuthContext,
+    permissionCode: ExpenseRequestOperationPermission | "expense_request.read",
+  ): Promise<ExpenseRequestVisibilityFilter> {
+    if (!accessPolicyService.hasPermission(authContext, permissionCode)) {
+      return {
+        type: "none",
+        employeeIds: [],
+      };
+    }
+
+    return accessPolicyService.getVisibleExpenseFilters(authContext, permissionCode);
+  }
+
+  private async assertCanOperateExpenseRequest(
+    authContext: AuthContext,
+    record: { employee_id: string; assignee_id: string | null },
+    permissionCode: ExpenseRequestOperationPermission,
+    message: string,
+  ) {
+    const visibility = await this.getVisibilityForPermission(
+      authContext,
+      permissionCode,
+    );
+
+    if (!this.canAccessByVisibility(visibility, record)) {
+      throw Errors.business(403, message, "FORBIDDEN");
+    }
+  }
+
+  private getProcessPermissionForQuery(params: ExpenseRequestListQueryType) {
+    if (params.status === "pending" && params.current_step === "manager_review") {
+      return "expense_request.approve_manager" as const;
+    }
+
+    if (params.status === "pending" && params.current_step === "finance_review") {
+      return "expense_request.approve_finance" as const;
+    }
+
+    if (params.status === "approved" && params.current_step === "payment") {
+      return "expense_request.pay" as const;
+    }
+
+    return null;
   }
 
   private async assertEmployeeExists(id: string, message = "员工不存在") {
@@ -332,12 +410,24 @@ class ExpenseRequestService {
     }
 
     if (existing.current_step === "manager_review") {
+      await this.assertCanOperateExpenseRequest(
+        authContext,
+        existing,
+        "expense_request.approve_manager",
+        "当前用户无经理审批权限",
+      );
       this.ensureCurrentEmployee(
         authContext,
         input.approver_id,
         "expense_request.approve_manager",
       );
     } else {
+      await this.assertCanOperateExpenseRequest(
+        authContext,
+        existing,
+        "expense_request.approve_finance",
+        "当前用户无财务审批权限",
+      );
       this.ensureCurrentEmployee(
         authContext,
         input.approver_id,
@@ -388,12 +478,24 @@ class ExpenseRequestService {
     }
 
     if (existing.current_step === "manager_review") {
+      await this.assertCanOperateExpenseRequest(
+        authContext,
+        existing,
+        "expense_request.approve_manager",
+        "当前用户无经理审批权限",
+      );
       this.ensureCurrentEmployee(
         authContext,
         input.approver_id,
         "expense_request.approve_manager",
       );
     } else if (existing.current_step === "finance_review") {
+      await this.assertCanOperateExpenseRequest(
+        authContext,
+        existing,
+        "expense_request.approve_finance",
+        "当前用户无财务审批权限",
+      );
       this.ensureCurrentEmployee(
         authContext,
         input.approver_id,
@@ -478,6 +580,12 @@ class ExpenseRequestService {
     }
 
     await this.assertCanReadExpenseRequest(authContext, existing);
+    await this.assertCanOperateExpenseRequest(
+      authContext,
+      existing,
+      "expense_request.pay",
+      "当前用户无登记打款权限",
+    );
     this.ensureCurrentEmployee(authContext, input.paid_by, "expense_request.pay");
 
     if (existing.status !== "approved" || existing.current_step !== "payment") {
@@ -542,11 +650,86 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestListQueryType,
   ) {
-    const visibility = await accessPolicyService.getVisibleExpenseFilters(
-      authContext,
-      "expense_request.read",
-    );
+    const processPermission = this.getProcessPermissionForQuery(params);
+    const visibility = processPermission
+      ? await this.getVisibilityForPermission(authContext, processPermission)
+      : await accessPolicyService.getVisibleExpenseFilters(
+        authContext,
+        "expense_request.read",
+      );
     return expenseRequestRepository.list(params, visibility);
+  }
+
+  async listTodoExpenseRequests(
+    authContext: AuthContext,
+    params: ExpenseRequestTodoQueryType,
+  ) {
+    const todoDefinitions = [
+      {
+        status: "pending",
+        current_step: "manager_review",
+        permissionCode: "expense_request.approve_manager" as const,
+      },
+      {
+        status: "pending",
+        current_step: "finance_review",
+        permissionCode: "expense_request.approve_finance" as const,
+      },
+      {
+        status: "approved",
+        current_step: "payment",
+        permissionCode: "expense_request.pay" as const,
+      },
+    ];
+    const rowsById = new Map<string, Awaited<ReturnType<typeof expenseRequestRepository.list>>["list"][number]>();
+
+    for (const definition of todoDefinitions) {
+      if (params.status && params.status !== definition.status) {
+        continue;
+      }
+
+      const visibility = await this.getVisibilityForPermission(
+        authContext,
+        definition.permissionCode,
+      );
+      if (visibility.type === "none") {
+        continue;
+      }
+
+      const result = await expenseRequestRepository.list(
+        {
+          page: 1,
+          pageSize: 10000,
+          keyword: params.keyword,
+          status: definition.status as ExpenseRequestListQueryType["status"],
+          current_step:
+            definition.current_step as ExpenseRequestListQueryType["current_step"],
+        },
+        visibility,
+      );
+
+      for (const item of result.list) {
+        rowsById.set(item.id, item);
+      }
+    }
+
+    const rows = Array.from(rowsById.values()).sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    });
+    const from = (params.page - 1) * params.pageSize;
+    const list = rows.slice(from, from + params.pageSize);
+
+    return {
+      list,
+      pagination: {
+        page: params.page,
+        pageSize: params.pageSize,
+        total: rows.length,
+        totalPages: rows.length ? Math.ceil(rows.length / params.pageSize) : 0,
+      },
+    };
   }
 }
 

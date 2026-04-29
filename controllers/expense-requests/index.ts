@@ -5,13 +5,14 @@ import {
   CancelExpenseRequestSchema,
   CreateExpenseRequestSchema,
   ExpenseRequestListQuerySchema,
+  ExpenseRequestTodoQuerySchema,
   PayExpenseRequestSchema,
   RejectExpenseRequestSchema,
   SubmitExpenseRequestSchema,
   UpdateExpenseRequestSchema,
 } from "@/schema/expense-requests";
 import { expenseRequestService } from "@/services/expense-requests";
-import { Post } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { authorizationService } from "@/services/authorization";
@@ -59,6 +60,19 @@ class ExpenseRequestsController extends BaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Get("/expense-requests/todo")
+  async todo(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = ExpenseRequestTodoQuerySchema.safeParse(request.query);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await expenseRequestService.listTodoExpenseRequests(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);

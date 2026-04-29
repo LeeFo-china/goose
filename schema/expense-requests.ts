@@ -147,6 +147,11 @@ export const ExpenseRequestListQuerySchema = PaginationQuerySchema.extend({
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
 });
 
+export const ExpenseRequestTodoQuerySchema = PaginationQuerySchema.extend({
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  status: optionalQueryValue(ExpenseStatusSchema),
+});
+
 export type ExpenseRequestItemInput = z.infer<typeof ExpenseRequestItemSchema>;
 export type CreateExpenseRequestInput = z.infer<typeof CreateExpenseRequestSchema>;
 export type UpdateExpenseRequestInput = z.infer<typeof UpdateExpenseRequestSchema>;
@@ -156,3 +161,4 @@ export type RejectExpenseRequestInput = z.infer<typeof RejectExpenseRequestSchem
 export type CancelExpenseRequestInput = z.infer<typeof CancelExpenseRequestSchema>;
 export type PayExpenseRequestInput = z.infer<typeof PayExpenseRequestSchema>;
 export type ExpenseRequestListQueryType = z.infer<typeof ExpenseRequestListQuerySchema>;
+export type ExpenseRequestTodoQueryType = z.infer<typeof ExpenseRequestTodoQuerySchema>;
