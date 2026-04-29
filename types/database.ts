@@ -437,6 +437,79 @@ export type Database = {
           },
         ]
       }
+      expense_request_approval_chains: {
+        Row: {
+          acted_at: string | null
+          acted_by: string | null
+          assignee_id: string
+          assignee_name_snapshot: string | null
+          comment: string | null
+          created_at: string
+          expense_request_id: string
+          id: string
+          required_permission: string
+          sort_order: number
+          status: string
+          step: string
+          step_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          acted_at?: string | null
+          acted_by?: string | null
+          assignee_id: string
+          assignee_name_snapshot?: string | null
+          comment?: string | null
+          created_at?: string
+          expense_request_id: string
+          id?: string
+          required_permission: string
+          sort_order: number
+          status?: string
+          step: string
+          step_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          acted_at?: string | null
+          acted_by?: string | null
+          assignee_id?: string
+          assignee_name_snapshot?: string | null
+          comment?: string | null
+          created_at?: string
+          expense_request_id?: string
+          id?: string
+          required_permission?: string
+          sort_order?: number
+          status?: string
+          step?: string
+          step_name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_request_approval_chains_acted_by_fkey"
+            columns: ["acted_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_approval_chains_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_request_approval_chains_expense_request_id_fkey"
+            columns: ["expense_request_id"]
+            isOneToOne: false
+            referencedRelation: "expense_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_request_items: {
         Row: {
           amount: number

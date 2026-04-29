@@ -4,6 +4,8 @@ import {
   ApproveExpenseRequestSchema,
   CancelExpenseRequestSchema,
   CreateExpenseRequestSchema,
+  ExpenseApprovalCandidateQuerySchema,
+  ExpenseApprovalTemplateQuerySchema,
   ExpenseRequestListQuerySchema,
   ExpenseRequestTodoQuerySchema,
   PayExpenseRequestSchema,
@@ -60,6 +62,29 @@ class ExpenseRequestsController extends BaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Get("/expense-requests/approval-template")
+  async approvalTemplate(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredAuthContext(request);
+    const result = ExpenseApprovalTemplateQuerySchema.safeParse(request.query);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = expenseRequestService.getApprovalTemplate(result.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/expense-requests/approval-candidates")
+  async approvalCandidates(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = ExpenseApprovalCandidateQuerySchema.safeParse(request.query);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await expenseRequestService.listApprovalCandidates(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
 
   @Get("/expense-requests/todo")
   async todo(request: FastifyRequest, reply: FastifyReply) {

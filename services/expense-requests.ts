@@ -4,6 +4,9 @@ import type {
   ApproveExpenseRequestInput,
   CancelExpenseRequestInput,
   CreateExpenseRequestInput,
+  ExpenseApprovalCandidateQueryType,
+  ExpenseApprovalChainItemInput,
+  ExpenseApprovalTemplateQueryType,
   ExpenseRequestListQueryType,
   ExpenseRequestTodoQueryType,
   ExpenseRequestItemInput,
@@ -12,6 +15,11 @@ import type {
   SubmitExpenseRequestInput,
   UpdateExpenseRequestInput,
 } from "@/schema/expense-requests";
+import type {
+  ExpenseApprovalCandidateEmployee,
+  ExpenseApprovalChainPayload,
+  ExpenseApprovalChainRecord,
+} from "@/repositories/expense-requests";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
@@ -25,6 +33,44 @@ type ExpenseRequestOperationPermission =
   | "expense_request.approve_manager"
   | "expense_request.approve_finance"
   | "expense_request.pay";
+
+type ApprovalChainStep = "manager_review" | "finance_review";
+
+const approvalChainStepConfigs: Array<{
+  step: ApprovalChainStep;
+  step_name: string;
+  sort_order: number;
+  required_permission: ExpenseRequestOperationPermission;
+  description: string;
+}> = [
+  {
+    step: "manager_review",
+    step_name: "经理审批",
+    sort_order: 1,
+    required_permission: "expense_request.approve_manager",
+    description: "请选择具备经理审批权限的负责人",
+  },
+  {
+    step: "finance_review",
+    step_name: "财务审批",
+    sort_order: 2,
+    required_permission: "expense_request.approve_finance",
+    description: "请选择具备财务审批权限的会计或财务人员",
+  },
+];
+
+const approvalStepPermissionMap: Record<string, ExpenseRequestOperationPermission> = {
+  manager_review: "expense_request.approve_manager",
+  finance_review: "expense_request.approve_finance",
+  payment: "expense_request.pay",
+};
+
+const scopeWeight: Record<string, number> = {
+  self: 1,
+  assigned: 2,
+  department: 3,
+  all: 4,
+};
 
 type ResolvedExpenseRequestItemInput = ExpenseRequestItemInput & {
   category: string;
@@ -67,6 +113,28 @@ function generateExpenseRequestNo() {
   const random = Math.floor(Math.random() * 9000) + 1000;
 
   return `ER${stamp}${random}`;
+}
+
+function normalizeRelationName(value: unknown) {
+  if (Array.isArray(value)) {
+    const first = value[0] as { name?: unknown } | undefined;
+    return typeof first?.name === "string" ? first.name : null;
+  }
+
+  if (value && typeof value === "object") {
+    const item = value as { name?: unknown };
+    return typeof item.name === "string" ? item.name : null;
+  }
+
+  return null;
+}
+
+function normalizeScope(value: string | null | undefined) {
+  if (value === "department" || value === "assigned" || value === "all") {
+    return value;
+  }
+
+  return "self";
 }
 
 class ExpenseRequestService {
@@ -226,6 +294,213 @@ class ExpenseRequestService {
     return null;
   }
 
+  private mergeScope(existing: string | null, incoming: string | null) {
+    const normalizedIncoming = normalizeScope(incoming);
+    if (!existing) {
+      return normalizedIncoming;
+    }
+
+    return scopeWeight[normalizedIncoming] > scopeWeight[existing]
+      ? normalizedIncoming
+      : existing;
+  }
+
+  private buildCandidateScopeMap(
+    rows: Array<{
+      employee_id: string;
+      role_scope: string | null;
+      override_effect: string | null;
+      override_scope: string | null;
+    }>,
+  ) {
+    const map = new Map<string, string>();
+
+    for (const row of rows) {
+      if (row.override_effect === "deny") {
+        map.delete(row.employee_id);
+        continue;
+      }
+
+      if (row.override_effect === "allow") {
+        map.set(
+          row.employee_id,
+          this.mergeScope(map.get(row.employee_id) ?? null, row.override_scope),
+        );
+        continue;
+      }
+
+      if (row.role_scope) {
+        map.set(
+          row.employee_id,
+          this.mergeScope(map.get(row.employee_id) ?? null, row.role_scope),
+        );
+      }
+    }
+
+    return map;
+  }
+
+  private scopeCoversApplicant(input: {
+    scope: string | null;
+    candidate: ExpenseApprovalCandidateEmployee;
+    applicant: { id: string; department_id: string | null };
+  }) {
+    const scope = normalizeScope(input.scope);
+    if (scope === "all") {
+      return true;
+    }
+
+    if (scope === "department") {
+      return Boolean(
+        input.applicant.department_id &&
+          input.candidate.department_id &&
+          input.applicant.department_id === input.candidate.department_id,
+      );
+    }
+
+    return input.candidate.id === input.applicant.id;
+  }
+
+  private getStepConfig(step: string) {
+    return approvalChainStepConfigs.find((item) => item.step === step) ?? null;
+  }
+
+  private async getApplicantEmployee(id: string) {
+    const employee = await expenseRequestRepository.findEmployeeForApproval(id);
+    if (!employee || employee.status !== "active") {
+      throw Errors.badRequest("申请人不存在或不可用");
+    }
+
+    return employee;
+  }
+
+  private async assertCandidateForStep(input: {
+    candidateId: string;
+    applicantId: string;
+    step: ApprovalChainStep;
+  }) {
+    const [candidate, applicant] = await Promise.all([
+      expenseRequestRepository.findEmployeeForApproval(input.candidateId),
+      this.getApplicantEmployee(input.applicantId),
+    ]);
+
+    if (!candidate || candidate.status !== "active") {
+      throw Errors.badRequest("审批人不存在或已停用");
+    }
+
+    if (candidate.id === applicant.id) {
+      throw Errors.badRequest("申请人不能审批自己的费用申请");
+    }
+
+    const config = this.getStepConfig(input.step);
+    if (!config) {
+      throw Errors.badRequest("审批流程节点顺序不正确");
+    }
+
+    const permissionRows = await expenseRequestRepository.listEmployeePermissionContexts(
+      [candidate.id],
+      config.required_permission,
+    );
+    const scope = this.buildCandidateScopeMap(permissionRows).get(candidate.id) ?? null;
+    if (!scope) {
+      throw Errors.badRequest("该员工不具备当前节点审批权限");
+    }
+
+    if (
+      !this.scopeCoversApplicant({
+        scope,
+        candidate,
+        applicant,
+      })
+    ) {
+      throw Errors.badRequest("该员工无权审批当前费用申请");
+    }
+
+    return {
+      candidate,
+      config,
+      scope,
+    };
+  }
+
+  private normalizeApprovalChainInput(
+    input: ExpenseApprovalChainItemInput[] | undefined,
+  ) {
+    if (!input || input.length === 0) {
+      return [] as ExpenseApprovalChainItemInput[];
+    }
+
+    const seen = new Set<string>();
+    for (const item of input) {
+      if (seen.has(item.step)) {
+        throw Errors.badRequest("审批流程节点不能重复");
+      }
+      seen.add(item.step);
+    }
+
+    return approvalChainStepConfigs.map((config) => {
+      const matched = input.find((item) => item.step === config.step);
+      if (!matched) {
+        throw Errors.badRequest(
+          config.step === "manager_review" ? "请选择经理审批人" : "请选择财务审批人",
+        );
+      }
+
+      return matched;
+    });
+  }
+
+  private async buildApprovalChainPayload(
+    expenseRequestId: string,
+    applicantId: string,
+    input: ExpenseApprovalChainItemInput[],
+    firstStatus: "pending" | "current",
+  ): Promise<ExpenseApprovalChainPayload[]> {
+    const normalized = this.normalizeApprovalChainInput(input);
+    const payload: ExpenseApprovalChainPayload[] = [];
+
+    for (const item of normalized) {
+      const { candidate, config } = await this.assertCandidateForStep({
+        candidateId: item.assignee_id,
+        applicantId,
+        step: item.step,
+      });
+
+      payload.push({
+        expense_request_id: expenseRequestId,
+        step: config.step,
+        step_name: config.step_name,
+        sort_order: config.sort_order,
+        assignee_id: candidate.id,
+        assignee_name_snapshot: candidate.name ?? null,
+        required_permission: config.required_permission,
+        status: config.sort_order === 1 ? firstStatus : "pending",
+      });
+    }
+
+    return payload;
+  }
+
+  private getApprovalChain(record: { approval_chain?: unknown }) {
+    const rows = Array.isArray(record.approval_chain)
+      ? record.approval_chain
+      : [];
+
+    return [...(rows as ExpenseApprovalChainRecord[])].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
+  }
+
+  private getCurrentApprovalNode(record: {
+    approval_chain?: unknown;
+    current_step: string;
+  }) {
+    const chain = this.getApprovalChain(record);
+    return chain.find((item) => item.status === "current") ??
+      chain.find((item) => item.step === record.current_step && item.status !== "approved") ??
+      null;
+  }
+
   private async assertEmployeeExists(id: string, message = "员工不存在") {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
@@ -262,6 +537,82 @@ class ExpenseRequestService {
     }
   }
 
+  getApprovalTemplate(_params: ExpenseApprovalTemplateQueryType) {
+    return {
+      list: approvalChainStepConfigs.map((item) => ({
+        step: item.step,
+        step_name: item.step_name,
+        required: true,
+        sort_order: item.sort_order,
+        required_permission: item.required_permission,
+        description: item.description,
+      })),
+    };
+  }
+
+  async listApprovalCandidates(
+    authContext: AuthContext,
+    params: ExpenseApprovalCandidateQueryType,
+  ) {
+    const permissionCode = approvalStepPermissionMap[params.step];
+    if (!permissionCode) {
+      throw Errors.badRequest("无效的审批节点");
+    }
+
+    const applicantId = params.applicant_employee_id ?? authContext.employeeId;
+    if (!applicantId) {
+      throw Errors.badRequest("缺少申请人");
+    }
+
+    const applicant = await this.getApplicantEmployee(applicantId);
+    const candidates = await expenseRequestRepository.listEmployeesForApprovalCandidates({
+      keyword: params.keyword,
+    });
+    const permissionRows = await expenseRequestRepository.listEmployeePermissionContexts(
+      candidates.map((item) => item.id),
+      permissionCode,
+    );
+    const scopeMap = this.buildCandidateScopeMap(permissionRows);
+    const filtered = candidates
+      .filter((candidate) => candidate.id !== applicant.id)
+      .filter((candidate) => {
+        if (params.department_id && candidate.department_id !== params.department_id) {
+          return false;
+        }
+
+        const scope = scopeMap.get(candidate.id) ?? null;
+        return Boolean(scope) &&
+          this.scopeCoversApplicant({
+            scope,
+            candidate,
+            applicant,
+          });
+      });
+    const total = filtered.length;
+    const from = (params.page - 1) * params.pageSize;
+    const paged = filtered.slice(from, from + params.pageSize);
+
+    return {
+      list: paged.map((item) => ({
+        id: item.id,
+        name: item.name,
+        phone: item.phone,
+        avatar: item.avatar,
+        department_id: item.department_id,
+        department_name: normalizeRelationName(item.department),
+        post_name: normalizeRelationName(item.post),
+        matched_permission: permissionCode,
+        matched_scope: scopeMap.get(item.id) ?? null,
+      })),
+      pagination: {
+        page: params.page,
+        pageSize: params.pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / params.pageSize) : 0,
+      },
+    };
+  }
+
   async createExpenseRequest(authContext: AuthContext, input: CreateExpenseRequestInput) {
     this.ensureCurrentEmployee(authContext, input.employee_id, "expense_request.create");
     await this.assertEmployeeExists(input.employee_id);
@@ -271,7 +622,7 @@ class ExpenseRequestService {
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() || null;
 
-    return expenseRequestRepository.create(
+    const created = await expenseRequestRepository.create(
       {
         employee_id: input.employee_id,
         project_id: input.project_id ?? null,
@@ -287,6 +638,21 @@ class ExpenseRequestService {
       },
       items,
     );
+
+    if (input.approval_chain && input.approval_chain.length > 0) {
+      await expenseRequestRepository.replaceApprovalChain(
+        created.id,
+        await this.buildApprovalChainPayload(
+          created.id,
+          input.employee_id,
+          input.approval_chain,
+          "pending",
+        ),
+      );
+      return expenseRequestRepository.findById(created.id);
+    }
+
+    return created;
   }
 
   async updateExpenseRequest(
@@ -310,6 +676,10 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前状态不允许修改费用申请");
     }
 
+    if (input.approval_chain && !["draft", "rejected"].includes(existing.status)) {
+      throw Errors.badRequest("当前状态不允许修改审批流程");
+    }
+
     await this.assertProjectExists(input.project_id);
 
     const items = input.items
@@ -318,7 +688,7 @@ class ExpenseRequestService {
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() ?? existing.title ?? null;
 
-    return expenseRequestRepository.update(
+    const updated = await expenseRequestRepository.update(
       id,
       {
         project_id: input.project_id ?? existing.project_id,
@@ -332,6 +702,21 @@ class ExpenseRequestService {
       },
       input.items ? items : undefined,
     );
+
+    if (input.approval_chain) {
+      await expenseRequestRepository.replaceApprovalChain(
+        id,
+        await this.buildApprovalChainPayload(
+          id,
+          existing.employee_id,
+          input.approval_chain,
+          "pending",
+        ),
+      );
+      return expenseRequestRepository.findById(id);
+    }
+
+    return updated;
   }
 
   async submitExpenseRequest(
@@ -345,9 +730,13 @@ class ExpenseRequestService {
     }
 
     await this.assertCanReadExpenseRequest(authContext, existing);
+    const operatorId = input.operator_id ?? authContext.employeeId;
+    if (!operatorId) {
+      throw Errors.badRequest("缺少提交人");
+    }
     this.ensureCurrentEmployee(
       authContext,
-      input.operator_id,
+      operatorId,
       "expense_request.submit",
     );
 
@@ -355,7 +744,7 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前状态不允许提交费用申请");
     }
 
-    await this.assertEmployeeExists(input.operator_id, "提交人不存在");
+    await this.assertEmployeeExists(operatorId, "提交人不存在");
 
     const items = (existing.items as ResolvedExpenseRequestItemInput[] | undefined) || [];
     if (items.length === 0) {
@@ -369,6 +758,23 @@ class ExpenseRequestService {
 
     const now = new Date().toISOString();
     const action = existing.status === "rejected" ? "resubmit" : "submit";
+    const requestedApprovalChain = input.approval_chain ??
+      (this.getApprovalChain(existing).length > 0
+        ? this.getApprovalChain(existing).map((item) => ({
+          step: item.step as ApprovalChainStep,
+          assignee_id: item.assignee_id,
+        }))
+        : undefined);
+
+    if (!requestedApprovalChain || requestedApprovalChain.length === 0) {
+      throw Errors.badRequest("请先选择审批流程");
+    }
+    const approvalChainPayload = await this.buildApprovalChainPayload(
+      id,
+      existing.employee_id,
+      requestedApprovalChain,
+      "current",
+    );
 
     const updated = await expenseRequestRepository.update(id, {
       total_amount: totalAmount,
@@ -376,15 +782,17 @@ class ExpenseRequestService {
       current_step: "manager_review",
       submitted_at: now,
       rejected_reason: null,
-      assignee_id: null,
+      assignee_id: approvalChainPayload[0]?.assignee_id ?? null,
       ...buildLegacyFields(existing.title, items, totalAmount),
     });
 
+    await expenseRequestRepository.replaceApprovalChain(id, approvalChainPayload);
+
     await expenseRequestRepository.appendApproval({
       expense_request_id: id,
-      step: "manager_review",
+      step: "draft",
       action,
-      approver_id: input.operator_id,
+      approver_id: operatorId,
       comment: input.comment ?? null,
     });
 
@@ -409,6 +817,50 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前审批节点不允许通过");
     }
 
+    const approverId = input.approver_id ?? authContext.employeeId;
+    if (!approverId) {
+      throw Errors.badRequest("缺少审批人");
+    }
+
+    const currentNode = this.getCurrentApprovalNode(existing);
+    if (currentNode) {
+      if (currentNode.status !== "current") {
+        throw Errors.badRequest("当前审批链节点状态不允许操作");
+      }
+
+      if (currentNode.assignee_id !== approverId) {
+        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
+      }
+
+      if (currentNode.step !== existing.current_step) {
+        throw Errors.badRequest("审批链与当前节点不一致");
+      }
+    }
+
+    const approverId = input.approver_id ?? authContext.employeeId;
+    if (!approverId) {
+      throw Errors.badRequest("缺少审批人");
+    }
+    const rejectedReason = input.rejected_reason ?? input.reason;
+    if (!rejectedReason) {
+      throw Errors.badRequest("驳回原因不能为空");
+    }
+
+    const currentNode = this.getCurrentApprovalNode(existing);
+    if (currentNode) {
+      if (currentNode.status !== "current") {
+        throw Errors.badRequest("当前审批链节点状态不允许操作");
+      }
+
+      if (currentNode.assignee_id !== approverId) {
+        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
+      }
+
+      if (currentNode.step !== existing.current_step) {
+        throw Errors.badRequest("审批链与当前节点不一致");
+      }
+    }
+
     if (existing.current_step === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
@@ -418,7 +870,7 @@ class ExpenseRequestService {
       );
       this.ensureCurrentEmployee(
         authContext,
-        input.approver_id,
+        approverId,
         "expense_request.approve_manager",
       );
     } else {
@@ -430,12 +882,12 @@ class ExpenseRequestService {
       );
       this.ensureCurrentEmployee(
         authContext,
-        input.approver_id,
+        approverId,
         "expense_request.approve_finance",
       );
     }
 
-    await this.assertEmployeeExists(input.approver_id, "审批人不存在");
+    await this.assertEmployeeExists(approverId, "审批人不存在");
 
     const now = new Date().toISOString();
     const nextStatus = existing.current_step === "finance_review"
@@ -444,19 +896,36 @@ class ExpenseRequestService {
     const nextStep = existing.current_step === "finance_review"
       ? "payment"
       : "finance_review";
+    const chain = this.getApprovalChain(existing);
+    const nextNode = chain.find((item) => item.step === nextStep);
 
     const updated = await expenseRequestRepository.update(id, {
       status: nextStatus,
       current_step: nextStep,
       approved_at: existing.current_step === "finance_review" ? now : null,
-      assignee_id: null,
+      assignee_id: nextNode?.assignee_id ?? null,
     });
+
+    if (currentNode) {
+      await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
+        status: "approved",
+        acted_by: approverId,
+        acted_at: now,
+        comment: input.comment ?? null,
+      });
+    }
+
+    if (nextNode && existing.current_step === "manager_review") {
+      await expenseRequestRepository.updateApprovalChainNode(nextNode.id, {
+        status: "current",
+      });
+    }
 
     await expenseRequestRepository.appendApproval({
       expense_request_id: id,
       step: existing.current_step,
       action: "approve",
-      approver_id: input.approver_id,
+      approver_id: approverId,
       comment: input.comment ?? null,
     });
 
@@ -486,7 +955,7 @@ class ExpenseRequestService {
       );
       this.ensureCurrentEmployee(
         authContext,
-        input.approver_id,
+        approverId,
         "expense_request.approve_manager",
       );
     } else if (existing.current_step === "finance_review") {
@@ -498,30 +967,47 @@ class ExpenseRequestService {
       );
       this.ensureCurrentEmployee(
         authContext,
-        input.approver_id,
+        approverId,
         "expense_request.approve_finance",
       );
     } else {
       throw Errors.badRequest("当前审批节点不允许驳回");
     }
 
-    await this.assertEmployeeExists(input.approver_id, "审批人不存在");
+    await this.assertEmployeeExists(approverId, "审批人不存在");
 
     const now = new Date().toISOString();
     const updated = await expenseRequestRepository.update(id, {
       status: "rejected",
       current_step: "draft",
       rejected_at: now,
-      rejected_reason: input.rejected_reason,
+      rejected_reason: rejectedReason,
       assignee_id: existing.employee_id,
     });
+
+    if (currentNode) {
+      await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
+        status: "rejected",
+        acted_by: approverId,
+        acted_at: now,
+        comment: input.comment ?? rejectedReason,
+      });
+
+      for (const node of this.getApprovalChain(existing)) {
+        if (node.id !== currentNode.id && node.status === "pending") {
+          await expenseRequestRepository.updateApprovalChainNode(node.id, {
+            status: "cancelled",
+          });
+        }
+      }
+    }
 
     await expenseRequestRepository.appendApproval({
       expense_request_id: id,
       step: existing.current_step,
       action: "reject",
-      approver_id: input.approver_id,
-      comment: input.comment ?? input.rejected_reason,
+      approver_id: approverId,
+      comment: input.comment ?? rejectedReason,
     });
 
     return expenseRequestRepository.findById(updated.id);
@@ -557,6 +1043,17 @@ class ExpenseRequestService {
       cancelled_at: now,
       assignee_id: null,
     });
+
+    for (const node of this.getApprovalChain(existing)) {
+      if (!["approved", "rejected", "cancelled"].includes(node.status)) {
+        await expenseRequestRepository.updateApprovalChainNode(node.id, {
+          status: "cancelled",
+          acted_by: input.operator_id,
+          acted_at: now,
+          comment: input.comment ?? null,
+        });
+      }
+    }
 
     await expenseRequestRepository.appendApproval({
       expense_request_id: id,
@@ -657,7 +1154,41 @@ class ExpenseRequestService {
         authContext,
         "expense_request.read",
       );
-    return expenseRequestRepository.list(params, visibility);
+    const result = await expenseRequestRepository.list(
+      processPermission
+        ? {
+          ...params,
+          page: 1,
+          pageSize: 10000,
+        }
+        : params,
+      visibility,
+    );
+
+    if (!processPermission) {
+      return result;
+    }
+
+    const rows = result.list.filter((item) => {
+      const currentNode = this.getCurrentApprovalNode(item);
+      if (!currentNode) {
+        return true;
+      }
+
+      return currentNode.assignee_id === authContext.employeeId;
+    });
+    const from = (params.page - 1) * params.pageSize;
+    const list = rows.slice(from, from + params.pageSize);
+
+    return {
+      list,
+      pagination: {
+        page: params.page,
+        pageSize: params.pageSize,
+        total: rows.length,
+        totalPages: rows.length ? Math.ceil(rows.length / params.pageSize) : 0,
+      },
+    };
   }
 
   async listTodoExpenseRequests(
@@ -709,6 +1240,15 @@ class ExpenseRequestService {
       );
 
       for (const item of result.list) {
+        const currentNode = this.getCurrentApprovalNode(item);
+        if (
+          currentNode &&
+          definition.status === "pending" &&
+          currentNode.assignee_id !== authContext.employeeId
+        ) {
+          continue;
+        }
+
         rowsById.set(item.id, item);
       }
     }

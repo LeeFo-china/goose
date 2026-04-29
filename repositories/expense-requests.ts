@@ -41,6 +41,7 @@ export type ExpenseRequestRecord = {
   items?: unknown;
   approvals?: unknown;
   settlement?: unknown;
+  approval_chain?: unknown;
 };
 
 export type ExpenseRequestMutationPayload = {
@@ -86,6 +87,47 @@ type ExpenseRequestSettlementPayload = {
   remark?: string | null;
 };
 
+export type ExpenseApprovalChainPayload = {
+  expense_request_id: string;
+  step: string;
+  step_name: string;
+  sort_order: number;
+  assignee_id: string;
+  assignee_name_snapshot?: string | null;
+  required_permission: string;
+  status: string;
+};
+
+export type ExpenseApprovalChainRecord = {
+  id: string;
+  expense_request_id: string;
+  step: string;
+  step_name: string;
+  sort_order: number;
+  assignee_id: string;
+  assignee_name_snapshot: string | null;
+  required_permission: string;
+  status: string;
+  acted_by: string | null;
+  acted_at: string | null;
+  comment: string | null;
+  created_at: string;
+  updated_at: string | null;
+  assignee?: unknown;
+};
+
+export type ExpenseApprovalCandidateEmployee = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  avatar: string | null;
+  status: string | null;
+  department_id: string | null;
+  post_id: string | null;
+  department?: unknown;
+  post?: unknown;
+};
+
 type ExpenseRequestVisibilityFilter =
   | { type: "all"; employeeIds: string[] }
   | { type: "none"; employeeIds: string[] }
@@ -105,6 +147,30 @@ class ExpenseRequestRepository {
       paid_amount,
       paid_at,
       paid_by
+    ),
+    approval_chain:expense_request_approval_chains(
+      id,
+      step,
+      step_name,
+      sort_order,
+      assignee_id,
+      assignee_name_snapshot,
+      required_permission,
+      status,
+      acted_by,
+      acted_at,
+      comment,
+      created_at,
+      updated_at,
+      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
+      )
     )
   `;
 
@@ -158,6 +224,30 @@ class ExpenseRequestRepository {
         name,
         phone,
         status
+      )
+    ),
+    approval_chain:expense_request_approval_chains(
+      id,
+      step,
+      step_name,
+      sort_order,
+      assignee_id,
+      assignee_name_snapshot,
+      required_permission,
+      status,
+      acted_by,
+      acted_at,
+      comment,
+      created_at,
+      updated_at,
+      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
       )
     )
   `;
@@ -287,6 +377,246 @@ class ExpenseRequestRepository {
     if (error) {
       throw Errors.dbError("写入费用审批记录失败", error);
     }
+  }
+
+  async replaceApprovalChain(
+    expenseRequestId: string,
+    items: ExpenseApprovalChainPayload[],
+  ) {
+    const { error: deleteError } = await SupabaseDB.getAdminClient()
+      .from("expense_request_approval_chains")
+      .delete()
+      .eq("expense_request_id", expenseRequestId);
+
+    if (deleteError) {
+      throw Errors.dbError("清理费用审批链失败", deleteError);
+    }
+
+    if (items.length === 0) {
+      return;
+    }
+
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("expense_request_approval_chains")
+      .insert(items);
+
+    if (error) {
+      throw Errors.dbError("保存费用审批链失败", error);
+    }
+  }
+
+  async listApprovalChain(expenseRequestId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("expense_request_approval_chains")
+      .select(`
+        id,
+        expense_request_id,
+        step,
+        step_name,
+        sort_order,
+        assignee_id,
+        assignee_name_snapshot,
+        required_permission,
+        status,
+        acted_by,
+        acted_at,
+        comment,
+        created_at,
+        updated_at,
+        assignee:employees!expense_request_approval_chains_assignee_id_fkey(
+          id,
+          name,
+          phone,
+          avatar,
+          status,
+          department:departments!employees_department_id_fkey(name),
+          post:posts!employees_post_id_fkey(name)
+        )
+      `)
+      .eq("expense_request_id", expenseRequestId)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询费用审批链失败", error);
+    }
+
+    return ((data || []) as unknown) as ExpenseApprovalChainRecord[];
+  }
+
+  async updateApprovalChainNode(
+    id: string,
+    payload: {
+      status: string;
+      acted_by?: string | null;
+      acted_at?: string | null;
+      comment?: string | null;
+    },
+  ) {
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("expense_request_approval_chains")
+      .update({
+        ...payload,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) {
+      throw Errors.dbError("更新费用审批链失败", error);
+    }
+  }
+
+  async findEmployeeForApproval(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employees")
+      .select(`
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        department_id,
+        post_id,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
+      `)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询审批人失败", error);
+    }
+
+    return (data as unknown) as ExpenseApprovalCandidateEmployee | null;
+  }
+
+  async listEmployeesForApprovalCandidates(input: {
+    keyword?: string;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("employees")
+      .select(`
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        department_id,
+        post_id,
+        department:departments!employees_department_id_fkey(name),
+        post:posts!employees_post_id_fkey(name)
+      `)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
+    const keyword = input.keyword?.trim();
+    if (keyword) {
+      query = query.or(`name.ilike.%${keyword}%,phone.ilike.%${keyword}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询审批候选人失败", error);
+    }
+
+    return ((data || []) as unknown) as ExpenseApprovalCandidateEmployee[];
+  }
+
+  async listEmployeePermissionContexts(employeeIds: string[], permissionCode: string) {
+    if (employeeIds.length === 0) {
+      return [] as Array<{
+        employee_id: string;
+        role_scope: string | null;
+        override_effect: string | null;
+        override_scope: string | null;
+      }>;
+    }
+
+    const [roleResult, overrideResult] = await Promise.all([
+      SupabaseDB.getAdminClient()
+        .from("employee_roles")
+        .select(`
+          employee_id,
+          role:roles!employee_roles_role_id_fkey(
+            status,
+            role_permissions(
+              access_scope,
+              permission:permissions!role_permissions_permission_id_fkey(code, status)
+            )
+          )
+        `)
+        .in("employee_id", employeeIds),
+      SupabaseDB.getAdminClient()
+        .from("employee_permission_overrides")
+        .select(`
+          employee_id,
+          effect,
+          access_scope,
+          permission:permissions!employee_permission_overrides_permission_id_fkey(code, status)
+        `)
+        .in("employee_id", employeeIds),
+    ]);
+
+    if (roleResult.error) {
+      throw Errors.dbError("查询审批候选人权限失败", roleResult.error);
+    }
+
+    if (overrideResult.error) {
+      throw Errors.dbError("查询审批候选人权限失败", overrideResult.error);
+    }
+
+    const rows: Array<{
+      employee_id: string;
+      role_scope: string | null;
+      override_effect: string | null;
+      override_scope: string | null;
+    }> = [];
+
+    for (const item of (roleResult.data || []) as Array<any>) {
+      const role = Array.isArray(item.role) ? item.role[0] : item.role;
+      if (!role || role.status !== "active") {
+        continue;
+      }
+
+      const rolePermissions = Array.isArray(role.role_permissions)
+        ? role.role_permissions
+        : [];
+      for (const rolePermission of rolePermissions) {
+        const permission = Array.isArray(rolePermission.permission)
+          ? rolePermission.permission[0]
+          : rolePermission.permission;
+        if (
+          permission?.code === permissionCode &&
+          permission?.status === "active"
+        ) {
+          rows.push({
+            employee_id: item.employee_id,
+            role_scope: rolePermission.access_scope ?? "self",
+            override_effect: null,
+            override_scope: null,
+          });
+        }
+      }
+    }
+
+    for (const item of (overrideResult.data || []) as Array<any>) {
+      const permission = Array.isArray(item.permission)
+        ? item.permission[0]
+        : item.permission;
+      if (
+        permission?.code === permissionCode &&
+        permission?.status === "active"
+      ) {
+        rows.push({
+          employee_id: item.employee_id,
+          role_scope: null,
+          override_effect: item.effect,
+          override_scope: item.access_scope ?? null,
+        });
+      }
+    }
+
+    return rows;
   }
 
   async createSettlement(payload: ExpenseRequestSettlementPayload) {
