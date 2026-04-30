@@ -12,6 +12,7 @@ import type {
   UpdateRoleInput,
 } from "@/schema/permissions";
 import { authorizationService } from "@/services/authorization";
+import { PermissionCodeConfig } from "@gooes/domain";
 
 class PermissionService {
   async listRoles(params: RoleListQueryType) {
@@ -55,7 +56,15 @@ class PermissionService {
   }
 
   async createPermission(input: CreatePermissionInput) {
-    return permissionRepository.createPermission(input);
+    const name = input.name?.trim()
+      || PermissionCodeConfig[input.code]?.label
+      || input.description?.trim()
+      || input.code;
+
+    return permissionRepository.createPermission({
+      ...input,
+      name,
+    });
   }
 
   async updatePermission(id: string, input: UpdatePermissionInput) {

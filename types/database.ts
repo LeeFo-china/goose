@@ -876,6 +876,7 @@ export type Database = {
           description: string | null
           id: string
           module: string
+          name: string
           resource: string
           status: string
           updated_at: string
@@ -887,6 +888,7 @@ export type Database = {
           description?: string | null
           id?: string
           module: string
+          name: string
           resource: string
           status?: string
           updated_at?: string
@@ -898,6 +900,7 @@ export type Database = {
           description?: string | null
           id?: string
           module?: string
+          name?: string
           resource?: string
           status?: string
           updated_at?: string

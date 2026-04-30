@@ -25,6 +25,7 @@ export type RoleRecord = {
 export type PermissionRecord = {
   id: string;
   code: string;
+  name: string;
   module: string;
   resource: string;
   action: string;
@@ -192,6 +193,7 @@ class PermissionRepository {
         permission:permissions (
           id,
           code,
+          name,
           module,
           resource,
           action,
@@ -280,7 +282,7 @@ class PermissionRepository {
 
     if (keyword) {
       query = query.or(
-        `code.ilike.%${keyword}%,description.ilike.%${keyword}%,resource.ilike.%${keyword}%`,
+        `code.ilike.%${keyword}%,name.ilike.%${keyword}%,description.ilike.%${keyword}%,resource.ilike.%${keyword}%`,
       );
     }
 

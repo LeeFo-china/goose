@@ -54,6 +54,11 @@ export const PermissionCodeSchema = z.enum(PERMISSION_CODE_VALUES, {
   message: "无效的权限编码",
 });
 
+const PermissionNameSchema = z.string().trim().min(1, "权限名称不能为空").max(
+  100,
+  "权限名称过长",
+);
+
 export const RoleBaseSchema = z.object({
   id: z.uuid("无效的角色 ID").optional(),
   code: z.string().trim().min(1, "角色编码不能为空").max(100, "角色编码过长"),
@@ -75,6 +80,7 @@ export const UpdateRoleSchema = CreateRoleSchema.partial();
 export const PermissionBaseSchema = z.object({
   id: z.uuid("无效的权限 ID").optional(),
   code: PermissionCodeSchema,
+  name: PermissionNameSchema,
   module: z.string().trim().min(1, "权限模块不能为空").max(100, "权限模块过长"),
   resource: z.string().trim().min(1, "权限资源不能为空").max(100, "权限资源过长"),
   action: z.string().trim().min(1, "权限动作不能为空").max(100, "权限动作过长"),
@@ -88,6 +94,8 @@ export const CreatePermissionSchema = PermissionBaseSchema.omit({
   id: true,
   created_at: true,
   updated_at: true,
+}).extend({
+  name: PermissionNameSchema.optional(),
 });
 
 export const UpdatePermissionSchema = CreatePermissionSchema.partial();
