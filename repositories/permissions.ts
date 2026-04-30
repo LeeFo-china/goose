@@ -64,10 +64,16 @@ export type EmployeePermissionContextRecord = {
     scope: string;
   }>;
   overrides: Array<{
+    permission_id: string;
+    permission_code: string;
+    permission_name: string | null;
     code: string;
     effect: string;
+    access_scope: string | null;
     scope: string | null;
     reason: string | null;
+    created_at: string;
+    updated_at: string;
   }>;
 };
 
@@ -614,11 +620,16 @@ class PermissionRepository {
     const { data, error } = await this.adminClient
       .from("employee_permission_overrides")
       .select(`
+        permission_id,
         effect,
         access_scope,
         reason,
+        created_at,
+        updated_at,
         permission:permissions (
-          code
+          id,
+          code,
+          name
         )
       `)
       .eq("employee_id", employeeId);
@@ -628,24 +639,39 @@ class PermissionRepository {
     }
 
     const rows = ((data || []) as unknown as Array<{
+      permission_id: string;
       effect: string;
       access_scope: string | null;
       reason: string | null;
-      permission: { code: string } | null;
+      created_at: string;
+      updated_at: string;
+      permission: { id: string; code: string; name: string | null } | null;
     }>);
 
     return rows
       .map((item) => ({
+        permission_id: item.permission_id,
+        permission_code: item.permission?.code,
+        permission_name: item.permission?.name ?? null,
         code: item.permission?.code,
         effect: item.effect,
+        access_scope: item.access_scope,
         scope: item.access_scope,
         reason: item.reason,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
       }))
       .filter((item): item is {
+        permission_id: string;
+        permission_code: string;
+        permission_name: string | null;
         code: string;
         effect: string;
+        access_scope: string | null;
         scope: string | null;
         reason: string | null;
+        created_at: string;
+        updated_at: string;
       } => Boolean(item.code));
   }
 

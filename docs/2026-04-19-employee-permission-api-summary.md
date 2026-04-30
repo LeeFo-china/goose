@@ -149,6 +149,47 @@
 - 员工基础信息
 - 员工已分配的角色模板
 - 最终生效权限
+- 员工级权限覆盖明细 `overrides`
+
+`permissions` 是已经合并角色权限和员工级覆盖后的最终生效权限集合。
+
+`overrides` 是 `employee_permission_overrides` 的明细，前端展示覆盖项时应直接使用该字段，不要从最终 `permissions` 反推：
+
+```json
+{
+  "data": {
+    "employeeId": "employee-id",
+    "roleCodes": ["employee_base"],
+    "permissions": [
+      {
+        "code": "expense_request.approve_manager",
+        "scope": "all"
+      }
+    ],
+    "overrides": [
+      {
+        "permission_id": "permission-uuid",
+        "permission_code": "expense_request.approve_manager",
+        "permission_name": "主管审批费用申请",
+        "effect": "allow",
+        "access_scope": "all",
+        "reason": "临时授权审批",
+        "created_at": "2026-04-30T00:00:00.000Z",
+        "updated_at": "2026-04-30T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+字段说明：
+
+- `permission_id` 是权限 ID，删除覆盖项时传给 `DELETE /employees/:id/permission-overrides/:permission_id`
+- `permission_code` 用于展示和兜底匹配
+- `permission_name` 用于中文标题展示
+- `effect` 为 `allow | deny`
+- `access_scope` 在 `allow` 时返回，`deny` 通常为 `null`
+- `reason` 可为空
 
 ## 5. 给员工分配角色模板
 

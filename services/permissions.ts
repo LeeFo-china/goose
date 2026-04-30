@@ -198,7 +198,26 @@ class PermissionService {
   }
 
   async getEmployeePermissionContext(employeeId: string) {
-    return authorizationService.getAuthContextByEmployeeId(employeeId);
+    const authContext = await authorizationService.getAuthContextByEmployeeId(
+      employeeId,
+    );
+    const overrides = await permissionRepository.listEmployeePermissionOverrides(
+      employeeId,
+    );
+
+    return {
+      ...authContext,
+      overrides: overrides.map((item) => ({
+        permission_id: item.permission_id,
+        permission_code: item.permission_code,
+        permission_name: item.permission_name,
+        effect: item.effect,
+        access_scope: item.access_scope,
+        reason: item.reason,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      })),
+    };
   }
 }
 
