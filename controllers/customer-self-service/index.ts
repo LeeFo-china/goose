@@ -5,11 +5,12 @@ import { Get, Patch } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { PaginationQuerySchema } from "@/schema/request";
+import { IdParamSchema, PaginationQuerySchema } from "@/schema/request";
 import {
   AuthMeProfileUpdateSchema,
   type AuthMeProfileUpdateInput,
 } from "@/schema/user-profile";
+import { z } from "zod";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   ProjectStatusConfig,
@@ -80,6 +81,19 @@ type CustomerProjectLogRow = {
   created_at: string | null;
 };
 
+type CustomerProjectRecentLogSummaryRow = {
+  project_id: string;
+  id: string;
+  stage_code: string | null;
+  node_name: string | null;
+  created_at: string | null;
+  image_count: number | null;
+  cover_image_path: string | null;
+  comment_count: number | null;
+  rating_count: number | null;
+  average_rating: number | null;
+};
+
 type ProjectLogCommentAggregateRow = {
   id: string;
   log_id: string;
@@ -88,6 +102,24 @@ type ProjectLogCommentAggregateRow = {
   author_id: string;
   rating: number | null;
   created_at: string | null;
+};
+
+type CustomerProjectLogCommentRow = {
+  id: string;
+  log_id: string;
+  parent_id: string | null;
+  author_type: string;
+  author_id: string;
+  content: string;
+  rating: number | null;
+  images: unknown;
+  created_at: string | null;
+};
+
+type CustomerProjectLogCommentAuthor = {
+  id: string;
+  name: string | null;
+  avatar: string | null;
 };
 
 type CustomerProjectMemberSummary = {
@@ -110,6 +142,52 @@ type CustomerProjectMemberSummary = {
 };
 
 const PROJECT_LOGS_BUCKET = "project-logs";
+
+function optionalCustomerQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (
+        normalized === "" ||
+        normalized === "undefined" ||
+        normalized === "null"
+      ) {
+        return undefined;
+      }
+
+      return normalized;
+    }
+
+    return value;
+  }, schema.optional());
+}
+
+const CustomerProjectListQuerySchema = PaginationQuerySchema.extend({
+  include: optionalCustomerQueryValue(z.enum(["home_summary"])),
+});
+
+const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
+  pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(
+    20,
+    "每页日志不能超过 20 条",
+  ).default(10),
+  imageMode: optionalCustomerQueryValue(z.enum(["thumb", "full"])).default("thumb"),
+});
+
+const CustomerProjectLogCommentListQuerySchema = PaginationQuerySchema.extend({
+  pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(
+    20,
+    "每页评论不能超过 20 条",
+  ).default(20),
+});
+
+const CustomerProjectLogCommentParamSchema = IdParamSchema.extend({
+  logId: z.uuid("无效的日志 ID"),
+});
 
 class CustomerSelfServiceController extends BaseController {
   constructor() {
@@ -183,6 +261,19 @@ class CustomerSelfServiceController extends BaseController {
       .map((item) => {
         return this.getImagePublicUrl(item) || item;
       });
+  }
+
+  private getImageThumbUrl(url: string) {
+    return url;
+  }
+
+  private normalizeProjectLogImageItems(images: unknown) {
+    return this.normalizeProjectLogImages(images).map((url) => ({
+      url,
+      thumb_url: this.getImageThumbUrl(url),
+      width: null as number | null,
+      height: null as number | null,
+    }));
   }
 
   private async getCustomerProfileByAuthUserId(
@@ -346,10 +437,36 @@ class CustomerSelfServiceController extends BaseController {
     };
   }
 
+  private serializeCustomerProjectRecentLog(row: CustomerProjectRecentLogSummaryRow) {
+    const stageCode: ProjectLogStageCode | null = isProjectLogStageCode(row.stage_code)
+      ? row.stage_code
+      : null;
+
+    return {
+      id: row.id,
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+      node_name: row.node_name,
+      created_at: row.created_at,
+      comment_count: Number(row.comment_count ?? 0),
+      rating_count: Number(row.rating_count ?? 0),
+      average_rating: row.average_rating == null ? null : Number(row.average_rating),
+      image_count: Number(row.image_count ?? 0),
+      cover_thumb_url: this.getImagePublicUrl(row.cover_image_path),
+    };
+  }
+
   private serializeCustomerProjectLog(row: CustomerProjectLogRow) {
     const stageCode: ProjectLogStageCode | null = isProjectLogStageCode(row.stage_code)
       ? row.stage_code
       : null;
+    const images = this.normalizeProjectLogImages(row.images);
+    const imageItems = images.map((url) => ({
+      url,
+      thumb_url: this.getImageThumbUrl(url),
+      width: null as number | null,
+      height: null as number | null,
+    }));
 
     return {
       id: row.id,
@@ -358,7 +475,9 @@ class CustomerSelfServiceController extends BaseController {
       stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
       node_name: row.node_name,
       content: row.content,
-      images: this.normalizeProjectLogImages(row.images),
+      images,
+      image_items: imageItems,
+      image_count: imageItems.length,
       created_at: row.created_at,
     };
   }
@@ -411,6 +530,133 @@ class CustomerSelfServiceController extends BaseController {
     }
 
     return aggregates;
+  }
+
+  private async listRecentLogSummariesForProjects(
+    customerId: string,
+    projectIds: string[],
+  ) {
+    if (projectIds.length === 0) {
+      return new Map<string, ReturnType<typeof this.serializeCustomerProjectRecentLog>[]>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "get_customer_project_recent_log_summaries",
+      {
+        p_customer_id: customerId,
+        p_project_ids: projectIds,
+        p_per_project: 2,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("查询客户项目最近日志摘要失败", error);
+    }
+
+    const recentLogMap = new Map<
+      string,
+      ReturnType<typeof this.serializeCustomerProjectRecentLog>[]
+    >();
+
+    for (const row of (data || []) as CustomerProjectRecentLogSummaryRow[]) {
+      const list = recentLogMap.get(row.project_id) || [];
+      if (list.length < 2) {
+        list.push(this.serializeCustomerProjectRecentLog(row));
+        recentLogMap.set(row.project_id, list);
+      }
+    }
+
+    return recentLogMap;
+  }
+
+  private async getOwnedProjectLog(logId: string, projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id")
+      .eq("id", logId)
+      .eq("project_id", projectId)
+      .maybeSingle<{ id: string; project_id: string }>();
+
+    if (error) {
+      throw Errors.dbError("查询客户项目日志失败", error);
+    }
+
+    if (!data?.id) {
+      throw Errors.notFound("项目日志不存在");
+    }
+
+    return data;
+  }
+
+  private async attachCustomerProjectLogCommentAuthors(
+    rows: CustomerProjectLogCommentRow[],
+  ) {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const employeeIds = Array.from(new Set(
+      rows
+        .filter((item) => item.author_type === "employee")
+        .map((item) => item.author_id),
+    ));
+    const customerIds = Array.from(new Set(
+      rows
+        .filter((item) => item.author_type === "customer")
+        .map((item) => item.author_id),
+    ));
+
+    const adminClient = SupabaseDB.getAdminClient();
+    const [{ data: employees }, { data: customers }] = await Promise.all([
+      employeeIds.length > 0
+        ? adminClient.from("employees").select("id, name, avatar").in("id", employeeIds)
+        : Promise.resolve({
+          data: [] as Array<Pick<Tables<"employees">, "id" | "name" | "avatar">>,
+        }),
+      customerIds.length > 0
+        ? adminClient.from("customers").select("id, name").in("id", customerIds)
+        : Promise.resolve({
+          data: [] as Array<Pick<Tables<"customers">, "id" | "name">>,
+        }),
+    ]);
+
+    const employeeMap = new Map<string, CustomerProjectLogCommentAuthor>(
+      (employees || []).map((item) => [
+        item.id,
+        {
+          id: item.id,
+          name: item.name,
+          avatar: item.avatar,
+        },
+      ]),
+    );
+    const customerMap = new Map<string, CustomerProjectLogCommentAuthor>(
+      (customers || []).map((item) => [
+        item.id,
+        {
+          id: item.id,
+          name: item.name,
+          avatar: null,
+        },
+      ]),
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      log_id: row.log_id,
+      parent_id: row.parent_id,
+      content: row.content,
+      rating: row.rating,
+      images: this.normalizeProjectLogImageItems(row.images).map((item) => ({
+        url: item.url,
+        thumb_url: item.thumb_url,
+      })),
+      author_type: row.author_type,
+      author: row.author_type === "employee"
+        ? employeeMap.get(row.author_id) ?? null
+        : customerMap.get(row.author_id) ?? null,
+      created_at: row.created_at,
+    }));
   }
 
   private serializeCustomerProjectMember(item: CustomerProjectMemberSummary) {
@@ -564,10 +810,10 @@ class CustomerSelfServiceController extends BaseController {
     const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
       required: true,
     });
-    const queryResult = PaginationQuerySchema.safeParse(request.query);
+    const queryResult = CustomerProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize } = queryResult.data;
+    const { page, pageSize, include } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -604,10 +850,24 @@ class CustomerSelfServiceController extends BaseController {
       throw Errors.dbError("查询客户项目列表失败", error);
     }
 
+    const list = ((data || []) as unknown as CustomerProjectListItem[]).map((item) =>
+      this.serializeCustomerProjectListItem(item)
+    );
+
+    const recentLogMap = include === "home_summary"
+      ? await this.listRecentLogSummariesForProjects(
+        customer!.id,
+        list.map((item) => item.id),
+      )
+      : null;
+
     return ResponseHandler.success({
-      list: ((data || []) as unknown as CustomerProjectListItem[]).map((item) =>
-        this.serializeCustomerProjectListItem(item)
-      ),
+      list: list.map((item) => ({
+        ...item,
+        ...(recentLogMap
+          ? { recent_logs: recentLogMap.get(item.id) || [] }
+          : {}),
+      })),
       pagination: {
         page,
         pageSize,
@@ -641,14 +901,22 @@ class CustomerSelfServiceController extends BaseController {
     });
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const queryResult = CustomerProjectLogListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     await this.getOwnedProject(idVerify.data.id, customer!.id);
+    const { page, pageSize } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    const { data, error } = await SupabaseDB.getAdminClient()
+    const { data, error, count } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .select("id, project_id, stage_code, node_name, content, images, created_at", {
+        count: "exact",
+      })
       .eq("project_id", idVerify.data.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       throw Errors.dbError("查询客户项目日志失败", error);
@@ -697,6 +965,62 @@ class CustomerSelfServiceController extends BaseController {
           my_rating: aggregate?.my_rating ?? null,
         };
       }),
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    });
+  }
+
+  @Get("/customer/projects/:id/logs/:logId/comments")
+  async getCustomerProjectLogComments(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+      required: true,
+    });
+    const paramsResult = CustomerProjectLogCommentParamSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = CustomerProjectLogCommentListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    await this.getOwnedProject(paramsResult.data.id, customer!.id);
+    await this.getOwnedProjectLog(paramsResult.data.logId, paramsResult.data.id);
+
+    const { page, pageSize } = queryResult.data;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await SupabaseDB.getAdminClient()
+      .from("project_log_comments")
+      .select(
+        "id, log_id, parent_id, author_type, author_id, content, rating, images, created_at",
+        { count: "exact" },
+      )
+      .eq("log_id", paramsResult.data.logId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询日志评论失败", error);
+    }
+
+    return ResponseHandler.success({
+      list: await this.attachCustomerProjectLogCommentAuthors(
+        (data || []) as unknown as CustomerProjectLogCommentRow[],
+      ),
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
     });
   }
 }
