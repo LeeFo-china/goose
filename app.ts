@@ -53,7 +53,7 @@ app.register(multipart, {
   },
 });
 app.register(errorHandler);
-app.register(requestLoggingPlugin);
+requestLoggingPlugin(app);
 authPlugin(app);
 app.register(AutoLoad, {
   dir: join(__dirname, "routes"),

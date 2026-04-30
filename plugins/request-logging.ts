@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getRequestLogContext } from "@/utils/logging";
 
 const requestStartTimes = new WeakMap<FastifyRequest, number>();
@@ -8,7 +8,7 @@ function getSlowRequestThresholdMs() {
   return Number.isFinite(raw) && raw > 0 ? raw : 1000;
 }
 
-const requestLoggingPlugin: FastifyPluginAsync = async (app) => {
+const requestLoggingPlugin = (app: FastifyInstance) => {
   app.addHook("onRequest", async (request) => {
     requestStartTimes.set(request, Date.now());
   });
