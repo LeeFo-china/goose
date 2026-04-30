@@ -3,9 +3,12 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   DecorationQaRequestInput,
+  DecorationQaSuggestionQueryInput,
   DecorationQaStreamRequestInput,
 } from "@/schema/ai";
 import type { Tables } from "@/types/database";
+import { authorizationService } from "@/services/authorization";
+import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   ProjectStatusConfig,
@@ -18,6 +21,15 @@ import {
 type DecorationQaResult = {
   answer: string;
   suggestions: string[];
+};
+
+type DecorationQaSuggestionScene = DecorationQaSuggestionQueryInput["scene"];
+
+type DecorationQaSuggestionResult = {
+  list: string[];
+  source: "cache" | "ai" | "fallback";
+  cache_key: string;
+  expires_at: string | null;
 };
 
 type DecorationQaStreamEvent =
@@ -111,6 +123,47 @@ const STREAM_OUTPUT_PROMPT = `
 
 你必须直接输出自然语言答案正文，不要输出 JSON，不要输出 markdown 代码块，不要输出多余前缀。
 回答结束时不要再补“如需我继续”等收尾套话。`;
+
+const SUGGESTION_SYSTEM_PROMPT = `你是装修公司小程序里的装修知识问答推荐问题生成器。
+请生成 4 个用户可能会点击的问题。
+要求：
+1. 每个问题 8 到 22 个中文字符左右。
+2. 必须是装修相关问题。
+3. 表达具体，不要空泛。
+4. 不要输出答案。
+5. 不要输出编号。
+6. 不要包含 markdown。
+7. 不要承诺价格、工期或法律责任。
+8. 返回 JSON 数组字符串。`;
+
+const FALLBACK_VISITOR = [
+  "装修预算怎么控制？",
+  "水电改造要注意什么？",
+  "全包和半包怎么选？",
+  "装修工期一般多久？",
+  "瓷砖验收看哪些细节？",
+  "旧房翻新先做什么？",
+  "环保材料怎么选择？",
+  "装修合同重点看哪里？",
+];
+
+const FALLBACK_CUSTOMER = [
+  "当前阶段要注意什么？",
+  "验收时重点看哪些地方？",
+  "施工延期该怎么处理？",
+  "增项费用怎么确认？",
+  "材料进场要核对什么？",
+  "水电验收怎么判断合格？",
+];
+
+const FALLBACK_EMPLOYEE = [
+  "客户问预算怎么解释？",
+  "水电工艺如何说明？",
+  "延期原因怎么沟通？",
+  "验收标准怎么讲清楚？",
+  "材料差异怎么解释？",
+  "增项确认怎么提醒？",
+];
 
 type CustomerContextRow = Pick<
   Tables<"customers">,
@@ -341,6 +394,103 @@ function normalizeSuggestions(input: unknown) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 2);
+}
+
+function getFallbackSuggestionQuestions(scene: DecorationQaSuggestionScene) {
+  if (scene === "customer") {
+    return FALLBACK_CUSTOMER.slice(0, 4);
+  }
+
+  if (scene === "employee") {
+    return FALLBACK_EMPLOYEE.slice(0, 4);
+  }
+
+  return FALLBACK_VISITOR.slice(0, 4);
+}
+
+function stripSuggestionPrefix(value: string) {
+  return value
+    .replace(/^\s*(?:[-*•]+|\d+[.、)]|[一二三四五六七八九十]+[、.)])\s*/u, "")
+    .trim();
+}
+
+function getSuggestionLength(value: string) {
+  return Array.from(value).length;
+}
+
+function tryParseSuggestionJson(rawContent: string) {
+  const trimmed = rawContent.trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  const arrayStart = trimmed.indexOf("[");
+  const arrayEnd = trimmed.lastIndexOf("]");
+  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
+    try {
+      return JSON.parse(trimmed.slice(arrayStart, arrayEnd + 1)) as unknown;
+    } catch {
+      return [];
+    }
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return [];
+  }
+}
+
+function normalizeSuggestionQuestions(
+  input: unknown,
+  scene: DecorationQaSuggestionScene,
+) {
+  const rawList = typeof input === "string"
+    ? tryParseSuggestionJson(input)
+    : input;
+  const list = Array.isArray(rawList)
+    ? rawList
+    : rawList && typeof rawList === "object" && "list" in rawList
+    ? (rawList as { list?: unknown }).list
+    : [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (typeof item !== "string") {
+        continue;
+      }
+
+      const question = stripSuggestionPrefix(item);
+      if (
+        !question ||
+        seen.has(question) ||
+        getSuggestionLength(question) > 28
+      ) {
+        continue;
+      }
+
+      seen.add(question);
+      normalized.push(question);
+      if (normalized.length >= 4) {
+        break;
+      }
+    }
+  }
+
+  for (const fallback of getFallbackSuggestionQuestions(scene)) {
+    if (normalized.length >= 4) {
+      break;
+    }
+
+    if (!seen.has(fallback)) {
+      seen.add(fallback);
+      normalized.push(fallback);
+    }
+  }
+
+  return normalized.slice(0, 4);
 }
 
 function extractContent(content: OpenAiChatResponse["choices"]) {
@@ -653,6 +803,222 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
   }
 
   return lines.join("\n");
+}
+
+function formatCustomerProjectSuggestionContext(context: CustomerProjectQaContext) {
+  const latestLog = context.recent_logs[0];
+  const parts = [
+    context.status_label || context.status
+      ? `项目阶段：${context.status_label || context.status}`
+      : null,
+    context.property?.area ? `房屋面积：${context.property.area}㎡` : null,
+    context.property?.layout ? `户型：${context.property.layout}` : null,
+    context.style_tags.length ? `风格：${context.style_tags.join("、")}` : null,
+    latestLog
+      ? `最近施工节点：${[
+        latestLog.stage_label,
+        latestLog.node_name,
+      ].filter(Boolean).join(" - ") || "未同步"}`
+      : "最近施工节点：未同步",
+    context.status === "acceptance" ||
+        latestLog?.stage_code === "completion"
+      ? "当前可能临近验收"
+      : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join("\n") : "当前项目摘要：暂未同步足够项目资料。";
+}
+
+function getSuggestionDateKey(now: Date) {
+  return now.toISOString().slice(0, 10);
+}
+
+function buildSuggestionCacheKey(input: {
+  scene: DecorationQaSuggestionScene;
+  projectId: string | null;
+  now: Date;
+}) {
+  const dateKey = getSuggestionDateKey(input.now);
+
+  if (input.scene === "customer" && input.projectId) {
+    return `customer:${input.projectId}:${dateKey}`;
+  }
+
+  return `${input.scene}:${dateKey}`;
+}
+
+function getSuggestionExpiresAt(input: {
+  scene: DecorationQaSuggestionScene;
+  projectId: string | null;
+  now: Date;
+}) {
+  if (input.scene === "customer" && input.projectId) {
+    return new Date(input.now.getTime() + 6 * 60 * 60 * 1000);
+  }
+
+  const expiresAt = new Date(input.now);
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
+  expiresAt.setUTCHours(0, 0, 0, 0);
+  return expiresAt;
+}
+
+async function buildSuggestionScenePrompt(input: {
+  scene: DecorationQaSuggestionScene;
+  projectId: string | null;
+  authUserId?: string;
+}) {
+  if (input.scene === "visitor") {
+    return "用户是普通访客，还没有明确项目。问题应覆盖预算、流程、材料、工期、验收等通用主题。";
+  }
+
+  if (!input.authUserId) {
+    throw Errors.unauthorized("缺少登录凭证");
+  }
+
+  if (input.scene === "employee") {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      input.authUserId,
+    );
+    if (!authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    return "用户是装修公司员工。问题可以偏向客户沟通、施工解释、材料工艺说明。";
+  }
+
+  if (input.projectId) {
+    const context = await buildCustomerProjectQaContext(
+      input.authUserId,
+      input.projectId,
+    );
+
+    return [
+      "用户是装修客户。请优先结合当前项目阶段生成问题，问题应该站在客户视角，便于客户点击咨询。",
+      "当前项目摘要：",
+      formatCustomerProjectSuggestionContext(context),
+    ].join("\n");
+  }
+
+  await getCustomerContextByAuthUserId(input.authUserId);
+  return "用户是装修客户，但当前没有指定项目。请生成客户视角的通用装修问题，重点覆盖流程、验收、费用确认和工期沟通。";
+}
+
+async function generateSuggestionQuestionsByAi(scenePrompt: string) {
+  const apiKey = getAiApiKey();
+  const model = getAiModel();
+  const endpoint = getAiEndpoint();
+  const result = await requestQaResult(endpoint, apiKey, {
+    model,
+    temperature: 0.8,
+    messages: [
+      { role: "system", content: SUGGESTION_SYSTEM_PROMPT },
+      { role: "user", content: scenePrompt },
+    ],
+  });
+  const content = extractContent(result.choices);
+
+  if (!content) {
+    throw Errors.dbError("大模型未返回有效推荐问题");
+  }
+
+  return content;
+}
+
+async function tryGetCachedSuggestion(cacheKey: string, now: Date) {
+  try {
+    return await decorationQaSuggestionCacheRepository.findValid(cacheKey, now);
+  } catch {
+    return null;
+  }
+}
+
+async function trySaveSuggestionCache(input: {
+  cacheKey: string;
+  scene: DecorationQaSuggestionScene;
+  projectId: string | null;
+  questions: string[];
+  source: "ai" | "fallback";
+  expiresAt: Date;
+}) {
+  try {
+    await decorationQaSuggestionCacheRepository.upsert({
+      cache_key: input.cacheKey,
+      scene: input.scene,
+      project_id: input.projectId,
+      questions: input.questions,
+      source: input.source,
+      expires_at: input.expiresAt.toISOString(),
+    });
+  } catch {
+    // Cache failures must not block the question page.
+  }
+}
+
+export async function getDecorationQaSuggestions(input: {
+  query: DecorationQaSuggestionQueryInput;
+  authUserId?: string;
+}): Promise<DecorationQaSuggestionResult> {
+  const now = new Date();
+  const scene = input.query.scene;
+  const projectId = scene === "customer" ? input.query.project_id ?? null : null;
+  const cacheKey = buildSuggestionCacheKey({ scene, projectId, now });
+  const expiresAt = getSuggestionExpiresAt({ scene, projectId, now });
+  const scenePrompt = await buildSuggestionScenePrompt({
+    scene,
+    projectId,
+    authUserId: input.authUserId,
+  });
+
+  if (!input.query.refresh) {
+    const cached = await tryGetCachedSuggestion(cacheKey, now);
+    if (cached) {
+      return {
+        list: normalizeSuggestionQuestions(cached.questions, scene),
+        source: "cache",
+        cache_key: cacheKey,
+        expires_at: cached.expires_at,
+      };
+    }
+  }
+
+  try {
+    const aiQuestions = normalizeSuggestionQuestions(
+      await generateSuggestionQuestionsByAi(scenePrompt),
+      scene,
+    );
+    await trySaveSuggestionCache({
+      cacheKey,
+      scene,
+      projectId,
+      questions: aiQuestions,
+      source: "ai",
+      expiresAt,
+    });
+
+    return {
+      list: aiQuestions,
+      source: "ai",
+      cache_key: cacheKey,
+      expires_at: expiresAt.toISOString(),
+    };
+  } catch {
+    const fallbackQuestions = getFallbackSuggestionQuestions(scene);
+    await trySaveSuggestionCache({
+      cacheKey,
+      scene,
+      projectId,
+      questions: fallbackQuestions,
+      source: "fallback",
+      expiresAt,
+    });
+
+    return {
+      list: fallbackQuestions,
+      source: "fallback",
+      cache_key: cacheKey,
+      expires_at: expiresAt.toISOString(),
+    };
+  }
 }
 
 export async function resolveDecorationQaStreamSystemMessages(

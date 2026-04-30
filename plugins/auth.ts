@@ -11,6 +11,13 @@ function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD")
+    && url === "/ai/decoration-qa/suggestions"
+  ) {
+    return true;
+  }
+
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
     return true;
   }

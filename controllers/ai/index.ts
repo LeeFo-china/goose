@@ -1,13 +1,15 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
-import { Post } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import {
   DecorationQaRequestSchema,
+  DecorationQaSuggestionQuerySchema,
   DecorationQaStreamRequestSchema,
 } from "@/schema/ai";
 import {
   askDecorationQa,
+  getDecorationQaSuggestions,
   resolveDecorationQaStreamSystemMessages,
   serializeDecorationQaStreamEvent,
   streamDecorationQa,
@@ -43,6 +45,25 @@ class AiController extends BaseController {
         statusCode: 500,
       });
     }
+  }
+
+  @Get("/ai/decoration-qa/suggestions")
+  async decorationQaSuggestions(request: FastifyRequest, reply: FastifyReply) {
+    const result = DecorationQaSuggestionQuerySchema.safeParse(request.query);
+
+    if (!result.success) {
+      throw Errors.fromZod(result.error);
+    }
+
+    const suggestions = await getDecorationQaSuggestions({
+      query: result.data,
+      authUserId: request.user?.sub,
+    });
+
+    return reply.status(200).send({
+      data: suggestions,
+      message: "success",
+    });
   }
 
   @Post("/ai/decoration-qa/stream")

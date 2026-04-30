@@ -26,6 +26,35 @@ export const DecorationQaStreamRequestSchema = z.object({
   context: DecorationQaStreamContextSchema,
 });
 
+const booleanQuerySchema = z.preprocess((value) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off", ""].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean({ message: "refresh 必须是布尔值" }).default(false));
+
+export const DecorationQaSuggestionQuerySchema = z.object({
+  scene: z.enum(["visitor", "customer", "employee"], {
+    message: "推荐问题场景无效",
+  }).default("visitor"),
+  project_id: z.string().uuid("无效的项目ID").optional(),
+  refresh: booleanQuerySchema,
+});
+
 export type DecorationQaRequestInput = z.infer<typeof DecorationQaRequestSchema>;
 export type DecorationQaStreamRequestInput =
   z.infer<typeof DecorationQaStreamRequestSchema>;
+export type DecorationQaSuggestionQueryInput = z.infer<
+  typeof DecorationQaSuggestionQuerySchema
+>;
