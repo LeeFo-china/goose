@@ -78,6 +78,15 @@ function escapeSupabaseOrValue(value: string) {
     .replace(/,/g, "\\,");
 }
 
+function buildPagination(page: number, pageSize: number, total: number) {
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+  };
+}
+
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
@@ -676,6 +685,40 @@ class CustomerController extends BaseController<
     };
   }
 
+  private applyCustomerListFilters(
+    query: any,
+    visibleOwnerIds: string[] | null,
+    status?: string,
+    keyword?: string,
+  ) {
+    let filteredQuery = query;
+
+    if (visibleOwnerIds !== null) {
+      if (visibleOwnerIds.length === 0) {
+        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      } else {
+        filteredQuery = filteredQuery.in("owner_id", visibleOwnerIds);
+      }
+    }
+
+    if (status) {
+      filteredQuery = filteredQuery.eq("status", status);
+    }
+
+    if (keyword) {
+      const escapedKeyword = escapeSupabaseOrValue(keyword);
+      filteredQuery = filteredQuery.or(
+        [
+          `name.ilike.%${escapedKeyword}%`,
+          `phone.ilike.%${escapedKeyword}%`,
+          `source.ilike.%${escapedKeyword}%`,
+        ].join(","),
+      );
+    }
+
+    return filteredQuery;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
@@ -690,36 +733,39 @@ class CustomerController extends BaseController<
       "customer.read",
     );
 
+    const normalizedKeyword = keyword?.trim();
+    let countQuery = SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id", { count: "exact", head: true });
+    countQuery = this.applyCustomerListFilters(
+      countQuery,
+      visibleOwnerIds,
+      status,
+      normalizedKeyword,
+    );
+
+    const { error: countError, count } = await countQuery;
+    if (countError) throw Errors.dbError("列表查询失败", countError);
+
+    const total = count ?? 0;
+    if (from >= total) {
+      return ResponseHandler.success({
+        list: [],
+        pagination: buildPagination(page, pageSize, total),
+      });
+    }
+
     let query = SupabaseDB.getAdminClient()
       .from("customers")
-      .select(this.customerSelect, { count: "exact" })
+      .select(this.customerSelect)
       .order("created_at", { ascending: false });
-
-    if (visibleOwnerIds !== null) {
-      if (visibleOwnerIds.length === 0) {
-        query = query.eq("id", "00000000-0000-0000-0000-000000000000");
-      } else {
-        query = query.in("owner_id", visibleOwnerIds);
-      }
-    }
-
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    const normalizedKeyword = keyword?.trim();
-    if (normalizedKeyword) {
-      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
-      query = query.or(
-        [
-          `name.ilike.%${escapedKeyword}%`,
-          `phone.ilike.%${escapedKeyword}%`,
-          `source.ilike.%${escapedKeyword}%`,
-        ].join(","),
-      );
-    }
-
-    const { data, error, count } = await query.range(from, to);
+    query = this.applyCustomerListFilters(
+      query,
+      visibleOwnerIds,
+      status,
+      normalizedKeyword,
+    );
+    const { data, error } = await query.range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
@@ -729,12 +775,7 @@ class CustomerController extends BaseController<
       list: (((data || []) as unknown) as CustomerRowForResponse[]).map((item) =>
         this.serializeCustomer(item, phonePrivacyContext)
       ),
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
+      pagination: buildPagination(page, pageSize, total),
     });
   };
 

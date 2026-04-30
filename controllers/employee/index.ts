@@ -28,6 +28,15 @@ function escapeSupabaseOrValue(value: string) {
     .replace(/,/g, "\\,");
 }
 
+function buildPagination(page: number, pageSize: number, total: number) {
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+  };
+}
+
 /**
  * 员工控制器类
  *
@@ -87,6 +96,32 @@ class EmployeeController extends BaseController<
     return query.eq("id", authContext.employeeId);
   }
 
+  private applyEmployeeListFilters(
+    query: any,
+    scope: "self" | "department" | "assigned" | "all" | null,
+    authContext: Awaited<ReturnType<EmployeeController["getRequiredAuthContext"]>>,
+    status?: string,
+    keyword?: string,
+  ) {
+    let filteredQuery = this.applyEmployeeScope(query, scope, authContext);
+
+    if (status) {
+      filteredQuery = filteredQuery.eq("status", status);
+    }
+
+    if (keyword) {
+      const escapedKeyword = escapeSupabaseOrValue(keyword);
+      filteredQuery = filteredQuery.or(
+        [
+          `name.ilike.%${escapedKeyword}%`,
+          `phone.ilike.%${escapedKeyword}%`,
+        ].join(","),
+      );
+    }
+
+    return filteredQuery;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     const scope = accessPolicyService.assertPermission(
@@ -100,40 +135,48 @@ class EmployeeController extends BaseController<
     const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    const normalizedKeyword = keyword?.trim();
+
+    let countQuery = SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select("id", { count: "exact", head: true });
+    countQuery = this.applyEmployeeListFilters(
+      countQuery,
+      scope,
+      authContext,
+      status,
+      normalizedKeyword,
+    );
+
+    const { error: countError, count } = await countQuery;
+    if (countError) throw Errors.dbError("列表查询失败", countError);
+
+    const total = count ?? 0;
+    if (from >= total) {
+      return ResponseHandler.success({
+        list: [],
+        pagination: buildPagination(page, pageSize, total),
+      });
+    }
 
     let query = SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("*", { count: "exact" })
+      .select("*")
       .order("created_at", { ascending: false });
+    query = this.applyEmployeeListFilters(
+      query,
+      scope,
+      authContext,
+      status,
+      normalizedKeyword,
+    );
 
-    query = this.applyEmployeeScope(query, scope, authContext);
-
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    const normalizedKeyword = keyword?.trim();
-    if (normalizedKeyword) {
-      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
-      query = query.or(
-        [
-          `name.ilike.%${escapedKeyword}%`,
-          `phone.ilike.%${escapedKeyword}%`,
-        ].join(","),
-      );
-    }
-
-    const { data, error, count } = await query.range(from, to);
+    const { data, error } = await query.range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
     return ResponseHandler.success({
       list: data || [],
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
+      pagination: buildPagination(page, pageSize, total),
     });
   };
 

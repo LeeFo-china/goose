@@ -40,6 +40,22 @@ import {
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
 
+function escapeSupabaseOrValue(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, "\\$&")
+    .replace(/,/g, "\\,");
+}
+
+function buildPagination(page: number, pageSize: number, total: number) {
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+  };
+}
+
 type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
   "id" | "name" | "phone" | "owner_id"
@@ -287,6 +303,28 @@ class ProjectController extends BaseController<
     }
 
     return query.in("id", visibleProjectIds);
+  }
+
+  private applyProjectListFilters(
+    query: any,
+    visibleProjectIds: string[] | null,
+    status?: string,
+    keyword?: string,
+  ) {
+    let filteredQuery = this.applyProjectIdsFilter(query, visibleProjectIds);
+
+    if (status) {
+      filteredQuery = filteredQuery.eq("status", status);
+    }
+
+    if (keyword) {
+      const escapedKeyword = escapeSupabaseOrValue(keyword);
+      filteredQuery = filteredQuery.or(
+        `name.ilike.%${escapedKeyword}%,address.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    return filteredQuery;
   }
 
   private async getProjectListVisibleIds(
@@ -699,26 +737,41 @@ class ProjectController extends BaseController<
     const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    const normalizedKeyword = keyword?.trim();
+
+    let countQuery = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id", { count: "exact", head: true });
+    countQuery = this.applyProjectListFilters(
+      countQuery,
+      visibleProjectIds,
+      status,
+      normalizedKeyword,
+    );
+
+    const { error: countError, count } = await countQuery;
+    if (countError) throw Errors.dbError("列表查询失败", countError);
+
+    const total = count ?? 0;
+    if (from >= total) {
+      return ResponseHandler.success({
+        list: [],
+        pagination: buildPagination(page, pageSize, total),
+      });
+    }
 
     let query = SupabaseDB.getAdminClient()
       .from("projects")
-      .select(this.projectListSelect, { count: "exact" })
+      .select(this.projectListSelect)
       .order("created_at", { ascending: false });
+    query = this.applyProjectListFilters(
+      query,
+      visibleProjectIds,
+      status,
+      normalizedKeyword,
+    );
 
-    query = this.applyProjectIdsFilter(query, visibleProjectIds);
-
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    const normalizedKeyword = keyword?.trim();
-    if (normalizedKeyword) {
-      query = query.or(
-        `name.ilike.%${normalizedKeyword}%,address.ilike.%${normalizedKeyword}%`,
-      );
-    }
-
-    const { data, error, count } = await query.range(from, to);
+    const { data, error } = await query.range(from, to);
     if (error) throw Errors.dbError("列表查询失败", error);
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
@@ -728,12 +781,7 @@ class ProjectController extends BaseController<
       list: ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
         this.serializeProjectListItem(item, phonePrivacyContext)
       ),
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
+      pagination: buildPagination(page, pageSize, total),
     });
   };
 
@@ -1051,6 +1099,28 @@ class ProjectController extends BaseController<
     const { page, pageSize, status, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    const normalizedKeyword = keyword?.trim();
+
+    let countQuery = SupabaseDB
+      .from("projects")
+      .select("id", { count: "exact", head: true });
+    countQuery = this.applyProjectListFilters(
+      countQuery,
+      visibleProjectIds,
+      status,
+      normalizedKeyword,
+    );
+
+    const { error: countError, count } = await countQuery;
+    if (countError) throw Errors.dbError("列表查询失败", countError);
+
+    const total = count ?? 0;
+    if (from >= total) {
+      return ResponseHandler.success({
+        list: [],
+        pagination: buildPagination(page, pageSize, total),
+      });
+    }
 
     let query = SupabaseDB
       .from("projects")
@@ -1089,23 +1159,15 @@ class ProjectController extends BaseController<
               phone
             )
             `,
-        { count: "exact" },
       );
+    query = this.applyProjectListFilters(
+      query,
+      visibleProjectIds,
+      status,
+      normalizedKeyword,
+    );
 
-    query = this.applyProjectIdsFilter(query, visibleProjectIds);
-
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    const normalizedKeyword = keyword?.trim();
-    if (normalizedKeyword) {
-      query = query.or(
-        `name.ilike.%${normalizedKeyword}%,address.ilike.%${normalizedKeyword}%`,
-      );
-    }
-
-    const { data, error, count } = await query
+    const { data, error } = await query
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -1118,12 +1180,7 @@ class ProjectController extends BaseController<
       list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
         this.serializeProjectListItem(item, phonePrivacyContext)
       ),
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
+      pagination: buildPagination(page, pageSize, total),
     });
   }
 
