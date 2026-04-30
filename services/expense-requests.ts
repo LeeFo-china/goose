@@ -837,30 +837,6 @@ class ExpenseRequestService {
       }
     }
 
-    const approverId = input.approver_id ?? authContext.employeeId;
-    if (!approverId) {
-      throw Errors.badRequest("缺少审批人");
-    }
-    const rejectedReason = input.rejected_reason ?? input.reason;
-    if (!rejectedReason) {
-      throw Errors.badRequest("驳回原因不能为空");
-    }
-
-    const currentNode = this.getCurrentApprovalNode(existing);
-    if (currentNode) {
-      if (currentNode.status !== "current") {
-        throw Errors.badRequest("当前审批链节点状态不允许操作");
-      }
-
-      if (currentNode.assignee_id !== approverId) {
-        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
-      }
-
-      if (currentNode.step !== existing.current_step) {
-        throw Errors.badRequest("审批链与当前节点不一致");
-      }
-    }
-
     if (existing.current_step === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
@@ -944,6 +920,30 @@ class ExpenseRequestService {
 
     if (existing.status !== "pending") {
       throw Errors.badRequest("只有审批中的费用申请才能驳回");
+    }
+
+    const approverId = input.approver_id ?? authContext.employeeId;
+    if (!approverId) {
+      throw Errors.badRequest("缺少审批人");
+    }
+    const rejectedReason = input.rejected_reason ?? input.reason;
+    if (!rejectedReason) {
+      throw Errors.badRequest("驳回原因不能为空");
+    }
+
+    const currentNode = this.getCurrentApprovalNode(existing);
+    if (currentNode) {
+      if (currentNode.status !== "current") {
+        throw Errors.badRequest("当前审批链节点状态不允许操作");
+      }
+
+      if (currentNode.assignee_id !== approverId) {
+        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
+      }
+
+      if (currentNode.step !== existing.current_step) {
+        throw Errors.badRequest("审批链与当前节点不一致");
+      }
     }
 
     if (existing.current_step === "manager_review") {
