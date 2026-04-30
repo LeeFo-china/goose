@@ -48,8 +48,27 @@ export const DecorationQaSuggestionQuerySchema = z.object({
   scene: z.enum(["visitor", "customer", "employee"], {
     message: "推荐问题场景无效",
   }).default("visitor"),
-  project_id: z.string().uuid("无效的项目ID").optional(),
+  project_id: z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const normalized = value.trim();
+    return normalized || undefined;
+  }, z.string().max(80, "项目ID过长").optional()),
   refresh: booleanQuerySchema,
+}).superRefine((value, ctx) => {
+  if (
+    value.scene === "customer" &&
+    value.project_id &&
+    !z.uuid().safeParse(value.project_id).success
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["project_id"],
+      message: "无效的项目ID",
+    });
+  }
 });
 
 export type DecorationQaRequestInput = z.infer<typeof DecorationQaRequestSchema>;
