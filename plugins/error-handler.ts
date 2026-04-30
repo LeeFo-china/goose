@@ -1,5 +1,5 @@
 // src/plugins/error-handler.ts
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { AppError } from "../errors/app-error";
 import { fail } from "@/utils/response";
 import { ErrorCodes } from "../errors/error-codes";
@@ -53,7 +53,7 @@ function getErrorLogMeta(error: unknown) {
   };
 }
 
-const errorHandler: FastifyPluginAsync = async (app) => {
+const errorHandler = (app: FastifyInstance) => {
   app.setErrorHandler((error, request, reply) => {
     const requestId = request.id;
     const logMeta = getErrorLogMeta(error);

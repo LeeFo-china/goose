@@ -52,7 +52,7 @@ app.register(multipart, {
     fileSize: 10 * 1024 * 1024,
   },
 });
-app.register(errorHandler);
+errorHandler(app);
 requestLoggingPlugin(app);
 authPlugin(app);
 app.register(AutoLoad, {
