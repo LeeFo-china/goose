@@ -160,7 +160,10 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("发送验证码失败", smsError);
     }
 
-    request.log.info({ requestId: request.id, phone, scene, code }, "[auth] sms verification code generated");
+    request.log.info(
+      { requestId: request.id, hasPhone: Boolean(phone), scene },
+      "[auth] sms verification code generated",
+    );
 
     return ResponseHandler.success(null, "验证码已发送");
   }

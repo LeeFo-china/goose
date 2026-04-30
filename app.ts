@@ -6,12 +6,45 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import errorHandler from "./plugins/error-handler";
 import authPlugin from "./plugins/auth";
+import requestLoggingPlugin from "./plugins/request-logging";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const logLevel = process.env.LOG_LEVEL ||
+  (process.env.NODE_ENV === "production" ? "info" : "debug");
+
 const app = Fastify({
-  logger: true,
+  logger: {
+    level: logLevel,
+    redact: {
+      censor: "[REDACTED]",
+      paths: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "req.headers['x-token']",
+        "req.headers['x-openid']",
+        "req.headers['x-wx-openid']",
+        "headers.authorization",
+        "headers.cookie",
+        "authorization",
+        "cookie",
+        "phone",
+        "openid",
+        "unionid",
+        "*.token",
+        "*.access_token",
+        "*.refresh_token",
+        "*.password",
+        "*.phone",
+        "*.openid",
+        "*.unionid",
+        "*.verification_code",
+        "*.verificationCode",
+      ],
+    },
+  },
+  disableRequestLogging: true,
 });
 app.register(multipart, {
   limits: {
@@ -20,6 +53,7 @@ app.register(multipart, {
   },
 });
 app.register(errorHandler);
+app.register(requestLoggingPlugin);
 authPlugin(app);
 app.register(AutoLoad, {
   dir: join(__dirname, "routes"),

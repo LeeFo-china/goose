@@ -1,25 +1,73 @@
 // src/plugins/error-handler.ts
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { AppError } from "../errors/app-error";
 import { fail } from "@/utils/response";
 import { ErrorCodes } from "../errors/error-codes";
 import { ZodError } from "zod";
+import { getRequestLogContext } from "@/utils/logging";
+
+function hasFastifyValidation(error: unknown): error is { validation: unknown } {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "validation" in error &&
+      (error as { validation?: unknown }).validation,
+  );
+}
+
+function getErrorLogPayload(
+  error: unknown,
+  request: FastifyRequest,
+  statusCode: number,
+  code: string,
+) {
+  return {
+    ...getRequestLogContext(request),
+    statusCode,
+    code,
+    err: error,
+  };
+}
+
+function getErrorLogMeta(error: unknown) {
+  if (error instanceof AppError) {
+    return {
+      statusCode: error.statusCode,
+      code: error.code,
+      message: "application error",
+    };
+  }
+
+  if (error instanceof ZodError || hasFastifyValidation(error)) {
+    return {
+      statusCode: 400,
+      code: ErrorCodes.VALIDATION_ERROR,
+      message: "validation error",
+    };
+  }
+
+  return {
+    statusCode: 500,
+    code: ErrorCodes.INTERNAL_ERROR,
+    message: "unhandled error",
+  };
+}
 
 const errorHandler: FastifyPluginAsync = async (app) => {
   app.setErrorHandler((error, request, reply) => {
     const requestId = request.id;
+    const logMeta = getErrorLogMeta(error);
+    const logPayload = getErrorLogPayload(
+      error,
+      request,
+      logMeta.statusCode,
+      logMeta.code,
+    );
 
-    // 🔥 日志分级
-    if (error instanceof AppError) {
-      request.log.warn({
-        err: error,
-        requestId,
-      });
+    if (logMeta.statusCode >= 500) {
+      request.log.error(logPayload, logMeta.message);
     } else {
-      request.log.error({
-        err: error,
-        requestId,
-      });
+      request.log.warn(logPayload, logMeta.message);
     }
 
     // ✅ 自定义错误
@@ -46,7 +94,7 @@ const errorHandler: FastifyPluginAsync = async (app) => {
     }
 
     // ✅ schema 验证错误
-    if ((error as any).validation) {
+    if (hasFastifyValidation(error)) {
       return reply
         .status(400)
         .send(
@@ -54,7 +102,7 @@ const errorHandler: FastifyPluginAsync = async (app) => {
             "参数验证失败",
             ErrorCodes.VALIDATION_ERROR,
             requestId,
-            (error as any).validation,
+            error.validation,
           ),
         );
     }
