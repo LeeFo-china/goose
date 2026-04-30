@@ -21,6 +21,13 @@ import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 
+function escapeSupabaseOrValue(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, "\\$&")
+    .replace(/,/g, "\\,");
+}
+
 /**
  * 员工控制器类
  *
@@ -107,8 +114,12 @@ class EmployeeController extends BaseController<
 
     const normalizedKeyword = keyword?.trim();
     if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
       query = query.or(
-        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
+        [
+          `name.ilike.%${escapedKeyword}%`,
+          `phone.ilike.%${escapedKeyword}%`,
+        ].join(","),
       );
     }
 

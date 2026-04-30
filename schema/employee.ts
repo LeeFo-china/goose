@@ -4,6 +4,29 @@ import {
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
 
+function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (
+        normalized === "" ||
+        normalized === "undefined" ||
+        normalized === "null"
+      ) {
+        return undefined;
+      }
+
+      return normalized;
+    }
+
+    return value;
+  }, schema.optional());
+}
+
 const optionalNullableDateTime = (message: string) =>
   z.preprocess((value) => {
     if (value == null) {
@@ -85,10 +108,10 @@ export type CreateEmployeeInput = z.infer<typeof CreateEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof UpdateEmployeeSchema>;
 
 export const EmployeeListQuerySchema = PaginationQuerySchema.extend({
-  status: z.enum(EMPLOYEE_STATUS_VALUES, {
+  status: optionalQueryValue(z.enum(EMPLOYEE_STATUS_VALUES, {
     message: "请选择有效的员工状态",
-  }).nullable().optional(),
-  keyword: z.string().trim().optional(),
+  })),
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
 });
 
 export type EmployeeListQueryType = z.infer<typeof EmployeeListQuerySchema>;

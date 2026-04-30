@@ -5,6 +5,29 @@ import {
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
 
+function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (
+        normalized === "" ||
+        normalized === "undefined" ||
+        normalized === "null"
+      ) {
+        return undefined;
+      }
+
+      return normalized;
+    }
+
+    return value;
+  }, schema.optional());
+}
+
 function normalizeOptionalText(value: unknown) {
   if (value == null) {
     return null;
@@ -102,10 +125,10 @@ export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;
 export type UpdateCustomerSchemaType = z.infer<typeof UpdateCustomerSchema>;
 
 export const CustomerListQuerySchema = PaginationQuerySchema.extend({
-  status: z.enum(CUSTOMER_STATUS_VALUES, {
+  status: optionalQueryValue(z.enum(CUSTOMER_STATUS_VALUES, {
     message: "无效的客户状态",
-  }).nullable().optional(),
-  keyword: z.string().trim().optional(),
+  })),
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
 });
 
 export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;

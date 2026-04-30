@@ -71,6 +71,13 @@ const CustomerPhoneActionBodySchema = z.object({
   reason: z.string().trim().max(200, "原因过长").optional(),
 });
 
+function escapeSupabaseOrValue(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, "\\$&")
+    .replace(/,/g, "\\,");
+}
+
 // 继承基类
 class CustomerController extends BaseController<
   typeof CreateCustomerSchema,
@@ -702,8 +709,13 @@ class CustomerController extends BaseController<
 
     const normalizedKeyword = keyword?.trim();
     if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
       query = query.or(
-        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
+        [
+          `name.ilike.%${escapedKeyword}%`,
+          `phone.ilike.%${escapedKeyword}%`,
+          `source.ilike.%${escapedKeyword}%`,
+        ].join(","),
       );
     }
 
