@@ -4,6 +4,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import {
   buildEzvizLiveUrl,
+  ezvizDeviceService,
   ezvizTokenService,
   getEzplayerPluginVersion,
 } from "@/services/ezviz";
@@ -63,6 +64,22 @@ function serializeCameraForPlayer(camera: ProjectCameraRow) {
     can_control: camera.can_control,
     capabilities: normalizeCapabilities(camera.capabilities),
   };
+}
+
+function buildDeviceChannelKey(deviceSerial: string, channelNo: number) {
+  return `${deviceSerial}:${channelNo}`;
+}
+
+function getBindingProject(project: unknown) {
+  if (Array.isArray(project)) {
+    return project[0] as { id?: string | null; name?: string | null } | undefined;
+  }
+
+  if (project && typeof project === "object") {
+    return project as { id?: string | null; name?: string | null };
+  }
+
+  return undefined;
 }
 
 function getUserAgent(meta?: RequestLogMeta) {
@@ -226,6 +243,63 @@ class ProjectCameraService {
       list: cameras
         .filter((camera) => actor.userRole === "employee" || camera.can_view)
         .map(serializeCamera),
+    };
+  }
+
+  async listEzvizDeviceChannels(input: {
+    authUserId?: string | null;
+    projectId: string;
+    onlyUnbound: boolean;
+  }) {
+    await this.resolveActor({
+      authUserId: input.authUserId,
+      projectId: input.projectId,
+      permissionCode: "project.update",
+      allowCustomer: false,
+    });
+
+    const [channels, bindings] = await Promise.all([
+      ezvizDeviceService.listDeviceChannels(),
+      projectCameraRepository.listActiveBindingsByVendor("ezviz"),
+    ]);
+    const bindingMap = new Map(
+      bindings.map((binding) => [
+        buildDeviceChannelKey(binding.vendor_device_serial, binding.channel_no),
+        binding,
+      ]),
+    );
+
+    const list = channels.map((channel) => {
+      const binding = bindingMap.get(
+        buildDeviceChannelKey(channel.device_serial, channel.channel_no),
+      );
+      const isBound = Boolean(binding);
+      const isBoundToCurrentProject = binding?.project_id === input.projectId;
+      const boundProject = getBindingProject(binding?.project);
+
+      return {
+        device_name: channel.device_name,
+        device_serial: channel.device_serial,
+        channel_no: channel.channel_no,
+        channel_name: channel.channel_name,
+        status: channel.status,
+        raw_status: channel.raw_status,
+        video_encrypted: channel.video_encrypted,
+        cover_url: channel.cover_url,
+        is_bound: isBound,
+        is_bound_to_current_project: isBoundToCurrentProject,
+        bound_project_id: binding?.project_id || null,
+        bound_project_name: boundProject?.name || null,
+        bound_camera_id: binding?.id || null,
+        bound_camera_name: binding?.name || null,
+        can_bind: !isBound,
+      };
+    });
+
+    return {
+      list: input.onlyUnbound
+        ? list.filter((item) => item.can_bind)
+        : list,
     };
   }
 

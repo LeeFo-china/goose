@@ -46,8 +46,31 @@ export const ProjectCameraPlayParamsBodySchema = z.object({
   }).default("live"),
 }).default({ stream: "live" });
 
+const QueryBooleanSchema = z.preprocess((value) => {
+  if (value === true || value === "true" || value === "1") return true;
+  if (
+    value === false ||
+    value === "false" ||
+    value === "0" ||
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return false;
+  }
+
+  return value;
+}, z.boolean());
+
+export const ProjectCameraEzvizDevicesQuerySchema = z.object({
+  only_unbound: QueryBooleanSchema.default(false),
+});
+
 export type CreateProjectCameraInput = z.infer<typeof CreateProjectCameraSchema>;
 export type UpdateProjectCameraInput = z.infer<typeof UpdateProjectCameraSchema>;
 export type ProjectCameraPlayParamsInput = z.infer<
   typeof ProjectCameraPlayParamsBodySchema
+>;
+export type ProjectCameraEzvizDevicesQueryInput = z.infer<
+  typeof ProjectCameraEzvizDevicesQuerySchema
 >;

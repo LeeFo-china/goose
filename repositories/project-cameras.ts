@@ -31,6 +31,24 @@ export type ProjectCameraRow = {
 
 export type CameraAccessLogAction = "list" | "play_params" | "refresh_status" | "control";
 
+export type ProjectCameraBindingRow = Pick<
+  ProjectCameraRow,
+  | "id"
+  | "project_id"
+  | "vendor"
+  | "vendor_device_serial"
+  | "channel_no"
+  | "name"
+> & {
+  project?: {
+    id?: string | null;
+    name?: string | null;
+  } | Array<{
+    id?: string | null;
+    name?: string | null;
+  }> | null;
+};
+
 class ProjectCameraRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -85,6 +103,28 @@ class ProjectCameraRepository {
     }
 
     return (data || null) as ProjectCameraRow | null;
+  }
+
+  async listActiveBindingsByVendor(vendor: "ezviz") {
+    const { data, error } = await this.adminClient
+      .from("project_cameras")
+      .select(`
+        id,
+        project_id,
+        vendor,
+        vendor_device_serial,
+        channel_no,
+        name,
+        project:projects(id, name)
+      `)
+      .eq("vendor", vendor)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw Errors.dbError("查询摄像头绑定状态失败", error);
+    }
+
+    return (data || []) as ProjectCameraBindingRow[];
   }
 
   async create(projectId: string, input: CreateProjectCameraInput) {

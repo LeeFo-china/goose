@@ -5,6 +5,7 @@ import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import {
   CreateProjectCameraSchema,
+  ProjectCameraEzvizDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
   ProjectCameraParamsSchema,
   ProjectCameraPlayParamsBodySchema,
@@ -33,6 +34,25 @@ class ProjectCameraController extends BaseController {
       authUserId: request.user?.sub,
       projectId: paramsResult.data.project_id,
       meta: this.getRequestMeta(request),
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/projects/:project_id/cameras/ezviz-devices")
+  async listEzvizDeviceChannels(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = ProjectCameraParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = ProjectCameraEzvizDevicesQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectCameraService.listEzvizDeviceChannels({
+      authUserId: request.user?.sub,
+      projectId: paramsResult.data.project_id,
+      onlyUnbound: queryResult.data.only_unbound,
     });
 
     return ResponseHandler.success(result);
