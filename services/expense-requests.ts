@@ -34,6 +34,8 @@ type ExpenseRequestOperationPermission =
   | "expense_request.approve_finance"
   | "expense_request.pay";
 
+type ExpenseRequestAccessScope = "self" | "assigned" | "department" | "all";
+
 type ApprovalChainStep = "manager_review" | "finance_review";
 
 const approvalChainStepConfigs: Array<{
@@ -65,7 +67,7 @@ const approvalStepPermissionMap: Record<string, ExpenseRequestOperationPermissio
   payment: "expense_request.pay",
 };
 
-const scopeWeight: Record<string, number> = {
+const scopeWeight: Record<ExpenseRequestAccessScope, number> = {
   self: 1,
   assigned: 2,
   department: 3,
@@ -129,7 +131,7 @@ function normalizeRelationName(value: unknown) {
   return null;
 }
 
-function normalizeScope(value: string | null | undefined) {
+function normalizeScope(value: string | null | undefined): ExpenseRequestAccessScope {
   if (value === "department" || value === "assigned" || value === "all") {
     return value;
   }
@@ -295,14 +297,15 @@ class ExpenseRequestService {
   }
 
   private mergeScope(existing: string | null, incoming: string | null) {
+    const normalizedExisting = existing ? normalizeScope(existing) : null;
     const normalizedIncoming = normalizeScope(incoming);
-    if (!existing) {
+    if (!normalizedExisting) {
       return normalizedIncoming;
     }
 
-    return scopeWeight[normalizedIncoming] > scopeWeight[existing]
+    return scopeWeight[normalizedIncoming] > scopeWeight[normalizedExisting]
       ? normalizedIncoming
-      : existing;
+      : normalizedExisting;
   }
 
   private buildCandidateScopeMap(
