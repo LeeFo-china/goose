@@ -56,6 +56,11 @@ class PermissionService {
   }
 
   async createPermission(input: CreatePermissionInput) {
+    const existing = await permissionRepository.findPermissionByCode(input.code);
+    if (existing) {
+      throw Errors.badRequest("权限编码已存在");
+    }
+
     const name = input.name?.trim()
       || PermissionCodeConfig[input.code]?.label
       || input.description?.trim()
