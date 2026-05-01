@@ -6,6 +6,7 @@ import {
   UpdatePermissionSchema,
 } from "@/schema/permissions";
 import { permissionService } from "@/services/permissions";
+import { Delete } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -62,6 +63,15 @@ class PermissionsController extends BaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Delete("/permissions/:id")
+  async deletePermission(request: FastifyRequest, reply: FastifyReply) {
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await permissionService.deletePermission(idVerify.data.id);
+    return ResponseHandler.success(data, "删除成功");
+  }
 }
 
 export default new PermissionsController();

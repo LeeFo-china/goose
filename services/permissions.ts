@@ -71,6 +71,17 @@ class PermissionService {
     return permissionRepository.updatePermission(id, input);
   }
 
+  async deletePermission(id: string) {
+    const permission = await permissionRepository.findPermissionById(id);
+    if (!permission) {
+      throw Errors.badRequest("权限不存在");
+    }
+
+    return permissionRepository.updatePermission(id, {
+      status: "inactive",
+    });
+  }
+
   async assignEmployeeRoles(employeeId: string, input: AssignEmployeeRolesInput) {
     const employee = await permissionRepository.findEmployeeById(employeeId);
     if (!employee) {
