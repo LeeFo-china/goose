@@ -33,6 +33,7 @@ import CustomerProjectLogSharesController from "@/controllers/customer-project-l
 import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up-comments";
 import ExpenseRequestCategoriesController from "@/controllers/expense-request-categories";
 import ProjectCameraController from "@/controllers/project-cameras";
+import AdminAuthController from "@/controllers/admin-auth";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -41,6 +42,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   });
 
   WeChatController.registerExtraRoutes(app);
+  AdminAuthController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);

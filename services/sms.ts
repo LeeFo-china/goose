@@ -33,6 +33,11 @@ function getAliyunTemplateCode(scene: SmsScene) {
     return requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
   }
 
+  if (scene === "admin_login") {
+    return process.env.ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN?.trim() ||
+      requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+  }
+
   return requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
 }
 

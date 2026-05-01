@@ -4,7 +4,8 @@ import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
   sub: string;
-  openid: string;
+  openid?: string;
+  login_channel?: "wechat" | "admin_web";
   roles?: string[];
   iat?: number;
   exp?: number;
@@ -28,7 +29,7 @@ function fromBase64Url(value: string) {
   return Buffer.from(value, "base64url").toString("utf8");
 }
 
-function parseExpiresIn(expiresIn: string) {
+export function parseJwtExpiresIn(expiresIn: string) {
   const normalized = expiresIn.trim();
 
   if (/^\d+$/.test(normalized)) {
@@ -80,7 +81,7 @@ function signRaw(content: string, secret: string) {
 export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   const secret = getJwtSecret();
   const now = Math.floor(Date.now() / 1000);
-  const expiresIn = parseExpiresIn(process.env.JWT_EXPIRES_IN || "7d");
+  const expiresIn = parseJwtExpiresIn(process.env.JWT_EXPIRES_IN || "7d");
 
   const header: JwtHeader = {
     alg: "HS256",
@@ -138,9 +139,14 @@ export function verifyToken(token: string) {
   const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
   const now = Math.floor(Date.now() / 1000);
 
-  if (!payload.sub || !payload.openid || !payload.exp || payload.exp <= now) {
+  if (!payload.sub || !payload.exp || payload.exp <= now) {
     return null;
   }
 
   return payload;
+}
+
+export function getJwtExpiresAt(now = Date.now()) {
+  const expiresIn = parseJwtExpiresIn(process.env.JWT_EXPIRES_IN || "7d");
+  return new Date(now + expiresIn * 1000).toISOString();
 }

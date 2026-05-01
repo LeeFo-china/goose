@@ -4,7 +4,13 @@ import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
 
-const publicRoutes = new Set(["/", "/auth", "/auth/send-code"]);
+const publicRoutes = new Set([
+  "/",
+  "/auth",
+  "/auth/send-code",
+  "/admin/auth/send-code",
+  "/admin/auth/login",
+]);
 
 function isPublicRoute(method: string, url: string) {
   if (publicRoutes.has(url)) {
