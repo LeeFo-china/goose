@@ -10,7 +10,7 @@ import {
   UpdateCustomerSchema,
 } from "@/schema/customer";
 import { BaseController } from "@/controllers/BaseController";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type {
   BatchAssignCustomerOwnerInput,
@@ -1011,6 +1011,51 @@ class CustomerController extends BaseController<
       }),
     );
   };
+
+  @Delete("/customers/:id")
+  async deleteCustomer(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const existing = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, owner_id")
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (existing.error) {
+      throw Errors.dbError("查询客户失败", existing.error);
+    }
+
+    if (!existing.data) {
+      throw Errors.badRequest("客户不存在");
+    }
+
+    const canAccess = await accessPolicyService.canAccessCustomer(
+      authContext,
+      (existing.data as unknown) as { owner_id: string | null },
+      "customer.update",
+    );
+    if (!canAccess) {
+      throw Errors.forbidden();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .update({ status: "invalid" })
+      .eq("id", idVerify.data.id)
+      .select(this.customerSelect)
+      .single();
+
+    if (error) throw Errors.dbError("作废客户失败", error);
+    return ResponseHandler.success(
+      this.serializeCustomer(
+        (data as unknown) as CustomerRowForResponse,
+        await customerPhonePrivacyService.createPrivacyContext(authContext),
+      ),
+    );
+  }
 
   @Post("/customers/assign-owner/batch")
   async batchAssignOwner(request: FastifyRequest, reply: FastifyReply) {
