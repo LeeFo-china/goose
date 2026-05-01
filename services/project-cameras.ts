@@ -146,6 +146,18 @@ class ProjectCameraService {
     const authContext = await authorizationService.getRequiredAuthContext(
       input.authUserId,
     );
+
+    if (
+      !authContext.employeeId ||
+      !accessPolicyService.hasPermission(authContext, input.permissionCode)
+    ) {
+      throw Errors.business(
+        403,
+        "无权查看该项目摄像头",
+        ErrorCodes.CAMERA_ACCESS_DENIED,
+      );
+    }
+
     const hasAccess = await accessPolicyService.canAccessProject(
       authContext,
       input.projectId,
