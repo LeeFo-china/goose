@@ -17,6 +17,9 @@
     "dev": "bun --watch app.ts",
     "start": "bun app.ts",
     "build": "bun build app.ts --outdir dist --target node",
+    "admin:dev": "pnpm --dir apps/admin dev",
+    "admin:build": "pnpm --dir apps/admin build",
+    "admin:start": "pnpm --dir apps/admin start",
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
   },
   "dependencies": {

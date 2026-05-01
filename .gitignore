@@ -6,6 +6,8 @@ node_modules
 # output
 out
 dist
+.next
+apps/*/.next
 supabase/.temp
 *.tgz
 

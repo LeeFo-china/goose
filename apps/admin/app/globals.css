@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 17% 98%;
+  --foreground: 210 20% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 20% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 20% 10%;
+  --primary: 198 88% 24%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 34 55% 92%;
+  --secondary-foreground: 28 28% 18%;
+  --muted: 210 20% 94%;
+  --muted-foreground: 210 9% 42%;
+  --accent: 162 34% 90%;
+  --accent-foreground: 166 50% 18%;
+  --destructive: 0 74% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 16% 88%;
+  --input: 210 16% 86%;
+  --ring: 198 88% 30%;
+  --radius: 8px;
+  --font-sans: "Avenir Next", "Gill Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+
+::selection {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.console-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.44) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.38) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

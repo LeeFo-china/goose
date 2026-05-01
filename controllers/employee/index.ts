@@ -15,7 +15,7 @@ import {
 } from "@/schema/employee";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
-import { Get } from "@/utils/decorators/route";
+import { Delete, Get } from "@/utils/decorators/route";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
@@ -238,6 +238,47 @@ class EmployeeController extends BaseController<
     if (error) throw Errors.dbError("更新失败", error);
     return ResponseHandler.success(data);
   };
+
+  @Delete("/employees/:id")
+  async deleteEmployee(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "employee.update");
+
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const existing = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .select("id, user_id, department_id")
+      .eq("id", idVerify.data.id)
+      .maybeSingle();
+
+    if (existing.error) throw Errors.dbError("查询失败", existing.error);
+    if (!existing.data) throw Errors.badRequest("员工不存在");
+
+    if (!accessPolicyService.canAccessEmployee(authContext, existing.data, "employee.update")) {
+      throw Errors.forbidden();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from(this.tableName)
+      .update({
+        status: "leaved",
+        user_id: null,
+      })
+      .eq("id", idVerify.data.id)
+      .select()
+      .single();
+
+    if (error) throw Errors.dbError("删除员工失败", error);
+
+    authorizationService.invalidateAuthContext({
+      authUserId: existing.data.user_id,
+      employeeId: existing.data.id,
+    });
+
+    return ResponseHandler.success(data, "删除成功");
+  }
 
   // ==================== 基础 CRUD ====================
   // 继承自 BaseController:
