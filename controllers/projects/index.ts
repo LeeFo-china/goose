@@ -869,6 +869,25 @@ class ProjectController extends BaseController<
     return ResponseHandler.success(data);
   };
 
+  @Delete("/projects/:id")
+  async deleteProject(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      idVerify.data.id,
+      "project.delete",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const data = await projectSer.deleteProject(idVerify.data.id);
+    return ResponseHandler.success(data);
+  }
+
   @Get("/projects/:id/members")
   async getProjectMembers(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);

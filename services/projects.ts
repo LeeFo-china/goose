@@ -95,6 +95,18 @@ class ProjectService {
 
         return projectRepository.update(id, input);
     }
+
+    async deleteProject(id: string) {
+        const existing = await projectRepository.findById(id);
+
+        if (!existing) {
+            throw Errors.badRequest("项目不存在");
+        }
+
+        return projectRepository.update(id, {
+            status: "invalid",
+        });
+    }
 }
 
 export const projectSer = new ProjectService();
