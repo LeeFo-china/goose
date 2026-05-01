@@ -155,16 +155,26 @@ class AdminAuthRepository {
   }
 
   async markVerificationCodeVerified(id: string) {
-    const { error } = await this.adminClient
+    const { data, error } = await this.adminClient
       .from("sms_verification_codes")
       .update({
         status: "verified",
         verified_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新验证码状态失败", error);
+    }
+
+    if (!data) {
+      throw Errors.business(
+        400,
+        "验证码错误或已过期",
+        ErrorCodes.ADMIN_AUTH_CODE_INVALID,
+      );
     }
   }
 
