@@ -32,6 +32,7 @@ import CustomerSelfServiceController from "@/controllers/customer-self-service";
 import CustomerProjectLogSharesController from "@/controllers/customer-project-log-shares";
 import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up-comments";
 import ExpenseRequestCategoriesController from "@/controllers/expense-request-categories";
+import ProjectCameraController from "@/controllers/project-cameras";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -48,6 +49,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   CustomerSelfServiceController.registerExtraRoutes(app);
   CustomerProjectLogSharesController.registerExtraRoutes(app);
   CustomerFollowUpCommentsController.registerExtraRoutes(app);
+  ProjectCameraController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController));
