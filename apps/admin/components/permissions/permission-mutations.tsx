@@ -1,8 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useTransition } from "react";
+import { ChangeEvent, FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Loader2, Plus, Power, RotateCcw, Shield } from "lucide-react";
+import {
+  PERMISSION_CODE_VALUES,
+  PermissionCodeConfig,
+  type PermissionCode,
+} from "@gooes/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +24,82 @@ export type PermissionRecord = {
 };
 
 type PermissionMode = "create" | "edit";
+
+type PermissionFormState = {
+  code: string;
+  name: string;
+  module: string;
+  resource: string;
+  action: string;
+  description: string;
+  status: string;
+};
+
+const SELECT_CLASS_NAME =
+  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
+function uniq(values: string[]) {
+  return Array.from(new Set(values)).filter(Boolean).sort((a, b) => a.localeCompare(b));
+}
+
+function inferPermissionFields(code: PermissionCode) {
+  const module = PermissionCodeConfig[code]?.module || code.split(".")[0];
+  const rest = code.startsWith(`${module}.`) ? code.slice(module.length + 1) : code;
+  const segments = rest.split(".");
+  const resource = segments.length > 1 ? `${module}_${segments.slice(0, -1).join("_")}` : module;
+  const action = segments.at(-1) || rest;
+
+  return {
+    code,
+    name: PermissionCodeConfig[code]?.label || code,
+    module,
+    resource,
+    action,
+  };
+}
+
+const PERMISSION_FIELD_OPTIONS = PERMISSION_CODE_VALUES.map(inferPermissionFields);
+const PERMISSION_MODULE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.module));
+const PERMISSION_RESOURCE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.resource));
+const PERMISSION_ACTION_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.action));
+
+function isPermissionCodeValue(value: string): value is PermissionCode {
+  return PERMISSION_CODE_VALUES.includes(value as PermissionCode);
+}
+
+function SelectField({
+  id,
+  name,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  name: string;
+  value: string;
+  options: string[];
+  disabled: boolean;
+  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+}) {
+  return (
+    <select
+      id={id}
+      name={name}
+      value={value}
+      disabled={disabled}
+      required
+      className={SELECT_CLASS_NAME}
+      onChange={onChange}
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -64,15 +145,24 @@ function PermissionDialog({
   const [error, setError] = useState("");
   const title = mode === "create" ? "新增权限" : "编辑权限";
   const submitText = mode === "create" ? "创建权限" : "保存修改";
-  const defaults = useMemo(() => ({
-    code: permission?.code || "",
-    name: permission?.name || "",
-    module: permission?.module || "",
-    resource: permission?.resource || "",
-    action: permission?.action || "",
-    description: permission?.description || "",
-    status: permission?.status || "active",
-  }), [permission]);
+  const defaults = useMemo<PermissionFormState>(() => {
+    const permissionCode = permission?.code || "";
+    const code = isPermissionCodeValue(permissionCode)
+      ? permissionCode
+      : PERMISSION_CODE_VALUES[0];
+    const inferred = inferPermissionFields(code);
+
+    return {
+      code,
+      name: permission?.name || inferred.name,
+      module: permission?.module || inferred.module,
+      resource: permission?.resource || inferred.resource,
+      action: permission?.action || inferred.action,
+      description: permission?.description || "",
+      status: permission?.status || "active",
+    };
+  }, [permission]);
+  const [formState, setFormState] = useState<PermissionFormState>(defaults);
 
   if (!open) return null;
 
@@ -84,15 +174,14 @@ function PermissionDialog({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
     const payload = {
-      code: String(formData.get("code") || "").trim(),
-      name: String(formData.get("name") || "").trim() || undefined,
-      module: String(formData.get("module") || "").trim(),
-      resource: String(formData.get("resource") || "").trim(),
-      action: String(formData.get("action") || "").trim(),
-      description: String(formData.get("description") || "").trim() || null,
-      status: String(formData.get("status") || "active"),
+      code: formState.code.trim(),
+      name: formState.name.trim() || undefined,
+      module: formState.module.trim(),
+      resource: formState.resource.trim(),
+      action: formState.action.trim(),
+      description: formState.description.trim() || null,
+      status: formState.status || "active",
     };
 
     setError("");
@@ -131,56 +220,86 @@ function PermissionDialog({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor={`${mode}-permission-code`}>权限编码</Label>
-              <Input
+              <select
                 id={`${mode}-permission-code`}
                 name="code"
-                defaultValue={defaults.code}
-                placeholder="例如 employee.read"
+                value={formState.code}
                 disabled={pending}
                 required
-              />
+                className={SELECT_CLASS_NAME}
+                onChange={(event) => {
+                  const code = event.target.value;
+                  if (!isPermissionCodeValue(code)) return;
+                  const next = inferPermissionFields(code);
+                  setFormState((current) => ({
+                    ...current,
+                    ...next,
+                    description: current.description,
+                    status: current.status,
+                  }));
+                }}
+              >
+                {PERMISSION_CODE_VALUES.map((code) => (
+                  <option key={code} value={code}>
+                    {code} - {PermissionCodeConfig[code]?.label || code}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor={`${mode}-permission-name`}>权限名称</Label>
               <Input
                 id={`${mode}-permission-name`}
                 name="name"
-                defaultValue={defaults.name}
+                value={formState.name}
                 placeholder="例如 查看员工"
                 disabled={pending}
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${mode}-permission-module`}>模块</Label>
-              <Input
+              <SelectField
                 id={`${mode}-permission-module`}
                 name="module"
-                defaultValue={defaults.module}
-                placeholder="employee"
                 disabled={pending}
-                required
+                value={formState.module}
+                options={PERMISSION_MODULE_OPTIONS}
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  module: event.target.value,
+                }))}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${mode}-permission-resource`}>资源</Label>
-              <Input
+              <SelectField
                 id={`${mode}-permission-resource`}
                 name="resource"
-                defaultValue={defaults.resource}
-                placeholder="employee"
                 disabled={pending}
-                required
+                value={formState.resource}
+                options={PERMISSION_RESOURCE_OPTIONS}
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  resource: event.target.value,
+                }))}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${mode}-permission-action`}>动作</Label>
-              <Input
+              <SelectField
                 id={`${mode}-permission-action`}
                 name="action"
-                defaultValue={defaults.action}
-                placeholder="read / create / update"
                 disabled={pending}
-                required
+                value={formState.action}
+                options={PERMISSION_ACTION_OPTIONS}
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  action: event.target.value,
+                }))}
               />
             </div>
             <div className="space-y-2">
@@ -188,9 +307,13 @@ function PermissionDialog({
               <select
                 id={`${mode}-permission-status`}
                 name="status"
-                defaultValue={defaults.status}
+                value={formState.status}
                 disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className={SELECT_CLASS_NAME}
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  status: event.target.value,
+                }))}
               >
                 <option value="active">启用</option>
                 <option value="inactive">停用</option>
@@ -201,10 +324,14 @@ function PermissionDialog({
               <textarea
                 id={`${mode}-permission-description`}
                 name="description"
-                defaultValue={defaults.description}
+                value={formState.description}
                 placeholder="可留空"
                 disabled={pending}
                 className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                onChange={(event) => setFormState((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))}
               />
             </div>
           </div>
