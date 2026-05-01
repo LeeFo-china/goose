@@ -15,6 +15,35 @@ function hasFastifyValidation(error: unknown): error is { validation: unknown } 
   );
 }
 
+function getHttpErrorStatusCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) {
+    return null;
+  }
+
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  return typeof statusCode === "number" ? statusCode : null;
+}
+
+function getHttpErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return ErrorCodes.VALIDATION_ERROR;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : ErrorCodes.VALIDATION_ERROR;
+}
+
+function getHttpErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object" || !("message" in error)) {
+    return "请求参数格式非法";
+  }
+
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" && message
+    ? message
+    : "请求参数格式非法";
+}
+
 function getErrorLogPayload(
   error: unknown,
   request: FastifyRequest,
@@ -43,6 +72,15 @@ function getErrorLogMeta(error: unknown) {
       statusCode: 400,
       code: ErrorCodes.VALIDATION_ERROR,
       message: "validation error",
+    };
+  }
+
+  const httpStatusCode = getHttpErrorStatusCode(error);
+  if (httpStatusCode && httpStatusCode >= 400 && httpStatusCode < 500) {
+    return {
+      statusCode: httpStatusCode,
+      code: getHttpErrorCode(error),
+      message: "client error",
     };
   }
 
@@ -103,6 +141,19 @@ const errorHandler = (app: FastifyInstance) => {
             ErrorCodes.VALIDATION_ERROR,
             requestId,
             error.validation,
+          ),
+        );
+    }
+
+    const httpStatusCode = getHttpErrorStatusCode(error);
+    if (httpStatusCode && httpStatusCode >= 400 && httpStatusCode < 500) {
+      return reply
+        .status(httpStatusCode)
+        .send(
+          fail(
+            getHttpErrorMessage(error),
+            getHttpErrorCode(error),
+            requestId,
           ),
         );
     }
