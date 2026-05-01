@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,25 +83,15 @@ export function ExpenseFilters({
   currentStep: string;
   keyword: string;
 }) {
-  const { pending, navigate } = useExpensesNavigation();
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    navigate(buildExpensesHref({
-      status: String(formData.get("status") || ""),
-      mode: String(formData.get("mode") || ""),
-      currentStep: String(formData.get("current_step") || ""),
-      keyword: String(formData.get("keyword") || "").trim(),
-    }));
-  }
-
   return (
-    <form className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_72px]" onSubmit={submit}>
+    <form
+      action="/expenses"
+      method="get"
+      className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_72px]"
+    >
       <select
         name="status"
         defaultValue={status}
-        disabled={pending}
         className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         {statusOptions.map(([value, label]) => (
@@ -111,7 +101,6 @@ export function ExpenseFilters({
       <select
         name="mode"
         defaultValue={mode}
-        disabled={pending}
         className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         {modeOptions.map(([value, label]) => (
@@ -121,7 +110,6 @@ export function ExpenseFilters({
       <select
         name="current_step"
         defaultValue={currentStep}
-        disabled={pending}
         className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         {stepOptions.map(([value, label]) => (
@@ -135,11 +123,9 @@ export function ExpenseFilters({
           defaultValue={keyword}
           placeholder="搜索单号或标题"
           className="pl-9"
-          disabled={pending}
         />
       </div>
-      <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" variant="outline">
         搜索
       </Button>
     </form>
