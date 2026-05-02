@@ -4,6 +4,11 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   CustomerRowActions,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
@@ -83,14 +88,24 @@ const columns: ColumnDef<CustomerRecord>[] = [
       const name = row.original.name || "未命名客户";
 
       return (
-        <div className="min-w-0">
-          <div className="w-[5em] truncate font-medium" title={name}>
-            {name}
-          </div>
-          <div className="w-[5em] truncate text-xs text-muted-foreground" title={row.original.id}>
-            {row.original.id}
-          </div>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="min-w-0 cursor-default">
+              <div className="w-[5em] truncate font-medium">
+                {name}
+              </div>
+              <div className="w-[5em] truncate text-xs text-muted-foreground">
+                {row.original.id}
+              </div>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent align="start" className="max-w-[280px]">
+            <div className="flex flex-col gap-1">
+              <div className="break-all font-medium">{name}</div>
+              <div className="break-all text-xs opacity-90">{row.original.id}</div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
       );
     },
     meta: {
