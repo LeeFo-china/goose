@@ -6,12 +6,13 @@ import {
   CustomerStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
 
@@ -70,11 +71,13 @@ export function CustomerFilters({
 }) {
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedFollow, setSelectedFollow] = useState(follow);
+  const [selectedKeyword, setSelectedKeyword] = useState(keyword);
 
   useEffect(() => {
     setSelectedStatus(status);
     setSelectedFollow(follow);
-  }, [follow, status]);
+    setSelectedKeyword(keyword);
+  }, [follow, keyword, status]);
 
   return (
     <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px]">
@@ -105,9 +108,21 @@ export function CustomerFilters({
         </InputGroupAddon>
         <InputGroupInput
           name="keyword"
-          defaultValue={keyword}
+          value={selectedKeyword}
           placeholder="搜索姓名、手机号或来源"
+          onChange={(event) => setSelectedKeyword(event.target.value)}
         />
+        {selectedKeyword ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="清除搜索内容"
+              size="icon-xs"
+              onClick={() => setSelectedKeyword("")}
+            >
+              <X aria-hidden="true" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
       <Button type="submit" variant="outline">
         搜索
