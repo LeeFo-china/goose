@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   EXPENSE_MODE_VALUES,
   EXPENSE_REQUEST_STEP_VALUES,
@@ -11,6 +11,7 @@ import {
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -87,39 +88,52 @@ export function ExpenseFilters({
   currentStep: string;
   keyword: string;
 }) {
+  const [selectedStatus, setSelectedStatus] = useState(status);
+  const [selectedMode, setSelectedMode] = useState(mode);
+  const [selectedStep, setSelectedStep] = useState(currentStep);
+
+  useEffect(() => {
+    setSelectedStatus(status);
+    setSelectedMode(mode);
+    setSelectedStep(currentStep);
+  }, [currentStep, mode, status]);
+
   return (
     <form
       action="/expenses"
       method="get"
       className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_72px]"
     >
-      <select
-        name="status"
-        defaultValue={status}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        {statusOptions.map(([value, label]) => (
-          <option key={value || "all"} value={value}>{label}</option>
-        ))}
-      </select>
-      <select
-        name="mode"
-        defaultValue={mode}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        {modeOptions.map(([value, label]) => (
-          <option key={value || "all"} value={value}>{label}</option>
-        ))}
-      </select>
-      <select
-        name="current_step"
-        defaultValue={currentStep}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        {stepOptions.map(([value, label]) => (
-          <option key={value || "all"} value={value}>{label}</option>
-        ))}
-      </select>
+      <input type="hidden" name="status" value={selectedStatus} />
+      <input type="hidden" name="mode" value={selectedMode} />
+      <input type="hidden" name="current_step" value={selectedStep} />
+      <FormSelect
+        id="expense-status-filter"
+        value={selectedStatus || "__all"}
+        options={statusOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="expense-mode-filter"
+        value={selectedMode || "__all"}
+        options={modeOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedMode(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="expense-current-step-filter"
+        value={selectedStep || "__all"}
+        options={stepOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedStep(value === "__all" ? "" : value)}
+      />
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input

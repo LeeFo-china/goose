@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useTransition } from "react";
+import { FormEvent, useEffect, useState, useTransition } from "react";
 import {
   PERMISSION_STATUS_VALUES,
   PermissionStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -16,6 +17,14 @@ type Pagination = {
   total: number;
   totalPages: number;
 };
+
+const statusOptions = [
+  ["", "全部状态"],
+  ...PERMISSION_STATUS_VALUES.map((value) => [
+    value,
+    PermissionStatusConfig[value].label,
+  ] as const),
+] as const;
 
 function buildPermissionsHref(input: {
   page?: number;
@@ -56,6 +65,11 @@ export function PermissionFilters({
   keyword: string;
 }) {
   const { pending, navigate } = usePermissionsNavigation();
+  const [selectedStatus, setSelectedStatus] = useState(status);
+
+  useEffect(() => {
+    setSelectedStatus(status);
+  }, [status]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,19 +83,17 @@ export function PermissionFilters({
 
   return (
     <form className="grid gap-3 lg:grid-cols-[140px_180px_1fr_72px]" onSubmit={submit}>
-      <select
-        name="status"
-        defaultValue={status}
+      <input type="hidden" name="status" value={selectedStatus} />
+      <FormSelect
+        id="permission-status-filter"
+        value={selectedStatus || "__all"}
         disabled={pending}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        <option value="">全部状态</option>
-        {PERMISSION_STATUS_VALUES.map((value) => (
-          <option key={value} value={value}>
-            {PermissionStatusConfig[value].label}
-          </option>
-        ))}
-      </select>
+        options={statusOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
       <Input
         name="module"
         defaultValue={module}

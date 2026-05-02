@@ -1,8 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -49,32 +50,40 @@ export function MarketingFilters({
   status: string;
   keyword: string;
 }) {
+  const [selectedCampaignType, setSelectedCampaignType] = useState(campaignType);
+  const [selectedStatus, setSelectedStatus] = useState(status);
+
+  useEffect(() => {
+    setSelectedCampaignType(campaignType);
+    setSelectedStatus(status);
+  }, [campaignType, status]);
+
   return (
     <form
       action="/marketing"
       method="get"
       className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px]"
     >
-      <select
-        name="campaign_type"
-        defaultValue={campaignType}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <option value="">全部类型</option>
-        {campaignTypeOptions.map(([value, label]) => (
-          <option key={value} value={value}>{label}</option>
-        ))}
-      </select>
-      <select
-        name="status"
-        defaultValue={status}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <option value="">全部状态</option>
-        {campaignStatusOptions.map(([value, label]) => (
-          <option key={value} value={value}>{label}</option>
-        ))}
-      </select>
+      <input type="hidden" name="campaign_type" value={selectedCampaignType} />
+      <input type="hidden" name="status" value={selectedStatus} />
+      <FormSelect
+        id="marketing-campaign-type-filter"
+        value={selectedCampaignType || "__all"}
+        options={[
+          { value: "__all", label: "全部类型" },
+          ...campaignTypeOptions.map(([value, label]) => ({ value, label })),
+        ]}
+        onChange={(value) => setSelectedCampaignType(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="marketing-status-filter"
+        value={selectedStatus || "__all"}
+        options={[
+          { value: "__all", label: "全部状态" },
+          ...campaignStatusOptions.map(([value, label]) => ({ value, label })),
+        ]}
+        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
