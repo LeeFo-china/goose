@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "devDependencies": {
@@ -17,6 +18,9 @@
     "dev": "bun --watch app.ts",
     "start": "bun app.ts",
     "build": "bun build app.ts --outdir dist --target node",
+    "api:dev": "bun --watch app.ts",
+    "api:start": "bun app.ts",
+    "api:build": "bun build app.ts --outdir dist --target node",
     "admin:dev": "pnpm --dir apps/admin dev",
     "admin:build": "pnpm --dir apps/admin build",
     "admin:start": "pnpm --dir apps/admin start",
@@ -36,6 +40,6 @@
     "fastify-cli": "^7.4.1",
     "openai": "^6.34.0",
     "reflect-metadata": "^0.2.2",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   }
 }
