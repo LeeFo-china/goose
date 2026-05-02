@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-const REFRESH_INTERVAL_MS = 5000;
+const AUTO_REFRESH_INTERVAL_MS = 2000;
+const ERROR_REFRESH_INTERVAL_MS = 8000;
 
 function clampPercent(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -121,11 +122,19 @@ export function SystemMetricsPanel() {
   const [metrics, setMetrics] = useState<OpsSystemMetrics | null>(null);
   const [error, setError] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [pageVisible, setPageVisible] = useState(true);
+  const [lastAutoFailed, setLastAutoFailed] = useState(false);
   const [manualPending, setManualPending] = useState(false);
   const hasMetricsRef = useRef(false);
+  const loadingRef = useRef(false);
 
   const loadMetrics = useCallback(async (options?: { manual?: boolean }) => {
     const manual = Boolean(options?.manual);
+    if (loadingRef.current && !manual) {
+      return null;
+    }
+
+    loadingRef.current = true;
     if (manual) {
       setManualPending(true);
       setError("");
@@ -135,13 +144,20 @@ export function SystemMetricsPanel() {
       const data = await requestMetrics();
       setMetrics(data);
       hasMetricsRef.current = true;
+      setLastAutoFailed(false);
       if (manual) setError("");
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "资源指标加载失败";
+      if (!manual) {
+        setLastAutoFailed(true);
+      }
       if (manual || !hasMetricsRef.current) {
         setError(message);
       }
+      return false;
     } finally {
+      loadingRef.current = false;
       if (manual) setManualPending(false);
     }
   }, []);
@@ -151,12 +167,42 @@ export function SystemMetricsPanel() {
   }, [loadMetrics]);
 
   useEffect(() => {
-    if (!autoRefresh) return;
-    const timer = window.setInterval(() => {
+    const syncPageVisible = () => {
+      setPageVisible(!document.hidden);
+    };
+
+    syncPageVisible();
+    document.addEventListener("visibilitychange", syncPageVisible);
+    return () => document.removeEventListener("visibilitychange", syncPageVisible);
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh || !pageVisible) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(async () => {
+        const ok = await loadMetrics();
+        if (cancelled) return;
+        schedule(ok === false ? ERROR_REFRESH_INTERVAL_MS : AUTO_REFRESH_INTERVAL_MS);
+      }, delay);
+    };
+
+    schedule(lastAutoFailed ? ERROR_REFRESH_INTERVAL_MS : AUTO_REFRESH_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [autoRefresh, lastAutoFailed, loadMetrics, pageVisible]);
+
+  useEffect(() => {
+    if (autoRefresh && pageVisible) {
       void loadMetrics();
-    }, REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [autoRefresh, loadMetrics]);
+    }
+  }, [autoRefresh, loadMetrics, pageVisible]);
 
   const loadAverage = useMemo(() => {
     return metrics?.server.load_average?.map((value) => value.toFixed(2)).join(" / ") || "-";
@@ -168,12 +214,15 @@ export function SystemMetricsPanel() {
         <div>
           <CardTitle>实时资源状态</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            每 5 秒刷新一次，不写入脚本执行记录。
+            前台每 2 秒刷新一次，页面隐藏时暂停，失败后自动降频重试。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={autoRefresh ? "success" : "outline"}>
-            {autoRefresh ? "自动刷新" : "已暂停"}
+          <Badge variant={autoRefresh && pageVisible ? "success" : "outline"}>
+            {autoRefresh ? pageVisible ? "自动刷新" : "页面隐藏暂停" : "已暂停"}
+          </Badge>
+          <Badge variant={lastAutoFailed ? "warning" : "outline"}>
+            {lastAutoFailed ? "8 秒重试" : "2 秒刷新"}
           </Badge>
           <Button type="button" variant="outline" onClick={() => setAutoRefresh((value) => !value)}>
             {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}

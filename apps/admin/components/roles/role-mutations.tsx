@@ -348,8 +348,8 @@ function RolePermissionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[86vh] max-w-[860px] overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="flex h-[86vh] max-w-[860px] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
               <KeyRound className="size-4" />
@@ -362,7 +362,7 @@ function RolePermissionsDialog({
             </div>
           </div>
         </DialogHeader>
-        <div className="min-h-0 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 size-4 animate-spin" />
@@ -425,7 +425,7 @@ function RolePermissionsDialog({
           )}
         </div>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" onClick={close} disabled={pending}>
             取消
           </Button>
