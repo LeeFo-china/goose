@@ -66,6 +66,18 @@ type CustomerRowForResponse = {
   douyin_screenshot_images?: unknown;
 };
 
+type CustomerFollowUpSummary = {
+  id: string;
+  customer_id: string;
+  content: string;
+  next_follow_at: string | null;
+  created_at: string;
+  employee?: unknown;
+  employee_id: string | null;
+};
+
+type CustomerFollowFilter = "due" | "overdue";
+
 const CustomerPhoneActionBodySchema = z.object({
   scene: z.string().trim().max(80, "场景过长").optional(),
   reason: z.string().trim().max(200, "原因过长").optional(),
@@ -407,6 +419,89 @@ class CustomerController extends BaseController<
     return data || [];
   }
 
+  private getFollowUpState(nextFollowAt: string | null | undefined) {
+    if (!nextFollowAt) {
+      return "none";
+    }
+
+    const nextTime = new Date(nextFollowAt).getTime();
+    if (Number.isNaN(nextTime)) {
+      return "none";
+    }
+
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    ).getTime();
+
+    if (nextTime < todayStart) {
+      return "overdue";
+    }
+
+    if (nextTime <= now.getTime()) {
+      return "due";
+    }
+
+    return "upcoming";
+  }
+
+  private matchesFollowFilter(
+    summary: CustomerFollowUpSummary | undefined,
+    followFilter: CustomerFollowFilter,
+  ) {
+    const state = this.getFollowUpState(summary?.next_follow_at);
+    if (followFilter === "overdue") {
+      return state === "overdue";
+    }
+
+    return state === "due" || state === "overdue";
+  }
+
+  private async getLatestFollowUpMap(customerIds: string[]) {
+    if (customerIds.length === 0) {
+      return new Map<string, CustomerFollowUpSummary>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_follow_ups")
+      .select(this.followUpSelect)
+      .in("customer_id", customerIds)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户跟进摘要失败", error);
+    }
+
+    const summaryMap = new Map<string, CustomerFollowUpSummary>();
+    for (const item of ((data || []) as unknown as CustomerFollowUpSummary[])) {
+      if (!item.customer_id || summaryMap.has(item.customer_id)) {
+        continue;
+      }
+
+      summaryMap.set(item.customer_id, item);
+    }
+
+    return summaryMap;
+  }
+
+  private attachFollowUpSummary<T extends CustomerRowForResponse>(
+    customer: T,
+    followUpMap: Map<string, CustomerFollowUpSummary>,
+  ) {
+    const latest = followUpMap.get(customer.id);
+    const serialized = latest ? this.serializeFollowUp(latest) : null;
+
+    return {
+      ...customer,
+      latest_follow_up: serialized,
+      last_follow_at: latest?.created_at ?? null,
+      next_follow_at: latest?.next_follow_at ?? null,
+      follow_up_state: this.getFollowUpState(latest?.next_follow_at),
+    };
+  }
+
   private async upsertCustomerPrimaryProperty(
     customerId: string,
     propertyPayload: NormalizedCustomerPropertyPayload | undefined,
@@ -457,9 +552,13 @@ class CustomerController extends BaseController<
     const properties = options?.includeProperties
       ? await this.getCustomerPropertySummaries(customer.id)
       : undefined;
+    const followUpMap = await this.getLatestFollowUpMap([customer.id]);
 
     return {
-      ...this.serializeCustomer(customer, options?.phonePrivacyContext),
+      ...this.serializeCustomer(
+        this.attachFollowUpSummary(customer, followUpMap),
+        options?.phonePrivacyContext,
+      ),
       property_id: primaryProperty?.id ?? null,
       community: primaryProperty?.community ?? null,
       building_info: primaryProperty?.building_info ?? null,
@@ -724,7 +823,7 @@ class CustomerController extends BaseController<
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, status, keyword } = queryResult.data;
+    const { page, pageSize, status, keyword, follow } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -734,6 +833,64 @@ class CustomerController extends BaseController<
     );
 
     const normalizedKeyword = keyword?.trim();
+    if (follow) {
+      let idQuery = SupabaseDB.getAdminClient()
+        .from("customers")
+        .select("id")
+        .order("created_at", { ascending: false });
+      idQuery = this.applyCustomerListFilters(
+        idQuery,
+        visibleOwnerIds,
+        status,
+        normalizedKeyword,
+      );
+      const { data: idRows, error: idError } = await idQuery;
+      if (idError) throw Errors.dbError("列表查询失败", idError);
+
+      const customerIds = (((idRows || []) as unknown) as Array<{ id: string }>)
+        .map((item) => item.id)
+        .filter(Boolean);
+      const followUpMap = await this.getLatestFollowUpMap(customerIds);
+      const filteredCustomerIds = customerIds.filter((id) =>
+        this.matchesFollowFilter(followUpMap.get(id), follow)
+      );
+      const total = filteredCustomerIds.length;
+      const pageCustomerIds = filteredCustomerIds.slice(from, to + 1);
+
+      if (pageCustomerIds.length === 0) {
+        return ResponseHandler.success({
+          list: [],
+          pagination: buildPagination(page, pageSize, total),
+        });
+      }
+
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("customers")
+        .select(this.customerSelect)
+        .in("id", pageCustomerIds);
+
+      if (error) throw Errors.dbError("列表查询失败", error);
+
+      const customerOrder = new Map(pageCustomerIds.map((id, index) => [id, index]));
+      const rows = (((data || []) as unknown) as CustomerRowForResponse[])
+        .sort((a, b) =>
+          (customerOrder.get(a.id) ?? 0) - (customerOrder.get(b.id) ?? 0)
+        );
+      const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+        authContext,
+      );
+
+      return ResponseHandler.success({
+        list: rows.map((item) =>
+          this.serializeCustomer(
+            this.attachFollowUpSummary(item, followUpMap),
+            phonePrivacyContext,
+          )
+        ),
+        pagination: buildPagination(page, pageSize, total),
+      });
+    }
+
     let countQuery = SupabaseDB.getAdminClient()
       .from("customers")
       .select("id", { count: "exact", head: true });
@@ -768,12 +925,17 @@ class CustomerController extends BaseController<
     const { data, error } = await query.range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
+    const rows = (((data || []) as unknown) as CustomerRowForResponse[]);
+    const followUpMap = await this.getLatestFollowUpMap(rows.map((item) => item.id));
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
     return ResponseHandler.success({
-      list: (((data || []) as unknown) as CustomerRowForResponse[]).map((item) =>
-        this.serializeCustomer(item, phonePrivacyContext)
+      list: rows.map((item) =>
+        this.serializeCustomer(
+          this.attachFollowUpSummary(item, followUpMap),
+          phonePrivacyContext,
+        )
       ),
       pagination: buildPagination(page, pageSize, total),
     });

@@ -29,11 +29,13 @@ function buildCustomersHref(input: {
   page?: number;
   status?: string;
   keyword?: string;
+  follow?: string;
 }) {
   const params = new URLSearchParams();
   if (input.page && input.page > 1) params.set("page", String(input.page));
   if (input.status) params.set("status", input.status);
   if (input.keyword) params.set("keyword", input.keyword);
+  if (input.follow) params.set("follow", input.follow);
   const query = params.toString();
   return query ? `/customers?${query}` : "/customers";
 }
@@ -55,15 +57,17 @@ function useCustomersNavigation() {
 export function CustomerFilters({
   status,
   keyword,
+  follow,
 }: {
   status: string;
   keyword: string;
+  follow: string;
 }) {
   return (
     <form
       action="/customers"
       method="get"
-      className="grid gap-3 lg:grid-cols-[150px_1fr_72px]"
+      className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px]"
     >
       <select
         name="status"
@@ -73,6 +77,15 @@ export function CustomerFilters({
         {statusOptions.map(([value, label]) => (
           <option key={value || "all"} value={value}>{label}</option>
         ))}
+      </select>
+      <select
+        name="follow"
+        defaultValue={follow}
+        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <option value="">全部跟进</option>
+        <option value="due">待跟进</option>
+        <option value="overdue">超期未跟进</option>
       </select>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -94,10 +107,12 @@ export function CustomersPagination({
   pagination,
   status,
   keyword,
+  follow,
 }: {
   pagination: Pagination;
   status: string;
   keyword: string;
+  follow: string;
 }) {
   const { pending, navigate } = useCustomersNavigation();
   const previousDisabled = pagination.page <= 1 || pending;
@@ -113,6 +128,7 @@ export function CustomersPagination({
           page: Math.max(1, pagination.page - 1),
           status,
           keyword,
+          follow,
         }))}
       >
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
@@ -126,6 +142,7 @@ export function CustomersPagination({
           page: pagination.page + 1,
           status,
           keyword,
+          follow,
         }))}
       >
         下一页

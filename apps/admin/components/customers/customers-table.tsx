@@ -50,6 +50,31 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function followUpBadge(state: string | null | undefined) {
+  if (state === "overdue") {
+    return <Badge className="whitespace-nowrap" variant="danger">超期</Badge>;
+  }
+  if (state === "due") {
+    return <Badge className="whitespace-nowrap" variant="warning">待跟进</Badge>;
+  }
+  if (state === "upcoming") {
+    return <Badge className="whitespace-nowrap" variant="success">已计划</Badge>;
+  }
+  return <Badge className="whitespace-nowrap" variant="secondary">无计划</Badge>;
+}
+
 const columns: ColumnDef<CustomerRecord>[] = [
   {
     accessorKey: "name",
@@ -117,6 +142,28 @@ const columns: ColumnDef<CustomerRecord>[] = [
     },
   },
   {
+    id: "followUp",
+    header: "跟进",
+    cell: ({ row }) => (
+      <div className="min-w-[180px]">
+        <div className="flex items-center gap-2">
+          {followUpBadge(row.original.follow_up_state)}
+          <span className="text-xs text-muted-foreground">
+            最近 {formatDateTime(row.original.last_follow_at)}
+          </span>
+        </div>
+        <div className="mt-1 truncate text-xs text-muted-foreground">
+          下次 {formatDateTime(row.original.next_follow_at)}
+        </div>
+        {row.original.latest_follow_up?.content ? (
+          <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
+            {row.original.latest_follow_up.content}
+          </div>
+        ) : null}
+      </div>
+    ),
+  },
+  {
     accessorKey: "created_at",
     header: "创建时间",
     cell: ({ row }) => formatDate(row.original.created_at),
@@ -145,7 +192,7 @@ export function CustomersTable({
       columns={columns}
       data={customers}
       emptyText="没有符合条件的客户"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1360px]"
     />
   );
 }

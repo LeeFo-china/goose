@@ -129,6 +129,9 @@ export const CustomerListQuerySchema = PaginationQuerySchema.extend({
     message: "无效的客户状态",
   })),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  follow: optionalQueryValue(z.enum(["due", "overdue"], {
+    message: "无效的跟进筛选",
+  })),
 });
 
 export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;

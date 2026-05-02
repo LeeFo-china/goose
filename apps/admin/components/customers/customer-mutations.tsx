@@ -13,7 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
-import { Edit3, Eye, Loader2, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, Plus, Trash2 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,24 @@ type PropertySummary = {
   is_primary?: boolean;
 };
 
+export type CustomerFollowUpRecord = {
+  id: string;
+  customer_id?: string | null;
+  employee_id: string | null;
+  employee_name?: string | null;
+  employee?: Owner | Owner[] | null;
+  content: string;
+  next_follow_at: string | null;
+  created_at: string | null;
+  comment_count?: number;
+  latest_comment_preview?: {
+    id: string;
+    content: string;
+    author_employee_name: string | null;
+    created_at: string;
+  } | null;
+};
+
 export type CustomerRecord = {
   id: string;
   name: string | null;
@@ -73,6 +91,10 @@ export type CustomerRecord = {
   area?: number | null;
   properties?: PropertySummary[];
   property_count?: number;
+  latest_follow_up?: CustomerFollowUpRecord | null;
+  last_follow_at?: string | null;
+  next_follow_at?: string | null;
+  follow_up_state?: "none" | "upcoming" | "due" | "overdue" | string;
 };
 
 type EmployeeOption = {
@@ -171,6 +193,19 @@ function formatDate(value: string | null | undefined) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+  });
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -565,6 +600,32 @@ function CustomerDetailDialog({
   customer: CustomerRecord;
   onClose: () => void;
 }) {
+  const [followUps, setFollowUps] = useState<CustomerFollowUpRecord[]>([]);
+  const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [followUpsError, setFollowUpsError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setFollowUpsLoading(true);
+    setFollowUpsError("");
+    requestCustomer({ path: `/customers/${customer.id}/follow_ups?page=1&pageSize=10` })
+      .then((data) => {
+        if (!cancelled) setFollowUps(data?.list || []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setFollowUpsError(err instanceof Error ? err.message : "跟进记录加载失败");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFollowUpsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customer.id]);
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[88vh] max-w-[820px] overflow-hidden p-0">
@@ -581,11 +642,63 @@ function CustomerDetailDialog({
             <InfoItem label="负责人" value={ownerName(customer.owner)} />
             <InfoItem label="来源" value={sourceOptions.find(([value]) => value === customer.source)?.[1] || customer.source || "-"} />
             <InfoItem label="创建时间" value={formatDate(customer.created_at)} />
+            <InfoItem label="最近跟进" value={formatDateTime(customer.last_follow_at)} />
+            <InfoItem label="下次跟进" value={formatDateTime(customer.next_follow_at)} />
             <InfoItem label="主小区" value={customer.community || "-"} />
             <InfoItem label="楼栋门牌" value={customer.building_info || "-"} />
             <InfoItem label="面积" value={customer.area != null ? `${customer.area}㎡` : "-"} />
             <InfoItem label="户型" value={customer.layout || "-"} />
           </div>
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">跟进记录</h3>
+              <Badge variant="outline">最近 10 条</Badge>
+            </div>
+            {followUpsError ? <StatusAlert>{followUpsError}</StatusAlert> : null}
+            {followUpsLoading ? (
+              <div className="flex h-28 items-center justify-center rounded-md border text-sm text-muted-foreground">
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                正在加载跟进记录
+              </div>
+            ) : followUps.length > 0 ? (
+              <div className="relative ml-3 flex flex-col gap-4 border-l pl-5">
+                {followUps.map((item) => (
+                  <div key={item.id} className="relative rounded-md border bg-background p-3">
+                    <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-primary" />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <MessageSquareText className="size-4 text-primary" />
+                        {item.employee_name || ownerName(item.employee) || "未知员工"}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTime(item.created_at)}
+                      </span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                      {item.content}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <CalendarClock className="size-3.5" />
+                      下次跟进 {formatDateTime(item.next_follow_at)}
+                      {item.comment_count ? (
+                        <Badge variant="outline">评论 {item.comment_count}</Badge>
+                      ) : null}
+                    </div>
+                    {item.latest_comment_preview ? (
+                      <div className="mt-2 rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
+                        最新评论：{item.latest_comment_preview.author_employee_name || "员工"}：
+                        {item.latest_comment_preview.content}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                暂无跟进记录。
+              </div>
+            )}
+          </section>
           <section>
             <h3 className="mb-3 text-sm font-semibold">房产列表</h3>
             <div className="grid gap-2 md:grid-cols-2">

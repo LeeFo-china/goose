@@ -30,6 +30,7 @@ type CustomerPageSearchParams = {
   page?: string;
   status?: string;
   keyword?: string;
+  follow?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -50,12 +51,14 @@ async function getCustomers(params: CustomerPageSearchParams) {
   const page = normalizePage(params.page);
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const follow = params.follow?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
   });
   if (status) query.set("status", status);
   if (keyword) query.set("keyword", keyword);
+  if (follow) query.set("follow", follow);
 
   try {
     const response = await fetch(buildBackendUrl(`/customers?${query}`), {
@@ -89,6 +92,7 @@ export default async function CustomersPage({
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const follow = params.follow?.trim() || "";
   const { list, pagination, error } = await getCustomers(params);
   const activeCount = list.filter((item) => item.status !== "invalid").length;
   const followingCount = list.filter((item) =>
@@ -146,7 +150,7 @@ export default async function CustomersPage({
 
       <Card>
         <CardContent className="p-4">
-          <CustomerFilters status={status} keyword={keyword} />
+          <CustomerFilters status={status} keyword={keyword} follow={follow} />
         </CardContent>
       </Card>
 
@@ -174,6 +178,7 @@ export default async function CustomersPage({
           pagination={pagination}
           status={status}
           keyword={keyword}
+          follow={follow}
         />
       </div>
     </div>
