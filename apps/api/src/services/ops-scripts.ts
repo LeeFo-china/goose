@@ -39,7 +39,7 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     label: "健康检查",
     description: "检查 API、Admin、PM2 和服务端口状态。",
     command: "bash",
-    args: ["scripts/deploy-health-check.sh"],
+    args: ["scripts/ops/health-check.sh"],
     timeoutMs: 30_000,
     dangerLevel: "low",
   },
@@ -47,8 +47,8 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     key: "pm2_status",
     label: "PM2 状态",
     description: "查看 goose 和 goose-admin 进程状态。",
-    command: process.env.PM2_BIN || "pm2",
-    args: ["list", "--no-color"],
+    command: "bash",
+    args: ["scripts/ops/pm2-status.sh"],
     timeoutMs: 10_000,
     dangerLevel: "low",
   },
@@ -56,8 +56,8 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     key: "deploy_trace",
     label: "部署 Trace",
     description: "查看最近部署 trace 日志。",
-    command: "tail",
-    args: ["-120", "/tmp/goose-deploy-trace.log"],
+    command: "bash",
+    args: ["scripts/ops/deploy-trace.sh"],
     timeoutMs: 10_000,
     dangerLevel: "low",
   },
@@ -65,8 +65,8 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     key: "deploy_notify_test",
     label: "发送通知测试",
     description: "手动发送一封部署通知测试邮件。",
-    command: process.env.BUN_BIN || "bun",
-    args: ["scripts/deploy-notify.ts"],
+    command: "bash",
+    args: ["scripts/ops/deploy-notify-test.sh"],
     timeoutMs: 30_000,
     dangerLevel: "medium",
   },
@@ -203,4 +203,3 @@ class OpsScriptService {
 }
 
 export const opsScriptService = new OpsScriptService();
-
