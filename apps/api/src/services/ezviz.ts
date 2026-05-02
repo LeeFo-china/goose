@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { ezvizAccessTokenRepository } from "@/repositories/ezviz-access-tokens";
+import { systemSettingsService } from "@/services/system-settings";
 
 export type EzvizAccessToken = {
   access_token: string;
@@ -51,12 +52,15 @@ function getRequiredEnv(name: string) {
   return value;
 }
 
-function getEzvizApiBaseUrl() {
-  return process.env.EZVIZ_API_BASE_URL?.trim() || "https://open.ys7.com";
+async function getEzvizApiBaseUrl() {
+  return systemSettingsService.getString("EZVIZ_API_BASE_URL", "https://open.ys7.com");
 }
 
-function getTokenRefreshAheadMs() {
-  const raw = Number(process.env.EZVIZ_TOKEN_REFRESH_AHEAD_MS || 10 * 60 * 1000);
+async function getTokenRefreshAheadMs() {
+  const raw = await systemSettingsService.getNumber(
+    "EZVIZ_TOKEN_REFRESH_AHEAD_MS",
+    10 * 60 * 1000,
+  );
   return Number.isFinite(raw) && raw > 0 ? raw : 10 * 60 * 1000;
 }
 
@@ -64,16 +68,16 @@ function normalizeBaseUrl(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-function buildEzvizTokenUrl() {
-  return `${normalizeBaseUrl(getEzvizApiBaseUrl())}/api/lapp/token/get`;
+async function buildEzvizTokenUrl() {
+  return `${normalizeBaseUrl(await getEzvizApiBaseUrl())}/api/lapp/token/get`;
 }
 
-function buildEzvizApiUrl(path: string) {
-  return `${normalizeBaseUrl(getEzvizApiBaseUrl())}${path}`;
+async function buildEzvizApiUrl(path: string) {
+  return `${normalizeBaseUrl(await getEzvizApiBaseUrl())}${path}`;
 }
 
-export function getEzplayerPluginVersion() {
-  return process.env.EZPLAYER_PLUGIN_VERSION?.trim() || "1.5.2";
+export async function getEzplayerPluginVersion() {
+  return systemSettingsService.getString("EZPLAYER_PLUGIN_VERSION", "1.5.2");
 }
 
 export function buildEzvizLiveUrl(deviceSerial: string, channelNo = 1) {
@@ -91,7 +95,7 @@ async function requestEzvizAccessToken(): Promise<EzvizAccessToken> {
 
   let response: Response;
   try {
-    response = await fetch(buildEzvizTokenUrl(), {
+    response = await fetch(await buildEzvizTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -223,7 +227,7 @@ async function postEzvizListApi(path: string, input: {
 
   let response: Response;
   try {
-    response = await fetch(buildEzvizApiUrl(path), {
+    response = await fetch(await buildEzvizApiUrl(path), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -338,7 +342,7 @@ function serializeEzvizDevice(record: EzvizApiRecord): EzvizDeviceChannel | null
 
 export class EzvizTokenService {
   async getValidAccessToken(): Promise<EzvizAccessToken> {
-    const minExpiresAt = new Date(Date.now() + getTokenRefreshAheadMs());
+    const minExpiresAt = new Date(Date.now() + await getTokenRefreshAheadMs());
     const cached = await ezvizAccessTokenRepository.findLatestValid(minExpiresAt);
 
     if (cached) {

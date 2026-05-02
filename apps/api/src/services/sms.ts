@@ -2,14 +2,17 @@ import Dysmsapi20170525, { SendSmsRequest } from "@alicloud/dysmsapi20170525";
 import { Config } from "@alicloud/openapi-client";
 import Credential, { Config as CredentialConfig } from "@alicloud/credentials";
 import { RuntimeOptions } from "@alicloud/tea-util";
+import { systemSettingsService } from "@/services/system-settings";
 import type { SmsScene } from "@gooes/domain";
 
 type SmsProvider = "mock" | "disabled" | "aliyun";
 
 let aliyunSmsClient: Dysmsapi20170525 | null = null;
 
-function getSmsProvider(): SmsProvider {
-  const provider = (process.env.SMS_PROVIDER || "mock").trim().toLowerCase();
+async function getSmsProvider(): Promise<SmsProvider> {
+  const provider = (await systemSettingsService.getString("SMS_PROVIDER", "mock"))
+    .trim()
+    .toLowerCase();
 
   if (provider === "mock" || provider === "disabled" || provider === "aliyun") {
     return provider;
@@ -28,17 +31,20 @@ function requireSmsEnv(name: string) {
   return value;
 }
 
-function getAliyunTemplateCode(scene: SmsScene) {
+async function getAliyunTemplateCode(scene: SmsScene) {
   if (scene === "bind_customer") {
-    return requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
+    const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
+    return value || requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
   }
 
   if (scene === "admin_login") {
-    return process.env.ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN?.trim() ||
+    const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN");
+    return value ||
       requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
   }
 
-  return requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+  const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+  return value || requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
 }
 
 function getAliyunSmsClient() {
@@ -67,8 +73,9 @@ function getAliyunSmsClient() {
 
 async function sendAliyunSmsCode(phone: string, code: string, scene: SmsScene) {
   const client = getAliyunSmsClient();
-  const signName = requireSmsEnv("ALIYUN_SMS_SIGN_NAME");
-  const templateCode = getAliyunTemplateCode(scene);
+  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME") ||
+    requireSmsEnv("ALIYUN_SMS_SIGN_NAME");
+  const templateCode = await getAliyunTemplateCode(scene);
 
   const request = new SendSmsRequest({
     phoneNumbers: phone,
@@ -112,7 +119,7 @@ export async function sendSmsCode(
   code: string,
   scene: SmsScene,
 ): Promise<void> {
-  const provider = getSmsProvider();
+  const provider = await getSmsProvider();
 
   if (provider === "disabled") {
     throw new Error("短信服务未启用");

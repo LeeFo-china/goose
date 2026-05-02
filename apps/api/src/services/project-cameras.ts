@@ -393,7 +393,7 @@ class ProjectCameraService {
       camera: serializeCameraForPlayer(camera),
       player: {
         provider: "ezplayer",
-        plugin_version: getEzplayerPluginVersion(),
+        plugin_version: await getEzplayerPluginVersion(),
         access_token: token.access_token,
         play_url: buildEzvizLiveUrl(
           camera.vendor_device_serial,

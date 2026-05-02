@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Shield,
+  SlidersHorizontal,
   TerminalSquare,
   Users,
   type LucideIcon,
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
   { href: "/marketing", label: "营销活动", icon: Megaphone },
   { href: "/cameras", label: "工地监控", icon: Camera },
   { href: "/ops", label: "运维脚本", icon: TerminalSquare },
+  { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
 ];
 
 function isActivePath(pathname: string, href: string) {

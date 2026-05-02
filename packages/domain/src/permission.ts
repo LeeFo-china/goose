@@ -52,6 +52,9 @@ export const PERMISSION_CODE_VALUES = [
   'project_referral.manage',
   'system.ops.read',
   'system.ops.run',
+  'system.settings.read',
+  'system.settings.update',
+  'system.settings.test',
 ] as const;
 
 export type PermissionCode = (typeof PERMISSION_CODE_VALUES)[number];
@@ -170,6 +173,18 @@ export const PermissionCodeConfig: Record<
   },
   'system.ops.run': {
     label: '执行运维脚本',
+    module: 'system',
+  },
+  'system.settings.read': {
+    label: '查看系统配置',
+    module: 'system',
+  },
+  'system.settings.update': {
+    label: '编辑系统配置',
+    module: 'system',
+  },
+  'system.settings.test': {
+    label: '测试系统配置',
     module: 'system',
   },
 };
