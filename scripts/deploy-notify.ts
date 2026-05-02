@@ -14,6 +14,20 @@ type SmtpResponse = {
   response: string;
 };
 
+type ServiceStatus = {
+  name: string;
+  status: string;
+  pid: string;
+};
+
+type HealthSummary = {
+  gooseHttpStatus: string;
+  adminHttpStatus: string;
+  services: ServiceStatus[];
+  ports: string;
+  deployTrace: string;
+};
+
 const WORKSPACE = process.env.GITHUB_WORKSPACE || process.cwd();
 const ENV_CANDIDATES = [
   resolve(WORKSPACE, ".env"),
@@ -66,9 +80,29 @@ function mask(value: string) {
   return `${value.slice(0, 2)}***${value.slice(-2)}`;
 }
 
+function stripAnsi(value: string) {
+  return value.replace(/\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+}
+
 function truncate(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}\n... truncated ${value.length - maxLength} chars`;
+  const clean = stripAnsi(value);
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength)}\n... truncated ${clean.length - maxLength} chars`;
+}
+
+function formatShanghaiTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const item = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${item("year")}-${item("month")}-${item("day")} ${item("hour")}:${item("minute")}:${item("second")} Asia/Shanghai`;
 }
 
 async function runCommand(command: string, args: string[], options: { cwd?: string } = {}) {
@@ -78,33 +112,94 @@ async function runCommand(command: string, args: string[], options: { cwd?: stri
       timeout: 20_000,
       maxBuffer: 1024 * 1024,
     });
-    return [stdout, stderr].filter(Boolean).join("\n").trim();
+    return stripAnsi([stdout, stderr].filter(Boolean).join("\n").trim());
   } catch (error) {
     const err = error as { stdout?: string; stderr?: string; message?: string };
-    return [
+    return stripAnsi([
       err.stdout,
       err.stderr,
       err.message ? `command failed: ${err.message}` : "",
-    ].filter(Boolean).join("\n").trim();
+    ].filter(Boolean).join("\n").trim());
   }
+}
+
+async function getHttpStatus(url: string) {
+  return runCommand("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", url])
+    .then((value) => value.trim() || "000")
+    .catch(() => "000");
+}
+
+async function getServiceStatuses(pm2Bin: string) {
+  const output = await runCommand(pm2Bin, ["jlist"]);
+  try {
+    const list = JSON.parse(output) as Array<{
+      name?: string;
+      pid?: number;
+      pm2_env?: {
+        status?: string;
+      };
+    }>;
+    return ["goose", "goose-admin"].map((name) => {
+      const app = list.find((item) => item.name === name);
+      return {
+        name,
+        status: app?.pm2_env?.status || "missing",
+        pid: app?.pid ? String(app.pid) : "-",
+      };
+    });
+  } catch {
+    return [
+      { name: "goose", status: "unknown", pid: "-" },
+      { name: "goose-admin", status: "unknown", pid: "-" },
+    ];
+  }
+}
+
+async function collectHealthSummary(pm2Bin: string): Promise<HealthSummary> {
+  const [gooseHttpStatus, adminHttpStatus, services, ports, deployTrace] = await Promise.all([
+    getHttpStatus("http://127.0.0.1:3000/"),
+    getHttpStatus("http://127.0.0.1:3010/dashboard"),
+    getServiceStatuses(pm2Bin),
+    runCommand("bash", ["-lc", "ss -lntp | grep -E ':(3000|3010)\\b' || true"]),
+    runCommand("bash", ["-lc", "tail -80 /tmp/goose-deploy-trace.log 2>/dev/null || true"]),
+  ]);
+
+  return {
+    gooseHttpStatus,
+    adminHttpStatus,
+    services,
+    ports: ports || "No service port details",
+    deployTrace: deployTrace || "No deploy trace found",
+  };
+}
+
+function formatServiceLine(service: ServiceStatus, health: string) {
+  return `- ${service.name}: ${service.status}, pid=${service.pid}, health=${health}`;
 }
 
 async function collectReport(env: EnvMap) {
   const status = env.DEPLOY_JOB_STATUS || env.JOB_STATUS || "unknown";
   const pm2Bin = env.PM2_BIN || "pm2";
-  const healthScript = resolve(WORKSPACE, "scripts/deploy-health-check.sh");
-  const health = existsSync(healthScript)
-    ? await runCommand("bash", [healthScript])
-    : "scripts/deploy-health-check.sh not found";
+  const health = await collectHealthSummary(pm2Bin);
+  const gooseService = health.services.find((service) => service.name === "goose")
+    || { name: "goose", status: "unknown", pid: "-" };
+  const adminService = health.services.find((service) => service.name === "goose-admin")
+    || { name: "goose-admin", status: "unknown", pid: "-" };
 
   const failureLogs = status === "success"
     ? ""
     : [
+      "=== Service Ports ===",
+      health.ports,
+      "",
+      "=== Recent Deploy Trace ===",
+      health.deployTrace,
+      "",
       "=== Goose Recent Logs ===",
-      await runCommand(pm2Bin, ["logs", "goose", "--lines", "80", "--nostream"]),
+      await runCommand(pm2Bin, ["logs", "goose", "--lines", "80", "--nostream", "--no-color"]),
       "",
       "=== Goose Admin Recent Logs ===",
-      await runCommand(pm2Bin, ["logs", "goose-admin", "--lines", "80", "--nostream"]),
+      await runCommand(pm2Bin, ["logs", "goose-admin", "--lines", "80", "--nostream", "--no-color"]),
     ].join("\n");
 
   const subjectStatus = status === "success" ? "成功" : "失败";
@@ -114,19 +209,24 @@ async function collectReport(env: EnvMap) {
     : "";
 
   const body = [
+    `Goose 部署${subjectStatus}`,
+    "",
+    `环境：production`,
     `部署状态：${subjectStatus}`,
-    `仓库：${env.GITHUB_REPOSITORY || "unknown"}`,
     `分支：${env.GITHUB_REF_NAME || env.GITHUB_REF || "unknown"}`,
-    `Commit：${env.GITHUB_SHA || "unknown"}`,
-    `Run ID：${env.GITHUB_RUN_ID || "unknown"}`,
-    runUrl ? `Run URL：${runUrl}` : "",
+    `Commit：${(env.GITHUB_SHA || "unknown").slice(0, 12)}`,
+    `时间：${formatShanghaiTime()}`,
     `服务器：${hostname()}`,
     `工作目录：${WORKSPACE}`,
-    `时间：${new Date().toISOString()}`,
     "",
-    truncate(health, 16_000),
+    "服务状态：",
+    formatServiceLine(gooseService, health.gooseHttpStatus),
+    formatServiceLine(adminService, health.adminHttpStatus),
+    "",
+    "GitHub Actions：",
+    runUrl || `Run ID：${env.GITHUB_RUN_ID || "unknown"}`,
     failureLogs ? "" : "",
-    failureLogs ? truncate(failureLogs, 18_000) : "",
+    failureLogs ? truncate(failureLogs, 24_000) : "",
   ].filter(Boolean).join("\n");
 
   return { subject, body };
