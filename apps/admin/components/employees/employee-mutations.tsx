@@ -105,10 +105,15 @@ function EmployeeDialog({
     status: isEmployeeStatus(employee?.status) ? employee.status : "active",
   }), [employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
+  const [avatar, setAvatar] = useState(defaults.avatar);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
   useEffect(() => {
-    if (open) setStatus(defaults.status);
-  }, [defaults.status, open]);
+    if (!open) return;
+    setStatus(defaults.status);
+    setAvatar(defaults.avatar);
+    setAvatarLoadFailed(false);
+  }, [defaults.avatar, defaults.status, open]);
 
   function close() {
     if (pending) return;
@@ -204,13 +209,40 @@ function EmployeeDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor={`${mode}-employee-avatar`}>头像地址</FieldLabel>
-            <Input
-              id={`${mode}-employee-avatar`}
-              name="avatar"
-              defaultValue={defaults.avatar}
-              placeholder="可留空"
-              disabled={pending}
-            />
+              <div className="flex gap-3">
+                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
+                  {avatar && !avatarLoadFailed ? (
+                    <img
+                      src={avatar}
+                      alt={`${defaults.name || "员工"}头像预览`}
+                      className="size-full object-cover"
+                      onError={() => setAvatarLoadFailed(true)}
+                    />
+                  ) : (
+                    <UserRound className="size-6" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Input
+                    id={`${mode}-employee-avatar`}
+                    name="avatar"
+                    value={avatar}
+                    placeholder="可留空，粘贴图片 URL 后显示预览"
+                    disabled={pending}
+                    onChange={(event) => {
+                      setAvatar(event.target.value);
+                      setAvatarLoadFailed(false);
+                    }}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {avatar
+                      ? avatarLoadFailed
+                        ? "头像图片加载失败，请检查地址是否可访问"
+                        : "当前头像缩略图预览"
+                      : "未设置头像时使用默认图标"}
+                  </p>
+                </div>
+              </div>
             </Field>
           </FieldGroup>
           {error ? (
