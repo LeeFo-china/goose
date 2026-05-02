@@ -1,12 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   CUSTOMER_STATUS_VALUES,
   CustomerStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -63,30 +64,37 @@ export function CustomerFilters({
   keyword: string;
   follow: string;
 }) {
+  const [selectedStatus, setSelectedStatus] = useState(status);
+  const [selectedFollow, setSelectedFollow] = useState(follow);
+
+  useEffect(() => {
+    setSelectedStatus(status);
+    setSelectedFollow(follow);
+  }, [follow, status]);
+
   return (
-    <form
-      action="/customers"
-      method="get"
-      className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px]"
-    >
-      <select
-        name="status"
-        defaultValue={status}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {statusOptions.map(([value, label]) => (
-          <option key={value || "all"} value={value}>{label}</option>
-        ))}
-      </select>
-      <select
-        name="follow"
-        defaultValue={follow}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <option value="">全部跟进</option>
-        <option value="due">待跟进</option>
-        <option value="overdue">超期未跟进</option>
-      </select>
+    <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px]">
+      <input type="hidden" name="status" value={selectedStatus} />
+      <input type="hidden" name="follow" value={selectedFollow} />
+      <FormSelect
+        id="customer-status-filter"
+        value={selectedStatus || "__all"}
+        options={statusOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="customer-follow-filter"
+        value={selectedFollow || "__all"}
+        options={[
+          { value: "__all", label: "全部跟进" },
+          { value: "due", label: "待跟进" },
+          { value: "overdue", label: "超期未跟进" },
+        ]}
+        onChange={(value) => setSelectedFollow(value === "__all" ? "" : value)}
+      />
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
