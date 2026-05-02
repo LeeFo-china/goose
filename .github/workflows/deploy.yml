@@ -114,6 +114,13 @@ jobs:
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 
+          # The shared backend .env currently contains NODE_ENV=development.
+          # Next.js production builds must run with NODE_ENV=production.
+          touch apps/admin/.env.production
+          sed -i '/^NODE_ENV=/d' apps/admin/.env.production
+          printf '\nNODE_ENV=production\n' >> apps/admin/.env.production
+          export NODE_ENV=production
+
           # Install admin dependencies.
           log_step "Installing admin dependencies..."
           "$PNPM_BIN" --dir apps/admin install --frozen-lockfile
