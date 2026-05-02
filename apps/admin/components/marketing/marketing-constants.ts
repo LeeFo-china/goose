@@ -1,0 +1,23 @@
+import type {
+  MarketingCampaignStatus,
+  MarketingCampaignType,
+  MarketingCampaignTargetScopeType,
+} from "@/components/marketing/marketing-types";
+
+export const campaignTypeOptions = [
+  ["share_assist", "分享助力"],
+  ["appointment_reward", "预约奖励"],
+] as const satisfies readonly (readonly [MarketingCampaignType, string])[];
+
+export const campaignStatusOptions = [
+  ["draft", "草稿"],
+  ["active", "进行中"],
+  ["paused", "已暂停"],
+  ["closed", "已关闭"],
+] as const satisfies readonly (readonly [MarketingCampaignStatus, string])[];
+
+export const targetScopeOptions = [
+  ["all_projects", "全部项目"],
+  ["project_list", "指定项目"],
+] as const satisfies readonly (readonly [MarketingCampaignTargetScopeType, string])[];
+

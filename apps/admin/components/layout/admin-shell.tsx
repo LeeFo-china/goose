@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   LayoutDashboard,
+  Megaphone,
   Shield,
   Users,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/employees", label: "员工", icon: BadgeCheck },
   { href: "/permissions", label: "角色权限", icon: Shield },
   { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
+  { href: "/marketing", label: "营销活动", icon: Megaphone },
   { href: "/cameras", label: "工地监控", icon: Camera },
 ];
 
