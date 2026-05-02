@@ -693,7 +693,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   }
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex min-w-[228px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情

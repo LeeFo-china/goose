@@ -228,18 +228,31 @@ export default async function ProjectsPage({
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] border-t text-sm">
+            <table className="w-full min-w-[1680px] table-fixed border-t text-sm">
+              <colgroup>
+                <col className="w-[320px]" />
+                <col className="w-[140px]" />
+                <col className="w-[260px]" />
+                <col className="w-[110px]" />
+                <col className="w-[140px]" />
+                <col className="w-[130px]" />
+                <col className="w-[150px]" />
+                <col className="w-[120px]" />
+                <col className="w-[260px]" />
+              </colgroup>
               <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
                 <tr>
-                  <th className="px-5 py-3">项目</th>
-                  <th className="px-5 py-3">客户</th>
-                  <th className="px-5 py-3">房产</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3">预算</th>
-                  <th className="px-5 py-3">设计师</th>
-                  <th className="px-5 py-3">工程负责人</th>
-                  <th className="px-5 py-3">开工日期</th>
-                  <th className="px-5 py-3 text-right">操作</th>
+                  <th className="whitespace-nowrap px-4 py-3">项目</th>
+                  <th className="whitespace-nowrap px-4 py-3">客户</th>
+                  <th className="whitespace-nowrap px-4 py-3">房产</th>
+                  <th className="whitespace-nowrap px-4 py-3">状态</th>
+                  <th className="whitespace-nowrap px-4 py-3">预算</th>
+                  <th className="whitespace-nowrap px-4 py-3">设计师</th>
+                  <th className="whitespace-nowrap px-4 py-3">工程负责人</th>
+                  <th className="whitespace-nowrap px-4 py-3">开工日期</th>
+                  <th className="sticky right-0 z-10 whitespace-nowrap bg-muted/95 px-4 py-3 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)]">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -251,8 +264,8 @@ export default async function ProjectsPage({
                     };
 
                     return (
-                      <tr key={project.id} className="border-t transition-colors hover:bg-muted/40">
-                        <td className="px-5 py-4">
+                      <tr key={project.id} className="group border-t transition-colors hover:bg-muted/40">
+                        <td className="px-4 py-4">
                           <div className="min-w-0">
                             <div className="truncate font-medium">{project.name}</div>
                             <div className="truncate text-xs text-muted-foreground">
@@ -260,16 +273,18 @@ export default async function ProjectsPage({
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">{customerName(project.customer)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{propertyLabel(project.property)}</td>
-                        <td className="px-5 py-4">
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
+                        <td className="whitespace-nowrap px-4 py-4">{customerName(project.customer)}</td>
+                        <td className="px-4 py-4 text-muted-foreground">
+                          <div className="truncate">{propertyLabel(project.property)}</div>
                         </td>
-                        <td className="px-5 py-4 font-medium">¥{formatMoney(project.budget)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{personName(project.designer)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{personName(project.supervisor)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{formatDate(project.start_date)}</td>
-                        <td className="relative px-5 py-4">
+                        <td className="whitespace-nowrap px-4 py-4">
+                          <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4 font-medium">¥{formatMoney(project.budget)}</td>
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.designer)}</td>
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.supervisor)}</td>
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{formatDate(project.start_date)}</td>
+                        <td className="sticky right-0 z-10 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted">
                           <ProjectRowActions project={project} />
                         </td>
                       </tr>
