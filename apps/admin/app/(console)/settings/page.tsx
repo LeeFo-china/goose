@@ -1,9 +1,8 @@
 import { SlidersHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { SettingEditor } from "@/components/settings/settings-actions";
+import { SettingsTabs } from "@/components/settings/settings-tabs";
 import type { SystemSetting } from "@/components/settings/settings-types";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -61,7 +60,18 @@ export default async function SettingsPage() {
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
   const secretCount = list.filter((item) => item.is_secret).length;
-  const groupEntries = Object.entries(groups);
+  const groupEntries = Object.entries(groups)
+    .map(([groupCode, settings]) => ({
+      code: groupCode,
+      label: groupLabels[groupCode] || groupCode,
+      settings,
+      emptyCount: settings.filter((item) => item.source === "empty").length,
+      secretCount: settings.filter((item) => item.is_secret).length,
+    }))
+    .sort((left, right) => {
+      const order = ["sms", "ai", "ezviz", "wechat", "notify"];
+      return order.indexOf(left.code) - order.indexOf(right.code);
+    });
 
   return (
     <div className="flex flex-col gap-5">
@@ -107,19 +117,7 @@ export default async function SettingsPage() {
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      {groupEntries.map(([groupCode, settings]) => (
-        <Card key={groupCode}>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle>{groupLabels[groupCode] || groupCode}</CardTitle>
-            <Badge variant="outline">{settings.length} 项</Badge>
-          </CardHeader>
-          <CardContent className="p-0">
-            {settings.map((setting) => (
-              <SettingEditor key={setting.key} setting={setting} />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      <SettingsTabs groups={groupEntries} />
     </div>
   );
 }
