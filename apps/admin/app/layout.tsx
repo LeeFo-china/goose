@@ -3,8 +3,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "固鹅后台",
-  description: "固鹅业务管理后台",
+  title: "小笨鹅",
+  description: "小笨鹅业务管理后台",
 };
 
 export default function RootLayout({

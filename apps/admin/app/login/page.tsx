@@ -16,7 +16,7 @@ export default async function LoginPage() {
             Gooes Admin Console
           </div>
           <h1 className="text-4xl font-semibold leading-tight tracking-normal text-slate-950">
-            固鹅业务管理后台
+            小笨鹅业务管理后台
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
             客户、项目、员工权限、费用审批和工地监控集中管理。后台只允许在职员工使用短信验证码登录。

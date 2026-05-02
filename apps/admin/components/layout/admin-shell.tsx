@@ -1,4 +1,3 @@
-import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
@@ -16,11 +15,11 @@ export function AdminShell({
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-card lg:block">
         <div className="flex h-16 items-center gap-3 px-5">
-          <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <ClipboardList className="size-5" />
+          <div className="flex size-9 items-center justify-center overflow-hidden rounded-md border bg-background">
+            <img src="/logo.png" alt="小笨鹅" className="size-8 object-contain" />
           </div>
           <div>
-            <div className="text-sm font-semibold">固鹅后台</div>
+            <div className="text-sm font-semibold">小笨鹅</div>
             <div className="text-xs text-muted-foreground">Admin Console</div>
           </div>
         </div>
