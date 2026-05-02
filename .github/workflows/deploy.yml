@@ -11,6 +11,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Keep runtime artifacts such as apps/admin/.next while the old PM2
+          # process is still serving traffic. The deploy step validates and
+          # replaces the build after next build succeeds.
+          clean: false
 
       - name: Setup runtime
         shell: bash
