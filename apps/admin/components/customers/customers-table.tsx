@@ -1,0 +1,151 @@
+"use client";
+
+import { type ColumnDef } from "@tanstack/react-table";
+import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/admin/data-table";
+import {
+  CustomerRowActions,
+  type CustomerRecord,
+} from "@/components/customers/customer-mutations";
+
+const statusMeta: Record<string, {
+  label: string;
+  variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
+}> = {
+  potential: { label: "潜在客户", variant: "outline" },
+  following: { label: "跟进中", variant: "default" },
+  arrived: { label: "已到店", variant: "warning" },
+  ordered: { label: "已下定", variant: "success" },
+  contracted: { label: "已签约", variant: "success" },
+  dormant: { label: "沉睡客户", variant: "secondary" },
+  invalid: { label: "无效客户", variant: "danger" },
+};
+
+const sourceMeta: Record<string, string> = {
+  douyin: "抖音/短视频",
+  referral: "老客介绍",
+  walk_in: "自然进店",
+  telemarketing: "电销开发",
+  platform: "装修平台",
+};
+
+function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function ownerName(customer: CustomerRecord) {
+  const owner = relationOne(customer.owner);
+  return customer.owner_name || owner?.name || owner?.phone || "-";
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+const columns: ColumnDef<CustomerRecord>[] = [
+  {
+    accessorKey: "name",
+    header: "客户",
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <div className="truncate font-medium">
+          {row.original.name || "未命名客户"}
+        </div>
+        <div className="truncate text-xs text-muted-foreground">
+          {row.original.id}
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "phone",
+    header: "手机号",
+    cell: ({ row }) => row.original.phone || row.original.phone_masked || "-",
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    id: "owner",
+    header: "负责人",
+    cell: ({ row }) => ownerName(row.original),
+    meta: {
+      cellClassName: "whitespace-nowrap text-muted-foreground",
+    },
+  },
+  {
+    accessorKey: "source",
+    header: "来源",
+    cell: ({ row }) => sourceMeta[row.original.source || ""] || row.original.source || "-",
+    meta: {
+      cellClassName: "whitespace-nowrap text-muted-foreground",
+    },
+  },
+  {
+    accessorKey: "status",
+    header: "状态",
+    cell: ({ row }) => {
+      const meta = statusMeta[row.original.status || ""] || {
+        label: row.original.status || "未知",
+        variant: "outline" as const,
+      };
+
+      return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
+    },
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    id: "phonePermission",
+    header: "号码权限",
+    cell: ({ row }) => row.original.can_view_phone ? (
+      <Badge className="whitespace-nowrap" variant="success">可查看</Badge>
+    ) : (
+      <Badge className="whitespace-nowrap" variant="secondary">脱敏</Badge>
+    ),
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    accessorKey: "created_at",
+    header: "创建时间",
+    cell: ({ row }) => formatDate(row.original.created_at),
+    meta: {
+      cellClassName: "whitespace-nowrap text-muted-foreground",
+    },
+  },
+  {
+    id: "actions",
+    header: "操作",
+    cell: ({ row }) => <CustomerRowActions customer={row.original} />,
+    meta: {
+      headerClassName: "text-right",
+      cellClassName: "relative whitespace-nowrap text-right",
+    },
+  },
+];
+
+export function CustomersTable({
+  customers,
+}: {
+  customers: CustomerRecord[];
+}) {
+  return (
+    <DataTable
+      columns={columns}
+      data={customers}
+      emptyText="没有符合条件的客户"
+      minWidth="min-w-[1180px]"
+    />
+  );
+}

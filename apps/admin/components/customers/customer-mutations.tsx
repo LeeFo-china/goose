@@ -1,12 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import { Edit3, Eye, Loader2, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type Owner = {
   id?: string | null;
@@ -56,18 +65,23 @@ type EmployeeOption = {
 
 type CustomerMode = "create" | "edit";
 
-type CustomerFormState = {
-  name: string;
-  phone: string;
-  status: string;
-  source: string;
-  owner_id: string;
-  douyin_screenshot_images: string;
-  community: string;
-  building_info: string;
-  area: string;
-  layout: string;
-};
+const CUSTOMER_STATUS_VALUES = [
+  "potential",
+  "following",
+  "arrived",
+  "ordered",
+  "contracted",
+  "dormant",
+  "invalid",
+] as const;
+
+const CUSTOMER_SOURCE_VALUES = [
+  "douyin",
+  "referral",
+  "walk_in",
+  "telemarketing",
+  "platform",
+] as const;
 
 const statusOptions = [
   ["potential", "潜在客户"],
@@ -87,9 +101,72 @@ const sourceOptions = [
   ["platform", "装修平台"],
 ] as const;
 
+const CustomerFormSchema = z.object({
+  name: z.string().trim().min(1, "请输入客户姓名"),
+  phone: z.string().trim().regex(/^1[3-9]\d{9}$/, "请输入有效手机号"),
+  status: z.enum(CUSTOMER_STATUS_VALUES),
+  source: z.enum(CUSTOMER_SOURCE_VALUES),
+  owner_id: z.string(),
+  douyin_screenshot_images: z.string(),
+  community: z.string(),
+  building_info: z.string(),
+  area: z.string().refine((value) => {
+    if (!value.trim()) return true;
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount >= 0;
+  }, "请输入有效面积"),
+  layout: z.string(),
+});
+
+type CustomerFormValues = z.infer<typeof CustomerFormSchema>;
+
+const SELECT_CLASS_NAME =
+  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+function isCustomerStatusValue(value: string | null | undefined): value is CustomerFormValues["status"] {
+  return CUSTOMER_STATUS_VALUES.includes(value as CustomerFormValues["status"]);
+}
+
+function isCustomerSourceValue(value: string | null | undefined): value is CustomerFormValues["source"] {
+  return CUSTOMER_SOURCE_VALUES.includes(value as CustomerFormValues["source"]);
+}
+
+function SelectField({
+  id,
+  value,
+  options,
+  disabled,
+  placeholder,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  options: ReadonlyArray<readonly [string, string]>;
+  disabled: boolean;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      id={id}
+      value={value}
+      disabled={disabled}
+      className={SELECT_CLASS_NAME}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {placeholder ? <option value="">{placeholder}</option> : null}
+      {options.map(([optionValue, label]) => (
+        <option key={optionValue} value={optionValue}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function ownerName(value: Owner | Owner[] | null | undefined) {
@@ -133,15 +210,15 @@ async function requestCustomer(input: {
   return payload.data;
 }
 
-function buildDefaults(customer?: CustomerRecord): CustomerFormState {
+function buildDefaults(customer?: CustomerRecord): CustomerFormValues {
   const primaryProperty = (customer?.properties || []).find((item) => item.is_primary) ||
     customer?.properties?.[0];
 
   return {
     name: customer?.name || "",
     phone: customer?.phone || "",
-    status: customer?.status || "potential",
-    source: customer?.source || "walk_in",
+    status: isCustomerStatusValue(customer?.status) ? customer.status : "potential",
+    source: isCustomerSourceValue(customer?.source) ? customer.source : "walk_in",
     owner_id: customer?.owner_id || relationOne(customer?.owner)?.id || "",
     douyin_screenshot_images: (customer?.douyin_screenshot_images || []).join("\n"),
     community: customer?.community || primaryProperty?.community || "",
@@ -215,14 +292,18 @@ function CustomerDialog({
 }) {
   const router = useRouter();
   const defaults = useMemo(() => buildDefaults(customer), [customer]);
-  const [formState, setFormState] = useState<CustomerFormState>(defaults);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const employees = useEmployeeOptions(open, customer);
+  const form = useForm<CustomerFormValues>({
+    resolver: zodResolver(CustomerFormSchema),
+    defaultValues: defaults,
+  });
+  const selectedSource = form.watch("source");
 
   useEffect(() => {
-    if (open) setFormState(defaults);
-  }, [open, defaults]);
+    if (open) form.reset(defaults);
+  }, [open, defaults, form]);
 
   if (!open) return null;
 
@@ -232,31 +313,30 @@ function CustomerDialog({
     onOpenChange(false);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const images = formState.douyin_screenshot_images
+  function submit(values: CustomerFormValues) {
+    const images = values.douyin_screenshot_images
       .split(/[\n,，]/)
       .map((item) => item.trim())
       .filter(Boolean);
     const hasProperty = Boolean(
-      formState.community.trim() ||
-        formState.building_info.trim() ||
-        formState.layout.trim() ||
-        formState.area,
+      values.community.trim() ||
+        values.building_info.trim() ||
+        values.layout.trim() ||
+        values.area,
     );
     const payload = {
-      name: formState.name.trim(),
-      phone: formState.phone.trim(),
-      status: formState.status,
-      source: formState.source,
-      owner_id: formState.owner_id || null,
-      douyin_screenshot_images: formState.source === "douyin" ? images : [],
+      name: values.name.trim(),
+      phone: values.phone.trim(),
+      status: values.status,
+      source: values.source,
+      owner_id: values.owner_id || null,
+      douyin_screenshot_images: values.source === "douyin" ? images : [],
       property: hasProperty
         ? {
-          community: formState.community.trim(),
-          building_info: formState.building_info.trim() || null,
-          area: formState.area ? Number(formState.area) : null,
-          layout: formState.layout.trim() || null,
+          community: values.community.trim(),
+          building_info: values.building_info.trim() || null,
+          area: values.area ? Number(values.area) : null,
+          layout: values.layout.trim() || null,
         }
         : null,
     };
@@ -288,157 +368,188 @@ function CustomerDialog({
             维护客户基础资料、负责人、来源状态和主房产信息。
           </p>
         </div>
-        <form className="max-h-[calc(88vh-82px)] space-y-4 overflow-y-auto p-5" onSubmit={submit}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-name`}>客户姓名</Label>
-              <Input
-                id={`${mode}-customer-name`}
-                value={formState.name}
-                disabled={pending}
-                required
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))}
+        <form className="max-h-[calc(88vh-82px)] space-y-4 overflow-y-auto p-5" onSubmit={form.handleSubmit(submit)}>
+          <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <Controller
+              name="name"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-name`}>客户姓名</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-name`}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="phone"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-phone`}>手机号</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-phone`}
+                    disabled={pending}
+                    inputMode="numeric"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="status"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-status`}>状态</FieldLabel>
+                  <SelectField
+                    id={`${mode}-customer-status`}
+                    value={field.value}
+                    options={statusOptions}
+                    disabled={pending}
+                    onChange={field.onChange}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="source"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-source`}>来源</FieldLabel>
+                  <SelectField
+                    id={`${mode}-customer-source`}
+                    value={field.value}
+                    options={sourceOptions}
+                    disabled={pending}
+                    onChange={field.onChange}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="owner_id"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-owner`}>负责人</FieldLabel>
+                  <select
+                    id={`${mode}-customer-owner`}
+                    value={field.value}
+                    disabled={pending || employees.loading}
+                    aria-invalid={fieldState.invalid}
+                    className={SELECT_CLASS_NAME}
+                    onChange={field.onChange}
+                  >
+                    <option value="">{employees.loading ? "负责人加载中" : "默认当前账号"}</option>
+                    {employees.options.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name || employee.phone || employee.id}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            {selectedSource === "douyin" ? (
+              <Controller
+                name="douyin_screenshot_images"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor={`${mode}-customer-douyin`}>抖音截图 URL</FieldLabel>
+                    <Textarea
+                      {...field}
+                      id={`${mode}-customer-douyin`}
+                      placeholder="抖音来源必填，最多 1 张"
+                      disabled={pending}
+                      aria-invalid={fieldState.invalid}
+                      className="min-h-[72px]"
+                    />
+                    <FieldError errors={[fieldState.error]} />
+                  </Field>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-phone`}>手机号</Label>
-              <Input
-                id={`${mode}-customer-phone`}
-                value={formState.phone}
-                disabled={pending}
-                required
-                pattern="^1[3-9]\\d{9}$"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  phone: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-status`}>状态</Label>
-              <select
-                id={`${mode}-customer-status`}
-                value={formState.status}
-                disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  status: event.target.value,
-                }))}
-              >
-                {statusOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-source`}>来源</Label>
-              <select
-                id={`${mode}-customer-source`}
-                value={formState.source}
-                disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  source: event.target.value,
-                }))}
-              >
-                {sourceOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-customer-owner`}>负责人</Label>
-              <select
-                id={`${mode}-customer-owner`}
-                value={formState.owner_id}
-                disabled={pending || employees.loading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  owner_id: event.target.value,
-                }))}
-              >
-                <option value="">{employees.loading ? "负责人加载中" : "默认当前账号"}</option>
-                {employees.options.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name || employee.phone || employee.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {formState.source === "douyin" ? (
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor={`${mode}-customer-douyin`}>抖音截图 URL</Label>
-                <textarea
-                  id={`${mode}-customer-douyin`}
-                  value={formState.douyin_screenshot_images}
-                  placeholder="抖音来源必填，最多 1 张"
-                  disabled={pending}
-                  className="min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  onChange={(event) => setFormState((current) => ({
-                    ...current,
-                    douyin_screenshot_images: event.target.value,
-                  }))}
-                />
-              </div>
             ) : null}
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-customer-community`}>小区名称</Label>
-              <Input
-                id={`${mode}-customer-community`}
-                value={formState.community}
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  community: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-building`}>楼栋门牌</Label>
-              <Input
-                id={`${mode}-customer-building`}
-                value={formState.building_info}
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  building_info: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-customer-area`}>面积</Label>
-              <Input
-                id={`${mode}-customer-area`}
-                type="number"
-                min="0"
-                step="0.01"
-                value={formState.area}
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  area: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-customer-layout`}>户型</Label>
-              <Input
-                id={`${mode}-customer-layout`}
-                value={formState.layout}
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  layout: event.target.value,
-                }))}
-              />
-            </div>
-          </div>
+            <Controller
+              name="community"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-community`}>小区名称</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-community`}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="building_info"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-building`}>楼栋门牌</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-building`}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="area"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-area`}>面积</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-area`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="layout"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-customer-layout`}>户型</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-customer-layout`}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+          </FieldGroup>
           {employees.error ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
               {employees.error}
@@ -599,7 +710,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
   }
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex min-w-[228px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情

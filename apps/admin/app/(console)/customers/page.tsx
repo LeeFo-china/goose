@@ -5,9 +5,9 @@ import {
 } from "@/components/customers/customer-list-actions";
 import {
   CreateCustomerButton,
-  CustomerRowActions,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
+import { CustomersTable } from "@/components/customers/customers-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
@@ -31,51 +31,9 @@ type CustomerPageSearchParams = {
   keyword?: string;
 };
 
-const statusMeta: Record<string, {
-  label: string;
-  variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
-}> = {
-  potential: { label: "潜在客户", variant: "outline" },
-  following: { label: "跟进中", variant: "default" },
-  arrived: { label: "已到店", variant: "warning" },
-  ordered: { label: "已下定", variant: "success" },
-  contracted: { label: "已签约", variant: "success" },
-  dormant: { label: "沉睡客户", variant: "secondary" },
-  invalid: { label: "无效客户", variant: "danger" },
-};
-
-const sourceMeta: Record<string, string> = {
-  douyin: "抖音/短视频",
-  referral: "老客介绍",
-  walk_in: "自然进店",
-  telemarketing: "电销开发",
-  platform: "装修平台",
-};
-
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function relationOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
-}
-
-function ownerName(customer: CustomerRecord) {
-  const owner = relationOne(customer.owner);
-  return customer.owner_name || owner?.name || owner?.phone || "-";
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
 }
 
 async function getCustomers(params: CustomerPageSearchParams) {
@@ -208,78 +166,7 @@ export default async function CustomersPage({
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] border-t text-sm">
-              <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">客户</th>
-                  <th className="px-5 py-3">手机号</th>
-                  <th className="px-5 py-3">负责人</th>
-                  <th className="px-5 py-3">来源</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3">号码权限</th>
-                  <th className="px-5 py-3">创建时间</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.length > 0 ? (
-                  list.map((customer) => {
-                    const meta = statusMeta[customer.status || ""] || {
-                      label: customer.status || "未知",
-                      variant: "outline" as const,
-                    };
-
-                    return (
-                      <tr key={customer.id} className="border-t transition-colors hover:bg-muted/40">
-                        <td className="px-5 py-4">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">
-                              {customer.name || "未命名客户"}
-                            </div>
-                            <div className="truncate text-xs text-muted-foreground">
-                              {customer.id}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          {customer.phone || customer.phone_masked || "-"}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {ownerName(customer)}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {sourceMeta[customer.source || ""] || customer.source || "-"}
-                        </td>
-                        <td className="px-5 py-4">
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                        </td>
-                        <td className="px-5 py-4">
-                          {customer.can_view_phone ? (
-                            <Badge variant="success">可查看</Badge>
-                          ) : (
-                            <Badge variant="secondary">脱敏</Badge>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {formatDate(customer.created_at)}
-                        </td>
-                        <td className="relative px-5 py-4">
-                          <CustomerRowActions customer={customer} />
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td className="px-5 py-12 text-center text-muted-foreground" colSpan={8}>
-                      没有符合条件的客户
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <CustomersTable customers={list} />
         </CardContent>
       </Card>
 
