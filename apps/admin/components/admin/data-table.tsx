@@ -35,17 +35,20 @@ export function DataTable<TData, TValue>({
   emptyText = "暂无数据",
   minWidth,
   rowClassName,
+  tableMeta,
 }: {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   emptyText?: string;
   minWidth?: string;
   rowClassName?: (row: TData) => string | undefined;
+  tableMeta?: Record<string, unknown>;
 }) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    meta: tableMeta,
   });
 
   return (
