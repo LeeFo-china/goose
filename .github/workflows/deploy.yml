@@ -155,33 +155,7 @@ jobs:
           ADMIN_PID_BEFORE=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
           echo "goose-admin PID before restart: ${ADMIN_PID_BEFORE:-not running}"
           "$PM2_BIN" delete "goo""es-admin" >/dev/null 2>&1 || true
-          "$PM2_BIN" delete goose-admin >/dev/null 2>&1 || true
-
-          for attempt in $(seq 1 10); do
-            ADMIN_EXISTING_PID=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
-            if [ -z "$ADMIN_EXISTING_PID" ] || [ "$ADMIN_EXISTING_PID" = "0" ]; then
-              break
-            fi
-            echo "Waiting for old goose-admin PM2 process to stop (attempt $attempt): $ADMIN_EXISTING_PID"
-            sleep 1
-          done
-
-          if command -v ss >/dev/null 2>&1; then
-            for attempt in $(seq 1 10); do
-              if ! ss -lntp | grep ':3010\b' >/dev/null 2>&1; then
-                break
-              fi
-              echo "Waiting for port 3010 to be released (attempt $attempt)"
-              sleep 1
-            done
-
-            if ss -lntp | grep ':3010\b'; then
-              echo "Port 3010 is still busy before starting goose-admin"
-              exit 1
-            fi
-          fi
-
-          "$PM2_BIN" start "$PNPM_BIN" --name goose-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
+          "$PM2_BIN" restart goose-admin --update-env || "$PM2_BIN" start "$PNPM_BIN" --name goose-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
           "$PM2_BIN" save
           "$PM2_BIN" status goose-admin
           ADMIN_PID_AFTER=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
