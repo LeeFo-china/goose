@@ -1,5 +1,6 @@
 import { Activity, ShieldCheck, TerminalSquare } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
 import type {
@@ -21,6 +22,17 @@ type RunListData = {
   pagination: Pagination;
 };
 
+type OpsPageSearchParams = {
+  page?: string;
+};
+
+const OPS_RUNS_PAGE_SIZE = 10;
+
+function normalizePage(value: string | undefined) {
+  const page = Number(value || 1);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
 async function fetchBackendData<T>(token: string, path: string) {
   const response = await fetch(buildBackendUrl(path), {
     headers: {
@@ -32,41 +44,51 @@ async function fetchBackendData<T>(token: string, path: string) {
   return payload.data as T;
 }
 
-async function getOpsData() {
+async function getOpsData(params: OpsPageSearchParams) {
+  const page = normalizePage(params.page);
   const token = await getAdminToken();
   if (!token) {
     return {
       scripts: [] as OpsScript[],
       runs: [] as OpsScriptRun[],
-      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
 
   try {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: String(OPS_RUNS_PAGE_SIZE),
+    });
     const [scriptData, runData] = await Promise.all([
       fetchBackendData<ScriptListData>(token, "/admin/ops/scripts"),
-      fetchBackendData<RunListData>(token, "/admin/ops/script-runs?page=1&pageSize=20"),
+      fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`),
     ]);
 
     return {
       scripts: scriptData?.list || [],
       runs: runData?.list || [],
-      pagination: runData?.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: null,
     };
   } catch (error) {
     return {
       scripts: [] as OpsScript[],
       runs: [] as OpsScriptRun[],
-      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "运维脚本加载失败",
     };
   }
 }
 
-export default async function OpsPage() {
-  const { scripts, runs, pagination, error } = await getOpsData();
+export default async function OpsPage({
+  searchParams,
+}: {
+  searchParams: Promise<OpsPageSearchParams>;
+}) {
+  const params = await searchParams;
+  const { scripts, runs, pagination, error } = await getOpsData(params);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
 
@@ -143,14 +165,20 @@ export default async function OpsPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>最近执行记录</CardTitle>
           <Badge variant="outline">
-            共 {pagination.total} 条
+            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
           <OpsRunsTable runs={runs} />
         </CardContent>
       </Card>
+
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          每页 {pagination.pageSize} 条，共 {pagination.total} 条
+        </div>
+        <OpsRunsPagination pagination={pagination} />
+      </div>
     </div>
   );
 }
-
