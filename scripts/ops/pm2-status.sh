@@ -26,7 +26,7 @@ try {
 
   if (!rows.length) {
     console.log("No goose PM2 processes found.");
-    return;
+    process.exit(0);
   }
 
   for (const row of rows) {
