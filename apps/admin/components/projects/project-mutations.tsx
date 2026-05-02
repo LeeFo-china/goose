@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -297,20 +298,21 @@ function OptionSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <select
+    <FormSelect
       id={id}
-      value={value}
+      value={value || "__none"}
       disabled={disabled}
-      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-      onChange={(event) => onChange(event.target.value)}
-    >
-      <option value="">{placeholder}</option>
-      {options.map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.description ? `${option.label} · ${option.description}` : option.label}
-        </option>
-      ))}
-    </select>
+      options={[
+        { value: "__none", label: placeholder },
+        ...options.map((option) => ({
+          value: option.id,
+          label: option.description
+            ? `${option.label} · ${option.description}`
+            : option.label,
+        })),
+      ]}
+      onChange={(nextValue) => onChange(nextValue === "__none" ? "" : nextValue)}
+    />
   );
 }
 
@@ -408,37 +410,35 @@ function ProjectDialog({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-status`}>状态</Label>
-              <select
+              <FormSelect
                 id={`${mode}-project-status`}
                 value={formState.status}
                 disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  status: event.target.value,
+                options={statusOptions.map(([value, label]) => ({
+                  value,
+                  label,
                 }))}
-              >
-                {statusOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
+                onChange={(value) => setFormState((current) => ({
+                  ...current,
+                  status: value,
+                }))}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-visibility`}>展示状态</Label>
-              <select
+              <FormSelect
                 id={`${mode}-project-visibility`}
                 value={formState.visibility_status}
                 disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  visibility_status: event.target.value,
+                options={visibilityOptions.map(([value, label]) => ({
+                  value,
+                  label,
                 }))}
-              >
-                {visibilityOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
+                onChange={(value) => setFormState((current) => ({
+                  ...current,
+                  visibility_status: value,
+                }))}
+              />
             </div>
             <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-customer`}>客户</Label>

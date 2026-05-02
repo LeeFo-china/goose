@@ -1,12 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   PROJECT_STATUS_VALUES,
   ProjectStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -69,30 +70,42 @@ export function ProjectFilters({
   ownership: string;
   keyword: string;
 }) {
+  const [selectedStatus, setSelectedStatus] = useState(status);
+  const [selectedOwnership, setSelectedOwnership] = useState(ownership);
+
+  useEffect(() => {
+    setSelectedStatus(status);
+    setSelectedOwnership(ownership);
+  }, [ownership, status]);
+
   return (
     <form
       action="/projects"
       method="get"
       className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px]"
     >
-      <select
-        name="status"
-        defaultValue={status}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {statusOptions.map(([value, label]) => (
-          <option key={value || "all"} value={value}>{label}</option>
-        ))}
-      </select>
-      <select
-        name="ownership"
-        defaultValue={ownership}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {ownershipOptions.map(([value, label]) => (
-          <option key={value || "default"} value={value}>{label}</option>
-        ))}
-      </select>
+      <input type="hidden" name="status" value={selectedStatus} />
+      <input type="hidden" name="ownership" value={selectedOwnership} />
+      <FormSelect
+        id="project-status-filter"
+        value={selectedStatus || "__all"}
+        options={statusOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="project-ownership-filter"
+        value={selectedOwnership || "__default"}
+        options={ownershipOptions.map(([value, label]) => ({
+          value: value || "__default",
+          label,
+        }))}
+        onChange={(value) =>
+          setSelectedOwnership(value === "__default" ? "" : value)
+        }
+      />
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
