@@ -12,6 +12,23 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildBackendHeaders(request: Request, token: string) {
+  const headers = new Headers();
+  headers.set("authorization", `Bearer ${token}`);
+
+  const accept = request.headers.get("accept");
+  if (accept) {
+    headers.set("accept", accept);
+  }
+
+  const contentType = request.headers.get("content-type");
+  if (contentType) {
+    headers.set("content-type", contentType);
+  }
+
+  return headers;
+}
+
 async function fetchBackendWithRetry(input: {
   url: string;
   method: string;
@@ -65,11 +82,7 @@ async function proxyBackend(request: Request, context: RouteContext) {
   const params = await context.params;
   const sourceUrl = new URL(request.url);
   const path = `/${params.path.join("/")}${sourceUrl.search}`;
-  const headers = new Headers(request.headers);
-  headers.set("authorization", `Bearer ${token}`);
-  headers.delete("host");
-  headers.delete("cookie");
-  headers.delete("content-length");
+  const headers = buildBackendHeaders(request, token);
 
   const method = request.method.toUpperCase();
   let response: Response;
