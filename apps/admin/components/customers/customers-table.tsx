@@ -90,14 +90,17 @@ const columns: ColumnDef<CustomerRecord>[] = [
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="min-w-0 cursor-default">
+            <button
+              type="button"
+              className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <div className="w-[5em] truncate font-medium">
                 {name}
               </div>
               <div className="w-[5em] truncate text-xs text-muted-foreground">
                 {row.original.id}
               </div>
-            </div>
+            </button>
           </TooltipTrigger>
           <TooltipContent align="start" className="max-w-[280px]">
             <div className="flex flex-col gap-1">

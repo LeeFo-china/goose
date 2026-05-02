@@ -16,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
-        <TooltipProvider>
+        <TooltipProvider delayDuration={0} skipDelayDuration={100}>
           {children}
           <Toaster richColors />
         </TooltipProvider>
