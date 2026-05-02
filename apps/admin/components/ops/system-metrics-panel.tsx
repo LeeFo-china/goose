@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Gauge, HardDrive, Loader2, MemoryStick, Pause, Play, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { OpsSystemMetrics } from "@/components/ops/ops-types";
@@ -121,27 +121,40 @@ export function SystemMetricsPanel() {
   const [metrics, setMetrics] = useState<OpsSystemMetrics | null>(null);
   const [error, setError] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [pending, startTransition] = useTransition();
+  const [manualPending, setManualPending] = useState(false);
+  const hasMetricsRef = useRef(false);
 
-  const loadMetrics = useCallback(() => {
-    setError("");
-    startTransition(async () => {
-      try {
-        const data = await requestMetrics();
-        setMetrics(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "资源指标加载失败");
+  const loadMetrics = useCallback(async (options?: { manual?: boolean }) => {
+    const manual = Boolean(options?.manual);
+    if (manual) {
+      setManualPending(true);
+      setError("");
+    }
+
+    try {
+      const data = await requestMetrics();
+      setMetrics(data);
+      hasMetricsRef.current = true;
+      if (manual) setError("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "资源指标加载失败";
+      if (manual || !hasMetricsRef.current) {
+        setError(message);
       }
-    });
+    } finally {
+      if (manual) setManualPending(false);
+    }
   }, []);
 
   useEffect(() => {
-    loadMetrics();
+    void loadMetrics({ manual: true });
   }, [loadMetrics]);
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const timer = window.setInterval(loadMetrics, REFRESH_INTERVAL_MS);
+    const timer = window.setInterval(() => {
+      void loadMetrics();
+    }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, loadMetrics]);
 
@@ -166,8 +179,8 @@ export function SystemMetricsPanel() {
             {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
             {autoRefresh ? "暂停" : "继续"}
           </Button>
-          <Button type="button" onClick={loadMetrics} disabled={pending}>
-            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
+          <Button type="button" onClick={() => void loadMetrics({ manual: true })} disabled={manualPending}>
+            {manualPending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
             刷新
           </Button>
         </div>
