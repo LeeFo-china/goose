@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { Edit3, Eye, Loader2, Plus, Trash2 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -303,7 +303,7 @@ function CustomerDialog({
   const [error, setError] = useState("");
   const employees = useEmployeeOptions(open, customer);
   const form = useForm<CustomerFormValues>({
-    resolver: zodResolver(CustomerFormSchema),
+    resolver: zodResolver(CustomerFormSchema as never) as Resolver<CustomerFormValues>,
     defaultValues: defaults,
   });
   const selectedSource = form.watch("source");

@@ -1,52 +1,32 @@
 {
-  "extends": "./tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // Environment setup & latest features
     "lib": ["ESNext"],
     "types": ["bun"],
-    // "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
-
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "target": "ES6",
-
-    // Bundler mode
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-
-    // Best practices
     "strict": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-
-    // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
-
     "paths": {
-      "@/*": ["./apps/api/src/*"],
-      "@gooes/domain": ["./packages/domain/src/index.ts"],
-      "@gooes/domain/*": ["./packages/domain/src/*"]
-    },
+      "@/*": ["./src/*"],
+      "@gooes/domain": ["../../packages/domain/src/index.ts"],
+      "@gooes/domain/*": ["../../packages/domain/src/*"]
+    }
   },
-  "include": [
-    "apps/api/src/**/*.ts",
-    "apps/api/src/**/*.d.ts"
-  ],
-  "exclude": [
-    "apps/admin",
-    "apps/api/dist",
-    "dist",
-    "node_modules",
-    "packages/*/dist",
-    "supabase/.temp"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["dist", "node_modules"]
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
   CheckCircle2,
@@ -504,7 +504,7 @@ function PayDialog({
     remark: "",
   }), [expense.total_amount]);
   const form = useForm<PayFormValues>({
-    resolver: zodResolver(PayFormSchema),
+    resolver: zodResolver(PayFormSchema as never) as Resolver<PayFormValues>,
     defaultValues: defaults,
   });
 

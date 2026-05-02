@@ -24,10 +24,13 @@ jobs:
           #cd $GITHUB_WORKSPACE
           pwd
           # 4. 执行安装
+          mkdir -p apps/api
           cp /home/github-deploy/_work/.env .env
-          bun install
+          cp /home/github-deploy/_work/.env apps/api/.env
+          pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
           
           # 5. 优化 PM2 启动命令：
           # - 使用 reload 实现平滑重启
           # - 如果是第一次运行，reload 失败则执行 start
-          pm2 reload goose || pm2 start app.ts --interpreter ~/.bun/bin/bun --name "goose"
+          pm2 delete goose >/dev/null 2>&1 || true
+          pm2 start "$GITHUB_WORKSPACE/apps/api/src/app.ts" --interpreter ~/.bun/bin/bun --name "goose" --cwd "$GITHUB_WORKSPACE/apps/api" --update-env

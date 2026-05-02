@@ -1,6 +1,6 @@
 {
   "name": "gooes",
-  "module": "app.ts",
+  "module": "apps/api/src/app.ts",
   "type": "module",
   "private": true,
   "workspaces": [
@@ -15,31 +15,16 @@
     "typescript": "^5"
   },
   "scripts": {
-    "dev": "bun --watch app.ts",
-    "start": "bun app.ts",
-    "build": "bun build app.ts --outdir dist --target node",
-    "api:dev": "bun --watch app.ts",
-    "api:start": "bun app.ts",
-    "api:build": "bun build app.ts --outdir dist --target node",
+    "dev": "bun run api:dev",
+    "start": "bun run api:start",
+    "build": "bun run api:build",
+    "api:dev": "cd apps/api && bun --watch src/app.ts",
+    "api:start": "cd apps/api && bun src/app.ts",
+    "api:build": "cd apps/api && bun build src/app.ts --outdir dist --target node",
+    "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
     "admin:dev": "pnpm --dir apps/admin dev",
     "admin:build": "pnpm --dir apps/admin build",
     "admin:start": "pnpm --dir apps/admin start",
-    "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > types/database.ts"
-  },
-  "dependencies": {
-    "@alicloud/credentials": "^2.4.4",
-    "@alicloud/dysmsapi20170525": "4.5.1",
-    "@alicloud/openapi-client": "^0.4.15",
-    "@alicloud/tea-typescript": "^1.8.0",
-    "@alicloud/tea-util": "^1.4.11",
-    "@fastify/autoload": "^6.3.1",
-    "@fastify/multipart": "^10.0.0",
-    "@gooes/domain": "workspace:*",
-    "@supabase/supabase-js": "^2.100.0",
-    "fastify": "^5.8.4",
-    "fastify-cli": "^7.4.1",
-    "openai": "^6.34.0",
-    "reflect-metadata": "^0.2.2",
-    "zod": "^4.4.2"
+    "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > apps/api/src/types/database.ts"
   }
 }

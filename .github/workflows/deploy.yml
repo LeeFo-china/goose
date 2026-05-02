@@ -93,7 +93,9 @@ jobs:
 
           if [ -n "$ENV_SOURCE" ]; then
             echo "Using env file: $ENV_SOURCE"
+            mkdir -p apps/api
             cp "$ENV_SOURCE" .env
+            cp "$ENV_SOURCE" apps/api/.env
             cp "$ENV_SOURCE" apps/admin/.env.production
           else
             echo ".env file not found, skipping cp"
@@ -105,12 +107,13 @@ jobs:
           # If disk pressure becomes a problem, enable a full dependency cleanup:
           # rm -rf node_modules apps/admin/node_modules
 
-          # Install root dependencies with Bun.
-          "$BUN_BIN" install
+          # Install API workspace dependencies. Runtime still uses Bun.
+          "$PNPM_BIN" install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
 
           # Deploy main app (goose).
           echo "Deploying goose (main app)..."
-          "$PM2_BIN" reload goose --update-env || "$PM2_BIN" start app.ts --interpreter "$BUN_BIN" --name goose
+          "$PM2_BIN" delete goose >/dev/null 2>&1 || true
+          "$PM2_BIN" start "$GITHUB_WORKSPACE/apps/api/src/app.ts" --interpreter "$BUN_BIN" --name goose --cwd "$GITHUB_WORKSPACE/apps/api" --update-env
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 

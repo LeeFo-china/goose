@@ -10,29 +10,36 @@ Bun + TypeScript + Fastify REST API with Supabase backend. Provides CRUD for cus
 ## STRUCTURE
 ```
 gooes/
-├── app.ts                 # Fastify entry point (port from env)
-├── controllers/           # BaseController + domain controllers
-├── routes/                # Autoload registry + resource factory
-├── schema/                # Zod validation schemas
+├── apps/
+│   ├── api/
+│   │   ├── src/
+│   │   │   ├── app.ts        # Fastify entry point (port from env)
+│   │   │   ├── controllers/  # BaseController + domain controllers
+│   │   │   ├── routes/       # Autoload registry + resource factory
+│   │   │   ├── schema/       # Zod validation schemas
+│   │   │   └── services/     # Business orchestration
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── admin/              # Next.js admin console
+├── packages/
+│   └── domain/             # Shared domain types/constants
 ├── supabase/              # Migrations + Edge functions (Deno)
-├── types/                 # TypeScript definitions
-├── utils/                 # Decorators, response helpers, DB client
-├── errors/                # AppError, error factory, error codes
-└── plugins/               # Fastify plugins (error handler)
+├── tsconfig.base.json
+└── pnpm-workspace.yaml
 ```
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Add new CRUD | controllers/X/index.ts + schema/X.ts | Extend BaseController |
-| Route registration | routes/index.ts | AutoLoad registers all |
-| Custom routes | routes/factory.ts | createResourceRoutes() |
-| Validation | schema/*.ts | Zod schemas |
-| Supabase client | utils/supabase/index.ts | Static from() API |
-| Error handling | errors/error-factory.ts | Errors.badRequest(), .dbError() |
+| Add new CRUD | apps/api/src/controllers/X/index.ts + apps/api/src/schema/X.ts | Extend BaseController |
+| Route registration | apps/api/src/routes/index.ts | AutoLoad registers all |
+| Custom routes | apps/api/src/routes/factory.ts | createResourceRoutes() |
+| Validation | apps/api/src/schema/*.ts | Zod schemas |
+| Supabase client | apps/api/src/utils/supabase/index.ts | Static from() API |
+| Error handling | apps/api/src/errors/error-factory.ts | Errors.badRequest(), .dbError() |
 
 ## CONVENTIONS
-- Path alias: `@/*` → `./*`
+- API package alias: `@/*` → `apps/api/src/*`
 - File naming: kebab-case (except BaseController.ts)
 - ES modules with `"type": "module"`
 - Decorator metadata: `reflect-metadata` import first in app.ts
@@ -54,16 +61,15 @@ gooes/
 
 ## COMMANDS
 ```bash
-bun --watch app.ts     # dev
-bun app.ts            # start
-bun build app.ts --outdir dist --target node  # build
-supabase gen types typescript --project-id X > types/database.ts  # gen types
+bun run api:dev       # dev
+bun run api:start     # start
+bun run api:build     # build
+supabase gen types typescript --project-id X > apps/api/src/types/database.ts  # gen types
 ```
 
 ## NOTES
 - Hybrid runtime: Bun (main app) + Deno (Supabase Edge functions)
-- No src/ directory - files at root level
-- package.json "module": "index.ts" but entry is app.ts (mismatch)
+- Backend runtime lives in apps/api/src
 - Both bun.lock and pnpm-lock.yaml present (use bun)
 
 ## STRICT RULES

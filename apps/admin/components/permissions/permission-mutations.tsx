@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { Edit3, Loader2, Plus, Power, RotateCcw, Shield } from "lucide-react";
 import { FormSelect, type SelectOption } from "@/components/admin/form-select";
@@ -252,7 +252,7 @@ function PermissionDialog({
     };
   }, [permission]);
   const form = useForm<PermissionFormValues>({
-    resolver: zodResolver(PermissionFormSchema),
+    resolver: zodResolver(PermissionFormSchema as never) as Resolver<PermissionFormValues>,
     defaultValues: defaults,
   });
 

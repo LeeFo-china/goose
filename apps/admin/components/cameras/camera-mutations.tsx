@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
   Edit3,
@@ -191,7 +191,7 @@ function CameraDialog({
   const [error, setError] = useState("");
   const availableDevices = useMemo(() => devices.filter((device) => device.can_bind), [devices]);
   const form = useForm<CameraFormValues>({
-    resolver: zodResolver(CameraFormSchema),
+    resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
     defaultValues: defaults,
   });
   const selectedCapabilities = form.watch("capabilities");
