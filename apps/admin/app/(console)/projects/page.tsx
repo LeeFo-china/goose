@@ -1,4 +1,5 @@
-import { BriefcaseBusiness, CalendarDays, House, ShieldAlert } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, House } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import {
   ProjectFilters,
   ProjectsPagination,
@@ -157,7 +158,7 @@ export default async function ProjectsPage({
   const pageBudget = list.reduce((sum, item) => sum + Number(item.budget || 0), 0);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">项目管理</h1>
@@ -171,8 +172,8 @@ export default async function ProjectsPage({
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <BriefcaseBusiness className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <BriefcaseBusiness className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页有效项目</div>
@@ -182,8 +183,8 @@ export default async function ProjectsPage({
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-50 text-amber-700">
-              <CalendarDays className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+              <CalendarDays className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页施工/验收</div>
@@ -193,8 +194,8 @@ export default async function ProjectsPage({
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-              <House className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <House className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页预算</div>
@@ -211,16 +212,11 @@ export default async function ProjectsPage({
       </Card>
 
       {error ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="flex items-center gap-3 p-4 text-sm text-red-700">
-            <ShieldAlert className="h-4 w-4" />
-            {error}
-          </CardContent>
-        </Card>
+        <StatusAlert>{error}</StatusAlert>
       ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>项目列表</CardTitle>
           <Badge variant="outline">
             第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
@@ -250,7 +246,7 @@ export default async function ProjectsPage({
                   <th className="whitespace-nowrap px-4 py-3">设计师</th>
                   <th className="whitespace-nowrap px-4 py-3">工程负责人</th>
                   <th className="whitespace-nowrap px-4 py-3">开工日期</th>
-                  <th className="sticky right-0 z-10 whitespace-nowrap bg-muted px-4 py-3 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)]">
+                  <th className="sticky right-0 whitespace-nowrap bg-muted px-4 py-3 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
                     操作
                   </th>
                 </tr>
@@ -284,7 +280,7 @@ export default async function ProjectsPage({
                         <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.designer)}</td>
                         <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.supervisor)}</td>
                         <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{formatDate(project.start_date)}</td>
-                        <td className="sticky right-0 z-10 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted">
+                        <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted">
                           <ProjectRowActions project={project} />
                         </td>
                       </tr>

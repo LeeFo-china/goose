@@ -1,4 +1,4 @@
-import { ShieldAlert } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import {
   PermissionFilters,
   PermissionsPagination,
@@ -95,7 +95,7 @@ export default async function PermissionsPage({
   const { list, pagination, error } = await getPermissions(params);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">角色权限</h1>
@@ -113,16 +113,11 @@ export default async function PermissionsPage({
       </Card>
 
       {error ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="flex items-center gap-3 p-4 text-sm text-red-700">
-            <ShieldAlert className="h-4 w-4" />
-            {error}
-          </CardContent>
-        </Card>
+        <StatusAlert>{error}</StatusAlert>
       ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>权限列表</CardTitle>
           <Badge variant="outline">
             第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页

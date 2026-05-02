@@ -9,8 +9,17 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -375,19 +384,19 @@ function ProjectDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="max-h-[88vh] w-full max-w-[720px] overflow-hidden rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="border-b p-5">
-          <h2 className="text-base font-semibold">
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="max-h-[88vh] max-w-[720px] overflow-hidden p-0">
+        <DialogHeader className="border-b p-5">
+          <DialogTitle>
             {mode === "create" ? "新增项目" : "编辑项目"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          </DialogTitle>
+          <DialogDescription>
             维护项目基础档案、客户、设计师、工程负责人和展示状态。
-          </p>
-        </div>
-        <form className="max-h-[calc(88vh-82px)] space-y-4 overflow-y-auto p-5" onSubmit={submit}>
+          </DialogDescription>
+        </DialogHeader>
+        <form className="flex max-h-[calc(88vh-82px)] flex-col gap-4 overflow-y-auto p-5" onSubmit={submit}>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
+            <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-name`}>项目名称</Label>
               <Input
                 id={`${mode}-project-name`}
@@ -400,7 +409,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-status`}>状态</Label>
               <select
                 id={`${mode}-project-status`}
@@ -417,7 +426,7 @@ function ProjectDialog({
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-visibility`}>展示状态</Label>
               <select
                 id={`${mode}-project-visibility`}
@@ -434,7 +443,7 @@ function ProjectDialog({
                 ))}
               </select>
             </div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-customer`}>客户</Label>
               <OptionSelect
                 id={`${mode}-project-customer`}
@@ -448,7 +457,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-designer`}>设计师</Label>
               <OptionSelect
                 id={`${mode}-project-designer`}
@@ -462,7 +471,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-supervisor`}>工程负责人</Label>
               <OptionSelect
                 id={`${mode}-project-supervisor`}
@@ -476,7 +485,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-budget`}>预算</Label>
               <Input
                 id={`${mode}-project-budget`}
@@ -491,7 +500,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-signed-amount`}>签约金额</Label>
               <Input
                 id={`${mode}-project-signed-amount`}
@@ -506,7 +515,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-start-date`}>开工日期</Label>
               <Input
                 id={`${mode}-project-start-date`}
@@ -519,7 +528,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-tags`}>风格标签</Label>
               <Input
                 id={`${mode}-project-tags`}
@@ -532,7 +541,7 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-address`}>项目地址</Label>
               <textarea
                 id={`${mode}-project-address`}
@@ -547,27 +556,23 @@ function ProjectDialog({
             </div>
           </div>
           {options.error ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              {options.error}
-            </div>
+            <StatusAlert tone="warning">{options.error}</StatusAlert>
           ) : null}
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <div className="flex justify-end gap-2 border-t pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={pending}>
               取消
             </Button>
             <Button type="submit" disabled={pending || options.loading}>
-              {pending ? <Loader2 className="animate-spin" /> : null}
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {mode === "create" ? "创建项目" : "保存修改"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -579,16 +584,16 @@ function ProjectDetailDialog({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="max-h-[88vh] w-full max-w-[860px] overflow-hidden rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="flex items-start justify-between gap-4 border-b p-5">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[88vh] max-w-[860px] overflow-hidden p-0">
+        <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
-            <h2 className="text-base font-semibold">{project.name}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{project.id}</p>
+            <DialogTitle>{project.name}</DialogTitle>
+            <DialogDescription>{project.id}</DialogDescription>
           </div>
           <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
-        </div>
-        <div className="max-h-[calc(88vh-82px)] space-y-5 overflow-y-auto p-5">
+        </DialogHeader>
+        <div className="flex max-h-[calc(88vh-82px)] flex-col gap-5 overflow-y-auto p-5">
           <div className="grid gap-3 md:grid-cols-4">
             <InfoItem label="客户" value={customerName(project.customer)} />
             <InfoItem label="房产" value={propertyLabel(project.property)} />
@@ -628,8 +633,8 @@ function ProjectDetailDialog({
             </div>
           </section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -714,7 +719,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
       />
       {detail ? <ProjectDetailDialog project={detail} onClose={() => setDetail(null)} /> : null}
       {error ? (
-        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm">
+        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}
         </div>
       ) : null}

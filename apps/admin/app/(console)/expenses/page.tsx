@@ -1,4 +1,5 @@
-import { CircleDollarSign, Clock3, ShieldAlert, UserRound } from "lucide-react";
+import { CircleDollarSign, Clock3, UserRound } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import {
   ExpenseFilters,
   ExpensesPagination,
@@ -113,7 +114,7 @@ export default async function ExpensesPage({
   const totalAmount = list.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">费用审批</h1>
@@ -126,8 +127,8 @@ export default async function ExpensesPage({
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <CircleDollarSign className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <CircleDollarSign className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页金额</div>
@@ -137,8 +138,8 @@ export default async function ExpensesPage({
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-50 text-amber-700">
-              <Clock3 className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+              <Clock3 className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页审批中</div>
@@ -148,8 +149,8 @@ export default async function ExpensesPage({
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-              <UserRound className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <UserRound className="size-5" />
             </div>
             <div>
               <div className="text-sm text-muted-foreground">本页待打款</div>
@@ -171,16 +172,11 @@ export default async function ExpensesPage({
       </Card>
 
       {error ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="flex items-center gap-3 p-4 text-sm text-red-700">
-            <ShieldAlert className="h-4 w-4" />
-            {error}
-          </CardContent>
-        </Card>
+        <StatusAlert>{error}</StatusAlert>
       ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>费用申请列表</CardTitle>
           <Badge variant="outline">
             第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页

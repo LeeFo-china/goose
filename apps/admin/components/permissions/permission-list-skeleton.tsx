@@ -2,14 +2,15 @@ import { Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function SkeletonBlock({ className }: { className: string }) {
-  return <div className={["animate-pulse rounded-md bg-muted", className].join(" ")} />;
+  return <Skeleton className={className} />;
 }
 
 export function PermissionListSkeleton() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-live="polite">
+    <div className="flex flex-col gap-5" aria-busy="true" aria-live="polite">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">角色权限</h1>
@@ -29,7 +30,7 @@ export function PermissionListSkeleton() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>权限列表</CardTitle>
           <Badge variant="outline">加载中</Badge>
         </CardHeader>
@@ -50,7 +51,7 @@ export function PermissionListSkeleton() {
                 {Array.from({ length: 8 }).map((_, index) => (
                   <tr key={index} className="border-t">
                     <td className="px-5 py-4">
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <SkeletonBlock className="h-4 w-28" />
                         <SkeletonBlock className="h-3 w-52" />
                       </div>

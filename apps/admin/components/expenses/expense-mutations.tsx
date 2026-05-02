@@ -14,8 +14,18 @@ import {
   WalletCards,
   XCircle,
 } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldError,
@@ -129,6 +139,10 @@ const settlementMethodOptions = [
   ["alipay", "支付宝"],
   ["cash", "现金"],
 ] as const;
+const settlementMethodSelectOptions = settlementMethodOptions.map(([value, label]) => ({
+  value,
+  label,
+}));
 
 const PayFormSchema = z.object({
   payee_bank: z.string(),
@@ -146,8 +160,6 @@ const PayFormSchema = z.object({
 
 type PayFormValues = z.infer<typeof PayFormSchema>;
 
-const SELECT_CLASS_NAME =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const EVIDENCE_COMPRESS_THRESHOLD = 1.5 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 9;
 
@@ -334,18 +346,18 @@ function DetailDialog({
   const settlement = relationOne(expense.settlement);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="max-h-[88vh] w-full max-w-[920px] overflow-hidden rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="flex items-start justify-between gap-4 border-b p-5">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[88vh] max-w-[920px] overflow-hidden p-0">
+        <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
-            <h2 className="text-base font-semibold">{expense.title || "费用申请详情"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <DialogTitle>{expense.title || "费用申请详情"}</DialogTitle>
+            <DialogDescription>
               {expense.request_no || expense.id} · {personName(expense.employee)}
-            </p>
+            </DialogDescription>
           </div>
           <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
-        </div>
-        <div className="max-h-[calc(88vh-82px)] space-y-5 overflow-y-auto p-5">
+        </DialogHeader>
+        <div className="flex max-h-[calc(88vh-82px)] flex-col gap-5 overflow-y-auto p-5">
           <div className="grid gap-3 md:grid-cols-4">
             <InfoItem label="金额" value={`¥${formatMoney(expense.total_amount)}`} />
             <InfoItem label="模式" value={modeLabel[expense.mode] || expense.mode} />
@@ -418,7 +430,7 @@ function DetailDialog({
 
           <section>
             <h3 className="mb-3 text-sm font-semibold">审批记录</h3>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {(expense.approvals || []).map((item) => (
                 <div key={item.id} className="rounded-md border p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
@@ -452,8 +464,8 @@ function DetailDialog({
             </section>
           ) : null}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -576,15 +588,15 @@ function PayDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="w-full max-w-[560px] rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="border-b p-5">
-          <h2 className="text-base font-semibold">登记打款</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>登记打款</DialogTitle>
+          <DialogDescription>
             金额必须等于申请总额 ¥{formatMoney(expense.total_amount)}，打款凭证至少 1 张。
-          </p>
-        </div>
-        <form className="space-y-4 p-5" onSubmit={form.handleSubmit(submit)}>
+          </DialogDescription>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>收款人</FieldLabel>
@@ -598,18 +610,14 @@ function PayDialog({
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor="method">打款方式</FieldLabel>
-                  <select
+                  <FormSelect
                     id="method"
                     value={field.value}
                     disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                    className={SELECT_CLASS_NAME}
+                    invalid={fieldState.invalid}
+                    options={settlementMethodSelectOptions}
                     onChange={field.onChange}
-                  >
-                    {settlementMethodOptions.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
+                  />
                   <FieldError errors={[fieldState.error]} />
                 </Field>
               )}
@@ -759,22 +767,20 @@ function PayDialog({
             />
           </FieldGroup>
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <div className="flex justify-end gap-2 border-t pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={pending || uploading}>
               取消
             </Button>
             <Button type="submit" disabled={pending || uploading}>
-              {pending || uploading ? <Loader2 className="animate-spin" /> : <WalletCards />}
+              {pending || uploading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <WalletCards data-icon="inline-start" />}
               确认打款
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -928,7 +934,7 @@ export function ExpenseRowActions({
         />
       ) : null}
       {error ? (
-        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm">
+        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}
         </div>
       ) : null}

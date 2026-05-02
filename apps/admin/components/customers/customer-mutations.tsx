@@ -6,8 +6,18 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Edit3, Eye, Loader2, Plus, Trash2 } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldError,
@@ -152,20 +162,17 @@ function SelectField({
   onChange: (value: string) => void;
 }) {
   return (
-    <select
+    <FormSelect
       id={id}
       value={value}
       disabled={disabled}
-      className={SELECT_CLASS_NAME}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {placeholder ? <option value="">{placeholder}</option> : null}
-      {options.map(([optionValue, label]) => (
-        <option key={optionValue} value={optionValue}>
-          {label}
-        </option>
-      ))}
-    </select>
+      placeholder={placeholder}
+      options={options.map(([optionValue, label]) => ({
+        value: optionValue,
+        label,
+      }))}
+      onChange={onChange}
+    />
   );
 }
 
@@ -305,8 +312,6 @@ function CustomerDialog({
     if (open) form.reset(defaults);
   }, [open, defaults, form]);
 
-  if (!open) return null;
-
   function close() {
     if (pending) return;
     setError("");
@@ -358,17 +363,17 @@ function CustomerDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="max-h-[88vh] w-full max-w-[720px] overflow-hidden rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="border-b p-5">
-          <h2 className="text-base font-semibold">
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="max-h-[88vh] max-w-[720px] overflow-hidden p-0">
+        <DialogHeader className="border-b p-5">
+          <DialogTitle>
             {mode === "create" ? "新增客户" : "编辑客户"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          </DialogTitle>
+          <DialogDescription>
             维护客户基础资料、负责人、来源状态和主房产信息。
-          </p>
-        </div>
-        <form className="max-h-[calc(88vh-82px)] space-y-4 overflow-y-auto p-5" onSubmit={form.handleSubmit(submit)}>
+          </DialogDescription>
+        </DialogHeader>
+        <form className="flex max-h-[calc(88vh-82px)] flex-col gap-4 overflow-y-auto p-5" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Controller
               name="name"
@@ -551,27 +556,23 @@ function CustomerDialog({
             />
           </FieldGroup>
           {employees.error ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              {employees.error}
-            </div>
+            <StatusAlert tone="warning">{employees.error}</StatusAlert>
           ) : null}
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <div className="flex justify-end gap-2 border-t pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={pending}>
               取消
             </Button>
             <Button type="submit" disabled={pending || employees.loading}>
-              {pending ? <Loader2 className="animate-spin" /> : null}
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {mode === "create" ? "创建客户" : "保存修改"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -583,16 +584,16 @@ function CustomerDetailDialog({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="max-h-[88vh] w-full max-w-[820px] overflow-hidden rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="flex items-start justify-between gap-4 border-b p-5">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[88vh] max-w-[820px] overflow-hidden p-0">
+        <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
-            <h2 className="text-base font-semibold">{customer.name || "未命名客户"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{customer.id}</p>
+            <DialogTitle>{customer.name || "未命名客户"}</DialogTitle>
+            <DialogDescription>{customer.id}</DialogDescription>
           </div>
           <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
-        </div>
-        <div className="max-h-[calc(88vh-82px)] space-y-5 overflow-y-auto p-5">
+        </DialogHeader>
+        <div className="flex max-h-[calc(88vh-82px)] flex-col gap-5 overflow-y-auto p-5">
           <div className="grid gap-3 md:grid-cols-4">
             <InfoItem label="手机号" value={customer.phone || customer.phone_masked || "-"} />
             <InfoItem label="负责人" value={ownerName(customer.owner)} />
@@ -607,7 +608,7 @@ function CustomerDetailDialog({
             <h3 className="mb-3 text-sm font-semibold">房产列表</h3>
             <div className="grid gap-2 md:grid-cols-2">
               {(customer.properties || []).map((property) => (
-                <div key={property.id} className="rounded-md border p-3">
+              <div key={property.id} className="rounded-md border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium">{property.community || "-"}</div>
                     {property.is_primary ? <Badge variant="success">主房产</Badge> : null}
@@ -629,7 +630,7 @@ function CustomerDetailDialog({
           {customer.douyin_screenshot_images?.length ? (
             <section>
               <h3 className="mb-3 text-sm font-semibold">抖音截图</h3>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 {customer.douyin_screenshot_images.map((image) => (
                   <a
                     key={image}
@@ -645,8 +646,8 @@ function CustomerDetailDialog({
             </section>
           ) : null}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -731,7 +732,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
       />
       {detail ? <CustomerDetailDialog customer={detail} onClose={() => setDetail(null)} /> : null}
       {error ? (
-        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm">
+        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}
         </div>
       ) : null}

@@ -14,6 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 
 declare module "@tanstack/react-table" {
@@ -86,9 +92,14 @@ export function DataTable<TData, TValue>({
             <TableRow>
               <TableCell
                 colSpan={columns.length}
-                className="h-24 text-center text-muted-foreground"
+                className="h-32"
               >
-                {emptyText}
+                <Empty className="border-0 p-4">
+                  <EmptyHeader>
+                    <EmptyTitle>暂无数据</EmptyTitle>
+                    <EmptyDescription>{emptyText}</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               </TableCell>
             </TableRow>
           )}

@@ -6,7 +6,7 @@ function FieldGroup({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("space-y-4", className)} {...props} />;
+  return <div className={cn("flex flex-col gap-4", className)} {...props} />;
 }
 
 function Field({
@@ -16,7 +16,7 @@ function Field({
   return (
     <div
       className={cn(
-        "space-y-2 data-[invalid=true]:[&_input]:border-destructive data-[invalid=true]:[&_textarea]:border-destructive data-[invalid=true]:[&_select]:border-destructive",
+        "flex flex-col gap-2 data-[invalid=true]:[&_input]:border-destructive data-[invalid=true]:[&_textarea]:border-destructive data-[invalid=true]:[&_button[role=combobox]]:border-destructive data-[invalid=true]:[&_select]:border-destructive",
         className,
       )}
       {...props}

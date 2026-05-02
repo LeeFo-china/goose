@@ -1,11 +1,25 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Loader2, Plus, Trash2, UserRound } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 type EmployeeStatus = "pending" | "active" | "suspended" | "leaved";
 
@@ -25,6 +39,11 @@ const statusOptions: Array<{ label: string; value: EmployeeStatus }> = [
   { label: "已封禁", value: "suspended" },
   { label: "已离职", value: "leaved" },
 ];
+
+const employeeStatusSelectOptions = statusOptions.map((item) => ({
+  value: item.value,
+  label: item.label,
+}));
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -82,10 +101,11 @@ function EmployeeDialog({
     avatar: employee?.avatar || "",
     status: (employee?.status || "active") as EmployeeStatus,
   }), [employee]);
+  const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
 
-  if (!open) {
-    return null;
-  }
+  useEffect(() => {
+    if (open) setStatus(defaults.status);
+  }, [defaults.status, open]);
 
   function close() {
     if (pending) return;
@@ -125,24 +145,25 @@ function EmployeeDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="w-full max-w-[480px] rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="border-b p-5">
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="max-w-[480px]">
+        <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <UserRound className="h-4 w-4" />
+            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <UserRound className="size-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold">{title}</h2>
-              <p className="text-sm text-muted-foreground">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>
                 {mode === "create" ? "创建可登录后台或小程序员工身份的基础档案。" : "调整员工基础档案和在职状态。"}
-              </p>
+              </DialogDescription>
             </div>
           </div>
-        </div>
-        <form className="space-y-4 p-5" onSubmit={submit}>
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-employee-name`}>姓名</Label>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-name`}>姓名</FieldLabel>
             <Input
               id={`${mode}-employee-name`}
               name="name"
@@ -153,9 +174,9 @@ function EmployeeDialog({
               placeholder="请输入员工姓名"
               disabled={pending}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-employee-phone`}>手机号</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-phone`}>手机号</FieldLabel>
             <Input
               id={`${mode}-employee-phone`}
               name="phone"
@@ -166,25 +187,20 @@ function EmployeeDialog({
               placeholder="请输入 11 位手机号"
               disabled={pending}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-employee-status`}>状态</Label>
-            <select
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-status`}>状态</FieldLabel>
+              <input type="hidden" name="status" value={status} />
+              <FormSelect
               id={`${mode}-employee-status`}
-              name="status"
-              defaultValue={defaults.status}
               disabled={pending}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {statusOptions.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-employee-avatar`}>头像地址</Label>
+                value={status}
+                options={employeeStatusSelectOptions}
+                onChange={(value) => setStatus(value as EmployeeStatus)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-avatar`}>头像地址</FieldLabel>
             <Input
               id={`${mode}-employee-avatar`}
               name="avatar"
@@ -192,24 +208,23 @@ function EmployeeDialog({
               placeholder="可留空"
               disabled={pending}
             />
-          </div>
+            </Field>
+          </FieldGroup>
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <div className="flex justify-end gap-2 border-t pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={pending}>
               取消
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : null}
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {submitText}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -286,7 +301,7 @@ export function EmployeeRowActions({
         onOpenChange={setEditOpen}
       />
       {error ? (
-        <div className="absolute right-5 mt-10 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm">
+        <div className="absolute right-5 mt-10 rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}
         </div>
       ) : null}

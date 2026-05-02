@@ -6,7 +6,17 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Edit3, Loader2, Plus, Power, RotateCcw, Shield } from "lucide-react";
+import { FormSelect, type SelectOption } from "@/components/admin/form-select";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldError,
@@ -28,9 +38,6 @@ export type PermissionRecord = {
 };
 
 type PermissionMode = "create" | "edit";
-
-const SELECT_CLASS_NAME =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 const PERMISSION_CODE_VALUES = [
   "dashboard.read",
@@ -122,6 +129,26 @@ const PERMISSION_FIELD_OPTIONS = PERMISSION_CODE_VALUES.map(inferPermissionField
 const PERMISSION_MODULE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.module));
 const PERMISSION_RESOURCE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.resource));
 const PERMISSION_ACTION_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.action));
+const PERMISSION_CODE_OPTIONS: SelectOption[] = PERMISSION_CODE_VALUES.map((code) => ({
+  value: code,
+  label: `${code} - ${PermissionCodeConfig[code]?.label || code}`,
+}));
+const PERMISSION_MODULE_SELECT_OPTIONS: SelectOption[] = PERMISSION_MODULE_OPTIONS.map((value) => ({
+  value,
+  label: value,
+}));
+const PERMISSION_RESOURCE_SELECT_OPTIONS: SelectOption[] = PERMISSION_RESOURCE_OPTIONS.map((value) => ({
+  value,
+  label: value,
+}));
+const PERMISSION_ACTION_SELECT_OPTIONS: SelectOption[] = PERMISSION_ACTION_OPTIONS.map((value) => ({
+  value,
+  label: value,
+}));
+const PERMISSION_STATUS_OPTIONS: SelectOption[] = [
+  { value: "active", label: "启用" },
+  { value: "inactive", label: "停用" },
+];
 
 const PermissionFormSchema = z.object({
   code: z.enum(PERMISSION_CODE_VALUES),
@@ -148,25 +175,18 @@ function SelectField({
 }: {
   id: string;
   value: string;
-  options: string[];
+  options: SelectOption[];
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
   return (
-    <select
+    <FormSelect
       id={id}
       value={value}
       disabled={disabled}
-      required
-      className={SELECT_CLASS_NAME}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      options={options}
+      onChange={onChange}
+    />
   );
 }
 
@@ -240,8 +260,6 @@ function PermissionDialog({
     if (open) form.reset(defaults);
   }, [defaults, form, open]);
 
-  if (!open) return null;
-
   function close() {
     if (pending) return;
     setError("");
@@ -276,22 +294,22 @@ function PermissionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="w-full max-w-[560px] rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
-        <div className="border-b p-5">
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="max-w-[560px]">
+        <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <Shield className="h-4 w-4" />
+            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <Shield className="size-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold">{title}</h2>
-              <p className="text-sm text-muted-foreground">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>
                 权限编码需存在于后端权限枚举，模块、资源、动作用于后台筛选和维护。
-              </p>
+              </DialogDescription>
             </div>
           </div>
-        </div>
-        <form className="space-y-4 p-5" onSubmit={form.handleSubmit(submit)}>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Controller
               name="code"
@@ -299,15 +317,13 @@ function PermissionDialog({
               render={({ field, fieldState }) => (
                 <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor={`${mode}-permission-code`}>权限编码</FieldLabel>
-                  <select
+                  <FormSelect
                     id={`${mode}-permission-code`}
                     value={field.value}
                     disabled={pending}
-                    required
-                    aria-invalid={fieldState.invalid}
-                    className={SELECT_CLASS_NAME}
-                    onChange={(event) => {
-                      const code = event.target.value;
+                    invalid={fieldState.invalid}
+                    options={PERMISSION_CODE_OPTIONS}
+                    onChange={(code) => {
                       if (!isPermissionCodeValue(code)) return;
                       const next = inferPermissionFields(code);
                       form.setValue("code", next.code, { shouldValidate: true });
@@ -316,13 +332,7 @@ function PermissionDialog({
                       form.setValue("resource", next.resource, { shouldValidate: true });
                       form.setValue("action", next.action, { shouldValidate: true });
                     }}
-                  >
-                    {PERMISSION_CODE_VALUES.map((code) => (
-                      <option key={code} value={code}>
-                        {code} - {PermissionCodeConfig[code]?.label || code}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <FieldError errors={[fieldState.error]} />
                 </Field>
               )}
@@ -354,7 +364,7 @@ function PermissionDialog({
                     id={`${mode}-permission-module`}
                     disabled={pending}
                     value={field.value}
-                    options={PERMISSION_MODULE_OPTIONS}
+                    options={PERMISSION_MODULE_SELECT_OPTIONS}
                     onChange={field.onChange}
                   />
                   <FieldError errors={[fieldState.error]} />
@@ -371,7 +381,7 @@ function PermissionDialog({
                     id={`${mode}-permission-resource`}
                     disabled={pending}
                     value={field.value}
-                    options={PERMISSION_RESOURCE_OPTIONS}
+                    options={PERMISSION_RESOURCE_SELECT_OPTIONS}
                     onChange={field.onChange}
                   />
                   <FieldError errors={[fieldState.error]} />
@@ -388,7 +398,7 @@ function PermissionDialog({
                     id={`${mode}-permission-action`}
                     disabled={pending}
                     value={field.value}
-                    options={PERMISSION_ACTION_OPTIONS}
+                    options={PERMISSION_ACTION_SELECT_OPTIONS}
                     onChange={field.onChange}
                   />
                   <FieldError errors={[fieldState.error]} />
@@ -401,17 +411,14 @@ function PermissionDialog({
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor={`${mode}-permission-status`}>状态</FieldLabel>
-                  <select
+                  <FormSelect
                     id={`${mode}-permission-status`}
                     value={field.value}
                     disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                    className={SELECT_CLASS_NAME}
+                    invalid={fieldState.invalid}
+                    options={PERMISSION_STATUS_OPTIONS}
                     onChange={field.onChange}
-                  >
-                    <option value="active">启用</option>
-                    <option value="inactive">停用</option>
-                  </select>
+                  />
                   <FieldError errors={[fieldState.error]} />
                 </Field>
               )}
@@ -435,22 +442,20 @@ function PermissionDialog({
             />
           </FieldGroup>
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
-          <div className="flex justify-end gap-2 border-t pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={pending}>
               取消
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : null}
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {submitText}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -540,7 +545,7 @@ export function PermissionRowActions({
         onOpenChange={setEditOpen}
       />
       {error ? (
-        <div className="absolute right-5 mt-10 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm">
+        <div className="absolute right-5 mt-10 rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}
         </div>
       ) : null}

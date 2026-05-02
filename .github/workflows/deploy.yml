@@ -24,8 +24,13 @@ jobs:
 
           export PATH="$HOME/.bun/bin:$PATH"
 
+          if ! command -v pnpm >/dev/null 2>&1 && command -v corepack >/dev/null 2>&1; then
+            corepack enable
+          fi
+
           echo "NODE_BIN=$(command -v node)" >> "$GITHUB_ENV"
           echo "BUN_BIN=$(command -v bun)" >> "$GITHUB_ENV"
+          echo "PNPM_BIN=$(command -v pnpm)" >> "$GITHUB_ENV"
           echo "PM2_BIN=$(command -v pm2)" >> "$GITHUB_ENV"
 
       - name: Deploy
@@ -47,12 +52,14 @@ jobs:
 
           test -n "${NODE_BIN:-}"
           test -n "${BUN_BIN:-}"
+          test -n "${PNPM_BIN:-}"
           test -n "${PM2_BIN:-}"
 
           echo "Deploying to $GITHUB_WORKSPACE"
           whoami
           "$NODE_BIN" --version
           "$BUN_BIN" --version
+          "$PNPM_BIN" --version
           "$PM2_BIN" --version
 
           ENV_CANDIDATES=(
@@ -71,6 +78,7 @@ jobs:
           if [ -n "$ENV_SOURCE" ]; then
             echo "Using env file: $ENV_SOURCE"
             cp "$ENV_SOURCE" .env
+            cp "$ENV_SOURCE" apps/admin/.env.production
           else
             echo ".env file not found, skipping cp"
           fi
@@ -81,8 +89,16 @@ jobs:
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 
+          "$PNPM_BIN" --dir apps/admin install --frozen-lockfile
+          "$PNPM_BIN" --dir apps/admin build
+
+          "$PM2_BIN" reload gooes-admin --update-env || "$PM2_BIN" start "$PNPM_BIN" --name gooes-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
+          "$PM2_BIN" save
+          "$PM2_BIN" status gooes-admin
+
           if command -v ss >/dev/null 2>&1; then
             ss -lntp | grep ':3000\b' || true
+            ss -lntp | grep ':3010\b' || true
           fi
 
           HEALTH_OK=0
@@ -102,3 +118,21 @@ jobs:
           fi
 
           cat /tmp/goose-health.txt
+
+          ADMIN_HEALTH_OK=0
+          for attempt in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:3010/login >/tmp/gooes-admin-health.html; then
+              ADMIN_HEALTH_OK=1
+              break
+            fi
+            echo "Admin health check attempt $attempt failed, retrying..."
+            sleep 2
+          done
+
+          if [ "$ADMIN_HEALTH_OK" -ne 1 ]; then
+            echo "Admin health check failed after retries"
+            "$PM2_BIN" logs gooes-admin --lines 80 --nostream || true
+            exit 1
+          fi
+
+          echo "Admin health check passed"

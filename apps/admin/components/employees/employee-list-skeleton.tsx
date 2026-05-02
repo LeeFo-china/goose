@@ -3,21 +3,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 function SkeletonBlock({ className }: { className: string }) {
-  return (
-    <div
-      className={[
-        "animate-pulse rounded-md bg-muted",
-        className,
-      ].join(" ")}
-    />
-  );
+  return <Skeleton className={className} />;
 }
 
 export function EmployeeListSkeleton() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-live="polite">
+    <div className="flex flex-col gap-5" aria-busy="true" aria-live="polite">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">员工管理</h1>
@@ -38,20 +33,20 @@ export function EmployeeListSkeleton() {
               {["全部", "在职", "待入职", "已封禁", "已离职"].map((item, index) => (
                 <div
                   key={item}
-                  className={[
+                  className={cn(
                     "inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium",
                     index === 0
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-slate-700",
-                  ].join(" ")}
+                      : "border-border bg-background text-foreground",
+                  )}
                 >
                   {item}
                 </div>
               ))}
             </div>
-            <div className="flex w-full gap-2 xl:w-[360px]">
+          <div className="flex w-full gap-2 xl:w-[360px]">
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input disabled placeholder="搜索姓名或手机号" className="pl-9" />
               </div>
               <Button type="button" variant="outline" disabled>搜索</Button>
@@ -61,7 +56,7 @@ export function EmployeeListSkeleton() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>员工列表</CardTitle>
           <Badge variant="outline">加载中</Badge>
         </CardHeader>
@@ -84,8 +79,8 @@ export function EmployeeListSkeleton() {
                   <tr key={index} className="border-t">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <SkeletonBlock className="h-9 w-9" />
-                        <div className="space-y-2">
+                        <SkeletonBlock className="size-9" />
+                        <div className="flex flex-col gap-2">
                           <SkeletonBlock className="h-4 w-24" />
                           <SkeletonBlock className="h-3 w-56" />
                         </div>

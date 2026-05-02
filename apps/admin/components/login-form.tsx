@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -88,21 +89,22 @@ export function LoginForm() {
 
   return (
     <Card className="w-full max-w-[420px] border-slate-200 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
-      <CardHeader className="space-y-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <ShieldCheck className="h-5 w-5" />
+      <CardHeader className="gap-3">
+        <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <ShieldCheck className="size-5" />
         </div>
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <CardTitle className="text-xl">员工后台登录</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardDescription>
             使用已绑定员工档案的手机号进入管理后台。
-          </p>
+          </CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        <form className="space-y-4" onSubmit={login}>
-          <div className="space-y-2">
-            <Label htmlFor="phone">手机号</Label>
+        <form className="flex flex-col gap-4" onSubmit={login}>
+          <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="phone">手机号</FieldLabel>
             <Input
               id="phone"
               inputMode="tel"
@@ -112,9 +114,9 @@ export function LoginForm() {
               onChange={(event) => setPhone(event.target.value)}
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="code">验证码</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="code">验证码</FieldLabel>
             <div className="grid grid-cols-[1fr_112px] gap-2">
               <Input
                 id="code"
@@ -132,7 +134,7 @@ export function LoginForm() {
                 onClick={sendCode}
               >
                 {sending ? (
-                  <Loader2 className="animate-spin" />
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
                 ) : countdown > 0 ? (
                   `${countdown}s`
                 ) : (
@@ -140,19 +142,16 @@ export function LoginForm() {
                 )}
               </Button>
             </div>
-          </div>
+          </Field>
+          </FieldGroup>
           {error ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+            <StatusAlert>{error}</StatusAlert>
           ) : null}
           {message ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-              {message}
-            </div>
+            <StatusAlert tone="success">{message}</StatusAlert>
           ) : null}
           <Button className="w-full" type="submit" disabled={loggingIn}>
-            {loggingIn ? <Loader2 className="animate-spin" /> : null}
+            {loggingIn ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
             登录后台
           </Button>
         </form>

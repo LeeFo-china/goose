@@ -33,10 +33,10 @@ export function AdminShell({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r bg-card lg:block">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-card lg:block">
         <div className="flex h-16 items-center gap-3 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <ClipboardList className="h-5 w-5" />
+          <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <ClipboardList className="size-5" />
           </div>
           <div>
             <div className="text-sm font-semibold">固鹅后台</div>
@@ -44,21 +44,21 @@ export function AdminShell({
           </div>
         </div>
         <Separator />
-        <nav className="space-y-1 p-3">
+        <nav className="flex flex-col gap-1 p-3">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="size-4" />
               {item.label}
             </Link>
           ))}
         </nav>
       </aside>
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/92 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 flex h-16 items-center justify-between border-b bg-background/92 px-4 backdrop-blur md:px-6">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">
               {session.employee.name || "未命名员工"}

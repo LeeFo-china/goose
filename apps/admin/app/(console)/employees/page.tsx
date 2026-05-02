@@ -1,8 +1,8 @@
 import {
   BadgeCheck,
-  ShieldAlert,
   UserRound,
 } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import {
   EmployeeSearchForm,
   EmployeesPagination,
@@ -148,7 +148,7 @@ export default async function EmployeesPage({
   const { list, pagination, error } = await getEmployees(params);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">员工管理</h1>
@@ -173,16 +173,11 @@ export default async function EmployeesPage({
       </Card>
 
       {error ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="flex items-center gap-3 p-4 text-sm text-red-700">
-            <ShieldAlert className="h-4 w-4" />
-            {error}
-          </CardContent>
-        </Card>
+        <StatusAlert>{error}</StatusAlert>
       ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <CardTitle>员工列表</CardTitle>
           <Badge variant="outline">
             第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
@@ -214,8 +209,8 @@ export default async function EmployeesPage({
                       <tr key={employee.id} className="border-t transition-colors hover:bg-muted/40">
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                              <UserRound className="h-4 w-4" />
+                            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                              <UserRound className="size-4" />
                             </div>
                             <div className="min-w-0">
                               <div className="truncate font-medium">
@@ -234,7 +229,7 @@ export default async function EmployeesPage({
                         <td className="px-5 py-4">
                           {employee.user_id ? (
                             <Badge variant="success">
-                              <BadgeCheck className="mr-1 h-3 w-3" />
+                              <BadgeCheck className="size-3" />
                               已绑定
                             </Badge>
                           ) : (

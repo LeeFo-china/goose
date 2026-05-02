@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type EmployeeStatus = "pending" | "active" | "suspended" | "leaved";
 
@@ -71,15 +72,19 @@ export function EmployeesStatusFilters({
               status: item.value,
               keyword,
             }))}
-            className={[
-              "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-60",
-              active
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background text-slate-700 hover:bg-accent",
-            ].join(" ")}
+            className="contents"
           >
-            {pending && active ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {item.label}
+            <span
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors",
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-foreground hover:bg-accent",
+              )}
+            >
+              {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              {item.label}
+            </span>
           </button>
         );
       })}
@@ -109,7 +114,7 @@ export function EmployeeSearchForm({
   return (
     <form className="flex w-full gap-2 xl:w-[360px]" onSubmit={submit}>
       <div className="relative flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           name="keyword"
           defaultValue={keyword}
@@ -119,7 +124,7 @@ export function EmployeeSearchForm({
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
     </form>
@@ -151,7 +156,7 @@ export function EmployeesPagination({
           keyword,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" /> : <ChevronLeft />}
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
         上一页
       </Button>
       <Button
@@ -165,7 +170,7 @@ export function EmployeesPagination({
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
       </Button>
     </div>
   );

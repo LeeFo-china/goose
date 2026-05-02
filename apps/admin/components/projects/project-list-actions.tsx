@@ -97,7 +97,7 @@ export function ProjectFilters({
         ))}
       </select>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           name="keyword"
           defaultValue={keyword}
@@ -140,7 +140,7 @@ export function ProjectsPagination({
           keyword,
         }))}
       >
-        {pending ? <Loader2 className="animate-spin" /> : <ChevronLeft />}
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
         上一页
       </Button>
       <Button
@@ -155,7 +155,7 @@ export function ProjectsPagination({
         }))}
       >
         下一页
-        {pending ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
       </Button>
     </div>
   );
