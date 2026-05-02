@@ -87,7 +87,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
   }
 
   return (
-    <div className="grid gap-4 border-t px-5 py-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-start">
+    <div className="grid gap-4 border-t px-5 py-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-medium">{setting.name}</div>
@@ -147,7 +147,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
         {saved ? <StatusAlert tone="success">已保存</StatusAlert> : null}
       </div>
 
-      <div className="flex gap-2 lg:justify-end">
+      <div className="flex gap-2 lg:items-center lg:justify-end">
         <Button type="button" variant="outline" onClick={reset} disabled={pending || !dirty}>
           <RotateCcw data-icon="inline-start" />
           重置
