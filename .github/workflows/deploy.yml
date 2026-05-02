@@ -140,6 +140,7 @@ jobs:
             restore_admin_next
             exit 1
           fi
+          echo "Admin build verified: $(cat "$ADMIN_NEXT_DIR/BUILD_ID")"
 
           rm -rf "$ADMIN_NEXT_BACKUP"
 
