@@ -3,10 +3,8 @@ import {
   ExpenseFilters,
   ExpensesPagination,
 } from "@/components/expenses/expense-list-actions";
-import {
-  ExpenseRowActions,
-  type ExpenseRecord,
-} from "@/components/expenses/expense-mutations";
+import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
+import { ExpensesTable } from "@/components/expenses/expenses-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
@@ -32,42 +30,9 @@ type ExpensePageSearchParams = {
   keyword?: string;
 };
 
-const statusMeta: Record<string, {
-  label: string;
-  variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
-}> = {
-  draft: { label: "草稿", variant: "outline" },
-  pending: { label: "审批中", variant: "warning" },
-  approved: { label: "待打款", variant: "default" },
-  rejected: { label: "已驳回", variant: "danger" },
-  paid: { label: "已完成", variant: "success" },
-  cancelled: { label: "已撤回", variant: "secondary" },
-};
-
-const modeMeta: Record<string, string> = {
-  reimbursement: "员工报销",
-  advance: "预借款",
-  direct: "公司直付",
-  petty_cash: "备用金",
-};
-
-const stepMeta: Record<string, string> = {
-  draft: "草稿",
-  manager_review: "待主管审核",
-  finance_review: "待财务审核",
-  payment: "待打款",
-  done: "已完成",
-  cancelled: "已作废",
-};
-
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function relationOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
 }
 
 function formatMoney(value: number | string | null | undefined) {
@@ -76,32 +41,6 @@ function formatMoney(value: number | string | null | undefined) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
-function employeeName(expense: ExpenseRecord) {
-  const employee = relationOne(expense.employee);
-  return employee?.name || employee?.phone || "-";
-}
-
-function assigneeName(expense: ExpenseRecord) {
-  const assignee = relationOne(expense.assignee);
-  return assignee?.name || assignee?.phone || "-";
-}
-
-function projectName(expense: ExpenseRecord) {
-  const project = relationOne(expense.project);
-  return project?.name || "-";
 }
 
 async function getExpenses(params: ExpensePageSearchParams) {
@@ -248,76 +187,7 @@ export default async function ExpensesPage({
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] border-t text-sm">
-              <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">申请</th>
-                  <th className="px-5 py-3">申请人</th>
-                  <th className="px-5 py-3">项目</th>
-                  <th className="px-5 py-3">金额</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3">当前节点</th>
-                  <th className="px-5 py-3">处理人</th>
-                  <th className="px-5 py-3">创建时间</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.length > 0 ? (
-                  list.map((expense) => {
-                    const meta = statusMeta[expense.status || ""] || {
-                      label: expense.status || "未知",
-                      variant: "outline" as const,
-                    };
-
-                    return (
-                      <tr key={expense.id} className="border-t transition-colors hover:bg-muted/40">
-                        <td className="px-5 py-4">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">
-                              {expense.title || "未命名费用申请"}
-                            </div>
-                            <div className="truncate text-xs text-muted-foreground">
-                              {expense.request_no || expense.id}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {modeMeta[expense.mode] || expense.mode}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">{employeeName(expense)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{projectName(expense)}</td>
-                        <td className="px-5 py-4 font-medium">¥{formatMoney(expense.total_amount)}</td>
-                        <td className="px-5 py-4">
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {stepMeta[expense.current_step] || expense.current_step || "-"}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">{assigneeName(expense)}</td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {formatDate(expense.created_at)}
-                        </td>
-                        <td className="relative px-5 py-4">
-                          <ExpenseRowActions
-                            expense={expense}
-                            currentEmployeeId={currentEmployeeId}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td className="px-5 py-12 text-center text-muted-foreground" colSpan={9}>
-                      没有符合条件的费用申请
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <ExpensesTable expenses={list} currentEmployeeId={currentEmployeeId} />
         </CardContent>
       </Card>
 

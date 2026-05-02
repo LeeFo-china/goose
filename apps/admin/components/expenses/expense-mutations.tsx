@@ -1,7 +1,10 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   CheckCircle2,
   Eye,
@@ -13,8 +16,14 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type Person = {
   id?: string | null;
@@ -107,12 +116,38 @@ export type ExpenseRecord = {
   approval_chain?: ApprovalChainRecord[];
 };
 
+const SETTLEMENT_METHOD_VALUES = [
+  "bank_transfer",
+  "wechat",
+  "alipay",
+  "cash",
+] as const;
+
 const settlementMethodOptions = [
   ["bank_transfer", "银行转账"],
   ["wechat", "微信转账"],
   ["alipay", "支付宝"],
   ["cash", "现金"],
 ] as const;
+
+const PayFormSchema = z.object({
+  payee_name: z.string().trim().min(1, "请输入收款人"),
+  payee_bank: z.string(),
+  payee_account: z.string(),
+  method: z.enum(SETTLEMENT_METHOD_VALUES),
+  paid_amount: z.string().refine((value) => {
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount > 0;
+  }, "请输入有效打款金额"),
+  paid_at: z.string().min(1, "请选择打款时间"),
+  evidence_images: z.string().trim().min(1, "请填写至少 1 个打款凭证 URL"),
+  remark: z.string(),
+});
+
+type PayFormValues = z.infer<typeof PayFormSchema>;
+
+const SELECT_CLASS_NAME =
+  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 const modeLabel: Record<string, string> = {
   reimbursement: "员工报销",
@@ -346,24 +381,42 @@ function PayDialog({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const defaults = useMemo<PayFormValues>(() => ({
+    payee_name: "",
+    payee_bank: "",
+    payee_account: "",
+    method: "bank_transfer",
+    paid_amount: String(expense.total_amount || ""),
+    paid_at: new Date().toISOString().slice(0, 16),
+    evidence_images: "",
+    remark: "",
+  }), [expense.total_amount]);
+  const form = useForm<PayFormValues>({
+    resolver: zodResolver(PayFormSchema),
+    defaultValues: defaults,
+  });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const evidenceImages = String(formData.get("evidence_images") || "")
+  function submit(values: PayFormValues) {
+    const paidAmount = Number(values.paid_amount);
+    if (paidAmount.toFixed(2) !== Number(expense.total_amount || 0).toFixed(2)) {
+      setError(`打款金额必须等于申请总额 ¥${formatMoney(expense.total_amount)}`);
+      return;
+    }
+
+    const evidenceImages = values.evidence_images
       .split(/[\n,]/)
       .map((item) => item.trim())
       .filter(Boolean);
     const payload = {
-      payee_name: String(formData.get("payee_name") || "").trim(),
-      payee_bank: String(formData.get("payee_bank") || "").trim() || null,
-      payee_account: String(formData.get("payee_account") || "").trim() || null,
-      method: String(formData.get("method") || "bank_transfer"),
-      paid_amount: Number(formData.get("paid_amount") || expense.total_amount),
-      paid_at: new Date(String(formData.get("paid_at") || new Date().toISOString())).toISOString(),
+      payee_name: values.payee_name.trim(),
+      payee_bank: values.payee_bank.trim() || null,
+      payee_account: values.payee_account.trim() || null,
+      method: values.method,
+      paid_amount: paidAmount,
+      paid_at: new Date(values.paid_at).toISOString(),
       paid_by: currentEmployeeId,
       evidence_images: evidenceImages,
-      remark: String(formData.get("remark") || "").trim() || null,
+      remark: values.remark.trim() || null,
     };
 
     setError("");
@@ -390,77 +443,148 @@ function PayDialog({
             金额必须等于申请总额 ¥{formatMoney(expense.total_amount)}，打款凭证至少 1 张。
           </p>
         </div>
-        <form className="space-y-4 p-5" onSubmit={submit}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="payee_name">收款人</Label>
-              <Input id="payee_name" name="payee_name" disabled={pending} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="method">打款方式</Label>
-              <select
-                id="method"
-                name="method"
-                disabled={pending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {settlementMethodOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="paid_amount">打款金额</Label>
-              <Input
-                id="paid_amount"
-                name="paid_amount"
-                type="number"
-                step="0.01"
-                defaultValue={expense.total_amount}
-                disabled={pending}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="paid_at">打款时间</Label>
-              <Input
-                id="paid_at"
-                name="paid_at"
-                type="datetime-local"
-                defaultValue={new Date().toISOString().slice(0, 16)}
-                disabled={pending}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="payee_bank">收款银行</Label>
-              <Input id="payee_bank" name="payee_bank" disabled={pending} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="payee_account">收款账号</Label>
-              <Input id="payee_account" name="payee_account" disabled={pending} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="evidence_images">打款凭证 URL</Label>
-              <textarea
-                id="evidence_images"
-                name="evidence_images"
-                placeholder="每行一个图片地址"
-                disabled={pending}
-                required
-                className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="remark">备注</Label>
-              <textarea
-                id="remark"
-                name="remark"
-                disabled={pending}
-                className="min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-          </div>
+        <form className="space-y-4 p-5" onSubmit={form.handleSubmit(submit)}>
+          <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <Controller
+              name="payee_name"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="payee_name">收款人</FieldLabel>
+                  <Input
+                    {...field}
+                    id="payee_name"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="method"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="method">打款方式</FieldLabel>
+                  <select
+                    id="method"
+                    value={field.value}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                    className={SELECT_CLASS_NAME}
+                    onChange={field.onChange}
+                  >
+                    {settlementMethodOptions.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="paid_amount"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="paid_amount">打款金额</FieldLabel>
+                  <Input
+                    {...field}
+                    id="paid_amount"
+                    type="number"
+                    step="0.01"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="paid_at"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="paid_at">打款时间</FieldLabel>
+                  <Input
+                    {...field}
+                    id="paid_at"
+                    type="datetime-local"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="payee_bank"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="payee_bank">收款银行</FieldLabel>
+                  <Input
+                    {...field}
+                    id="payee_bank"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="payee_account"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="payee_account">收款账号</FieldLabel>
+                  <Input
+                    {...field}
+                    id="payee_account"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="evidence_images"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="evidence_images">打款凭证 URL</FieldLabel>
+                  <Textarea
+                    {...field}
+                    id="evidence_images"
+                    placeholder="每行一个图片地址"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="remark"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="remark">备注</FieldLabel>
+                  <Textarea
+                    {...field}
+                    id="remark"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                    className="min-h-[72px]"
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+          </FieldGroup>
           {error ? (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -577,7 +701,7 @@ export function ExpenseRowActions({
   }
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex min-w-[236px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情
