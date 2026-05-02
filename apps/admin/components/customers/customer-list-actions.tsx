@@ -9,7 +9,11 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 
 type Pagination = {
   page: number;
@@ -95,15 +99,16 @@ export function CustomerFilters({
         ]}
         onChange={(value) => setSelectedFollow(value === "__all" ? "" : value)}
       />
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
+      <InputGroup>
+        <InputGroupAddon>
+          <Search aria-hidden="true" />
+        </InputGroupAddon>
+        <InputGroupInput
           name="keyword"
           defaultValue={keyword}
           placeholder="搜索姓名、手机号或来源"
-          className="pl-9"
         />
-      </div>
+      </InputGroup>
       <Button type="submit" variant="outline">
         搜索
       </Button>
