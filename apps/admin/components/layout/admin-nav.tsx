@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Shield,
+  TerminalSquare,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
   { href: "/marketing", label: "营销活动", icon: Megaphone },
   { href: "/cameras", label: "工地监控", icon: Camera },
+  { href: "/ops", label: "运维脚本", icon: TerminalSquare },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -74,4 +76,3 @@ export function AdminNav() {
     </nav>
   );
 }
-

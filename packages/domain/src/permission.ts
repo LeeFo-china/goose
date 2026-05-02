@@ -50,6 +50,8 @@ export const PERMISSION_CODE_VALUES = [
   'expense_request.pay',
   'project_referral.read',
   'project_referral.manage',
+  'system.ops.read',
+  'system.ops.run',
 ] as const;
 
 export type PermissionCode = (typeof PERMISSION_CODE_VALUES)[number];
@@ -161,6 +163,14 @@ export const PermissionCodeConfig: Record<
   'project_referral.manage': {
     label: '管理介绍费',
     module: 'project_referral',
+  },
+  'system.ops.read': {
+    label: '查看运维脚本',
+    module: 'system',
+  },
+  'system.ops.run': {
+    label: '执行运维脚本',
+    module: 'system',
   },
 };
 

@@ -34,6 +34,7 @@ import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up
 import ExpenseRequestCategoriesController from "@/controllers/expense-request-categories";
 import ProjectCameraController from "@/controllers/project-cameras";
 import AdminAuthController from "@/controllers/admin-auth";
+import AdminOpsController from "@/controllers/admin-ops";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -43,6 +44,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
 
   WeChatController.registerExtraRoutes(app);
   AdminAuthController.registerExtraRoutes(app);
+  AdminOpsController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);
