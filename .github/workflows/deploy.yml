@@ -246,9 +246,15 @@ jobs:
       - name: Deployment Status
         if: always()
         shell: bash
+        env:
+          DEPLOY_JOB_STATUS: ${{ job.status }}
         run: |
           echo "=== Deployment Summary ==="
           "$PM2_BIN" list
           echo ""
           echo "=== Service Ports ==="
           ss -lntp | grep -E ':(3000|3010)\b' || echo "No services listening"
+          echo ""
+          echo "=== Deploy Notification ==="
+          chmod +x scripts/deploy-health-check.sh || true
+          "$BUN_BIN" scripts/deploy-notify.ts || true
