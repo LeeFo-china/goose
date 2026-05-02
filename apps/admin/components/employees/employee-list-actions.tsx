@@ -1,13 +1,12 @@
 "use client";
 
 import { FormEvent, useTransition } from "react";
+import type { EmployeeStatus } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-type EmployeeStatus = "pending" | "active" | "suspended" | "leaved";
 
 type StatusOption = {
   label: string;

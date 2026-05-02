@@ -1,6 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  PROJECT_STATUS_VALUES,
+  ProjectStatusConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import {
   Edit3,
@@ -98,18 +102,11 @@ type ProjectFormState = {
 };
 
 const statusOptions = [
-  ["lead", "线索客户"],
-  ["measure", "量房中"],
-  ["negotiating", "谈单中"],
-  ["signed", "已签约"],
-  ["designing", "设计中"],
-  ["constructing", "施工中"],
-  ["on_hold", "已暂停"],
-  ["acceptance", "验收中"],
-  ["completed", "已完工"],
-  ["after_sale", "售后中"],
-  ["invalid", "无效客户"],
-] as const;
+  ...PROJECT_STATUS_VALUES.map((value) => [
+    value,
+    ProjectStatusConfig[value].label,
+  ] as const),
+];
 
 const visibilityOptions = [
   ["inherit", "跟随状态"],

@@ -2,6 +2,11 @@ import {
   BadgeCheck,
   UserRound,
 } from "lucide-react";
+import {
+  EMPLOYEE_STATUS_VALUES,
+  EmployeeStatusConfig,
+  type EmployeeStatus,
+} from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   EmployeeSearchForm,
@@ -16,8 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
-
-type EmployeeStatus = "pending" | "active" | "suspended" | "leaved";
 
 type Employee = {
   id: string;
@@ -56,21 +59,27 @@ const statusOptions: Array<{
   value: "" | EmployeeStatus;
 }> = [
   { label: "全部", value: "" },
-  { label: "在职", value: "active" },
-  { label: "待入职", value: "pending" },
-  { label: "已封禁", value: "suspended" },
-  { label: "已离职", value: "leaved" },
+  ...EMPLOYEE_STATUS_VALUES.map((value) => ({
+    value,
+    label: EmployeeStatusConfig[value].label,
+  })),
 ];
 
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline";
-}> = {
-  active: { label: "在职", variant: "success" },
-  pending: { label: "待入职", variant: "warning" },
-  suspended: { label: "已封禁", variant: "secondary" },
-  leaved: { label: "已离职", variant: "outline" },
-};
+}> = Object.fromEntries(
+  EMPLOYEE_STATUS_VALUES.map((value) => {
+    const type = EmployeeStatusConfig[value].type;
+    return [
+      value,
+      {
+        label: EmployeeStatusConfig[value].label,
+        variant: type === "success" ? "success" : type === "warning" ? "warning" : type === "danger" ? "secondary" : "outline",
+      },
+    ];
+  }),
+);
 
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);

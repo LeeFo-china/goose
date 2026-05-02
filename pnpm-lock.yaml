@@ -23,6 +23,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@gooes/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.75.0(react@19.2.5))

@@ -2,6 +2,14 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  CUSTOMER_SOURCE_VALUES,
+  CUSTOMER_STATUS_VALUES,
+  CustomerSourceConfig,
+  CustomerStatusConfig,
+  isCustomerSource,
+  isCustomerStatus,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
@@ -75,41 +83,15 @@ type EmployeeOption = {
 
 type CustomerMode = "create" | "edit";
 
-const CUSTOMER_STATUS_VALUES = [
-  "potential",
-  "following",
-  "arrived",
-  "ordered",
-  "contracted",
-  "dormant",
-  "invalid",
-] as const;
+const statusOptions = CUSTOMER_STATUS_VALUES.map((value) => [
+  value,
+  CustomerStatusConfig[value].label,
+] as const);
 
-const CUSTOMER_SOURCE_VALUES = [
-  "douyin",
-  "referral",
-  "walk_in",
-  "telemarketing",
-  "platform",
-] as const;
-
-const statusOptions = [
-  ["potential", "潜在客户"],
-  ["following", "跟进中"],
-  ["arrived", "已到店"],
-  ["ordered", "已下定"],
-  ["contracted", "已签约"],
-  ["dormant", "沉睡客户"],
-  ["invalid", "无效客户"],
-] as const;
-
-const sourceOptions = [
-  ["douyin", "抖音/短视频"],
-  ["referral", "老客介绍"],
-  ["walk_in", "自然进店"],
-  ["telemarketing", "电销开发"],
-  ["platform", "装修平台"],
-] as const;
+const sourceOptions = CUSTOMER_SOURCE_VALUES.map((value) => [
+  value,
+  CustomerSourceConfig[value].label,
+] as const);
 
 const CustomerFormSchema = z.object({
   name: z.string().trim().min(1, "请输入客户姓名"),
@@ -139,11 +121,11 @@ function relationOne<T>(value: T | T[] | null | undefined): T | null {
 }
 
 function isCustomerStatusValue(value: string | null | undefined): value is CustomerFormValues["status"] {
-  return CUSTOMER_STATUS_VALUES.includes(value as CustomerFormValues["status"]);
+  return isCustomerStatus(value);
 }
 
 function isCustomerSourceValue(value: string | null | undefined): value is CustomerFormValues["source"] {
-  return CUSTOMER_SOURCE_VALUES.includes(value as CustomerFormValues["source"]);
+  return isCustomerSource(value);
 }
 
 function SelectField({

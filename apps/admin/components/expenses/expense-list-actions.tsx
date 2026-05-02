@@ -1,6 +1,14 @@
 "use client";
 
 import { useTransition } from "react";
+import {
+  EXPENSE_MODE_VALUES,
+  EXPENSE_REQUEST_STEP_VALUES,
+  EXPENSE_STATUS_VALUES,
+  ExpenseModeConfig,
+  ExpenseRequestStepConfig,
+  ExpenseStatusConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,30 +23,26 @@ type Pagination = {
 
 const statusOptions = [
   ["", "全部状态"],
-  ["draft", "草稿"],
-  ["pending", "审批中"],
-  ["approved", "待打款"],
-  ["rejected", "已驳回"],
-  ["paid", "已完成"],
-  ["cancelled", "已撤回"],
+  ...EXPENSE_STATUS_VALUES.map((value) => [
+    value,
+    ExpenseStatusConfig[value].label,
+  ] as const),
 ] as const;
 
 const modeOptions = [
   ["", "全部模式"],
-  ["reimbursement", "员工报销"],
-  ["advance", "预借款"],
-  ["direct", "公司直付"],
-  ["petty_cash", "备用金"],
+  ...EXPENSE_MODE_VALUES.map((value) => [
+    value,
+    ExpenseModeConfig[value].label,
+  ] as const),
 ] as const;
 
 const stepOptions = [
   ["", "全部节点"],
-  ["draft", "草稿"],
-  ["manager_review", "待主管审核"],
-  ["finance_review", "待财务审核"],
-  ["payment", "待打款"],
-  ["done", "已完成"],
-  ["cancelled", "已作废"],
+  ...EXPENSE_REQUEST_STEP_VALUES.map((value) => [
+    value,
+    ExpenseRequestStepConfig[value].label,
+  ] as const),
 ] as const;
 
 function buildExpensesHref(input: {

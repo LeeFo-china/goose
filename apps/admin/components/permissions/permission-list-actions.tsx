@@ -1,6 +1,10 @@
 "use client";
 
 import { FormEvent, useTransition } from "react";
+import {
+  PERMISSION_STATUS_VALUES,
+  PermissionStatusConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -72,8 +76,11 @@ export function PermissionFilters({
         className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <option value="">全部状态</option>
-        <option value="active">启用</option>
-        <option value="inactive">停用</option>
+        {PERMISSION_STATUS_VALUES.map((value) => (
+          <option key={value} value={value}>
+            {PermissionStatusConfig[value].label}
+          </option>
+        ))}
       </select>
       <Input
         name="module"

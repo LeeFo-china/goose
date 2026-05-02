@@ -1,6 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
+import {
+  PROJECT_STATUS_VALUES,
+  ProjectStatusConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,17 +19,10 @@ type Pagination = {
 
 const statusOptions = [
   ["", "全部状态"],
-  ["lead", "线索客户"],
-  ["measure", "量房中"],
-  ["negotiating", "谈单中"],
-  ["signed", "已签约"],
-  ["designing", "设计中"],
-  ["constructing", "施工中"],
-  ["on_hold", "已暂停"],
-  ["acceptance", "验收中"],
-  ["completed", "已完工"],
-  ["after_sale", "售后中"],
-  ["invalid", "无效客户"],
+  ...PROJECT_STATUS_VALUES.map((value) => [
+    value,
+    ProjectStatusConfig[value].label,
+  ] as const),
 ] as const;
 
 const ownershipOptions = [

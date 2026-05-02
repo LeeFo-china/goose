@@ -2,6 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  EXPENSE_MODE_VALUES,
+  EXPENSE_SETTLEMENT_METHOD_VALUES,
+  ExpenseModeConfig,
+  ExpenseSettlementMethodConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
@@ -126,19 +132,10 @@ export type ExpenseRecord = {
   approval_chain?: ApprovalChainRecord[];
 };
 
-const SETTLEMENT_METHOD_VALUES = [
-  "bank_transfer",
-  "wechat",
-  "alipay",
-  "cash",
-] as const;
-
-const settlementMethodOptions = [
-  ["bank_transfer", "银行转账"],
-  ["wechat", "微信转账"],
-  ["alipay", "支付宝"],
-  ["cash", "现金"],
-] as const;
+const settlementMethodOptions = EXPENSE_SETTLEMENT_METHOD_VALUES.map((value) => [
+  value,
+  ExpenseSettlementMethodConfig[value].label,
+] as const);
 const settlementMethodSelectOptions = settlementMethodOptions.map(([value, label]) => ({
   value,
   label,
@@ -147,7 +144,7 @@ const settlementMethodSelectOptions = settlementMethodOptions.map(([value, label
 const PayFormSchema = z.object({
   payee_bank: z.string(),
   payee_account: z.string(),
-  method: z.enum(SETTLEMENT_METHOD_VALUES),
+  method: z.enum(EXPENSE_SETTLEMENT_METHOD_VALUES),
   paid_amount: z.string().refine((value) => {
     const amount = Number(value);
     return Number.isFinite(amount) && amount > 0;
@@ -163,12 +160,12 @@ type PayFormValues = z.infer<typeof PayFormSchema>;
 const EVIDENCE_COMPRESS_THRESHOLD = 1.5 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 9;
 
-const modeLabel: Record<string, string> = {
-  reimbursement: "员工报销",
-  advance: "预借款",
-  direct: "公司直付",
-  petty_cash: "备用金",
-};
+const modeLabel: Record<string, string> = Object.fromEntries(
+  EXPENSE_MODE_VALUES.map((value) => [
+    value,
+    ExpenseModeConfig[value].label,
+  ]),
+);
 
 const actionLabel: Record<string, string> = {
   submit: "提交",

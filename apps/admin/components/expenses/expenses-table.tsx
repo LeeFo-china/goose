@@ -1,6 +1,14 @@
 "use client";
 
 import { type ColumnDef } from "@tanstack/react-table";
+import {
+  EXPENSE_MODE_VALUES,
+  EXPENSE_REQUEST_STEP_VALUES,
+  EXPENSE_STATUS_VALUES,
+  ExpenseModeConfig,
+  ExpenseRequestStepConfig,
+  ExpenseStatusConfig,
+} from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import {
@@ -11,30 +19,40 @@ import {
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
-}> = {
-  draft: { label: "草稿", variant: "outline" },
-  pending: { label: "审批中", variant: "warning" },
-  approved: { label: "待打款", variant: "default" },
-  rejected: { label: "已驳回", variant: "danger" },
-  paid: { label: "已完成", variant: "success" },
-  cancelled: { label: "已撤回", variant: "secondary" },
-};
+}> = Object.fromEntries(
+  EXPENSE_STATUS_VALUES.map((value) => {
+    const type = ExpenseStatusConfig[value].type;
+    return [
+      value,
+      {
+        label: ExpenseStatusConfig[value].label,
+        variant: type === "success"
+          ? "success"
+          : type === "warning"
+            ? "warning"
+            : type === "danger"
+              ? "danger"
+              : type === "primary"
+                ? "default"
+                : "outline",
+      },
+    ];
+  }),
+);
 
-const modeMeta: Record<string, string> = {
-  reimbursement: "员工报销",
-  advance: "预借款",
-  direct: "公司直付",
-  petty_cash: "备用金",
-};
+const modeMeta: Record<string, string> = Object.fromEntries(
+  EXPENSE_MODE_VALUES.map((value) => [
+    value,
+    ExpenseModeConfig[value].label,
+  ]),
+);
 
-const stepMeta: Record<string, string> = {
-  draft: "草稿",
-  manager_review: "待主管审核",
-  finance_review: "待财务审核",
-  payment: "待打款",
-  done: "已完成",
-  cancelled: "已作废",
-};
+const stepMeta: Record<string, string> = Object.fromEntries(
+  EXPENSE_REQUEST_STEP_VALUES.map((value) => [
+    value,
+    ExpenseRequestStepConfig[value].label,
+  ]),
+);
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;

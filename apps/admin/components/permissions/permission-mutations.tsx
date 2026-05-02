@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  PERMISSION_CODE_VALUES,
+  PERMISSION_STATUS_VALUES,
+  PermissionCodeConfig,
+  PermissionStatusConfig,
+  type PermissionCode,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
@@ -38,72 +45,6 @@ export type PermissionRecord = {
 };
 
 type PermissionMode = "create" | "edit";
-
-const PERMISSION_CODE_VALUES = [
-  "dashboard.read",
-  "task_center.read",
-  "customer.read",
-  "customer.create",
-  "customer.update",
-  "customer.assign_owner",
-  "customer.phone.view",
-  "customer.phone.call",
-  "customer.phone.copy",
-  "project.read",
-  "project.create",
-  "project.update",
-  "project.delete",
-  "project_log.create",
-  "employee.read",
-  "employee.create",
-  "employee.update",
-  "employee.permission_manage",
-  "expense_request.read",
-  "expense_request.create",
-  "expense_request.submit",
-  "expense_request.approve_manager",
-  "expense_request.approve_finance",
-  "expense_request.pay",
-  "project_referral.read",
-  "project_referral.manage",
-] as const;
-
-type PermissionCode = (typeof PERMISSION_CODE_VALUES)[number];
-
-const PermissionCodeConfig: Record<PermissionCode, { label: string; module: string }> = {
-  "dashboard.read": { label: "查看工作台", module: "dashboard" },
-  "task_center.read": { label: "查看待办中心", module: "task_center" },
-  "customer.read": { label: "查看客户", module: "customer" },
-  "customer.create": { label: "新建客户", module: "customer" },
-  "customer.update": { label: "编辑客户", module: "customer" },
-  "customer.assign_owner": { label: "分配客户负责人", module: "customer" },
-  "customer.phone.view": { label: "查看客户完整手机号", module: "customer" },
-  "customer.phone.call": { label: "拨打客户手机号", module: "customer" },
-  "customer.phone.copy": { label: "复制客户手机号", module: "customer" },
-  "project.read": { label: "查看项目", module: "project" },
-  "project.create": { label: "新建项目", module: "project" },
-  "project.update": { label: "编辑项目", module: "project" },
-  "project.delete": { label: "删除项目", module: "project" },
-  "project_log.create": { label: "新建施工日志", module: "project_log" },
-  "employee.read": { label: "查看员工", module: "employee" },
-  "employee.create": { label: "新建员工", module: "employee" },
-  "employee.update": { label: "编辑员工", module: "employee" },
-  "employee.permission_manage": { label: "管理员工权限", module: "employee" },
-  "expense_request.read": { label: "查看费用申请", module: "expense_request" },
-  "expense_request.create": { label: "新建费用申请", module: "expense_request" },
-  "expense_request.submit": { label: "提交费用申请", module: "expense_request" },
-  "expense_request.approve_manager": {
-    label: "主管审批费用申请",
-    module: "expense_request",
-  },
-  "expense_request.approve_finance": {
-    label: "财务审批费用申请",
-    module: "expense_request",
-  },
-  "expense_request.pay": { label: "登记费用打款", module: "expense_request" },
-  "project_referral.read": { label: "查看介绍费", module: "project_referral" },
-  "project_referral.manage": { label: "管理介绍费", module: "project_referral" },
-};
 
 function uniq(values: string[]) {
   return Array.from(new Set(values)).filter(Boolean).sort((a, b) => a.localeCompare(b));
@@ -145,10 +86,10 @@ const PERMISSION_ACTION_SELECT_OPTIONS: SelectOption[] = PERMISSION_ACTION_OPTIO
   value,
   label: value,
 }));
-const PERMISSION_STATUS_OPTIONS: SelectOption[] = [
-  { value: "active", label: "启用" },
-  { value: "inactive", label: "停用" },
-];
+const PERMISSION_STATUS_OPTIONS: SelectOption[] = PERMISSION_STATUS_VALUES.map((value) => ({
+  value,
+  label: PermissionStatusConfig[value].label,
+}));
 
 const PermissionFormSchema = z.object({
   code: z.enum(PERMISSION_CODE_VALUES),
@@ -157,7 +98,7 @@ const PermissionFormSchema = z.object({
   resource: z.string().trim().min(1, "请选择资源"),
   action: z.string().trim().min(1, "请选择动作"),
   description: z.string(),
-  status: z.enum(["active", "inactive"]),
+  status: z.enum(PERMISSION_STATUS_VALUES),
 });
 
 type PermissionFormValues = z.infer<typeof PermissionFormSchema>;

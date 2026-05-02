@@ -22,7 +22,7 @@ gooes/
 │   │   └── tsconfig.json
 │   └── admin/              # Next.js admin console
 ├── packages/
-│   └── domain/             # Shared domain types/constants
+│   └── domain/             # Shared domain types/constants used by api/admin
 ├── supabase/              # Migrations + Edge functions (Deno)
 ├── tsconfig.base.json
 └── pnpm-workspace.yaml
@@ -40,6 +40,7 @@ gooes/
 
 ## CONVENTIONS
 - API package alias: `@/*` → `apps/api/src/*`
+- Shared domain imports should use `@gooes/domain` from both API and admin.
 - File naming: kebab-case (except BaseController.ts)
 - ES modules with `"type": "module"`
 - Decorator metadata: `reflect-metadata` import first in app.ts

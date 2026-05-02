@@ -1,6 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  EMPLOYEE_STATUS_VALUES,
+  EmployeeStatusConfig,
+  isEmployeeStatus,
+  type EmployeeStatus,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Edit3, Loader2, Plus, Trash2, UserRound } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -21,8 +27,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-type EmployeeStatus = "pending" | "active" | "suspended" | "leaved";
-
 export type EmployeeMutationRecord = {
   id: string;
   name: string | null;
@@ -33,12 +37,11 @@ export type EmployeeMutationRecord = {
 
 type MutationMode = "create" | "edit";
 
-const statusOptions: Array<{ label: string; value: EmployeeStatus }> = [
-  { label: "在职", value: "active" },
-  { label: "待入职", value: "pending" },
-  { label: "已封禁", value: "suspended" },
-  { label: "已离职", value: "leaved" },
-];
+const statusOptions: Array<{ label: string; value: EmployeeStatus }> =
+  EMPLOYEE_STATUS_VALUES.map((value) => ({
+    value,
+    label: EmployeeStatusConfig[value].label,
+  }));
 
 const employeeStatusSelectOptions = statusOptions.map((item) => ({
   value: item.value,
@@ -99,7 +102,7 @@ function EmployeeDialog({
     name: employee?.name || "",
     phone: employee?.phone || "",
     avatar: employee?.avatar || "",
-    status: (employee?.status || "active") as EmployeeStatus,
+    status: isEmployeeStatus(employee?.status) ? employee.status : "active",
   }), [employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
 

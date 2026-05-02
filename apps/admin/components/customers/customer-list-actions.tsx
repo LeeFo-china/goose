@@ -1,6 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
+import {
+  CUSTOMER_STATUS_VALUES,
+  CustomerStatusConfig,
+} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,13 +19,10 @@ type Pagination = {
 
 const statusOptions = [
   ["", "全部状态"],
-  ["potential", "潜在客户"],
-  ["following", "跟进中"],
-  ["arrived", "已到店"],
-  ["ordered", "已下定"],
-  ["contracted", "已签约"],
-  ["dormant", "沉睡客户"],
-  ["invalid", "无效客户"],
+  ...CUSTOMER_STATUS_VALUES.map((value) => [
+    value,
+    CustomerStatusConfig[value].label,
+  ] as const),
 ] as const;
 
 function buildCustomersHref(input: {
