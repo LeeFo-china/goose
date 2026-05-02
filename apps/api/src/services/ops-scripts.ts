@@ -52,6 +52,15 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     timeoutMs: 10_000,
     dangerLevel: "low",
   },
+  system_metrics: {
+    key: "system_metrics",
+    label: "系统资源",
+    description: "查看服务器 CPU、内存、磁盘、负载和 PM2 进程资源占用。",
+    command: "bash",
+    args: ["scripts/ops/system-metrics.sh"],
+    timeoutMs: 5_000,
+    dangerLevel: "low",
+  },
   deploy_trace: {
     key: "deploy_trace",
     label: "部署 Trace",
@@ -154,6 +163,35 @@ class OpsScriptService {
       scriptKey: query.script_key,
       status: query.status,
     });
+  }
+
+  async getSystemMetrics() {
+    const definition = OPS_SCRIPT_DEFINITIONS.system_metrics;
+    const result = await runCommand(definition);
+
+    if (result.timedOut || result.exitCode !== 0) {
+      throw Errors.business(
+        500,
+        "系统资源指标采集失败",
+        ErrorCodes.OPS_SCRIPT_RUN_FAILED,
+        {
+          exit_code: result.exitCode,
+          stderr: result.stderr,
+          timed_out: result.timedOut,
+        },
+      );
+    }
+
+    try {
+      return JSON.parse(result.stdout) as unknown;
+    } catch (error) {
+      throw Errors.business(
+        500,
+        "系统资源指标解析失败",
+        ErrorCodes.OPS_SCRIPT_RUN_FAILED,
+        error instanceof Error ? { message: error.message } : undefined,
+      );
+    }
   }
 
   async runScript(

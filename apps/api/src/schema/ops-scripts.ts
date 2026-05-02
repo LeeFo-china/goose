@@ -4,6 +4,7 @@ import { PaginationQuerySchema } from "@/schema/request";
 export const OpsScriptKeySchema = z.enum([
   "health_check",
   "pm2_status",
+  "system_metrics",
   "deploy_trace",
   "deploy_notify_test",
 ]);
@@ -24,4 +25,3 @@ export const OpsScriptRunListQuerySchema = PaginationQuerySchema.extend({
 export type OpsScriptKey = z.infer<typeof OpsScriptKeySchema>;
 export type RunOpsScriptInput = z.infer<typeof RunOpsScriptSchema>;
 export type OpsScriptRunListQuery = z.infer<typeof OpsScriptRunListQuerySchema>;
-

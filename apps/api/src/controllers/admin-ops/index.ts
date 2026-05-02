@@ -37,6 +37,15 @@ class AdminOpsController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/admin/ops/system-metrics")
+  async getSystemMetrics(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    accessPolicyService.assertPermission(authContext, "system.ops.read");
+
+    const data = await opsScriptService.getSystemMetrics();
+    return ResponseHandler.success(data);
+  }
+
   @Post("/admin/ops/scripts/:scriptKey/run")
   async runScript(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
@@ -58,4 +67,3 @@ class AdminOpsController extends BaseController {
 }
 
 export default new AdminOpsController();
-
