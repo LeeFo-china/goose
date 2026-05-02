@@ -58,7 +58,7 @@ export function AdminShell({
         </nav>
       </aside>
       <div className="lg:pl-64">
-        <header className="sticky top-0 flex h-16 items-center justify-between border-b bg-background/92 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-card px-4 shadow-sm md:px-6">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">
               {session.employee.name || "未命名员工"}
