@@ -116,13 +116,19 @@ jobs:
           echo "Building admin..."
           ADMIN_NEXT_DIR="$GITHUB_WORKSPACE/apps/admin/.next"
           ADMIN_NEXT_BACKUP="/tmp/goose-admin-next-backup-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}"
+          ADMIN_HAS_NEXT_BACKUP=0
           rm -rf "$ADMIN_NEXT_BACKUP"
           if [ -d "$ADMIN_NEXT_DIR" ]; then
-            cp -a "$ADMIN_NEXT_DIR" "$ADMIN_NEXT_BACKUP"
+            if cp -a "$ADMIN_NEXT_DIR" "$ADMIN_NEXT_BACKUP"; then
+              ADMIN_HAS_NEXT_BACKUP=1
+            else
+              echo "Warning: failed to back up existing admin .next; continuing without rollback backup."
+              rm -rf "$ADMIN_NEXT_BACKUP"
+            fi
           fi
 
           restore_admin_next() {
-            if [ -d "$ADMIN_NEXT_BACKUP" ]; then
+            if [ "$ADMIN_HAS_NEXT_BACKUP" = "1" ] && [ -d "$ADMIN_NEXT_BACKUP" ]; then
               echo "Restoring previous admin .next build..."
               rm -rf "$ADMIN_NEXT_DIR"
               cp -a "$ADMIN_NEXT_BACKUP" "$ADMIN_NEXT_DIR"
