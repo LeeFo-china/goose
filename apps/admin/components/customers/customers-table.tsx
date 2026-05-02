@@ -130,18 +130,6 @@ const columns: ColumnDef<CustomerRecord>[] = [
     },
   },
   {
-    id: "phonePermission",
-    header: "号码权限",
-    cell: ({ row }) => row.original.can_view_phone ? (
-      <Badge className="whitespace-nowrap" variant="success">可查看</Badge>
-    ) : (
-      <Badge className="whitespace-nowrap" variant="secondary">脱敏</Badge>
-    ),
-    meta: {
-      cellClassName: "whitespace-nowrap",
-    },
-  },
-  {
     id: "followUp",
     header: "跟进",
     cell: ({ row }) => (
@@ -192,7 +180,7 @@ export function CustomersTable({
       columns={columns}
       data={customers}
       emptyText="没有符合条件的客户"
-      minWidth="min-w-[1360px]"
+      minWidth="min-w-[1240px]"
     />
   );
 }
