@@ -60,6 +60,7 @@ export default async function SettingsPage() {
   const databaseCount = list.filter((item) => item.source === "database").length;
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
+  const secretCount = list.filter((item) => item.is_secret).length;
   const groupEntries = Object.entries(groups);
 
   return (
@@ -67,7 +68,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">系统配置</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          第一阶段仅开放非敏感配置；密钥、JWT、Supabase 等基础变量仍保留在服务器环境变量中。
+          非敏感配置明文存储；密钥类配置加密存储并保留环境变量回退。JWT、Supabase、端口和加密主密钥仍保留在服务器环境变量中。
         </p>
       </div>
 
@@ -99,6 +100,7 @@ export default async function SettingsPage() {
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">未配置</div>
             <div className="text-xl font-semibold">{emptyCount}</div>
+            <div className="mt-1 text-xs text-muted-foreground">敏感项 {secretCount}</div>
           </CardContent>
         </Card>
       </div>

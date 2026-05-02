@@ -39,8 +39,8 @@ export type EzvizDeviceChannel = {
   cover_url: string | null;
 };
 
-function getRequiredEnv(name: string) {
-  const value = process.env[name]?.trim();
+async function getRequiredSecretConfig(name: string) {
+  const value = await systemSettingsService.getSecretString(name);
   if (!value) {
     throw Errors.business(
       503,
@@ -86,8 +86,8 @@ export function buildEzvizLiveUrl(deviceSerial: string, channelNo = 1) {
 }
 
 async function requestEzvizAccessToken(): Promise<EzvizAccessToken> {
-  const appKey = getRequiredEnv("EZVIZ_APP_KEY");
-  const appSecret = getRequiredEnv("EZVIZ_APP_SECRET");
+  const appKey = await getRequiredSecretConfig("EZVIZ_APP_KEY");
+  const appSecret = await getRequiredSecretConfig("EZVIZ_APP_SECRET");
   const body = new URLSearchParams({
     appKey,
     appSecret,

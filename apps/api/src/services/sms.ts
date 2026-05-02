@@ -21,11 +21,11 @@ async function getSmsProvider(): Promise<SmsProvider> {
   return "mock";
 }
 
-function requireSmsEnv(name: string) {
-  const value = process.env[name]?.trim();
+async function requireSmsConfig(name: string) {
+  const value = await systemSettingsService.getSecretString(name);
 
   if (!value) {
-    throw new Error(`缺少短信环境变量: ${name}`);
+    throw new Error(`缺少短信配置: ${name}`);
   }
 
   return value;
@@ -34,26 +34,26 @@ function requireSmsEnv(name: string) {
 async function getAliyunTemplateCode(scene: SmsScene) {
   if (scene === "bind_customer") {
     const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
-    return value || requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
+    return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
   }
 
   if (scene === "admin_login") {
     const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN");
     return value ||
-      requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+      await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
   }
 
   const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
-  return value || requireSmsEnv("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+  return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
 }
 
-function getAliyunSmsClient() {
+async function getAliyunSmsClient() {
   if (aliyunSmsClient) {
     return aliyunSmsClient;
   }
 
-  const accessKeyId = requireSmsEnv("ALIBABA_CLOUD_ACCESS_KEY_ID");
-  const accessKeySecret = requireSmsEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET");
+  const accessKeyId = await requireSmsConfig("ALIBABA_CLOUD_ACCESS_KEY_ID");
+  const accessKeySecret = await requireSmsConfig("ALIBABA_CLOUD_ACCESS_KEY_SECRET");
   const credentialsConfig = new CredentialConfig({
     type: "access_key",
     accessKeyId,
@@ -72,9 +72,9 @@ function getAliyunSmsClient() {
 }
 
 async function sendAliyunSmsCode(phone: string, code: string, scene: SmsScene) {
-  const client = getAliyunSmsClient();
+  const client = await getAliyunSmsClient();
   const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME") ||
-    requireSmsEnv("ALIYUN_SMS_SIGN_NAME");
+    await requireSmsConfig("ALIYUN_SMS_SIGN_NAME");
   const templateCode = await getAliyunTemplateCode(scene);
 
   const request = new SendSmsRequest({

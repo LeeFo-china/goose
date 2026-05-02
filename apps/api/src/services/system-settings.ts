@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import { systemSettingRepository, type SystemSettingRecord } from "@/repositories/system-settings";
 import type { AuthContext } from "@/services/authorization";
@@ -10,6 +11,7 @@ type SettingDefinition = {
   valueType: "string" | "number" | "boolean" | "json";
   envNames: string[];
   defaultValue?: string;
+  isSecret?: boolean;
 };
 
 type SettingSource = "database" | "env" | "default" | "empty";
@@ -22,6 +24,7 @@ type EffectiveSetting = SystemSettingRecord & {
 };
 
 const CACHE_TTL_MS = 30 * 1000;
+const ENCRYPTED_VALUE_PREFIX = "enc:v1:";
 
 const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
@@ -40,6 +43,24 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: "阿里云短信签名名称。",
     valueType: "string",
     envNames: ["ALIYUN_SMS_SIGN_NAME"],
+  },
+  {
+    key: "ALIBABA_CLOUD_ACCESS_KEY_ID",
+    groupCode: "sms",
+    name: "阿里云 AccessKey ID",
+    description: "阿里云短信 AccessKey ID，加密存储。",
+    valueType: "string",
+    envNames: ["ALIBABA_CLOUD_ACCESS_KEY_ID"],
+    isSecret: true,
+  },
+  {
+    key: "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+    groupCode: "sms",
+    name: "阿里云 AccessKey Secret",
+    description: "阿里云短信 AccessKey Secret，加密存储。",
+    valueType: "string",
+    envNames: ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"],
+    isSecret: true,
   },
   {
     key: "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
@@ -75,6 +96,24 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "https://open.ys7.com",
   },
   {
+    key: "EZVIZ_APP_KEY",
+    groupCode: "ezviz",
+    name: "萤石 App Key",
+    description: "萤石开放平台 App Key，加密存储。",
+    valueType: "string",
+    envNames: ["EZVIZ_APP_KEY"],
+    isSecret: true,
+  },
+  {
+    key: "EZVIZ_APP_SECRET",
+    groupCode: "ezviz",
+    name: "萤石 App Secret",
+    description: "萤石开放平台 App Secret，加密存储。",
+    valueType: "string",
+    envNames: ["EZVIZ_APP_SECRET"],
+    isSecret: true,
+  },
+  {
     key: "EZVIZ_TOKEN_REFRESH_AHEAD_MS",
     groupCode: "ezviz",
     name: "萤石 Token 提前刷新时间",
@@ -99,6 +138,24 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: "兼容 Chat Completions 的接口地址。",
     valueType: "string",
     envNames: ["AI_CHAT_COMPLETIONS_URL", "DEEPSEEK_CHAT_COMPLETIONS_URL"],
+  },
+  {
+    key: "AI_API_KEY",
+    groupCode: "ai",
+    name: "AI API Key",
+    description: "OpenAI/OpenRouter 兼容接口 API Key，加密存储。",
+    valueType: "string",
+    envNames: ["AI_API_KEY"],
+    isSecret: true,
+  },
+  {
+    key: "DEEPSEEK_API_KEY",
+    groupCode: "ai",
+    name: "DeepSeek API Key",
+    description: "DeepSeek API Key，加密存储。",
+    valueType: "string",
+    envNames: ["DEEPSEEK_API_KEY"],
+    isSecret: true,
   },
   {
     key: "AI_MODEL",
@@ -153,6 +210,24 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "pages/share-campaign/index",
   },
   {
+    key: "WECHAT_APPID",
+    groupCode: "wechat",
+    name: "微信小程序 AppID",
+    description: "微信小程序 AppID，加密存储。",
+    valueType: "string",
+    envNames: ["WECHAT_APPID"],
+    isSecret: true,
+  },
+  {
+    key: "WECHAT_SECRET",
+    groupCode: "wechat",
+    name: "微信小程序 Secret",
+    description: "微信小程序 Secret，加密存储。",
+    valueType: "string",
+    envNames: ["WECHAT_SECRET"],
+    isSecret: true,
+  },
+  {
     key: "WECHAT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE",
     groupCode: "wechat",
     name: "微信领券页路径",
@@ -193,6 +268,24 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     description: "SMTP 服务器地址。",
     valueType: "string",
     envNames: ["SMTP_HOST"],
+  },
+  {
+    key: "SMTP_USER",
+    groupCode: "notify",
+    name: "SMTP 用户名",
+    description: "SMTP 登录用户名，加密存储。",
+    valueType: "string",
+    envNames: ["SMTP_USER"],
+    isSecret: true,
+  },
+  {
+    key: "SMTP_PASS",
+    groupCode: "notify",
+    name: "SMTP 密码/授权码",
+    description: "SMTP 登录密码或授权码，加密存储。",
+    valueType: "string",
+    envNames: ["SMTP_PASS"],
+    isSecret: true,
   },
   {
     key: "SMTP_PORT",
@@ -236,6 +329,67 @@ function readEnvValue(envNames: string[]) {
   }
 
   return null;
+}
+
+function getEncryptionKey() {
+  const raw = process.env.APP_CONFIG_ENCRYPTION_KEY?.trim();
+  if (!raw) {
+    throw Errors.business(
+      503,
+      "缺少配置加密密钥 APP_CONFIG_ENCRYPTION_KEY",
+      "CONFIG_ENCRYPTION_KEY_MISSING",
+    );
+  }
+
+  return createHash("sha256").update(raw).digest();
+}
+
+function encryptSecretValue(value: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(value, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return [
+    ENCRYPTED_VALUE_PREFIX.slice(0, -1),
+    iv.toString("base64url"),
+    tag.toString("base64url"),
+    encrypted.toString("base64url"),
+  ].join(":");
+}
+
+function decryptSecretValue(value: string) {
+  if (!value.startsWith(ENCRYPTED_VALUE_PREFIX)) {
+    return value;
+  }
+
+  const [, , ivText, tagText, encryptedText] = value.split(":");
+  if (!ivText || !tagText || !encryptedText) {
+    throw Errors.business(500, "系统配置密文格式错误", "CONFIG_SECRET_DECRYPT_FAILED");
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      getEncryptionKey(),
+      Buffer.from(ivText, "base64url"),
+    );
+    decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch (error) {
+    throw Errors.business(
+      500,
+      "系统配置密文解密失败",
+      "CONFIG_SECRET_DECRYPT_FAILED",
+      error instanceof Error ? { message: error.message } : undefined,
+    );
+  }
 }
 
 function resolveEffectiveValue(record: SystemSettingRecord): {
@@ -336,15 +490,13 @@ class SystemSettingsService {
     if (!record) {
       throw Errors.notFound("系统配置不存在");
     }
-    if (record.is_secret) {
-      throw Errors.forbidden();
-    }
-
     const normalizedValue = normalizeStoredValue(value);
     const validatedValue = validateSettingValue(record, normalizedValue);
     const updated = await systemSettingRepository.updateValue({
       key,
-      valueText: validatedValue,
+      valueText: record.is_secret && validatedValue
+        ? encryptSecretValue(validatedValue)
+        : validatedValue,
       employeeId: authContext.employeeId,
     });
     this.clearCache();
@@ -360,7 +512,16 @@ class SystemSettingsService {
       return readEnvValue(definition?.envNames || [key]) || definition?.defaultValue || fallbackValue;
     }
 
-    return resolveEffectiveValue(record).value || fallbackValue;
+    const effective = resolveEffectiveValue(record);
+    if (record.is_secret && effective.source === "database" && effective.value) {
+      return decryptSecretValue(effective.value) || fallbackValue;
+    }
+
+    return effective.value || fallbackValue;
+  }
+
+  async getSecretString(key: string, fallbackValue = "") {
+    return this.getString(key, fallbackValue);
   }
 
   async getNumber(key: string, fallbackValue: number) {

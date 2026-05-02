@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createDecipheriv, createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { resolve } from "node:path";
@@ -48,7 +49,10 @@ const REMOTE_NOTIFY_SETTING_KEYS = [
   "SMTP_PORT",
   "SMTP_SECURE",
   "SMTP_FAMILY",
+  "SMTP_USER",
+  "SMTP_PASS",
 ];
+const ENCRYPTED_VALUE_PREFIX = "enc:v1:";
 
 function parseEnvFile(path: string) {
   const parsed: EnvMap = {};
@@ -88,6 +92,43 @@ function loadEnv() {
   };
 }
 
+function getEncryptionKey(env: EnvMap) {
+  const raw = env.APP_CONFIG_ENCRYPTION_KEY?.trim();
+  if (!raw) return null;
+  return createHash("sha256").update(raw).digest();
+}
+
+function decryptRemoteValue(env: EnvMap, value: string) {
+  if (!value.startsWith(ENCRYPTED_VALUE_PREFIX)) {
+    return value;
+  }
+
+  const key = getEncryptionKey(env);
+  if (!key) {
+    console.log("Deploy mail remote secret skipped: missing APP_CONFIG_ENCRYPTION_KEY");
+    return "";
+  }
+
+  const [, , ivText, tagText, encryptedText] = value.split(":");
+  if (!ivText || !tagText || !encryptedText) {
+    console.log("Deploy mail remote secret skipped: invalid encrypted value");
+    return "";
+  }
+
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`Deploy mail remote secret skipped: ${message}`);
+    return "";
+  }
+}
+
 async function loadRemoteSystemSettings(env: EnvMap) {
   const supabaseUrl = env.SUPABASE_URL?.replace(/\/+$/, "");
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -118,7 +159,8 @@ async function loadRemoteSystemSettings(env: EnvMap) {
         row.status === "active" &&
         row.value_text?.trim()
       ) {
-        result[row.key] = row.value_text.trim();
+        const value = decryptRemoteValue(env, row.value_text.trim());
+        if (value) result[row.key] = value;
       }
       return result;
     }, {});

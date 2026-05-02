@@ -57,11 +57,14 @@ function formatValue(value: string | null) {
 
 export function SettingEditor({ setting }: { setting: SystemSetting }) {
   const router = useRouter();
-  const [value, setValue] = useState(setting.stored_value || "");
+  const [value, setValue] = useState(setting.is_secret ? "" : setting.stored_value || "");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
-  const dirty = value !== (setting.stored_value || "");
+  const initialValue = setting.is_secret ? "" : setting.stored_value || "";
+  const dirty = setting.is_secret && setting.source === "database"
+    ? true
+    : value !== initialValue;
 
   function submit() {
     setError("");
@@ -78,7 +81,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
   }
 
   function reset() {
-    setValue(setting.stored_value || "");
+    setValue(initialValue);
     setError("");
     setSaved(false);
   }
@@ -89,6 +92,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-medium">{setting.name}</div>
           {sourceBadge(setting)}
+          {setting.is_secret ? <Badge variant="warning">敏感</Badge> : null}
           <Badge variant="outline">{setting.value_type}</Badge>
         </div>
         <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{setting.key}</div>
@@ -102,7 +106,16 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
 
       <div className="space-y-2">
         <Label htmlFor={`setting-${setting.key}`}>数据库配置值</Label>
-        {setting.value_type === "boolean" ? (
+        {setting.is_secret ? (
+          <Input
+            id={`setting-${setting.key}`}
+            type="password"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={setting.source === "database" ? "输入新密钥，留空保存可清空数据库值" : "输入新密钥，留空则继承环境变量"}
+            autoComplete="new-password"
+          />
+        ) : setting.value_type === "boolean" ? (
           <Select value={value || "__empty__"} onValueChange={(nextValue) => setValue(nextValue === "__empty__" ? "" : nextValue)}>
             <SelectTrigger id={`setting-${setting.key}`}>
               <SelectValue placeholder="继承环境变量或默认值" />
@@ -139,7 +152,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
           <RotateCcw data-icon="inline-start" />
           重置
         </Button>
-        <Button type="button" onClick={submit} disabled={pending || !dirty || setting.is_secret}>
+        <Button type="button" onClick={submit} disabled={pending || !dirty}>
           {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : saved ? <Check data-icon="inline-start" /> : <Save data-icon="inline-start" />}
           保存
         </Button>

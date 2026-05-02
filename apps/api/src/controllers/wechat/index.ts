@@ -9,6 +9,7 @@ import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
 import { authorizationService } from "@/services/authorization";
+import { systemSettingsService } from "@/services/system-settings";
 import type {
   AuthTargetRole,
   SmsScene,
@@ -231,8 +232,8 @@ export class WeChatController extends BaseController {
 
   // 这里必须保留注释：微信 code 只能短时且单次使用，接口失败原因需要在服务端集中兜底，前端才能稳定触发静默重登。
   private async getWeChatSession(code: string) {
-    const appId = process.env.WECHAT_APPID;
-    const secret = process.env.WECHAT_SECRET;
+    const appId = await systemSettingsService.getSecretString("WECHAT_APPID");
+    const secret = await systemSettingsService.getSecretString("WECHAT_SECRET");
 
     if (!appId || !secret) {
       throw Errors.badRequest("服务器未配置微信参数");

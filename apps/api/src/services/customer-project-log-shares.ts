@@ -253,16 +253,22 @@ function firstNonEmptyEnv(names: string[]) {
 }
 
 async function getAiEndpoint() {
+  const hasDeepSeekApiKey = Boolean(await systemSettingsService.getSecretString("DEEPSEEK_API_KEY"));
   return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
-    || (process.env.DEEPSEEK_API_KEY?.trim()
+    || (hasDeepSeekApiKey
       ? "https://api.deepseek.com/chat/completions"
       : "https://api.openai.com/v1/chat/completions");
 }
 
-function getAiApiKey(endpoint: string) {
+async function getAiApiKey(endpoint: string) {
   const envNames = endpoint.includes("api.deepseek.com")
     ? ["DEEPSEEK_API_KEY", "AI_API_KEY"]
     : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
+
+  for (const name of envNames) {
+    const value = await systemSettingsService.getSecretString(name);
+    if (value) return value;
+  }
 
   return firstNonEmptyEnv(envNames);
 }
@@ -639,8 +645,8 @@ class CustomerProjectLogShareService {
       return cachedWechatAccessToken.token;
     }
 
-    const appId = process.env.WECHAT_APPID?.trim();
-    const secret = process.env.WECHAT_SECRET?.trim();
+    const appId = await systemSettingsService.getSecretString("WECHAT_APPID");
+    const secret = await systemSettingsService.getSecretString("WECHAT_SECRET");
     if (!appId || !secret) {
       throw Errors.badRequest("服务器未配置微信参数");
     }
@@ -1526,7 +1532,7 @@ class CustomerProjectLogShareService {
     input: GenerateCustomerProjectLogShareCopyInput,
   ) {
     const endpoint = await getAiEndpoint();
-    const apiKey = getAiApiKey(endpoint);
+    const apiKey = await getAiApiKey(endpoint);
     const model = await getAiModel(endpoint);
 
     if (!endpoint || !apiKey || !model) {

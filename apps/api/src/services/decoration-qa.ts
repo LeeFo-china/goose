@@ -309,16 +309,22 @@ function requireAiEnv(names: string[], label: string) {
 }
 
 async function getAiEndpoint() {
+  const hasDeepSeekApiKey = Boolean(await systemSettingsService.getSecretString("DEEPSEEK_API_KEY"));
   return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
-    || (process.env.DEEPSEEK_API_KEY?.trim()
+    || (hasDeepSeekApiKey
       ? "https://api.deepseek.com/chat/completions"
       : "https://api.openai.com/v1/chat/completions");
 }
 
-function getAiApiKey(endpoint: string) {
+async function getAiApiKey(endpoint: string) {
   const envNames = endpoint.includes("api.deepseek.com")
     ? ["DEEPSEEK_API_KEY", "AI_API_KEY"]
     : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
+
+  for (const name of envNames) {
+    const value = await systemSettingsService.getSecretString(name);
+    if (value) return value;
+  }
 
   return requireAiEnv(envNames, "AI_API_KEY / DEEPSEEK_API_KEY");
 }
@@ -899,7 +905,7 @@ async function buildSuggestionScenePrompt(input: {
 
 async function generateSuggestionQuestionsByAi(scenePrompt: string) {
   const endpoint = await getAiEndpoint();
-  const apiKey = getAiApiKey(endpoint);
+  const apiKey = await getAiApiKey(endpoint);
   const model = await getAiModel(endpoint);
   const result = await requestQaResult(endpoint, apiKey, {
     model,
@@ -1149,7 +1155,7 @@ export async function askDecorationQa(
   input: DecorationQaRequestInput,
 ): Promise<DecorationQaResult> {
   const endpoint = await getAiEndpoint();
-  const apiKey = getAiApiKey(endpoint);
+  const apiKey = await getAiApiKey(endpoint);
   const model = await getAiModel(endpoint);
 
   const messages = buildMessages(input.question, input.history, await getSystemPrompt());
@@ -1196,7 +1202,7 @@ export async function streamDecorationQa(
   },
 ) {
   const endpoint = await getAiEndpoint();
-  const apiKey = getAiApiKey(endpoint);
+  const apiKey = await getAiApiKey(endpoint);
   const model = await getAiModel(endpoint);
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
   const extraSystemMessages = options?.extraSystemMessages
