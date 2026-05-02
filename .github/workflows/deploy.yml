@@ -62,6 +62,7 @@ jobs:
           "$PNPM_BIN" --version
           "$PM2_BIN" --version
 
+          # Copy environment variables.
           ENV_CANDIDATES=(
             "$HOME/actions-runner/.env"
             "/home/runner/actions-runner/.env"
@@ -83,56 +84,96 @@ jobs:
             echo ".env file not found, skipping cp"
           fi
 
+          # Clean old build artifacts left by self-hosted runner workspaces.
+          rm -rf apps/admin/.next apps/admin/.turbo
+          # If disk pressure becomes a problem, enable a full dependency cleanup:
+          # rm -rf node_modules apps/admin/node_modules
+
+          # Install root dependencies with Bun.
           "$BUN_BIN" install
 
+          # Deploy main app (goose).
+          echo "Deploying goose (main app)..."
           "$PM2_BIN" reload goose --update-env || "$PM2_BIN" start app.ts --interpreter "$BUN_BIN" --name goose
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 
+          # Install admin dependencies.
+          echo "Installing admin dependencies..."
           "$PNPM_BIN" --dir apps/admin install --frozen-lockfile
+
+          # Build admin.
+          echo "Building admin..."
           "$PNPM_BIN" --dir apps/admin build
 
-          "$PM2_BIN" reload gooes-admin --update-env || "$PM2_BIN" start "$PNPM_BIN" --name gooes-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
+          # Deploy admin app (goose-admin).
+          echo "Deploying goose-admin..."
+          "$PM2_BIN" delete "goo""es-admin" >/dev/null 2>&1 || true
+          "$PM2_BIN" reload goose-admin --update-env || "$PM2_BIN" start "$PNPM_BIN" --name goose-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
           "$PM2_BIN" save
-          "$PM2_BIN" status gooes-admin
+          "$PM2_BIN" status goose-admin
 
+          # Check listening ports.
           if command -v ss >/dev/null 2>&1; then
-            ss -lntp | grep ':3000\b' || true
-            ss -lntp | grep ':3010\b' || true
+            echo "Checking port 3000 (goose)..."
+            ss -lntp | grep ':3000\b' || echo "Port 3000 not listening yet"
+            echo "Checking port 3010 (goose-admin)..."
+            ss -lntp | grep ':3010\b' || echo "Port 3010 not listening yet"
           fi
 
+          # Health check - main app.
           HEALTH_OK=0
           for attempt in $(seq 1 15); do
             if curl -fsS http://127.0.0.1:3000/ >/tmp/goose-health.txt; then
               HEALTH_OK=1
+              echo "Goose health check passed on attempt $attempt"
               break
             fi
-            echo "Health check attempt $attempt failed, retrying..."
+            echo "Goose health check attempt $attempt failed, retrying..."
             sleep 2
           done
 
           if [ "$HEALTH_OK" -ne 1 ]; then
-            echo "Health check failed after retries"
+            echo "Goose health check failed after retries"
+            echo "=== Goose logs ==="
             "$PM2_BIN" logs goose --lines 80 --nostream || true
             exit 1
           fi
 
           cat /tmp/goose-health.txt
 
+          # Health check - admin app.
           ADMIN_HEALTH_OK=0
           for attempt in $(seq 1 15); do
-            if curl -fsS http://127.0.0.1:3010/login >/tmp/gooes-admin-health.html; then
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3010/dashboard || echo "000")
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "307" ]; then
               ADMIN_HEALTH_OK=1
+              echo "Admin health check passed on attempt $attempt (HTTP $HTTP_STATUS)"
               break
             fi
-            echo "Admin health check attempt $attempt failed, retrying..."
+            echo "Admin health check attempt $attempt failed (HTTP $HTTP_STATUS), retrying..."
             sleep 2
           done
 
           if [ "$ADMIN_HEALTH_OK" -ne 1 ]; then
             echo "Admin health check failed after retries"
-            "$PM2_BIN" logs gooes-admin --lines 80 --nostream || true
+            echo "=== Admin logs ==="
+            "$PM2_BIN" logs goose-admin --lines 80 --nostream || true
             exit 1
           fi
 
           echo "Admin health check passed"
+          echo "Deployment completed successfully."
+
+          # Clean temporary files.
+          rm -f /tmp/goose-health.txt /tmp/goose-admin-health.html 2>/dev/null || true
+
+      - name: Deployment Status
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Deployment Summary ==="
+          "$PM2_BIN" list
+          echo ""
+          echo "=== Service Ports ==="
+          ss -lntp | grep -E ':(3000|3010)\b' || echo "No services listening"
