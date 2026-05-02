@@ -1,11 +1,20 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import { Edit3, Loader2, Plus, Power, RotateCcw, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export type PermissionRecord = {
   id: string;
@@ -19,16 +28,6 @@ export type PermissionRecord = {
 };
 
 type PermissionMode = "create" | "edit";
-
-type PermissionFormState = {
-  code: string;
-  name: string;
-  module: string;
-  resource: string;
-  action: string;
-  description: string;
-  status: string;
-};
 
 const SELECT_CLASS_NAME =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -124,34 +123,43 @@ const PERMISSION_MODULE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => it
 const PERMISSION_RESOURCE_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.resource));
 const PERMISSION_ACTION_OPTIONS = uniq(PERMISSION_FIELD_OPTIONS.map((item) => item.action));
 
+const PermissionFormSchema = z.object({
+  code: z.enum(PERMISSION_CODE_VALUES),
+  name: z.string().trim().min(1, "请输入权限名称"),
+  module: z.string().trim().min(1, "请选择模块"),
+  resource: z.string().trim().min(1, "请选择资源"),
+  action: z.string().trim().min(1, "请选择动作"),
+  description: z.string(),
+  status: z.enum(["active", "inactive"]),
+});
+
+type PermissionFormValues = z.infer<typeof PermissionFormSchema>;
+
 function isPermissionCodeValue(value: string): value is PermissionCode {
   return PERMISSION_CODE_VALUES.includes(value as PermissionCode);
 }
 
 function SelectField({
   id,
-  name,
   value,
   options,
   disabled,
   onChange,
 }: {
   id: string;
-  name: string;
   value: string;
   options: string[];
   disabled: boolean;
-  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  onChange: (value: string) => void;
 }) {
   return (
     <select
       id={id}
-      name={name}
       value={value}
       disabled={disabled}
       required
       className={SELECT_CLASS_NAME}
-      onChange={onChange}
+      onChange={(event) => onChange(event.target.value)}
     >
       {options.map((option) => (
         <option key={option} value={option}>
@@ -206,7 +214,7 @@ function PermissionDialog({
   const [error, setError] = useState("");
   const title = mode === "create" ? "新增权限" : "编辑权限";
   const submitText = mode === "create" ? "创建权限" : "保存修改";
-  const defaults = useMemo<PermissionFormState>(() => {
+  const defaults = useMemo<PermissionFormValues>(() => {
     const permissionCode = permission?.code || "";
     const code = isPermissionCodeValue(permissionCode)
       ? permissionCode
@@ -220,10 +228,17 @@ function PermissionDialog({
       resource: permission?.resource || inferred.resource,
       action: permission?.action || inferred.action,
       description: permission?.description || "",
-      status: permission?.status || "active",
+      status: permission?.status === "inactive" ? "inactive" : "active",
     };
   }, [permission]);
-  const [formState, setFormState] = useState<PermissionFormState>(defaults);
+  const form = useForm<PermissionFormValues>({
+    resolver: zodResolver(PermissionFormSchema),
+    defaultValues: defaults,
+  });
+
+  useEffect(() => {
+    if (open) form.reset(defaults);
+  }, [defaults, form, open]);
 
   if (!open) return null;
 
@@ -233,16 +248,15 @@ function PermissionDialog({
     onOpenChange(false);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submit(values: PermissionFormValues) {
     const payload = {
-      code: formState.code.trim(),
-      name: formState.name.trim() || undefined,
-      module: formState.module.trim(),
-      resource: formState.resource.trim(),
-      action: formState.action.trim(),
-      description: formState.description.trim() || null,
-      status: formState.status || "active",
+      code: values.code.trim(),
+      name: values.name.trim(),
+      module: values.module.trim(),
+      resource: values.resource.trim(),
+      action: values.action.trim(),
+      description: values.description.trim() || null,
+      status: values.status,
     };
 
     setError("");
@@ -277,125 +291,149 @@ function PermissionDialog({
             </div>
           </div>
         </div>
-        <form className="space-y-4 p-5" onSubmit={submit}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-permission-code`}>权限编码</Label>
-              <select
-                id={`${mode}-permission-code`}
-                name="code"
-                value={formState.code}
-                disabled={pending}
-                required
-                className={SELECT_CLASS_NAME}
-                onChange={(event) => {
-                  const code = event.target.value;
-                  if (!isPermissionCodeValue(code)) return;
-                  const next = inferPermissionFields(code);
-                  setFormState((current) => ({
-                    ...current,
-                    ...next,
-                    description: current.description,
-                    status: current.status,
-                  }));
-                }}
-              >
-                {PERMISSION_CODE_VALUES.map((code) => (
-                  <option key={code} value={code}>
-                    {code} - {PermissionCodeConfig[code]?.label || code}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-permission-name`}>权限名称</Label>
-              <Input
-                id={`${mode}-permission-name`}
-                name="name"
-                value={formState.name}
-                placeholder="例如 查看员工"
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-permission-module`}>模块</Label>
-              <SelectField
-                id={`${mode}-permission-module`}
-                name="module"
-                disabled={pending}
-                value={formState.module}
-                options={PERMISSION_MODULE_OPTIONS}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  module: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-permission-resource`}>资源</Label>
-              <SelectField
-                id={`${mode}-permission-resource`}
-                name="resource"
-                disabled={pending}
-                value={formState.resource}
-                options={PERMISSION_RESOURCE_OPTIONS}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  resource: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-permission-action`}>动作</Label>
-              <SelectField
-                id={`${mode}-permission-action`}
-                name="action"
-                disabled={pending}
-                value={formState.action}
-                options={PERMISSION_ACTION_OPTIONS}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  action: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-permission-status`}>状态</Label>
-              <select
-                id={`${mode}-permission-status`}
-                name="status"
-                value={formState.status}
-                disabled={pending}
-                className={SELECT_CLASS_NAME}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  status: event.target.value,
-                }))}
-              >
-                <option value="active">启用</option>
-                <option value="inactive">停用</option>
-              </select>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor={`${mode}-permission-description`}>说明</Label>
-              <textarea
-                id={`${mode}-permission-description`}
-                name="description"
-                value={formState.description}
-                placeholder="可留空"
-                disabled={pending}
-                className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))}
-              />
-            </div>
-          </div>
+        <form className="space-y-4 p-5" onSubmit={form.handleSubmit(submit)}>
+          <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <Controller
+              name="code"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-code`}>权限编码</FieldLabel>
+                  <select
+                    id={`${mode}-permission-code`}
+                    value={field.value}
+                    disabled={pending}
+                    required
+                    aria-invalid={fieldState.invalid}
+                    className={SELECT_CLASS_NAME}
+                    onChange={(event) => {
+                      const code = event.target.value;
+                      if (!isPermissionCodeValue(code)) return;
+                      const next = inferPermissionFields(code);
+                      form.setValue("code", next.code, { shouldValidate: true });
+                      form.setValue("name", next.name, { shouldValidate: true });
+                      form.setValue("module", next.module, { shouldValidate: true });
+                      form.setValue("resource", next.resource, { shouldValidate: true });
+                      form.setValue("action", next.action, { shouldValidate: true });
+                    }}
+                  >
+                    {PERMISSION_CODE_VALUES.map((code) => (
+                      <option key={code} value={code}>
+                        {code} - {PermissionCodeConfig[code]?.label || code}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="name"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-name`}>权限名称</FieldLabel>
+                  <Input
+                    {...field}
+                    id={`${mode}-permission-name`}
+                    placeholder="例如 查看员工"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="module"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-module`}>模块</FieldLabel>
+                  <SelectField
+                    id={`${mode}-permission-module`}
+                    disabled={pending}
+                    value={field.value}
+                    options={PERMISSION_MODULE_OPTIONS}
+                    onChange={field.onChange}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="resource"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-resource`}>资源</FieldLabel>
+                  <SelectField
+                    id={`${mode}-permission-resource`}
+                    disabled={pending}
+                    value={field.value}
+                    options={PERMISSION_RESOURCE_OPTIONS}
+                    onChange={field.onChange}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="action"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-action`}>动作</FieldLabel>
+                  <SelectField
+                    id={`${mode}-permission-action`}
+                    disabled={pending}
+                    value={field.value}
+                    options={PERMISSION_ACTION_OPTIONS}
+                    onChange={field.onChange}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="status"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-status`}>状态</FieldLabel>
+                  <select
+                    id={`${mode}-permission-status`}
+                    value={field.value}
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                    className={SELECT_CLASS_NAME}
+                    onChange={field.onChange}
+                  >
+                    <option value="active">启用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
+              name="description"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={`${mode}-permission-description`}>说明</FieldLabel>
+                  <Textarea
+                    {...field}
+                    id={`${mode}-permission-description`}
+                    placeholder="可留空"
+                    disabled={pending}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+          </FieldGroup>
           {error ? (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -467,7 +505,7 @@ export function PermissionRowActions({
   }
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex min-w-[156px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)}>
         <Edit3 />
         编辑

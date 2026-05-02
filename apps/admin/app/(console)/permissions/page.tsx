@@ -5,9 +5,9 @@ import {
 } from "@/components/permissions/permission-list-actions";
 import {
   CreatePermissionButton,
-  PermissionRowActions,
   type PermissionRecord,
 } from "@/components/permissions/permission-mutations";
+import { PermissionsTable } from "@/components/permissions/permissions-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
@@ -30,14 +30,6 @@ type PermissionPageSearchParams = {
   status?: string;
   module?: string;
   keyword?: string;
-};
-
-const statusMeta: Record<string, {
-  label: string;
-  variant: "success" | "secondary" | "outline";
-}> = {
-  active: { label: "启用", variant: "success" },
-  inactive: { label: "停用", variant: "secondary" },
 };
 
 function normalizePage(value: string | undefined) {
@@ -137,65 +129,7 @@ export default async function PermissionsPage({
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] border-t text-sm">
-              <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">权限</th>
-                  <th className="px-5 py-3">模块</th>
-                  <th className="px-5 py-3">资源</th>
-                  <th className="px-5 py-3">动作</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.length > 0 ? (
-                  list.map((permission) => {
-                    const meta = statusMeta[permission.status || ""] || {
-                      label: permission.status || "未知",
-                      variant: "outline" as const,
-                    };
-
-                    return (
-                      <tr key={permission.id} className="border-t transition-colors hover:bg-muted/40">
-                        <td className="px-5 py-4">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">
-                              {permission.name || permission.code}
-                            </div>
-                            <div className="truncate text-xs text-muted-foreground">
-                              {permission.code}
-                            </div>
-                            {permission.description ? (
-                              <div className="mt-1 max-w-[420px] truncate text-xs text-muted-foreground">
-                                {permission.description}
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">{permission.module}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{permission.resource}</td>
-                        <td className="px-5 py-4 text-muted-foreground">{permission.action}</td>
-                        <td className="px-5 py-4">
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                        </td>
-                        <td className="relative px-5 py-4">
-                          <PermissionRowActions permission={permission} />
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td className="px-5 py-12 text-center text-muted-foreground" colSpan={6}>
-                      没有符合条件的权限
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <PermissionsTable permissions={list} />
         </CardContent>
       </Card>
 
