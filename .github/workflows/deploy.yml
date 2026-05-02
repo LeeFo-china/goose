@@ -46,6 +46,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          DEPLOY_TRACE="/tmp/goose-deploy-trace.log"
+          : > "$DEPLOY_TRACE"
+          trap 'code=$?; echo "$(date "+%F %T") failed at line $LINENO: $BASH_COMMAND (exit $code)" | tee -a "$DEPLOY_TRACE"; exit $code' ERR
+          log_step() {
+            echo "$(date "+%F %T") $*" | tee -a "$DEPLOY_TRACE"
+          }
 
           if [ ! -d "/home/ubuntu/actions-runner" ]; then
             echo "This job did not land on the production runner (/home/ubuntu/actions-runner missing)."
@@ -109,11 +115,11 @@ jobs:
           "$PM2_BIN" status goose
 
           # Install admin dependencies.
-          echo "Installing admin dependencies..."
+          log_step "Installing admin dependencies..."
           "$PNPM_BIN" --dir apps/admin install --frozen-lockfile
 
           # Build admin.
-          echo "Building admin..."
+          log_step "Building admin..."
           ADMIN_NEXT_DIR="$GITHUB_WORKSPACE/apps/admin/.next"
           ADMIN_NEXT_BACKUP="/tmp/goose-admin-next-backup-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}"
           ADMIN_HAS_NEXT_BACKUP=0
@@ -151,7 +157,7 @@ jobs:
           rm -rf "$ADMIN_NEXT_BACKUP"
 
           # Deploy admin app (goose-admin).
-          echo "Deploying goose-admin..."
+          log_step "Deploying goose-admin..."
           ADMIN_PID_BEFORE=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
           echo "goose-admin PID before restart: ${ADMIN_PID_BEFORE:-not running}"
           "$PM2_BIN" delete "goo""es-admin" >/dev/null 2>&1 || true
