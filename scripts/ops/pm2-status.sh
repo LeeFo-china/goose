@@ -2,12 +2,11 @@
 set -euo pipefail
 
 PM2_BIN="${PM2_BIN:-pm2}"
+PM2_JSON="$("$PM2_BIN" jlist)"
 
-"$PM2_BIN" jlist | node <<'NODE'
-const chunks = [];
-process.stdin.on("data", (chunk) => chunks.push(chunk));
-process.stdin.on("end", () => {
-  const apps = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+PM2_JSON="$PM2_JSON" node <<'NODE'
+try {
+  const apps = JSON.parse(process.env.PM2_JSON || "[]");
   const targetNames = new Set(["goose", "goose-admin"]);
   const rows = apps
     .filter((app) => targetNames.has(app.name))
@@ -33,5 +32,8 @@ process.stdin.on("end", () => {
   for (const row of rows) {
     console.log(`${row.name}: status=${row.status} pid=${row.pid} uptime=${row.uptime} restarts=${row.restarts} cpu=${row.cpu} memory=${row.memory}`);
   }
-});
+} catch (error) {
+  console.error(`Failed to parse PM2 status: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
 NODE
