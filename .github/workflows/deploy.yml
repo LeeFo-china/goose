@@ -120,6 +120,7 @@ jobs:
 
           # Build admin.
           log_step "Building admin..."
+          ADMIN_BUILD_LOG="/tmp/goose-admin-build.log"
           ADMIN_NEXT_DIR="$GITHUB_WORKSPACE/apps/admin/.next"
           ADMIN_NEXT_BACKUP="/tmp/goose-admin-next-backup-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}"
           ADMIN_HAS_NEXT_BACKUP=0
@@ -141,7 +142,8 @@ jobs:
             fi
           }
 
-          if ! "$PNPM_BIN" --dir apps/admin build; then
+          if ! "$PNPM_BIN" --dir apps/admin build 2>&1 | tee "$ADMIN_BUILD_LOG"; then
+            log_step "Admin build failed; see $ADMIN_BUILD_LOG"
             restore_admin_next
             exit 1
           fi
