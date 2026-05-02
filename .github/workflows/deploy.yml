@@ -84,8 +84,9 @@ jobs:
             echo ".env file not found, skipping cp"
           fi
 
-          # Clean old build artifacts left by self-hosted runner workspaces.
-          rm -rf apps/admin/.next apps/admin/.turbo
+          # Clean old non-runtime build artifacts left by self-hosted runner workspaces.
+          # Do not delete apps/admin/.next before a successful build: next start reads it at runtime.
+          rm -rf apps/admin/.turbo
           # If disk pressure becomes a problem, enable a full dependency cleanup:
           # rm -rf node_modules apps/admin/node_modules
 
@@ -104,14 +105,42 @@ jobs:
 
           # Build admin.
           echo "Building admin..."
-          "$PNPM_BIN" --dir apps/admin build
+          ADMIN_NEXT_DIR="$GITHUB_WORKSPACE/apps/admin/.next"
+          ADMIN_NEXT_BACKUP="/tmp/goose-admin-next-backup-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}"
+          rm -rf "$ADMIN_NEXT_BACKUP"
+          if [ -d "$ADMIN_NEXT_DIR" ]; then
+            cp -a "$ADMIN_NEXT_DIR" "$ADMIN_NEXT_BACKUP"
+          fi
+
+          restore_admin_next() {
+            if [ -d "$ADMIN_NEXT_BACKUP" ]; then
+              echo "Restoring previous admin .next build..."
+              rm -rf "$ADMIN_NEXT_DIR"
+              cp -a "$ADMIN_NEXT_BACKUP" "$ADMIN_NEXT_DIR"
+            fi
+          }
+
+          if ! "$PNPM_BIN" --dir apps/admin build; then
+            restore_admin_next
+            exit 1
+          fi
+
+          if [ ! -f "$ADMIN_NEXT_DIR/BUILD_ID" ] || [ ! -f "$ADMIN_NEXT_DIR/prerender-manifest.json" ]; then
+            echo "Admin build is incomplete: required .next files are missing."
+            ls -la "$ADMIN_NEXT_DIR" || true
+            restore_admin_next
+            exit 1
+          fi
+
+          rm -rf "$ADMIN_NEXT_BACKUP"
 
           # Deploy admin app (goose-admin).
           echo "Deploying goose-admin..."
           ADMIN_PID_BEFORE=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
           echo "goose-admin PID before restart: ${ADMIN_PID_BEFORE:-not running}"
           "$PM2_BIN" delete "goo""es-admin" >/dev/null 2>&1 || true
-          "$PM2_BIN" restart goose-admin --update-env || "$PM2_BIN" start "$PNPM_BIN" --name goose-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
+          "$PM2_BIN" delete goose-admin >/dev/null 2>&1 || true
+          "$PM2_BIN" start "$PNPM_BIN" --name goose-admin --cwd "$GITHUB_WORKSPACE/apps/admin" -- start
           "$PM2_BIN" save
           "$PM2_BIN" status goose-admin
           ADMIN_PID_AFTER=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
