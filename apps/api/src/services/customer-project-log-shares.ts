@@ -290,9 +290,11 @@ async function getWechatShareCampaignClaimVoucherPage() {
   );
 }
 
-function getCustomerProjectLogShareTargetAssistCount() {
-  const raw = process.env.CUSTOMER_LOG_SHARE_TARGET_ASSIST_COUNT?.trim();
-  const parsed = raw ? Number(raw) : NaN;
+async function getCustomerProjectLogShareTargetAssistCount() {
+  const parsed = await systemSettingsService.getNumber(
+    "CUSTOMER_LOG_SHARE_TARGET_ASSIST_COUNT",
+    10,
+  );
   if (Number.isInteger(parsed) && parsed > 0) {
     return parsed;
   }
@@ -871,15 +873,18 @@ class CustomerProjectLogShareService {
     };
   }
 
-  private parseShareAssistConfigPayload(payload: Record<string, unknown> | null): ShareAssistConfigPayload {
+  private async parseShareAssistConfigPayload(
+    payload: Record<string, unknown> | null,
+  ): Promise<ShareAssistConfigPayload> {
+    const defaultTargetAssistCount = await getCustomerProjectLogShareTargetAssistCount();
     const targetAssistCount = typeof payload?.target_assist_count === "number"
       ? payload.target_assist_count
-      : getCustomerProjectLogShareTargetAssistCount();
+      : defaultTargetAssistCount;
 
     return {
       target_assist_count: Number.isInteger(targetAssistCount) && targetAssistCount > 0
         ? targetAssistCount
-        : getCustomerProjectLogShareTargetAssistCount(),
+        : defaultTargetAssistCount,
       allow_create_when_existing_active: Boolean(payload?.allow_create_when_existing_active),
       default_display_title: typeof payload?.default_display_title === "string"
         ? payload.default_display_title.trim() || null
@@ -909,22 +914,22 @@ class CustomerProjectLogShareService {
     };
   }
 
-  private buildNormalizedMarketingCampaignConfigPayload(
+  private async buildNormalizedMarketingCampaignConfigPayload(
     campaignType: MarketingCampaignRow["campaign_type"] | MarketingCampaignTemplateRow["campaign_type"],
     payload: Record<string, unknown> | null,
   ) {
     return campaignType === "appointment_reward"
       ? this.parseAppointmentRewardConfigPayload(payload)
-      : this.parseShareAssistConfigPayload(payload);
+      : await this.parseShareAssistConfigPayload(payload);
   }
 
   private normalizeMarketingCampaignTemplateEnabled(status: MarketingCampaignTemplateStatus, enabled: boolean) {
     return status === "disabled" ? false : enabled;
   }
 
-  private buildMarketingCampaignTemplateSnapshot(
+  private async buildMarketingCampaignTemplateSnapshot(
     template: MarketingCampaignTemplateRow,
-  ): MarketingCampaignTemplateSnapshot {
+  ): Promise<MarketingCampaignTemplateSnapshot> {
     return {
       id: template.id,
       campaign_type: template.campaign_type,
@@ -937,16 +942,16 @@ class CustomerProjectLogShareService {
       reward_remark: template.reward_remark,
       reward_claim_instruction: template.reward_claim_instruction,
       reward_claim_channel: template.reward_claim_channel,
-      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+      config_payload: await this.buildNormalizedMarketingCampaignConfigPayload(
         template.campaign_type,
         template.config_payload,
       ),
     };
   }
 
-  private parseMarketingCampaignTemplateSnapshot(
+  private async parseMarketingCampaignTemplateSnapshot(
     value: Record<string, unknown> | null,
-  ): MarketingCampaignTemplateSnapshot | null {
+  ): Promise<MarketingCampaignTemplateSnapshot | null> {
     if (!value || typeof value !== "object") {
       return null;
     }
@@ -979,7 +984,7 @@ class CustomerProjectLogShareService {
       reward_claim_channel: typeof value.reward_claim_channel === "string"
         ? value.reward_claim_channel
         : null,
-      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+      config_payload: await this.buildNormalizedMarketingCampaignConfigPayload(
         campaignType,
         typeof value.config_payload === "object" && value.config_payload !== null
           ? value.config_payload as Record<string, unknown>
@@ -1013,10 +1018,10 @@ class CustomerProjectLogShareService {
     };
   }
 
-  private buildEffectiveConfigFromMarketingCampaign(
+  private async buildEffectiveConfigFromMarketingCampaign(
     campaign: MarketingCampaignRow,
-  ): EffectiveShareCampaignConfig {
-    const payload = this.parseShareAssistConfigPayload(campaign.config_payload);
+  ): Promise<EffectiveShareCampaignConfig> {
+    const payload = await this.parseShareAssistConfigPayload(campaign.config_payload);
 
     return {
       config_id: null,
@@ -1216,7 +1221,9 @@ class CustomerProjectLogShareService {
         rawCampaign: matchedCampaign.campaign,
         rawLegacyConfig: null,
         blockReason,
-        effective: !blockReason ? this.buildEffectiveConfigFromMarketingCampaign(matchedCampaign.campaign) : null,
+        effective: !blockReason
+          ? await this.buildEffectiveConfigFromMarketingCampaign(matchedCampaign.campaign)
+          : null,
       };
     }
 
@@ -2792,12 +2799,12 @@ class CustomerProjectLogShareService {
     return template;
   }
 
-  private resolveMarketingCampaignCreateInput(
+  private async resolveMarketingCampaignCreateInput(
     input: CreateMarketingCampaignInput,
     template: MarketingCampaignTemplateRow | null,
-  ): MarketingCampaignUpsertInput {
+  ): Promise<MarketingCampaignUpsertInput> {
     const templatePayload = template
-      ? this.buildNormalizedMarketingCampaignConfigPayload(
+      ? await this.buildNormalizedMarketingCampaignConfigPayload(
         template.campaign_type,
         template.config_payload,
       )
@@ -2847,7 +2854,7 @@ class CustomerProjectLogShareService {
         : {
           target_assist_count: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.target_assist_count
             ?? (templatePayload as ShareAssistConfigPayload | null)?.target_assist_count
-            ?? getCustomerProjectLogShareTargetAssistCount(),
+            ?? await getCustomerProjectLogShareTargetAssistCount(),
           allow_create_when_existing_active: (input.config_payload as Partial<ShareAssistConfigPayload> | undefined)?.allow_create_when_existing_active
             ?? (templatePayload as ShareAssistConfigPayload | null)?.allow_create_when_existing_active
             ?? false,
@@ -2981,7 +2988,7 @@ class CustomerProjectLogShareService {
       reward_remark: template.reward_remark,
       reward_claim_instruction: template.reward_claim_instruction,
       reward_claim_channel: template.reward_claim_channel,
-      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+      config_payload: await this.buildNormalizedMarketingCampaignConfigPayload(
         template.campaign_type,
         template.config_payload,
       ),
@@ -3074,7 +3081,7 @@ class CustomerProjectLogShareService {
     const templateSummary = campaign.template_id
       ? await marketingCampaignTemplateRepository.findById(campaign.template_id)
       : null;
-    const templateSnapshot = this.parseMarketingCampaignTemplateSnapshot(campaign.template_snapshot);
+    const templateSnapshot = await this.parseMarketingCampaignTemplateSnapshot(campaign.template_snapshot);
     const projectMap = await this.getScopeProjectMap(scopes.map((item) => item.project_id));
     const instanceSummary = campaign.campaign_type === "appointment_reward"
       ? await customerAppointmentRewardCampaignRepository.countByMarketingCampaignStatus(campaignId)
@@ -3103,7 +3110,7 @@ class CustomerProjectLogShareService {
       reward_remark: campaign.reward_remark,
       reward_claim_instruction: campaign.reward_claim_instruction,
       reward_claim_channel: campaign.reward_claim_channel,
-      config_payload: this.buildNormalizedMarketingCampaignConfigPayload(
+      config_payload: await this.buildNormalizedMarketingCampaignConfigPayload(
         campaign.campaign_type,
         campaign.config_payload,
       ),
@@ -3147,7 +3154,7 @@ class CustomerProjectLogShareService {
       }
     }
 
-    const resolvedInput = this.resolveMarketingCampaignCreateInput(input, template);
+    const resolvedInput = await this.resolveMarketingCampaignCreateInput(input, template);
     const scopeRows = this.buildMarketingCampaignScopeRows(resolvedInput);
     if (scopeRows.length) {
       const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
@@ -3176,7 +3183,7 @@ class CustomerProjectLogShareService {
       reward_claim_instruction: resolvedInput.reward_claim_instruction ?? null,
       reward_claim_channel: resolvedInput.reward_claim_channel ?? null,
       template_id: template?.id ?? null,
-      template_snapshot: template ? this.buildMarketingCampaignTemplateSnapshot(template) : null,
+      template_snapshot: template ? await this.buildMarketingCampaignTemplateSnapshot(template) : null,
       config_payload: this.buildMarketingCampaignTemplateConfigPayload(resolvedInput),
       created_by_employee_id: authContext.employeeId,
       updated_by_employee_id: authContext.employeeId,
