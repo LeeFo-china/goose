@@ -32,5 +32,13 @@ jobs:
           # 5. 优化 PM2 启动命令：
           # - 使用 reload 实现平滑重启
           # - 如果是第一次运行，reload 失败则执行 start
-          pm2 delete goose >/dev/null 2>&1 || true
-          pm2 start "$GITHUB_WORKSPACE/apps/api/src/app.ts" --interpreter ~/.bun/bin/bun --name "goose" --cwd "$GITHUB_WORKSPACE/apps/api" --update-env
+          API_CWD="$GITHUB_WORKSPACE/apps/api"
+          API_ENTRY="$API_CWD/src/app.ts"
+          CURRENT_API_CWD=$(pm2 jlist | node -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose"); process.stdout.write(app?.pm2_env?.pm_cwd || ""); });')
+          CURRENT_API_ENTRY=$(pm2 jlist | node -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose"); process.stdout.write(app?.pm2_env?.pm_exec_path || ""); });')
+          if [ "$CURRENT_API_CWD" = "$API_CWD" ] && [ "$CURRENT_API_ENTRY" = "$API_ENTRY" ]; then
+            pm2 reload goose --update-env || pm2 restart goose --update-env
+          else
+            pm2 delete goose >/dev/null 2>&1 || true
+            pm2 start "$API_ENTRY" --interpreter ~/.bun/bin/bun --name "goose" --cwd "$API_CWD" --update-env
+          fi

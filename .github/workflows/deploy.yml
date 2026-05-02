@@ -112,8 +112,17 @@ jobs:
 
           # Deploy main app (goose).
           echo "Deploying goose (main app)..."
-          "$PM2_BIN" delete goose >/dev/null 2>&1 || true
-          "$PM2_BIN" start "$GITHUB_WORKSPACE/apps/api/src/app.ts" --interpreter "$BUN_BIN" --name goose --cwd "$GITHUB_WORKSPACE/apps/api" --update-env
+          API_CWD="$GITHUB_WORKSPACE/apps/api"
+          API_ENTRY="$API_CWD/src/app.ts"
+          CURRENT_API_CWD=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose"); process.stdout.write(app?.pm2_env?.pm_cwd || ""); });')
+          CURRENT_API_ENTRY=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose"); process.stdout.write(app?.pm2_env?.pm_exec_path || ""); });')
+          if [ "$CURRENT_API_CWD" = "$API_CWD" ] && [ "$CURRENT_API_ENTRY" = "$API_ENTRY" ]; then
+            "$PM2_BIN" reload goose --update-env || "$PM2_BIN" restart goose --update-env
+          else
+            echo "Recreating goose PM2 process because its entry changed."
+            "$PM2_BIN" delete goose >/dev/null 2>&1 || true
+            "$PM2_BIN" start "$API_ENTRY" --interpreter "$BUN_BIN" --name goose --cwd "$API_CWD" --update-env
+          fi
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 
