@@ -250,7 +250,7 @@ export default async function ProjectsPage({
                   <th className="whitespace-nowrap px-4 py-3">设计师</th>
                   <th className="whitespace-nowrap px-4 py-3">工程负责人</th>
                   <th className="whitespace-nowrap px-4 py-3">开工日期</th>
-                  <th className="sticky right-0 z-10 whitespace-nowrap bg-muted/95 px-4 py-3 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)]">
+                  <th className="sticky right-0 z-10 whitespace-nowrap bg-muted px-4 py-3 text-right shadow-[-12px_0_18px_-18px_rgba(15,23,42,0.45)]">
                     操作
                   </th>
                 </tr>
