@@ -1,30 +1,9 @@
-import Link from "next/link";
-import {
-  BadgeCheck,
-  BriefcaseBusiness,
-  Camera,
-  CircleDollarSign,
-  ClipboardList,
-  LayoutDashboard,
-  Megaphone,
-  Shield,
-  Users,
-} from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
-
-const navItems = [
-  { href: "/dashboard", label: "概览", icon: LayoutDashboard },
-  { href: "/customers", label: "客户", icon: Users },
-  { href: "/projects", label: "项目", icon: BriefcaseBusiness },
-  { href: "/employees", label: "员工", icon: BadgeCheck },
-  { href: "/permissions", label: "角色权限", icon: Shield },
-  { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
-  { href: "/marketing", label: "营销活动", icon: Megaphone },
-  { href: "/cameras", label: "工地监控", icon: Camera },
-];
+import { AdminNav } from "@/components/layout/admin-nav";
 
 export function AdminShell({
   session,
@@ -46,18 +25,7 @@ export function AdminShell({
           </div>
         </div>
         <Separator />
-        <nav className="flex flex-col gap-1 p-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <item.icon className="size-4" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <AdminNav />
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-card px-4 shadow-sm md:px-6">
