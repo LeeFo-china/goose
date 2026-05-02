@@ -3,6 +3,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
+import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
 import type {
   OpsScript,
   OpsScriptRun,
@@ -100,6 +101,8 @@ export default async function OpsPage({
           仅允许执行后端白名单脚本，用于健康检查、PM2 状态、部署 trace 和通知测试。
         </p>
       </div>
+
+      <SystemMetricsPanel />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Card>

@@ -34,3 +34,31 @@ export type Pagination = {
   totalPages: number;
 };
 
+export type OpsSystemMetrics = {
+  server: {
+    cpu_usage_percent: number;
+    memory: {
+      total_mb: number;
+      used_mb: number;
+      free_mb: number;
+      usage_percent: number;
+    };
+    disk: {
+      total_mb: number;
+      used_mb: number;
+      available_mb: number;
+      usage_percent: number;
+    };
+    load_average: number[];
+  };
+  pm2: Array<{
+    name: string;
+    pid: number | null;
+    status: string;
+    cpu_percent: number;
+    memory_mb: number;
+    restarts: number;
+    uptime: string;
+  }>;
+  checked_at: string;
+};
