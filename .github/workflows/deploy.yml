@@ -97,6 +97,10 @@ jobs:
             cp "$ENV_SOURCE" .env
             cp "$ENV_SOURCE" apps/api/.env
             cp "$ENV_SOURCE" apps/admin/.env.production
+            for runtime_env in .env apps/api/.env apps/admin/.env.production; do
+              sed -i '/^NODE_ENV=/d' "$runtime_env"
+              printf '\nNODE_ENV=production\n' >> "$runtime_env"
+            done
           else
             echo ".env file not found, skipping cp"
           fi
@@ -129,8 +133,6 @@ jobs:
           # The shared backend .env currently contains NODE_ENV=development.
           # Next.js production builds must run with NODE_ENV=production.
           touch apps/admin/.env.production
-          sed -i '/^NODE_ENV=/d' apps/admin/.env.production
-          printf '\nNODE_ENV=production\n' >> apps/admin/.env.production
           export NODE_ENV=production
 
           # Install admin dependencies.
