@@ -131,7 +131,6 @@ const settlementMethodOptions = [
 ] as const;
 
 const PayFormSchema = z.object({
-  payee_name: z.string().trim().min(1, "请输入收款人"),
   payee_bank: z.string(),
   payee_account: z.string(),
   method: z.enum(SETTLEMENT_METHOD_VALUES),
@@ -140,7 +139,8 @@ const PayFormSchema = z.object({
     return Number.isFinite(amount) && amount > 0;
   }, "请输入有效打款金额"),
   paid_at: z.string().min(1, "请选择打款时间"),
-  evidence_images: z.string().trim().min(1, "请填写至少 1 个打款凭证 URL"),
+  evidence_images: z.array(z.string().trim().min(1, "打款凭证不能为空"))
+    .min(1, "请上传至少 1 张打款凭证"),
   remark: z.string(),
 });
 
@@ -148,6 +148,8 @@ type PayFormValues = z.infer<typeof PayFormSchema>;
 
 const SELECT_CLASS_NAME =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+const EVIDENCE_COMPRESS_THRESHOLD = 1.5 * 1024 * 1024;
+const MAX_UPLOAD_FILES = 9;
 
 const modeLabel: Record<string, string> = {
   reimbursement: "员工报销",
@@ -178,6 +180,13 @@ function personName(value: Person | Person[] | null | undefined) {
 function projectName(value: Project | Project[] | null | undefined) {
   const item = relationOne(value);
   return item?.name || "-";
+}
+
+function getExpensePayeeName(expense: ExpenseRecord) {
+  const directPayee = expense.mode === "direct"
+    ? (expense.items || []).map((item) => item.vendor_name?.trim()).find(Boolean)
+    : null;
+  return directPayee || personName(expense.employee);
 }
 
 function formatMoney(value: number | string | null | undefined) {
@@ -224,6 +233,95 @@ async function requestExpense(input: {
     throw new Error(getPayloadMessage(payload, "操作失败"));
   }
   return payload.data;
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("图片读取失败"));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("图片压缩失败"));
+        return;
+      }
+      resolve(blob);
+    }, "image/jpeg", quality);
+  });
+}
+
+async function compressImageIfNeeded(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error(`${file.name} 不是图片文件`);
+  }
+
+  if (file.size <= EVIDENCE_COMPRESS_THRESHOLD) {
+    return file;
+  }
+
+  if (file.type === "image/heic" || file.type === "image/heif") {
+    throw new Error(`${file.name} 大于 1.5MB，当前浏览器无法压缩 HEIC/HEIF，请先转换为 JPG/PNG`);
+  }
+
+  const image = await loadImage(file);
+  let scale = Math.min(1, 2200 / Math.max(image.width, image.height));
+
+  for (const quality of [0.82, 0.72, 0.62, 0.52, 0.44]) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器不支持图片压缩");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await canvasToBlob(canvas, quality);
+    if (blob.size <= EVIDENCE_COMPRESS_THRESHOLD) {
+      return new File(
+        [blob],
+        file.name.replace(/\.[^.]+$/, "") + ".jpg",
+        { type: "image/jpeg" },
+      );
+    }
+    scale *= 0.82;
+  }
+
+  throw new Error(`${file.name} 压缩后仍超过 1.5MB，请更换更小的图片`);
+}
+
+async function uploadEvidenceImages(files: File[]) {
+  const formData = new FormData();
+  formData.append("scene", "expense_request");
+
+  for (const file of files) {
+    const uploadFile = await compressImageIfNeeded(file);
+    formData.append("files", uploadFile);
+  }
+
+  const response = await fetch("/api/backend/uploads/images", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "上传打款凭证失败"));
+  }
+
+  const list = Array.isArray(payload.data?.list) ? payload.data.list : [];
+  return list
+    .map((item: { url?: unknown }) => item.url)
+    .filter((url: unknown): url is string => typeof url === "string" && Boolean(url));
 }
 
 function DetailDialog({
@@ -380,15 +478,17 @@ function PayDialog({
   onDone: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [uploading, startUploadTransition] = useTransition();
   const [error, setError] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
+  const payeeName = getExpensePayeeName(expense);
   const defaults = useMemo<PayFormValues>(() => ({
-    payee_name: "",
     payee_bank: "",
     payee_account: "",
     method: "bank_transfer",
     paid_amount: String(expense.total_amount || ""),
     paid_at: new Date().toISOString().slice(0, 16),
-    evidence_images: "",
+    evidence_images: [],
     remark: "",
   }), [expense.total_amount]);
   const form = useForm<PayFormValues>({
@@ -397,25 +497,26 @@ function PayDialog({
   });
 
   function submit(values: PayFormValues) {
+    if (!payeeName || payeeName === "-") {
+      setError("申请中缺少可用于打款的收款人");
+      return;
+    }
+
     const paidAmount = Number(values.paid_amount);
     if (paidAmount.toFixed(2) !== Number(expense.total_amount || 0).toFixed(2)) {
       setError(`打款金额必须等于申请总额 ¥${formatMoney(expense.total_amount)}`);
       return;
     }
 
-    const evidenceImages = values.evidence_images
-      .split(/[\n,]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
     const payload = {
-      payee_name: values.payee_name.trim(),
+      payee_name: payeeName,
       payee_bank: values.payee_bank.trim() || null,
       payee_account: values.payee_account.trim() || null,
       method: values.method,
       paid_amount: paidAmount,
       paid_at: new Date(values.paid_at).toISOString(),
       paid_by: currentEmployeeId,
-      evidence_images: evidenceImages,
+      evidence_images: values.evidence_images,
       remark: values.remark.trim() || null,
     };
 
@@ -434,6 +535,46 @@ function PayDialog({
     });
   }
 
+  function handleEvidenceFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+
+    const currentImages = form.getValues("evidence_images");
+    if (currentImages.length + files.length > MAX_UPLOAD_FILES) {
+      setError(`打款凭证最多上传 ${MAX_UPLOAD_FILES} 张`);
+      return;
+    }
+
+    setError("");
+    setUploadMessage("正在处理图片...");
+    startUploadTransition(async () => {
+      try {
+        const urls = await uploadEvidenceImages(files);
+        if (urls.length === 0) {
+          throw new Error("上传完成但未返回图片地址");
+        }
+        const nextImages = [...form.getValues("evidence_images"), ...urls];
+        form.setValue("evidence_images", nextImages, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        setUploadMessage(`已上传 ${nextImages.length} 张打款凭证`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "上传打款凭证失败");
+        setUploadMessage("");
+      }
+    });
+  }
+
+  function removeEvidenceImage(index: number) {
+    const nextImages = form.getValues("evidence_images").filter((_, itemIndex) => itemIndex !== index);
+    form.setValue("evidence_images", nextImages, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setUploadMessage(nextImages.length > 0 ? `已上传 ${nextImages.length} 张打款凭证` : "");
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
       <div className="w-full max-w-[560px] rounded-lg border bg-card shadow-[0_20px_80px_rgba(15,23,42,0.22)]">
@@ -445,22 +586,12 @@ function PayDialog({
         </div>
         <form className="space-y-4 p-5" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
-            <Controller
-              name="payee_name"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="payee_name">收款人</FieldLabel>
-                  <Input
-                    {...field}
-                    id="payee_name"
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
+            <Field>
+              <FieldLabel>收款人</FieldLabel>
+              <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 text-sm">
+                {payeeName}
+              </div>
+            </Field>
             <Controller
               name="method"
               control={form.control}
@@ -553,19 +684,61 @@ function PayDialog({
             <Controller
               name="evidence_images"
               control={form.control}
-              render={({ field, fieldState }) => (
+              render={({ fieldState }) => {
+                const images = form.watch("evidence_images");
+                return (
                 <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="evidence_images">打款凭证 URL</FieldLabel>
-                  <Textarea
-                    {...field}
+                  <FieldLabel htmlFor="evidence_images">打款凭证图片</FieldLabel>
+                  <Input
                     id="evidence_images"
-                    placeholder="每行一个图片地址"
-                    disabled={pending}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    multiple
+                    disabled={pending || uploading}
                     aria-invalid={fieldState.invalid}
+                    onChange={(event) => {
+                      handleEvidenceFiles(event.target.files);
+                      event.target.value = "";
+                    }}
                   />
+                  {uploadMessage ? (
+                    <div className="text-xs text-muted-foreground">{uploadMessage}</div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">
+                      支持 JPG、PNG、WebP、HEIC；单张大于 1.5MB 会先压缩再上传。
+                    </div>
+                  )}
+                  {images.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {images.map((image, index) => (
+                        <div key={image} className="overflow-hidden rounded-md border bg-background">
+                          <img
+                            src={image}
+                            alt={`打款凭证 ${index + 1}`}
+                            className="h-24 w-full object-cover"
+                          />
+                          <div className="flex items-center justify-between gap-2 p-2">
+                            <span className="truncate text-xs text-muted-foreground">
+                              凭证 {index + 1}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={pending || uploading}
+                              onClick={() => removeEvidenceImage(index)}
+                            >
+                              移除
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <FieldError errors={[fieldState.error]} />
                 </Field>
-              )}
+              );
+              }}
             />
             <Controller
               name="remark"
@@ -591,11 +764,11 @@ function PayDialog({
             </div>
           ) : null}
           <div className="flex justify-end gap-2 border-t pt-4">
-            <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={pending || uploading}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : <WalletCards />}
+            <Button type="submit" disabled={pending || uploading}>
+              {pending || uploading ? <Loader2 className="animate-spin" /> : <WalletCards />}
               确认打款
             </Button>
           </div>
@@ -616,7 +789,7 @@ export function ExpenseRowActions({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<ExpenseRecord | null>(null);
-  const [payOpen, setPayOpen] = useState(false);
+  const [payExpense, setPayExpense] = useState<ExpenseRecord | null>(null);
   const canApprove = expense.status === "pending" &&
     ["manager_review", "finance_review"].includes(expense.current_step);
   const canCancel = ["draft", "pending", "rejected"].includes(expense.status) &&
@@ -700,6 +873,18 @@ export function ExpenseRowActions({
     });
   }
 
+  function openPay() {
+    setError("");
+    startTransition(async () => {
+      try {
+        const data = await requestExpense({ path: `/expense-requests/${expense.id}` });
+        setPayExpense(data as ExpenseRecord);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "打款信息加载失败");
+      }
+    });
+  }
+
   return (
     <div className="flex min-w-[236px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
@@ -725,19 +910,19 @@ export function ExpenseRowActions({
         </Button>
       ) : null}
       {canPay ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => setPayOpen(true)} disabled={pending}>
+        <Button type="button" variant="outline" size="sm" onClick={openPay} disabled={pending}>
           <SendHorizontal />
           打款
         </Button>
       ) : null}
       {detail ? <DetailDialog expense={detail} onClose={() => setDetail(null)} /> : null}
-      {payOpen && currentEmployeeId ? (
+      {payExpense && currentEmployeeId ? (
         <PayDialog
-          expense={expense}
+          expense={payExpense}
           currentEmployeeId={currentEmployeeId}
-          onClose={() => setPayOpen(false)}
+          onClose={() => setPayExpense(null)}
           onDone={() => {
-            setPayOpen(false);
+            setPayExpense(null);
             refresh();
           }}
         />

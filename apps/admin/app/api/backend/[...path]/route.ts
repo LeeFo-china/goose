@@ -26,6 +26,7 @@ async function proxyBackend(request: Request, context: RouteContext) {
   headers.set("authorization", `Bearer ${token}`);
   headers.delete("host");
   headers.delete("cookie");
+  headers.delete("content-length");
 
   const method = request.method.toUpperCase();
   let response: Response;
@@ -33,7 +34,7 @@ async function proxyBackend(request: Request, context: RouteContext) {
     response = await fetch(buildBackendUrl(path), {
       method,
       headers,
-      body: method === "GET" || method === "HEAD" ? undefined : await request.text(),
+      body: method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer(),
       cache: "no-store",
     });
   } catch {
