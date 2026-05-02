@@ -79,16 +79,23 @@ const columns: ColumnDef<CustomerRecord>[] = [
   {
     accessorKey: "name",
     header: "客户",
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="truncate font-medium">
-          {row.original.name || "未命名客户"}
+    cell: ({ row }) => {
+      const name = row.original.name || "未命名客户";
+
+      return (
+        <div className="min-w-0">
+          <div className="w-[5em] truncate font-medium" title={name}>
+            {name}
+          </div>
+          <div className="w-[5em] truncate text-xs text-muted-foreground" title={row.original.id}>
+            {row.original.id}
+          </div>
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {row.original.id}
-        </div>
-      </div>
-    ),
+      );
+    },
+    meta: {
+      cellClassName: "w-[5em] max-w-[5em]",
+    },
   },
   {
     id: "phone",
