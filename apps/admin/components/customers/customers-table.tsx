@@ -80,6 +80,36 @@ function followUpBadge(state: string | null | undefined) {
   return <Badge className="whitespace-nowrap" variant="secondary">无计划</Badge>;
 }
 
+function CustomerIdentityCell({
+  id,
+  name,
+}: {
+  id: string;
+  name: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="w-[5em] truncate font-medium">
+          {name}
+        </div>
+        <div className="w-[5em] truncate text-xs text-muted-foreground">
+          {id}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-[280px]">
+        <div className="flex flex-col gap-1">
+          <div className="break-all font-medium">{name}</div>
+          <div className="break-all text-xs opacity-90">{id}</div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 const columns: ColumnDef<CustomerRecord>[] = [
   {
     accessorKey: "name",
@@ -88,27 +118,7 @@ const columns: ColumnDef<CustomerRecord>[] = [
       const name = row.original.name || "未命名客户";
 
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="w-[5em] truncate font-medium">
-                {name}
-              </div>
-              <div className="w-[5em] truncate text-xs text-muted-foreground">
-                {row.original.id}
-              </div>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent align="start" className="max-w-[280px]">
-            <div className="flex flex-col gap-1">
-              <div className="break-all font-medium">{name}</div>
-              <div className="break-all text-xs opacity-90">{row.original.id}</div>
-            </div>
-          </TooltipContent>
-        </Tooltip>
+        <CustomerIdentityCell id={row.original.id} name={name} />
       );
     },
     meta: {
