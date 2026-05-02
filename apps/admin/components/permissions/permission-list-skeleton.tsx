@@ -13,7 +13,7 @@ export function PermissionListSkeleton() {
     <div className="flex flex-col gap-5" aria-busy="true" aria-live="polite">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">角色权限</h1>
+          <h1 className="text-2xl font-semibold tracking-normal">权限点管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">正在加载权限编码、模块和状态。</p>
         </div>
         <Button disabled>

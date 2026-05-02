@@ -29,8 +29,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getAdminSession } from "@/lib/auth";
-import { type AdminPermission } from "@/lib/backend";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
+import { buildBackendUrl, parseBackendJson, type AdminPermission } from "@/lib/backend";
+import { isPermissionCode, PermissionCodeConfig } from "@gooes/domain";
 
 const moduleCards = [
   {
@@ -102,6 +103,16 @@ const scopeLabel: Record<AdminPermission["scope"], string> = {
   all: "全部",
 };
 
+type PermissionMeta = {
+  code: string;
+  name: string | null;
+  description: string | null;
+};
+
+type PermissionMetaListData = {
+  list: PermissionMeta[];
+};
+
 function hasPermission(permissions: AdminPermission[], code: string) {
   return permissions.some((item) => item.code === code);
 }
@@ -123,8 +134,53 @@ function employeeStatusLabel(status: string | null | undefined) {
   return status || "未知";
 }
 
+async function getPermissionMetaMap() {
+  const token = await getAdminToken();
+  if (!token) {
+    return new Map<string, PermissionMeta>();
+  }
+
+  try {
+    const response = await fetch(
+      buildBackendUrl("/permissions?page=1&pageSize=200&status=active"),
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+    const payload = await parseBackendJson<PermissionMetaListData>(response);
+    return new Map((payload.data?.list || []).map((item) => [item.code, item]));
+  } catch {
+    return new Map<string, PermissionMeta>();
+  }
+}
+
+function getPermissionTitle(permission: AdminPermission, meta: PermissionMeta | undefined) {
+  if (meta?.name && meta.name !== permission.code) return meta.name;
+  if (meta?.description) return meta.description;
+  if (isPermissionCode(permission.code)) {
+    return PermissionCodeConfig[permission.code].label;
+  }
+  return permission.code;
+}
+
+function getPermissionDescription(permission: AdminPermission, meta: PermissionMeta | undefined) {
+  if (
+    meta?.description &&
+    meta.description !== getPermissionTitle(permission, meta)
+  ) {
+    return meta.description;
+  }
+  return null;
+}
+
 export default async function DashboardPage() {
-  const session = await getAdminSession();
+  const [session, permissionMetaMap] = await Promise.all([
+    getAdminSession(),
+    getPermissionMetaMap(),
+  ]);
   const permissions = session?.permissions || [];
   const employee = session?.employee;
   const allScopeCount = permissions.filter((item) => item.scope === "all").length;
@@ -285,7 +341,7 @@ export default async function DashboardPage() {
           <CardFooter>
             <Button asChild variant="secondary" className="w-full">
               <Link href="/permissions">
-                查看权限
+                查看权限点
                 <ArrowRight data-icon="inline-end" />
               </Link>
             </Button>
@@ -342,18 +398,31 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>权限明细</CardTitle>
-          <CardDescription>展示当前会话的前 6 项权限，完整列表请进入角色权限页面。</CardDescription>
+          <CardDescription>展示当前会话的前 6 项权限，完整列表请进入权限点页面。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {topPermissions.length > 0 ? (
-            topPermissions.map((permission) => (
-              <div key={`${permission.code}-${permission.scope}`} className="rounded-md border p-3">
-                <div className="truncate text-sm font-medium">{permission.code}</div>
-                <div className="mt-2">
-                  <Badge variant="outline">{scopeLabel[permission.scope] || permission.scope}</Badge>
+            topPermissions.map((permission) => {
+              const meta = permissionMetaMap.get(permission.code);
+              const title = getPermissionTitle(permission, meta);
+              const description = getPermissionDescription(permission, meta);
+
+              return (
+                <div key={`${permission.code}-${permission.scope}`} className="rounded-md border p-3">
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-medium">{title}</div>
+                    {description ? (
+                      <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                        {description}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{scopeLabel[permission.scope] || permission.scope}</Badge>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="rounded-md border p-4 text-sm text-muted-foreground">
               当前会话没有返回权限明细。

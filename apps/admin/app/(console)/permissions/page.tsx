@@ -98,7 +98,7 @@ export default async function PermissionsPage({
     <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">角色权限</h1>
+          <h1 className="text-2xl font-semibold tracking-normal">权限点管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             权限编码、模块、资源和动作维护。当前共 {pagination.total} 条记录。
           </p>
