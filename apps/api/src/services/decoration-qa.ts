@@ -9,6 +9,7 @@ import type {
 import type { Tables } from "@/types/database";
 import { authorizationService } from "@/services/authorization";
 import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
+import { systemSettingsService } from "@/services/system-settings";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   ProjectStatusConfig,
@@ -307,18 +308,14 @@ function requireAiEnv(names: string[], label: string) {
   return value;
 }
 
-function getAiEndpoint() {
-  return firstNonEmptyEnv([
-    "AI_CHAT_COMPLETIONS_URL",
-    "DEEPSEEK_CHAT_COMPLETIONS_URL",
-  ])
+async function getAiEndpoint() {
+  return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
     || (process.env.DEEPSEEK_API_KEY?.trim()
       ? "https://api.deepseek.com/chat/completions"
       : "https://api.openai.com/v1/chat/completions");
 }
 
-function getAiApiKey() {
-  const endpoint = getAiEndpoint();
+function getAiApiKey(endpoint: string) {
   const envNames = endpoint.includes("api.deepseek.com")
     ? ["DEEPSEEK_API_KEY", "AI_API_KEY"]
     : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
@@ -326,12 +323,8 @@ function getAiApiKey() {
   return requireAiEnv(envNames, "AI_API_KEY / DEEPSEEK_API_KEY");
 }
 
-function getAiModel() {
-  const endpoint = getAiEndpoint();
-  const envNames = endpoint.includes("api.deepseek.com")
-    ? ["DEEPSEEK_MODEL", "AI_MODEL"]
-    : ["AI_MODEL", "DEEPSEEK_MODEL"];
-  const explicit = firstNonEmptyEnv(envNames);
+async function getAiModel(endpoint: string) {
+  const explicit = await systemSettingsService.getString("AI_MODEL");
   if (explicit) {
     return explicit;
   }
@@ -343,9 +336,8 @@ function getAiModel() {
   throw Errors.dbError("缺少 AI 环境变量: AI_MODEL / DEEPSEEK_MODEL");
 }
 
-function getAiRequestTimeoutMs() {
-  const raw = process.env.AI_REQUEST_TIMEOUT_MS?.trim();
-  const parsed = raw ? Number(raw) : 60000;
+async function getAiRequestTimeoutMs() {
+  const parsed = await systemSettingsService.getNumber("AI_REQUEST_TIMEOUT_MS", 60000);
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return 60000;
@@ -354,33 +346,35 @@ function getAiRequestTimeoutMs() {
   return parsed;
 }
 
-function getBaseSystemPrompt() {
-  const customPrompt = process.env.DECORATION_QA_SYSTEM_PROMPT?.trim();
+async function getBaseSystemPrompt() {
+  const customPrompt = await systemSettingsService.getString("DECORATION_QA_SYSTEM_PROMPT");
   return customPrompt
     ? `${customPrompt}\n\n${DEFAULT_SYSTEM_PROMPT}`
     : DEFAULT_SYSTEM_PROMPT;
 }
 
-function getSystemPrompt() {
-  return `${getBaseSystemPrompt()}${JSON_OUTPUT_PROMPT}`;
+async function getSystemPrompt() {
+  return `${await getBaseSystemPrompt()}${JSON_OUTPUT_PROMPT}`;
 }
 
-function getStreamingSystemPrompt() {
-  return `${getBaseSystemPrompt()}${STREAM_OUTPUT_PROMPT}`;
+async function getStreamingSystemPrompt() {
+  return `${await getBaseSystemPrompt()}${STREAM_OUTPUT_PROMPT}`;
 }
 
-function getOpenRouterHeaders(): Record<string, string> {
-  const endpoint = getAiEndpoint();
-
+async function getOpenRouterHeaders(endpoint: string): Promise<Record<string, string>> {
   if (!endpoint.includes("openrouter.ai")) {
     return {};
   }
 
   return {
-    "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER?.trim()
-      || "https://gooes.local",
-    "X-Title": process.env.OPENROUTER_APP_NAME?.trim()
-      || "gooes-decoration-qa",
+    "HTTP-Referer": await systemSettingsService.getString(
+      "OPENROUTER_HTTP_REFERER",
+      "https://gooes.local",
+    ),
+    "X-Title": await systemSettingsService.getString(
+      "OPENROUTER_APP_NAME",
+      "gooes-decoration-qa",
+    ),
   };
 }
 
@@ -559,11 +553,11 @@ function parseQaResult(rawContent: string): DecorationQaResult {
   }
 }
 
-function buildHeaders(apiKey: string): Record<string, string> {
+async function buildHeaders(apiKey: string, endpoint: string): Promise<Record<string, string>> {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
-    ...getOpenRouterHeaders(),
+    ...await getOpenRouterHeaders(endpoint),
   };
 }
 
@@ -904,9 +898,9 @@ async function buildSuggestionScenePrompt(input: {
 }
 
 async function generateSuggestionQuestionsByAi(scenePrompt: string) {
-  const apiKey = getAiApiKey();
-  const model = getAiModel();
-  const endpoint = getAiEndpoint();
+  const endpoint = await getAiEndpoint();
+  const apiKey = getAiApiKey(endpoint);
+  const model = await getAiModel(endpoint);
   const result = await requestQaResult(endpoint, apiKey, {
     model,
     temperature: 0.8,
@@ -1048,12 +1042,12 @@ async function requestQaResult(
   requestBody: OpenAiRequestBody,
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), getAiRequestTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), await getAiRequestTimeoutMs());
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: buildHeaders(apiKey),
+      headers: await buildHeaders(apiKey, endpoint),
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
@@ -1070,18 +1064,18 @@ async function requestQaResult(
   }
 }
 
-function createStreamRequestBody(
+async function createStreamRequestBody(
   input: DecorationQaStreamRequestInput,
   model: string,
   extraSystemMessages: string[] = [],
-): OpenAiRequestBody {
+): Promise<OpenAiRequestBody> {
   return {
     model,
     temperature: 0.7,
     messages: buildMessages(
       input.question,
       [],
-      getStreamingSystemPrompt(),
+      await getStreamingSystemPrompt(),
       extraSystemMessages,
     ),
     stream: true,
@@ -1107,12 +1101,12 @@ async function requestQaStream(
       });
     }
   }
-  const timeout = setTimeout(() => controller.abort(), getAiRequestTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), await getAiRequestTimeoutMs());
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: buildHeaders(apiKey),
+      headers: await buildHeaders(apiKey, endpoint),
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
@@ -1154,11 +1148,11 @@ function parseSseEvent(line: string) {
 export async function askDecorationQa(
   input: DecorationQaRequestInput,
 ): Promise<DecorationQaResult> {
-  const apiKey = getAiApiKey();
-  const model = getAiModel();
-  const endpoint = getAiEndpoint();
+  const endpoint = await getAiEndpoint();
+  const apiKey = getAiApiKey(endpoint);
+  const model = await getAiModel(endpoint);
 
-  const messages = buildMessages(input.question, input.history, getSystemPrompt());
+  const messages = buildMessages(input.question, input.history, await getSystemPrompt());
 
   let result: OpenAiChatResponse;
 
@@ -1201,9 +1195,9 @@ export async function streamDecorationQa(
     signal?: AbortSignal;
   },
 ) {
-  const apiKey = getAiApiKey();
-  const model = getAiModel();
-  const endpoint = getAiEndpoint();
+  const endpoint = await getAiEndpoint();
+  const apiKey = getAiApiKey(endpoint);
+  const model = await getAiModel(endpoint);
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
   const extraSystemMessages = options?.extraSystemMessages
     || await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
@@ -1211,7 +1205,7 @@ export async function streamDecorationQa(
   const streamRequest = await requestQaStream(
     endpoint,
     apiKey,
-    createStreamRequestBody(input, model, extraSystemMessages),
+    await createStreamRequestBody(input, model, extraSystemMessages),
     options?.signal,
   );
 
@@ -1311,6 +1305,6 @@ export function serializeDecorationQaStreamEvent(event: DecorationQaStreamEvent)
   return toNdjson(event);
 }
 
-export function getDecorationQaSystemPrompt() {
+export async function getDecorationQaSystemPrompt() {
   return getSystemPrompt();
 }

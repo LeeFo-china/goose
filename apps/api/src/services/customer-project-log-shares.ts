@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { systemSettingsService } from "@/services/system-settings";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
 import {
   marketingCampaignRepository,
@@ -251,18 +252,14 @@ function firstNonEmptyEnv(names: string[]) {
   return "";
 }
 
-function getAiEndpoint() {
-  return firstNonEmptyEnv([
-    "AI_CHAT_COMPLETIONS_URL",
-    "DEEPSEEK_CHAT_COMPLETIONS_URL",
-  ])
+async function getAiEndpoint() {
+  return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
     || (process.env.DEEPSEEK_API_KEY?.trim()
       ? "https://api.deepseek.com/chat/completions"
       : "https://api.openai.com/v1/chat/completions");
 }
 
-function getAiApiKey() {
-  const endpoint = getAiEndpoint();
+function getAiApiKey(endpoint: string) {
   const envNames = endpoint.includes("api.deepseek.com")
     ? ["DEEPSEEK_API_KEY", "AI_API_KEY"]
     : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
@@ -270,12 +267,8 @@ function getAiApiKey() {
   return firstNonEmptyEnv(envNames);
 }
 
-function getAiModel() {
-  const endpoint = getAiEndpoint();
-  const envNames = endpoint.includes("api.deepseek.com")
-    ? ["DEEPSEEK_MODEL", "AI_MODEL"]
-    : ["AI_MODEL", "DEEPSEEK_MODEL"];
-  const explicit = firstNonEmptyEnv(envNames);
+async function getAiModel(endpoint: string) {
+  const explicit = await systemSettingsService.getString("AI_MODEL");
   if (explicit) {
     return explicit;
   }
@@ -283,13 +276,18 @@ function getAiModel() {
   return endpoint.includes("api.deepseek.com") ? "deepseek-chat" : "";
 }
 
-function getWechatShareCampaignPage() {
-  return process.env.WECHAT_SHARE_CAMPAIGN_PAGE?.trim() || DEFAULT_SHARE_CAMPAIGN_PAGE;
+async function getWechatShareCampaignPage() {
+  return systemSettingsService.getString(
+    "WECHAT_SHARE_CAMPAIGN_PAGE",
+    DEFAULT_SHARE_CAMPAIGN_PAGE,
+  );
 }
 
-function getWechatShareCampaignClaimVoucherPage() {
-  return process.env.WECHAT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE?.trim()
-    || DEFAULT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE;
+async function getWechatShareCampaignClaimVoucherPage() {
+  return systemSettingsService.getString(
+    "WECHAT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE",
+    DEFAULT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE,
+  );
 }
 
 function getCustomerProjectLogShareTargetAssistCount() {
@@ -1520,9 +1518,9 @@ class CustomerProjectLogShareService {
     context: CustomerProjectLogShareContext,
     input: GenerateCustomerProjectLogShareCopyInput,
   ) {
-    const endpoint = getAiEndpoint();
-    const apiKey = getAiApiKey();
-    const model = getAiModel();
+    const endpoint = await getAiEndpoint();
+    const apiKey = getAiApiKey(endpoint);
+    const model = await getAiModel(endpoint);
 
     if (!endpoint || !apiKey || !model) {
       return fallbackCopies(context);
@@ -1864,7 +1862,7 @@ class CustomerProjectLogShareService {
         },
         body: JSON.stringify({
           scene: buildMiniProgramScene(shareToken),
-          page: getWechatShareCampaignPage(),
+          page: await getWechatShareCampaignPage(),
           check_path: false,
           env_version: "release",
         }),
@@ -1912,7 +1910,7 @@ class CustomerProjectLogShareService {
         },
         body: JSON.stringify({
           scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
-          page: getWechatShareCampaignClaimVoucherPage(),
+          page: await getWechatShareCampaignClaimVoucherPage(),
           check_path: false,
           env_version: "release",
         }),
@@ -1960,7 +1958,7 @@ class CustomerProjectLogShareService {
         },
         body: JSON.stringify({
           scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
-          page: getWechatShareCampaignClaimVoucherPage(),
+          page: await getWechatShareCampaignClaimVoucherPage(),
           check_path: false,
           env_version: "release",
         }),

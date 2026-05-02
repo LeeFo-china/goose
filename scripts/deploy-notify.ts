@@ -13,6 +13,11 @@ type SmtpResponse = {
   code: number;
   response: string;
 };
+type RemoteSystemSetting = {
+  key?: string;
+  value_text?: string | null;
+  status?: string;
+};
 
 type ServiceStatus = {
   name: string;
@@ -35,6 +40,15 @@ const ENV_CANDIDATES = [
   "/home/ubuntu/actions-runner/.env",
   "/home/runner/actions-runner/.env",
 ].filter(Boolean);
+
+const REMOTE_NOTIFY_SETTING_KEYS = [
+  "DEPLOY_NOTIFY_TO",
+  "DEPLOY_NOTIFY_FROM",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_SECURE",
+  "SMTP_FAMILY",
+];
 
 function parseEnvFile(path: string) {
   const parsed: EnvMap = {};
@@ -72,6 +86,47 @@ function loadEnv() {
       ),
     ),
   };
+}
+
+async function loadRemoteSystemSettings(env: EnvMap) {
+  const supabaseUrl = env.SUPABASE_URL?.replace(/\/+$/, "");
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return {};
+  }
+
+  const keyFilter = REMOTE_NOTIFY_SETTING_KEYS.join(",");
+  const url = `${supabaseUrl}/rest/v1/system_settings?select=key,value_text,status&status=eq.active&key=in.(${keyFilter})`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+    });
+    if (!response.ok) {
+      console.log(`Deploy mail remote settings skipped: status ${response.status}`);
+      return {};
+    }
+
+    const rows = await response.json() as RemoteSystemSetting[];
+    return rows.reduce<EnvMap>((result, row) => {
+      if (
+        row.key &&
+        REMOTE_NOTIFY_SETTING_KEYS.includes(row.key) &&
+        row.status === "active" &&
+        row.value_text?.trim()
+      ) {
+        result[row.key] = row.value_text.trim();
+      }
+      return result;
+    }, {});
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`Deploy mail remote settings skipped: ${message}`);
+    return {};
+  }
 }
 
 function mask(value: string) {
@@ -390,7 +445,12 @@ async function sendMail(env: EnvMap, input: { subject: string; body: string }) {
 }
 
 async function main() {
-  const env = loadEnv();
+  const localEnv = loadEnv();
+  const remoteSettings = await loadRemoteSystemSettings(localEnv);
+  const env = {
+    ...localEnv,
+    ...remoteSettings,
+  };
   try {
     const report = await collectReport(env);
     await sendMail(env, report);
