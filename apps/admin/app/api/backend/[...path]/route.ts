@@ -6,6 +6,49 @@ type RouteContext = {
   params: Promise<{ path: string[] }>;
 };
 
+const RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchBackendWithRetry(input: {
+  url: string;
+  method: string;
+  headers: Headers;
+  body?: ArrayBuffer;
+  path: string;
+}) {
+  const maxAttempts = RETRYABLE_METHODS.has(input.method) ? 2 : 1;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetch(input.url, {
+        method: input.method,
+        headers: input.headers,
+        body: input.body,
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      console.error("[admin-backend-proxy] backend fetch failed", {
+        path: input.path,
+        method: input.method,
+        attempt,
+        maxAttempts,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (attempt < maxAttempts) {
+        await sleep(300);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 async function proxyBackend(request: Request, context: RouteContext) {
   const token = await getAdminToken();
   if (!token) {
@@ -31,11 +74,12 @@ async function proxyBackend(request: Request, context: RouteContext) {
   const method = request.method.toUpperCase();
   let response: Response;
   try {
-    response = await fetch(buildBackendUrl(path), {
+    response = await fetchBackendWithRetry({
+      url: buildBackendUrl(path),
       method,
       headers,
       body: method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer(),
-      cache: "no-store",
+      path,
     });
   } catch {
     return NextResponse.json(
