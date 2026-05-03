@@ -1,15 +1,8 @@
-import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  PermissionFilters,
-  PermissionsPagination,
-} from "@/components/permissions/permission-list-actions";
 import {
   CreatePermissionButton,
   type PermissionRecord,
 } from "@/components/permissions/permission-mutations";
-import { PermissionsTable } from "@/components/permissions/permissions-table";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionsClientShell } from "@/components/permissions/permissions-client-shell";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -106,39 +99,14 @@ export default async function PermissionsPage({
         <CreatePermissionButton />
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <PermissionFilters status={status} module={module} keyword={keyword} />
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>权限列表</CardTitle>
-          <Badge variant="outline">
-            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <PermissionsTable permissions={list} />
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <PermissionsPagination
-          pagination={pagination}
-          status={status}
-          module={module}
-          keyword={keyword}
-        />
-      </div>
+      <PermissionsClientShell
+        permissions={list}
+        pagination={pagination}
+        status={status}
+        module={module}
+        keyword={keyword}
+        error={error}
+      />
     </div>
   );
 }
