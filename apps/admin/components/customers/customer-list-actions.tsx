@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   CUSTOMER_SOURCE_VALUES,
   CUSTOMER_STATUS_VALUES,
   CustomerSourceConfig,
   CustomerStatusConfig,
 } from "@gooes/domain";
-import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,8 @@ type Pagination = {
   total: number;
   totalPages: number;
 };
+
+type Navigate = (href: string) => void;
 
 const statusOptions = [
   ["", "全部状态"],
@@ -58,32 +59,21 @@ function buildCustomersHref(input: {
   return query ? `/customers?${query}` : "/customers";
 }
 
-function useCustomersNavigation() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
-  function navigate(href: string) {
-    startTransition(() => {
-      router.push(href);
-      router.refresh();
-    });
-  }
-
-  return { pending, navigate };
-}
-
 export function CustomerFilters({
   status,
   source,
   keyword,
   follow,
+  pending,
+  onNavigate,
 }: {
   status: string;
   source: string;
   keyword: string;
   follow: string;
+  pending: boolean;
+  onNavigate: Navigate;
 }) {
-  const { pending, navigate } = useCustomersNavigation();
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedSource, setSelectedSource] = useState(source);
   const [selectedFollow, setSelectedFollow] = useState(follow);
@@ -101,7 +91,7 @@ export function CustomerFilters({
     source?: string;
     follow?: string;
   }) {
-    navigate(buildCustomersHref({
+    onNavigate(buildCustomersHref({
       status: input.status ?? status,
       source: input.source ?? source,
       follow: input.follow ?? follow,
@@ -109,8 +99,18 @@ export function CustomerFilters({
     }));
   }
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onNavigate(buildCustomersHref({
+      status: selectedStatus,
+      source: selectedSource,
+      follow: selectedFollow,
+      keyword: selectedKeyword.trim(),
+    }));
+  }
+
   return (
-    <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_150px_160px_1fr_72px]">
+    <form className="grid gap-3 lg:grid-cols-[150px_150px_160px_1fr_72px]" onSubmit={submit}>
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="source" value={selectedSource} />
       <input type="hidden" name="follow" value={selectedFollow} />
@@ -165,6 +165,7 @@ export function CustomerFilters({
           name="keyword"
           value={selectedKeyword}
           placeholder="搜索姓名、手机号或来源"
+          disabled={pending}
           onChange={(event) => setSelectedKeyword(event.target.value)}
         />
         {selectedKeyword ? (
@@ -172,6 +173,7 @@ export function CustomerFilters({
             <InputGroupButton
               aria-label="清除搜索内容"
               size="icon-xs"
+              disabled={pending}
               onClick={() => setSelectedKeyword("")}
             >
               <X aria-hidden="true" />
@@ -179,7 +181,7 @@ export function CustomerFilters({
           </InputGroupAddon>
         ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline">
+      <Button type="submit" variant="outline" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
@@ -193,14 +195,17 @@ export function CustomersPagination({
   source,
   keyword,
   follow,
+  pending,
+  onNavigate,
 }: {
   pagination: Pagination;
   status: string;
   source: string;
   keyword: string;
   follow: string;
+  pending: boolean;
+  onNavigate: Navigate;
 }) {
-  const { pending, navigate } = useCustomersNavigation();
   const previousDisabled = pagination.page <= 1 || pending;
   const nextDisabled = pagination.page >= pagination.totalPages || pending;
 
@@ -210,7 +215,7 @@ export function CustomersPagination({
         type="button"
         variant="outline"
         disabled={previousDisabled}
-        onClick={() => navigate(buildCustomersHref({
+        onClick={() => onNavigate(buildCustomersHref({
           page: Math.max(1, pagination.page - 1),
           status,
           source,
@@ -225,7 +230,7 @@ export function CustomersPagination({
         type="button"
         variant="outline"
         disabled={nextDisabled}
-        onClick={() => navigate(buildCustomersHref({
+        onClick={() => onNavigate(buildCustomersHref({
           page: pagination.page + 1,
           status,
           source,

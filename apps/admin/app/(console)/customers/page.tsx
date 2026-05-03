@@ -1,16 +1,10 @@
 import { PhoneCall, UserRound, UsersRound } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  CustomerFilters,
-  CustomersPagination,
-} from "@/components/customers/customer-list-actions";
+import { CustomersClientShell } from "@/components/customers/customers-client-shell";
 import {
   CreateCustomerButton,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
-import { CustomersTable } from "@/components/customers/customers-table";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -152,45 +146,15 @@ export default async function CustomersPage({
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <CustomerFilters
-            status={status}
-            source={source}
-            keyword={keyword}
-            follow={follow}
-          />
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>客户列表</CardTitle>
-          <Badge variant="outline">
-            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <CustomersTable customers={list} />
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <CustomersPagination
-          pagination={pagination}
-          status={status}
-          source={source}
-          keyword={keyword}
-          follow={follow}
-        />
-      </div>
+      <CustomersClientShell
+        customers={list}
+        pagination={pagination}
+        status={status}
+        source={source}
+        keyword={keyword}
+        follow={follow}
+        error={error}
+      />
     </div>
   );
 }
