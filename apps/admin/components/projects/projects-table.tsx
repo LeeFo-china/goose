@@ -71,9 +71,11 @@ function propertyLabel(value: ProjectRecord["property"]) {
 function ProjectIdentityCell({
   id,
   name,
+  customer,
 }: {
   id: string;
   name: string;
+  customer: string;
 }) {
   return (
     <Tooltip>
@@ -85,13 +87,14 @@ function ProjectIdentityCell({
           {name}
         </div>
         <div className="w-[10em] truncate text-xs text-muted-foreground">
-          {id}
+          {customer}
         </div>
       </TooltipTrigger>
       <TooltipContent align="start" className="max-w-[280px]">
         <div className="flex flex-col gap-1">
           <div className="break-all font-medium">{name}</div>
-          <div className="break-all text-xs opacity-90">{id}</div>
+          <div className="break-all text-xs opacity-90">客户：{customer}</div>
+          <div className="break-all text-xs opacity-90">项目 ID：{id}</div>
         </div>
       </TooltipContent>
     </Tooltip>
@@ -105,10 +108,9 @@ export function ProjectsTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1420px] table-fixed border-t text-sm">
+      <table className="w-full min-w-[1280px] table-fixed border-t text-sm">
         <colgroup>
           <col className="w-[170px]" />
-          <col className="w-[140px]" />
           <col className="w-[260px]" />
           <col className="w-[110px]" />
           <col className="w-[140px]" />
@@ -120,7 +122,6 @@ export function ProjectsTable({
         <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
           <tr>
             <th className="whitespace-nowrap px-4 py-3">项目</th>
-            <th className="whitespace-nowrap px-4 py-3">客户</th>
             <th className="whitespace-nowrap px-4 py-3">房产</th>
             <th className="whitespace-nowrap px-4 py-3">状态</th>
             <th className="whitespace-nowrap px-4 py-3">预算</th>
@@ -143,9 +144,12 @@ export function ProjectsTable({
               return (
                 <tr key={project.id} className="group border-t transition-colors hover:bg-muted/40">
                   <td className="px-4 py-4">
-                    <ProjectIdentityCell id={project.id} name={project.name || "未命名项目"} />
+                    <ProjectIdentityCell
+                      id={project.id}
+                      name={project.name || "未命名项目"}
+                      customer={customerName(project.customer)}
+                    />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-4">{customerName(project.customer)}</td>
                   <td className="px-4 py-4 text-muted-foreground">
                     <div className="truncate">{propertyLabel(project.property)}</div>
                   </td>
@@ -164,7 +168,7 @@ export function ProjectsTable({
             })
           ) : (
             <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={9}>
+              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={8}>
                 没有符合条件的项目
               </td>
             </tr>
