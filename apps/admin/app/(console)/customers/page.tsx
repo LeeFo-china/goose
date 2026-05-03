@@ -29,6 +29,7 @@ type CustomerListData = {
 type CustomerPageSearchParams = {
   page?: string;
   status?: string;
+  source?: string;
   keyword?: string;
   follow?: string;
 };
@@ -50,6 +51,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
 
   const page = normalizePage(params.page);
   const status = params.status?.trim() || "";
+  const source = params.source?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const follow = params.follow?.trim() || "";
   const query = new URLSearchParams({
@@ -57,6 +59,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
     pageSize: "20",
   });
   if (status) query.set("status", status);
+  if (source) query.set("source", source);
   if (keyword) query.set("keyword", keyword);
   if (follow) query.set("follow", follow);
 
@@ -91,6 +94,7 @@ export default async function CustomersPage({
 }) {
   const params = await searchParams;
   const status = params.status?.trim() || "";
+  const source = params.source?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const follow = params.follow?.trim() || "";
   const { list, pagination, error } = await getCustomers(params);
@@ -150,7 +154,12 @@ export default async function CustomersPage({
 
       <Card>
         <CardContent className="p-4">
-          <CustomerFilters status={status} keyword={keyword} follow={follow} />
+          <CustomerFilters
+            status={status}
+            source={source}
+            keyword={keyword}
+            follow={follow}
+          />
         </CardContent>
       </Card>
 
@@ -177,6 +186,7 @@ export default async function CustomersPage({
         <CustomersPagination
           pagination={pagination}
           status={status}
+          source={source}
           keyword={keyword}
           follow={follow}
         />

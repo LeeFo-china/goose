@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useTransition } from "react";
 import {
+  CUSTOMER_SOURCE_VALUES,
   CUSTOMER_STATUS_VALUES,
+  CustomerSourceConfig,
   CustomerStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
@@ -31,15 +33,25 @@ const statusOptions = [
   ] as const),
 ] as const;
 
+const sourceOptions = [
+  ["", "全部来源"],
+  ...CUSTOMER_SOURCE_VALUES.map((value) => [
+    value,
+    CustomerSourceConfig[value].label,
+  ] as const),
+] as const;
+
 function buildCustomersHref(input: {
   page?: number;
   status?: string;
+  source?: string;
   keyword?: string;
   follow?: string;
 }) {
   const params = new URLSearchParams();
   if (input.page && input.page > 1) params.set("page", String(input.page));
   if (input.status) params.set("status", input.status);
+  if (input.source) params.set("source", input.source);
   if (input.keyword) params.set("keyword", input.keyword);
   if (input.follow) params.set("follow", input.follow);
   const query = params.toString();
@@ -62,26 +74,31 @@ function useCustomersNavigation() {
 
 export function CustomerFilters({
   status,
+  source,
   keyword,
   follow,
 }: {
   status: string;
+  source: string;
   keyword: string;
   follow: string;
 }) {
   const [selectedStatus, setSelectedStatus] = useState(status);
+  const [selectedSource, setSelectedSource] = useState(source);
   const [selectedFollow, setSelectedFollow] = useState(follow);
   const [selectedKeyword, setSelectedKeyword] = useState(keyword);
 
   useEffect(() => {
     setSelectedStatus(status);
+    setSelectedSource(source);
     setSelectedFollow(follow);
     setSelectedKeyword(keyword);
-  }, [follow, keyword, status]);
+  }, [follow, keyword, source, status]);
 
   return (
-    <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px]">
+    <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_150px_160px_1fr_72px]">
       <input type="hidden" name="status" value={selectedStatus} />
+      <input type="hidden" name="source" value={selectedSource} />
       <input type="hidden" name="follow" value={selectedFollow} />
       <FormSelect
         id="customer-status-filter"
@@ -91,6 +108,15 @@ export function CustomerFilters({
           label,
         }))}
         onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+      />
+      <FormSelect
+        id="customer-source-filter"
+        value={selectedSource || "__all"}
+        options={sourceOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => setSelectedSource(value === "__all" ? "" : value)}
       />
       <FormSelect
         id="customer-follow-filter"
@@ -134,11 +160,13 @@ export function CustomerFilters({
 export function CustomersPagination({
   pagination,
   status,
+  source,
   keyword,
   follow,
 }: {
   pagination: Pagination;
   status: string;
+  source: string;
   keyword: string;
   follow: string;
 }) {
@@ -155,6 +183,7 @@ export function CustomersPagination({
         onClick={() => navigate(buildCustomersHref({
           page: Math.max(1, pagination.page - 1),
           status,
+          source,
           keyword,
           follow,
         }))}
@@ -169,6 +198,7 @@ export function CustomersPagination({
         onClick={() => navigate(buildCustomersHref({
           page: pagination.page + 1,
           status,
+          source,
           keyword,
           follow,
         }))}
