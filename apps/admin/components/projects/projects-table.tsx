@@ -70,7 +70,7 @@ export function ProjectsTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1680px] table-fixed border-t text-sm">
+      <table className="w-full min-w-[1570px] table-fixed border-t text-sm">
         <colgroup>
           <col className="w-[320px]" />
           <col className="w-[140px]" />
@@ -80,7 +80,7 @@ export function ProjectsTable({
           <col className="w-[130px]" />
           <col className="w-[150px]" />
           <col className="w-[120px]" />
-          <col className="w-[330px]" />
+          <col className="w-[220px]" />
         </colgroup>
         <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
           <tr>

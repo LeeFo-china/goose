@@ -9,7 +9,6 @@ import { useRouter } from "next/navigation";
 import {
   Edit3,
   Eye,
-  FileText,
   Loader2,
   Plus,
   Trash2,
@@ -739,14 +738,10 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   }
 
   return (
-    <div className="flex min-w-[300px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+    <div className="flex min-w-[220px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={() => openDetail()} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => openDetail("logs")} disabled={pending}>
-        <FileText />
-        日志
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} disabled={disabled}>
         <Edit3 />
