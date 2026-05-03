@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BadgeCheck,
+  Building2,
   BriefcaseBusiness,
   Camera,
   CircleDollarSign,
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { href: "/customers", label: "客户", icon: Users },
   { href: "/projects", label: "项目", icon: BriefcaseBusiness },
   { href: "/employees", label: "员工", icon: BadgeCheck },
+  { href: "/organization", label: "组织架构", icon: Building2 },
   { href: "/roles", label: "角色", icon: Shield },
   { href: "/permissions", label: "权限点", icon: KeyRound },
   { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
