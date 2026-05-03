@@ -80,7 +80,7 @@ export function ProjectsTable({
           <col className="w-[130px]" />
           <col className="w-[150px]" />
           <col className="w-[120px]" />
-          <col className="w-[260px]" />
+          <col className="w-[330px]" />
         </colgroup>
         <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
           <tr>

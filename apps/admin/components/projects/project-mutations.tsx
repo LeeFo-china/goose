@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import {
   Edit3,
   Eye,
+  FileText,
   Loader2,
   Plus,
   Trash2,
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProjectLogsDialog } from "@/components/projects/project-logs-dialog";
 
 type RelationPerson = {
   id?: string | null;
@@ -663,6 +665,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [detail, setDetail] = useState<ProjectRecord | null>(null);
   const disabled = pending || project.status === "invalid";
 
@@ -695,10 +698,14 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   }
 
   return (
-    <div className="flex min-w-[228px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+    <div className="flex min-w-[300px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
       <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => setLogsOpen(true)} disabled={pending}>
+        <FileText />
+        日志
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} disabled={disabled}>
         <Edit3 />
@@ -713,6 +720,11 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
         project={project}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <ProjectLogsDialog
+        project={project}
+        open={logsOpen}
+        onOpenChange={setLogsOpen}
       />
       {detail ? <ProjectDetailDialog project={detail} onClose={() => setDetail(null)} /> : null}
       {error ? (
