@@ -3,6 +3,9 @@ node_modules
 
 .vscode
 
+# local Codex workspace files
+.codex/skills/backend/SKILL.md
+
 # output
 out
 dist

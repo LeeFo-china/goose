@@ -28,7 +28,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ProjectLogsDialog } from "@/components/projects/project-logs-dialog";
+import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 type RelationPerson = {
   id?: string | null;
@@ -89,6 +95,7 @@ type Option = {
 };
 
 type ProjectMode = "create" | "edit";
+type ProjectDetailTab = "overview" | "members" | "logs";
 
 type ProjectFormState = {
   name: string;
@@ -577,14 +584,23 @@ function ProjectDialog({
 
 function ProjectDetailDialog({
   project,
+  initialTab,
   onClose,
 }: {
   project: ProjectRecord;
+  initialTab: ProjectDetailTab;
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
+  const updateActiveTab = (value: string) => {
+    if (value === "overview" || value === "members" || value === "logs") {
+      setActiveTab(value);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[88vh] max-w-[860px] overflow-hidden p-0">
+      <DialogContent className="max-h-[88vh] max-w-[920px] overflow-hidden p-0">
         <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
             <DialogTitle>{project.name}</DialogTitle>
@@ -592,46 +608,66 @@ function ProjectDetailDialog({
           </div>
           <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
         </DialogHeader>
-        <div className="flex max-h-[calc(88vh-82px)] flex-col gap-5 overflow-y-auto p-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <InfoItem label="客户" value={customerName(project.customer)} />
-            <InfoItem label="房产" value={propertyLabel(project.property)} />
-            <InfoItem label="预算" value={`¥${formatMoney(project.budget)}`} />
-            <InfoItem label="签约金额" value={`¥${formatMoney(project.signed_amount)}`} />
-            <InfoItem label="设计师" value={personName(project.designer)} />
-            <InfoItem label="工程负责人" value={personName(project.supervisor)} />
-            <InfoItem label="开工日期" value={formatDate(project.start_date)} />
-            <InfoItem label="展示状态" value={project.visibility_status || "inherit"} />
+        <Tabs
+          value={activeTab}
+          onValueChange={updateActiveTab}
+          className="max-h-[calc(88vh-82px)] overflow-hidden"
+        >
+          <div className="border-b px-5 pt-4">
+            <TabsList>
+              <TabsTrigger value="overview">概览</TabsTrigger>
+              <TabsTrigger value="members">成员</TabsTrigger>
+              <TabsTrigger value="logs">施工日志</TabsTrigger>
+            </TabsList>
           </div>
-          <section>
-            <h3 className="mb-3 text-sm font-semibold">项目地址</h3>
-            <div className="rounded-md border p-4 text-sm text-muted-foreground">
-              {project.address || "-"}
-            </div>
-          </section>
-          <section>
-            <h3 className="mb-3 text-sm font-semibold">项目成员</h3>
-            <div className="grid gap-2 md:grid-cols-2">
-              {(project.members || []).map((member) => (
-                <div key={member.id} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{member.role_name}</div>
-                    {member.is_primary ? <Badge variant="success">主责</Badge> : null}
-                  </div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {personName(member.employee)}
-                    {member.is_virtual ? " · 客户归属" : ""}
-                  </div>
-                </div>
-              ))}
-              {(project.members || []).length === 0 ? (
+          <div className="max-h-[calc(88vh-138px)] overflow-y-auto p-5">
+            <TabsContent value="overview" className="flex flex-col gap-5">
+              <div className="grid gap-3 md:grid-cols-4">
+                <InfoItem label="客户" value={customerName(project.customer)} />
+                <InfoItem label="房产" value={propertyLabel(project.property)} />
+                <InfoItem label="预算" value={`¥${formatMoney(project.budget)}`} />
+                <InfoItem label="签约金额" value={`¥${formatMoney(project.signed_amount)}`} />
+                <InfoItem label="设计师" value={personName(project.designer)} />
+                <InfoItem label="工程负责人" value={personName(project.supervisor)} />
+                <InfoItem label="开工日期" value={formatDate(project.start_date)} />
+                <InfoItem label="展示状态" value={project.visibility_status || "inherit"} />
+              </div>
+              <section>
+                <h3 className="mb-3 text-sm font-semibold">项目地址</h3>
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                  暂无成员
+                  {project.address || "-"}
                 </div>
-              ) : null}
-            </div>
-          </section>
-        </div>
+              </section>
+            </TabsContent>
+            <TabsContent value="members">
+              <section>
+                <h3 className="mb-3 text-sm font-semibold">项目成员</h3>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {(project.members || []).map((member) => (
+                    <div key={member.id} className="rounded-md border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium">{member.role_name}</div>
+                        {member.is_primary ? <Badge variant="success">主责</Badge> : null}
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {personName(member.employee)}
+                        {member.is_virtual ? " · 客户归属" : ""}
+                      </div>
+                    </div>
+                  ))}
+                  {(project.members || []).length === 0 ? (
+                    <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                      暂无成员
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </TabsContent>
+            <TabsContent value="logs">
+              <ProjectLogsPanel project={project} active={activeTab === "logs"} />
+            </TabsContent>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
@@ -665,16 +701,21 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
-  const [detail, setDetail] = useState<ProjectRecord | null>(null);
+  const [detail, setDetail] = useState<{
+    project: ProjectRecord;
+    initialTab: ProjectDetailTab;
+  } | null>(null);
   const disabled = pending || project.status === "invalid";
 
-  function openDetail() {
+  function openDetail(initialTab: ProjectDetailTab = "overview") {
     setError("");
     startTransition(async () => {
       try {
         const data = await requestProject({ path: `/projects/${project.id}` });
-        setDetail(data as ProjectRecord);
+        setDetail({
+          project: data as ProjectRecord,
+          initialTab,
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "详情加载失败");
       }
@@ -699,11 +740,11 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
 
   return (
     <div className="flex min-w-[300px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
+      <Button type="button" variant="outline" size="sm" onClick={() => openDetail()} disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Eye />}
         详情
       </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => setLogsOpen(true)} disabled={pending}>
+      <Button type="button" variant="outline" size="sm" onClick={() => openDetail("logs")} disabled={pending}>
         <FileText />
         日志
       </Button>
@@ -721,12 +762,13 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
         open={editOpen}
         onOpenChange={setEditOpen}
       />
-      <ProjectLogsDialog
-        project={project}
-        open={logsOpen}
-        onOpenChange={setLogsOpen}
-      />
-      {detail ? <ProjectDetailDialog project={detail} onClose={() => setDetail(null)} /> : null}
+      {detail ? (
+        <ProjectDetailDialog
+          project={detail.project}
+          initialTab={detail.initialTab}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
       {error ? (
         <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}

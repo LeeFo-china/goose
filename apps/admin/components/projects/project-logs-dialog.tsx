@@ -7,13 +7,6 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
 
@@ -136,14 +129,12 @@ function ProjectLogSkeleton() {
   );
 }
 
-export function ProjectLogsDialog({
+export function ProjectLogsPanel({
   project,
-  open,
-  onOpenChange,
+  active = true,
 }: {
   project: ProjectRecord;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  active?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -152,7 +143,7 @@ export function ProjectLogsDialog({
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
 
     let cancelled = false;
     setLoading(true);
@@ -187,123 +178,117 @@ export function ProjectLogsDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, project.id]);
+  }, [active, project.id]);
 
   const summary = useMemo(() => buildSummary(logs, calendar), [calendar, logs]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-[920px] overflow-hidden p-0">
-        <DialogHeader className="border-b p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <DialogTitle>施工日志</DialogTitle>
-              <DialogDescription>
-                {project.name} · 最近 10 条施工记录
-              </DialogDescription>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">施工日志</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {project.name} · 最近 10 条施工记录
+          </p>
+        </div>
+        <Badge variant="outline">共 {total} 条</Badge>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">最近日志</div>
+            <div className="mt-1 truncate text-sm font-medium">
+              {formatDateTime(summary.latestTime)}
             </div>
-            <Badge variant="outline">共 {total} 条</Badge>
-          </div>
-        </DialogHeader>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">当前阶段</div>
+            <div className="mt-1 truncate text-sm font-medium">{summary.latestStage}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">日历记录</div>
+            <div className="mt-1 text-sm font-medium">{summary.monthCount} 条</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">有图日志</div>
+            <div className="mt-1 text-sm font-medium">{summary.imageLogCount} 条</div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="flex max-h-[calc(88vh-86px)] flex-col gap-5 overflow-y-auto p-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">最近日志</div>
-                <div className="mt-1 truncate text-sm font-medium">
-                  {formatDateTime(summary.latestTime)}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">当前阶段</div>
-                <div className="mt-1 truncate text-sm font-medium">{summary.latestStage}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">日历记录</div>
-                <div className="mt-1 text-sm font-medium">{summary.monthCount} 条</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">有图日志</div>
-                <div className="mt-1 text-sm font-medium">{summary.imageLogCount} 条</div>
-              </CardContent>
-            </Card>
-          </div>
+      {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-          {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-          {loading ? (
-            <ProjectLogSkeleton />
-          ) : logs.length > 0 ? (
-            <div className="relative flex flex-col gap-4 before:absolute before:left-[11px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-border">
-              {logs.map((log) => (
-                <article key={log.id} className="relative pl-8">
-                  <span className="absolute left-0 top-1 flex size-6 items-center justify-center rounded-full border bg-background">
-                    <FileText className="size-3.5 text-muted-foreground" />
+      {loading ? (
+        <ProjectLogSkeleton />
+      ) : logs.length > 0 ? (
+        <div className="relative flex flex-col gap-4 before:absolute before:left-[11px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-border">
+          {logs.map((log) => (
+            <article key={log.id} className="relative pl-8">
+              <span className="absolute left-0 top-1 flex size-6 items-center justify-center rounded-full border bg-background">
+                <FileText className="size-3.5 text-muted-foreground" />
+              </span>
+              <div className="rounded-md border bg-card p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{stageLabel(log)}</Badge>
+                  {log.node_name ? <Badge variant="outline">{log.node_name}</Badge> : null}
+                  <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <CalendarDays className="size-3" />
+                    {formatDateTime(log.created_at)}
                   </span>
-                  <div className="rounded-md border bg-card p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{stageLabel(log)}</Badge>
-                      {log.node_name ? <Badge variant="outline">{log.node_name}</Badge> : null}
-                      <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <CalendarDays className="size-3" />
-                        {formatDateTime(log.created_at)}
-                      </span>
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{log.content}</p>
-                    {log.images.length > 0 ? (
-                      <div className="mt-3 flex gap-2 overflow-x-auto">
-                        {log.images.slice(0, 6).map((image) => (
-                          <a
-                            key={image}
-                            href={image}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block size-20 shrink-0 overflow-hidden rounded-md border bg-muted"
-                          >
-                            <img src={image} alt="施工日志图片" className="size-full object-cover" />
-                          </a>
-                        ))}
-                        {log.images.length > 6 ? (
-                          <div className="flex size-20 shrink-0 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
-                            +{log.images.length - 6}
-                          </div>
-                        ) : null}
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{log.content}</p>
+                {log.images.length > 0 ? (
+                  <div className="mt-3 flex gap-2 overflow-x-auto">
+                    {log.images.slice(0, 6).map((image) => (
+                      <a
+                        key={image}
+                        href={image}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block size-20 shrink-0 overflow-hidden rounded-md border bg-muted"
+                      >
+                        <img src={image} alt="施工日志图片" className="size-full object-cover" />
+                      </a>
+                    ))}
+                    {log.images.length > 6 ? (
+                      <div className="flex size-20 shrink-0 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+                        +{log.images.length - 6}
                       </div>
                     ) : null}
-                    <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{employeeName(log)}</span>
-                      <span className="inline-flex items-center gap-1">
-                        <ImageIcon className="size-3" />
-                        {log.images.length} 张图片
-                      </span>
-                    </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
-              暂无施工日志
-            </div>
-          )}
-
-          {total > logs.length ? (
-            <div className="flex justify-center">
-              <Button type="button" variant="outline" disabled>
-                {loading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                暂仅展示最近 10 条
-              </Button>
-            </div>
-          ) : null}
+                ) : null}
+                <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{employeeName(log)}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <ImageIcon className="size-3" />
+                    {log.images.length} 张图片
+                  </span>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      ) : (
+        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+          暂无施工日志
+        </div>
+      )}
+
+      {total > logs.length ? (
+        <div className="flex justify-center">
+          <Button type="button" variant="outline" disabled>
+            {loading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            暂仅展示最近 10 条
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
