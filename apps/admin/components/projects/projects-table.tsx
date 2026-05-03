@@ -2,6 +2,11 @@
 
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ProjectRowActions,
   type ProjectRecord,
 } from "@/components/projects/project-mutations";
@@ -63,6 +68,36 @@ function propertyLabel(value: ProjectRecord["property"]) {
   return [item.community, item.building_info].filter(Boolean).join(" ") || "-";
 }
 
+function ProjectIdentityCell({
+  id,
+  name,
+}: {
+  id: string;
+  name: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="w-[10em] truncate font-medium">
+          {name}
+        </div>
+        <div className="w-[10em] truncate text-xs text-muted-foreground">
+          {id}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-[280px]">
+        <div className="flex flex-col gap-1">
+          <div className="break-all font-medium">{name}</div>
+          <div className="break-all text-xs opacity-90">{id}</div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ProjectsTable({
   projects,
 }: {
@@ -70,9 +105,9 @@ export function ProjectsTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1570px] table-fixed border-t text-sm">
+      <table className="w-full min-w-[1420px] table-fixed border-t text-sm">
         <colgroup>
-          <col className="w-[320px]" />
+          <col className="w-[170px]" />
           <col className="w-[140px]" />
           <col className="w-[260px]" />
           <col className="w-[110px]" />
@@ -108,12 +143,7 @@ export function ProjectsTable({
               return (
                 <tr key={project.id} className="group border-t transition-colors hover:bg-muted/40">
                   <td className="px-4 py-4">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{project.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {project.address || project.id}
-                      </div>
-                    </div>
+                    <ProjectIdentityCell id={project.id} name={project.name || "未命名项目"} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-4">{customerName(project.customer)}</td>
                   <td className="px-4 py-4 text-muted-foreground">
