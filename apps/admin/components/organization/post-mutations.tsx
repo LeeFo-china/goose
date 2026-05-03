@@ -7,7 +7,6 @@ import {
   PostConfig,
   PostStatusConfig,
   SalaryTypeConfig,
-  type PostCode,
   type SalaryType,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
+  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -34,14 +34,6 @@ import { Textarea } from "@/components/ui/textarea";
 import type { PostRecord } from "@/components/organization/organization-types";
 
 type PostMode = "create" | "edit";
-
-const postCodeOptions = [
-  { value: "__none", label: "不设置编码" },
-  ...POST_CODE_VALUES.map((value) => ({
-    value,
-    label: `${PostConfig[value].label} · ${value}`,
-  })),
-];
 
 const salaryTypeOptions = [
   { value: "__none", label: "不设置薪资类型" },
@@ -84,10 +76,6 @@ async function mutatePost(input: {
   return payload;
 }
 
-function toPostCode(value: string | null | undefined) {
-  return value && POST_CODE_VALUES.includes(value as PostCode) ? value : "__none";
-}
-
 function toSalaryType(value: string | null | undefined) {
   return value && SALARY_TYPE_VALUES.includes(value as SalaryType) ? value : "__none";
 }
@@ -108,7 +96,7 @@ function PostDialog({
   const [error, setError] = useState("");
   const defaults = useMemo(() => ({
     name: post?.name || "",
-    code: toPostCode(post?.code),
+    code: post?.code || "",
     baseSalary: post?.base_salary != null ? String(post.base_salary) : "",
     salaryType: toSalaryType(post?.salary_type),
     sort: post?.sort != null ? String(post.sort) : "0",
@@ -139,9 +127,10 @@ function PostDialog({
     const baseSalaryValue = String(formData.get("base_salary") || "").trim();
     const sortValue = String(formData.get("sort") || "").trim();
     const description = String(formData.get("description") || "").trim();
+    const codeValue = code.trim().toUpperCase();
     const payload = {
       name: String(formData.get("name") || "").trim(),
-      code: code === "__none" ? null : code,
+      code: codeValue || null,
       base_salary: baseSalaryValue ? Number(baseSalaryValue) : null,
       salary_type: salaryType === "__none" ? null : salaryType,
       sort: sortValue ? Number(sortValue) : 0,
@@ -197,13 +186,26 @@ function PostDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor={`${mode}-post-code`}>岗位编码</FieldLabel>
-              <FormSelect
+              <Input
                 id={`${mode}-post-code`}
+                name="code"
                 value={code}
-                options={postCodeOptions}
+                list={`${mode}-post-code-suggestions`}
+                placeholder="例如 CUSTOMER_SERVICE"
+                maxLength={64}
                 disabled={pending}
-                onChange={setCode}
+                onChange={(event) => setCode(event.target.value.toUpperCase())}
               />
+              <datalist id={`${mode}-post-code-suggestions`}>
+                {POST_CODE_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {PostConfig[value].label}
+                  </option>
+                ))}
+              </datalist>
+              <FieldDescription>
+                使用大写字母、数字、下划线，且以大写字母开头；留空表示不设置。
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={`${mode}-post-salary-type`}>薪资类型</FieldLabel>

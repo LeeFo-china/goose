@@ -1,24 +1,24 @@
 import { BaseController } from "@/controllers/BaseController";
 import {
   CreatePostSchema,
+  POST_CODE_PATTERN,
   UpdatePostSchema,
 } from "@/schema/post";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
-  POST_CODE_VALUES,
   POST_STATUS_VALUES,
   SALARY_TYPE_VALUES,
 } from "@gooes/domain";
 import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
-import { SupabaseDB } from "@/utils/supabase/index";
+import { postsService } from "@/services/posts";
 
 const PostListQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
   pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(100, "每页条数不能超过 100").default(20),
   keyword: z.string().trim().optional(),
-  code: z.enum(POST_CODE_VALUES).optional(),
+  code: z.string().trim().regex(POST_CODE_PATTERN, "无效的岗位编码").optional(),
   salary_type: z.enum(SALARY_TYPE_VALUES).optional(),
   status: z.coerce.number().refine(
     (value) => POST_STATUS_VALUES.includes(value as (typeof POST_STATUS_VALUES)[number]),
@@ -38,44 +38,26 @@ class PostsController extends BaseController<
     const queryResult = PostListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword, code, salary_type, status } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    let query = SupabaseDB.from("posts")
-      .select("*", { count: "exact" });
+    return ResponseHandler.success(await postsService.listPosts(queryResult.data));
+  };
 
-    if (keyword) {
-      const escaped = keyword.replaceAll(",", "\\,");
-      query = query.or(`name.ilike.%${escaped}%,code.ilike.%${escaped}%,description.ilike.%${escaped}%`);
-    }
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const result = CreatePostSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
 
-    if (code) {
-      query = query.eq("code", code);
-    }
+    return ResponseHandler.success(await postsService.createPost(result.data));
+  };
 
-    if (salary_type) {
-      query = query.eq("salary_type", salary_type);
-    }
+  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    if (status !== undefined) {
-      query = query.eq("status", status);
-    }
+    const result = UpdatePostSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
 
-    const { data, error, count } = await query
-      .order("sort", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw Errors.dbError("岗位列表查询失败", error);
-    return ResponseHandler.success({
-      list: data || [],
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
-    });
+    return ResponseHandler.success(
+      await postsService.updatePost(idVerify.data.id, result.data),
+    );
   };
 }
 
