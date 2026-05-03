@@ -1,24 +1,12 @@
 import {
-  BadgeCheck,
-  UserRound,
-} from "lucide-react";
-import {
   EMPLOYEE_STATUS_VALUES,
   EmployeeStatusConfig,
   type EmployeeStatus,
 } from "@gooes/domain";
-import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  EmployeeSearchForm,
-  EmployeesPagination,
-  EmployeesStatusFilters,
-} from "@/components/employees/employee-list-actions";
 import {
   CreateEmployeeButton,
-  EmployeeRowActions,
 } from "@/components/employees/employee-mutations";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmployeesClientShell } from "@/components/employees/employees-client-shell";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -65,41 +53,9 @@ const statusOptions: Array<{
   })),
 ];
 
-const statusMeta: Record<string, {
-  label: string;
-  variant: "success" | "warning" | "secondary" | "outline";
-}> = Object.fromEntries(
-  EMPLOYEE_STATUS_VALUES.map((value) => {
-    const type = EmployeeStatusConfig[value].type;
-    return [
-      value,
-      {
-        label: EmployeeStatusConfig[value].label,
-        variant: type === "success" ? "success" : type === "warning" ? "warning" : type === "danger" ? "secondary" : "outline",
-      },
-    ];
-  }),
-);
-
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
-function maskPhone(value: string | null) {
-  if (!value || value.length < 7) return value || "-";
-  return `${value.slice(0, 3)}****${value.slice(-4)}`;
 }
 
 async function getEmployees(params: EmployeePageSearchParams) {
@@ -168,118 +124,14 @@ export default async function EmployeesPage({
         <CreateEmployeeButton />
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <EmployeesStatusFilters
-              options={statusOptions}
-              currentStatus={status}
-              keyword={keyword}
-            />
-            <EmployeeSearchForm status={status} keyword={keyword} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>员工列表</CardTitle>
-          <Badge variant="outline">
-            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] border-t text-sm">
-              <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">员工</th>
-                  <th className="px-5 py-3">手机号</th>
-                  <th className="px-5 py-3">状态</th>
-                  <th className="px-5 py-3">登录绑定</th>
-                  <th className="px-5 py-3">部门</th>
-                  <th className="px-5 py-3">创建时间</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.length > 0 ? (
-                  list.map((employee) => {
-                    const meta = statusMeta[employee.status || ""] || {
-                      label: employee.status || "未知",
-                      variant: "outline" as const,
-                    };
-
-                    return (
-                      <tr key={employee.id} className="border-t transition-colors hover:bg-muted/40">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                              <UserRound className="size-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">
-                                {employee.name || "未命名员工"}
-                              </div>
-                              <div className="truncate text-xs text-muted-foreground">
-                                {employee.id}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">{maskPhone(employee.phone)}</td>
-                        <td className="px-5 py-4">
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                        </td>
-                        <td className="px-5 py-4">
-                          {employee.user_id ? (
-                            <Badge variant="success">
-                              <BadgeCheck className="size-3" />
-                              已绑定
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">未绑定</Badge>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {employee.department_id ? employee.department_id.slice(0, 8) : "-"}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {formatDate(employee.created_at)}
-                        </td>
-                        <td className="relative px-5 py-4">
-                          <EmployeeRowActions employee={employee} />
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td className="px-5 py-12 text-center text-muted-foreground" colSpan={7}>
-                      没有符合条件的员工
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <EmployeesPagination
-          pagination={pagination}
-          status={status}
-          keyword={keyword}
-        />
-      </div>
+      <EmployeesClientShell
+        employees={list}
+        pagination={pagination}
+        status={status}
+        keyword={keyword}
+        error={error}
+        statusOptions={statusOptions}
+      />
     </div>
   );
 }

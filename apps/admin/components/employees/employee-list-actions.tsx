@@ -1,11 +1,14 @@
 "use client";
 
-import { FormEvent, useTransition } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { EmployeeStatus } from "@gooes/domain";
-import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 
 type StatusOption = {
@@ -20,6 +23,8 @@ type Pagination = {
   totalPages: number;
 };
 
+type Navigate = (href: string) => void;
+
 function buildEmployeesHref(input: {
   page?: number;
   status?: string;
@@ -33,31 +38,19 @@ function buildEmployeesHref(input: {
   return query ? `/employees?${query}` : "/employees";
 }
 
-function useEmployeesNavigation() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
-  function navigate(href: string) {
-    startTransition(() => {
-      router.push(href);
-      router.refresh();
-    });
-  }
-
-  return { pending, navigate };
-}
-
 export function EmployeesStatusFilters({
   options,
   currentStatus,
   keyword,
+  pending,
+  onNavigate,
 }: {
   options: StatusOption[];
   currentStatus: string;
   keyword: string;
+  pending: boolean;
+  onNavigate: Navigate;
 }) {
-  const { pending, navigate } = useEmployeesNavigation();
-
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((item) => {
@@ -67,7 +60,7 @@ export function EmployeesStatusFilters({
             key={item.value || "all"}
             type="button"
             disabled={pending}
-            onClick={() => navigate(buildEmployeesHref({
+            onClick={() => onNavigate(buildEmployeesHref({
               status: item.value,
               keyword,
             }))}
@@ -94,34 +87,42 @@ export function EmployeesStatusFilters({
 export function EmployeeSearchForm({
   status,
   keyword,
+  pending,
+  onNavigate,
 }: {
   status: string;
   keyword: string;
+  pending: boolean;
+  onNavigate: Navigate;
 }) {
-  const { pending, navigate } = useEmployeesNavigation();
+  const [selectedKeyword, setSelectedKeyword] = useState(keyword);
+
+  useEffect(() => {
+    setSelectedKeyword(keyword);
+  }, [keyword]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const nextKeyword = String(formData.get("keyword") || "").trim();
-    navigate(buildEmployeesHref({
+    onNavigate(buildEmployeesHref({
       status,
-      keyword: nextKeyword,
+      keyword: selectedKeyword.trim(),
     }));
   }
 
   return (
     <form className="flex w-full gap-2 xl:w-[360px]" onSubmit={submit}>
-      <div className="relative flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
+      <InputGroup className="flex-1">
+        <InputGroupAddon>
+          <Search aria-hidden="true" />
+        </InputGroupAddon>
+        <InputGroupInput
           name="keyword"
-          defaultValue={keyword}
+          value={selectedKeyword}
           placeholder="搜索姓名或手机号"
-          className="pl-9"
           disabled={pending}
+          onChange={(event) => setSelectedKeyword(event.target.value)}
         />
-      </div>
+      </InputGroup>
       <Button type="submit" variant="outline" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
@@ -134,12 +135,15 @@ export function EmployeesPagination({
   pagination,
   status,
   keyword,
+  pending,
+  onNavigate,
 }: {
   pagination: Pagination;
   status: string;
   keyword: string;
+  pending: boolean;
+  onNavigate: Navigate;
 }) {
-  const { pending, navigate } = useEmployeesNavigation();
   const previousDisabled = pagination.page <= 1 || pending;
   const nextDisabled = pagination.page >= pagination.totalPages || pending;
 
@@ -149,7 +153,7 @@ export function EmployeesPagination({
         type="button"
         variant="outline"
         disabled={previousDisabled}
-        onClick={() => navigate(buildEmployeesHref({
+        onClick={() => onNavigate(buildEmployeesHref({
           page: Math.max(1, pagination.page - 1),
           status,
           keyword,
@@ -162,7 +166,7 @@ export function EmployeesPagination({
         type="button"
         variant="outline"
         disabled={nextDisabled}
-        onClick={() => navigate(buildEmployeesHref({
+        onClick={() => onNavigate(buildEmployeesHref({
           page: pagination.page + 1,
           status,
           keyword,
