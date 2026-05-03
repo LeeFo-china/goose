@@ -83,6 +83,7 @@ export function CustomerFilters({
   keyword: string;
   follow: string;
 }) {
+  const { pending, navigate } = useCustomersNavigation();
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedSource, setSelectedSource] = useState(source);
   const [selectedFollow, setSelectedFollow] = useState(follow);
@@ -95,6 +96,19 @@ export function CustomerFilters({
     setSelectedKeyword(keyword);
   }, [follow, keyword, source, status]);
 
+  function applySelectFilters(input: {
+    status?: string;
+    source?: string;
+    follow?: string;
+  }) {
+    navigate(buildCustomersHref({
+      status: input.status ?? status,
+      source: input.source ?? source,
+      follow: input.follow ?? follow,
+      keyword,
+    }));
+  }
+
   return (
     <form action="/customers" method="get" className="grid gap-3 lg:grid-cols-[150px_150px_160px_1fr_72px]">
       <input type="hidden" name="status" value={selectedStatus} />
@@ -103,30 +117,45 @@ export function CustomerFilters({
       <FormSelect
         id="customer-status-filter"
         value={selectedStatus || "__all"}
+        disabled={pending}
         options={statusOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
         }))}
-        onChange={(value) => setSelectedStatus(value === "__all" ? "" : value)}
+        onChange={(value) => {
+          const nextStatus = value === "__all" ? "" : value;
+          setSelectedStatus(nextStatus);
+          applySelectFilters({ status: nextStatus });
+        }}
       />
       <FormSelect
         id="customer-source-filter"
         value={selectedSource || "__all"}
+        disabled={pending}
         options={sourceOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
         }))}
-        onChange={(value) => setSelectedSource(value === "__all" ? "" : value)}
+        onChange={(value) => {
+          const nextSource = value === "__all" ? "" : value;
+          setSelectedSource(nextSource);
+          applySelectFilters({ source: nextSource });
+        }}
       />
       <FormSelect
         id="customer-follow-filter"
         value={selectedFollow || "__all"}
+        disabled={pending}
         options={[
           { value: "__all", label: "全部跟进" },
           { value: "due", label: "待跟进" },
           { value: "overdue", label: "超期未跟进" },
         ]}
-        onChange={(value) => setSelectedFollow(value === "__all" ? "" : value)}
+        onChange={(value) => {
+          const nextFollow = value === "__all" ? "" : value;
+          setSelectedFollow(nextFollow);
+          applySelectFilters({ follow: nextFollow });
+        }}
       />
       <InputGroup>
         <InputGroupAddon>
@@ -151,6 +180,7 @@ export function CustomerFilters({
         ) : null}
       </InputGroup>
       <Button type="submit" variant="outline">
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
     </form>
