@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PROJECT_LOG_STAGE_CONFIG, isProjectLogStageCode } from "@gooes/domain";
 import { CalendarDays, FileText, ImageIcon, Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
 
@@ -27,14 +26,6 @@ type ProjectLogRecord = {
   } | null;
 };
 
-type ProjectLogCalendarItem = {
-  date: string;
-  count: number;
-  stage_code: string | null;
-  stage_label: string | null;
-  node_name: string | null;
-};
-
 type ProjectLogsData = {
   list: ProjectLogRecord[];
   pagination: {
@@ -43,11 +34,6 @@ type ProjectLogsData = {
     total: number;
     totalPages: number;
   };
-};
-
-type ProjectLogCalendarData = {
-  project_id: string;
-  list: ProjectLogCalendarItem[];
 };
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -80,16 +66,6 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
 function stageLabel(log: ProjectLogRecord) {
   if (log.stage_label) return log.stage_label;
   return isProjectLogStageCode(log.stage_code)
@@ -99,20 +75,6 @@ function stageLabel(log: ProjectLogRecord) {
 
 function employeeName(log: ProjectLogRecord) {
   return log.employee?.name || "未命名员工";
-}
-
-function buildSummary(logs: ProjectLogRecord[], calendar: ProjectLogCalendarItem[]) {
-  const imageLogCount = logs.filter((log) => log.images.length > 0).length;
-  const latest = logs[0] || null;
-  const latestCalendar = calendar[0] || null;
-  const monthCount = calendar.reduce((sum, item) => sum + Number(item.count || 0), 0);
-
-  return {
-    latestTime: latest?.created_at || null,
-    latestStage: latest ? stageLabel(latest) : latestCalendar?.stage_label || "-",
-    monthCount,
-    imageLogCount,
-  };
 }
 
 function ProjectLogSkeleton() {
@@ -139,7 +101,6 @@ export function ProjectLogsPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [logs, setLogs] = useState<ProjectLogRecord[]>([]);
-  const [calendar, setCalendar] = useState<ProjectLogCalendarItem[]>([]);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
@@ -149,26 +110,19 @@ export function ProjectLogsPanel({
     setLoading(true);
     setError("");
 
-    Promise.all([
-      requestBackend<ProjectLogsData>(
-        `/project_logs/projects?project_id=${project.id}&page=1&pageSize=10`,
-      ),
-      requestBackend<ProjectLogCalendarData>(
-        `/project_logs/projects/calendar?project_id=${project.id}`,
-      ),
-    ])
-      .then(([logData, calendarData]) => {
+    requestBackend<ProjectLogsData>(
+      `/project_logs/projects?project_id=${project.id}&page=1&pageSize=10`,
+    )
+      .then((logData) => {
         if (cancelled) return;
         setLogs(logData.list || []);
         setTotal(logData.pagination?.total || 0);
-        setCalendar(calendarData.list || []);
       })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "施工日志加载失败");
           setLogs([]);
           setTotal(0);
-          setCalendar([]);
         }
       })
       .finally(() => {
@@ -180,49 +134,8 @@ export function ProjectLogsPanel({
     };
   }, [active, project.id]);
 
-  const summary = useMemo(() => buildSummary(logs, calendar), [calendar, logs]);
-
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">施工日志</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {project.name} · 最近 10 条施工记录
-          </p>
-        </div>
-        <Badge variant="outline">共 {total} 条</Badge>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">最近日志</div>
-            <div className="mt-1 truncate text-sm font-medium">
-              {formatDateTime(summary.latestTime)}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">当前阶段</div>
-            <div className="mt-1 truncate text-sm font-medium">{summary.latestStage}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">日历记录</div>
-            <div className="mt-1 text-sm font-medium">{summary.monthCount} 条</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">有图日志</div>
-            <div className="mt-1 text-sm font-medium">{summary.imageLogCount} 条</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
       {loading ? (
