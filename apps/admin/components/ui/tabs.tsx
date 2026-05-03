@@ -92,6 +92,7 @@ function TabsContent({
       className={cn(
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
+        !selected && "hidden",
       )}
       {...props}
     />
