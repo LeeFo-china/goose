@@ -521,6 +521,72 @@ class MarketingPageRepository {
     return data as MarketingLeadRecord;
   }
 
+  async findRecentLeadByPageAndPhone(input: {
+    pageId: string;
+    phone: string;
+    since: string;
+  }) {
+    const { data, error } = await this.leads()
+      .select("*")
+      .eq("page_id", input.pageId)
+      .eq("phone", input.phone)
+      .neq("lead_status", "invalid")
+      .gte("created_at", input.since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 H5 营销线索防重记录失败", error);
+    }
+
+    return (data || null) as MarketingLeadRecord | null;
+  }
+
+  async updateRecentLeadSubmission(id: string, input: SubmitMarketingLeadInput & {
+    pageVersionId: string;
+    requestIp: string | null;
+    userAgent: string | null;
+    customerId?: string | null;
+    wxOpenid?: string | null;
+  }) {
+    const updatePayload: Record<string, unknown> = {
+      page_version_id: input.pageVersionId,
+      name: input.name ?? null,
+      phone: input.phone ?? null,
+      community: input.community ?? null,
+      city: input.city ?? null,
+      form_data: input.form_data,
+      request_ip: input.requestIp,
+      user_agent: input.userAgent,
+    };
+
+    const customerId = input.customerId ?? await this.findCustomerIdByPhone(input.phone);
+    if (customerId) {
+      updatePayload.customer_id = customerId;
+    }
+
+    if (input.wxOpenid) {
+      updatePayload.wx_openid = input.wxOpenid;
+    }
+
+    const { data, error } = await this.leads()
+      .update(updatePayload)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新 H5 营销线索重复提交信息失败", error);
+    }
+
+    if (!data) {
+      throw Errors.notFound("H5 营销线索不存在");
+    }
+
+    return data as MarketingLeadRecord;
+  }
+
   async listLeads(query: MarketingLeadListQuery) {
     const { page, pageSize, status, page_id, keyword } = query;
     const from = (page - 1) * pageSize;

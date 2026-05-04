@@ -39,6 +39,16 @@ function getH5BaseUrl() {
     .replace(/\/+$/g, "");
 }
 
+function getPhoneTail(phone: string | null | undefined) {
+  return phone ? phone.slice(-4) : null;
+}
+
+function getDedupSince() {
+  const since = new Date();
+  since.setHours(since.getHours() - 24);
+  return since.toISOString();
+}
+
 class MarketingPageService {
   async listPages(query: MarketingPageListQuery) {
     return marketingPageRepository.listPages(query);
@@ -298,12 +308,53 @@ class MarketingPageService {
     userAgent: string | null;
   }) {
     const publishedPage = await this.getPublishedPageBySlug(input.slug);
+    const phone = input.phone?.trim() || null;
 
-    return marketingPageRepository.createLead({
+    if (phone) {
+      const existingLead = await marketingPageRepository.findRecentLeadByPageAndPhone({
+        pageId: publishedPage.page.id,
+        phone,
+        since: getDedupSince(),
+      });
+
+      if (existingLead) {
+        const lead = await marketingPageRepository.updateRecentLeadSubmission(
+          existingLead.id,
+          {
+            ...input,
+            phone,
+            pageVersionId: publishedPage.version.id,
+          },
+        );
+
+        return {
+          lead_id: lead.id,
+          already_submitted: true,
+          updated_existing: true,
+          phone_tail: getPhoneTail(lead.phone),
+          identity_status: "anonymous",
+          message: "你已提交预约",
+          lead,
+        };
+      }
+    }
+
+    const lead = await marketingPageRepository.createLead({
       ...input,
+      phone,
       pageId: publishedPage.page.id,
       pageVersionId: publishedPage.version.id,
     });
+
+    return {
+      lead_id: lead.id,
+      already_submitted: false,
+      updated_existing: false,
+      phone_tail: getPhoneTail(lead.phone),
+      identity_status: "anonymous",
+      message: "预约已提交",
+      lead,
+    };
   }
 
   async trackEvent(input: TrackMarketingEventInput & {
