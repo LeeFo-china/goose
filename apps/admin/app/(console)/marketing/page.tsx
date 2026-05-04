@@ -6,6 +6,7 @@ import {
   PlayCircle,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { H5MarketingLeadsTable } from "@/components/marketing/h5-leads-table";
 import { CreateH5MarketingPageButton } from "@/components/marketing/h5-page-mutations";
 import { H5MarketingPagesTable } from "@/components/marketing/h5-pages-table";
 import { campaignStatusOptions } from "@/components/marketing/marketing-constants";
@@ -16,6 +17,7 @@ import {
 import { CreateMarketingCampaignButton } from "@/components/marketing/marketing-mutations";
 import { MarketingCampaignsTable } from "@/components/marketing/marketing-table";
 import type {
+  H5MarketingLeadRecord,
   H5MarketingPageRecord,
   MarketingCampaignRecord,
   MarketingProjectOption,
@@ -50,6 +52,11 @@ type ProjectListData = {
 
 type H5PageListData = {
   list: H5MarketingPageRecord[];
+  pagination: Pagination;
+};
+
+type H5LeadListData = {
+  list: H5MarketingLeadRecord[];
   pagination: Pagination;
 };
 
@@ -156,6 +163,34 @@ async function getH5Pages(token: string | null) {
   }
 }
 
+async function getH5Leads(token: string | null) {
+  if (!token) {
+    return {
+      list: [] as H5MarketingLeadRecord[],
+      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const data = await fetchBackendData<H5LeadListData>(
+      token,
+      "/marketing-leads?page=1&pageSize=10",
+    );
+    return {
+      list: data?.list || [],
+      pagination: data?.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [] as H5MarketingLeadRecord[],
+      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: error instanceof Error ? error.message : "H5 营销线索加载失败",
+    };
+  }
+}
+
 const statusLabel = Object.fromEntries(campaignStatusOptions);
 
 export default async function MarketingPage({
@@ -165,10 +200,11 @@ export default async function MarketingPage({
 }) {
   const params = await searchParams;
   const token = await getAdminToken();
-  const [{ list, pagination, error }, projects, h5Pages] = await Promise.all([
+  const [{ list, pagination, error }, projects, h5Pages, h5Leads] = await Promise.all([
     getCampaigns(token, params),
     getProjects(token),
     getH5Pages(token),
+    getH5Leads(token),
   ]);
   const campaignType = params.campaign_type?.trim() || "";
   const status = params.status?.trim() || "";
@@ -176,6 +212,7 @@ export default async function MarketingPage({
   const activeCount = list.filter((item) => item.status === "active").length;
   const pausedCount = list.filter((item) => item.status === "paused").length;
   const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
+  const newLeadCount = h5Leads.list.filter((item) => item.lead_status === "new").length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -264,6 +301,29 @@ export default async function MarketingPage({
             </div>
           ) : (
             <H5MarketingPagesTable pages={h5Pages.list} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+          <div>
+            <CardTitle>H5 营销线索</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              最近提交的活动页预约线索，共 {h5Leads.pagination.total} 条，当前列表中新线索 {newLeadCount} 条。
+            </p>
+          </div>
+          <Badge variant="outline">
+            最近 {h5Leads.list.length} 条
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {h5Leads.error ? (
+            <div className="p-4">
+              <StatusAlert>{h5Leads.error}</StatusAlert>
+            </div>
+          ) : (
+            <H5MarketingLeadsTable leads={h5Leads.list} />
           )}
         </CardContent>
       </Card>

@@ -4,11 +4,15 @@ import {
   CreateMarketingPageSchema,
   DuplicateMarketingPageSchema,
   MarketingPageIdParamsSchema,
+  MarketingLeadIdParamsSchema,
+  MarketingLeadListQuerySchema,
   MarketingPageListQuerySchema,
   MarketingPageSlugParamsSchema,
+  PublicMarketingPageListQuerySchema,
   SaveMarketingPageDraftSchema,
   SubmitMarketingLeadSchema,
   TrackMarketingEventSchema,
+  UpdateMarketingLeadSchema,
   UpdateMarketingPageSchema,
 } from "@/schema/marketing-pages";
 import { accessPolicyService } from "@/services/access-policy";
@@ -202,7 +206,41 @@ class MarketingPagesController extends BaseController {
 
   @Get("/public/marketing-pages")
   async listPublishedPages(request: FastifyRequest, reply: FastifyReply) {
-    const data = await marketingPageService.listPublishedEntries();
+    const queryResult = PublicMarketingPageListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await marketingPageService.listPublishedEntries(queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/marketing-leads")
+  async listLeads(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_lead.read");
+
+    const queryResult = MarketingLeadListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await marketingPageService.listLeads(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/marketing-leads/:id")
+  async updateLead(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_lead.update");
+
+    const paramsResult = MarketingLeadIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = UpdateMarketingLeadSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.updateLead(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

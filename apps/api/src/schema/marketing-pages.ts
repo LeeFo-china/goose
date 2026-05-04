@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
   MARKETING_PAGE_BLOCK_TYPE_VALUES,
+  MARKETING_PAGE_DISPLAY_SCENE_VALUES,
   MARKETING_PAGE_EVENT_NAME_VALUES,
   MARKETING_PAGE_STATUS_VALUES,
+  MARKETING_LEAD_STATUS_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 
@@ -31,6 +33,14 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
 }
 
 const JsonObjectSchema = z.record(z.string(), z.unknown());
+
+const OptionalDateTimeSchema = z.preprocess((value) => {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  return value;
+}, z.iso.datetime("无效的时间").nullable());
 
 export const MarketingPageSlugSchema = z
   .string("页面路径不能为空")
@@ -80,6 +90,17 @@ export const MarketingPageBaseSchema = z.object({
   }).default("draft"),
   description: z.string().trim().max(500, "页面描述不能超过 500 个字符").nullable().optional(),
   cover_image: z.string().trim().max(2048, "封面地址过长").nullable().optional(),
+  display_scene: z.enum(MARKETING_PAGE_DISPLAY_SCENE_VALUES, {
+    message: "无效的展示场景",
+  }).default("all"),
+  sort_order: z.coerce
+    .number("排序值必须是数字")
+    .int("排序值必须是整数")
+    .min(0, "排序值不能小于 0")
+    .max(9999, "排序值不能超过 9999")
+    .default(100),
+  start_at: OptionalDateTimeSchema.optional(),
+  end_at: OptionalDateTimeSchema.optional(),
   published_version_id: z.uuid("无效的发布版本 ID").nullable().optional(),
   created_by: z.uuid("无效的创建人 ID").nullable().optional(),
   updated_by: z.uuid("无效的更新人 ID").nullable().optional(),
@@ -94,6 +115,10 @@ export const CreateMarketingPageSchema = MarketingPageBaseSchema.pick({
   slug: true,
   description: true,
   cover_image: true,
+  display_scene: true,
+  sort_order: true,
+  start_at: true,
+  end_at: true,
 }).extend({
   config: MarketingPageConfigSchema.optional(),
 });
@@ -103,6 +128,10 @@ export const UpdateMarketingPageSchema = MarketingPageBaseSchema.pick({
   slug: true,
   description: true,
   cover_image: true,
+  display_scene: true,
+  sort_order: true,
+  start_at: true,
+  end_at: true,
 }).partial();
 
 export const MarketingPageListQuerySchema = PaginationQuerySchema.extend({
@@ -112,6 +141,14 @@ export const MarketingPageListQuerySchema = PaginationQuerySchema.extend({
     }),
   ),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+});
+
+export const PublicMarketingPageListQuerySchema = z.object({
+  scene: optionalQueryValue(
+    z.enum(MARKETING_PAGE_DISPLAY_SCENE_VALUES, {
+      message: "无效的展示场景",
+    }),
+  ),
 });
 
 export const MarketingPageIdParamsSchema = z.object({
@@ -129,6 +166,27 @@ export const SaveMarketingPageDraftSchema = z.object({
 export const DuplicateMarketingPageSchema = z.object({
   title: z.string().trim().min(1, "页面标题不能为空").max(120, "页面标题不能超过 120 个字符").optional(),
   slug: MarketingPageSlugSchema.optional(),
+});
+
+export const MarketingLeadListQuerySchema = PaginationQuerySchema.extend({
+  status: optionalQueryValue(
+    z.enum(MARKETING_LEAD_STATUS_VALUES, {
+      message: "无效的线索状态",
+    }),
+  ),
+  page_id: optionalQueryValue(z.uuid("无效的活动页 ID")),
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+});
+
+export const MarketingLeadIdParamsSchema = z.object({
+  id: z.uuid("无效的营销线索 ID"),
+});
+
+export const UpdateMarketingLeadSchema = z.object({
+  lead_status: z.enum(MARKETING_LEAD_STATUS_VALUES, {
+    message: "无效的线索状态",
+  }),
+  follow_remark: z.string().trim().max(1000, "跟进备注不能超过 1000 个字符").nullable().optional(),
 });
 
 export const SubmitMarketingLeadSchema = z.object({
@@ -157,7 +215,10 @@ export const TrackMarketingEventSchema = z.object({
 export type CreateMarketingPageInput = z.infer<typeof CreateMarketingPageSchema>;
 export type UpdateMarketingPageInput = z.infer<typeof UpdateMarketingPageSchema>;
 export type MarketingPageListQuery = z.infer<typeof MarketingPageListQuerySchema>;
+export type PublicMarketingPageListQuery = z.infer<typeof PublicMarketingPageListQuerySchema>;
 export type MarketingPageConfigInput = z.infer<typeof MarketingPageConfigSchema>;
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;
+export type MarketingLeadListQuery = z.infer<typeof MarketingLeadListQuerySchema>;
+export type UpdateMarketingLeadInput = z.infer<typeof UpdateMarketingLeadSchema>;
 export type SubmitMarketingLeadInput = z.infer<typeof SubmitMarketingLeadSchema>;
 export type TrackMarketingEventInput = z.infer<typeof TrackMarketingEventSchema>;

@@ -56,6 +56,7 @@ export const PERMISSION_CODE_VALUES = [
   'marketing_page.publish',
   'marketing_page.delete',
   'marketing_lead.read',
+  'marketing_lead.update',
   'marketing_event.read',
   'system.ops.read',
   'system.ops.run',
@@ -196,6 +197,10 @@ export const PermissionCodeConfig: Record<
   },
   'marketing_lead.read': {
     label: '查看营销线索',
+    module: 'marketing',
+  },
+  'marketing_lead.update': {
+    label: '跟进营销线索',
     module: 'marketing',
   },
   'marketing_event.read': {

@@ -3,13 +3,14 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table";
-import { h5PageStatusOptions } from "@/components/marketing/marketing-constants";
+import { h5PageDisplaySceneOptions, h5PageStatusOptions } from "@/components/marketing/marketing-constants";
 import { H5PageRowActions } from "@/components/marketing/h5-page-mutations";
 import type { H5MarketingPageRecord } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const statusLabel = Object.fromEntries(h5PageStatusOptions);
+const sceneLabel = Object.fromEntries(h5PageDisplaySceneOptions);
 
 const statusVariant: Record<string, "success" | "warning" | "secondary" | "outline" | "default"> = {
   draft: "outline",
@@ -85,6 +86,32 @@ const columns: ColumnDef<H5MarketingPageRecord>[] = [
     },
   },
   {
+    accessorKey: "display_scene",
+    header: "小程序展示",
+    cell: ({ row }) => (
+      <div className="flex flex-col gap-1">
+        <span className="text-sm">{sceneLabel[row.original.display_scene] || row.original.display_scene}</span>
+        <span className="text-xs text-muted-foreground">排序 {row.original.sort_order ?? 100}</span>
+      </div>
+    ),
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    id: "active_window",
+    header: "展示时间",
+    cell: ({ row }) => (
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>开始 {formatDateTime(row.original.start_at)}</span>
+        <span>结束 {formatDateTime(row.original.end_at)}</span>
+      </div>
+    ),
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
     accessorKey: "published_at",
     header: "发布时间",
     cell: ({ row }) => formatDateTime(row.original.published_at),
@@ -106,7 +133,7 @@ const columns: ColumnDef<H5MarketingPageRecord>[] = [
     cell: ({ row }) => <H5PageRowActions page={row.original} />,
     meta: {
       headerClassName: "text-right",
-      cellClassName: "relative min-w-[430px] whitespace-nowrap text-right",
+      cellClassName: "relative min-w-[500px] whitespace-nowrap text-right",
     },
   },
 ];
@@ -121,7 +148,7 @@ export function H5MarketingPagesTable({
       columns={columns}
       data={pages}
       emptyText="还没有 H5 活动页"
-      minWidth="min-w-[1120px]"
+      minWidth="min-w-[1360px]"
     />
   );
 }

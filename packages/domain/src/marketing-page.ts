@@ -8,6 +8,17 @@ export const MARKETING_PAGE_STATUS_VALUES = [
 export type MarketingPageStatus =
   (typeof MARKETING_PAGE_STATUS_VALUES)[number];
 
+export const MARKETING_PAGE_DISPLAY_SCENE_VALUES = [
+  'all',
+  'home',
+  'customer_home',
+  'project_detail',
+  'marketing_list',
+] as const;
+
+export type MarketingPageDisplayScene =
+  (typeof MARKETING_PAGE_DISPLAY_SCENE_VALUES)[number];
+
 export const MARKETING_PAGE_VERSION_STATUS_VALUES = [
   'draft',
   'published',
@@ -43,6 +54,16 @@ export const MARKETING_PAGE_EVENT_NAME_VALUES = [
 export type MarketingPageEventName =
   (typeof MARKETING_PAGE_EVENT_NAME_VALUES)[number];
 
+export const MARKETING_LEAD_STATUS_VALUES = [
+  'new',
+  'contacted',
+  'converted',
+  'invalid',
+] as const;
+
+export type MarketingLeadStatus =
+  (typeof MARKETING_LEAD_STATUS_VALUES)[number];
+
 export interface MarketingPageStatusConfigItem {
   label: string;
   type: 'default' | 'primary' | 'success' | 'warning' | 'danger';
@@ -65,6 +86,27 @@ export const MarketingPageVersionStatusConfig: Record<
   draft: { label: '草稿', type: 'default' },
   published: { label: '已发布', type: 'success' },
   archived: { label: '已归档', type: 'default' },
+};
+
+export const MarketingPageDisplaySceneConfig: Record<
+  MarketingPageDisplayScene,
+  { label: string }
+> = {
+  all: { label: '全部场景' },
+  home: { label: '首页' },
+  customer_home: { label: '客户首页' },
+  project_detail: { label: '项目详情' },
+  marketing_list: { label: '活动列表' },
+};
+
+export const MarketingLeadStatusConfig: Record<
+  MarketingLeadStatus,
+  MarketingPageStatusConfigItem
+> = {
+  new: { label: '新线索', type: 'primary' },
+  contacted: { label: '已联系', type: 'warning' },
+  converted: { label: '已转化', type: 'success' },
+  invalid: { label: '无效', type: 'default' },
 };
 
 export const MarketingPageBlockTypeConfig: Record<
@@ -99,6 +141,14 @@ export const isMarketingPageStatus = (
   typeof value === 'string' &&
   MARKETING_PAGE_STATUS_VALUES.includes(value as MarketingPageStatus);
 
+export const isMarketingPageDisplayScene = (
+  value: string | null | undefined,
+): value is MarketingPageDisplayScene =>
+  typeof value === 'string' &&
+  MARKETING_PAGE_DISPLAY_SCENE_VALUES.includes(
+    value as MarketingPageDisplayScene,
+  );
+
 export const isMarketingPageVersionStatus = (
   value: string | null | undefined,
 ): value is MarketingPageVersionStatus =>
@@ -122,3 +172,9 @@ export const isMarketingPageEventName = (
   MARKETING_PAGE_EVENT_NAME_VALUES.includes(
     value as MarketingPageEventName,
   );
+
+export const isMarketingLeadStatus = (
+  value: string | null | undefined,
+): value is MarketingLeadStatus =>
+  typeof value === 'string' &&
+  MARKETING_LEAD_STATUS_VALUES.includes(value as MarketingLeadStatus);

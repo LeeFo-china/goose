@@ -53,6 +53,15 @@ MVP 阶段小程序端不应该写死活动页 `slug`。推荐先调用公开列
 GET https://h5.goodcms.cn/public/marketing-pages
 ```
 
+按具体入口场景获取：
+
+```text
+GET https://h5.goodcms.cn/public/marketing-pages?scene=home
+GET https://h5.goodcms.cn/public/marketing-pages?scene=customer_home
+GET https://h5.goodcms.cn/public/marketing-pages?scene=project_detail
+GET https://h5.goodcms.cn/public/marketing-pages?scene=marketing_list
+```
+
 返回格式：
 
 ```json
@@ -65,7 +74,11 @@ GET https://h5.goodcms.cn/public/marketing-pages
         "slug": "springsale",
         "description": "到店预约可领取专属装修礼包",
         "cover_image": "https://example.com/cover.jpg",
+        "display_scene": "home",
+        "sort_order": 10,
         "url": "https://h5.goodcms.cn/p/springsale",
+        "start_at": "2026-05-01T00:00:00.000Z",
+        "end_at": "2026-05-31T23:59:59.000Z",
         "published_at": "2026-05-04T10:30:00.000Z",
         "updated_at": "2026-05-04T10:30:00.000Z"
       }
@@ -82,10 +95,21 @@ GET https://h5.goodcms.cn/public/marketing-pages
 | `slug` | 活动页路径标识 | 拼接或追踪活动页 |
 | `description` | 活动简介 | 卡片副标题 |
 | `cover_image` | 活动封面图 | 首页 Banner、活动卡片图片 |
+| `display_scene` | 后台配置的展示场景 | 判断活动适合展示在哪里 |
+| `sort_order` | 排序值 | 数值越小越靠前 |
 | `url` | 可直接打开的 H5 完整地址 | 传给通用 `web-view` 页面 |
+| `start_at` / `end_at` | 活动展示时间 | 当前接口已经过滤过期和未开始活动 |
 | `published_at` | 发布时间 | 排序或展示最新活动 |
 
-接口只返回 `published` 状态的活动页。后台下线或结束活动后，该活动不会继续出现在列表里，小程序端不需要单独维护开关。
+接口只返回 `published` 状态、且在展示时间内的活动页。后台下线、结束活动或活动过期后，该活动不会继续出现在列表里，小程序端不需要单独维护开关。
+
+`scene` 过滤规则：
+
+- `scene=home`：返回后台配置为 `home` 或 `all` 的活动
+- `scene=customer_home`：返回后台配置为 `customer_home` 或 `all` 的活动
+- `scene=project_detail`：返回后台配置为 `project_detail` 或 `all` 的活动
+- `scene=marketing_list`：返回后台配置为 `marketing_list` 或 `all` 的活动
+- 不传 `scene`：返回所有当前可展示活动
 
 小程序端推荐拉取时机：
 
@@ -350,7 +374,11 @@ type H5ActivityEntry = {
   slug: string;
   description: string | null;
   cover_image: string | null;
+  display_scene: "all" | "home" | "customer_home" | "project_detail" | "marketing_list";
+  sort_order: number;
   url: string;
+  start_at: string | null;
+  end_at: string | null;
   published_at: string | null;
   updated_at: string | null;
 };
@@ -366,10 +394,12 @@ function isAllowedH5Url(value: string) {
   }
 }
 
-export function fetchH5Activities(): Promise<H5ActivityEntry[]> {
+export function fetchH5Activities(scene?: H5ActivityEntry["display_scene"]): Promise<H5ActivityEntry[]> {
+  const query = scene ? `?scene=${encodeURIComponent(scene)}` : "";
+
   return new Promise((resolve, reject) => {
     wx.request({
-      url: "https://h5.goodcms.cn/public/marketing-pages",
+      url: `https://h5.goodcms.cn/public/marketing-pages${query}`,
       method: "GET",
       success(response) {
         const body = response.data as {
@@ -433,7 +463,11 @@ export type H5ActivityEntry = {
   slug: string;
   description: string | null;
   cover_image: string | null;
+  display_scene: "all" | "home" | "customer_home" | "project_detail" | "marketing_list";
+  sort_order: number;
   url: string;
+  start_at: string | null;
+  end_at: string | null;
   published_at: string | null;
   updated_at: string | null;
 };
@@ -449,13 +483,14 @@ function isAllowedH5Url(value: string) {
   }
 }
 
-export async function fetchH5Activities() {
+export async function fetchH5Activities(scene?: H5ActivityEntry["display_scene"]) {
+  const query = scene ? `?scene=${encodeURIComponent(scene)}` : "";
   const response = await Taro.request<{
     data?: {
       list?: H5ActivityEntry[];
     };
   }>({
-    url: "https://h5.goodcms.cn/public/marketing-pages",
+    url: `https://h5.goodcms.cn/public/marketing-pages${query}`,
     method: "GET",
   });
 
@@ -543,6 +578,8 @@ type H5ActivityEntry = {
   slug: string;
   description: string | null;
   cover_image: string | null;
+  display_scene: "all" | "home" | "customer_home" | "project_detail" | "marketing_list";
+  sort_order: number;
   url: string;
 };
 ```

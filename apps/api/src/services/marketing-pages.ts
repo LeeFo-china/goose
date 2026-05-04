@@ -3,10 +3,13 @@ import { marketingPageRepository } from "@/repositories/marketing-pages";
 import type {
   CreateMarketingPageInput,
   DuplicateMarketingPageInput,
+  MarketingLeadListQuery,
   MarketingPageConfigInput,
   MarketingPageListQuery,
+  PublicMarketingPageListQuery,
   SubmitMarketingLeadInput,
   TrackMarketingEventInput,
+  UpdateMarketingLeadInput,
   UpdateMarketingPageInput,
 } from "@/schema/marketing-pages";
 import type { AuthContext } from "@/services/authorization";
@@ -40,8 +43,8 @@ class MarketingPageService {
     return marketingPageRepository.listPages(query);
   }
 
-  async listPublishedEntries() {
-    const pages = await marketingPageRepository.listPublishedPageEntries();
+  async listPublishedEntries(query: PublicMarketingPageListQuery = {}) {
+    const pages = await marketingPageRepository.listPublishedPageEntries(query);
     const h5BaseUrl = getH5BaseUrl();
 
     return {
@@ -51,7 +54,11 @@ class MarketingPageService {
         slug: page.slug,
         description: page.description,
         cover_image: page.cover_image,
+        display_scene: page.display_scene,
+        sort_order: page.sort_order,
         url: `${h5BaseUrl}/p/${encodeURIComponent(page.slug)}`,
+        start_at: page.start_at,
+        end_at: page.end_at,
         published_at: page.published_at,
         updated_at: page.updated_at,
       })),
@@ -82,6 +89,10 @@ class MarketingPageService {
       slug: input.slug,
       description: input.description ?? null,
       cover_image: input.cover_image ?? null,
+      display_scene: input.display_scene ?? "all",
+      sort_order: input.sort_order ?? 100,
+      start_at: input.start_at ?? null,
+      end_at: input.end_at ?? null,
       employeeId: authContext.employeeId,
     });
 
@@ -230,6 +241,10 @@ class MarketingPageService {
       slug,
       description: sourcePage.description,
       cover_image: sourcePage.cover_image,
+      display_scene: sourcePage.display_scene,
+      sort_order: sourcePage.sort_order,
+      start_at: sourcePage.start_at,
+      end_at: sourcePage.end_at,
       employeeId: authContext.employeeId,
     });
 
@@ -253,7 +268,12 @@ class MarketingPageService {
 
   async getPublishedPageBySlug(slug: string) {
     const page = await marketingPageRepository.findPageBySlug(slug);
-    if (!page || page.status !== "published" || !page.published_version_id) {
+    if (
+      !page ||
+      page.status !== "published" ||
+      !page.published_version_id ||
+      !this.isWithinDisplayWindow(page)
+    ) {
       throw Errors.notFound("H5 活动页不存在或未发布");
     }
 
@@ -296,6 +316,21 @@ class MarketingPageService {
       ...input,
       pageId: publishedPage.page.id,
       pageVersionId: publishedPage.version.id,
+    });
+  }
+
+  async listLeads(authContext: AuthContext, query: MarketingLeadListQuery) {
+    return marketingPageRepository.listLeads(query);
+  }
+
+  async updateLead(
+    authContext: AuthContext,
+    id: string,
+    input: UpdateMarketingLeadInput,
+  ) {
+    return marketingPageRepository.updateLead(id, {
+      ...input,
+      employeeId: authContext.employeeId,
     });
   }
 
@@ -349,6 +384,25 @@ class MarketingPageService {
     }
 
     return buildCopiedSlug(sourceSlug, `copy-${Date.now().toString(36)}`);
+  }
+
+  private isWithinDisplayWindow(page: {
+    start_at: string | null;
+    end_at: string | null;
+  }) {
+    const now = Date.now();
+    const startTime = page.start_at ? new Date(page.start_at).getTime() : null;
+    const endTime = page.end_at ? new Date(page.end_at).getTime() : null;
+
+    if (startTime && Number.isFinite(startTime) && startTime > now) {
+      return false;
+    }
+
+    if (endTime && Number.isFinite(endTime) && endTime < now) {
+      return false;
+    }
+
+    return true;
   }
 }
 

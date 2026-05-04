@@ -1,4 +1,6 @@
 import type {
+  H5MarketingLeadStatus,
+  H5MarketingPageDisplayScene,
   H5MarketingPageStatus,
   MarketingCampaignStatus,
   MarketingCampaignType,
@@ -28,3 +30,18 @@ export const h5PageStatusOptions = [
   ["offline", "已下线"],
   ["archived", "已归档"],
 ] as const satisfies readonly (readonly [H5MarketingPageStatus, string])[];
+
+export const h5PageDisplaySceneOptions = [
+  ["all", "全部场景"],
+  ["home", "首页"],
+  ["customer_home", "客户首页"],
+  ["project_detail", "项目详情"],
+  ["marketing_list", "活动列表"],
+] as const satisfies readonly (readonly [H5MarketingPageDisplayScene, string])[];
+
+export const h5MarketingLeadStatusOptions = [
+  ["new", "新线索"],
+  ["contacted", "已联系"],
+  ["converted", "已转化"],
+  ["invalid", "无效"],
+] as const satisfies readonly (readonly [H5MarketingLeadStatus, string])[];

@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw } from "lucide-react";
+import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
-import type { H5MarketingPageRecord } from "@/components/marketing/marketing-types";
+import { FormSelect } from "@/components/admin/form-select";
+import { h5PageDisplaySceneOptions } from "@/components/marketing/marketing-constants";
+import type { H5MarketingPageDisplayScene, H5MarketingPageRecord } from "@/components/marketing/marketing-types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,6 +41,10 @@ const H5PageFormSchema = z.object({
       "页面路径只能包含小写字母、数字和中划线",
     ),
   description: z.string().trim().max(500, "页面描述不能超过 500 个字符").optional(),
+  display_scene: z.enum(["all", "home", "customer_home", "project_detail", "marketing_list"]),
+  sort_order: z.coerce.number().int("排序值必须是整数").min(0, "排序值不能小于 0").max(9999, "排序值不能超过 9999"),
+  start_at: z.string().optional(),
+  end_at: z.string().optional(),
 });
 
 type H5PageFormValues = z.infer<typeof H5PageFormSchema>;
@@ -49,6 +55,32 @@ function getH5BaseUrl() {
 
 function buildPageUrl(slug: string) {
   return `${getH5BaseUrl()}/p/${slug}`;
+}
+
+function toApiDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function buildPagePayload(values: H5PageFormValues) {
+  return {
+    title: values.title,
+    slug: values.slug,
+    description: values.description || null,
+    display_scene: values.display_scene,
+    sort_order: values.sort_order,
+    start_at: toApiDateTime(values.start_at),
+    end_at: toApiDateTime(values.end_at),
+  };
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -136,15 +168,19 @@ export function CreateH5MarketingPageButton() {
     title: "",
     slug: "",
     description: "",
+    display_scene: "all",
+    sort_order: 100,
+    start_at: "",
+    end_at: "",
   });
   const [error, setError] = useState("");
   const validation = useMemo(() => H5PageFormSchema.safeParse(values), [values]);
 
-  function updateValue(key: keyof H5PageFormValues, value: string) {
+  function updateValue(key: keyof H5PageFormValues, value: string | number) {
     setError("");
     setValues((current) => ({
       ...current,
-      [key]: key === "slug" ? normalizeSlug(value) : value,
+      [key]: key === "slug" && typeof value === "string" ? normalizeSlug(value) : value,
     }));
   }
 
@@ -161,14 +197,21 @@ export function CreateH5MarketingPageButton() {
           path: "/marketing-pages",
           method: "POST",
           payload: {
-            ...result.data,
-            description: result.data.description || null,
+            ...buildPagePayload(result.data),
             config: buildDefaultConfig(result.data),
           },
         });
         toast.success("H5 活动页已创建");
         setOpen(false);
-        setValues({ title: "", slug: "", description: "" });
+        setValues({
+          title: "",
+          slug: "",
+          description: "",
+          display_scene: "all",
+          sort_order: 100,
+          start_at: "",
+          end_at: "",
+        });
         router.refresh();
       } catch (error) {
         setError(error instanceof Error ? error.message : "创建失败");
@@ -225,6 +268,51 @@ export function CreateH5MarketingPageButton() {
                 placeholder="一句话描述活动权益"
               />
             </Field>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field data-invalid={Boolean(firstIssue?.path[0] === "display_scene")}>
+                <FieldLabel htmlFor="h5-page-display-scene">展示场景</FieldLabel>
+                <FormSelect
+                  id="h5-page-display-scene"
+                  value={values.display_scene}
+                  options={h5PageDisplaySceneOptions.map(([value, label]) => ({ value, label }))}
+                  invalid={Boolean(firstIssue?.path[0] === "display_scene")}
+                  onChange={(value) => updateValue("display_scene", value as H5MarketingPageDisplayScene)}
+                />
+              </Field>
+              <Field data-invalid={Boolean(firstIssue?.path[0] === "sort_order")}>
+                <FieldLabel htmlFor="h5-page-sort-order">排序</FieldLabel>
+                <Input
+                  id="h5-page-sort-order"
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={values.sort_order}
+                  aria-invalid={Boolean(firstIssue?.path[0] === "sort_order")}
+                  onChange={(event) => updateValue("sort_order", Number(event.target.value))}
+                />
+                <FieldDescription>数值越小，小程序入口越靠前。</FieldDescription>
+              </Field>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="h5-page-start-at">开始展示</FieldLabel>
+                <Input
+                  id="h5-page-start-at"
+                  type="datetime-local"
+                  value={values.start_at || ""}
+                  onChange={(event) => updateValue("start_at", event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="h5-page-end-at">结束展示</FieldLabel>
+                <Input
+                  id="h5-page-end-at"
+                  type="datetime-local"
+                  value={values.end_at || ""}
+                  onChange={(event) => updateValue("end_at", event.target.value)}
+                />
+              </Field>
+            </div>
             {error ? (
               <Field data-invalid>
                 <FieldError>{error}</FieldError>
@@ -238,6 +326,163 @@ export function CreateH5MarketingPageButton() {
             <Button type="button" disabled={pending} onClick={submit}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function H5PageSettingsButton({ page }: { page: H5MarketingPageRecord }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [values, setValues] = useState<H5PageFormValues>({
+    title: page.title || "",
+    slug: page.slug || "",
+    description: page.description || "",
+    display_scene: page.display_scene || "all",
+    sort_order: page.sort_order ?? 100,
+    start_at: toDateTimeLocalValue(page.start_at),
+    end_at: toDateTimeLocalValue(page.end_at),
+  });
+  const validation = useMemo(() => H5PageFormSchema.safeParse(values), [values]);
+  const firstIssue = validation.success ? null : validation.error.issues[0];
+
+  function updateValue(key: keyof H5PageFormValues, value: string | number) {
+    setError("");
+    setValues((current) => ({
+      ...current,
+      [key]: key === "slug" && typeof value === "string" ? normalizeSlug(value) : value,
+    }));
+  }
+
+  function submit() {
+    const result = H5PageFormSchema.safeParse(values);
+    if (!result.success) {
+      setError(result.error.issues[0]?.message || "请检查表单内容");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await requestH5Page({
+          path: `/marketing-pages/${page.id}`,
+          method: "PATCH",
+          payload: buildPagePayload(result.data),
+        });
+        toast.success("H5 活动页配置已保存");
+        setOpen(false);
+        router.refresh();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "保存失败");
+      }
+    });
+  }
+
+  return (
+    <>
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Settings data-icon="inline-start" />
+        配置
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>活动展示配置</DialogTitle>
+            <DialogDescription>
+              配置小程序展示场景、排序和活动有效时间，发布页列表会按这里过滤。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field data-invalid={Boolean(firstIssue?.path[0] === "title")}>
+              <FieldLabel htmlFor={`h5-page-title-${page.id}`}>页面标题</FieldLabel>
+              <Input
+                id={`h5-page-title-${page.id}`}
+                value={values.title}
+                aria-invalid={Boolean(firstIssue?.path[0] === "title")}
+                onChange={(event) => updateValue("title", event.target.value)}
+              />
+            </Field>
+            <Field data-invalid={Boolean(firstIssue?.path[0] === "slug")}>
+              <FieldLabel htmlFor={`h5-page-slug-${page.id}`}>页面路径</FieldLabel>
+              <Input
+                id={`h5-page-slug-${page.id}`}
+                value={values.slug}
+                aria-invalid={Boolean(firstIssue?.path[0] === "slug")}
+                onChange={(event) => updateValue("slug", event.target.value)}
+              />
+              <FieldDescription>
+                发布后访问地址为 {buildPageUrl(values.slug || "spring-sale")}
+              </FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`h5-page-description-${page.id}`}>页面描述</FieldLabel>
+              <Textarea
+                id={`h5-page-description-${page.id}`}
+                value={values.description || ""}
+                onChange={(event) => updateValue("description", event.target.value)}
+              />
+            </Field>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field data-invalid={Boolean(firstIssue?.path[0] === "display_scene")}>
+                <FieldLabel htmlFor={`h5-page-display-scene-${page.id}`}>展示场景</FieldLabel>
+                <FormSelect
+                  id={`h5-page-display-scene-${page.id}`}
+                  value={values.display_scene}
+                  options={h5PageDisplaySceneOptions.map(([value, label]) => ({ value, label }))}
+                  invalid={Boolean(firstIssue?.path[0] === "display_scene")}
+                  onChange={(value) => updateValue("display_scene", value as H5MarketingPageDisplayScene)}
+                />
+              </Field>
+              <Field data-invalid={Boolean(firstIssue?.path[0] === "sort_order")}>
+                <FieldLabel htmlFor={`h5-page-sort-order-${page.id}`}>排序</FieldLabel>
+                <Input
+                  id={`h5-page-sort-order-${page.id}`}
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={values.sort_order}
+                  aria-invalid={Boolean(firstIssue?.path[0] === "sort_order")}
+                  onChange={(event) => updateValue("sort_order", Number(event.target.value))}
+                />
+              </Field>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor={`h5-page-start-at-${page.id}`}>开始展示</FieldLabel>
+                <Input
+                  id={`h5-page-start-at-${page.id}`}
+                  type="datetime-local"
+                  value={values.start_at || ""}
+                  onChange={(event) => updateValue("start_at", event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`h5-page-end-at-${page.id}`}>结束展示</FieldLabel>
+                <Input
+                  id={`h5-page-end-at-${page.id}`}
+                  type="datetime-local"
+                  value={values.end_at || ""}
+                  onChange={(event) => updateValue("end_at", event.target.value)}
+                />
+              </Field>
+            </div>
+            {error ? (
+              <Field data-invalid>
+                <FieldError>{error}</FieldError>
+              </Field>
+            ) : null}
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" disabled={pending} onClick={submit}>
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -279,6 +524,7 @@ export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
             编辑
           </Link>
         </Button>
+        <H5PageSettingsButton page={page} />
         <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
           <Copy data-icon="inline-start" />
           复制链接

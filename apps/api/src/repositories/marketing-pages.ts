@@ -1,9 +1,12 @@
 import { Errors } from "@/errors/error-factory";
 import type {
+  MarketingLeadListQuery,
   MarketingPageConfigInput,
   MarketingPageListQuery,
+  PublicMarketingPageListQuery,
   SubmitMarketingLeadInput,
   TrackMarketingEventInput,
+  UpdateMarketingLeadInput,
   UpdateMarketingPageInput,
 } from "@/schema/marketing-pages";
 import { SupabaseDB } from "@/utils/supabase";
@@ -15,6 +18,10 @@ export type MarketingPageRecord = {
   status: "draft" | "published" | "offline" | "archived";
   description: string | null;
   cover_image: string | null;
+  display_scene: "all" | "home" | "customer_home" | "project_detail" | "marketing_list";
+  sort_order: number;
+  start_at: string | null;
+  end_at: string | null;
   published_version_id: string | null;
   created_by: string | null;
   updated_by: string | null;
@@ -46,6 +53,10 @@ export type MarketingLeadRecord = {
   city: string | null;
   form_data: Record<string, unknown>;
   source: string;
+  lead_status: "new" | "contacted" | "converted" | "invalid";
+  follow_remark: string | null;
+  followed_by: string | null;
+  followed_at: string | null;
   wx_openid: string | null;
   customer_id: string | null;
   request_ip: string | null;
@@ -74,6 +85,9 @@ type UntypedTable = {
   delete: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
   neq: (...args: unknown[]) => UntypedTable;
+  is: (...args: unknown[]) => UntypedTable;
+  lte: (...args: unknown[]) => UntypedTable;
+  gte: (...args: unknown[]) => UntypedTable;
   ilike: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
@@ -128,6 +142,10 @@ class MarketingPageRepository {
     return this.from("marketing_events");
   }
 
+  private customers() {
+    return this.from("customers");
+  }
+
   async listPages(query: MarketingPageListQuery) {
     const { page, pageSize, status, keyword } = query;
     const from = (page - 1) * pageSize;
@@ -167,10 +185,20 @@ class MarketingPageRepository {
     };
   }
 
-  async listPublishedPageEntries() {
-    const { data, error } = await this.pages()
-      .select("id,title,slug,description,cover_image,published_at,updated_at")
+  async listPublishedPageEntries(query: PublicMarketingPageListQuery = {}) {
+    const now = new Date().toISOString();
+    let request = this.pages()
+      .select("id,title,slug,description,cover_image,display_scene,sort_order,start_at,end_at,published_at,updated_at")
       .eq("status", "published")
+      .or(`start_at.is.null,start_at.lte.${now}`)
+      .or(`end_at.is.null,end_at.gte.${now}`);
+
+    if (query.scene) {
+      request = request.or(`display_scene.eq.all,display_scene.eq.${query.scene}`);
+    }
+
+    const { data, error } = await request
+      .order("sort_order", { ascending: true })
       .order("published_at", { ascending: false });
 
     if (error) {
@@ -184,6 +212,10 @@ class MarketingPageRepository {
       | "slug"
       | "description"
       | "cover_image"
+      | "display_scene"
+      | "sort_order"
+      | "start_at"
+      | "end_at"
       | "published_at"
       | "updated_at"
     >[];
@@ -220,6 +252,10 @@ class MarketingPageRepository {
     slug: string;
     description?: string | null;
     cover_image?: string | null;
+    display_scene?: MarketingPageRecord["display_scene"];
+    sort_order?: number;
+    start_at?: string | null;
+    end_at?: string | null;
     employeeId: string | null;
   }) {
     const { data, error } = await this.pages()
@@ -228,6 +264,10 @@ class MarketingPageRepository {
         slug: input.slug,
         description: input.description ?? null,
         cover_image: input.cover_image ?? null,
+        display_scene: input.display_scene ?? "all",
+        sort_order: input.sort_order ?? 100,
+        start_at: input.start_at ?? null,
+        end_at: input.end_at ?? null,
         status: "draft",
         created_by: input.employeeId,
         updated_by: input.employeeId,
@@ -454,6 +494,7 @@ class MarketingPageRepository {
     customerId?: string | null;
     wxOpenid?: string | null;
   }) {
+    const customerId = input.customerId ?? await this.findCustomerIdByPhone(input.phone);
     const { data, error } = await this.leads()
       .insert({
         page_id: input.pageId,
@@ -464,7 +505,7 @@ class MarketingPageRepository {
         city: input.city ?? null,
         form_data: input.form_data,
         source: "h5",
-        customer_id: input.customerId ?? null,
+        customer_id: customerId,
         wx_openid: input.wxOpenid ?? null,
         request_ip: input.requestIp,
         user_agent: input.userAgent,
@@ -474,6 +515,81 @@ class MarketingPageRepository {
 
     if (error) {
       throw Errors.dbError("提交 H5 营销线索失败", error);
+    }
+
+    return data as MarketingLeadRecord;
+  }
+
+  async listLeads(query: MarketingLeadListQuery) {
+    const { page, pageSize, status, page_id, keyword } = query;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let request = this.leads()
+      .select(`
+        *,
+        page:marketing_pages(id,title,slug),
+        customer:customers(id,name,phone,status,owner_id)
+      `, { count: "exact" });
+
+    if (status) {
+      request = request.eq("lead_status", status);
+    }
+
+    if (page_id) {
+      request = request.eq("page_id", page_id);
+    }
+
+    if (keyword) {
+      const escapedKeyword = escapeSupabaseOrValue(keyword);
+      request = request.or(
+        `name.ilike.%${escapedKeyword}%,phone.ilike.%${escapedKeyword}%,community.ilike.%${escapedKeyword}%,city.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    const { data, error, count } = await request
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询 H5 营销线索列表失败", error);
+    }
+
+    return {
+      list: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
+  }
+
+  async updateLead(id: string, input: UpdateMarketingLeadInput & {
+    employeeId: string | null;
+  }) {
+    const { data, error } = await this.leads()
+      .update({
+        lead_status: input.lead_status,
+        follow_remark: input.follow_remark ?? null,
+        followed_by: input.employeeId,
+        followed_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select(`
+        *,
+        page:marketing_pages(id,title,slug),
+        customer:customers(id,name,phone,status,owner_id)
+      `)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新 H5 营销线索失败", error);
+    }
+
+    if (!data) {
+      throw Errors.notFound("H5 营销线索不存在");
     }
 
     return data as MarketingLeadRecord;
@@ -513,6 +629,21 @@ class MarketingPageRepository {
     if (getErrorMessage(error).includes("duplicate key")) {
       throw Errors.badRequest(message);
     }
+  }
+
+  private async findCustomerIdByPhone(phone: string | null | undefined) {
+    if (!phone) return null;
+
+    const { data, error } = await this.customers()
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("匹配 H5 营销线索客户失败", error);
+    }
+
+    return (data as { id?: string } | null)?.id ?? null;
   }
 }
 

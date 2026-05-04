@@ -381,11 +381,25 @@ POST   /marketing-pages/:id/publish
 POST   /marketing-pages/:id/offline
 POST   /marketing-pages/:id/duplicate
 
-GET    /public/marketing-pages
+GET    /public/marketing-pages?scene=home
 GET    /public/marketing-pages/:slug
 POST   /public/marketing-pages/:slug/leads
 POST   /public/marketing-pages/:slug/events
+GET    /marketing-leads
+PATCH  /marketing-leads/:id
 ```
+
+当前公开活动列表会按后台配置过滤：
+
+- `display_scene`：`all/home/customer_home/project_detail/marketing_list`
+- `sort_order`：小程序入口排序，越小越靠前
+- `start_at` / `end_at`：展示时间窗口
+
+营销线索支持后台查看和跟进：
+
+- `lead_status`：`new/contacted/converted/invalid`
+- `follow_remark`：跟进备注
+- `customer_id`：提交手机号命中 `customers.phone` 时自动绑定
 
 分层建议：
 

@@ -59,6 +59,13 @@ export type MarketingCampaignDetail = MarketingCampaignRecord & {
 };
 
 export type H5MarketingPageStatus = "draft" | "published" | "offline" | "archived";
+export type H5MarketingPageDisplayScene =
+  | "all"
+  | "home"
+  | "customer_home"
+  | "project_detail"
+  | "marketing_list";
+export type H5MarketingLeadStatus = "new" | "contacted" | "converted" | "invalid";
 
 export type H5MarketingPageRecord = {
   id: string;
@@ -67,8 +74,45 @@ export type H5MarketingPageRecord = {
   status: H5MarketingPageStatus;
   description: string | null;
   cover_image: string | null;
+  display_scene: H5MarketingPageDisplayScene;
+  sort_order: number;
+  start_at: string | null;
+  end_at: string | null;
   published_version_id: string | null;
   published_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type H5MarketingLeadRecord = {
+  id: string;
+  page_id: string | null;
+  page_version_id: string | null;
+  name: string | null;
+  phone: string | null;
+  community: string | null;
+  city: string | null;
+  form_data: Record<string, unknown>;
+  source: string;
+  lead_status: H5MarketingLeadStatus;
+  follow_remark: string | null;
+  followed_by: string | null;
+  followed_at: string | null;
+  wx_openid: string | null;
+  customer_id: string | null;
+  request_ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+  page?: {
+    id: string;
+    title: string | null;
+    slug: string | null;
+  } | null;
+  customer?: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    status: string | null;
+    owner_id: string | null;
+  } | null;
 };
