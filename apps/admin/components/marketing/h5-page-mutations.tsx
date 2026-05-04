@@ -53,6 +53,13 @@ function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
 }
 
+function buildH5PageEditHref(pageId: string) {
+  const query = new URLSearchParams({
+    returnTo: "/marketing?tab=h5",
+  });
+  return `/marketing/h5-pages/${pageId}/edit?${query}`;
+}
+
 function buildPageUrl(slug: string) {
   return `${getH5BaseUrl()}/p/${slug}`;
 }
@@ -519,7 +526,7 @@ export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
     <>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" asChild>
-          <Link href={`/marketing/h5-pages/${page.id}/edit`}>
+          <Link href={buildH5PageEditHref(page.id)}>
             <Pencil data-icon="inline-start" />
             编辑
           </Link>

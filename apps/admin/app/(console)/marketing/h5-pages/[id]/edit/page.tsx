@@ -7,6 +7,10 @@ type RouteParams = {
   id: string;
 };
 
+type PageSearchParams = {
+  returnTo?: string;
+};
+
 type H5PageDraftData = {
   page: {
     id: string;
@@ -31,10 +35,20 @@ async function fetchDraft(token: string, id: string) {
   return payload.data;
 }
 
+function normalizeReturnHref(value: string | undefined) {
+  if (value?.startsWith("/marketing")) {
+    return value;
+  }
+
+  return "/marketing?tab=h5";
+}
+
 export default async function H5PageEditorPage({
   params,
+  searchParams,
 }: {
   params: Promise<RouteParams>;
+  searchParams: Promise<PageSearchParams>;
 }) {
   const token = await getAdminToken();
   if (!token) {
@@ -46,11 +60,13 @@ export default async function H5PageEditorPage({
   if (!data) {
     notFound();
   }
+  const query = await searchParams;
 
   return (
     <H5PageEditor
       page={data.page}
       draftVersion={data.draft_version}
+      returnHref={normalizeReturnHref(query.returnTo)}
     />
   );
 }

@@ -41,6 +41,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+const H5_MARKETING_RETURN_HREF = "/marketing?tab=h5";
+
 type H5BlockType =
   | "hero"
   | "image"
@@ -701,9 +703,11 @@ function ActionDetailFields({
 export function H5PageEditor({
   page,
   draftVersion,
+  returnHref = H5_MARKETING_RETURN_HREF,
 }: {
   page: H5PageEditorPage;
   draftVersion: H5PageEditorVersion;
+  returnHref?: string;
 }) {
   const router = useRouter();
   const [config, setConfig] = useState(() => normalizeConfig(draftVersion.config, page));
@@ -834,7 +838,7 @@ export function H5PageEditor({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
         <div>
-          <Button type="button" variant="ghost" className="mb-2 px-0" onClick={() => router.push("/marketing")}>
+          <Button type="button" variant="ghost" className="mb-2 px-0" onClick={() => router.push(returnHref)}>
             <ArrowLeft data-icon="inline-start" />
             返回营销活动
           </Button>
