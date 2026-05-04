@@ -190,6 +190,28 @@ jobs:
           ADMIN_PID_AFTER=$("$PM2_BIN" pid goose-admin 2>/dev/null || true)
           echo "goose-admin PID after restart: ${ADMIN_PID_AFTER:-not running}"
 
+          # Build and deploy static H5 marketing site.
+          log_step "Building H5 marketing site..."
+          "$BUN_BIN" run h5:build
+
+          log_step "Deploying H5 marketing site..."
+          H5_DIST_DIR="$GITHUB_WORKSPACE/apps/h5/dist"
+          H5_TARGET_DIR="/var/www/h5.goodcms.cn"
+          if [ ! -f "$H5_DIST_DIR/index.html" ] || [ ! -f "$H5_DIST_DIR/assets/main.js" ] || [ ! -f "$H5_DIST_DIR/assets/styles.css" ]; then
+            echo "H5 build is incomplete: required static files are missing."
+            find "$H5_DIST_DIR" -maxdepth 3 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+
+          mkdir -p "$H5_TARGET_DIR/assets"
+          install -m 0644 "$H5_DIST_DIR/index.html" "$H5_TARGET_DIR/index.html"
+          install -m 0644 "$H5_DIST_DIR/config.js" "$H5_TARGET_DIR/config.js"
+          install -m 0644 "$H5_DIST_DIR/assets/main.js" "$H5_TARGET_DIR/assets/main.js"
+          install -m 0644 "$H5_DIST_DIR/assets/styles.css" "$H5_TARGET_DIR/assets/styles.css"
+
+          echo "H5 deploy verified:"
+          ls -l "$H5_TARGET_DIR/index.html" "$H5_TARGET_DIR/assets/main.js" "$H5_TARGET_DIR/assets/styles.css"
+
           # Check listening ports.
           if command -v ss >/dev/null 2>&1; then
             echo "Checking port 3000 (goose)..."
@@ -240,6 +262,12 @@ jobs:
           fi
 
           echo "Admin health check passed"
+          H5_HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://h5.goodcms.cn/assets/main.js || echo "000")
+          if [ "$H5_HTTP_STATUS" != "200" ]; then
+            echo "H5 health check failed (HTTP $H5_HTTP_STATUS)"
+            exit 1
+          fi
+          echo "H5 health check passed (HTTP $H5_HTTP_STATUS)"
           echo "Deployment completed successfully."
 
           # Clean temporary files.
