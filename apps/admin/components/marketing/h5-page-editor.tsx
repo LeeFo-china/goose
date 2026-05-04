@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -192,9 +192,9 @@ function getImageRequirement(usage: ImageUsage) {
     label: "图片",
     minWidth: 750,
     ratios: [
-      { value: "free", label: "自由", ratio: null },
       { value: "16:9", label: "16:9", ratio: 16 / 9 },
       { value: "3:1", label: "3:1", ratio: 3 },
+      { value: "free", label: "自由", ratio: null },
     ],
   };
 }
@@ -207,7 +207,11 @@ function formatFileSize(bytes: number) {
   return `${Math.ceil(bytes / 1024)}KB`;
 }
 
-function getImageValidationIssues(image: LoadedImageFile, usage: ImageUsage) {
+function getImageValidationIssues(
+  image: LoadedImageFile,
+  usage: ImageUsage,
+  options: { skipRatio?: boolean } = {},
+) {
   const requirement = getImageRequirement(usage);
   const issues: string[] = [];
 
@@ -223,7 +227,9 @@ function getImageValidationIssues(image: LoadedImageFile, usage: ImageUsage) {
     issues.push(`图片宽度 ${image.width}px，低于 ${requirement.minWidth}px`);
   }
 
-  const fixedRatios = usage === "content" ? [] : requirement.ratios.filter((item) => item.ratio);
+  const fixedRatios = options.skipRatio
+    ? []
+    : requirement.ratios.filter((item) => item.ratio);
   if (fixedRatios.length > 0) {
     const currentRatio = image.width / image.height;
     const ratioMatched = fixedRatios.some((item) =>
@@ -781,6 +787,7 @@ function ImageUploadField({
   onChange: (value: string) => void;
 }) {
   const requirement = getImageRequirement(usage);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [repairState, setRepairState] = useState<ImageRepairState | null>(null);
   const [repairRatio, setRepairRatio] = useState(requirement.ratios[0]?.value || "free");
   const [quality, setQuality] = useState(0.82);
@@ -833,7 +840,9 @@ function ImageUploadField({
         ratio: ratioConfig?.ratio ?? null,
       });
       const repairedImage = await loadImageFile(repairedFile);
-      const issues = getImageValidationIssues(repairedImage, usage);
+      const issues = getImageValidationIssues(repairedImage, usage, {
+        skipRatio: usage === "content" && repairRatio === "free",
+      });
       URL.revokeObjectURL(repairedImage.objectUrl);
       if (issues.length > 0) {
         throw new Error(issues[0]);
@@ -859,28 +868,32 @@ function ImageUploadField({
           placeholder="https://..."
           onChange={(event) => onChange(event.target.value)}
         />
-        <Button type="button" variant="outline" disabled={uploading} asChild>
-          <label className="cursor-pointer">
-            {uploading ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Upload data-icon="inline-start" />
-            )}
-            上传
-            <input
-              className="sr-only"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/*"
-              onChange={(event) => {
-                void selectFile(event.target.files?.[0]);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? (
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Upload data-icon="inline-start" />
+          )}
+          上传
         </Button>
+        <input
+          ref={fileInputRef}
+          className="sr-only"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/*"
+          onChange={(event) => {
+            void selectFile(event.target.files?.[0]);
+            event.currentTarget.value = "";
+          }}
+        />
       </div>
       <FieldDescription>
-        {requirement.label} 建议宽度不低于 {requirement.minWidth}px，单张不超过 5MB，支持 JPG、PNG、WebP。
+        {requirement.label} 建议宽度不低于 {requirement.minWidth}px，单张不超过 5MB，比例建议 {requirement.ratios.filter((item) => item.ratio).map((item) => item.label).join(" / ") || "自由"}。
       </FieldDescription>
       {value ? (
         <div className="overflow-hidden rounded-md border bg-muted/40">
