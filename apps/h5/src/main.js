@@ -383,7 +383,7 @@ function renderLeadForm(block, slug) {
     <form data-form-block="true" novalidate>
       ${props.title ? `<h2>${escapeHtml(props.title)}</h2>` : "<h2>预约咨询</h2>"}
       ${props.description ? `<p class="form-desc">${escapeHtml(props.description)}</p>` : ""}
-      <div class="lead-success ${cachedLead ? "" : "is-hidden"}" data-lead-success="true">
+      <div class="lead-success ${cachedLead ? "" : "is-hidden"}" data-lead-success="true" ${cachedLead ? "" : "hidden"} role="status">
         <h3>${escapeHtml(props.successTitle || "预约已提交")}</h3>
         <p>${escapeHtml(props.successText || "顾问会尽快与您联系，请保持电话畅通")}</p>
         <p class="lead-success__phone" data-lead-phone>${cachedLead?.phoneTail ? `已提交手机号：****${escapeHtml(cachedLead.phoneTail)}` : ""}</p>
@@ -393,7 +393,7 @@ function renderLeadForm(block, slug) {
           <button class="text-action" type="button" data-edit-lead="true">修改信息</button>
         </div>
       </div>
-      <div class="lead-form-content ${cachedLead ? "is-hidden" : ""}" data-lead-form-content="true">
+      <div class="lead-form-content ${cachedLead ? "is-hidden" : ""}" data-lead-form-content="true" ${cachedLead ? "hidden" : ""}>
       <div class="form-fields">
         ${fields.map((field) => `
           <label>
@@ -412,12 +412,35 @@ function renderLeadForm(block, slug) {
   const successPanel = node.querySelector("[data-lead-success='true']");
   const formContent = node.querySelector("[data-lead-form-content='true']");
   const phoneText = node.querySelector("[data-lead-phone]");
+  const submitButton = node.querySelector("button[type='submit']");
+
+  const setFormControlsDisabled = (disabled) => {
+    formContent.querySelectorAll("input, select, textarea, button").forEach((control) => {
+      control.disabled = disabled;
+    });
+  };
 
   const showSuccess = (leadResult = {}, cache = null) => {
     const phoneTail = leadResult.phone_tail || cache?.phoneTail || "";
+    isSubmitted = true;
     phoneText.textContent = phoneTail ? `已提交手机号：****${phoneTail}` : "";
+    successPanel.hidden = false;
+    formContent.hidden = true;
     successPanel.classList.remove("is-hidden");
     formContent.classList.add("is-hidden");
+    setFormControlsDisabled(true);
+  };
+
+  const showForm = () => {
+    isSubmitted = false;
+    successPanel.hidden = true;
+    formContent.hidden = false;
+    successPanel.classList.add("is-hidden");
+    formContent.classList.remove("is-hidden");
+    setFormControlsDisabled(false);
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
   };
 
   node.querySelector("[data-return-mini-program='true']")?.addEventListener("click", async (event) => {
@@ -436,10 +459,12 @@ function renderLeadForm(block, slug) {
   });
 
   node.querySelector("[data-edit-lead='true']")?.addEventListener("click", () => {
-    isSubmitted = false;
-    successPanel.classList.add("is-hidden");
-    formContent.classList.remove("is-hidden");
+    showForm();
   });
+
+  if (cachedLead) {
+    setFormControlsDisabled(true);
+  }
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -451,6 +476,9 @@ function renderLeadForm(block, slug) {
     formData.phone = phone;
 
     if (isSubmitting || isSubmitted) {
+      if (isSubmitted) {
+        showSuccess({}, readLeadCache(slug));
+      }
       return;
     }
 
@@ -493,7 +521,6 @@ function renderLeadForm(block, slug) {
       form.reset();
       message.textContent = leadResult?.message || props.successText || "预约已提交";
       message.className = "form-message is-success";
-      isSubmitted = true;
       showSuccess(leadResult, cache);
     } catch (error) {
       message.textContent = error.message || "提交失败，请稍后重试";

@@ -333,9 +333,11 @@ img {
   padding: 22px 16px 18px;
 }
 
+.lead-form-content[hidden],
+.lead-success[hidden],
 .lead-form-content.is-hidden,
 .lead-success.is-hidden {
-  display: none;
+  display: none !important;
 }
 
 .lead-success {
