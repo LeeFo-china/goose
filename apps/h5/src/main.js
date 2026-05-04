@@ -67,6 +67,57 @@ function renderState(title, text, actionHtml = "") {
   `;
 }
 
+function addHours(date, hours) {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000);
+}
+
+function getLeadCacheKey(slug) {
+  return `gooes:h5:lead:${slug}`;
+}
+
+function readLeadCache(slug) {
+  const cacheKey = getLeadCacheKey(slug);
+
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+
+    const data = JSON.parse(raw);
+    if (!data?.expiresAt || new Date(data.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return data;
+  } catch {
+    try {
+      localStorage.removeItem(cacheKey);
+    } catch {
+      // Ignore cache cleanup failures in restricted web-view contexts.
+    }
+    return null;
+  }
+}
+
+function writeLeadCache(slug, leadResult) {
+  const submittedAt = new Date();
+  const cache = {
+    slug,
+    leadId: leadResult?.lead_id || leadResult?.lead?.id || null,
+    phoneTail: leadResult?.phone_tail || "",
+    submittedAt: submittedAt.toISOString(),
+    expiresAt: addHours(submittedAt, 24).toISOString(),
+  };
+
+  try {
+    localStorage.setItem(getLeadCacheKey(slug), JSON.stringify(cache));
+  } catch {
+    // localStorage may be unavailable in restricted web-view contexts.
+  }
+
+  return cache;
+}
+
 async function requestJson(path, options = {}) {
   const response = await fetch(buildApiUrl(path), {
     headers: {
@@ -93,6 +144,28 @@ function trackEvent(slug, eventName, blockId, payload = {}) {
       payload,
     }),
   }).catch(() => null);
+}
+
+function waitForEvent(promise, timeoutMs = 300) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+function returnToMiniProgram() {
+  const miniProgram = window.wx?.miniProgram;
+  if (miniProgram?.navigateBack) {
+    miniProgram.navigateBack();
+    return true;
+  }
+
+  if (history.length > 1) {
+    history.back();
+    return true;
+  }
+
+  return false;
 }
 
 function createSection(block, className, innerHtml) {
@@ -274,10 +347,22 @@ function renderLeadForm(block, slug) {
   const fields = Array.isArray(props.fields) && props.fields.length
     ? props.fields
     : ["name", "phone", "community"];
+  const cachedLead = readLeadCache(slug);
   const node = createSection(block, "lead-form-block", `
     <form data-form-block="true" novalidate>
       ${props.title ? `<h2>${escapeHtml(props.title)}</h2>` : "<h2>预约咨询</h2>"}
       ${props.description ? `<p class="form-desc">${escapeHtml(props.description)}</p>` : ""}
+      <div class="lead-success ${cachedLead ? "" : "is-hidden"}" data-lead-success="true">
+        <h3>${escapeHtml(props.successTitle || "预约已提交")}</h3>
+        <p>${escapeHtml(props.successText || "顾问会尽快与您联系，请保持电话畅通")}</p>
+        <p class="lead-success__phone" data-lead-phone>${cachedLead?.phoneTail ? `已提交手机号：****${escapeHtml(cachedLead.phoneTail)}` : ""}</p>
+        <div class="lead-success__actions">
+          <button class="secondary-action" type="button" data-return-mini-program="true">返回小程序</button>
+          <button class="secondary-action" type="button" data-continue-browsing="true">继续浏览活动</button>
+          <button class="text-action" type="button" data-edit-lead="true">修改信息</button>
+        </div>
+      </div>
+      <div class="lead-form-content ${cachedLead ? "is-hidden" : ""}" data-lead-form-content="true">
       <div class="form-fields">
         ${fields.map((field) => `
           <label>
@@ -288,15 +373,54 @@ function renderLeadForm(block, slug) {
       </div>
       <button class="primary-action" type="submit">${escapeHtml(props.submitText || "提交预约")}</button>
       <p class="form-message" role="status"></p>
+      </div>
     </form>
   `);
 
-  node.querySelector("form")?.addEventListener("submit", async (event) => {
+  const form = node.querySelector("form");
+  const successPanel = node.querySelector("[data-lead-success='true']");
+  const formContent = node.querySelector("[data-lead-form-content='true']");
+  const phoneText = node.querySelector("[data-lead-phone]");
+
+  const showSuccess = (leadResult = {}, cache = null) => {
+    const phoneTail = leadResult.phone_tail || cache?.phoneTail || "";
+    phoneText.textContent = phoneTail ? `已提交手机号：****${phoneTail}` : "";
+    successPanel.classList.remove("is-hidden");
+    formContent.classList.add("is-hidden");
+  };
+
+  node.querySelector("[data-return-mini-program='true']")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    await waitForEvent(trackEvent(slug, "button_click", block.id, { action: "return_miniprogram_click" }));
+    const returned = returnToMiniProgram();
+    if (!returned) {
+      button.textContent = "关闭页面后查看";
+      button.disabled = true;
+    }
+  });
+
+  node.querySelector("[data-continue-browsing='true']")?.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  node.querySelector("[data-edit-lead='true']")?.addEventListener("click", () => {
+    successPanel.classList.add("is-hidden");
+    formContent.classList.remove("is-hidden");
+  });
+
+  form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
-    const button = form.querySelector("button");
+    const button = form.querySelector("button[type='submit']");
     const message = form.querySelector(".form-message");
     const formData = Object.fromEntries(new FormData(form).entries());
+
+    if (fields.includes("phone") && !formData.phone) {
+      message.textContent = "请输入有效的手机号";
+      message.className = "form-message is-error";
+      return;
+    }
 
     if (formData.phone && !/^1[3-9]\d{9}$/.test(String(formData.phone))) {
       message.textContent = "请输入有效的手机号";
@@ -309,7 +433,8 @@ function renderLeadForm(block, slug) {
     message.className = "form-message";
 
     try {
-      await requestJson(`/public/marketing-pages/${encodeURIComponent(slug)}/leads`, {
+      trackEvent(slug, "form_submit", block.id, { phase: "submit" });
+      const leadResult = await requestJson(`/public/marketing-pages/${encodeURIComponent(slug)}/leads`, {
         method: "POST",
         body: JSON.stringify({
           name: formData.name || null,
@@ -319,10 +444,16 @@ function renderLeadForm(block, slug) {
           form_data: formData,
         }),
       });
-      await trackEvent(slug, "form_submit", block.id, { fields });
+      trackEvent(slug, "form_submit", block.id, {
+        phase: "success",
+        lead_id: leadResult?.lead_id || null,
+        already_submitted: Boolean(leadResult?.already_submitted),
+      });
+      const cache = writeLeadCache(slug, leadResult);
       form.reset();
-      message.textContent = props.successText || "提交成功，我们会尽快联系您";
+      message.textContent = leadResult?.message || props.successText || "预约已提交";
       message.className = "form-message is-success";
+      showSuccess(leadResult, cache);
     } catch (error) {
       message.textContent = error.message || "提交失败，请稍后重试";
       message.className = "form-message is-error";
