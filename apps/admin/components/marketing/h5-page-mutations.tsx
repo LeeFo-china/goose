@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw } from "lucide-react";
+import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import type { H5MarketingPageRecord } from "@/components/marketing/marketing-types";
@@ -249,6 +249,7 @@ export function CreateH5MarketingPageButton() {
 export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const pageUrl = buildPageUrl(page.slug);
 
   function runAction(label: string, action: () => Promise<unknown>) {
@@ -270,70 +271,114 @@ export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
   }
 
   return (
-    <div className="flex justify-end gap-2">
-      <Button type="button" variant="outline" size="sm" asChild>
-        <Link href={`/marketing/h5-pages/${page.id}/edit`}>
-          <Pencil data-icon="inline-start" />
-          编辑
-        </Link>
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
-        <Copy data-icon="inline-start" />
-        复制链接
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => window.open(pageUrl, "_blank")}>
-        <ExternalLink data-icon="inline-start" />
-        预览
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={() => runAction("已复制为新页面", () =>
-          requestH5Page({
-            path: `/marketing-pages/${page.id}/duplicate`,
-            method: "POST",
-            payload: {},
-          })
+    <>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link href={`/marketing/h5-pages/${page.id}/edit`}>
+            <Pencil data-icon="inline-start" />
+            编辑
+          </Link>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
+          <Copy data-icon="inline-start" />
+          复制链接
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => window.open(pageUrl, "_blank")}>
+          <ExternalLink data-icon="inline-start" />
+          预览
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => runAction("已复制为新页面", () =>
+            requestH5Page({
+              path: `/marketing-pages/${page.id}/duplicate`,
+              method: "POST",
+              payload: {},
+            })
+          )}
+        >
+          <RefreshCw data-icon="inline-start" />
+          复制
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => setArchiveOpen(true)}
+        >
+          <Archive data-icon="inline-start" />
+          结束
+        </Button>
+        {page.status === "published" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => runAction("H5 活动页已下线", () =>
+              requestH5Page({
+                path: `/marketing-pages/${page.id}/offline`,
+                method: "POST",
+              })
+            )}
+          >
+            <PauseCircle data-icon="inline-start" />
+            停止
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => runAction("H5 活动页已发布", () =>
+              requestH5Page({
+                path: `/marketing-pages/${page.id}/publish`,
+                method: "POST",
+              })
+            )}
+          >
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <PlayCircle data-icon="inline-start" />}
+            发布
+          </Button>
         )}
-      >
-        <RefreshCw data-icon="inline-start" />
-        复制
-      </Button>
-      {page.status === "published" ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => runAction("H5 活动页已下线", () =>
-            requestH5Page({
-              path: `/marketing-pages/${page.id}/offline`,
-              method: "POST",
-            })
-          )}
-        >
-          <PauseCircle data-icon="inline-start" />
-          下线
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => runAction("H5 活动页已发布", () =>
-            requestH5Page({
-              path: `/marketing-pages/${page.id}/publish`,
-              method: "POST",
-            })
-          )}
-        >
-          {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <PlayCircle data-icon="inline-start" />}
-          发布
-        </Button>
-      )}
-    </div>
+      </div>
+      <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>结束 H5 活动页</DialogTitle>
+            <DialogDescription>
+              结束后页面会归档，不再出现在活动页列表中，已投放的 H5 地址也不能继续作为有效活动页访问。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setArchiveOpen(false)}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending}
+              onClick={() => {
+                setArchiveOpen(false);
+                runAction("H5 活动页已结束", () =>
+                  requestH5Page({
+                    path: `/marketing-pages/${page.id}`,
+                    method: "DELETE",
+                  })
+                );
+              }}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
+              确认结束
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
