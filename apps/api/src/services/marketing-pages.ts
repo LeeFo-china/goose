@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { marketingPageRepository } from "@/repositories/marketing-pages";
 import type {
+  ConvertMarketingLeadInput,
   CreateMarketingPageInput,
   DuplicateMarketingPageInput,
   MarketingLeadListQuery,
@@ -329,6 +330,17 @@ class MarketingPageService {
     input: UpdateMarketingLeadInput,
   ) {
     return marketingPageRepository.updateLead(id, {
+      ...input,
+      employeeId: authContext.employeeId,
+    });
+  }
+
+  async convertLeadToCustomer(
+    authContext: AuthContext,
+    id: string,
+    input: ConvertMarketingLeadInput,
+  ) {
+    return marketingPageRepository.convertLeadToCustomer(id, {
       ...input,
       employeeId: authContext.employeeId,
     });

@@ -2,6 +2,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateMarketingPageSchema,
+  ConvertMarketingLeadSchema,
   DuplicateMarketingPageSchema,
   MarketingPageIdParamsSchema,
   MarketingLeadIdParamsSchema,
@@ -237,6 +238,26 @@ class MarketingPagesController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await marketingPageService.updateLead(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/marketing-leads/:id/convert-customer")
+  async convertLeadToCustomer(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_lead.update");
+    accessPolicyService.assertPermission(authContext, "customer.create");
+
+    const paramsResult = MarketingLeadIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ConvertMarketingLeadSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.convertLeadToCustomer(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

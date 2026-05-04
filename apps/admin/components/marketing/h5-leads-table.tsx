@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, MessageSquareText } from "lucide-react";
+import { Loader2, MessageSquareText, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { FormSelect } from "@/components/admin/form-select";
 import { DataTable } from "@/components/admin/data-table";
@@ -75,6 +75,27 @@ async function requestLeadUpdate(input: {
   }
 }
 
+async function requestLeadConvert(input: {
+  id: string;
+  follow_remark: string | null;
+}) {
+  const response = await fetch(`/api/backend/marketing-leads/${input.id}/convert-customer`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      follow_remark: input.follow_remark,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "转客户失败"));
+  }
+
+  return payload.data as {
+    created?: boolean;
+  };
+}
+
 function LeadFollowAction({ lead }: { lead: H5MarketingLeadRecord }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -141,6 +162,83 @@ function LeadFollowAction({ lead }: { lead: H5MarketingLeadRecord }) {
             <Button type="button" disabled={pending} onClick={submit}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function LeadConvertAction({ lead }: { lead: H5MarketingLeadRecord }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [remark, setRemark] = useState(lead.follow_remark || "");
+
+  function submit() {
+    startTransition(async () => {
+      try {
+        const data = await requestLeadConvert({
+          id: lead.id,
+          follow_remark: remark.trim() || lead.follow_remark || null,
+        });
+        toast.success(data.created ? "已创建客户并绑定线索" : "已绑定已有客户");
+        setOpen(false);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "转客户失败");
+      }
+    });
+  }
+
+  const disabled = lead.lead_status === "converted";
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <UserPlus data-icon="inline-start" />
+        转客户
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>转为客户</DialogTitle>
+            <DialogDescription>
+              系统会先按手机号匹配已有客户；如果没有匹配到，会创建新客户并把该线索标记为已转化。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel>手机号</FieldLabel>
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {lead.phone || "未填写手机号"}
+              </div>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`lead-convert-remark-${lead.id}`}>转化备注</FieldLabel>
+              <Textarea
+                id={`lead-convert-remark-${lead.id}`}
+                value={remark}
+                rows={4}
+                onChange={(event) => setRemark(event.target.value)}
+                placeholder="例如：确认有效线索，已转入客户池继续跟进"
+              />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" disabled={pending || !lead.phone} onClick={submit}>
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <UserPlus data-icon="inline-start" />}
+              确认转客户
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -226,7 +324,12 @@ const columns: ColumnDef<H5MarketingLeadRecord>[] = [
   {
     id: "actions",
     header: "操作",
-    cell: ({ row }) => <LeadFollowAction lead={row.original} />,
+    cell: ({ row }) => (
+      <div className="flex justify-end gap-2">
+        <LeadFollowAction lead={row.original} />
+        <LeadConvertAction lead={row.original} />
+      </div>
+    ),
     meta: {
       headerClassName: "text-right",
       cellClassName: "whitespace-nowrap text-right",
@@ -244,7 +347,7 @@ export function H5MarketingLeadsTable({
       columns={columns}
       data={leads}
       emptyText="还没有 H5 营销线索"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1260px]"
     />
   );
 }

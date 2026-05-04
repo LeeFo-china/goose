@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import type {
+  ConvertMarketingLeadInput,
   MarketingLeadListQuery,
   MarketingPageConfigInput,
   MarketingPageListQuery,
@@ -595,6 +596,53 @@ class MarketingPageRepository {
     return data as MarketingLeadRecord;
   }
 
+  async convertLeadToCustomer(id: string, input: ConvertMarketingLeadInput & {
+    employeeId: string | null;
+  }) {
+    const lead = await this.findLeadById(id);
+    if (!lead) {
+      throw Errors.notFound("H5 营销线索不存在");
+    }
+
+    const phone = lead.phone?.trim();
+    if (!phone) {
+      throw Errors.badRequest("线索未填写手机号，不能转为客户");
+    }
+
+    const existingCustomer = await this.findCustomerByPhone(phone);
+    const customer = existingCustomer ?? await this.createCustomerFromLead(lead, input.employeeId);
+    const followRemark = input.follow_remark ?? lead.follow_remark;
+    const { data, error } = await this.leads()
+      .update({
+        customer_id: customer.id,
+        lead_status: "converted",
+        follow_remark: followRemark ?? null,
+        followed_by: input.employeeId,
+        followed_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select(`
+        *,
+        page:marketing_pages(id,title,slug),
+        customer:customers(id,name,phone,status,owner_id)
+      `)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("转化 H5 营销线索失败", error);
+    }
+
+    if (!data) {
+      throw Errors.notFound("H5 营销线索不存在");
+    }
+
+    return {
+      lead: data,
+      customer,
+      created: !existingCustomer,
+    };
+  }
+
   async createEvent(input: TrackMarketingEventInput & {
     pageId: string;
     pageVersionId: string;
@@ -634,8 +682,26 @@ class MarketingPageRepository {
   private async findCustomerIdByPhone(phone: string | null | undefined) {
     if (!phone) return null;
 
+    const customer = await this.findCustomerByPhone(phone);
+    return customer?.id ?? null;
+  }
+
+  private async findLeadById(id: string) {
+    const { data, error } = await this.leads()
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 H5 营销线索失败", error);
+    }
+
+    return (data || null) as MarketingLeadRecord | null;
+  }
+
+  private async findCustomerByPhone(phone: string) {
     const { data, error } = await this.customers()
-      .select("id")
+      .select("id,name,phone,status,owner_id")
       .eq("phone", phone)
       .maybeSingle();
 
@@ -643,7 +709,51 @@ class MarketingPageRepository {
       throw Errors.dbError("匹配 H5 营销线索客户失败", error);
     }
 
-    return (data as { id?: string } | null)?.id ?? null;
+    return (data || null) as {
+      id: string;
+      name: string | null;
+      phone: string | null;
+      status: string | null;
+      owner_id: string | null;
+    } | null;
+  }
+
+  private async createCustomerFromLead(
+    lead: MarketingLeadRecord,
+    employeeId: string | null,
+  ) {
+    const phone = lead.phone?.trim();
+    if (!phone) {
+      throw Errors.badRequest("线索未填写手机号，不能转为客户");
+    }
+
+    const { data, error } = await this.customers()
+      .insert({
+        name: lead.name?.trim() || "H5营销线索",
+        phone,
+        source: "platform",
+        status: "potential",
+        owner_id: employeeId,
+      })
+      .select("id,name,phone,status,owner_id")
+      .single();
+
+    if (error) {
+      if (getErrorMessage(error).includes("duplicate key")) {
+        const customer = await this.findCustomerByPhone(phone);
+        if (customer) return customer;
+      }
+
+      throw Errors.dbError("创建 H5 营销线索客户失败", error);
+    }
+
+    return data as {
+      id: string;
+      name: string | null;
+      phone: string | null;
+      status: string | null;
+      owner_id: string | null;
+    };
   }
 }
 

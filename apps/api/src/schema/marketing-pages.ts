@@ -189,6 +189,10 @@ export const UpdateMarketingLeadSchema = z.object({
   follow_remark: z.string().trim().max(1000, "跟进备注不能超过 1000 个字符").nullable().optional(),
 });
 
+export const ConvertMarketingLeadSchema = z.object({
+  follow_remark: z.string().trim().max(1000, "跟进备注不能超过 1000 个字符").nullable().optional(),
+});
+
 export const SubmitMarketingLeadSchema = z.object({
   name: z.string().trim().max(50, "姓名不能超过 50 个字符").nullable().optional(),
   phone: z
@@ -220,5 +224,6 @@ export type MarketingPageConfigInput = z.infer<typeof MarketingPageConfigSchema>
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;
 export type MarketingLeadListQuery = z.infer<typeof MarketingLeadListQuerySchema>;
 export type UpdateMarketingLeadInput = z.infer<typeof UpdateMarketingLeadSchema>;
+export type ConvertMarketingLeadInput = z.infer<typeof ConvertMarketingLeadSchema>;
 export type SubmitMarketingLeadInput = z.infer<typeof SubmitMarketingLeadSchema>;
 export type TrackMarketingEventInput = z.infer<typeof TrackMarketingEventSchema>;
