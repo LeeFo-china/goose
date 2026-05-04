@@ -10,13 +10,14 @@ admin 后台已经支持创建、编辑、发布 H5 活动页。小程序端需�
 
 ```text
 admin 后台创建并发布 H5 页面
-  -> 得到 H5 地址 https://h5.goodcms.cn/p/{slug}
-  -> 小程序跳转 /pages/webview/index?url=encodeURIComponent(H5地址)
+  -> 小程序调用公开接口获取已发布活动列表
+  -> 根据返回的 slug/url 生成活动入口
+  -> 用户点击后跳转 /pages/webview/index?url=encodeURIComponent(H5地址)
   -> web-view 加载 H5 页面
   -> H5 自己完成页面渲染、表单提交、埋点
 ```
 
-MVP 阶段小程序端只负责打开 H5 页面，不需要自己调用 H5 营销页接口。
+MVP 阶段小程序端不应该写死活动页 `slug`。推荐先调用公开列表接口，拿到后台已发布的活动页数组，再由小程序按业务位置生成入口。
 
 ---
 
@@ -25,9 +26,10 @@ MVP 阶段小程序端只负责打开 H5 页面，不需要自己调用 H5 营�
 小程序后台需要确认：
 
 1. `https://h5.goodcms.cn` 已配置为 `web-view` 业务域名
-2. 业务域名校验文件仍保留在 `https://h5.goodcms.cn/` 根目录
-3. H5 站点使用 HTTPS 且证书有效
-4. 小程序主体支持使用 `web-view`
+2. 如果小程序通过 `wx.request` 请求 `https://h5.goodcms.cn/public/marketing-pages`，还需要把 `https://h5.goodcms.cn` 加入小程序后台的 `request` 合法域名
+3. 业务域名校验文件仍保留在 `https://h5.goodcms.cn/` 根目录
+4. H5 站点使用 HTTPS 且证书有效
+5. 小程序主体支持使用 `web-view`
 
 微信 `web-view` 的关键约束：
 
@@ -43,7 +45,59 @@ MVP 阶段小程序端只负责打开 H5 页面，不需要自己调用 H5 营�
 
 ---
 
-## 三、H5 地址规则
+## 三、活动列表接口
+
+小程序端用于生成活动入口的公开接口：
+
+```text
+GET https://h5.goodcms.cn/public/marketing-pages
+```
+
+返回格式：
+
+```json
+{
+  "data": {
+    "list": [
+      {
+        "id": "7d6c9f7b-9e8f-4a6e-b7b7-3d0c0e4f3f9a",
+        "title": "51劳动节到店有礼",
+        "slug": "springsale",
+        "description": "到店预约可领取专属装修礼包",
+        "cover_image": "https://example.com/cover.jpg",
+        "url": "https://h5.goodcms.cn/p/springsale",
+        "published_at": "2026-05-04T10:30:00.000Z",
+        "updated_at": "2026-05-04T10:30:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 含义 | 小程序用途 |
+| --- | --- | --- |
+| `title` | 活动标题 | 卡片标题、入口文案 |
+| `slug` | 活动页路径标识 | 拼接或追踪活动页 |
+| `description` | 活动简介 | 卡片副标题 |
+| `cover_image` | 活动封面图 | 首页 Banner、活动卡片图片 |
+| `url` | 可直接打开的 H5 完整地址 | 传给通用 `web-view` 页面 |
+| `published_at` | 发布时间 | 排序或展示最新活动 |
+
+接口只返回 `published` 状态的活动页。后台下线或结束活动后，该活动不会继续出现在列表里，小程序端不需要单独维护开关。
+
+小程序端推荐拉取时机：
+
+1. 首页或营销活动页 `onLoad` / `onShow`
+2. 客户首页需要展示活动卡片时
+3. 扫码进入但未指定具体活动时
+
+如果返回 `list` 为空，小程序隐藏活动入口即可。
+
+---
+
+## 四、H5 地址规则
 
 后台发布后的 H5 页面地址格式：
 
@@ -59,6 +113,8 @@ https://h5.goodcms.cn/p/spring-sale
 
 其中 `{slug}` 是 admin 后台新建 H5 页面时填写的“页面路径”。
 
+小程序端优先使用活动列表接口返回的 `url`。如果只拿到了 `slug`，再按上面的规则拼接 H5 地址。
+
 小程序跳转时必须 URL 编码：
 
 ```text
@@ -67,7 +123,7 @@ https://h5.goodcms.cn/p/spring-sale
 
 ---
 
-## 四、推荐小程序页面
+## 五、推荐小程序页面
 
 建议新增通用页面：
 
@@ -85,9 +141,9 @@ pages/webview/index
 
 ---
 
-## 五、原生小程序实现示例
+## 六、原生小程序实现示例
 
-## 1. app.json
+### 1. app.json
 
 ```json
 {
@@ -99,7 +155,7 @@ pages/webview/index
 
 如果已有 `pages`，只需要把 `pages/webview/index` 加进去。
 
-## 2. pages/webview/index.wxml
+### 2. pages/webview/index.wxml
 
 ```xml
 <web-view
@@ -114,7 +170,7 @@ pages/webview/index
 </view>
 ```
 
-## 3. pages/webview/index.ts
+### 3. pages/webview/index.ts
 
 ```ts
 const ALLOWED_H5_HOSTS = ["h5.goodcms.cn"];
@@ -174,7 +230,7 @@ Page({
 });
 ```
 
-## 4. pages/webview/index.wxss
+### 4. pages/webview/index.wxss
 
 ```css
 .webview-error {
@@ -191,11 +247,11 @@ Page({
 
 ---
 
-## 六、Taro 实现示例
+## 七、Taro 实现示例
 
 如果小程序端是 Taro，可以用下面写法。
 
-## 1. 路由配置
+### 1. 路由配置
 
 在 Taro 页面配置里加入：
 
@@ -203,7 +259,7 @@ Page({
 "pages/webview/index"
 ```
 
-## 2. pages/webview/index.tsx
+### 2. pages/webview/index.tsx
 
 ```tsx
 import { WebView, View, Text } from "@tarojs/components";
@@ -276,11 +332,159 @@ export default function H5WebViewPage() {
 
 ---
 
-## 七、跳转方法封装
+## 八、活动列表拉取与跳转封装
+
+建议统一封装两类方法：
+
+1. `fetchH5Activities()`：获取后台已发布活动
+2. `openH5ActivityUrl(url)`：打开活动页
+
+不要在首页、客户页、项目页里写死 `slug`。
+
+### 原生小程序
+
+```ts
+type H5ActivityEntry = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  cover_image: string | null;
+  url: string;
+  published_at: string | null;
+  updated_at: string | null;
+};
+
+const ALLOWED_H5_HOSTS = ["h5.goodcms.cn"];
+
+function isAllowedH5Url(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && ALLOWED_H5_HOSTS.includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function fetchH5Activities(): Promise<H5ActivityEntry[]> {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: "https://h5.goodcms.cn/public/marketing-pages",
+      method: "GET",
+      success(response) {
+        const body = response.data as {
+          data?: {
+            list?: H5ActivityEntry[];
+          };
+        };
+
+        resolve(Array.isArray(body.data?.list) ? body.data.list : []);
+      },
+      fail(error) {
+        reject(error);
+      },
+    });
+  });
+}
+
+export function openH5ActivityUrl(url: string) {
+  if (!isAllowedH5Url(url)) {
+    wx.showToast({
+      title: "活动页地址无效",
+      icon: "none",
+    });
+    return;
+  }
+
+  wx.navigateTo({
+    url: `/pages/webview/index?url=${encodeURIComponent(url)}`,
+  });
+}
+```
+
+页面使用示例：
+
+```ts
+Page({
+  data: {
+    activities: [] as H5ActivityEntry[],
+  },
+
+  async onLoad() {
+    const activities = await fetchH5Activities();
+    this.setData({ activities });
+  },
+
+  onActivityTap(event: WechatMiniprogram.TouchEvent) {
+    const activity = event.currentTarget.dataset.activity as H5ActivityEntry;
+    openH5ActivityUrl(activity.url);
+  },
+});
+```
+
+### Taro
+
+```ts
+import Taro from "@tarojs/taro";
+
+export type H5ActivityEntry = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  cover_image: string | null;
+  url: string;
+  published_at: string | null;
+  updated_at: string | null;
+};
+
+const ALLOWED_H5_HOSTS = ["h5.goodcms.cn"];
+
+function isAllowedH5Url(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && ALLOWED_H5_HOSTS.includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchH5Activities() {
+  const response = await Taro.request<{
+    data?: {
+      list?: H5ActivityEntry[];
+    };
+  }>({
+    url: "https://h5.goodcms.cn/public/marketing-pages",
+    method: "GET",
+  });
+
+  return Array.isArray(response.data.data?.list)
+    ? response.data.data.list
+    : [];
+}
+
+export function openH5ActivityUrl(url: string) {
+  if (!isAllowedH5Url(url)) {
+    return Taro.showToast({
+      title: "活动页地址无效",
+      icon: "none",
+    });
+  }
+
+  return Taro.navigateTo({
+    url: `/pages/webview/index?url=${encodeURIComponent(url)}`,
+  });
+}
+```
+
+---
+
+## 九、兼容 slug 的跳转方法
 
 建议统一封装一个跳转函数，不要在各业务页面手写 URL 拼接。
 
-## 原生小程序
+### 原生小程序
 
 ```ts
 export function openH5Activity(slug: string) {
@@ -293,7 +497,7 @@ export function openH5Activity(slug: string) {
 }
 ```
 
-## Taro
+### Taro
 
 ```ts
 import Taro from "@tarojs/taro";
@@ -314,9 +518,11 @@ export function openH5Activity(slug: string) {
 openH5Activity("spring-sale");
 ```
 
+这个方法只作为兼容能力保留。新入口优先使用 `fetchH5Activities()` 返回的 `url`，不要把 `spring-sale` 这类测试 slug 写死在线上业务页面。
+
 ---
 
-## 八、活动入口建议
+## 十、活动入口建议
 
 小程序端可以从以下入口跳转 H5 活动页：
 
@@ -326,31 +532,34 @@ openH5Activity("spring-sale");
 4. 项目详情里的活动入口
 5. 扫码进入指定活动
 
-入口配置建议只保存 `slug`，不要保存完整 URL。
+入口数据建议直接使用公开接口返回的数据，不要在小程序端维护静态数组。
 
 推荐数据结构：
 
 ```ts
 type H5ActivityEntry = {
+  id: string;
   title: string;
   slug: string;
-  coverImage?: string;
+  description: string | null;
+  cover_image: string | null;
+  url: string;
 };
 ```
 
 渲染时：
 
 ```ts
-openH5Activity(entry.slug);
+openH5ActivityUrl(entry.url);
 ```
 
-这样后续 H5 域名变更时，只需要改统一封装。
+如果小程序端某些模块只能保存轻量配置，最多保存 `slug`，页面展示时仍建议先拉列表做一次匹配，避免活动已经下线但入口仍然可见。
 
 ---
 
-## 九、客户身份传递方案
+## 十一、客户身份传递方案
 
-## MVP 阶段
+### MVP 阶段
 
 当前 MVP 不要求小程序向 H5 传客户身份。
 
@@ -363,7 +572,7 @@ H5 页面已经可以自己完成：
 
 线索会通过用户主动填写的手机号进入后端。
 
-## 后续增强
+### 后续增强
 
 如果后续要把 H5 线索自动绑定当前小程序客户，不要在 URL 里直接传：
 
@@ -406,49 +615,54 @@ https://h5.goodcms.cn/p/spring-sale?t=short_lived_token
 
 ---
 
-## 十、扫码和体验版注意事项
+## 十二、扫码和体验版注意事项
 
 如果体验版二维码和真机调试行为不一致，优先排查：
 
 1. 二维码配置的页面路径是否是最新的
-2. 二维码进入时传的 `slug` 是否正确
+2. 二维码进入时传的 `slug` 或 `url` 是否正确
 3. 体验版是否是最新上传版本
 4. 小程序缓存是否清理
 5. `web-view` 页面是否已经加入 `app.json`
 6. `url` 是否做了 `encodeURIComponent`
 7. `https://h5.goodcms.cn` 是否仍在业务域名列表
-8. H5 页面是否已经在 admin 后台发布
-9. H5 地址在微信外浏览器是否能打开
-10. 开发者工具和真机里 `onWebViewError` 打印的 `src`
+8. 如果调用活动列表接口，`https://h5.goodcms.cn` 是否也配置在 `request` 合法域名
+9. H5 页面是否已经在 admin 后台发布
+10. H5 地址在微信外浏览器是否能打开
+11. 开发者工具和真机里 `onWebViewError` 打印的 `src`
 
 ---
 
-## 十一、验收清单
+## 十三、验收清单
 
 前端完成后按这个清单验收：
 
 1. 小程序存在 `/pages/webview/index`
 2. `app.json` 已注册 web-view 页面
-3. 首页或测试入口点击后能打开 `https://h5.goodcms.cn/p/{slug}`
-4. `url` 参数经过 `encodeURIComponent`
-5. 非 `h5.goodcms.cn` 域名会被拒绝打开
-6. 已发布 H5 页面能正常展示
-7. 未发布或错误 slug 有合理错误提示
-8. H5 表单提交成功
-9. 后台能看到营销线索
-10. 后台能看到页面访问、按钮点击、表单提交埋点
-11. 微信开发者工具可打开
-12. 真机调试可打开
-13. 体验版二维码可打开
+3. 小程序能调用 `GET https://h5.goodcms.cn/public/marketing-pages`
+4. 活动入口来自接口返回的 `list`，不是前端写死数组
+5. 首页或测试入口点击后能打开 `https://h5.goodcms.cn/p/{slug}`
+6. `url` 参数经过 `encodeURIComponent`
+7. 非 `h5.goodcms.cn` 域名会被拒绝打开
+8. 已发布 H5 页面能正常展示
+9. 后台下线或结束活动后，小程序刷新列表不再展示该活动
+10. 未发布或错误 slug 有合理错误提示
+11. H5 表单提交成功
+12. 后台能看到营销线索
+13. 后台能看到页面访问、按钮点击、表单提交埋点
+14. 微信开发者工具可打开
+15. 真机调试可打开
+16. 体验版二维码可打开
 
 ---
 
-## 十二、后端与 H5 当前状态
+## 十四、后端与 H5 当前状态
 
 当前已经完成：
 
 - admin 可创建 H5 活动页
 - admin 可编辑模块、保存草稿、发布
+- 公开接口可返回已发布 H5 活动页列表
 - H5 地址格式：`https://h5.goodcms.cn/p/{slug}`
 - H5 自动调用公开接口读取页面配置
 - H5 自动提交线索和埋点
@@ -457,7 +671,8 @@ https://h5.goodcms.cn/p/spring-sale?t=short_lived_token
 
 ```text
 新增通用 web-view 页面
-封装 openH5Activity(slug)
-在业务入口调用 openH5Activity
+封装 fetchH5Activities()
+封装 openH5ActivityUrl(url)
+在业务入口按接口返回的 list 渲染活动入口
 完成真机和体验版验证
 ```

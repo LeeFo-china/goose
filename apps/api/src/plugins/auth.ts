@@ -41,7 +41,7 @@ function isPublicRoute(method: string, url: string) {
 
   if (
     (method === "GET" || method === "HEAD")
-    && url.startsWith("/public/marketing-pages/")
+    && (url === "/public/marketing-pages" || url.startsWith("/public/marketing-pages/"))
   ) {
     return true;
   }

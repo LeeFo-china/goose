@@ -167,6 +167,28 @@ class MarketingPageRepository {
     };
   }
 
+  async listPublishedPageEntries() {
+    const { data, error } = await this.pages()
+      .select("id,title,slug,description,cover_image,published_at,updated_at")
+      .eq("status", "published")
+      .order("published_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询公开 H5 活动页列表失败", error);
+    }
+
+    return (data || []) as Pick<
+      MarketingPageRecord,
+      | "id"
+      | "title"
+      | "slug"
+      | "description"
+      | "cover_image"
+      | "published_at"
+      | "updated_at"
+    >[];
+  }
+
   async findPageById(id: string) {
     const { data, error } = await this.pages()
       .select("*")

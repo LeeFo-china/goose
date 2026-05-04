@@ -30,9 +30,32 @@ function buildCopiedSlug(slug: string, suffix: string) {
   return `${base}-${suffix}`;
 }
 
+function getH5BaseUrl() {
+  return (process.env.H5_MARKETING_BASE_URL || "https://h5.goodcms.cn")
+    .replace(/\/+$/g, "");
+}
+
 class MarketingPageService {
   async listPages(query: MarketingPageListQuery) {
     return marketingPageRepository.listPages(query);
+  }
+
+  async listPublishedEntries() {
+    const pages = await marketingPageRepository.listPublishedPageEntries();
+    const h5BaseUrl = getH5BaseUrl();
+
+    return {
+      list: pages.map((page) => ({
+        id: page.id,
+        title: page.title,
+        slug: page.slug,
+        description: page.description,
+        cover_image: page.cover_image,
+        url: `${h5BaseUrl}/p/${encodeURIComponent(page.slug)}`,
+        published_at: page.published_at,
+        updated_at: page.updated_at,
+      })),
+    };
   }
 
   async getPage(id: string) {

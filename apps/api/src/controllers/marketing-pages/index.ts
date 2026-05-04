@@ -200,6 +200,12 @@ class MarketingPagesController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/public/marketing-pages")
+  async listPublishedPages(request: FastifyRequest, reply: FastifyReply) {
+    const data = await marketingPageService.listPublishedEntries();
+    return ResponseHandler.success(data);
+  }
+
   @Post("/public/marketing-pages/:slug/leads")
   async submitLead(request: FastifyRequest, reply: FastifyReply) {
     const paramsResult = MarketingPageSlugParamsSchema.safeParse(request.params);

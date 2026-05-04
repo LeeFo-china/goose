@@ -381,6 +381,7 @@ POST   /marketing-pages/:id/publish
 POST   /marketing-pages/:id/offline
 POST   /marketing-pages/:id/duplicate
 
+GET    /public/marketing-pages
 GET    /public/marketing-pages/:slug
 POST   /public/marketing-pages/:slug/leads
 POST   /public/marketing-pages/:slug/events
