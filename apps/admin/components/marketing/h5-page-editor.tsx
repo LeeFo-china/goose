@@ -476,6 +476,21 @@ function getActionString(props: Record<string, unknown>, key: string, field: str
   return "";
 }
 
+function previewImage(url: string, alt: string, className: string) {
+  if (!url) return null;
+
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className={className}
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+      }}
+    />
+  );
+}
+
 function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
   const next = [...items];
   const [item] = next.splice(fromIndex, 1);
@@ -528,6 +543,8 @@ function PreviewBlock({
   onDrop: () => void;
 }) {
   const props = block.props || {};
+  const imageUrl = getString(props, "imageUrl");
+  const logoUrl = getString(props, "logo");
 
   return (
     <div
@@ -565,30 +582,71 @@ function PreviewBlock({
         <GripVertical className="size-4" />
       </div>
       {block.type === "hero" ? (
-        <div className="flex min-h-[260px] flex-col justify-end rounded-md bg-muted p-5 pt-14">
+        <div className="relative flex min-h-[260px] flex-col justify-end overflow-hidden rounded-md bg-muted p-5 pt-14">
+          {previewImage(
+            imageUrl,
+            "Banner 预览",
+            "absolute inset-0 size-full object-cover",
+          )}
+          {imageUrl ? (
+            <div className="absolute inset-0 bg-black/35" />
+          ) : null}
           <div className="mb-2 w-fit rounded-full border bg-background/80 px-2 py-1 text-xs">
             {getString(props, "kicker") || "GOODCMS 活动"}
           </div>
-          <div className="text-3xl font-semibold leading-tight">
+          <div className={cn(
+            "relative text-3xl font-semibold leading-tight",
+            imageUrl && "text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.35)]",
+          )}>
             {getString(props, "title") || "顶部 Banner"}
           </div>
-          <div className="mt-2 text-sm leading-6 text-muted-foreground">
+          <div className={cn(
+            "relative mt-2 text-sm leading-6",
+            imageUrl ? "text-white/85" : "text-muted-foreground",
+          )}>
             {getString(props, "subtitle") || "首屏活动说明"}
           </div>
           {getString(props, "buttonText") ? (
-            <div className="mt-4 rounded-md bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground">
+            <div className="relative mt-4 rounded-md bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground">
               {getString(props, "buttonText")}
             </div>
           ) : null}
         </div>
       ) : block.type === "image" ? (
         <div className="overflow-hidden rounded-md">
-          <div className="grid aspect-[16/10] place-items-center bg-muted text-sm text-muted-foreground">
-            {getString(props, "imageUrl") ? "图片已配置" : "图片占位"}
+          <div className="grid aspect-[16/10] place-items-center overflow-hidden bg-muted text-sm text-muted-foreground">
+            {imageUrl
+              ? previewImage(imageUrl, "图片预览", "size-full object-cover")
+              : "图片占位"}
           </div>
           {getString(props, "caption") ? (
             <div className="p-3 text-sm text-muted-foreground">{getString(props, "caption")}</div>
           ) : null}
+        </div>
+      ) : block.type === "image_text" ? (
+        <div className="overflow-hidden rounded-md">
+          <div className="grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-sm text-muted-foreground">
+            {imageUrl
+              ? previewImage(imageUrl, "图文图片预览", "size-full object-cover")
+              : "图片占位"}
+          </div>
+          <div className="p-4">
+            <div className="font-semibold">{getString(props, "title") || "图文标题"}</div>
+            <div className="mt-1 text-sm leading-6 text-muted-foreground">
+              {getString(props, "content") || "图文说明"}
+            </div>
+          </div>
+        </div>
+      ) : block.type === "footer" ? (
+        <div className="flex items-center gap-3 p-4">
+          {logoUrl ? (
+            <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+              {previewImage(logoUrl, "Logo 预览", "size-full object-contain")}
+            </div>
+          ) : null}
+          <div className="text-sm text-muted-foreground">
+            {getString(props, "text") || "底部信息"}
+          </div>
         </div>
       ) : block.type === "lead_form" ? (
         <div className="p-4">
@@ -909,7 +967,22 @@ function ImageUploadField({
       </FieldDescription>
       {value ? (
         <div className="overflow-hidden rounded-md border bg-muted/40">
-          <img src={value} alt={label} className="max-h-32 w-full object-cover" />
+          <div className="relative">
+            <img src={value} alt={label} className="max-h-32 w-full object-cover" />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="absolute right-2 top-2 bg-background/90"
+              onClick={() => onChange("")}
+            >
+              <Trash2 data-icon="inline-start" />
+              删除
+            </Button>
+          </div>
+          <div className="border-t bg-background px-3 py-2 text-xs text-muted-foreground">
+            图片已写入当前模块配置，保存草稿或发布后生效。
+          </div>
         </div>
       ) : null}
 
