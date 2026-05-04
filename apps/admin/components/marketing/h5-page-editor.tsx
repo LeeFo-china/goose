@@ -20,9 +20,18 @@ import {
   Send,
   Trash2,
   Type,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldDescription,
@@ -42,6 +51,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const H5_MARKETING_RETURN_HREF = "/marketing?tab=h5";
+const EDITOR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const EDITOR_IMAGE_OUTPUT_MAX_WIDTH = 1200;
+const EDITOR_IMAGE_ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+type ImageUsage = "hero" | "content" | "logo";
+
+type LoadedImageFile = {
+  element: HTMLImageElement;
+  file: File;
+  height: number;
+  objectUrl: string;
+  width: number;
+};
+
+type ImageRepairState = LoadedImageFile & {
+  issues: string[];
+  usage: ImageUsage;
+};
 
 type H5BlockType =
   | "hero"
@@ -133,6 +164,177 @@ async function requestEditor<T>(input: {
     throw new Error(getPayloadMessage(payload, "操作失败"));
   }
   return payload.data as T;
+}
+
+function getImageRequirement(usage: ImageUsage) {
+  if (usage === "hero") {
+    return {
+      label: "Banner",
+      minWidth: 750,
+      ratios: [
+        { value: "16:9", label: "16:9", ratio: 16 / 9 },
+        { value: "3:1", label: "3:1", ratio: 3 },
+      ],
+    };
+  }
+
+  if (usage === "logo") {
+    return {
+      label: "Logo",
+      minWidth: 200,
+      ratios: [
+        { value: "1:1", label: "1:1", ratio: 1 },
+      ],
+    };
+  }
+
+  return {
+    label: "图片",
+    minWidth: 750,
+    ratios: [
+      { value: "free", label: "自由", ratio: null },
+      { value: "16:9", label: "16:9", ratio: 16 / 9 },
+      { value: "3:1", label: "3:1", ratio: 3 },
+    ],
+  };
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  }
+
+  return `${Math.ceil(bytes / 1024)}KB`;
+}
+
+function getImageValidationIssues(image: LoadedImageFile, usage: ImageUsage) {
+  const requirement = getImageRequirement(usage);
+  const issues: string[] = [];
+
+  if (!EDITOR_IMAGE_ALLOWED_TYPES.has(image.file.type)) {
+    issues.push("格式不符合要求，将转为 WebP");
+  }
+
+  if (image.file.size > EDITOR_IMAGE_MAX_BYTES) {
+    issues.push(`图片大小 ${formatFileSize(image.file.size)}，超过 5MB`);
+  }
+
+  if (image.width < requirement.minWidth) {
+    issues.push(`图片宽度 ${image.width}px，低于 ${requirement.minWidth}px`);
+  }
+
+  const fixedRatios = usage === "content" ? [] : requirement.ratios.filter((item) => item.ratio);
+  if (fixedRatios.length > 0) {
+    const currentRatio = image.width / image.height;
+    const ratioMatched = fixedRatios.some((item) =>
+      item.ratio ? Math.abs(currentRatio - item.ratio) / item.ratio <= 0.08 : true
+    );
+    if (!ratioMatched) {
+      issues.push(`当前比例 ${currentRatio.toFixed(2)}，不适合 ${requirement.label}`);
+    }
+  }
+
+  return issues;
+}
+
+function loadImageFile(file: File) {
+  return new Promise<LoadedImageFile>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      resolve({
+        element: image,
+        file,
+        height: image.naturalHeight,
+        objectUrl,
+        width: image.naturalWidth,
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("图片无法读取，请重新选择"));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("图片修正失败"));
+        return;
+      }
+      resolve(blob);
+    }, "image/webp", quality);
+  });
+}
+
+async function repairImageFile(input: {
+  file: File;
+  quality: number;
+  ratio: number | null;
+}) {
+  const image = await loadImageFile(input.file);
+  try {
+    const sourceRatio = image.width / image.height;
+    let sx = 0;
+    let sy = 0;
+    let sw = image.width;
+    let sh = image.height;
+
+    if (input.ratio && Math.abs(sourceRatio - input.ratio) > 0.01) {
+      if (sourceRatio > input.ratio) {
+        sw = Math.round(image.height * input.ratio);
+        sx = Math.round((image.width - sw) / 2);
+      } else {
+        sh = Math.round(image.width / input.ratio);
+        sy = Math.round((image.height - sh) / 2);
+      }
+    }
+
+    const outputWidth = Math.min(sw, EDITOR_IMAGE_OUTPUT_MAX_WIDTH);
+    const outputHeight = Math.round(outputWidth / (sw / sh));
+    const canvas = document.createElement("canvas");
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("浏览器不支持图片修正");
+    }
+
+    context.drawImage(image.element, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+    const blob = await canvasToBlob(canvas, input.quality);
+    return new File(
+      [blob],
+      `${input.file.name.replace(/\.[^.]+$/, "") || "h5-image"}.webp`,
+      { type: "image/webp" },
+    );
+  } finally {
+    URL.revokeObjectURL(image.objectUrl);
+  }
+}
+
+async function uploadEditorImage(file: File) {
+  const formData = new FormData();
+  formData.append("scene", "h5_marketing_page");
+  formData.append("file", file);
+
+  const response = await fetch("/api/backend/uploads/images", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "图片上传失败"));
+  }
+
+  const url = payload?.data?.list?.[0]?.url;
+  if (typeof url !== "string" || !url) {
+    throw new Error("图片上传成功但未返回地址");
+  }
+
+  return url;
 }
 
 function createBlockId(type: H5BlockType) {
@@ -442,7 +644,7 @@ function PropertyPanel({
           <TextField label="角标" value={getString(props, "kicker")} onChange={(value) => update("kicker", value)} />
           <TextField label="标题" value={getString(props, "title")} onChange={(value) => update("title", value)} />
           <TextareaField label="副标题" value={getString(props, "subtitle")} onChange={(value) => update("subtitle", value)} />
-          <TextField label="背景图片 URL" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
+          <ImageUploadField label="背景图片" usage="hero" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
           <TextField label="按钮文案" value={getString(props, "buttonText")} onChange={(value) => update("buttonText", value)} />
           <ActionField label="按钮动作" value={getActionType(props, "buttonAction")} onChange={(value) => updateAction("buttonAction", value)} />
           <ActionDetailFields
@@ -457,7 +659,7 @@ function PropertyPanel({
 
       {block.type === "image" ? (
         <>
-          <TextField label="图片 URL" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
+          <ImageUploadField label="图片" usage="content" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
           <TextField label="图片说明" value={getString(props, "caption")} onChange={(value) => update("caption", value)} />
         </>
       ) : null}
@@ -495,7 +697,7 @@ function PropertyPanel({
 
       {block.type === "image_text" ? (
         <>
-          <TextField label="图片 URL" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
+          <ImageUploadField label="图片" usage="content" value={getString(props, "imageUrl")} onChange={(value) => update("imageUrl", value)} />
           <TextField label="标题" value={getString(props, "title")} onChange={(value) => update("title", value)} />
           <TextareaField label="正文" value={getString(props, "content")} onChange={(value) => update("content", value)} />
           <TextField label="按钮文案" value={getString(props, "buttonText")} onChange={(value) => update("buttonText", value)} />
@@ -560,10 +762,217 @@ function PropertyPanel({
       {block.type === "footer" ? (
         <>
           <TextField label="底部文字" value={getString(props, "text")} onChange={(value) => update("text", value)} />
-          <TextField label="Logo URL" value={getString(props, "logo")} onChange={(value) => update("logo", value)} />
+          <ImageUploadField label="Logo" usage="logo" value={getString(props, "logo")} onChange={(value) => update("logo", value)} />
         </>
       ) : null}
     </FieldGroup>
+  );
+}
+
+function ImageUploadField({
+  label,
+  value,
+  usage,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  usage: ImageUsage;
+  onChange: (value: string) => void;
+}) {
+  const requirement = getImageRequirement(usage);
+  const [repairState, setRepairState] = useState<ImageRepairState | null>(null);
+  const [repairRatio, setRepairRatio] = useState(requirement.ratios[0]?.value || "free");
+  const [quality, setQuality] = useState(0.82);
+  const [uploading, setUploading] = useState(false);
+  const cannotRepair = Boolean(repairState && repairState.width < requirement.minWidth);
+
+  const closeRepair = () => {
+    if (repairState?.objectUrl) {
+      URL.revokeObjectURL(repairState.objectUrl);
+    }
+    setRepairState(null);
+  };
+
+  const selectFile = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const image = await loadImageFile(file);
+      const issues = getImageValidationIssues(image, usage);
+      if (issues.length > 0) {
+        setRepairRatio(requirement.ratios[0]?.value || "free");
+        setQuality(0.82);
+        setRepairState({ ...image, issues, usage });
+        return;
+      }
+
+      let url = "";
+      try {
+        url = await uploadEditorImage(file);
+      } finally {
+        URL.revokeObjectURL(image.objectUrl);
+      }
+      onChange(url);
+      toast.success("图片已上传");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "图片上传失败");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const applyRepair = async () => {
+    if (!repairState || cannotRepair) return;
+    setUploading(true);
+    try {
+      const ratioConfig = requirement.ratios.find((item) => item.value === repairRatio);
+      const repairedFile = await repairImageFile({
+        file: repairState.file,
+        quality,
+        ratio: ratioConfig?.ratio ?? null,
+      });
+      const repairedImage = await loadImageFile(repairedFile);
+      const issues = getImageValidationIssues(repairedImage, usage);
+      URL.revokeObjectURL(repairedImage.objectUrl);
+      if (issues.length > 0) {
+        throw new Error(issues[0]);
+      }
+
+      const url = await uploadEditorImage(repairedFile);
+      onChange(url);
+      toast.success("图片已修正并上传");
+      closeRepair();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "图片修正失败");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="flex gap-2">
+        <Input
+          value={value}
+          placeholder="https://..."
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <Button type="button" variant="outline" disabled={uploading} asChild>
+          <label className="cursor-pointer">
+            {uploading ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Upload data-icon="inline-start" />
+            )}
+            上传
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/*"
+              onChange={(event) => {
+                void selectFile(event.target.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </Button>
+      </div>
+      <FieldDescription>
+        {requirement.label} 建议宽度不低于 {requirement.minWidth}px，单张不超过 5MB，支持 JPG、PNG、WebP。
+      </FieldDescription>
+      {value ? (
+        <div className="overflow-hidden rounded-md border bg-muted/40">
+          <img src={value} alt={label} className="max-h-32 w-full object-cover" />
+        </div>
+      ) : null}
+
+      <Dialog open={Boolean(repairState)} onOpenChange={(open) => {
+        if (!open) closeRepair();
+      }}>
+        <DialogContent className="max-h-[90vh] max-w-[760px] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>图片修正</DialogTitle>
+            <DialogDescription>
+              当前图片不符合 {requirement.label} 要求，可在线裁剪、压缩并转为 WebP。
+            </DialogDescription>
+          </DialogHeader>
+
+          {repairState ? (
+            <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
+              <div className="overflow-hidden rounded-lg border bg-black/5">
+                <img
+                  src={repairState.objectUrl}
+                  alt="待修正图片"
+                  className="max-h-[420px] w-full object-contain"
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="rounded-lg border bg-[#fffdf6] p-3">
+                  <div className="text-sm font-semibold">不符合原因</div>
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                    {repairState.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    原图 {repairState.width} x {repairState.height}，{formatFileSize(repairState.file.size)}
+                  </div>
+                </div>
+
+                <Field>
+                  <FieldLabel>裁剪比例</FieldLabel>
+                  <Select value={repairRatio} onValueChange={setRepairRatio}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {requirement.ratios.map((ratio) => (
+                          <SelectItem key={ratio.value} value={ratio.value}>
+                            {ratio.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field>
+                  <FieldLabel>输出质量：{Math.round(quality * 100)}%</FieldLabel>
+                  <Input
+                    type="range"
+                    min={60}
+                    max={92}
+                    step={2}
+                    value={Math.round(quality * 100)}
+                    onChange={(event) => setQuality(Number(event.target.value) / 100)}
+                  />
+                  <FieldDescription>默认输出 WebP，通常可以压到 5MB 以内。</FieldDescription>
+                </Field>
+
+                {cannotRepair ? (
+                  <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    图片宽度过低，在线工具不做强行放大。请重新选择更清晰的素材。
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeRepair}>
+              重新选择
+            </Button>
+            <Button type="button" disabled={uploading || cannotRepair} onClick={applyRepair}>
+              {uploading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              应用并上传
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Field>
   );
 }
 

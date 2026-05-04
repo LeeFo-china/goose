@@ -11,7 +11,8 @@ import { z } from "zod";
 
 const PROJECT_LOGS_BUCKET = "project-logs";
 const MAX_UPLOAD_FILES = 9;
-const MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
+const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -28,6 +29,7 @@ const ALLOWED_UPLOAD_SCENES = [
   "employee_avatar",
   "customer_avatar",
   "customer_douyin_screenshot",
+  "h5_marketing_page",
 ] as const;
 
 const UploadImageFieldSchema = z.object({
@@ -126,8 +128,11 @@ class UploadController extends BaseController {
       throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
     }
 
-    if (file.buffer.length > MAX_UPLOAD_FILE_SIZE) {
-      throw Errors.badRequest("单张图片不能超过 2MB");
+    const maxUploadFileSize = this.getMaxUploadFileSize(options.scene);
+    if (file.buffer.length > maxUploadFileSize) {
+      throw Errors.badRequest(
+        `单张图片不能超过 ${Math.floor(maxUploadFileSize / 1024 / 1024)}MB`,
+      );
     }
 
     const extension = this.getFileExtension(file);
@@ -173,10 +178,17 @@ class UploadController extends BaseController {
       employee_avatar: "employee-avatar",
       customer_avatar: "customer-avatar",
       customer_douyin_screenshot: "customer-douyin-screenshots",
+      h5_marketing_page: "h5-marketing-pages",
     };
     const prefix = prefixByScene[options.scene];
 
     return `${prefix}/${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
+
+  private getMaxUploadFileSize(scene: UploadScene) {
+    return scene === "h5_marketing_page"
+      ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
+      : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
 
   private getFileExtension(file: Pick<PendingUploadFile, "filename" | "mimetype">) {
