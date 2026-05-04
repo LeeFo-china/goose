@@ -23,7 +23,7 @@ function getApiBaseUrl() {
     return "http://localhost:3000";
   }
 
-  return "https://goodcms.cn";
+  return location.origin;
 }
 
 function getSlugFromPath() {
