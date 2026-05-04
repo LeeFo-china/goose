@@ -198,6 +198,35 @@ function createBlock(type: H5BlockType): H5Block {
   }
 }
 
+function normalizeLeadFormFields(value: unknown) {
+  const rawFields = Array.isArray(value) && value.length
+    ? value
+    : ["name", "phone", "community"];
+  const fields = rawFields
+    .map((field) => String(field || "").trim())
+    .filter(Boolean);
+
+  if (!fields.includes("phone")) {
+    fields.splice(Math.min(fields.length, 1), 0, "phone");
+  }
+
+  return Array.from(new Set(fields));
+}
+
+function normalizeBlock(block: H5Block): H5Block {
+  if (block.type !== "lead_form") {
+    return block;
+  }
+
+  return {
+    ...block,
+    props: {
+      ...block.props,
+      fields: normalizeLeadFormFields(block.props.fields),
+    },
+  };
+}
+
 function normalizeConfig(config: H5PageConfig | null | undefined, page: H5PageEditorPage): H5PageConfig {
   return {
     schemaVersion: config?.schemaVersion || 1,
@@ -207,7 +236,7 @@ function normalizeConfig(config: H5PageConfig | null | undefined, page: H5PageEd
       backgroundColor: config?.theme?.backgroundColor || "#f7f3ea",
       textColor: config?.theme?.textColor || "#1f2933",
     },
-    blocks: Array.isArray(config?.blocks) ? config.blocks : [],
+    blocks: Array.isArray(config?.blocks) ? config.blocks.map(normalizeBlock) : [],
   };
 }
 
@@ -353,7 +382,7 @@ function PreviewBlock({
           <div className="text-xl font-semibold">{getString(props, "title") || "预约表单"}</div>
           <div className="mt-2 text-sm text-muted-foreground">{getString(props, "description") || "表单说明"}</div>
           <div className="mt-4 flex flex-col gap-2">
-            {(Array.isArray(props.fields) ? props.fields : ["name", "phone"]).map((field) => (
+            {normalizeLeadFormFields(props.fields).map((field) => (
               <div key={String(field)} className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
                 {String(field)}
               </div>
@@ -511,9 +540,9 @@ function PropertyPanel({
           <TextareaField label="说明" value={getString(props, "description")} onChange={(value) => update("description", value)} />
           <TextField
             label="字段"
-            description="逗号分隔，例如 name,phone,community"
-            value={(Array.isArray(props.fields) ? props.fields : []).join(",")}
-            onChange={(value) => update("fields", value.split(",").map((item) => item.trim()).filter(Boolean))}
+            description="逗号分隔，例如 name,phone,community。手机号 phone 为必填字段，保存时会自动保留。"
+            value={normalizeLeadFormFields(props.fields).join(",")}
+            onChange={(value) => update("fields", normalizeLeadFormFields(value.split(",")))}
           />
           <TextField label="提交按钮" value={getString(props, "submitText")} onChange={(value) => update("submitText", value)} />
         </>
@@ -704,7 +733,7 @@ export function H5PageEditor({
     setConfig((current) => ({
       ...current,
       blocks: current.blocks.map((block) =>
-        block.id === blockId ? { ...block, props } : block
+        block.id === blockId ? normalizeBlock({ ...block, props }) : block
       ),
     }));
   }
@@ -764,10 +793,12 @@ export function H5PageEditor({
   function saveDraft() {
     startTransition(async () => {
       try {
+        const normalizedConfig = normalizeConfig(config, page);
+        setConfig(normalizedConfig);
         await requestEditor({
           path: `/marketing-pages/${page.id}/draft`,
           method: "PUT",
-          payload: { config },
+          payload: { config: normalizedConfig },
         });
         toast.success("草稿已保存");
         router.refresh();
@@ -780,10 +811,12 @@ export function H5PageEditor({
   function publishPage() {
     startTransition(async () => {
       try {
+        const normalizedConfig = normalizeConfig(config, page);
+        setConfig(normalizedConfig);
         await requestEditor({
           path: `/marketing-pages/${page.id}/draft`,
           method: "PUT",
-          payload: { config },
+          payload: { config: normalizedConfig },
         });
         await requestEditor({
           path: `/marketing-pages/${page.id}/publish`,
