@@ -61,9 +61,31 @@ type CustomerRowForResponse = {
   owner?: unknown;
   owner_id: string | null;
   id: string;
+  property_id?: string | null;
   source?: string | null;
   phone?: string | null;
   douyin_screenshot_images?: unknown;
+};
+
+type CustomerPropertySummary = PrimaryPropertySummary & {
+  customer_id: string | null;
+};
+
+type SerializedPropertySummary = PrimaryPropertySummary & {
+  is_primary: boolean;
+};
+
+type CustomerPropertySummaryBundle = {
+  property_count: number;
+  property_id: string | null;
+  primary_property_id: string | null;
+  primary_property: SerializedPropertySummary | null;
+  property: SerializedPropertySummary | null;
+  properties: SerializedPropertySummary[];
+  community: string | null;
+  building_info: string | null;
+  layout: string | null;
+  area: number | null;
 };
 
 type CustomerFollowUpSummary = {
@@ -348,6 +370,91 @@ class CustomerController extends BaseController<
     return {
       ...property,
       is_primary: property.id === primaryPropertyId,
+    };
+  }
+
+  private normalizePropertySummary(
+    property: CustomerPropertySummary,
+  ): PrimaryPropertySummary {
+    return {
+      id: property.id,
+      community: property.community,
+      building_info: property.building_info,
+      layout: property.layout,
+      area: property.area,
+      latitude: property.latitude,
+      longitude: property.longitude,
+      created_at: property.created_at,
+    };
+  }
+
+  private async getCustomerPropertySummaryMap(customerIds: string[]) {
+    if (customerIds.length === 0) {
+      return new Map<string, PrimaryPropertySummary[]>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("properties")
+      .select(this.propertySummarySelect + ", customer_id")
+      .in("customer_id", customerIds)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户房产摘要失败", error);
+    }
+
+    const summaryMap = new Map<string, PrimaryPropertySummary[]>();
+    for (const item of ((data || []) as unknown as CustomerPropertySummary[])) {
+      if (!item.customer_id) {
+        continue;
+      }
+
+      const summaries = summaryMap.get(item.customer_id) || [];
+      summaries.push(this.normalizePropertySummary(item));
+      summaryMap.set(item.customer_id, summaries);
+    }
+
+    return summaryMap;
+  }
+
+  private buildCustomerPropertySummaryBundle(
+    customer: CustomerRowForResponse,
+    propertyMap: Map<string, PrimaryPropertySummary[]>,
+  ): CustomerPropertySummaryBundle {
+    const properties = propertyMap.get(customer.id) || [];
+    const preferredPropertyId = customer.property_id ?? null;
+    const primaryProperty = properties.find((item) => item.id === preferredPropertyId)
+      || properties[0]
+      || null;
+    const primaryPropertyId = primaryProperty?.id ?? null;
+    const serializedProperties = properties.map((item) =>
+      this.serializePropertySummary(item, primaryPropertyId)
+    );
+    const serializedPrimaryProperty = primaryProperty
+      ? this.serializePropertySummary(primaryProperty, primaryPropertyId)
+      : null;
+
+    return {
+      property_count: properties.length,
+      property_id: primaryPropertyId,
+      primary_property_id: primaryPropertyId,
+      primary_property: serializedPrimaryProperty,
+      property: serializedPrimaryProperty,
+      properties: serializedProperties,
+      community: primaryProperty?.community ?? null,
+      building_info: primaryProperty?.building_info ?? null,
+      layout: primaryProperty?.layout ?? null,
+      area: primaryProperty?.area ?? null,
+    };
+  }
+
+  private attachPropertySummary<T extends CustomerRowForResponse>(
+    customer: T,
+    propertyMap: Map<string, PrimaryPropertySummary[]>,
+  ) {
+    return {
+      ...customer,
+      ...this.buildCustomerPropertySummaryBundle(customer, propertyMap),
     };
   }
 
@@ -885,11 +992,17 @@ class CustomerController extends BaseController<
       const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
         authContext,
       );
+      const propertyMap = await this.getCustomerPropertySummaryMap(
+        rows.map((item) => item.id),
+      );
 
       return ResponseHandler.success({
         list: rows.map((item) =>
           this.serializeCustomer(
-            this.attachFollowUpSummary(item, followUpMap),
+            this.attachPropertySummary(
+              this.attachFollowUpSummary(item, followUpMap),
+              propertyMap,
+            ),
             phonePrivacyContext,
           )
         ),
@@ -938,10 +1051,16 @@ class CustomerController extends BaseController<
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
+    const propertyMap = await this.getCustomerPropertySummaryMap(
+      rows.map((item) => item.id),
+    );
     return ResponseHandler.success({
       list: rows.map((item) =>
         this.serializeCustomer(
-          this.attachFollowUpSummary(item, followUpMap),
+          this.attachPropertySummary(
+            this.attachFollowUpSummary(item, followUpMap),
+            propertyMap,
+          ),
           phonePrivacyContext,
         )
       ),
