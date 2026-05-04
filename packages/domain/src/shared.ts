@@ -36,6 +36,19 @@ export type {
   ExpenseStatus,
 } from './expense';
 
+export {
+  MARKETING_PAGE_BLOCK_TYPE_VALUES,
+  MARKETING_PAGE_EVENT_NAME_VALUES,
+  MARKETING_PAGE_STATUS_VALUES,
+  MARKETING_PAGE_VERSION_STATUS_VALUES,
+} from './marketing-page';
+export type {
+  MarketingPageBlockType,
+  MarketingPageEventName,
+  MarketingPageStatus,
+  MarketingPageVersionStatus,
+} from './marketing-page';
+
 export { PAYMENT_STATUS_VALUES, PAYMENT_TYPE_VALUES } from './payment';
 export type { PaymentStatus, PaymentType } from './payment';
 

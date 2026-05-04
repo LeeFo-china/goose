@@ -50,6 +50,13 @@ export const PERMISSION_CODE_VALUES = [
   'expense_request.pay',
   'project_referral.read',
   'project_referral.manage',
+  'marketing_page.read',
+  'marketing_page.create',
+  'marketing_page.update',
+  'marketing_page.publish',
+  'marketing_page.delete',
+  'marketing_lead.read',
+  'marketing_event.read',
   'system.ops.read',
   'system.ops.run',
   'system.settings.read',
@@ -166,6 +173,34 @@ export const PermissionCodeConfig: Record<
   'project_referral.manage': {
     label: '管理介绍费',
     module: 'project_referral',
+  },
+  'marketing_page.read': {
+    label: '查看 H5 活动页',
+    module: 'marketing',
+  },
+  'marketing_page.create': {
+    label: '新建 H5 活动页',
+    module: 'marketing',
+  },
+  'marketing_page.update': {
+    label: '编辑 H5 活动页',
+    module: 'marketing',
+  },
+  'marketing_page.publish': {
+    label: '发布 H5 活动页',
+    module: 'marketing',
+  },
+  'marketing_page.delete': {
+    label: '删除 H5 活动页',
+    module: 'marketing',
+  },
+  'marketing_lead.read': {
+    label: '查看营销线索',
+    module: 'marketing',
+  },
+  'marketing_event.read': {
+    label: '查看营销埋点',
+    module: 'marketing',
   },
   'system.ops.read': {
     label: '查看运维脚本',

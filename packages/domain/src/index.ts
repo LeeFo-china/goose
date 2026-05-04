@@ -4,6 +4,7 @@ export * from './customer';
 export * from './department';
 export * from './employee';
 export * from './expense';
+export * from './marketing-page';
 export * from './payment';
 export * from './permission';
 export * from './post';

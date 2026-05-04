@@ -58,3 +58,17 @@ export type MarketingCampaignDetail = MarketingCampaignRecord & {
   summary: MarketingCampaignSummary;
 };
 
+export type H5MarketingPageStatus = "draft" | "published" | "offline" | "archived";
+
+export type H5MarketingPageRecord = {
+  id: string;
+  title: string;
+  slug: string;
+  status: H5MarketingPageStatus;
+  description: string | null;
+  cover_image: string | null;
+  published_version_id: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

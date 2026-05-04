@@ -1,4 +1,5 @@
 import type {
+  H5MarketingPageStatus,
   MarketingCampaignStatus,
   MarketingCampaignType,
   MarketingCampaignTargetScopeType,
@@ -21,3 +22,9 @@ export const targetScopeOptions = [
   ["project_list", "指定项目"],
 ] as const satisfies readonly (readonly [MarketingCampaignTargetScopeType, string])[];
 
+export const h5PageStatusOptions = [
+  ["draft", "草稿"],
+  ["published", "已发布"],
+  ["offline", "已下线"],
+  ["archived", "已归档"],
+] as const satisfies readonly (readonly [H5MarketingPageStatus, string])[];

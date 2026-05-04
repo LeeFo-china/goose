@@ -1,10 +1,13 @@
 import {
   Gift,
   Megaphone,
+  MonitorSmartphone,
   PauseCircle,
   PlayCircle,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { CreateH5MarketingPageButton } from "@/components/marketing/h5-page-mutations";
+import { H5MarketingPagesTable } from "@/components/marketing/h5-pages-table";
 import { campaignStatusOptions } from "@/components/marketing/marketing-constants";
 import {
   MarketingFilters,
@@ -13,6 +16,7 @@ import {
 import { CreateMarketingCampaignButton } from "@/components/marketing/marketing-mutations";
 import { MarketingCampaignsTable } from "@/components/marketing/marketing-table";
 import type {
+  H5MarketingPageRecord,
   MarketingCampaignRecord,
   MarketingProjectOption,
   Pagination,
@@ -41,6 +45,11 @@ type ProjectListData = {
     status?: string | null;
     address?: string | null;
   }>;
+  pagination: Pagination;
+};
+
+type H5PageListData = {
+  list: H5MarketingPageRecord[];
   pagination: Pagination;
 };
 
@@ -119,6 +128,34 @@ async function getProjects(token: string | null) {
   }
 }
 
+async function getH5Pages(token: string | null) {
+  if (!token) {
+    return {
+      list: [] as H5MarketingPageRecord[],
+      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const data = await fetchBackendData<H5PageListData>(
+      token,
+      "/marketing-pages?page=1&pageSize=10",
+    );
+    return {
+      list: data?.list || [],
+      pagination: data?.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [] as H5MarketingPageRecord[],
+      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      error: error instanceof Error ? error.message : "H5 活动页列表加载失败",
+    };
+  }
+}
+
 const statusLabel = Object.fromEntries(campaignStatusOptions);
 
 export default async function MarketingPage({
@@ -128,9 +165,10 @@ export default async function MarketingPage({
 }) {
   const params = await searchParams;
   const token = await getAdminToken();
-  const [{ list, pagination, error }, projects] = await Promise.all([
+  const [{ list, pagination, error }, projects, h5Pages] = await Promise.all([
     getCampaigns(token, params),
     getProjects(token),
+    getH5Pages(token),
   ]);
   const campaignType = params.campaign_type?.trim() || "";
   const status = params.status?.trim() || "";
@@ -151,7 +189,7 @@ export default async function MarketingPage({
         <CreateMarketingCampaignButton projects={projects} />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
@@ -196,7 +234,39 @@ export default async function MarketingPage({
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <MonitorSmartphone className="size-5" />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">H5 页面</div>
+              <div className="text-xl font-semibold">{h5Pages.pagination.total}</div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+          <div>
+            <CardTitle>H5 活动页</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              用于小程序 web-view 加载的活动页，发布后访问 https://h5.goodcms.cn/p/页面路径。
+            </p>
+          </div>
+          <CreateH5MarketingPageButton />
+        </CardHeader>
+        <CardContent className="p-0">
+          {h5Pages.error ? (
+            <div className="p-4">
+              <StatusAlert>{h5Pages.error}</StatusAlert>
+            </div>
+          ) : (
+            <H5MarketingPagesTable pages={h5Pages.list} />
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4">

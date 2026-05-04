@@ -31,6 +31,8 @@
     "api:start": "cd apps/api && bun src/app.ts",
     "api:build": "cd apps/api && bun build src/app.ts --outdir dist --target node",
     "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
+    "h5:dev": "cd apps/h5 && bun run dev",
+    "h5:build": "cd apps/h5 && bun run build",
     "admin:dev": "pnpm --dir apps/admin dev",
     "admin:build": "pnpm --dir apps/admin build",
     "admin:start": "pnpm --dir apps/admin start",

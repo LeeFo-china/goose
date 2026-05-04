@@ -1,0 +1,10 @@
+{
+  "name": "@gooes/h5",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run build && bun run server.ts",
+    "build": "rm -rf dist && mkdir -p dist/assets && cp index.html config.js dist/ && cp src/styles.css src/main.js dist/assets/"
+  }
+}

@@ -39,6 +39,21 @@ function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/public/marketing-pages/")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url.startsWith("/public/marketing-pages/")
+    && (url.endsWith("/leads") || url.endsWith("/events"))
+  ) {
+    return true;
+  }
+
   return false;
 }
 
