@@ -4,19 +4,23 @@
 
 ## 当前执行状态
 
-截至 2026-05-04，后端第一版已落地：
+截至 2026-05-04，以下能力已落地：
 
 1. 已新增 `marketing_leads(page_id, phone, created_at DESC)` 防重查询索引
 2. 已在 H5 线索提交接口中增加 24 小时 `page_id + phone` 幂等
 3. 重复提交命中时不新增线索，更新原线索最新表单信息
 4. 提交响应已返回 `lead_id`、`already_submitted`、`updated_existing`、`phone_tail`、`identity_status`
 5. 埋点仍沿用现有事件名，未扩展数据库事件枚举
+6. H5 前端已支持提交成功态、`localStorage` 已提交回显、返回小程序、继续浏览活动、修改信息
+7. 已新增小程序 H5 短期 token 生成接口
+8. H5 线索提交和埋点已支持携带短期 token
+9. token 有效时，后端会写入 `customer_id` / `wx_openid`
+10. token 过期或缺失时，H5 仍按匿名链路正常提交
 
 未落地：
 
-1. H5 前端成功态替换表单
-2. H5 本地 `localStorage` 已提交回显
-3. 小程序 H5 短期 token 和 openid/customer_id 识别
+1. 小程序端实际调用 `POST /wechat/h5-session` 并拼接 web-view URL
+2. H5 页面加载时通过 token 查询当前客户是否已提交该活动
 
 ## 一、目标
 

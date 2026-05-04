@@ -598,8 +598,6 @@ openH5ActivityUrl(entry.url);
 
 ### MVP 阶段
 
-当前 MVP 不要求小程序向 H5 传客户身份。
-
 H5 页面已经可以自己完成：
 
 - 页面渲染
@@ -609,27 +607,33 @@ H5 页面已经可以自己完成：
 
 线索会通过用户主动填写的手机号进入后端。
 
-### 后续增强
+### 推荐接入 H5 短期 token
 
-如果后续要把 H5 线索自动绑定当前小程序客户，不要在 URL 里直接传：
+如果要把 H5 线索自动绑定当前小程序客户，不要在 URL 里直接传：
 
 - 手机号
 - openid
 - customer_id
 - user_id
 
-推荐后续新增接口：
+小程序登录后调用该接口换取短期 token：
 
 ```text
-POST /auth/h5-session
+POST /wechat/h5-session
 ```
 
-小程序登录后调用该接口换取短期 token：
+请求头：
+
+```text
+Authorization: Bearer {小程序登录 token}
+```
+
+请求体：
 
 ```json
 {
-  "scene": "marketing_page",
-  "slug": "spring-sale"
+  "slug": "spring-sale",
+  "scene": "marketing_list"
 }
 ```
 
@@ -637,18 +641,22 @@ POST /auth/h5-session
 
 ```json
 {
-  "token": "short_lived_token",
-  "expires_in": 600
+  "data": {
+    "token": "short_lived_token",
+    "expires_at": "2026-05-04T10:30:00.000Z",
+    "identity_status": "identified",
+    "customer_id": "customer-id-or-null"
+  }
 }
 ```
 
 然后打开：
 
 ```text
-https://h5.goodcms.cn/p/spring-sale?t=short_lived_token
+https://h5.goodcms.cn/p/spring-sale?token=short_lived_token
 ```
 
-注意：这个 token 接口目前还不是 MVP 必需项，前端不要阻塞在这里。
+H5 会自动读取 token 并在提交线索、记录埋点时带给后端。token 过期或申请失败时，小程序可以降级打开原始 `url`，H5 会按匿名链路继续提交。
 
 ---
 

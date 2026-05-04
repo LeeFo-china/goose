@@ -9,7 +9,9 @@ import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
 import { authorizationService } from "@/services/authorization";
+import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
+import { MarketingPageSlugSchema } from "@/schema/marketing-pages";
 import type {
   AuthTargetRole,
   SmsScene,
@@ -51,6 +53,11 @@ type SmsVerificationCodeRow = {
 
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
+});
+
+const H5MarketingSessionBodySchema = z.object({
+  slug: MarketingPageSlugSchema,
+  scene: z.string().trim().max(80, "场景值过长").nullable().optional(),
 });
 
 export class WeChatController extends BaseController {
@@ -228,6 +235,27 @@ export class WeChatController extends BaseController {
       roles,
       is_new_user: false,
     }, "身份验证成功");
+  }
+
+  @Post("/wechat/h5-session")
+  async createH5MarketingSession(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) {
+      throw Errors.unauthorized();
+    }
+
+    const bodyResult = H5MarketingSessionBodySchema.safeParse(request.body || {});
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await marketingPageService.createH5Session({
+      authUserId: request.user.sub,
+      openid: request.user.openid ?? null,
+      slug: bodyResult.data.slug,
+      scene: bodyResult.data.scene ?? null,
+    });
+
+    return ResponseHandler.success(data, "H5 访问凭证已生成");
   }
 
   // 这里必须保留注释：微信 code 只能短时且单次使用，接口失败原因需要在服务端集中兜底，前端才能稳定触发静默重登。

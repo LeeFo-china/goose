@@ -14,6 +14,11 @@ import type {
   UpdateMarketingPageInput,
 } from "@/schema/marketing-pages";
 import type { AuthContext } from "@/services/authorization";
+import {
+  getH5MarketingTokenExpiresAt,
+  signH5MarketingToken,
+  verifyH5MarketingToken,
+} from "@/utils/jwt";
 
 function createDefaultConfig(title: string): MarketingPageConfigInput {
   return {
@@ -48,6 +53,14 @@ function getDedupSince() {
   since.setHours(since.getHours() - 24);
   return since.toISOString();
 }
+
+type H5IdentityStatus = "identified" | "expired" | "anonymous";
+
+type H5MarketingIdentity = {
+  status: H5IdentityStatus;
+  customerId: string | null;
+  wxOpenid: string | null;
+};
 
 class MarketingPageService {
   async listPages(query: MarketingPageListQuery) {
@@ -302,6 +315,34 @@ class MarketingPageService {
     };
   }
 
+  async createH5Session(input: {
+    authUserId: string;
+    openid: string | null;
+    slug: string;
+    scene?: string | null;
+  }) {
+    await this.getPublishedPageBySlug(input.slug);
+
+    const customer = await marketingPageRepository.findCustomerByAuthUserId(
+      input.authUserId,
+    );
+    const expiresAt = getH5MarketingTokenExpiresAt();
+    const token = signH5MarketingToken({
+      sub: input.authUserId,
+      openid: input.openid ?? undefined,
+      slug: input.slug,
+      customer_id: customer?.id ?? null,
+      scene: input.scene ?? null,
+    });
+
+    return {
+      token,
+      expires_at: expiresAt,
+      identity_status: customer || input.openid ? "identified" : "anonymous",
+      customer_id: customer?.id ?? null,
+    };
+  }
+
   async submitLead(input: SubmitMarketingLeadInput & {
     slug: string;
     requestIp: string | null;
@@ -309,6 +350,7 @@ class MarketingPageService {
   }) {
     const publishedPage = await this.getPublishedPageBySlug(input.slug);
     const phone = input.phone?.trim() || null;
+    const identity = this.resolveH5MarketingIdentity(input.token, input.slug);
 
     if (phone) {
       const existingLead = await marketingPageRepository.findRecentLeadByPageAndPhone({
@@ -324,6 +366,8 @@ class MarketingPageService {
             ...input,
             phone,
             pageVersionId: publishedPage.version.id,
+            customerId: identity.customerId,
+            wxOpenid: identity.wxOpenid,
           },
         );
 
@@ -332,7 +376,7 @@ class MarketingPageService {
           already_submitted: true,
           updated_existing: true,
           phone_tail: getPhoneTail(lead.phone),
-          identity_status: "anonymous",
+          identity_status: identity.status,
           message: "你已提交预约",
           lead,
         };
@@ -344,6 +388,8 @@ class MarketingPageService {
       phone,
       pageId: publishedPage.page.id,
       pageVersionId: publishedPage.version.id,
+      customerId: identity.customerId,
+      wxOpenid: identity.wxOpenid,
     });
 
     return {
@@ -351,7 +397,7 @@ class MarketingPageService {
       already_submitted: false,
       updated_existing: false,
       phone_tail: getPhoneTail(lead.phone),
-      identity_status: "anonymous",
+      identity_status: identity.status,
       message: "预约已提交",
       lead,
     };
@@ -363,11 +409,18 @@ class MarketingPageService {
     userAgent: string | null;
   }) {
     const publishedPage = await this.getPublishedPageBySlug(input.slug);
+    const identity = this.resolveH5MarketingIdentity(input.token, input.slug);
 
     return marketingPageRepository.createEvent({
       ...input,
       pageId: publishedPage.page.id,
       pageVersionId: publishedPage.version.id,
+      payload: {
+        ...input.payload,
+        identity_status: identity.status,
+      },
+      customerId: identity.customerId,
+      wxOpenid: identity.wxOpenid,
     });
   }
 
@@ -404,6 +457,46 @@ class MarketingPageService {
     }
 
     return page;
+  }
+
+  private resolveH5MarketingIdentity(
+    token: string | null | undefined,
+    slug: string,
+  ): H5MarketingIdentity {
+    if (!token) {
+      return {
+        status: "anonymous",
+        customerId: null,
+        wxOpenid: null,
+      };
+    }
+
+    const result = verifyH5MarketingToken(token);
+    if (result.reason === "expired") {
+      return {
+        status: "expired",
+        customerId: null,
+        wxOpenid: null,
+      };
+    }
+
+    if (
+      result.reason !== "valid" ||
+      !result.payload ||
+      result.payload.slug !== slug
+    ) {
+      return {
+        status: "anonymous",
+        customerId: null,
+        wxOpenid: null,
+      };
+    }
+
+    return {
+      status: "identified",
+      customerId: result.payload.customer_id ?? null,
+      wxOpenid: result.payload.openid ?? null,
+    };
   }
 
   private async assertSlugAvailable(slug: string, excludeId?: string) {

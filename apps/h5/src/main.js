@@ -1,5 +1,6 @@
 const app = document.querySelector("#app");
 const runtimeConfig = window.__GOOES_H5_CONFIG__ || {};
+let h5SessionToken = "";
 
 const DEFAULT_THEME = {
   primaryColor: "#0f766e",
@@ -29,6 +30,20 @@ function getApiBaseUrl() {
 function getSlugFromPath() {
   const match = location.pathname.match(/^\/p\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getH5TokenFromUrl() {
+  const params = new URLSearchParams(location.search);
+  return params.get("token") || params.get("t") || "";
+}
+
+function stripH5TokenFromUrl() {
+  const url = new URL(location.href);
+  if (!url.searchParams.has("token") && !url.searchParams.has("t")) return;
+
+  url.searchParams.delete("token");
+  url.searchParams.delete("t");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function buildApiUrl(path) {
@@ -142,6 +157,7 @@ function trackEvent(slug, eventName, blockId, payload = {}) {
       event_name: eventName,
       block_id: blockId || null,
       payload,
+      token: h5SessionToken || undefined,
     }),
   }).catch(() => null);
 }
@@ -442,6 +458,7 @@ function renderLeadForm(block, slug) {
           community: formData.community || null,
           city: formData.city || null,
           form_data: formData,
+          token: h5SessionToken || undefined,
         }),
       });
       trackEvent(slug, "form_submit", block.id, {
@@ -541,6 +558,11 @@ async function boot() {
   if (!slug) {
     renderState("页面地址无效", "请使用 /p/活动路径 访问 H5 页面。");
     return;
+  }
+
+  h5SessionToken = getH5TokenFromUrl();
+  if (h5SessionToken) {
+    stripH5TokenFromUrl();
   }
 
   try {

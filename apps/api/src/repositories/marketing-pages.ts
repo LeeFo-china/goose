@@ -587,6 +587,25 @@ class MarketingPageRepository {
     return data as MarketingLeadRecord;
   }
 
+  async findCustomerByAuthUserId(authUserId: string) {
+    const { data, error } = await this.customers()
+      .select("id,name,phone,status,owner_id")
+      .eq("user_id", authUserId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 H5 营销页客户身份失败", error);
+    }
+
+    return (data || null) as {
+      id: string;
+      name: string | null;
+      phone: string | null;
+      status: string | null;
+      owner_id: string | null;
+    } | null;
+  }
+
   async listLeads(query: MarketingLeadListQuery) {
     const { page, pageSize, status, page_id, keyword } = query;
     const from = (page - 1) * pageSize;

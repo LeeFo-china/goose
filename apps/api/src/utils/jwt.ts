@@ -4,11 +4,19 @@ import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
   sub: string;
+  token_type?: "auth" | "h5_marketing";
   openid?: string;
   login_channel?: "wechat" | "admin_web";
   roles?: string[];
   iat?: number;
   exp?: number;
+};
+
+export type H5MarketingTokenPayload = JwtPayload & {
+  token_type: "h5_marketing";
+  slug: string;
+  customer_id?: string | null;
+  scene?: string | null;
 };
 
 type JwtHeader = {
@@ -78,10 +86,13 @@ function signRaw(content: string, secret: string) {
   return createHmac("sha256", secret).update(content).digest("base64url");
 }
 
-export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
+function signJwtPayload(
+  payload: Omit<JwtPayload, "iat" | "exp">,
+  expiresInValue: string,
+) {
   const secret = getJwtSecret();
   const now = Math.floor(Date.now() / 1000);
-  const expiresIn = parseJwtExpiresIn(process.env.JWT_EXPIRES_IN || "7d");
+  const expiresIn = parseJwtExpiresIn(expiresInValue);
 
   const header: JwtHeader = {
     alg: "HS256",
@@ -101,12 +112,31 @@ export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-export function verifyToken(token: string) {
+export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
+  return signJwtPayload(payload, process.env.JWT_EXPIRES_IN || "7d");
+}
+
+export function signH5MarketingToken(
+  payload: Omit<H5MarketingTokenPayload, "iat" | "exp" | "token_type">,
+) {
+  return signJwtPayload(
+    {
+      ...payload,
+      token_type: "h5_marketing",
+    },
+    process.env.H5_MARKETING_TOKEN_EXPIRES_IN || "30m",
+  );
+}
+
+export function verifyTokenDetailed(token: string): {
+  payload: JwtPayload | null;
+  reason: "valid" | "expired" | "invalid";
+} {
   const secret = getJwtSecret();
   const parts = token.split(".");
 
   if (parts.length !== 3) {
-    return null;
+    return { payload: null, reason: "invalid" };
   }
 
   const [encodedHeader, encodedPayload, signature] = parts as [
@@ -119,7 +149,7 @@ export function verifyToken(token: string) {
     secret,
   );
   if (signature.length !== expectedSignature.length) {
-    return null;
+    return { payload: null, reason: "invalid" };
   }
 
   const isValidSignature = timingSafeEqual(
@@ -128,25 +158,69 @@ export function verifyToken(token: string) {
   );
 
   if (!isValidSignature) {
-    return null;
+    return { payload: null, reason: "invalid" };
   }
 
-  const header = JSON.parse(fromBase64Url(encodedHeader)) as JwtHeader;
-  if (header.alg !== "HS256" || header.typ !== "JWT") {
-    return null;
+  try {
+    const header = JSON.parse(fromBase64Url(encodedHeader)) as JwtHeader;
+    if (header.alg !== "HS256" || header.typ !== "JWT") {
+      return { payload: null, reason: "invalid" };
+    }
+
+    const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!payload.sub || !payload.exp) {
+      return { payload: null, reason: "invalid" };
+    }
+
+    if (payload.exp <= now) {
+      return { payload, reason: "expired" };
+    }
+
+    return { payload, reason: "valid" };
+  } catch {
+    return { payload: null, reason: "invalid" };
+  }
+}
+
+export function verifyToken(token: string) {
+  const result = verifyTokenDetailed(token);
+  return result.reason === "valid" ? result.payload : null;
+}
+
+export function verifyH5MarketingToken(token: string): {
+  payload: H5MarketingTokenPayload | null;
+  reason: "valid" | "expired" | "invalid";
+} {
+  const result = verifyTokenDetailed(token);
+  const payload = result.payload;
+
+  if (result.reason === "invalid" || !payload) {
+    return { payload: null, reason: "invalid" };
   }
 
-  const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
-  const now = Math.floor(Date.now() / 1000);
-
-  if (!payload.sub || !payload.exp || payload.exp <= now) {
-    return null;
+  if (
+    payload.token_type !== "h5_marketing" ||
+    typeof (payload as Partial<H5MarketingTokenPayload>).slug !== "string"
+  ) {
+    return { payload: null, reason: "invalid" };
   }
 
-  return payload;
+  return {
+    payload: payload as H5MarketingTokenPayload,
+    reason: result.reason,
+  };
 }
 
 export function getJwtExpiresAt(now = Date.now()) {
   const expiresIn = parseJwtExpiresIn(process.env.JWT_EXPIRES_IN || "7d");
+  return new Date(now + expiresIn * 1000).toISOString();
+}
+
+export function getH5MarketingTokenExpiresAt(now = Date.now()) {
+  const expiresIn = parseJwtExpiresIn(
+    process.env.H5_MARKETING_TOKEN_EXPIRES_IN || "30m",
+  );
   return new Date(now + expiresIn * 1000).toISOString();
 }

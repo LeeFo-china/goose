@@ -101,6 +101,11 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
+    if (payload.token_type && payload.token_type !== "auth") {
+      const error = getTokenError("invalid");
+      return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+    }
+
     request.user = payload;
   });
 };
