@@ -192,26 +192,40 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">后台概览</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {employee?.name || "未命名员工"} · {employee?.department_name || "未分配部门"} · {employee?.post_name || "未分配岗位"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{session?.login_channel || "admin_web"}</Badge>
-          <Badge variant={employee?.status === "active" ? "success" : "secondary"}>
-            {employeeStatus}
-          </Badge>
+      <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-5 shadow-[0_12px_30px_rgba(17,17,17,0.08)]">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div className="flex items-start gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#f3b400] bg-white">
+              <img src="/logo.png" alt="鹅班长" className="size-11 object-contain" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-[#4d3b00]">鹅班长工作台</div>
+              <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-[#141414] [text-shadow:0_3px_0_rgba(243,180,0,0.26)]">
+                {employee?.name || "未命名员工"}，开始处理今日业务
+              </h1>
+              <p className="mt-2 text-sm text-[#4d3b00]">
+                {employee?.department_name || "未分配部门"} · {employee?.post_name || "未分配岗位"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border-black/10 bg-white text-[#4d3b00]">
+              {session?.login_channel || "admin_web"}
+            </Badge>
+            <Badge variant={employee?.status === "active" ? "success" : "secondary"}>
+              {employeeStatus}
+            </Badge>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <BadgeCheck className="size-4 text-primary" />
+              <span className="flex size-8 items-center justify-center rounded-md bg-[#ffd449] text-[#141414]">
+                <BadgeCheck className="size-4" />
+              </span>
               员工状态
             </CardTitle>
             <CardDescription>后台登录身份</CardDescription>
@@ -223,10 +237,12 @@ export default async function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <Shield className="size-4 text-primary" />
+              <span className="flex size-8 items-center justify-center rounded-md bg-[#141414] text-[#ffd449]">
+                <Shield className="size-4" />
+              </span>
               角色数量
             </CardTitle>
             <CardDescription>来自权限上下文</CardDescription>
@@ -238,10 +254,12 @@ export default async function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <KeyRound className="size-4 text-primary" />
+              <span className="flex size-8 items-center justify-center rounded-md bg-[#fffbec] text-[#4d3b00] ring-1 ring-black/10">
+                <KeyRound className="size-4" />
+              </span>
               有效权限
             </CardTitle>
             <CardDescription>按钮和数据范围控制</CardDescription>
@@ -253,10 +271,12 @@ export default async function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
-              <ClipboardList className="size-4 text-primary" />
+              <span className="flex size-8 items-center justify-center rounded-md bg-[#e9f5ed] text-[#3f6f4f]">
+                <ClipboardList className="size-4" />
+              </span>
               可访问模块
             </CardTitle>
             <CardDescription>按当前权限计算</CardDescription>
@@ -273,7 +293,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader>
             <CardTitle>业务模块</CardTitle>
             <CardDescription>按后端返回的权限编码展示当前账号可操作范围。</CardDescription>
@@ -284,10 +304,10 @@ export default async function DashboardPage() {
               const Icon = item.icon;
 
               return (
-                <div key={item.title} className="rounded-md border p-4">
+                <div key={item.title} className="rounded-lg border border-black/10 bg-[#fffdf6] p-4 transition-colors hover:bg-[#fff5cf]/65">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[#ffd449] text-[#141414]">
                         <Icon className="size-4" />
                       </div>
                       <div className="min-w-0">
@@ -306,7 +326,7 @@ export default async function DashboardPage() {
                     <span className="text-xs text-muted-foreground">
                       {coverage.enabled ? "已有访问权限" : "暂无匹配权限"}
                     </span>
-                    <Button asChild variant="outline" size="sm">
+                    <Button asChild variant="outline" size="sm" className="border-black/10 bg-white text-[#4d3b00] hover:bg-[#141414] hover:text-[#ffd449]">
                       <Link href={item.href}>
                         进入
                         <ArrowRight data-icon="inline-end" />
@@ -319,27 +339,27 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-black/10 bg-white shadow-none">
           <CardHeader>
             <CardTitle>会话上下文</CardTitle>
             <CardDescription>当前 token 解出的员工和权限摘要。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="rounded-md border p-3">
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
               <div className="text-xs text-muted-foreground">员工 ID</div>
               <div className="mt-1 truncate text-sm font-medium">{employee?.id || "-"}</div>
             </div>
-            <div className="rounded-md border p-3">
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
               <div className="text-xs text-muted-foreground">用户 ID</div>
               <div className="mt-1 truncate text-sm font-medium">{session?.user_id || "-"}</div>
             </div>
-            <div className="rounded-md border p-3">
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
               <div className="text-xs text-muted-foreground">过期时间</div>
               <div className="mt-1 truncate text-sm font-medium">{session?.expires_at || "后端未返回"}</div>
             </div>
           </CardContent>
           <CardFooter>
-            <Button asChild variant="secondary" className="w-full">
+            <Button asChild variant="secondary" className="w-full bg-[#fff5cf] text-[#4d3b00] hover:bg-[#ffd449] hover:text-[#141414]">
               <Link href="/permissions">
                 查看权限点
                 <ArrowRight data-icon="inline-end" />
@@ -349,14 +369,14 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-black/10 bg-white shadow-none">
         <CardHeader>
           <CardTitle>关键流程</CardTitle>
           <CardDescription>常用后台路径和当前账号是否具备对应入口权限。</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-muted/60">
+            <TableHeader className="bg-[#fffbec]">
               <TableRow>
                 <TableHead>流程</TableHead>
                 <TableHead>责任角色</TableHead>
@@ -380,7 +400,7 @@ export default async function DashboardPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="sm">
+                      <Button asChild variant="ghost" size="sm" className="text-[#4d3b00] hover:bg-[#fff5cf] hover:text-[#141414]">
                         <Link href={row.entry}>
                           打开
                           <ArrowRight data-icon="inline-end" />
@@ -395,7 +415,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-black/10 bg-white shadow-none">
         <CardHeader>
           <CardTitle>权限明细</CardTitle>
           <CardDescription>展示当前会话的前 6 项权限，完整列表请进入权限点页面。</CardDescription>
@@ -408,7 +428,7 @@ export default async function DashboardPage() {
               const description = getPermissionDescription(permission, meta);
 
               return (
-                <div key={`${permission.code}-${permission.scope}`} className="rounded-md border p-3">
+                <div key={`${permission.code}-${permission.scope}`} className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
                   <div className="min-w-0">
                     <div className="break-words text-sm font-medium">{title}</div>
                     {description ? (
@@ -424,7 +444,7 @@ export default async function DashboardPage() {
               );
             })
           ) : (
-            <div className="rounded-md border p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-4 text-sm text-muted-foreground">
               当前会话没有返回权限明细。
             </div>
           )}

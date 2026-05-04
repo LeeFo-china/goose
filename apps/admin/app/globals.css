@@ -3,31 +3,38 @@
 @tailwind utilities;
 
 :root {
-  --background: 210 17% 98%;
-  --foreground: 210 20% 10%;
+  --background: 46 100% 98%;
+  --foreground: 0 0% 8%;
   --card: 0 0% 100%;
-  --card-foreground: 210 20% 10%;
+  --card-foreground: 0 0% 8%;
   --popover: 0 0% 100%;
-  --popover-foreground: 210 20% 10%;
-  --primary: 198 88% 24%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 34 55% 92%;
-  --secondary-foreground: 28 28% 18%;
-  --muted: 210 20% 94%;
-  --muted-foreground: 210 9% 42%;
-  --accent: 162 34% 90%;
-  --accent-foreground: 166 50% 18%;
+  --popover-foreground: 0 0% 8%;
+  --primary: 0 0% 7%;
+  --primary-foreground: 47 100% 64%;
+  --secondary: 48 100% 91%;
+  --secondary-foreground: 46 100% 15%;
+  --muted: 47 85% 94%;
+  --muted-foreground: 0 0% 38%;
+  --accent: 47 100% 64%;
+  --accent-foreground: 0 0% 8%;
   --destructive: 0 74% 48%;
   --destructive-foreground: 0 0% 100%;
-  --success: 157 55% 33%;
+  --success: 139 28% 34%;
   --success-foreground: 0 0% 100%;
-  --warning: 38 92% 42%;
-  --warning-foreground: 30 24% 14%;
-  --border: 210 16% 88%;
-  --input: 210 16% 86%;
-  --ring: 198 88% 30%;
+  --warning: 44 100% 48%;
+  --warning-foreground: 46 100% 15%;
+  --border: 45 45% 86%;
+  --input: 45 45% 82%;
+  --ring: 44 100% 48%;
   --radius: 8px;
-  --font-sans: "Avenir Next", "Gill Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --goose-yellow: #f3b400;
+  --goose-yellow-soft: #ffd449;
+  --goose-cream: #fffdf6;
+  --goose-cream-deep: #fff5cf;
+  --goose-ink: #141414;
+  --goose-brown: #4d3b00;
+  --goose-surface-warm: #fffbec;
+  --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 * {
@@ -53,7 +60,12 @@ body {
 
 .console-grid {
   background-image:
-    linear-gradient(to right, hsl(var(--border) / 0.44) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--border) / 0.38) 1px, transparent 1px);
-  background-size: 32px 32px;
+    radial-gradient(circle at 50% 18%, rgb(255 214 75 / 28%), transparent 36%),
+    linear-gradient(180deg, #fffdf6 0%, #fff5cf 54%, #f3b400 100%);
+}
+
+.goose-workbench-bg {
+  background:
+    radial-gradient(circle at 18% 0%, rgb(255 212 73 / 24%), transparent 28%),
+    linear-gradient(180deg, #fffdf6 0%, #fff9e4 42%, #fffdf6 100%);
 }

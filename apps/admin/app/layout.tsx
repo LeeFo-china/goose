@@ -4,8 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "小笨鹅",
-  description: "小笨鹅业务管理后台",
+  title: "鹅班长",
+  description: "鹅班长AI助力装修管理后台",
 };
 
 export default function RootLayout({

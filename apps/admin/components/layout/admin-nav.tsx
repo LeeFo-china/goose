@@ -59,20 +59,20 @@ export function AdminNav() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-              active && "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
+              "group relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-[#4d3b00] transition-colors hover:bg-[#fff5cf] hover:text-[#141414]",
+              active && "bg-[#141414] text-[#ffd449] shadow-sm hover:bg-[#141414] hover:text-[#ffd449]",
             )}
           >
             <span
               className={cn(
                 "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-transparent transition-colors",
-                active && "bg-primary-foreground/90",
+                active && "bg-[#ffd449]",
               )}
             />
             <Icon
               className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent-foreground",
-                active && "text-primary-foreground group-hover:text-primary-foreground",
+                "size-4 shrink-0 text-[#4d3b00]/70 transition-colors group-hover:text-[#141414]",
+                active && "text-[#ffd449] group-hover:text-[#ffd449]",
               )}
             />
             <span className="truncate">{item.label}</span>
