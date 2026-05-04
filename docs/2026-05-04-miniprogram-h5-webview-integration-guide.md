@@ -653,10 +653,19 @@ Authorization: Bearer {小程序登录 token}
 然后打开：
 
 ```text
-https://h5.goodcms.cn/p/spring-sale?token=short_lived_token
+https://h5.goodcms.cn/p/spring-sale?token=short_lived_token&returnPath=%2Fpages%2Findex%2Findex&returnMethod=switchTab
 ```
 
 H5 会自动读取 token 并在提交线索、记录埋点时带给后端。token 过期或申请失败时，小程序可以降级打开原始 `url`，H5 会按匿名链路继续提交。
+
+`returnPath` 和 `returnMethod` 用于 H5 成功态里的“返回小程序”按钮。体验版二维码直达 H5 承载页时，页面栈可能没有上一页，只靠 `navigateBack` 会失败，因此建议小程序端始终传一个明确返回页。
+
+推荐规则：
+
+- 返回 tabBar 页面：`returnMethod=switchTab`
+- 返回普通页面：`returnMethod=redirectTo`
+- 只需要回到打开 H5 的上一页：`returnMethod=navigateBack`，可不传 `returnPath`
+- 需要重置小程序页面栈：`returnMethod=reLaunch`
 
 ---
 

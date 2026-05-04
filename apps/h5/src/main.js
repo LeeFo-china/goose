@@ -1,6 +1,8 @@
 const app = document.querySelector("#app");
 const runtimeConfig = window.__GOOES_H5_CONFIG__ || {};
 let h5SessionToken = "";
+let miniProgramReturnPath = "";
+let miniProgramReturnMethod = "navigateBack";
 
 const DEFAULT_THEME = {
   primaryColor: "#0f766e",
@@ -35,6 +37,27 @@ function getSlugFromPath() {
 function getH5TokenFromUrl() {
   const params = new URLSearchParams(location.search);
   return params.get("token") || params.get("t") || "";
+}
+
+function decodeUrlParam(value) {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function getMiniProgramReturnPathFromUrl() {
+  const params = new URLSearchParams(location.search);
+  return decodeUrlParam(params.get("returnPath") || params.get("return_path") || params.get("miniPath") || "");
+}
+
+function getMiniProgramReturnMethodFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const method = params.get("returnMethod") || params.get("return_method") || "";
+  const allowedMethods = new Set(["navigateBack", "redirectTo", "navigateTo", "switchTab", "reLaunch"]);
+  return allowedMethods.has(method) ? method : "navigateBack";
 }
 
 function stripH5TokenFromUrl() {
@@ -169,11 +192,71 @@ function waitForEvent(promise, timeoutMs = 300) {
   ]);
 }
 
-function returnToMiniProgram() {
-  const miniProgram = window.wx?.miniProgram;
-  if (miniProgram?.navigateBack) {
-    miniProgram.navigateBack();
-    return true;
+function isWeChatBrowser() {
+  return /MicroMessenger/i.test(navigator.userAgent || "");
+}
+
+function getMiniProgramBridge() {
+  return window.wx?.miniProgram || null;
+}
+
+function waitForMiniProgramBridge(timeoutMs = 1600) {
+  const currentBridge = getMiniProgramBridge();
+  if (currentBridge || !isWeChatBrowser()) {
+    return Promise.resolve(currentBridge);
+  }
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const bridge = getMiniProgramBridge();
+      if (bridge || Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(timer);
+        resolve(bridge || null);
+      }
+    }, 80);
+  });
+}
+
+function callMiniProgramRoute(method, payload = {}) {
+  const miniProgram = getMiniProgramBridge();
+  const route = miniProgram?.[method];
+  if (typeof route !== "function") return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    try {
+      route.call(miniProgram, {
+        ...payload,
+        success: () => finish(true),
+        fail: () => finish(false),
+      });
+
+      window.setTimeout(() => finish(true), 700);
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function returnToMiniProgram() {
+  const bridge = await waitForMiniProgramBridge();
+  if (bridge) {
+    if (miniProgramReturnPath && miniProgramReturnMethod !== "navigateBack") {
+      if (await callMiniProgramRoute(miniProgramReturnMethod, { url: miniProgramReturnPath })) {
+        return true;
+      }
+    }
+
+    if (await callMiniProgramRoute("navigateBack", { delta: 1 })) {
+      return true;
+    }
   }
 
   if (history.length > 1) {
@@ -445,13 +528,21 @@ function renderLeadForm(block, slug) {
 
   node.querySelector("[data-return-mini-program='true']")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
+    const originalText = button.textContent;
     button.disabled = true;
+    button.textContent = "返回中...";
     await waitForEvent(trackEvent(slug, "button_click", block.id, { action: "return_miniprogram_click" }));
-    const returned = returnToMiniProgram();
+    const returned = await returnToMiniProgram();
     if (!returned) {
       button.textContent = "关闭页面后查看";
       button.disabled = true;
+      return;
     }
+    button.textContent = originalText;
+    window.setTimeout(() => {
+      if (document.hidden) return;
+      button.disabled = false;
+    }, 1200);
   });
 
   node.querySelector("[data-continue-browsing='true']")?.addEventListener("click", () => {
@@ -613,6 +704,8 @@ async function boot() {
   }
 
   h5SessionToken = getH5TokenFromUrl();
+  miniProgramReturnPath = getMiniProgramReturnPathFromUrl();
+  miniProgramReturnMethod = getMiniProgramReturnMethodFromUrl();
   if (h5SessionToken) {
     stripH5TokenFromUrl();
   }

@@ -80,11 +80,24 @@ Authorization: Bearer {小程序登录 token}
 小程序拼接 H5 URL：
 
 ```ts
-const h5Url = `${page.url}?token=${encodeURIComponent(session.token)}`;
+const url = new URL(page.url);
+url.searchParams.set("token", session.token);
+url.searchParams.set("returnPath", "/pages/index/index");
+url.searchParams.set("returnMethod", "switchTab");
+
+const h5Url = url.toString();
 const webviewUrl = `/pages/webview/index?url=${encodeURIComponent(h5Url)}`;
 ```
 
-H5 会在加载后读取 `token`，并从地址栏移除该参数，避免 token 留在分享 URL 或浏览器历史里。
+H5 会在加载后读取 `token`，并从地址栏移除该参数，避免 token 留在分享 URL 或浏览器历史里。`returnPath` 和 `returnMethod` 用于“返回小程序”按钮，体验版二维码直达、页面栈为空时也可以回到指定小程序页面。
+
+`returnMethod` 可选值：
+
+- `navigateBack`：返回上一页，适合从小程序页面正常打开 H5
+- `switchTab`：跳到 tabBar 页面
+- `redirectTo`：跳到非 tabBar 页面并关闭当前 web-view 页
+- `navigateTo`：保留当前 web-view 页并打开新页面
+- `reLaunch`：重启到指定页面
 
 ## 三、H5 线索提交接口
 
@@ -218,10 +231,11 @@ gooes:h5:lead:{slug}
 
 按钮行为：
 
-1. `返回小程序`：优先调用 `wx.miniProgram.navigateBack()`
-2. 非微信环境：降级 `history.back()`
-3. 无法返回：隐藏按钮或显示“关闭页面后查看”
-4. `继续浏览活动`：滚动到页面顶部或活动内容区
+1. `返回小程序`：如果 URL 传了 `returnPath + returnMethod`，优先按指定方式跳转
+2. 未传固定返回页时，优先调用 `wx.miniProgram.navigateBack({ delta: 1 })`
+3. 非微信环境：降级 `history.back()`
+4. 无法返回：隐藏按钮或显示“关闭页面后查看”
+5. `继续浏览活动`：滚动到页面顶部或活动内容区
 
 ## 七、已提交用户再次进入
 

@@ -206,10 +206,20 @@ ON public.marketing_leads(page_id, phone, created_at DESC);
 
 行为建议：
 
-1. 优先调用 `wx.miniProgram.navigateBack()`
-2. 如果业务需要回到固定页面，可调用 `wx.miniProgram.redirectTo()` 或 `wx.miniProgram.switchTab()`
-3. 如果不在微信 web-view 内，降级为 `history.back()`
-4. 如果 `history.length <= 1` 且没有微信能力，隐藏按钮或文案降级为“关闭页面后查看”
+1. H5 引入微信 JS-SDK 后使用 `wx.miniProgram` 路由能力
+2. 如果 URL 带 `returnPath + returnMethod`，优先跳到指定小程序页面
+3. 未传固定返回页时，调用 `wx.miniProgram.navigateBack({ delta: 1 })`
+4. 如果不在微信 web-view 内，降级为 `history.back()`
+5. 如果 `history.length <= 1` 且没有微信能力，隐藏按钮或文案降级为“关闭页面后查看”
+
+小程序打开 H5 时建议携带：
+
+```text
+returnPath=/pages/index/index
+returnMethod=switchTab
+```
+
+`returnMethod` 需要和页面类型匹配：tabBar 页面用 `switchTab`，普通页面用 `redirectTo` 或 `navigateTo`。
 
 伪代码：
 
@@ -218,8 +228,13 @@ async function returnToMiniProgram() {
   await trackReturnClick();
 
   const miniProgram = window.wx?.miniProgram;
+  if (miniProgram && returnPath && returnMethod !== "navigateBack") {
+    miniProgram[returnMethod]({ url: returnPath });
+    return;
+  }
+
   if (miniProgram?.navigateBack) {
-    miniProgram.navigateBack();
+    miniProgram.navigateBack({ delta: 1 });
     return;
   }
 
