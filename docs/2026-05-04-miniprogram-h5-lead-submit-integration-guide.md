@@ -111,7 +111,7 @@ POST https://h5.goodcms.cn/public/marketing-pages/{slug}/leads
 }
 ```
 
-手机号建议必填。第一版后端仍兼容空手机号，但空手机号无法按 `page_id + phone` 做防重复。
+手机号为必填。后端会拒绝空手机号或格式无效的手机号，避免产生无法防重的空线索。
 
 如果 H5 页面 URL 带了 `token`，H5 会自动提交该字段，小程序端不需要直接参与表单提交。
 

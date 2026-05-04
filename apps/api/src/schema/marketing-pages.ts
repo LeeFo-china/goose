@@ -198,9 +198,8 @@ export const SubmitMarketingLeadSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^1[3-9]\d{9}$/, "请输入有效的手机号")
-    .nullable()
-    .optional(),
+    .min(1, "请输入有效的手机号")
+    .regex(/^1[3-9]\d{9}$/, "请输入有效的手机号"),
   community: z.string().trim().max(120, "小区名称不能超过 120 个字符").nullable().optional(),
   city: z.string().trim().max(80, "城市不能超过 80 个字符").nullable().optional(),
   form_data: JsonObjectSchema.default({}),

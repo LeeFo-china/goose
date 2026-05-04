@@ -352,35 +352,37 @@ class MarketingPageService {
     const phone = input.phone?.trim() || null;
     const identity = this.resolveH5MarketingIdentity(input.token, input.slug);
 
-    if (phone) {
-      const existingLead = await marketingPageRepository.findRecentLeadByPageAndPhone({
-        pageId: publishedPage.page.id,
-        phone,
-        since: getDedupSince(),
-      });
+    if (!phone) {
+      throw Errors.badRequest("请输入有效的手机号");
+    }
 
-      if (existingLead) {
-        const lead = await marketingPageRepository.updateRecentLeadSubmission(
-          existingLead.id,
-          {
-            ...input,
-            phone,
-            pageVersionId: publishedPage.version.id,
-            customerId: identity.customerId,
-            wxOpenid: identity.wxOpenid,
-          },
-        );
+    const existingLead = await marketingPageRepository.findRecentLeadByPageAndPhone({
+      pageId: publishedPage.page.id,
+      phone,
+      since: getDedupSince(),
+    });
 
-        return {
-          lead_id: lead.id,
-          already_submitted: true,
-          updated_existing: true,
-          phone_tail: getPhoneTail(lead.phone),
-          identity_status: identity.status,
-          message: "你已提交预约",
-          lead,
-        };
-      }
+    if (existingLead) {
+      const lead = await marketingPageRepository.updateRecentLeadSubmission(
+        existingLead.id,
+        {
+          ...input,
+          phone,
+          pageVersionId: publishedPage.version.id,
+          customerId: identity.customerId,
+          wxOpenid: identity.wxOpenid,
+        },
+      );
+
+      return {
+        lead_id: lead.id,
+        already_submitted: true,
+        updated_existing: true,
+        phone_tail: getPhoneTail(lead.phone),
+        identity_status: identity.status,
+        message: "你已提交预约",
+        lead,
+      };
     }
 
     const lead = await marketingPageRepository.createLead({

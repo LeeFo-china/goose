@@ -192,7 +192,7 @@ ON public.marketing_leads(page_id, phone, created_at DESC);
 
 - `already_submitted = true` 不代表错误，前端仍展示成功态。
 - `updated_existing = true` 表示没有新增线索，但已把用户最新填写的信息同步到原线索。
-- 如果提交手机号为空，不能执行 `page_id + phone` 幂等，只能按现有逻辑创建或要求表单必须填手机号。营销线索表单建议将手机号设为必填。
+- 手机号必须填写且格式有效；后端会拒绝空手机号，避免产生无法按 `page_id + phone` 防重的空线索。
 
 ## 六、返回小程序交互
 

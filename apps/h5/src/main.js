@@ -358,12 +358,27 @@ function renderCountdown(block) {
   return node;
 }
 
+function normalizeLeadFormFields(value) {
+  const rawFields = Array.isArray(value) && value.length
+    ? value
+    : ["name", "phone", "community"];
+  const fields = rawFields
+    .map((field) => String(field || "").trim())
+    .filter(Boolean);
+
+  if (!fields.includes("phone")) {
+    fields.splice(Math.min(fields.length, 1), 0, "phone");
+  }
+
+  return Array.from(new Set(fields));
+}
+
 function renderLeadForm(block, slug) {
   const props = block.props || {};
-  const fields = Array.isArray(props.fields) && props.fields.length
-    ? props.fields
-    : ["name", "phone", "community"];
+  const fields = normalizeLeadFormFields(props.fields);
   const cachedLead = readLeadCache(slug);
+  let isSubmitting = false;
+  let isSubmitted = Boolean(cachedLead);
   const node = createSection(block, "lead-form-block", `
     <form data-form-block="true" novalidate>
       ${props.title ? `<h2>${escapeHtml(props.title)}</h2>` : "<h2>预约咨询</h2>"}
@@ -421,6 +436,7 @@ function renderLeadForm(block, slug) {
   });
 
   node.querySelector("[data-edit-lead='true']")?.addEventListener("click", () => {
+    isSubmitted = false;
     successPanel.classList.add("is-hidden");
     formContent.classList.remove("is-hidden");
   });
@@ -431,19 +447,26 @@ function renderLeadForm(block, slug) {
     const button = form.querySelector("button[type='submit']");
     const message = form.querySelector(".form-message");
     const formData = Object.fromEntries(new FormData(form).entries());
+    const phone = String(formData.phone || "").trim();
+    formData.phone = phone;
 
-    if (fields.includes("phone") && !formData.phone) {
+    if (isSubmitting || isSubmitted) {
+      return;
+    }
+
+    if (!phone) {
       message.textContent = "请输入有效的手机号";
       message.className = "form-message is-error";
       return;
     }
 
-    if (formData.phone && !/^1[3-9]\d{9}$/.test(String(formData.phone))) {
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
       message.textContent = "请输入有效的手机号";
       message.className = "form-message is-error";
       return;
     }
 
+    isSubmitting = true;
     button.disabled = true;
     message.textContent = "提交中...";
     message.className = "form-message";
@@ -454,7 +477,7 @@ function renderLeadForm(block, slug) {
         method: "POST",
         body: JSON.stringify({
           name: formData.name || null,
-          phone: formData.phone || null,
+          phone,
           community: formData.community || null,
           city: formData.city || null,
           form_data: formData,
@@ -470,12 +493,14 @@ function renderLeadForm(block, slug) {
       form.reset();
       message.textContent = leadResult?.message || props.successText || "预约已提交";
       message.className = "form-message is-success";
+      isSubmitted = true;
       showSuccess(leadResult, cache);
     } catch (error) {
       message.textContent = error.message || "提交失败，请稍后重试";
       message.className = "form-message is-error";
     } finally {
-      button.disabled = false;
+      isSubmitting = false;
+      button.disabled = isSubmitted;
     }
   });
 
