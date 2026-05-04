@@ -51,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const H5_MARKETING_RETURN_HREF = "/marketing?tab=h5";
+const EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const EDITOR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const EDITOR_IMAGE_OUTPUT_MAX_WIDTH = 1200;
 const EDITOR_IMAGE_ALLOWED_TYPES = new Set([
@@ -221,6 +222,8 @@ function getImageValidationIssues(
 
   if (image.file.size > EDITOR_IMAGE_MAX_BYTES) {
     issues.push(`图片大小 ${formatFileSize(image.file.size)}，超过 5MB`);
+  } else if (image.file.size > EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES) {
+    issues.push(`图片大小 ${formatFileSize(image.file.size)}，建议压缩后上传`);
   }
 
   if (image.width < requirement.minWidth) {
@@ -814,14 +817,23 @@ function ImageUploadField({
         return;
       }
 
-      let url = "";
       try {
-        url = await uploadEditorImage(file);
-      } finally {
+        const url = await uploadEditorImage(file);
+        onChange(url);
+        toast.success("图片已上传");
         URL.revokeObjectURL(image.objectUrl);
+      } catch (uploadError) {
+        setRepairRatio(requirement.ratios[0]?.value || "free");
+        setQuality(0.82);
+        setRepairState({
+          ...image,
+          issues: [
+            uploadError instanceof Error ? uploadError.message : "图片上传失败",
+            "可尝试压缩并转为 WebP 后重新上传",
+          ],
+          usage,
+        });
       }
-      onChange(url);
-      toast.success("图片已上传");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "图片上传失败");
     } finally {
