@@ -6,6 +6,7 @@ import {
   PauseCircle,
   PlayCircle,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -27,7 +28,6 @@ import type {
   Pagination,
 } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -89,6 +89,66 @@ function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
   }
 
   return `/marketing?${query.toString()}`;
+}
+
+function MarketingTabLink({
+  active,
+  count,
+  description,
+  href,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  count: number;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex min-w-[240px] items-center justify-between gap-4 rounded-lg border p-3 transition-colors",
+        active
+          ? "border-[#141414] bg-[#141414] text-[#ffd449] shadow-[0_12px_30px_rgba(17,17,17,0.14)]"
+          : "border-black/10 bg-white text-[#141414] hover:bg-[#fff5cf]",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-md",
+            active ? "bg-[#ffd449] text-[#141414]" : "bg-[#fff5cf] text-[#4d3b00]",
+          )}
+        >
+          <Icon className="size-5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-extrabold">{label}</span>
+          <span
+            className={cn(
+              "mt-0.5 block truncate text-xs",
+              active ? "text-[#fff5cf]" : "text-[#4d3b00]",
+            )}
+          >
+            {description}
+          </span>
+        </span>
+      </span>
+      <span
+        className={cn(
+          "flex min-w-14 shrink-0 flex-col items-center rounded-md px-3 py-2 text-center",
+          active ? "bg-[#ffd449] text-[#141414]" : "bg-[#fffbec] text-[#4d3b00]",
+        )}
+      >
+        <span className="text-lg font-extrabold leading-none tabular-nums">{count}</span>
+        <span className="mt-1 text-[10px] font-semibold leading-none">总数</span>
+      </span>
+    </Link>
+  );
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -260,41 +320,23 @@ export default async function MarketingPage({
         )}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto rounded-md border bg-card p-2">
-        <Button
-          type="button"
-          variant={activeTab === "campaigns" ? "default" : "ghost"}
-          className={cn(
-            "h-9 shrink-0 gap-2 px-3",
-            activeTab !== "campaigns" && "text-muted-foreground",
-          )}
-          asChild
-        >
-          <Link href={buildTabHref("campaigns", params)}>
-            <Megaphone data-icon="inline-start" />
-            活动管理
-            <Badge variant={activeTab === "campaigns" ? "secondary" : "outline"}>
-              {pagination.total}
-            </Badge>
-          </Link>
-        </Button>
-        <Button
-          type="button"
-          variant={activeTab === "h5" ? "default" : "ghost"}
-          className={cn(
-            "h-9 shrink-0 gap-2 px-3",
-            activeTab !== "h5" && "text-muted-foreground",
-          )}
-          asChild
-        >
-          <Link href={buildTabHref("h5", params)}>
-            <MonitorSmartphone data-icon="inline-start" />
-            H5 活动页
-            <Badge variant={activeTab === "h5" ? "secondary" : "outline"}>
-              {h5Pages.pagination.total}
-            </Badge>
-          </Link>
-        </Button>
+      <div className="grid gap-3 rounded-lg border border-black/10 bg-[#fffdf6] p-2 md:grid-cols-2">
+        <MarketingTabLink
+          active={activeTab === "campaigns"}
+          count={pagination.total}
+          description="规则、奖励、启停"
+          href={buildTabHref("campaigns", params)}
+          icon={Megaphone}
+          label="活动管理"
+        />
+        <MarketingTabLink
+          active={activeTab === "h5"}
+          count={h5Pages.pagination.total}
+          description="页面、发布、线索"
+          href={buildTabHref("h5", params)}
+          icon={MonitorSmartphone}
+          label="H5 活动页"
+        />
       </div>
 
       {activeTab === "campaigns" ? (
