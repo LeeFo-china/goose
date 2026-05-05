@@ -208,26 +208,12 @@ async function getProjects(token: string | null) {
   if (!token) return [] as MarketingProjectOption[];
 
   try {
-    const pageSize = 100;
-    const firstPage = await fetchBackendData<ProjectListData>(
+    const pageSize = 8;
+    const data = await fetchBackendData<ProjectListData>(
       token,
       `/marketing-pages/project-options?page=1&pageSize=${pageSize}`,
     );
-    const totalPages = Math.max(1, firstPage?.pagination?.totalPages || 1);
-    const restPages = await Promise.all(
-      Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
-        fetchBackendData<ProjectListData>(
-          token,
-          `/marketing-pages/project-options?page=${index + 2}&pageSize=${pageSize}`,
-        )
-      ),
-    );
-    const projects = [
-      ...(firstPage?.list || []),
-      ...restPages.flatMap((pageData) => pageData?.list || []),
-    ];
-
-    return projects.map((project) => ({
+    return (data?.list || []).map((project) => ({
       id: project.id,
       name: project.name || project.title || project.id,
       status: project.status || null,

@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
+  ChevronLeft,
+  ChevronRight,
   Eye,
   Loader2,
   PauseCircle,
   Pencil,
   PlayCircle,
   Plus,
+  Search,
   XCircle,
 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -57,6 +60,7 @@ const achievementModeOptions = [
   { value: "appointment_submit", label: "提交预约即达成" },
   { value: "store_checkin", label: "到店确认后达成" },
 ] as const;
+const PROJECT_SELECTOR_PAGE_SIZE = 8;
 
 const CampaignFormSchema = z.object({
   name: z.string().trim().min(1, "活动名称不能为空").max(100, "活动名称过长"),
@@ -83,6 +87,25 @@ const CampaignFormSchema = z.object({
 });
 
 type CampaignFormValues = z.infer<typeof CampaignFormSchema>;
+
+type ProjectOptionPayload = {
+  id: string;
+  name?: string | null;
+  title?: string | null;
+  status?: string | null;
+  address?: string | null;
+  subtitle?: string | null;
+};
+
+type ProjectOptionsData = {
+  list: ProjectOptionPayload[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
 
 const defaultValues: CampaignFormValues = {
   name: "",
@@ -194,6 +217,15 @@ function projectHint(project: MarketingProjectOption) {
   return [project.status, project.address].filter(Boolean).join(" · ");
 }
 
+function normalizeProjectOption(project: ProjectOptionPayload): MarketingProjectOption {
+  return {
+    id: project.id,
+    name: project.name || project.title || project.id,
+    status: project.status || null,
+    address: project.address || project.subtitle || null,
+  };
+}
+
 function buildCampaignPayload(values: CampaignFormValues, projectIds: string[]) {
   const campaignType = values.campaign_type as MarketingCampaignType;
   const targetScopeType = values.target_scope_type;
@@ -247,6 +279,18 @@ function CampaignFormDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [projectKeyword, setProjectKeyword] = useState("");
+  const [projectPage, setProjectPage] = useState(1);
+  const [projectOptions, setProjectOptions] = useState<MarketingProjectOption[]>(projects);
+  const [projectPagination, setProjectPagination] = useState({
+    page: 1,
+    pageSize: PROJECT_SELECTOR_PAGE_SIZE,
+    total: projects.length,
+    totalPages: projects.length ? 1 : 0,
+  });
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectError, setProjectError] = useState("");
+  const [projectReloadKey, setProjectReloadKey] = useState(0);
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(CampaignFormSchema as never) as Resolver<CampaignFormValues>,
     defaultValues,
@@ -264,8 +308,69 @@ function CampaignFormDialog({
         ? campaign?.include_project_ids || []
         : campaign?.exclude_project_ids || [],
     );
+    setProjectKeyword("");
+    setProjectPage(1);
+    setProjectOptions(projects);
+    setProjectPagination({
+      page: 1,
+      pageSize: PROJECT_SELECTOR_PAGE_SIZE,
+      total: projects.length,
+      totalPages: projects.length ? 1 : 0,
+    });
+    setProjectError("");
+    setProjectReloadKey((value) => value + 1);
     setError("");
-  }, [campaign, form, open]);
+  }, [campaign, form, open, projects]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let ignore = false;
+    const timer = window.setTimeout(async () => {
+      const query = new URLSearchParams({
+        page: String(projectPage),
+        pageSize: String(PROJECT_SELECTOR_PAGE_SIZE),
+      });
+      if (projectKeyword.trim()) {
+        query.set("keyword", projectKeyword.trim());
+      }
+
+      setProjectLoading(true);
+      setProjectError("");
+      try {
+        const data = await requestMarketing<ProjectOptionsData>({
+          path: `/marketing-pages/project-options?${query.toString()}`,
+        });
+        if (ignore) return;
+        setProjectOptions((data?.list || []).map(normalizeProjectOption));
+        setProjectPagination(data?.pagination || {
+          page: projectPage,
+          pageSize: PROJECT_SELECTOR_PAGE_SIZE,
+          total: 0,
+          totalPages: 0,
+        });
+      } catch (err) {
+        if (ignore) return;
+        setProjectOptions([]);
+        setProjectPagination({
+          page: projectPage,
+          pageSize: PROJECT_SELECTOR_PAGE_SIZE,
+          total: 0,
+          totalPages: 0,
+        });
+        setProjectError(err instanceof Error ? err.message : "项目加载失败");
+      } finally {
+        if (!ignore) {
+          setProjectLoading(false);
+        }
+      }
+    }, projectKeyword ? 300 : 0);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timer);
+    };
+  }, [open, projectKeyword, projectPage, projectReloadKey]);
 
   function toggleProject(projectId: string, checked: boolean) {
     setProjectIds((current) =>
@@ -305,6 +410,13 @@ function CampaignFormDialog({
       }
     });
   }
+
+  const canGoPrevProjectPage = projectPagination.page > 1 && !projectLoading;
+  const canGoNextProjectPage = (
+    projectPagination.totalPages > 0
+    && projectPagination.page < projectPagination.totalPages
+    && !projectLoading
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -418,37 +530,105 @@ function CampaignFormDialog({
           </FieldGroup>
 
           <Field>
-            <FieldLabel>
-              {targetScopeType === "project_list" ? "包含项目" : "排除项目"}
-            </FieldLabel>
-            <div className="max-h-44 overflow-y-auto rounded-md border bg-muted/20 p-3">
-              {projects.length ? (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {projects.map((project) => (
-                    <label
-                      key={project.id}
-                      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-background"
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>
+                {targetScopeType === "project_list" ? "包含项目" : "排除项目"}
+              </FieldLabel>
+              <Badge variant="outline">已选 {projectIds.length}</Badge>
+            </div>
+            <div className="rounded-md border bg-muted/20 p-3">
+              <div className="relative mb-3">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="搜索项目名称、小区或地址"
+                  value={projectKeyword}
+                  onChange={(event) => {
+                    setProjectKeyword(event.target.value);
+                    setProjectPage(1);
+                  }}
+                />
+              </div>
+              <div className="min-h-40">
+                {projectLoading ? (
+                  <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    项目加载中
+                  </div>
+                ) : projectError ? (
+                  <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <span>{projectError}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setProjectPage(1);
+                        setProjectReloadKey((value) => value + 1);
+                      }}
                     >
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={projectIds.includes(project.id)}
-                        onChange={(event) => toggleProject(project.id, event.target.checked)}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">
-                          {project.name || project.id}
+                      重新加载
+                    </Button>
+                  </div>
+                ) : projectOptions.length ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {projectOptions.map((project) => (
+                      <label
+                        key={project.id}
+                        className="flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-background"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={projectIds.includes(project.id)}
+                          onChange={(event) => toggleProject(project.id, event.target.checked)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {project.name || project.id}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {projectHint(project) || "无项目备注"}
+                          </span>
                         </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {projectHint(project) || "无项目备注"}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">暂无可选项目</div>
-              )}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+                    暂无匹配项目
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-xs text-muted-foreground">
+                <span>
+                  第 {projectPagination.page || 1} / {Math.max(projectPagination.totalPages || 0, 1)} 页，共 {projectPagination.total} 个
+                </span>
+                <span className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    disabled={!canGoPrevProjectPage}
+                    onClick={() => setProjectPage((page) => Math.max(1, page - 1))}
+                    aria-label="上一页项目"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    disabled={!canGoNextProjectPage}
+                    onClick={() => setProjectPage((page) => page + 1)}
+                    aria-label="下一页项目"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </span>
+              </div>
             </div>
             <FieldDescription>
               全部项目模式下勾选的是排除项目；指定项目模式下勾选的是可参与项目。
