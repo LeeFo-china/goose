@@ -658,31 +658,38 @@ function CaseImageCarouselPreview({
   const currentImageUrl = imageUrls[0] || "";
   const safeViewerIndex = viewerIndex === null || imageUrls.length === 0
     ? 0
-    : viewerIndex % imageUrls.length;
+    : clampNumber(viewerIndex, 0, imageUrls.length - 1);
   const touchStartXRef = useRef<number | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const viewerTimerRef = useRef<number | null>(null);
   const [viewerOffset, setViewerOffset] = useState(0);
   const [viewerAnimated, setViewerAnimated] = useState(false);
-  const viewerSlides = imageUrls.length > 1
-    ? [
-      imageUrls[(safeViewerIndex - 1 + imageUrls.length) % imageUrls.length],
-      imageUrls[safeViewerIndex],
-      imageUrls[(safeViewerIndex + 1) % imageUrls.length],
-    ]
-    : [imageUrls[safeViewerIndex] || "", imageUrls[safeViewerIndex] || "", imageUrls[safeViewerIndex] || ""];
+  const viewerSlides = [
+    imageUrls[safeViewerIndex - 1] || "",
+    imageUrls[safeViewerIndex] || "",
+    imageUrls[safeViewerIndex + 1] || "",
+  ];
+  const canSwitchViewerImage = (direction: -1 | 1) => (
+    imageUrls.length > 1
+    && safeViewerIndex + direction >= 0
+    && safeViewerIndex + direction < imageUrls.length
+  );
 
   useEffect(() => () => {
     if (viewerTimerRef.current) {
       window.clearTimeout(viewerTimerRef.current);
+      viewerTimerRef.current = null;
     }
   }, []);
 
   const switchViewerImage = (direction: -1 | 1) => {
-    if (imageUrls.length <= 1) return;
+    if (viewerTimerRef.current) return;
 
-    if (viewerTimerRef.current) {
-      window.clearTimeout(viewerTimerRef.current);
+    if (!canSwitchViewerImage(direction)) {
+      setViewerAnimated(true);
+      setViewerOffset(0);
+      window.setTimeout(() => setViewerAnimated(false), 220);
+      return;
     }
 
     const width = (viewerRef.current?.clientWidth || window.innerWidth) + IMAGE_VIEWER_SLIDE_GAP;
@@ -690,10 +697,9 @@ function CaseImageCarouselPreview({
     setViewerOffset(direction > 0 ? -width : width);
     viewerTimerRef.current = window.setTimeout(() => {
       setViewerAnimated(false);
-      setViewerIndex((index) => (
-        ((index || 0) + direction + imageUrls.length) % imageUrls.length
-      ));
+      setViewerIndex(safeViewerIndex + direction);
       setViewerOffset(0);
+      viewerTimerRef.current = null;
     }, 270);
   };
 
@@ -732,6 +738,10 @@ function CaseImageCarouselPreview({
           setViewerIndex(null);
           setViewerOffset(0);
           setViewerAnimated(false);
+          if (viewerTimerRef.current) {
+            window.clearTimeout(viewerTimerRef.current);
+            viewerTimerRef.current = null;
+          }
         }
       }}>
         <DialogContent className="max-h-[92vh] max-w-[92vw] border-0 bg-black/95 p-3 text-white shadow-2xl">
@@ -797,30 +807,34 @@ function CaseImageCarouselPreview({
             </div>
             {imageUrls.length > 1 ? (
               <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  aria-label="上一张案例图"
-                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
-                  onClick={() => switchViewerImage(-1)}
-                >
-                  <ArrowLeft />
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  aria-label="下一张案例图"
-                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
-                  onClick={() => switchViewerImage(1)}
-                >
-                  <ArrowRight />
-                </Button>
+                {canSwitchViewerImage(-1) ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    aria-label="上一张案例图"
+                    className="absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-white/95 text-foreground shadow-lg hover:bg-white"
+                    onClick={() => switchViewerImage(-1)}
+                  >
+                    <ArrowLeft />
+                  </Button>
+                ) : null}
+                {canSwitchViewerImage(1) ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    aria-label="下一张案例图"
+                    className="absolute right-2 top-1/2 z-10 -translate-y-1/2 bg-white/95 text-foreground shadow-lg hover:bg-white"
+                    onClick={() => switchViewerImage(1)}
+                  >
+                    <ArrowRight />
+                  </Button>
+                ) : null}
               </>
             ) : null}
             {imageUrls.length > 1 ? (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs">
+              <div className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs">
                 {safeViewerIndex + 1}/{imageUrls.length}
               </div>
             ) : null}

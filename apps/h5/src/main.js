@@ -437,12 +437,18 @@ function openCaseImageViewer(images, initialIndex = 0) {
   const count = overlay.querySelector(".image-viewer__count");
   const prevButton = overlay.querySelector(".image-viewer__nav--prev");
   const nextButton = overlay.querySelector(".image-viewer__nav--next");
-  let currentIndex = (initialIndex + images.length) % images.length;
+  let currentIndex = Math.min(Math.max(initialIndex, 0), images.length - 1);
   let touchStartX = null;
   let touchDeltaX = 0;
   let isAnimating = false;
 
-  const getImageAt = (index) => images[(index + images.length) % images.length];
+  const getImageAt = (index) => images[index] || "";
+  const canSwitchImage = (direction) => (
+    images.length > 1
+    && !isAnimating
+    && currentIndex + direction >= 0
+    && currentIndex + direction < images.length
+  );
 
   const setTrackOffset = (offset, animated) => {
     track.style.transition = animated
@@ -452,13 +458,11 @@ function openCaseImageViewer(images, initialIndex = 0) {
   };
 
   const renderSlides = () => {
-    const slideSources = images.length > 1
-      ? [
-        getImageAt(currentIndex - 1),
-        getImageAt(currentIndex),
-        getImageAt(currentIndex + 1),
-      ]
-      : [images[currentIndex], images[currentIndex], images[currentIndex]];
+    const slideSources = [
+      getImageAt(currentIndex - 1),
+      getImageAt(currentIndex),
+      getImageAt(currentIndex + 1),
+    ];
 
     slideImages.forEach((image, index) => {
       image.setAttribute("src", slideSources[index] || "");
@@ -469,20 +473,24 @@ function openCaseImageViewer(images, initialIndex = 0) {
     renderSlides();
     count.textContent = `${currentIndex + 1}/${images.length}`;
     const hasMultipleImages = images.length > 1;
-    prevButton.hidden = !hasMultipleImages;
-    nextButton.hidden = !hasMultipleImages;
+    prevButton.hidden = !hasMultipleImages || currentIndex <= 0;
+    nextButton.hidden = !hasMultipleImages || currentIndex >= images.length - 1;
     count.hidden = !hasMultipleImages;
     setTrackOffset(0, false);
   };
 
   const switchImage = (direction) => {
-    if (images.length <= 1 || isAnimating) return;
+    if (!canSwitchImage(direction)) {
+      setTrackOffset(0, true);
+      return;
+    }
+
     isAnimating = true;
     const width = (viewport.clientWidth || window.innerWidth) + IMAGE_VIEWER_SLIDE_GAP;
     setTrackOffset(direction > 0 ? -width : width, true);
 
     window.setTimeout(() => {
-      currentIndex = (currentIndex + direction + images.length) % images.length;
+      currentIndex += direction;
       isAnimating = false;
       render();
     }, 270);
@@ -541,7 +549,13 @@ function openCaseImageViewer(images, initialIndex = 0) {
       return;
     }
 
-    switchImage(deltaX < 0 ? 1 : -1);
+    const direction = deltaX < 0 ? 1 : -1;
+    if (!canSwitchImage(direction)) {
+      setTrackOffset(0, true);
+      return;
+    }
+
+    switchImage(direction);
   }, { passive: true });
   overlay.addEventListener("touchcancel", () => {
     touchStartX = null;
