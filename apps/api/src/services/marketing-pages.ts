@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import { marketingPageRepository } from "@/repositories/marketing-pages";
+import {
+  marketingPageRepository,
+  type MarketingPageProjectOptionRow,
+} from "@/repositories/marketing-pages";
 import type {
   ConvertMarketingLeadInput,
   CreateMarketingPageInput,
@@ -7,12 +10,14 @@ import type {
   MarketingLeadListQuery,
   MarketingPageConfigInput,
   MarketingPageListQuery,
+  MarketingPageProjectOptionQuery,
   PublicMarketingPageListQuery,
   SubmitMarketingLeadInput,
   TrackMarketingEventInput,
   UpdateMarketingLeadInput,
   UpdateMarketingPageInput,
 } from "@/schema/marketing-pages";
+import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
   getH5MarketingTokenExpiresAt,
@@ -54,6 +59,113 @@ function getDedupSince() {
   return since.toISOString();
 }
 
+function normalizeRelation<T extends Record<string, unknown>>(
+  value: unknown,
+  fallback: T,
+): T {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first && typeof first === "object") {
+      return { ...fallback, ...(first as T) };
+    }
+
+    return fallback;
+  }
+
+  if (value && typeof value === "object") {
+    return { ...fallback, ...(value as T) };
+  }
+
+  return fallback;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeProjectLogImages(images: unknown) {
+  if (!Array.isArray(images)) {
+    return [] as string[];
+  }
+
+  return images
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function createProjectCoverImageMap(rows: MarketingPageProjectOptionRow[]) {
+  const coverMap = new Map<string, string>();
+
+  for (const row of rows) {
+    const projectId = typeof row.project_id === "string" ? row.project_id : "";
+    if (!projectId || coverMap.has(projectId)) {
+      continue;
+    }
+
+    const firstImage = normalizeProjectLogImages(row.images)[0];
+    if (firstImage) {
+      coverMap.set(projectId, firstImage);
+    }
+  }
+
+  return coverMap;
+}
+
+function formatArea(value: unknown) {
+  if (typeof value === "number") {
+    return `${value}m²`;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return `${value.trim()}m²`;
+  }
+
+  return null;
+}
+
+function serializeProjectOption(
+  row: MarketingPageProjectOptionRow,
+  coverImageMap: Map<string, string>,
+) {
+  const property = normalizeRelation(row.property, {
+    community: null,
+    building_info: null,
+    area: null,
+    layout: null,
+  });
+  const customer = normalizeRelation(row.customer, {
+    name: null,
+  });
+  const projectId = typeof row.id === "string" ? row.id : "";
+  const propertyParts = [
+    property.community,
+    property.layout,
+    formatArea(property.area),
+  ].filter(Boolean);
+
+  return {
+    id: projectId,
+    projectId,
+    title: typeof row.name === "string" && row.name.trim()
+      ? row.name
+      : "未命名项目",
+    subtitle: propertyParts.join(" · ") || (typeof row.address === "string" ? row.address : ""),
+    imageUrl: coverImageMap.get(projectId) || "",
+    status: typeof row.status === "string" ? row.status : null,
+    customer_name: typeof customer.name === "string" ? customer.name : null,
+    property,
+    style_tags: normalizeStringArray(row.style_tags),
+  };
+}
+
 type H5IdentityStatus = "identified" | "expired" | "anonymous";
 
 type H5MarketingIdentity = {
@@ -86,6 +198,31 @@ class MarketingPageService {
         published_at: page.published_at,
         updated_at: page.updated_at,
       })),
+    };
+  }
+
+  async listProjectOptions(
+    authContext: AuthContext,
+    query: MarketingPageProjectOptionQuery,
+  ) {
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
+    const data = await marketingPageRepository.listProjectOptions(
+      query,
+      visibleProjectIds,
+    );
+    const projectIds = data.list
+      .map((item) => typeof item.id === "string" ? item.id : "")
+      .filter(Boolean);
+    const coverImageMap = createProjectCoverImageMap(
+      await marketingPageRepository.listLatestProjectLogCoverImages(projectIds),
+    );
+
+    return {
+      list: data.list.map((item) => serializeProjectOption(item, coverImageMap)),
+      pagination: data.pagination,
     };
   }
 

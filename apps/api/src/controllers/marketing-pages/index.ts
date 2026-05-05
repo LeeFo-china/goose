@@ -8,6 +8,7 @@ import {
   MarketingLeadIdParamsSchema,
   MarketingLeadListQuerySchema,
   MarketingPageListQuerySchema,
+  MarketingPageProjectOptionQuerySchema,
   MarketingPageSlugParamsSchema,
   PublicMarketingPageListQuerySchema,
   SaveMarketingPageDraftSchema,
@@ -64,6 +65,20 @@ class MarketingPagesController extends BaseController {
     const data = await marketingPageService.createPage(
       authContext,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/marketing-pages/project-options")
+  async listProjectOptions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const queryResult = MarketingPageProjectOptionQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await marketingPageService.listProjectOptions(
+      authContext,
+      queryResult.data,
     );
     return ResponseHandler.success(data);
   }

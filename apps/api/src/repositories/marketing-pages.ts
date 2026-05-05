@@ -4,6 +4,7 @@ import type {
   MarketingLeadListQuery,
   MarketingPageConfigInput,
   MarketingPageListQuery,
+  MarketingPageProjectOptionQuery,
   PublicMarketingPageListQuery,
   SubmitMarketingLeadInput,
   TrackMarketingEventInput,
@@ -79,12 +80,15 @@ export type MarketingEventRecord = {
   created_at: string;
 };
 
+export type MarketingPageProjectOptionRow = Record<string, unknown>;
+
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   delete: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  in: (...args: unknown[]) => UntypedTable;
   neq: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
   lte: (...args: unknown[]) => UntypedTable;
@@ -118,6 +122,23 @@ function escapeSupabaseOrValue(value: string) {
     .replace(/,/g, "\\,");
 }
 
+const PROJECT_OPTION_SELECT = `
+  id,
+  name,
+  status,
+  address,
+  style_tags,
+  property:properties!projects_property_id_fkey(
+    community,
+    building_info,
+    area,
+    layout
+  ),
+  customer:customers!projects_customer_id_fkey(
+    name
+  )
+`;
+
 class MarketingPageRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -145,6 +166,29 @@ class MarketingPageRepository {
 
   private customers() {
     return this.from("customers");
+  }
+
+  private projects() {
+    return this.from("projects");
+  }
+
+  private projectLogs() {
+    return this.from("project_logs");
+  }
+
+  private applyProjectIdsFilter(
+    request: UntypedTable,
+    visibleProjectIds: string[] | null,
+  ) {
+    if (visibleProjectIds === null) {
+      return request;
+    }
+
+    if (visibleProjectIds.length === 0) {
+      return request.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+
+    return request.in("id", visibleProjectIds);
   }
 
   async listPages(query: MarketingPageListQuery) {
@@ -220,6 +264,84 @@ class MarketingPageRepository {
       | "published_at"
       | "updated_at"
     >[];
+  }
+
+  async listProjectOptions(
+    query: MarketingPageProjectOptionQuery,
+    visibleProjectIds: string[] | null,
+  ) {
+    const { page, pageSize, keyword } = query;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const normalizedKeyword = keyword?.trim();
+
+    let countRequest = this.projects()
+      .select("id", { count: "exact", head: true });
+    countRequest = this.applyProjectIdsFilter(countRequest, visibleProjectIds);
+    if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
+      countRequest = countRequest.or(
+        `name.ilike.%${escapedKeyword}%,address.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    const { error: countError, count } = await countRequest;
+    if (countError) {
+      throw Errors.dbError("项目案例选项计数失败", countError);
+    }
+
+    const total = count ?? 0;
+    const pagination = {
+      page,
+      pageSize,
+      total,
+      totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+    };
+
+    if (from >= total) {
+      return {
+        list: [] as MarketingPageProjectOptionRow[],
+        pagination,
+      };
+    }
+
+    let request = this.projects()
+      .select(PROJECT_OPTION_SELECT)
+      .order("created_at", { ascending: false });
+    request = this.applyProjectIdsFilter(request, visibleProjectIds);
+    if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
+      request = request.or(
+        `name.ilike.%${escapedKeyword}%,address.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    const { data, error } = await request.range(from, to);
+    if (error) {
+      throw Errors.dbError("项目案例选项查询失败", error);
+    }
+
+    return {
+      list: (data || []) as MarketingPageProjectOptionRow[],
+      pagination,
+    };
+  }
+
+  async listLatestProjectLogCoverImages(projectIds: string[]) {
+    if (projectIds.length === 0) {
+      return [] as MarketingPageProjectOptionRow[];
+    }
+
+    const { data, error } = await this.projectLogs()
+      .select("project_id, images, created_at")
+      .in("project_id", projectIds)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询项目案例封面失败", error);
+    }
+
+    return (data || []) as MarketingPageProjectOptionRow[];
   }
 
   async findPageById(id: string) {

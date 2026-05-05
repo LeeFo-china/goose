@@ -143,6 +143,10 @@ export const MarketingPageListQuerySchema = PaginationQuerySchema.extend({
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
 });
 
+export const MarketingPageProjectOptionQuerySchema = PaginationQuerySchema.extend({
+  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+});
+
 export const PublicMarketingPageListQuerySchema = z.object({
   scene: optionalQueryValue(
     z.enum(MARKETING_PAGE_DISPLAY_SCENE_VALUES, {
@@ -218,6 +222,7 @@ export const TrackMarketingEventSchema = z.object({
 export type CreateMarketingPageInput = z.infer<typeof CreateMarketingPageSchema>;
 export type UpdateMarketingPageInput = z.infer<typeof UpdateMarketingPageSchema>;
 export type MarketingPageListQuery = z.infer<typeof MarketingPageListQuerySchema>;
+export type MarketingPageProjectOptionQuery = z.infer<typeof MarketingPageProjectOptionQuerySchema>;
 export type PublicMarketingPageListQuery = z.infer<typeof PublicMarketingPageListQuerySchema>;
 export type MarketingPageConfigInput = z.infer<typeof MarketingPageConfigSchema>;
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -17,6 +17,7 @@ import {
   Phone,
   Plus,
   Save,
+  Search,
   Send,
   Trash2,
   Type,
@@ -73,6 +74,22 @@ type LoadedImageFile = {
 type ImageRepairState = LoadedImageFile & {
   issues: string[];
   usage: ImageUsage;
+};
+
+type ProjectCaseOption = {
+  id: string;
+  projectId?: string;
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+  status?: string | null;
+};
+
+type CaseListItem = {
+  projectId?: string;
+  title: string;
+  subtitle: string;
+  imageUrl: string;
 };
 
 type H5BlockType =
@@ -346,6 +363,26 @@ async function uploadEditorImage(file: File) {
   return url;
 }
 
+async function fetchProjectCaseOptions(keyword: string) {
+  const query = new URLSearchParams({
+    page: "1",
+    pageSize: "8",
+  });
+  if (keyword.trim()) {
+    query.set("keyword", keyword.trim());
+  }
+
+  const response = await fetch(`/api/backend/marketing-pages/project-options?${query}`, {
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "项目案例加载失败"));
+  }
+
+  return (payload?.data?.list || []) as ProjectCaseOption[];
+}
+
 function createBlockId(type: H5BlockType) {
   return `${type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -508,11 +545,20 @@ function parseCaseItems(value: unknown) {
 
     const record = item as Record<string, unknown>;
     return {
+      projectId: typeof record.projectId === "string" ? record.projectId : "",
       title: typeof record.title === "string" ? record.title : "",
       subtitle: typeof record.subtitle === "string" ? record.subtitle : "",
       imageUrl: typeof record.imageUrl === "string" ? record.imageUrl : "",
     };
   });
+}
+
+function moveCaseItem(items: CaseListItem[], fromIndex: number, toIndex: number) {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
+    return items;
+  }
+
+  return moveItem(items, fromIndex, toIndex);
 }
 
 function blockSummary(block: H5Block) {
@@ -782,9 +828,13 @@ function PropertyPanel({
       {block.type === "case_list" ? (
         <>
           <TextField label="标题" value={getString(props, "title")} onChange={(value) => update("title", value)} />
+          <ProjectCaseSelector
+            items={parseCaseItems(props.items)}
+            onChange={(items) => update("items", items)}
+          />
           <TextareaField
             label="案例 JSON"
-            description="数组格式，每项包含 title、subtitle、imageUrl。"
+            description="兜底编辑。数组格式，每项包含 projectId、title、subtitle、imageUrl。"
             value={JSON.stringify(parseCaseItems(props.items), null, 2)}
             onChange={(value) => {
               try {
@@ -833,6 +883,191 @@ function PropertyPanel({
         </>
       ) : null}
     </FieldGroup>
+  );
+}
+
+function ProjectCaseSelector({
+  items,
+  onChange,
+}: {
+  items: CaseListItem[];
+  onChange: (items: CaseListItem[]) => void;
+}) {
+  const [keyword, setKeyword] = useState("");
+  const [options, setOptions] = useState<ProjectCaseOption[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setLoading(true);
+    fetchProjectCaseOptions("")
+      .then((list) => {
+        if (!cancelled) setOptions(list);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "项目案例加载失败");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const searchOptions = async () => {
+    setLoading(true);
+    try {
+      setOptions(await fetchProjectCaseOptions(keyword));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "项目案例加载失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addOption = (option: ProjectCaseOption) => {
+    const projectId = option.projectId || option.id;
+    if (projectId && items.some((item) => item.projectId === projectId)) {
+      toast.error("该项目已在案例列表");
+      return;
+    }
+
+    onChange([
+      ...items,
+      {
+        projectId,
+        title: option.title || "未命名项目",
+        subtitle: option.subtitle || "",
+        imageUrl: option.imageUrl || "",
+      },
+    ]);
+  };
+
+  return (
+    <Field>
+      <FieldLabel>项目案例</FieldLabel>
+      <div className="flex gap-2">
+        <Input
+          value={keyword}
+          placeholder="搜索项目名称或地址"
+          onChange={(event) => setKeyword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void searchOptions();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" disabled={loading} onClick={() => void searchOptions()}>
+          {loading ? (
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Search data-icon="inline-start" />
+          )}
+          搜索
+        </Button>
+      </div>
+      <FieldDescription>
+        从项目库选择后会写入当前活动页配置，后续页面展示使用这份快照。
+      </FieldDescription>
+
+      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+        {options.length > 0 ? options.map((option) => {
+          const projectId = option.projectId || option.id;
+          const selected = Boolean(projectId && items.some((item) => item.projectId === projectId));
+
+          return (
+            <div
+              key={option.id}
+              className="flex items-center gap-3 rounded-md border bg-background p-2"
+            >
+              <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
+                {option.imageUrl
+                  ? previewImage(option.imageUrl, option.title, "size-full object-cover")
+                  : "无图"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{option.title || "未命名项目"}</div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">
+                  {option.subtitle || option.status || "项目信息待补"}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant={selected ? "secondary" : "outline"}
+                size="sm"
+                disabled={selected}
+                onClick={() => addOption(option)}
+              >
+                <Plus data-icon="inline-start" />
+                {selected ? "已添加" : "添加"}
+              </Button>
+            </div>
+          );
+        }) : (
+          <div className="rounded-md border border-dashed bg-background px-3 py-6 text-center text-sm text-muted-foreground">
+            {loading ? "项目加载中" : "暂无可选项目"}
+          </div>
+        )}
+      </div>
+
+      {items.length > 0 ? (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">已选案例</div>
+          {items.map((item, index) => (
+            <div
+              key={`${item.projectId || item.title || "case"}-${index}`}
+              className="flex items-center gap-3 rounded-md border bg-background p-2"
+            >
+              <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
+                {item.imageUrl
+                  ? previewImage(item.imageUrl, item.title, "size-full object-cover")
+                  : "无图"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{item.title || "未命名项目"}</div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">
+                  {item.subtitle || "项目信息待补"}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={index === 0}
+                  onClick={() => onChange(moveCaseItem(items, index, index - 1))}
+                >
+                  <ArrowUp />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={index === items.length - 1}
+                  onClick={() => onChange(moveCaseItem(items, index, index + 1))}
+                >
+                  <ArrowDown />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Field>
   );
 }
 
