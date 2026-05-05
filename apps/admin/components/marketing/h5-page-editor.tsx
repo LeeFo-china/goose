@@ -883,19 +883,6 @@ function PropertyPanel({
             items={parseCaseItems(props.items)}
             onChange={(items) => update("items", items)}
           />
-          <TextareaField
-            label="案例 JSON"
-            description="兜底编辑。数组格式，每项包含 projectId、title、subtitle、imageUrl。"
-            value={JSON.stringify(parseCaseItems(props.items), null, 2)}
-            onChange={(value) => {
-              try {
-                const parsed = JSON.parse(value);
-                update("items", Array.isArray(parsed) ? parsed : []);
-              } catch {
-                update("items", []);
-              }
-            }}
-          />
         </>
       ) : null}
 
