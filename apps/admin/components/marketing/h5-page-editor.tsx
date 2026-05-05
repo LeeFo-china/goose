@@ -608,6 +608,7 @@ function PreviewBlock({
   const props = block.props || {};
   const imageUrl = getString(props, "imageUrl");
   const logoUrl = getString(props, "logo");
+  const caseItems = block.type === "case_list" ? parseCaseItems(props.items) : [];
 
   return (
     <div
@@ -699,6 +700,39 @@ function PreviewBlock({
               {getString(props, "content") || "图文说明"}
             </div>
           </div>
+        </div>
+      ) : block.type === "case_list" ? (
+        <div className="p-4">
+          <div className="text-lg font-semibold">{getString(props, "title") || "案例列表"}</div>
+          <div className="mt-3 space-y-3">
+            {caseItems.length > 0 ? caseItems.slice(0, 3).map((item, index) => (
+              <div
+                key={`${item.projectId || item.title || "case"}-${index}`}
+                className="overflow-hidden rounded-md border bg-background"
+              >
+                <div className="grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-xs text-muted-foreground">
+                  {item.imageUrl
+                    ? previewImage(item.imageUrl, item.title || "案例图片", "size-full object-cover")
+                    : "案例图片"}
+                </div>
+                <div className="p-3">
+                  <div className="truncate text-sm font-medium">{item.title || "未命名项目"}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    {item.subtitle || "项目信息待补"}
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                暂无案例
+              </div>
+            )}
+          </div>
+          {caseItems.length > 3 ? (
+            <div className="mt-3 text-center text-xs text-muted-foreground">
+              另有 {caseItems.length - 3} 个案例
+            </div>
+          ) : null}
         </div>
       ) : block.type === "footer" ? (
         <div className="flex items-center gap-3 p-4">
