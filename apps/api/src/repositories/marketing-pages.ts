@@ -729,7 +729,7 @@ class MarketingPageRepository {
   }
 
   async listLeads(query: MarketingLeadListQuery) {
-    const { page, pageSize, status, page_id, keyword } = query;
+    const { page, pageSize, status, page_id, keyword, created_from, created_to } = query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -748,6 +748,14 @@ class MarketingPageRepository {
 
     if (page_id) {
       request = request.eq("page_id", page_id);
+    }
+
+    if (created_from) {
+      request = request.gte("created_at", created_from);
+    }
+
+    if (created_to) {
+      request = request.lte("created_at", created_to);
     }
 
     if (keyword) {

@@ -180,6 +180,8 @@ export const MarketingLeadListQuerySchema = PaginationQuerySchema.extend({
   ),
   page_id: optionalQueryValue(z.uuid("无效的活动页 ID")),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  created_from: optionalQueryValue(z.iso.datetime("无效的开始时间")),
+  created_to: optionalQueryValue(z.iso.datetime("无效的结束时间")),
 });
 
 export const MarketingLeadIdParamsSchema = z.object({

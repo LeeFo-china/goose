@@ -10,13 +10,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { H5MarketingLeadsTable } from "@/components/marketing/h5-leads-table";
+import { H5LeadsPanel } from "@/components/marketing/h5-leads-panel";
 import { CreateH5MarketingPageButton } from "@/components/marketing/h5-page-mutations";
 import { H5MarketingPagesTable } from "@/components/marketing/h5-pages-table";
 import { campaignStatusOptions } from "@/components/marketing/marketing-constants";
 import {
-  H5LeadFilters,
-  H5LeadPagination,
   MarketingFilters,
   MarketingPagination,
 } from "@/components/marketing/marketing-list-actions";
@@ -45,6 +43,8 @@ type MarketingPageSearchParams = {
   lead_status?: string;
   lead_keyword?: string;
   lead_page_id?: string;
+  lead_created_from?: string;
+  lead_created_to?: string;
 };
 
 type MarketingTab = "campaigns" | "h5";
@@ -85,6 +85,20 @@ function normalizeTab(value: string | undefined): MarketingTab {
   return value === "h5" ? "h5" : "campaigns";
 }
 
+function dateStartToIso(value: string) {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function dateEndToIso(value: string) {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const date = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
 function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
   const query = new URLSearchParams();
   query.set("tab", tab);
@@ -99,6 +113,8 @@ function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
     if (params.lead_status) query.set("lead_status", params.lead_status);
     if (params.lead_keyword) query.set("lead_keyword", params.lead_keyword);
     if (params.lead_page_id) query.set("lead_page_id", params.lead_page_id);
+    if (params.lead_created_from) query.set("lead_created_from", params.lead_created_from);
+    if (params.lead_created_to) query.set("lead_created_to", params.lead_created_to);
   }
 
   return `/marketing?${query.toString()}`;
@@ -280,9 +296,13 @@ async function getH5Leads(token: string | null, params: MarketingPageSearchParam
   const status = params.lead_status?.trim() || "";
   const keyword = params.lead_keyword?.trim() || "";
   const pageId = params.lead_page_id?.trim() || "";
+  const createdFrom = params.lead_created_from?.trim() || "";
+  const createdTo = params.lead_created_to?.trim() || "";
   if (status) query.set("status", status);
   if (keyword) query.set("keyword", keyword);
   if (pageId) query.set("page_id", pageId);
+  if (createdFrom) query.set("created_from", dateStartToIso(createdFrom));
+  if (createdTo) query.set("created_to", dateEndToIso(createdTo));
 
   try {
     const data = await fetchBackendData<H5LeadListData>(
@@ -325,6 +345,8 @@ export default async function MarketingPage({
   const leadStatus = params.lead_status?.trim() || "";
   const leadKeyword = params.lead_keyword?.trim() || "";
   const leadPageId = params.lead_page_id?.trim() || "";
+  const leadCreatedFrom = params.lead_created_from?.trim() || "";
+  const leadCreatedTo = params.lead_created_to?.trim() || "";
   const activeCount = list.filter((item) => item.status === "active").length;
   const pausedCount = list.filter((item) => item.status === "paused").length;
   const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
@@ -525,51 +547,17 @@ export default async function MarketingPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4">
-              <H5LeadFilters
-                status={leadStatus}
-                keyword={leadKeyword}
-                pageId={leadPageId}
-                pages={h5Pages.list}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <div>
-                <CardTitle>H5 营销线索</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  当前筛选共 {h5Leads.pagination.total} 条，当前页新线索 {newLeadCount} 条。
-                </p>
-              </div>
-              <Badge variant="outline">
-                第 {h5Leads.pagination.page} / {Math.max(h5Leads.pagination.totalPages, 1)} 页
-              </Badge>
-            </CardHeader>
-            <CardContent className="p-0">
-              {h5Leads.error ? (
-                <div className="p-4">
-                  <StatusAlert>{h5Leads.error}</StatusAlert>
-                </div>
-              ) : (
-                <H5MarketingLeadsTable leads={h5Leads.list} />
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              每页 {h5Leads.pagination.pageSize} 条，共 {h5Leads.pagination.total} 条
-            </div>
-            <H5LeadPagination
-              pagination={h5Leads.pagination}
-              status={leadStatus}
-              keyword={leadKeyword}
-              pageId={leadPageId}
-            />
-          </div>
+          <H5LeadsPanel
+            initialData={h5Leads}
+            initialFilters={{
+              status: leadStatus,
+              pageId: leadPageId,
+              keyword: leadKeyword,
+              createdFrom: leadCreatedFrom,
+              createdTo: leadCreatedTo,
+            }}
+            pages={h5Pages.list}
+          />
         </>
       )}
     </div>

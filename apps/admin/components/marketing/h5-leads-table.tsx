@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, MessageSquareText, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +33,8 @@ const statusVariant: Record<string, "success" | "warning" | "secondary" | "outli
   converted: "success",
   invalid: "secondary",
 };
+
+type LeadUpdatedHandler = (lead: H5MarketingLeadRecord) => void;
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
@@ -73,6 +74,8 @@ async function requestLeadUpdate(input: {
   if (!response.ok || payload.success === false) {
     throw new Error(getPayloadMessage(payload, "更新线索失败"));
   }
+
+  return payload.data as H5MarketingLeadRecord;
 }
 
 async function requestLeadConvert(input: {
@@ -92,12 +95,18 @@ async function requestLeadConvert(input: {
   }
 
   return payload.data as {
+    lead?: H5MarketingLeadRecord;
     created?: boolean;
   };
 }
 
-function LeadFollowAction({ lead }: { lead: H5MarketingLeadRecord }) {
-  const router = useRouter();
+function LeadFollowAction({
+  lead,
+  onLeadUpdated,
+}: {
+  lead: H5MarketingLeadRecord;
+  onLeadUpdated?: (lead: H5MarketingLeadRecord) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<H5MarketingLeadStatus>(lead.lead_status || "new");
@@ -106,14 +115,14 @@ function LeadFollowAction({ lead }: { lead: H5MarketingLeadRecord }) {
   function submit() {
     startTransition(async () => {
       try {
-        await requestLeadUpdate({
+        const updatedLead = await requestLeadUpdate({
           id: lead.id,
           lead_status: status,
           follow_remark: remark.trim() || null,
         });
         toast.success("线索跟进状态已更新");
         setOpen(false);
-        router.refresh();
+        onLeadUpdated?.(updatedLead);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "更新线索失败");
       }
@@ -170,8 +179,13 @@ function LeadFollowAction({ lead }: { lead: H5MarketingLeadRecord }) {
   );
 }
 
-function LeadConvertAction({ lead }: { lead: H5MarketingLeadRecord }) {
-  const router = useRouter();
+function LeadConvertAction({
+  lead,
+  onLeadUpdated,
+}: {
+  lead: H5MarketingLeadRecord;
+  onLeadUpdated?: (lead: H5MarketingLeadRecord) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [remark, setRemark] = useState(lead.follow_remark || "");
@@ -185,7 +199,9 @@ function LeadConvertAction({ lead }: { lead: H5MarketingLeadRecord }) {
         });
         toast.success(data.created ? "已创建客户并绑定线索" : "已绑定已有客户");
         setOpen(false);
-        router.refresh();
+        if (data.lead) {
+          onLeadUpdated?.(data.lead);
+        }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "转客户失败");
       }
@@ -247,8 +263,13 @@ function LeadConvertAction({ lead }: { lead: H5MarketingLeadRecord }) {
   );
 }
 
-function LeadInvalidateAction({ lead }: { lead: H5MarketingLeadRecord }) {
-  const router = useRouter();
+function LeadInvalidateAction({
+  lead,
+  onLeadUpdated,
+}: {
+  lead: H5MarketingLeadRecord;
+  onLeadUpdated?: (lead: H5MarketingLeadRecord) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const disabled = lead.lead_status === "invalid" || lead.lead_status === "converted";
@@ -256,14 +277,14 @@ function LeadInvalidateAction({ lead }: { lead: H5MarketingLeadRecord }) {
   function submit() {
     startTransition(async () => {
       try {
-        await requestLeadUpdate({
+        const updatedLead = await requestLeadUpdate({
           id: lead.id,
           lead_status: "invalid",
           follow_remark: lead.follow_remark || "线索已作废",
         });
         toast.success("线索已作废");
         setOpen(false);
-        router.refresh();
+        onLeadUpdated?.(updatedLead);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "作废线索失败");
       }
@@ -386,13 +407,18 @@ const columns: ColumnDef<H5MarketingLeadRecord>[] = [
   {
     id: "actions",
     header: "操作",
-    cell: ({ row }) => (
-      <div className="flex justify-end gap-2">
-        <LeadFollowAction lead={row.original} />
-        <LeadConvertAction lead={row.original} />
-        <LeadInvalidateAction lead={row.original} />
-      </div>
-    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as { onLeadUpdated?: LeadUpdatedHandler } | undefined;
+      const onLeadUpdated = meta?.onLeadUpdated;
+
+      return (
+        <div className="flex justify-end gap-2">
+          <LeadFollowAction lead={row.original} onLeadUpdated={onLeadUpdated} />
+          <LeadConvertAction lead={row.original} onLeadUpdated={onLeadUpdated} />
+          <LeadInvalidateAction lead={row.original} onLeadUpdated={onLeadUpdated} />
+        </div>
+      );
+    },
     meta: {
       headerClassName: "text-right",
       cellClassName: "whitespace-nowrap text-right",
@@ -402,8 +428,10 @@ const columns: ColumnDef<H5MarketingLeadRecord>[] = [
 
 export function H5MarketingLeadsTable({
   leads,
+  onLeadUpdated,
 }: {
   leads: H5MarketingLeadRecord[];
+  onLeadUpdated?: LeadUpdatedHandler;
 }) {
   return (
     <DataTable
@@ -411,6 +439,7 @@ export function H5MarketingLeadsTable({
       data={leads}
       emptyText="还没有 H5 营销线索"
       minWidth="min-w-[1260px]"
+      tableMeta={{ onLeadUpdated }}
     />
   );
 }
