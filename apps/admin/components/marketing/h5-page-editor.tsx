@@ -788,10 +788,7 @@ function CaseImageCarouselPreview({
                         src={imageUrl}
                         alt={item.title || "案例图片"}
                         draggable={false}
-                        className={cn(
-                          "max-h-[70vh] max-w-full select-none rounded-xl object-contain shadow-2xl",
-                          index !== 1 && "scale-[0.94] opacity-70",
-                        )}
+                        className="max-h-[70vh] max-w-full select-none rounded-xl object-contain shadow-2xl"
                       />
                     ) : null}
                   </div>
@@ -805,7 +802,7 @@ function CaseImageCarouselPreview({
                   variant="secondary"
                   size="icon"
                   aria-label="上一张案例图"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
+                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
                   onClick={() => switchViewerImage(-1)}
                 >
                   <ArrowLeft />
@@ -815,7 +812,7 @@ function CaseImageCarouselPreview({
                   variant="secondary"
                   size="icon"
                   aria-label="下一张案例图"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
+                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
                   onClick={() => switchViewerImage(1)}
                 >
                   <ArrowRight />

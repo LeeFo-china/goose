@@ -367,15 +367,10 @@ img {
   -webkit-user-drag: none;
 }
 
-.image-viewer__slide:first-child img,
-.image-viewer__slide:last-child img {
-  opacity: 0.72;
-  transform: scale(0.94);
-}
-
 .image-viewer__close,
 .image-viewer__nav {
   position: absolute;
+  z-index: 2;
   display: grid;
   place-items: center;
   border: 0;
