@@ -57,6 +57,7 @@ const EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const EDITOR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const EDITOR_IMAGE_OUTPUT_MAX_WIDTH = 1200;
 const PROJECT_CASE_SELECTOR_PAGE_SIZE = 5;
+const IMAGE_VIEWER_SLIDE_GAP = 22;
 const EDITOR_IMAGE_ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -684,7 +685,7 @@ function CaseImageCarouselPreview({
       window.clearTimeout(viewerTimerRef.current);
     }
 
-    const width = viewerRef.current?.clientWidth || window.innerWidth;
+    const width = (viewerRef.current?.clientWidth || window.innerWidth) + IMAGE_VIEWER_SLIDE_GAP;
     setViewerAnimated(true);
     setViewerOffset(direction > 0 ? -width : width);
     viewerTimerRef.current = window.setTimeout(() => {
@@ -693,7 +694,7 @@ function CaseImageCarouselPreview({
         ((index || 0) + direction + imageUrls.length) % imageUrls.length
       ));
       setViewerOffset(0);
-    }, 230);
+    }, 270);
   };
 
   return (
@@ -773,11 +774,11 @@ function CaseImageCarouselPreview({
             <div className="w-full max-w-[900px] overflow-hidden">
               <div
                 className={cn(
-                  "flex h-[70vh] will-change-transform",
-                  viewerAnimated && "transition-transform duration-200 ease-out",
+                  "flex h-[70vh] gap-[22px] will-change-transform",
+                  viewerAnimated && "transition-transform duration-[260ms] ease-out",
                 )}
                 style={{
-                  transform: `translate3d(calc(-100% + ${viewerOffset}px), 0, 0)`,
+                  transform: `translate3d(calc(-100% - ${IMAGE_VIEWER_SLIDE_GAP}px + ${viewerOffset}px), 0, 0)`,
                 }}
               >
                 {viewerSlides.map((imageUrl, index) => (
@@ -787,7 +788,10 @@ function CaseImageCarouselPreview({
                         src={imageUrl}
                         alt={item.title || "案例图片"}
                         draggable={false}
-                        className="max-h-[70vh] max-w-full select-none object-contain"
+                        className={cn(
+                          "max-h-[70vh] max-w-full select-none rounded-xl object-contain shadow-2xl",
+                          index !== 1 && "scale-[0.94] opacity-70",
+                        )}
                       />
                     ) : null}
                   </div>

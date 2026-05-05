@@ -16,6 +16,7 @@ const FIELD_LABELS = {
   community: "小区",
   city: "城市",
 };
+const IMAGE_VIEWER_SLIDE_GAP = 22;
 
 function getApiBaseUrl() {
   if (runtimeConfig.apiBaseUrl) {
@@ -445,9 +446,9 @@ function openCaseImageViewer(images, initialIndex = 0) {
 
   const setTrackOffset = (offset, animated) => {
     track.style.transition = animated
-      ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)"
+      ? "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)"
       : "none";
-    track.style.transform = `translate3d(calc(-100% + ${offset}px), 0, 0)`;
+    track.style.transform = `translate3d(calc(-100% - ${IMAGE_VIEWER_SLIDE_GAP}px + ${offset}px), 0, 0)`;
   };
 
   const renderSlides = () => {
@@ -477,14 +478,14 @@ function openCaseImageViewer(images, initialIndex = 0) {
   const switchImage = (direction) => {
     if (images.length <= 1 || isAnimating) return;
     isAnimating = true;
-    const width = viewport.clientWidth || window.innerWidth;
+    const width = (viewport.clientWidth || window.innerWidth) + IMAGE_VIEWER_SLIDE_GAP;
     setTrackOffset(direction > 0 ? -width : width, true);
 
     window.setTimeout(() => {
       currentIndex = (currentIndex + direction + images.length) % images.length;
       isAnimating = false;
       render();
-    }, 230);
+    }, 270);
   };
 
   const onKeyDown = (event) => {
