@@ -1049,29 +1049,29 @@ function ProjectCaseSelector({
       </div>
 
       {pagination.totalPages > 1 ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-2">
+        <div className="grid grid-cols-[32px_1fr_32px] items-center gap-2 rounded-md border bg-background px-2 py-2">
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
+            aria-label="上一页"
             disabled={loading || pagination.page <= 1}
             onClick={() => void loadOptions(Math.max(1, pagination.page - 1))}
           >
-            <ArrowLeft data-icon="inline-start" />
-            上一页
+            <ArrowLeft />
           </Button>
-          <div className="text-xs text-muted-foreground">
-            第 {pagination.page} / {pagination.totalPages} 页，共 {pagination.total} 个
+          <div className="min-w-0 truncate text-center text-xs text-muted-foreground">
+            {pagination.page}/{pagination.totalPages} · {pagination.total}个
           </div>
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
+            aria-label="下一页"
             disabled={loading || pagination.page >= pagination.totalPages}
             onClick={() => void loadOptions(Math.min(pagination.totalPages, pagination.page + 1))}
           >
-            下一页
-            <ArrowRight data-icon="inline-end" />
+            <ArrowRight />
           </Button>
         </div>
       ) : null}
