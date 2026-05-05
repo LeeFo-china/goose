@@ -62,6 +62,11 @@ const EDITOR_IMAGE_ALLOWED_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+const LEAD_FORM_FIELD_LABELS: Record<string, string> = {
+  name: "姓名",
+  phone: "手机号",
+  community: "小区",
+};
 
 type ImageUsage = "hero" | "content" | "logo";
 
@@ -480,6 +485,10 @@ function normalizeLeadFormFields(value: unknown) {
   return Array.from(new Set(fields));
 }
 
+function getLeadFormFieldLabel(field: string) {
+  return LEAD_FORM_FIELD_LABELS[field] || field;
+}
+
 function normalizeBlock(block: H5Block): H5Block {
   if (block.type !== "lead_form") {
     return block;
@@ -752,7 +761,7 @@ function PreviewBlock({
           <div className="mt-4 flex flex-col gap-2">
             {normalizeLeadFormFields(props.fields).map((field) => (
               <div key={String(field)} className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-                {String(field)}
+                {getLeadFormFieldLabel(String(field))}
               </div>
             ))}
           </div>
