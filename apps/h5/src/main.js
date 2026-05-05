@@ -429,6 +429,7 @@ function openCaseImageViewer(images, initialIndex = 0) {
   const prevButton = overlay.querySelector(".image-viewer__nav--prev");
   const nextButton = overlay.querySelector(".image-viewer__nav--next");
   let currentIndex = (initialIndex + images.length) % images.length;
+  let touchStartX = null;
 
   const render = () => {
     image.setAttribute("src", images[currentIndex]);
@@ -469,6 +470,22 @@ function openCaseImageViewer(images, initialIndex = 0) {
   overlay.querySelector(".image-viewer__close")?.addEventListener("click", closeCaseImageViewer);
   prevButton?.addEventListener("click", () => switchImage(-1));
   nextButton?.addEventListener("click", () => switchImage(1));
+  overlay.addEventListener("touchstart", (event) => {
+    touchStartX = event.touches[0]?.clientX ?? null;
+  }, { passive: true });
+  overlay.addEventListener("touchend", (event) => {
+    if (touchStartX === null || images.length <= 1) {
+      touchStartX = null;
+      return;
+    }
+
+    const touchEndX = event.changedTouches[0]?.clientX ?? touchStartX;
+    const deltaX = touchEndX - touchStartX;
+    touchStartX = null;
+    if (Math.abs(deltaX) < 40) return;
+
+    switchImage(deltaX < 0 ? 1 : -1);
+  }, { passive: true });
 
   caseImageViewerState = { overlay, onKeyDown };
   document.body.appendChild(overlay);
@@ -485,12 +502,10 @@ function renderCaseList(block) {
     const imageUrls = caseImageSets[index] || [];
 
     return `
-    <article class="case-card" data-case-index="${index}" data-image-index="0">
+    <article class="case-card" data-case-index="${index}">
       <div class="case-image-stage" ${imageUrls[0] ? `data-case-image-open="true" role="button" tabindex="0"` : ""}>
         ${imageUrls[0] ? `<img src="${escapeHtml(imageUrls[0])}" alt="" loading="lazy" data-case-image="true" />` : ""}
         ${imageUrls.length > 1 ? `
-          <button class="case-image-nav case-image-nav--prev" type="button" aria-label="上一张案例图" data-case-image-prev="true">‹</button>
-          <button class="case-image-nav case-image-nav--next" type="button" aria-label="下一张案例图" data-case-image-next="true">›</button>
           <span class="case-image-count" data-case-image-count="true">1/${imageUrls.length}</span>
         ` : ""}
       </div>
@@ -507,38 +522,12 @@ function renderCaseList(block) {
     <div class="case-list">${itemsHtml || "<p class='muted'>暂无案例</p>"}</div>
   `);
 
-  node.querySelectorAll("[data-case-image-prev='true'], [data-case-image-next='true']").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const card = event.currentTarget.closest("[data-case-index]");
-      const caseIndex = Number(card?.dataset.caseIndex);
-      const images = Number.isInteger(caseIndex) ? caseImageSets[caseIndex] || [] : [];
-      if (!card || images.length <= 1) return;
-
-      const direction = event.currentTarget.dataset.caseImagePrev === "true" ? -1 : 1;
-      const currentIndex = Number(card.dataset.imageIndex) || 0;
-      const nextIndex = (currentIndex + direction + images.length) % images.length;
-      const image = card.querySelector("[data-case-image='true']");
-      const count = card.querySelector("[data-case-image-count='true']");
-
-      card.dataset.imageIndex = String(nextIndex);
-      if (image) {
-        image.setAttribute("src", images[nextIndex]);
-      }
-      if (count) {
-        count.textContent = `${nextIndex + 1}/${images.length}`;
-      }
-    });
-  });
-
   node.querySelectorAll("[data-case-image-open='true']").forEach((stage) => {
     const openViewer = () => {
       const card = stage.closest("[data-case-index]");
       const caseIndex = Number(card?.dataset.caseIndex);
       const images = Number.isInteger(caseIndex) ? caseImageSets[caseIndex] || [] : [];
-      const currentIndex = Number(card?.dataset.imageIndex) || 0;
-      openCaseImageViewer(images, currentIndex);
+      openCaseImageViewer(images, 0);
     };
 
     stage.addEventListener("click", openViewer);

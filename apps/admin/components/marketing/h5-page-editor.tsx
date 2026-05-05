@@ -609,22 +609,13 @@ function CaseImageCarouselPreview({
   item: CaseListItem;
 }) {
   const imageUrls = normalizeCaseImageUrls(item);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const safeCurrentIndex = imageUrls.length > 0 ? currentIndex % imageUrls.length : 0;
-  const currentImageUrl = imageUrls[safeCurrentIndex] || "";
+  const currentImageUrl = imageUrls[0] || "";
   const safeViewerIndex = viewerIndex === null || imageUrls.length === 0
     ? 0
     : viewerIndex % imageUrls.length;
   const viewerImageUrl = imageUrls[safeViewerIndex] || "";
-
-  const switchImage = (direction: -1 | 1) => {
-    if (imageUrls.length <= 1) return;
-
-    setCurrentIndex((index) => (
-      index + direction + imageUrls.length
-    ) % imageUrls.length);
-  };
+  const touchStartXRef = useRef<number | null>(null);
 
   const switchViewerImage = (direction: -1 | 1) => {
     if (imageUrls.length <= 1) return;
@@ -646,45 +637,21 @@ function CaseImageCarouselPreview({
         onClick={(event) => {
           if (!currentImageUrl) return;
           event.stopPropagation();
-          setViewerIndex(safeCurrentIndex);
+          setViewerIndex(0);
         }}
         onKeyDown={(event) => {
           if (!currentImageUrl || event.key !== "Enter") return;
           event.stopPropagation();
-          setViewerIndex(safeCurrentIndex);
+          setViewerIndex(0);
         }}
       >
         {currentImageUrl
           ? previewImage(currentImageUrl, item.title || "案例图片", "size-full object-cover")
           : "案例图片"}
         {imageUrls.length > 1 ? (
-          <>
-            <button
-              type="button"
-              aria-label="上一张案例图"
-              className="absolute left-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                switchImage(-1);
-              }}
-            >
-              <ArrowLeft className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="下一张案例图"
-              className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                switchImage(1);
-              }}
-            >
-              <ArrowRight className="size-4" />
-            </button>
-            <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] leading-5 text-white">
-              {safeCurrentIndex + 1}/{imageUrls.length}
-            </div>
-          </>
+          <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] leading-5 text-white">
+            1/{imageUrls.length}
+          </div>
         ) : null}
       </div>
 
@@ -696,7 +663,23 @@ function CaseImageCarouselPreview({
             <DialogTitle>案例图片浏览</DialogTitle>
             <DialogDescription>查看当前案例的图片</DialogDescription>
           </DialogHeader>
-          <div className="relative grid min-h-[70vh] place-items-center">
+          <div
+            className="relative grid min-h-[70vh] place-items-center"
+            onTouchStart={(event) => {
+              touchStartXRef.current = event.touches[0]?.clientX ?? null;
+            }}
+            onTouchEnd={(event) => {
+              const startX = touchStartXRef.current;
+              touchStartXRef.current = null;
+              if (startX === null || imageUrls.length <= 1) return;
+
+              const endX = event.changedTouches[0]?.clientX ?? startX;
+              const deltaX = endX - startX;
+              if (Math.abs(deltaX) < 40) return;
+
+              switchViewerImage(deltaX < 0 ? 1 : -1);
+            }}
+          >
             {viewerImageUrl ? (
               <img
                 src={viewerImageUrl}

@@ -290,30 +290,6 @@ img {
   object-fit: cover;
 }
 
-.case-image-nav {
-  position: absolute;
-  top: 50%;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  color: var(--page-text);
-  font-size: 20px;
-  line-height: 1;
-  transform: translateY(-50%);
-}
-
-.case-image-nav--prev {
-  left: 6px;
-}
-
-.case-image-nav--next {
-  right: 6px;
-}
-
 .case-image-count {
   position: absolute;
   right: 6px;
