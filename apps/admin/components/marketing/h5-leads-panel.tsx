@@ -125,12 +125,11 @@ export function H5LeadsPanel({
       });
     } catch (err) {
       if (requestSeqRef.current !== requestSeq) return;
-      setLeads([]);
       setPagination({
         page,
         pageSize: LEAD_PAGE_SIZE,
-        total: 0,
-        totalPages: 0,
+        total: pagination.total,
+        totalPages: pagination.totalPages,
       });
       setError(err instanceof Error ? err.message : "H5 营销线索加载失败");
     } finally {
@@ -138,7 +137,7 @@ export function H5LeadsPanel({
         setLoading(false);
       }
     }
-  }, [filters, page]);
+  }, [filters, page, pagination.total, pagination.totalPages]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -171,7 +170,7 @@ export function H5LeadsPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="grid gap-3 p-4 lg:grid-cols-[150px_210px_1fr_150px_150px_auto]">
           <FormSelect
             id="h5-lead-status-filter"
@@ -250,7 +249,15 @@ export function H5LeadsPanel({
             第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
           </Badge>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="relative p-0">
+          {loading ? (
+            <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-[1px]">
+              <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm">
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                正在更新线索列表
+              </div>
+            </div>
+          ) : null}
           {error ? (
             <div className="p-4">
               <StatusAlert>{error}</StatusAlert>
