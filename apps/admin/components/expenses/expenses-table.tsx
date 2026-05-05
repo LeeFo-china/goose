@@ -236,8 +236,8 @@ export function ExpensesTable({
         );
       },
       meta: {
-        headerClassName: "text-right",
-        cellClassName: "relative whitespace-nowrap text-right",
+        headerClassName: "sticky right-0 z-10 bg-muted text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        cellClassName: "sticky right-0 z-10 whitespace-nowrap bg-card text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
   ];
