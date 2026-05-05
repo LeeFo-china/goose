@@ -12,6 +12,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ExpenseRowActions,
   type ExpenseRecord,
 } from "@/components/expenses/expense-mutations";
@@ -95,6 +100,42 @@ function projectName(expense: ExpenseRecord) {
   return project?.name || "-";
 }
 
+function ExpenseIdentityCell({
+  id,
+  title,
+  requestNo,
+  mode,
+}: {
+  id: string;
+  title: string;
+  requestNo: string;
+  mode: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="w-[10em] truncate font-medium">
+          {title}
+        </div>
+        <div className="w-[10em] truncate text-xs text-muted-foreground">
+          {requestNo}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-[280px]">
+        <div className="flex flex-col gap-1">
+          <div className="break-all font-medium">{title}</div>
+          <div className="break-all text-xs opacity-90">单号：{requestNo}</div>
+          <div className="break-all text-xs opacity-90">模式：{mode}</div>
+          <div className="break-all text-xs opacity-90">申请 ID：{id}</div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ExpensesTable({
   expenses,
   currentEmployeeId,
@@ -109,17 +150,12 @@ export function ExpensesTable({
       accessorKey: "title",
       header: "申请",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">
-            {row.original.title || "未命名费用申请"}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.request_no || row.original.id}
-          </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">
-            {modeMeta[row.original.mode] || row.original.mode}
-          </div>
-        </div>
+        <ExpenseIdentityCell
+          id={row.original.id}
+          title={row.original.title || "未命名费用申请"}
+          requestNo={row.original.request_no || row.original.id}
+          mode={modeMeta[row.original.mode] || row.original.mode}
+        />
       ),
     },
     {
