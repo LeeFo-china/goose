@@ -399,6 +399,84 @@ function normalizeCaseImageUrls(item = {}) {
   ].map((url) => String(url || "").trim()).filter(Boolean)));
 }
 
+let caseImageViewerState = null;
+
+function closeCaseImageViewer() {
+  if (!caseImageViewerState) return;
+
+  caseImageViewerState.overlay.remove();
+  document.removeEventListener("keydown", caseImageViewerState.onKeyDown);
+  document.body.classList.remove("image-viewer-open");
+  caseImageViewerState = null;
+}
+
+function openCaseImageViewer(images, initialIndex = 0) {
+  if (!Array.isArray(images) || images.length === 0) return;
+  closeCaseImageViewer();
+
+  const overlay = document.createElement("div");
+  overlay.className = "image-viewer";
+  overlay.innerHTML = `
+    <button class="image-viewer__close" type="button" aria-label="关闭图片浏览">×</button>
+    <button class="image-viewer__nav image-viewer__nav--prev" type="button" aria-label="上一张图片">‹</button>
+    <img class="image-viewer__image" alt="" />
+    <button class="image-viewer__nav image-viewer__nav--next" type="button" aria-label="下一张图片">›</button>
+    <span class="image-viewer__count"></span>
+  `;
+
+  const image = overlay.querySelector(".image-viewer__image");
+  const count = overlay.querySelector(".image-viewer__count");
+  const prevButton = overlay.querySelector(".image-viewer__nav--prev");
+  const nextButton = overlay.querySelector(".image-viewer__nav--next");
+  let currentIndex = (initialIndex + images.length) % images.length;
+
+  const render = () => {
+    image.setAttribute("src", images[currentIndex]);
+    count.textContent = `${currentIndex + 1}/${images.length}`;
+    const hasMultipleImages = images.length > 1;
+    prevButton.hidden = !hasMultipleImages;
+    nextButton.hidden = !hasMultipleImages;
+    count.hidden = !hasMultipleImages;
+  };
+
+  const switchImage = (direction) => {
+    if (images.length <= 1) return;
+    currentIndex = (currentIndex + direction + images.length) % images.length;
+    render();
+  };
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      closeCaseImageViewer();
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      switchImage(-1);
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      switchImage(1);
+    }
+  };
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      closeCaseImageViewer();
+    }
+  });
+  overlay.querySelector(".image-viewer__close")?.addEventListener("click", closeCaseImageViewer);
+  prevButton?.addEventListener("click", () => switchImage(-1));
+  nextButton?.addEventListener("click", () => switchImage(1));
+
+  caseImageViewerState = { overlay, onKeyDown };
+  document.body.appendChild(overlay);
+  document.body.classList.add("image-viewer-open");
+  document.addEventListener("keydown", onKeyDown);
+  render();
+}
+
 function renderCaseList(block) {
   const props = block.props || {};
   const cases = Array.isArray(props.items) ? props.items : [];
@@ -408,7 +486,7 @@ function renderCaseList(block) {
 
     return `
     <article class="case-card" data-case-index="${index}" data-image-index="0">
-      <div class="case-image-stage">
+      <div class="case-image-stage" ${imageUrls[0] ? `data-case-image-open="true" role="button" tabindex="0"` : ""}>
         ${imageUrls[0] ? `<img src="${escapeHtml(imageUrls[0])}" alt="" loading="lazy" data-case-image="true" />` : ""}
         ${imageUrls.length > 1 ? `
           <button class="case-image-nav case-image-nav--prev" type="button" aria-label="上一张案例图" data-case-image-prev="true">‹</button>
@@ -432,6 +510,7 @@ function renderCaseList(block) {
   node.querySelectorAll("[data-case-image-prev='true'], [data-case-image-next='true']").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
+      event.stopPropagation();
       const card = event.currentTarget.closest("[data-case-index]");
       const caseIndex = Number(card?.dataset.caseIndex);
       const images = Number.isInteger(caseIndex) ? caseImageSets[caseIndex] || [] : [];
@@ -450,6 +529,23 @@ function renderCaseList(block) {
       if (count) {
         count.textContent = `${nextIndex + 1}/${images.length}`;
       }
+    });
+  });
+
+  node.querySelectorAll("[data-case-image-open='true']").forEach((stage) => {
+    const openViewer = () => {
+      const card = stage.closest("[data-case-index]");
+      const caseIndex = Number(card?.dataset.caseIndex);
+      const images = Number.isInteger(caseIndex) ? caseImageSets[caseIndex] || [] : [];
+      const currentIndex = Number(card?.dataset.imageIndex) || 0;
+      openCaseImageViewer(images, currentIndex);
+    };
+
+    stage.addEventListener("click", openViewer);
+    stage.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      openViewer();
     });
   });
 

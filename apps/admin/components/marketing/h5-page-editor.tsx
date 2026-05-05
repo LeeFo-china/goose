@@ -610,8 +610,13 @@ function CaseImageCarouselPreview({
 }) {
   const imageUrls = normalizeCaseImageUrls(item);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const safeCurrentIndex = imageUrls.length > 0 ? currentIndex % imageUrls.length : 0;
   const currentImageUrl = imageUrls[safeCurrentIndex] || "";
+  const safeViewerIndex = viewerIndex === null || imageUrls.length === 0
+    ? 0
+    : viewerIndex % imageUrls.length;
+  const viewerImageUrl = imageUrls[safeViewerIndex] || "";
 
   const switchImage = (direction: -1 | 1) => {
     if (imageUrls.length <= 1) return;
@@ -621,41 +626,117 @@ function CaseImageCarouselPreview({
     ) % imageUrls.length);
   };
 
+  const switchViewerImage = (direction: -1 | 1) => {
+    if (imageUrls.length <= 1) return;
+
+    setViewerIndex((index) => (
+      ((index || 0) + direction + imageUrls.length) % imageUrls.length
+    ));
+  };
+
   return (
-    <div className="relative grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-xs text-muted-foreground">
-      {currentImageUrl
-        ? previewImage(currentImageUrl, item.title || "案例图片", "size-full object-cover")
-        : "案例图片"}
-      {imageUrls.length > 1 ? (
-        <>
-          <button
-            type="button"
-            aria-label="上一张案例图"
-            className="absolute left-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
-            onClick={(event) => {
-              event.stopPropagation();
-              switchImage(-1);
-            }}
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="下一张案例图"
-            className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
-            onClick={(event) => {
-              event.stopPropagation();
-              switchImage(1);
-            }}
-          >
-            <ArrowRight className="size-4" />
-          </button>
-          <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] leading-5 text-white">
-            {safeCurrentIndex + 1}/{imageUrls.length}
+    <>
+      <div
+        role={currentImageUrl ? "button" : undefined}
+        tabIndex={currentImageUrl ? 0 : undefined}
+        className={cn(
+          "relative grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-xs text-muted-foreground",
+          currentImageUrl && "cursor-zoom-in",
+        )}
+        onClick={(event) => {
+          if (!currentImageUrl) return;
+          event.stopPropagation();
+          setViewerIndex(safeCurrentIndex);
+        }}
+        onKeyDown={(event) => {
+          if (!currentImageUrl || event.key !== "Enter") return;
+          event.stopPropagation();
+          setViewerIndex(safeCurrentIndex);
+        }}
+      >
+        {currentImageUrl
+          ? previewImage(currentImageUrl, item.title || "案例图片", "size-full object-cover")
+          : "案例图片"}
+        {imageUrls.length > 1 ? (
+          <>
+            <button
+              type="button"
+              aria-label="上一张案例图"
+              className="absolute left-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                switchImage(-1);
+              }}
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="下一张案例图"
+              className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                switchImage(1);
+              }}
+            >
+              <ArrowRight className="size-4" />
+            </button>
+            <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] leading-5 text-white">
+              {safeCurrentIndex + 1}/{imageUrls.length}
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      <Dialog open={viewerIndex !== null} onOpenChange={(open) => {
+        if (!open) setViewerIndex(null);
+      }}>
+        <DialogContent className="max-h-[92vh] max-w-[92vw] border-0 bg-black/95 p-3 text-white shadow-2xl">
+          <DialogHeader className="sr-only">
+            <DialogTitle>案例图片浏览</DialogTitle>
+            <DialogDescription>查看当前案例的图片</DialogDescription>
+          </DialogHeader>
+          <div className="relative grid min-h-[70vh] place-items-center">
+            {viewerImageUrl ? (
+              <img
+                src={viewerImageUrl}
+                alt={item.title || "案例图片"}
+                className="max-h-[82vh] max-w-full object-contain"
+              />
+            ) : null}
+            {imageUrls.length > 1 ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  aria-label="上一张案例图"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
+                  onClick={() => switchViewerImage(-1)}
+                >
+                  <ArrowLeft />
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  aria-label="下一张案例图"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 text-foreground hover:bg-white"
+                  onClick={() => switchViewerImage(1)}
+                >
+                  <ArrowRight />
+                </Button>
+              </>
+            ) : null}
+            {imageUrls.length > 1 ? (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs">
+                {safeViewerIndex + 1}/{imageUrls.length}
+              </div>
+            ) : null}
           </div>
-        </>
-      ) : null}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
