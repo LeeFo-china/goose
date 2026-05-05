@@ -559,6 +559,34 @@ img {
   font-size: 18px;
 }
 
+.floating-phone-cta-block {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--floating-phone-bottom, 96px) + env(safe-area-inset-bottom));
+  z-index: 30;
+  margin: 0;
+}
+
+.floating-phone-cta-block.is-left {
+  right: auto;
+  left: 16px;
+}
+
+.floating-phone-cta {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--page-primary);
+  box-shadow: 0 12px 30px rgba(15, 118, 110, 0.26);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 16px;
+}
+
 .footer-block {
   padding: 24px 0 4px;
   color: var(--page-muted);

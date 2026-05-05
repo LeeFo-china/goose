@@ -118,6 +118,7 @@ type H5BlockType =
   | "countdown"
   | "lead_form"
   | "phone_cta"
+  | "floating_phone_cta"
   | "footer";
 
 type H5Block = {
@@ -164,6 +165,7 @@ const moduleTemplates: Array<{
   { type: "countdown", label: "倒计时", description: "活动截止提醒", icon: Megaphone },
   { type: "lead_form", label: "预约表单", description: "收集姓名、手机号、小区", icon: Send },
   { type: "phone_cta", label: "电话按钮", description: "一键拨打咨询电话", icon: Phone },
+  { type: "floating_phone_cta", label: "悬浮电话", description: "固定在屏幕上的拨号按钮", icon: Phone },
   { type: "footer", label: "底部信息", description: "品牌、门店或备案信息", icon: Type },
 ];
 
@@ -467,6 +469,16 @@ function createBlock(type: H5BlockType): H5Block {
       };
     case "phone_cta":
       return { ...base, props: { text: "电话咨询", phone: "" } };
+    case "floating_phone_cta":
+      return {
+        ...base,
+        props: {
+          text: "电话咨询",
+          phone: "",
+          side: "right",
+          bottom: 96,
+        },
+      };
     case "footer":
       return { ...base, props: { text: "GoodCMS", logo: "" } };
   }
@@ -521,6 +533,38 @@ function normalizeConfig(config: H5PageConfig | null | undefined, page: H5PageEd
 function getString(props: Record<string, unknown>, key: string) {
   const value = props[key];
   return typeof value === "string" ? value : "";
+}
+
+function getNumber(props: Record<string, unknown>, key: string, fallback: number) {
+  const value = props[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getFloatingPhoneProps(props: Record<string, unknown>) {
+  const side = props.side === "left" ? "left" : "right";
+  const bottom = clampNumber(getNumber(props, "bottom", 96), 24, 520);
+
+  return {
+    text: getString(props, "text") || "电话咨询",
+    phone: getString(props, "phone"),
+    side,
+    bottom,
+  };
 }
 
 function getActionType(props: Record<string, unknown>, key: string) {
@@ -974,6 +1018,80 @@ function PreviewBlock({
   );
 }
 
+function FloatingPhonePreview({
+  block,
+  phoneFrameRef,
+  selected,
+  onChange,
+  onSelect,
+}: {
+  block: H5Block;
+  phoneFrameRef: { current: HTMLDivElement | null };
+  selected: boolean;
+  onChange: (props: Record<string, unknown>) => void;
+  onSelect: () => void;
+}) {
+  const props = getFloatingPhoneProps(block.props || {});
+  const draggingRef = useRef(false);
+
+  const updatePosition = (clientX: number, clientY: number) => {
+    const frame = phoneFrameRef.current;
+    if (!frame) return;
+
+    const rect = frame.getBoundingClientRect();
+    const side = clientX < rect.left + rect.width / 2 ? "left" : "right";
+    const maxBottom = Math.max(24, rect.height - 96);
+    const bottom = clampNumber(rect.bottom - clientY - 22, 24, maxBottom);
+
+    onChange({
+      ...block.props,
+      side,
+      bottom: Math.round(bottom),
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "absolute z-30 flex h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition-shadow",
+        "cursor-grab active:cursor-grabbing",
+        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+      )}
+      style={{
+        bottom: props.bottom,
+        [props.side]: 18,
+      }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        draggingRef.current = true;
+        onSelect();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updatePosition(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        if (!draggingRef.current) return;
+        event.stopPropagation();
+        updatePosition(event.clientX, event.clientY);
+      }}
+      onPointerUp={(event) => {
+        draggingRef.current = false;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => {
+        draggingRef.current = false;
+      }}
+    >
+      <Phone className="size-4" />
+      <span>{props.text}</span>
+    </button>
+  );
+}
+
 function PropertyPanel({
   block,
   onChange,
@@ -1115,6 +1233,33 @@ function PropertyPanel({
         <>
           <TextField label="按钮文案" value={getString(props, "text")} onChange={(value) => update("text", value)} />
           <TextField label="电话号码" value={getString(props, "phone")} onChange={(value) => update("phone", value)} />
+        </>
+      ) : null}
+
+      {block.type === "floating_phone_cta" ? (
+        <>
+          <TextField label="按钮文案" value={getString(props, "text")} onChange={(value) => update("text", value)} />
+          <TextField
+            label="电话号码"
+            description="点击悬浮按钮后会唤起手机拨号。"
+            value={getString(props, "phone")}
+            onChange={(value) => update("phone", value)}
+          />
+          <SelectField
+            label="吸附位置"
+            value={getFloatingPhoneProps(props).side}
+            options={[
+              { value: "left", label: "左侧" },
+              { value: "right", label: "右侧" },
+            ]}
+            onChange={(value) => update("side", value)}
+          />
+          <TextField
+            label="底部距离"
+            description="单位 px，也可以直接在手机预览中拖动按钮调整。"
+            value={String(getFloatingPhoneProps(props).bottom)}
+            onChange={(value) => update("bottom", clampNumber(Number(value) || 96, 24, 520))}
+          />
         </>
       ) : null}
 
@@ -1747,12 +1892,15 @@ export function H5PageEditor({
   const [config, setConfig] = useState(() => normalizeConfig(draftVersion.config, page));
   const [selectedBlockId, setSelectedBlockId] = useState(config.blocks[0]?.id || "");
   const [dragBlockId, setDragBlockId] = useState("");
+  const phoneFrameRef = useRef<HTMLDivElement | null>(null);
   const [pending, startTransition] = useTransition();
   const selectedBlock = useMemo(
     () => config.blocks.find((block) => block.id === selectedBlockId) || null,
     [config.blocks, selectedBlockId],
   );
   const pageUrl = `${getH5BaseUrl()}/p/${page.slug}`;
+  const normalBlocks = config.blocks.filter((block) => block.type !== "floating_phone_cta");
+  const floatingBlocks = config.blocks.filter((block) => block.type === "floating_phone_cta");
 
   function updateConfig(next: Partial<H5PageConfig>) {
     setConfig((current) => ({ ...current, ...next }));
@@ -1948,10 +2096,13 @@ export function H5PageEditor({
             </Field>
           </div>
 
-          <div className="mx-auto min-h-[680px] w-full max-w-[390px] rounded-[24px] border bg-background p-3 shadow-sm">
+          <div
+            ref={phoneFrameRef}
+            className="relative mx-auto min-h-[680px] w-full max-w-[390px] overflow-hidden rounded-[24px] border bg-background p-3 shadow-sm"
+          >
             <div className="mb-3 h-5 rounded-full bg-muted" />
             <div className="flex min-h-[620px] flex-col gap-3 rounded-md bg-muted/40 p-2">
-              {config.blocks.length ? config.blocks.map((block, index) => (
+              {normalBlocks.length ? normalBlocks.map((block) => (
                 <PreviewBlock
                   key={block.id}
                   block={block}
@@ -1969,6 +2120,16 @@ export function H5PageEditor({
                 </div>
               )}
             </div>
+            {floatingBlocks.map((block) => (
+              <FloatingPhonePreview
+                key={block.id}
+                block={block}
+                phoneFrameRef={phoneFrameRef}
+                selected={block.id === selectedBlockId}
+                onSelect={() => setSelectedBlockId(block.id)}
+                onChange={(props) => updateBlockProps(block.id, props)}
+              />
+            ))}
           </div>
         </section>
 

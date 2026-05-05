@@ -38,6 +38,7 @@ export const MARKETING_PAGE_BLOCK_TYPE_VALUES = [
   'countdown',
   'lead_form',
   'phone_cta',
+  'floating_phone_cta',
   'footer',
 ] as const;
 
@@ -122,6 +123,7 @@ export const MarketingPageBlockTypeConfig: Record<
   countdown: { label: '倒计时' },
   lead_form: { label: '预约表单' },
   phone_cta: { label: '电话按钮' },
+  floating_phone_cta: { label: '悬浮电话' },
   footer: { label: '底部信息' },
 };
 

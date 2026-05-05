@@ -832,6 +832,26 @@ function renderPhoneCta(block, slug) {
   return node;
 }
 
+function renderFloatingPhoneCta(block, slug) {
+  const props = block.props || {};
+  const phone = props.phone || "";
+  const side = props.side === "left" ? "left" : "right";
+  const bottom = Number.isFinite(Number(props.bottom))
+    ? Math.min(Math.max(Number(props.bottom), 24), 520)
+    : 96;
+  const node = createSection(block, "floating-phone-cta-block", `
+    <button class="floating-phone-cta" type="button">
+      <span>${escapeHtml(props.text || "电话咨询")}</span>
+    </button>
+  `);
+  node.classList.add(`is-${side}`);
+  node.style.setProperty("--floating-phone-bottom", `${bottom}px`);
+  node.querySelector("button")?.addEventListener("click", () => {
+    handleAction(slug, block, { type: "phone", phone });
+  });
+  return node;
+}
+
 function renderFooter(block) {
   const props = block.props || {};
   return createSection(block, "footer-block", `
@@ -856,6 +876,7 @@ const renderers = {
   countdown: renderCountdown,
   lead_form: renderLeadForm,
   phone_cta: renderPhoneCta,
+  floating_phone_cta: renderFloatingPhoneCta,
   footer: renderFooter,
 };
 
