@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Copy,
   ExternalLink,
@@ -55,6 +56,7 @@ const H5_MARKETING_RETURN_HREF = "/marketing?tab=h5";
 const EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const EDITOR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const EDITOR_IMAGE_OUTPUT_MAX_WIDTH = 1200;
+const PROJECT_CASE_SELECTOR_PAGE_SIZE = 5;
 const EDITOR_IMAGE_ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -83,6 +85,13 @@ type ProjectCaseOption = {
   subtitle: string;
   imageUrl: string;
   status?: string | null;
+};
+
+type ProjectCaseOptionPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 };
 
 type CaseListItem = {
@@ -363,10 +372,10 @@ async function uploadEditorImage(file: File) {
   return url;
 }
 
-async function fetchProjectCaseOptions(keyword: string) {
+async function fetchProjectCaseOptions(keyword: string, page = 1) {
   const query = new URLSearchParams({
-    page: "1",
-    pageSize: "8",
+    page: String(page),
+    pageSize: String(PROJECT_CASE_SELECTOR_PAGE_SIZE),
   });
   if (keyword.trim()) {
     query.set("keyword", keyword.trim());
@@ -380,7 +389,15 @@ async function fetchProjectCaseOptions(keyword: string) {
     throw new Error(getPayloadMessage(payload, "项目案例加载失败"));
   }
 
-  return (payload?.data?.list || []) as ProjectCaseOption[];
+  return {
+    list: (payload?.data?.list || []) as ProjectCaseOption[],
+    pagination: {
+      page: Number(payload?.data?.pagination?.page) || page,
+      pageSize: Number(payload?.data?.pagination?.pageSize) || PROJECT_CASE_SELECTOR_PAGE_SIZE,
+      total: Number(payload?.data?.pagination?.total) || 0,
+      totalPages: Number(payload?.data?.pagination?.totalPages) || 0,
+    },
+  };
 }
 
 function createBlockId(type: H5BlockType) {
@@ -895,15 +912,24 @@ function ProjectCaseSelector({
 }) {
   const [keyword, setKeyword] = useState("");
   const [options, setOptions] = useState<ProjectCaseOption[]>([]);
+  const [pagination, setPagination] = useState<ProjectCaseOptionPagination>({
+    page: 1,
+    pageSize: PROJECT_CASE_SELECTOR_PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     setLoading(true);
-    fetchProjectCaseOptions("")
-      .then((list) => {
-        if (!cancelled) setOptions(list);
+    fetchProjectCaseOptions("", 1)
+      .then((data) => {
+        if (!cancelled) {
+          setOptions(data.list);
+          setPagination(data.pagination);
+        }
       })
       .catch((error) => {
         if (!cancelled) {
@@ -919,15 +945,21 @@ function ProjectCaseSelector({
     };
   }, []);
 
-  const searchOptions = async () => {
+  const loadOptions = async (nextPage: number, nextKeyword = keyword) => {
     setLoading(true);
     try {
-      setOptions(await fetchProjectCaseOptions(keyword));
+      const data = await fetchProjectCaseOptions(nextKeyword, nextPage);
+      setOptions(data.list);
+      setPagination(data.pagination);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "项目案例加载失败");
     } finally {
       setLoading(false);
     }
+  };
+
+  const searchOptions = async () => {
+    await loadOptions(1, keyword);
   };
 
   const addOption = (option: ProjectCaseOption) => {
@@ -973,7 +1005,7 @@ function ProjectCaseSelector({
         </Button>
       </div>
       <FieldDescription>
-        从项目库选择后会写入当前活动页配置，后续页面展示使用这份快照。
+        从项目库选择后会写入当前活动页配置，每页显示 5 个项目。
       </FieldDescription>
 
       <div className="space-y-2 rounded-md border bg-muted/20 p-2">
@@ -1015,6 +1047,34 @@ function ProjectCaseSelector({
           </div>
         )}
       </div>
+
+      {pagination.totalPages > 1 ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={loading || pagination.page <= 1}
+            onClick={() => void loadOptions(Math.max(1, pagination.page - 1))}
+          >
+            <ArrowLeft data-icon="inline-start" />
+            上一页
+          </Button>
+          <div className="text-xs text-muted-foreground">
+            第 {pagination.page} / {pagination.totalPages} 页，共 {pagination.total} 个
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={loading || pagination.page >= pagination.totalPages}
+            onClick={() => void loadOptions(Math.min(pagination.totalPages, pagination.page + 1))}
+          >
+            下一页
+            <ArrowRight data-icon="inline-end" />
+          </Button>
+        </div>
+      ) : null}
 
       {items.length > 0 ? (
         <div className="space-y-2">
