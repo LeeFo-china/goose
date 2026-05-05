@@ -83,6 +83,14 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function renderPhoneIcon() {
+  return `
+    <svg class="phone-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.9.66 2.8a2 2 0 0 1-.45 2.11L8.05 9.9a16 16 0 0 0 6.05 6.05l1.27-1.27a2 2 0 0 1 2.11-.45c.9.31 1.84.53 2.8.66A2 2 0 0 1 22 16.92Z" />
+    </svg>
+  `;
+}
+
 function normalizeBlocks(config) {
   return Array.isArray(config?.blocks) ? config.blocks : [];
 }
@@ -836,8 +844,8 @@ function renderPhoneCta(block, slug) {
   const props = block.props || {};
   const phone = props.phone || "";
   const node = createSection(block, "phone-cta-block", `
-    <button class="secondary-action" type="button">
-      <span>${escapeHtml(props.text || "电话咨询")}</span>
+    <button class="secondary-action phone-cta-button" type="button">
+      <span class="phone-cta-label">${renderPhoneIcon()}<span>${escapeHtml(props.text || "电话咨询")}</span></span>
       ${phone ? `<strong>${escapeHtml(phone)}</strong>` : ""}
     </button>
   `);
@@ -856,6 +864,7 @@ function renderFloatingPhoneCta(block, slug) {
     : 96;
   const node = createSection(block, "floating-phone-cta-block", `
     <button class="floating-phone-cta" type="button">
+      ${renderPhoneIcon()}
       <span>${escapeHtml(props.text || "电话咨询")}</span>
     </button>
   `);
