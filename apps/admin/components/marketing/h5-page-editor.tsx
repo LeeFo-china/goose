@@ -735,9 +735,9 @@ function PreviewBlock({
           ) : null}
         </div>
       ) : block.type === "footer" ? (
-        <div className="flex items-center gap-3 p-4">
+        <div className="p-4 text-center">
           {logoUrl ? (
-            <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+            <div className="mx-auto mb-2 flex size-[72px] items-center justify-center overflow-hidden rounded-md bg-muted">
               {previewImage(logoUrl, "Logo 预览", "size-full object-contain")}
             </div>
           ) : null}
