@@ -614,15 +614,42 @@ function CaseImageCarouselPreview({
   const safeViewerIndex = viewerIndex === null || imageUrls.length === 0
     ? 0
     : viewerIndex % imageUrls.length;
-  const viewerImageUrl = imageUrls[safeViewerIndex] || "";
   const touchStartXRef = useRef<number | null>(null);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
+  const viewerTimerRef = useRef<number | null>(null);
+  const [viewerOffset, setViewerOffset] = useState(0);
+  const [viewerAnimated, setViewerAnimated] = useState(false);
+  const viewerSlides = imageUrls.length > 1
+    ? [
+      imageUrls[(safeViewerIndex - 1 + imageUrls.length) % imageUrls.length],
+      imageUrls[safeViewerIndex],
+      imageUrls[(safeViewerIndex + 1) % imageUrls.length],
+    ]
+    : [imageUrls[safeViewerIndex] || "", imageUrls[safeViewerIndex] || "", imageUrls[safeViewerIndex] || ""];
+
+  useEffect(() => () => {
+    if (viewerTimerRef.current) {
+      window.clearTimeout(viewerTimerRef.current);
+    }
+  }, []);
 
   const switchViewerImage = (direction: -1 | 1) => {
     if (imageUrls.length <= 1) return;
 
-    setViewerIndex((index) => (
-      ((index || 0) + direction + imageUrls.length) % imageUrls.length
-    ));
+    if (viewerTimerRef.current) {
+      window.clearTimeout(viewerTimerRef.current);
+    }
+
+    const width = viewerRef.current?.clientWidth || window.innerWidth;
+    setViewerAnimated(true);
+    setViewerOffset(direction > 0 ? -width : width);
+    viewerTimerRef.current = window.setTimeout(() => {
+      setViewerAnimated(false);
+      setViewerIndex((index) => (
+        ((index || 0) + direction + imageUrls.length) % imageUrls.length
+      ));
+      setViewerOffset(0);
+    }, 230);
   };
 
   return (
@@ -656,7 +683,11 @@ function CaseImageCarouselPreview({
       </div>
 
       <Dialog open={viewerIndex !== null} onOpenChange={(open) => {
-        if (!open) setViewerIndex(null);
+        if (!open) {
+          setViewerIndex(null);
+          setViewerOffset(0);
+          setViewerAnimated(false);
+        }
       }}>
         <DialogContent className="max-h-[92vh] max-w-[92vw] border-0 bg-black/95 p-3 text-white shadow-2xl">
           <DialogHeader className="sr-only">
@@ -664,9 +695,19 @@ function CaseImageCarouselPreview({
             <DialogDescription>查看当前案例的图片</DialogDescription>
           </DialogHeader>
           <div
+            ref={viewerRef}
             className="relative grid min-h-[70vh] place-items-center"
             onTouchStart={(event) => {
+              setViewerAnimated(false);
               touchStartXRef.current = event.touches[0]?.clientX ?? null;
+            }}
+            onTouchMove={(event) => {
+              const startX = touchStartXRef.current;
+              if (startX === null || imageUrls.length <= 1) return;
+
+              const currentX = event.touches[0]?.clientX ?? startX;
+              setViewerOffset(currentX - startX);
+              event.preventDefault();
             }}
             onTouchEnd={(event) => {
               const startX = touchStartXRef.current;
@@ -675,18 +716,40 @@ function CaseImageCarouselPreview({
 
               const endX = event.changedTouches[0]?.clientX ?? startX;
               const deltaX = endX - startX;
-              if (Math.abs(deltaX) < 40) return;
+              if (Math.abs(deltaX) < 40) {
+                setViewerAnimated(true);
+                setViewerOffset(0);
+                window.setTimeout(() => setViewerAnimated(false), 220);
+                return;
+              }
 
               switchViewerImage(deltaX < 0 ? 1 : -1);
             }}
           >
-            {viewerImageUrl ? (
-              <img
-                src={viewerImageUrl}
-                alt={item.title || "案例图片"}
-                className="max-h-[82vh] max-w-full object-contain"
-              />
-            ) : null}
+            <div className="w-full max-w-[900px] overflow-hidden">
+              <div
+                className={cn(
+                  "flex h-[70vh] will-change-transform",
+                  viewerAnimated && "transition-transform duration-200 ease-out",
+                )}
+                style={{
+                  transform: `translate3d(calc(-100% + ${viewerOffset}px), 0, 0)`,
+                }}
+              >
+                {viewerSlides.map((imageUrl, index) => (
+                  <div key={`${imageUrl}-${index}`} className="grid min-w-full place-items-center">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={item.title || "案例图片"}
+                        draggable={false}
+                        className="max-h-[70vh] max-w-full select-none object-contain"
+                      />
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
             {imageUrls.length > 1 ? (
               <>
                 <Button

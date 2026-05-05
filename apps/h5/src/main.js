@@ -419,31 +419,72 @@ function openCaseImageViewer(images, initialIndex = 0) {
   overlay.innerHTML = `
     <button class="image-viewer__close" type="button" aria-label="关闭图片浏览">×</button>
     <button class="image-viewer__nav image-viewer__nav--prev" type="button" aria-label="上一张图片">‹</button>
-    <img class="image-viewer__image" alt="" />
+    <div class="image-viewer__viewport">
+      <div class="image-viewer__track">
+        <div class="image-viewer__slide"><img alt="" /></div>
+        <div class="image-viewer__slide"><img alt="" /></div>
+        <div class="image-viewer__slide"><img alt="" /></div>
+      </div>
+    </div>
     <button class="image-viewer__nav image-viewer__nav--next" type="button" aria-label="下一张图片">›</button>
     <span class="image-viewer__count"></span>
   `;
 
-  const image = overlay.querySelector(".image-viewer__image");
+  const viewport = overlay.querySelector(".image-viewer__viewport");
+  const track = overlay.querySelector(".image-viewer__track");
+  const slideImages = Array.from(overlay.querySelectorAll(".image-viewer__slide img"));
   const count = overlay.querySelector(".image-viewer__count");
   const prevButton = overlay.querySelector(".image-viewer__nav--prev");
   const nextButton = overlay.querySelector(".image-viewer__nav--next");
   let currentIndex = (initialIndex + images.length) % images.length;
   let touchStartX = null;
+  let touchDeltaX = 0;
+  let isAnimating = false;
+
+  const getImageAt = (index) => images[(index + images.length) % images.length];
+
+  const setTrackOffset = (offset, animated) => {
+    track.style.transition = animated
+      ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)"
+      : "none";
+    track.style.transform = `translate3d(calc(-100% + ${offset}px), 0, 0)`;
+  };
+
+  const renderSlides = () => {
+    const slideSources = images.length > 1
+      ? [
+        getImageAt(currentIndex - 1),
+        getImageAt(currentIndex),
+        getImageAt(currentIndex + 1),
+      ]
+      : [images[currentIndex], images[currentIndex], images[currentIndex]];
+
+    slideImages.forEach((image, index) => {
+      image.setAttribute("src", slideSources[index] || "");
+    });
+  };
 
   const render = () => {
-    image.setAttribute("src", images[currentIndex]);
+    renderSlides();
     count.textContent = `${currentIndex + 1}/${images.length}`;
     const hasMultipleImages = images.length > 1;
     prevButton.hidden = !hasMultipleImages;
     nextButton.hidden = !hasMultipleImages;
     count.hidden = !hasMultipleImages;
+    setTrackOffset(0, false);
   };
 
   const switchImage = (direction) => {
-    if (images.length <= 1) return;
-    currentIndex = (currentIndex + direction + images.length) % images.length;
-    render();
+    if (images.length <= 1 || isAnimating) return;
+    isAnimating = true;
+    const width = viewport.clientWidth || window.innerWidth;
+    setTrackOffset(direction > 0 ? -width : width, true);
+
+    window.setTimeout(() => {
+      currentIndex = (currentIndex + direction + images.length) % images.length;
+      isAnimating = false;
+      render();
+    }, 230);
   };
 
   const onKeyDown = (event) => {
@@ -471,8 +512,19 @@ function openCaseImageViewer(images, initialIndex = 0) {
   prevButton?.addEventListener("click", () => switchImage(-1));
   nextButton?.addEventListener("click", () => switchImage(1));
   overlay.addEventListener("touchstart", (event) => {
+    if (images.length <= 1 || isAnimating) return;
     touchStartX = event.touches[0]?.clientX ?? null;
+    touchDeltaX = 0;
+    setTrackOffset(0, false);
   }, { passive: true });
+  overlay.addEventListener("touchmove", (event) => {
+    if (touchStartX === null || images.length <= 1 || isAnimating) return;
+
+    const currentX = event.touches[0]?.clientX ?? touchStartX;
+    touchDeltaX = currentX - touchStartX;
+    setTrackOffset(touchDeltaX, false);
+    event.preventDefault();
+  }, { passive: false });
   overlay.addEventListener("touchend", (event) => {
     if (touchStartX === null || images.length <= 1) {
       touchStartX = null;
@@ -480,11 +532,20 @@ function openCaseImageViewer(images, initialIndex = 0) {
     }
 
     const touchEndX = event.changedTouches[0]?.clientX ?? touchStartX;
-    const deltaX = touchEndX - touchStartX;
+    const deltaX = touchDeltaX || touchEndX - touchStartX;
     touchStartX = null;
-    if (Math.abs(deltaX) < 40) return;
+    touchDeltaX = 0;
+    if (Math.abs(deltaX) < 40) {
+      setTrackOffset(0, true);
+      return;
+    }
 
     switchImage(deltaX < 0 ? 1 : -1);
+  }, { passive: true });
+  overlay.addEventListener("touchcancel", () => {
+    touchStartX = null;
+    touchDeltaX = 0;
+    setTrackOffset(0, true);
   }, { passive: true });
 
   caseImageViewerState = { overlay, onKeyDown };
