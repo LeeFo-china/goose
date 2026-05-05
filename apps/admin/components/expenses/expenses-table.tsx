@@ -16,6 +16,8 @@ import {
   type ExpenseRecord,
 } from "@/components/expenses/expense-mutations";
 
+type ExpenseUpdatedHandler = (expense: ExpenseRecord) => void;
+
 const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
@@ -96,9 +98,11 @@ function projectName(expense: ExpenseRecord) {
 export function ExpensesTable({
   expenses,
   currentEmployeeId,
+  onExpenseUpdated,
 }: {
   expenses: ExpenseRecord[];
   currentEmployeeId: string | null;
+  onExpenseUpdated?: ExpenseUpdatedHandler;
 }) {
   const columns: ColumnDef<ExpenseRecord>[] = [
     {
@@ -184,12 +188,17 @@ export function ExpensesTable({
     {
       id: "actions",
       header: "操作",
-      cell: ({ row }) => (
-        <ExpenseRowActions
-          expense={row.original}
-          currentEmployeeId={currentEmployeeId}
-        />
-      ),
+      cell: ({ row, table }) => {
+        const meta = table.options.meta as { onExpenseUpdated?: ExpenseUpdatedHandler } | undefined;
+
+        return (
+          <ExpenseRowActions
+            expense={row.original}
+            currentEmployeeId={currentEmployeeId}
+            onExpenseUpdated={meta?.onExpenseUpdated}
+          />
+        );
+      },
       meta: {
         headerClassName: "text-right",
         cellClassName: "relative whitespace-nowrap text-right",
@@ -203,6 +212,7 @@ export function ExpensesTable({
       data={expenses}
       emptyText="没有符合条件的费用申请"
       minWidth="min-w-[1360px]"
+      tableMeta={{ onExpenseUpdated }}
     />
   );
 }

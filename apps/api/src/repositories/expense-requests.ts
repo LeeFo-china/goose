@@ -668,6 +668,8 @@ class ExpenseRequestRepository {
       mode,
       current_step,
       keyword,
+      created_from,
+      created_to,
     } = params;
     let query = SupabaseDB.getAdminClient()
       .from("expense_requests")
@@ -696,6 +698,14 @@ class ExpenseRequestRepository {
 
     if (current_step) {
       query = query.eq("current_step", current_step);
+    }
+
+    if (created_from) {
+      query = query.gte("created_at", created_from);
+    }
+
+    if (created_to) {
+      query = query.lte("created_at", created_to);
     }
 
     if (keyword) {

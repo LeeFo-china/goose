@@ -176,6 +176,8 @@ export const ExpenseRequestListQuerySchema = PaginationQuerySchema.extend({
   mode: optionalQueryValue(ExpenseModeSchema),
   current_step: optionalQueryValue(ExpenseRequestStepSchema),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  created_from: optionalQueryValue(z.iso.datetime("无效的开始时间")),
+  created_to: optionalQueryValue(z.iso.datetime("无效的结束时间")),
 });
 
 export const ExpenseRequestTodoQuerySchema = PaginationQuerySchema.extend({

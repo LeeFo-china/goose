@@ -8,7 +8,6 @@ import {
   ExpenseModeConfig,
   ExpenseSettlementMethodConfig,
 } from "@gooes/domain";
-import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
@@ -484,7 +483,7 @@ function PayDialog({
   expense: ExpenseRecord;
   currentEmployeeId: string;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (expense: ExpenseRecord) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [uploading, startUploadTransition] = useTransition();
@@ -532,12 +531,12 @@ function PayDialog({
     setError("");
     startTransition(async () => {
       try {
-        await requestExpense({
+        const data = await requestExpense({
           path: `/expense-requests/${expense.id}/pay`,
           method: "POST",
           payload,
         });
-        onDone();
+        onDone(data as ExpenseRecord);
       } catch (err) {
         setError(err instanceof Error ? err.message : "登记打款失败");
       }
@@ -784,11 +783,12 @@ function PayDialog({
 export function ExpenseRowActions({
   expense,
   currentEmployeeId,
+  onExpenseUpdated,
 }: {
   expense: ExpenseRecord;
   currentEmployeeId: string | null;
+  onExpenseUpdated?: (expense: ExpenseRecord) => void;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<ExpenseRecord | null>(null);
@@ -801,10 +801,6 @@ export function ExpenseRowActions({
     expense.current_step === "payment" &&
     Boolean(currentEmployeeId);
 
-  function refresh() {
-    router.refresh();
-  }
-
   function runAction(input: {
     label: string;
     path: string;
@@ -815,12 +811,12 @@ export function ExpenseRowActions({
     setError("");
     startTransition(async () => {
       try {
-        await requestExpense({
+        const data = await requestExpense({
           path: input.path,
           method: "POST",
           payload: input.payload,
         });
-        refresh();
+        onExpenseUpdated?.(data as ExpenseRecord);
       } catch (err) {
         setError(err instanceof Error ? err.message : `${input.label}失败`);
       }
@@ -924,9 +920,9 @@ export function ExpenseRowActions({
           expense={payExpense}
           currentEmployeeId={currentEmployeeId}
           onClose={() => setPayExpense(null)}
-          onDone={() => {
+          onDone={(updatedExpense) => {
             setPayExpense(null);
-            refresh();
+            onExpenseUpdated?.(updatedExpense);
           }}
         />
       ) : null}

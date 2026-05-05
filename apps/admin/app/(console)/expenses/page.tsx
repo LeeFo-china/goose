@@ -1,13 +1,5 @@
-import { CircleDollarSign, Clock3, UserRound } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  ExpenseFilters,
-  ExpensesPagination,
-} from "@/components/expenses/expense-list-actions";
 import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
-import { ExpensesTable } from "@/components/expenses/expenses-table";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -29,6 +21,8 @@ type ExpensePageSearchParams = {
   mode?: string;
   current_step?: string;
   keyword?: string;
+  created_from?: string;
+  created_to?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -36,12 +30,18 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
-function formatMoney(value: number | string | null | undefined) {
-  const amount = Number(value || 0);
-  return amount.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+function dateStartToIso(value: string) {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function dateEndToIso(value: string) {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const date = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
 async function getExpenses(params: ExpensePageSearchParams) {
@@ -59,6 +59,8 @@ async function getExpenses(params: ExpensePageSearchParams) {
   const mode = params.mode?.trim() || "";
   const currentStep = params.current_step?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const createdFrom = params.created_from?.trim() || "";
+  const createdTo = params.created_to?.trim() || "";
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
@@ -67,6 +69,8 @@ async function getExpenses(params: ExpensePageSearchParams) {
   if (mode) query.set("mode", mode);
   if (currentStep) query.set("current_step", currentStep);
   if (keyword) query.set("keyword", keyword);
+  if (createdFrom) query.set("created_from", dateStartToIso(createdFrom));
+  if (createdTo) query.set("created_to", dateEndToIso(createdTo));
 
   try {
     const response = await fetch(buildBackendUrl(`/expense-requests?${query}`), {
@@ -102,16 +106,13 @@ export default async function ExpensesPage({
   const mode = params.mode?.trim() || "";
   const currentStep = params.current_step?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const createdFrom = params.created_from?.trim() || "";
+  const createdTo = params.created_to?.trim() || "";
   const [{ list, pagination, error }, session] = await Promise.all([
     getExpenses(params),
     getAdminSession(),
   ]);
   const currentEmployeeId = session?.employee?.id || null;
-  const pendingCount = list.filter((item) => item.status === "pending").length;
-  const paymentCount = list.filter((item) =>
-    item.status === "approved" && item.current_step === "payment"
-  ).length;
-  const totalAmount = list.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -119,86 +120,23 @@ export default async function ExpensesPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">费用审批</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            费用申请、审批链和打款处理。当前筛选共 {pagination.total} 条记录。
+            费用申请、审批链和打款处理，筛选变化后列表会自动更新。
           </p>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <CircleDollarSign className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页金额</div>
-              <div className="text-xl font-semibold">¥{formatMoney(totalAmount)}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Clock3 className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页审批中</div>
-              <div className="text-xl font-semibold">{pendingCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <UserRound className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页待打款</div>
-              <div className="text-xl font-semibold">{paymentCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent className="p-4">
-          <ExpenseFilters
-            status={status}
-            mode={mode}
-            currentStep={currentStep}
-            keyword={keyword}
-          />
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>费用申请列表</CardTitle>
-          <Badge variant="outline">
-            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ExpensesTable expenses={list} currentEmployeeId={currentEmployeeId} />
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <ExpensesPagination
-          pagination={pagination}
-          status={status}
-          mode={mode}
-          currentStep={currentStep}
-          keyword={keyword}
-        />
-      </div>
+      <ExpensesPanel
+        initialData={{ list, pagination, error }}
+        initialFilters={{
+          status,
+          mode,
+          currentStep,
+          keyword,
+          createdFrom,
+          createdTo,
+        }}
+        currentEmployeeId={currentEmployeeId}
+      />
     </div>
   );
 }
