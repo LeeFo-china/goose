@@ -101,22 +101,36 @@ function normalizeProjectLogImages(images: unknown) {
     .filter(Boolean);
 }
 
-function createProjectCoverImageMap(rows: MarketingPageProjectOptionRow[]) {
-  const coverMap = new Map<string, string>();
+function createProjectImageMap(rows: MarketingPageProjectOptionRow[]) {
+  const imageMap = new Map<string, string[]>();
 
   for (const row of rows) {
     const projectId = typeof row.project_id === "string" ? row.project_id : "";
-    if (!projectId || coverMap.has(projectId)) {
+    if (!projectId) {
       continue;
     }
 
-    const firstImage = normalizeProjectLogImages(row.images)[0];
-    if (firstImage) {
-      coverMap.set(projectId, firstImage);
+    const currentImages = imageMap.get(projectId) || [];
+    if (currentImages.length >= 8) {
+      continue;
+    }
+
+    for (const imageUrl of normalizeProjectLogImages(row.images)) {
+      if (!currentImages.includes(imageUrl)) {
+        currentImages.push(imageUrl);
+      }
+
+      if (currentImages.length >= 8) {
+        break;
+      }
+    }
+
+    if (currentImages.length > 0) {
+      imageMap.set(projectId, currentImages);
     }
   }
 
-  return coverMap;
+  return imageMap;
 }
 
 function formatArea(value: unknown) {
@@ -133,7 +147,7 @@ function formatArea(value: unknown) {
 
 function serializeProjectOption(
   row: MarketingPageProjectOptionRow,
-  coverImageMap: Map<string, string>,
+  imageMap: Map<string, string[]>,
 ) {
   const property = normalizeRelation(row.property, {
     community: null,
@@ -145,6 +159,7 @@ function serializeProjectOption(
     name: null,
   });
   const projectId = typeof row.id === "string" ? row.id : "";
+  const imageUrls = imageMap.get(projectId) || [];
   const propertyParts = [
     property.community,
     property.layout,
@@ -158,7 +173,8 @@ function serializeProjectOption(
       ? row.name
       : "未命名项目",
     subtitle: propertyParts.join(" · ") || (typeof row.address === "string" ? row.address : ""),
-    imageUrl: coverImageMap.get(projectId) || "",
+    imageUrl: imageUrls[0] || "",
+    imageUrls,
     status: typeof row.status === "string" ? row.status : null,
     customer_name: typeof customer.name === "string" ? customer.name : null,
     property,
@@ -216,12 +232,12 @@ class MarketingPageService {
     const projectIds = data.list
       .map((item) => typeof item.id === "string" ? item.id : "")
       .filter(Boolean);
-    const coverImageMap = createProjectCoverImageMap(
+    const imageMap = createProjectImageMap(
       await marketingPageRepository.listLatestProjectLogCoverImages(projectIds),
     );
 
     return {
-      list: data.list.map((item) => serializeProjectOption(item, coverImageMap)),
+      list: data.list.map((item) => serializeProjectOption(item, imageMap)),
       pagination: data.pagination,
     };
   }

@@ -391,23 +391,69 @@ function renderImageText(block, slug) {
   return node;
 }
 
+function normalizeCaseImageUrls(item = {}) {
+  const imageUrls = Array.isArray(item.imageUrls) ? item.imageUrls : [];
+  return Array.from(new Set([
+    ...imageUrls,
+    item.imageUrl || "",
+  ].map((url) => String(url || "").trim()).filter(Boolean)));
+}
+
 function renderCaseList(block) {
   const props = block.props || {};
   const cases = Array.isArray(props.items) ? props.items : [];
-  const itemsHtml = cases.map((item) => `
-    <article class="case-card">
-      ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="" loading="lazy" />` : ""}
+  const caseImageSets = cases.map(normalizeCaseImageUrls);
+  const itemsHtml = cases.map((item, index) => {
+    const imageUrls = caseImageSets[index] || [];
+
+    return `
+    <article class="case-card" data-case-index="${index}" data-image-index="0">
+      <div class="case-image-stage">
+        ${imageUrls[0] ? `<img src="${escapeHtml(imageUrls[0])}" alt="" loading="lazy" data-case-image="true" />` : ""}
+        ${imageUrls.length > 1 ? `
+          <button class="case-image-nav case-image-nav--prev" type="button" aria-label="上一张案例图" data-case-image-prev="true">‹</button>
+          <button class="case-image-nav case-image-nav--next" type="button" aria-label="下一张案例图" data-case-image-next="true">›</button>
+          <span class="case-image-count" data-case-image-count="true">1/${imageUrls.length}</span>
+        ` : ""}
+      </div>
       <div>
         <h3>${escapeHtml(item.title || "装修案例")}</h3>
         ${item.subtitle ? `<p>${escapeHtml(item.subtitle)}</p>` : ""}
       </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
 
-  return createSection(block, "case-list-block", `
+  const node = createSection(block, "case-list-block", `
     ${props.title ? `<h2>${escapeHtml(props.title)}</h2>` : ""}
     <div class="case-list">${itemsHtml || "<p class='muted'>暂无案例</p>"}</div>
   `);
+
+  node.querySelectorAll("[data-case-image-prev='true'], [data-case-image-next='true']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      const card = event.currentTarget.closest("[data-case-index]");
+      const caseIndex = Number(card?.dataset.caseIndex);
+      const images = Number.isInteger(caseIndex) ? caseImageSets[caseIndex] || [] : [];
+      if (!card || images.length <= 1) return;
+
+      const direction = event.currentTarget.dataset.caseImagePrev === "true" ? -1 : 1;
+      const currentIndex = Number(card.dataset.imageIndex) || 0;
+      const nextIndex = (currentIndex + direction + images.length) % images.length;
+      const image = card.querySelector("[data-case-image='true']");
+      const count = card.querySelector("[data-case-image-count='true']");
+
+      card.dataset.imageIndex = String(nextIndex);
+      if (image) {
+        image.setAttribute("src", images[nextIndex]);
+      }
+      if (count) {
+        count.textContent = `${nextIndex + 1}/${images.length}`;
+      }
+    });
+  });
+
+  return node;
 }
 
 function renderCountdown(block) {

@@ -89,6 +89,7 @@ type ProjectCaseOption = {
   title: string;
   subtitle: string;
   imageUrl: string;
+  imageUrls?: string[];
   status?: string | null;
 };
 
@@ -104,6 +105,7 @@ type CaseListItem = {
   title: string;
   subtitle: string;
   imageUrl: string;
+  imageUrls?: string[];
 };
 
 type H5BlockType =
@@ -554,6 +556,17 @@ function previewImage(url: string, alt: string, className: string) {
   );
 }
 
+function normalizeCaseImageUrls(item: {
+  imageUrl?: string;
+  imageUrls?: string[];
+}) {
+  const urls = Array.isArray(item.imageUrls) ? item.imageUrls : [];
+  return Array.from(new Set([
+    ...urls,
+    item.imageUrl || "",
+  ].map((url) => url.trim()).filter(Boolean)));
+}
+
 function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
   const next = [...items];
   const [item] = next.splice(fromIndex, 1);
@@ -575,6 +588,9 @@ function parseCaseItems(value: unknown) {
       title: typeof record.title === "string" ? record.title : "",
       subtitle: typeof record.subtitle === "string" ? record.subtitle : "",
       imageUrl: typeof record.imageUrl === "string" ? record.imageUrl : "",
+      imageUrls: Array.isArray(record.imageUrls)
+        ? record.imageUrls.filter((url): url is string => typeof url === "string")
+        : [],
     };
   });
 }
@@ -585,6 +601,62 @@ function moveCaseItem(items: CaseListItem[], fromIndex: number, toIndex: number)
   }
 
   return moveItem(items, fromIndex, toIndex);
+}
+
+function CaseImageCarouselPreview({
+  item,
+}: {
+  item: CaseListItem;
+}) {
+  const imageUrls = normalizeCaseImageUrls(item);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const safeCurrentIndex = imageUrls.length > 0 ? currentIndex % imageUrls.length : 0;
+  const currentImageUrl = imageUrls[safeCurrentIndex] || "";
+
+  const switchImage = (direction: -1 | 1) => {
+    if (imageUrls.length <= 1) return;
+
+    setCurrentIndex((index) => (
+      index + direction + imageUrls.length
+    ) % imageUrls.length);
+  };
+
+  return (
+    <div className="relative grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-xs text-muted-foreground">
+      {currentImageUrl
+        ? previewImage(currentImageUrl, item.title || "案例图片", "size-full object-cover")
+        : "案例图片"}
+      {imageUrls.length > 1 ? (
+        <>
+          <button
+            type="button"
+            aria-label="上一张案例图"
+            className="absolute left-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              switchImage(-1);
+            }}
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="下一张案例图"
+            className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-background/85 text-foreground shadow-sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              switchImage(1);
+            }}
+          >
+            <ArrowRight className="size-4" />
+          </button>
+          <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] leading-5 text-white">
+            {safeCurrentIndex + 1}/{imageUrls.length}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function blockSummary(block: H5Block) {
@@ -719,11 +791,7 @@ function PreviewBlock({
                 key={`${item.projectId || item.title || "case"}-${index}`}
                 className="overflow-hidden rounded-md border bg-background"
               >
-                <div className="grid aspect-[16/9] place-items-center overflow-hidden bg-muted text-xs text-muted-foreground">
-                  {item.imageUrl
-                    ? previewImage(item.imageUrl, item.title || "案例图片", "size-full object-cover")
-                    : "案例图片"}
-                </div>
+                <CaseImageCarouselPreview item={item} />
                 <div className="p-3">
                   <div className="truncate text-sm font-medium">{item.title || "未命名项目"}</div>
                   <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -1006,6 +1074,7 @@ function ProjectCaseSelector({
         title: option.title || "未命名项目",
         subtitle: option.subtitle || "",
         imageUrl: option.imageUrl || "",
+        imageUrls: normalizeCaseImageUrls(option),
       },
     ]);
   };
@@ -1041,6 +1110,7 @@ function ProjectCaseSelector({
       <div className="space-y-2 rounded-md border bg-muted/20 p-2">
         {options.length > 0 ? options.map((option) => {
           const projectId = option.projectId || option.id;
+          const optionImageUrls = normalizeCaseImageUrls(option);
           const selected = Boolean(projectId && items.some((item) => item.projectId === projectId));
 
           return (
@@ -1049,14 +1119,15 @@ function ProjectCaseSelector({
               className="flex items-center gap-3 rounded-md border bg-background p-2"
             >
               <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
-                {option.imageUrl
-                  ? previewImage(option.imageUrl, option.title, "size-full object-cover")
+                {optionImageUrls[0]
+                  ? previewImage(optionImageUrls[0], option.title, "size-full object-cover")
                   : "无图"}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{option.title || "未命名项目"}</div>
                 <div className="mt-1 truncate text-xs text-muted-foreground">
                   {option.subtitle || option.status || "项目信息待补"}
+                  {optionImageUrls.length > 1 ? ` · ${optionImageUrls.length}图` : ""}
                 </div>
               </div>
               <Button
@@ -1109,52 +1180,56 @@ function ProjectCaseSelector({
       {items.length > 0 ? (
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">已选案例</div>
-          {items.map((item, index) => (
-            <div
-              key={`${item.projectId || item.title || "case"}-${index}`}
-              className="flex items-center gap-3 rounded-md border bg-background p-2"
-            >
-              <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
-                {item.imageUrl
-                  ? previewImage(item.imageUrl, item.title, "size-full object-cover")
-                  : "无图"}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{item.title || "未命名项目"}</div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
-                  {item.subtitle || "项目信息待补"}
+          {items.map((item, index) => {
+            const itemImageUrls = normalizeCaseImageUrls(item);
+            return (
+              <div
+                key={`${item.projectId || item.title || "case"}-${index}`}
+                className="flex items-center gap-3 rounded-md border bg-background p-2"
+              >
+                <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
+                  {itemImageUrls[0]
+                    ? previewImage(itemImageUrls[0], item.title, "size-full object-cover")
+                    : "无图"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{item.title || "未命名项目"}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    {item.subtitle || "项目信息待补"}
+                    {itemImageUrls.length > 1 ? ` · ${itemImageUrls.length}图` : ""}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={index === 0}
+                    onClick={() => onChange(moveCaseItem(items, index, index - 1))}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={index === items.length - 1}
+                    onClick={() => onChange(moveCaseItem(items, index, index + 1))}
+                  >
+                    <ArrowDown />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={index === 0}
-                  onClick={() => onChange(moveCaseItem(items, index, index - 1))}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={index === items.length - 1}
-                  onClick={() => onChange(moveCaseItem(items, index, index + 1))}
-                >
-                  <ArrowDown />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
     </Field>
