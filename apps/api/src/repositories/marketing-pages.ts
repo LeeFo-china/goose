@@ -742,6 +742,8 @@ class MarketingPageRepository {
 
     if (status) {
       request = request.eq("lead_status", status);
+    } else {
+      request = request.neq("lead_status", "invalid");
     }
 
     if (page_id) {

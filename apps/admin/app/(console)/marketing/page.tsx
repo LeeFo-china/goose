@@ -15,6 +15,8 @@ import { CreateH5MarketingPageButton } from "@/components/marketing/h5-page-muta
 import { H5MarketingPagesTable } from "@/components/marketing/h5-pages-table";
 import { campaignStatusOptions } from "@/components/marketing/marketing-constants";
 import {
+  H5LeadFilters,
+  H5LeadPagination,
   MarketingFilters,
   MarketingPagination,
 } from "@/components/marketing/marketing-list-actions";
@@ -39,6 +41,10 @@ type MarketingPageSearchParams = {
   campaign_type?: string;
   status?: string;
   keyword?: string;
+  lead_page?: string;
+  lead_status?: string;
+  lead_keyword?: string;
+  lead_page_id?: string;
 };
 
 type MarketingTab = "campaigns" | "h5";
@@ -88,6 +94,11 @@ function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
     if (params.campaign_type) query.set("campaign_type", params.campaign_type);
     if (params.status) query.set("status", params.status);
     if (params.keyword) query.set("keyword", params.keyword);
+  } else {
+    if (params.lead_page) query.set("lead_page", params.lead_page);
+    if (params.lead_status) query.set("lead_status", params.lead_status);
+    if (params.lead_keyword) query.set("lead_keyword", params.lead_keyword);
+    if (params.lead_page_id) query.set("lead_page_id", params.lead_page_id);
   }
 
   return `/marketing?${query.toString()}`;
@@ -236,7 +247,7 @@ async function getH5Pages(token: string | null) {
   try {
     const data = await fetchBackendData<H5PageListData>(
       token,
-      "/marketing-pages?page=1&pageSize=10",
+      "/marketing-pages?page=1&pageSize=100",
     );
     return {
       list: data?.list || [],
@@ -252,29 +263,41 @@ async function getH5Pages(token: string | null) {
   }
 }
 
-async function getH5Leads(token: string | null) {
+async function getH5Leads(token: string | null, params: MarketingPageSearchParams) {
+  const page = normalizePage(params.lead_page);
   if (!token) {
     return {
       list: [] as H5MarketingLeadRecord[],
-      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
 
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: "20",
+  });
+  const status = params.lead_status?.trim() || "";
+  const keyword = params.lead_keyword?.trim() || "";
+  const pageId = params.lead_page_id?.trim() || "";
+  if (status) query.set("status", status);
+  if (keyword) query.set("keyword", keyword);
+  if (pageId) query.set("page_id", pageId);
+
   try {
     const data = await fetchBackendData<H5LeadListData>(
       token,
-      "/marketing-leads?page=1&pageSize=10",
+      `/marketing-leads?${query.toString()}`,
     );
     return {
       list: data?.list || [],
-      pagination: data?.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      pagination: data?.pagination || { page, pageSize: 20, total: 0, totalPages: 0 },
       error: null,
     };
   } catch (error) {
     return {
       list: [] as H5MarketingLeadRecord[],
-      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "H5 营销线索加载失败",
     };
   }
@@ -294,11 +317,14 @@ export default async function MarketingPage({
     getCampaigns(token, params),
     getProjects(token),
     getH5Pages(token),
-    getH5Leads(token),
+    getH5Leads(token, params),
   ]);
   const campaignType = params.campaign_type?.trim() || "";
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const leadStatus = params.lead_status?.trim() || "";
+  const leadKeyword = params.lead_keyword?.trim() || "";
+  const leadPageId = params.lead_page_id?.trim() || "";
   const activeCount = list.filter((item) => item.status === "active").length;
   const pausedCount = list.filter((item) => item.status === "paused").length;
   const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
@@ -500,15 +526,26 @@ export default async function MarketingPage({
           </Card>
 
           <Card>
+            <CardContent className="p-4">
+              <H5LeadFilters
+                status={leadStatus}
+                keyword={leadKeyword}
+                pageId={leadPageId}
+                pages={h5Pages.list}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
               <div>
                 <CardTitle>H5 营销线索</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  最近提交的活动页预约线索，共 {h5Leads.pagination.total} 条，当前列表中新线索 {newLeadCount} 条。
+                  当前筛选共 {h5Leads.pagination.total} 条，当前页新线索 {newLeadCount} 条。
                 </p>
               </div>
               <Badge variant="outline">
-                最近 {h5Leads.list.length} 条
+                第 {h5Leads.pagination.page} / {Math.max(h5Leads.pagination.totalPages, 1)} 页
               </Badge>
             </CardHeader>
             <CardContent className="p-0">
@@ -521,6 +558,18 @@ export default async function MarketingPage({
               )}
             </CardContent>
           </Card>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              每页 {h5Leads.pagination.pageSize} 条，共 {h5Leads.pagination.total} 条
+            </div>
+            <H5LeadPagination
+              pagination={h5Leads.pagination}
+              status={leadStatus}
+              keyword={leadKeyword}
+              pageId={leadPageId}
+            />
+          </div>
         </>
       )}
     </div>

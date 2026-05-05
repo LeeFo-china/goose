@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, MessageSquareText, UserPlus } from "lucide-react";
+import { Loader2, MessageSquareText, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { FormSelect } from "@/components/admin/form-select";
 import { DataTable } from "@/components/admin/data-table";
@@ -247,6 +247,68 @@ function LeadConvertAction({ lead }: { lead: H5MarketingLeadRecord }) {
   );
 }
 
+function LeadInvalidateAction({ lead }: { lead: H5MarketingLeadRecord }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const disabled = lead.lead_status === "invalid" || lead.lead_status === "converted";
+
+  function submit() {
+    startTransition(async () => {
+      try {
+        await requestLeadUpdate({
+          id: lead.id,
+          lead_status: "invalid",
+          follow_remark: lead.follow_remark || "线索已作废",
+        });
+        toast.success("线索已作废");
+        setOpen(false);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "作废线索失败");
+      }
+    });
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 data-icon="inline-start" />
+        作废
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>作废线索</DialogTitle>
+            <DialogDescription>
+              确认作废该线索？作废后不会计入有效线索统计，但仍可通过状态筛选查看。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/40 p-3 text-sm">
+            <div className="font-medium">{lead.name || "未填写姓名"}</div>
+            <div className="mt-1 text-muted-foreground">{lead.phone || "未填写手机号"}</div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" variant="destructive" disabled={pending} onClick={submit}>
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
+              确认作废
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 const columns: ColumnDef<H5MarketingLeadRecord>[] = [
   {
     accessorKey: "name",
@@ -328,6 +390,7 @@ const columns: ColumnDef<H5MarketingLeadRecord>[] = [
       <div className="flex justify-end gap-2">
         <LeadFollowAction lead={row.original} />
         <LeadConvertAction lead={row.original} />
+        <LeadInvalidateAction lead={row.original} />
       </div>
     ),
     meta: {
