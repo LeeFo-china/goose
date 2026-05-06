@@ -16,10 +16,8 @@ import {
   ProjectCreateSelectCustomerQuerySchema,
   type ProjectCreateSelectCustomerQueryType,
   ProjectMemberCandidateQuerySchema,
-  type ProjectMemberCandidateQueryType,
   ProjectCreateSelectEmployeeQuerySchema,
   type ProjectCreateSelectEmployeeQueryType,
-  type ProjectCreateSelectEmployeeScene,
 } from "@/schema/project-create-select";
 import type { Tables } from "@/types/database";
 import {
@@ -29,12 +27,13 @@ import {
   isProjectLogStageCode,
   isProjectStatus,
   type EmployeePostCode,
-  type ProjectMemberRoleCode,
   type ProjectLogStageCode,
+  type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectMemberService } from "@/services/project-members";
+import { projectMemberRolePostRuleService } from "@/services/project-member-role-post-rules";
 import {
   customerPhonePrivacyService,
   type CustomerPhonePrivacyContext,
@@ -1276,7 +1275,10 @@ class ProjectController extends BaseController<
       ProjectCreateSelectEmployeeQueryType = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes = this.getEmployeePostCodesByScene(scene);
+    const postCodes =
+      await projectMemberRolePostRuleService.listCandidatePostCodesByScene(
+        scene,
+      );
     const postIds = await this.getPostIdsByCodes(postCodes);
     const result = await this.queryProjectCreateEmployees({
       from,
@@ -1355,7 +1357,11 @@ class ProjectController extends BaseController<
     const { page, pageSize, keyword, role_code } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes = this.getEmployeePostCodesByMemberRole(role_code);
+    const postCodes = role_code
+      ? await projectMemberRolePostRuleService.listCandidatePostCodesByRole(
+        role_code,
+      )
+      : [];
     const postIds = await this.getPostIdsByCodes(postCodes);
     const result = await this.queryProjectCreateEmployees({
       from,
@@ -1408,95 +1414,6 @@ class ProjectController extends BaseController<
         totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
       },
     });
-  }
-
-  private getEmployeePostCodesByScene(
-    scene: ProjectCreateSelectEmployeeScene,
-  ): EmployeePostCode[] {
-    if (scene === "project_designer") {
-      return ["DESIGN_DIRECTOR", "CHIEF_DESIGNER", "INTERIOR_DESIGNER"];
-    }
-
-    if (scene === "project_construction_manager") {
-      return ["ENGINEERING_DIRECTOR", "PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
-    }
-
-    return [
-      "ENGINEERING_DIRECTOR",
-      "PROJECT_MANAGER",
-      "CONSTRUCTION_SUPER",
-      "QUALITY_INSPECTOR",
-    ];
-  }
-
-  private getEmployeePostCodesByMemberRole(
-    roleCode?: ProjectMemberCandidateQueryType["role_code"],
-  ): EmployeePostCode[] {
-    if (!roleCode) {
-      return [];
-    }
-
-    if (roleCode === "customer_owner") {
-      return [
-        "MARKETING_DIRECTOR",
-        "SALES_MANAGER",
-        "SALES_CONSULTANT",
-        "TELESALES",
-        "CHANNEL_MANAGER",
-      ];
-    }
-
-    if (roleCode === "sales_followup") {
-      return [
-        "SALES_CONSULTANT",
-        "TELESALES",
-        "CHANNEL_MANAGER",
-        "CUSTOMER_INVITER",
-      ];
-    }
-
-    if (roleCode === "designer") {
-      return ["DESIGN_DIRECTOR", "CHIEF_DESIGNER", "INTERIOR_DESIGNER"];
-    }
-
-    if (roleCode === "supervisor") {
-      return [
-        "ENGINEERING_DIRECTOR",
-        "PROJECT_MANAGER",
-        "CONSTRUCTION_SUPER",
-        "QUALITY_INSPECTOR",
-      ];
-    }
-
-    if (roleCode === "construction_manager") {
-      return ["ENGINEERING_DIRECTOR", "PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
-    }
-
-    if (roleCode === "site_manager") {
-      return [
-        "PROJECT_MANAGER",
-        "CONSTRUCTION_SUPER",
-        "HYDROPOWER_FOREMAN",
-        "TILE_FOREMAN",
-        "CARPENTRY_FOREMAN",
-        "PAINT_FOREMAN",
-      ];
-    }
-
-    if (roleCode === "budget_manager") {
-      return ["FINANCE_MANAGER", "FINANCE_ACCOUNTANT", "COST_ACCOUNTANT"];
-    }
-
-    if (roleCode === "material_manager") {
-      return [
-        "PROCUREMENT_MANAGER",
-        "PROCURE_OFFICER",
-        "MATERIAL_CLERK",
-        "WAREHOUSE_KEEPER",
-      ];
-    }
-
-    return [];
   }
 
   private async getPostIdsByCodes(codes: EmployeePostCode[]) {

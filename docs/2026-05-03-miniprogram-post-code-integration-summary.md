@@ -2,6 +2,8 @@
 
 本文档给微信小程序前端对接 `posts.code` / `post_code` 使用。当前后端已将岗位编码语义明确为 `EmployeePostCode`：员工岗位的业务编码，用于项目成员候选人筛选，也可用于前端展示兜底。
 
+> 2026-05-06 第二阶段更新：项目成员角色到岗位编码的关系已从后端 hardcode 迁移到数据库映射表 `project_member_role_post_rules`。小程序接口路径和参数不变，候选人范围以后以后端配置为准。
+
 ---
 
 ## 1. 前端结论
@@ -152,13 +154,20 @@ GET /projects/create/employees?page=1&pageSize=10&scene=project_construction_man
 
 `scene` 由后端负责筛选岗位，小程序不要再二次按岗位编码过滤员工。
 
-当前后端筛选范围：
+当前初始化筛选范围：
 
 | scene | 岗位编码 |
 |---|---|
 | `project_designer` | `DESIGN_DIRECTOR`, `CHIEF_DESIGNER`, `INTERIOR_DESIGNER` |
 | `project_construction_manager` | `ENGINEERING_DIRECTOR`, `PROJECT_MANAGER`, `CONSTRUCTION_SUPER` |
 | `project_supervisor` | `ENGINEERING_DIRECTOR`, `PROJECT_MANAGER`, `CONSTRUCTION_SUPER`, `QUALITY_INSPECTOR` |
+
+说明：
+
+- `project_designer` 会按项目成员角色 `designer` 的岗位映射查询。
+- `project_construction_manager` 会按 `construction_manager` 查询。
+- `project_supervisor` 会按 `supervisor` 查询。
+- 如果后端映射表后续调整，小程序不需要发版即可获得新的候选人范围。
 
 ---
 
@@ -170,7 +179,7 @@ GET /projects/create/employees?page=1&pageSize=10&scene=project_construction_man
 GET /projects/:id/member-candidates?page=1&pageSize=10&role_code=designer
 ```
 
-当前后端角色映射：
+当前初始化角色映射：
 
 | role_code | 岗位编码 |
 |---|---|
@@ -182,6 +191,8 @@ GET /projects/:id/member-candidates?page=1&pageSize=10&role_code=designer
 | `site_manager` | `PROJECT_MANAGER`, `CONSTRUCTION_SUPER`, `HYDROPOWER_FOREMAN`, `TILE_FOREMAN`, `CARPENTRY_FOREMAN`, `PAINT_FOREMAN` |
 | `budget_manager` | `FINANCE_MANAGER`, `FINANCE_ACCOUNTANT`, `COST_ACCOUNTANT` |
 | `material_manager` | `PROCUREMENT_MANAGER`, `PROCURE_OFFICER`, `MATERIAL_CLERK`, `WAREHOUSE_KEEPER` |
+
+这些映射由后端表 `project_member_role_post_rules` 维护。MVP 阶段还没有开放小程序配置入口，小程序只消费接口返回结果。
 
 ---
 
@@ -201,3 +212,24 @@ if (post_code === "INTERIOR_DESIGNER") {}
 - 特殊 UI：如果确实要按岗位编码展示，可以保留字符串判断，但要覆盖完整岗位编码，并做好未知编码兜底
 
 一句话：`post_code` 现在是可配置但必填的员工岗位业务编码。小程序可以展示它，但不要把候选人筛选和权限判断写死在前端。
+
+---
+
+## 8. 第二阶段对接结论
+
+本阶段小程序端没有强制代码改动。
+
+需要确认：
+
+- 继续调用原接口：
+  - `/projects/create/employees`
+  - `/projects/:id/member-candidates`
+- 继续传 `scene` / `role_code`
+- 不要根据 `post_code` 在前端二次过滤候选员工
+- UI 展示继续优先使用 `post.name` / `post_name`
+
+后端现在的规则来源优先级：
+
+1. 数据库表 `project_member_role_post_rules`
+2. 如果某个角色完全没有配置映射行，后端使用内置兜底映射，避免候选人列表为空
+3. 如果某个角色已配置映射但全部禁用，后端会尊重配置并返回空候选

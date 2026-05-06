@@ -1,0 +1,58 @@
+WITH employee_posts(code, name) AS (
+  VALUES
+    ('GENERAL_MANAGER', '总经理'),
+    ('OPERATIONS_DIRECTOR', '运营总监'),
+    ('GENERAL_MANAGER_ASSISTANT', '总经理助理'),
+    ('HR_ADMIN_MANAGER', '行政人事主管'),
+    ('HR_SPECIALIST', '人事专员'),
+    ('ADMIN_SPECIALIST', '行政专员'),
+    ('MARKETING_DIRECTOR', '营销总监'),
+    ('MARKETING_MANAGER', '市场经理'),
+    ('NEW_MEDIA_OPERATOR', '新媒体运营'),
+    ('VIDEO_EDITOR', '摄影剪辑'),
+    ('LIVE_STREAM_OPERATOR', '直播运营'),
+    ('AD_OPERATOR', '投流专员'),
+    ('CUSTOMER_INVITER', '客服邀约专员'),
+    ('SALES_MANAGER', '销售经理'),
+    ('SALES_CONSULTANT', '客户经理'),
+    ('TELESALES', '电话销售'),
+    ('CHANNEL_MANAGER', '渠道经理'),
+    ('DESIGN_DIRECTOR', '设计总监'),
+    ('CHIEF_DESIGNER', '主案设计师'),
+    ('INTERIOR_DESIGNER', '设计师'),
+    ('ASSISTANT_DESIGNER', '助理设计师'),
+    ('RENDERING_DESIGNER', '效果图设计师'),
+    ('ENGINEERING_DIRECTOR', '工程总监'),
+    ('PROJECT_MANAGER', '项目经理'),
+    ('CONSTRUCTION_SUPER', '工程监理'),
+    ('QUALITY_INSPECTOR', '质检专员'),
+    ('SAFETY_OFFICER', '安全员'),
+    ('HYDROPOWER_FOREMAN', '水电工长'),
+    ('TILE_FOREMAN', '瓦工工长'),
+    ('CARPENTRY_FOREMAN', '木工工长'),
+    ('PAINT_FOREMAN', '油漆工长'),
+    ('MAINTENANCE_WORKER', '维修工'),
+    ('PROCUREMENT_MANAGER', '采购主管'),
+    ('PROCURE_OFFICER', '采购专员'),
+    ('MATERIAL_CLERK', '材料员'),
+    ('WAREHOUSE_KEEPER', '仓库管理员'),
+    ('DELIVERY_COORDINATOR', '配送协调员'),
+    ('FINANCE_MANAGER', '财务经理'),
+    ('FINANCE_ACCOUNTANT', '会计'),
+    ('CASHIER', '出纳'),
+    ('COST_ACCOUNTANT', '成本核算员'),
+    ('CUSTOMER_SERVICE_MANAGER', '客服主管'),
+    ('CUSTOMER_SERVICE', '客服专员'),
+    ('AFTER_SALES_SPECIALIST', '售后专员'),
+    ('CUSTOMER_RETURN_VISITOR', '回访专员'),
+    ('SYSTEM_ADMIN', '系统管理员'),
+    ('DATA_SPECIALIST', '数据专员'),
+    ('IT_SUPPORT', 'IT技术支持')
+)
+UPDATE public.posts AS post
+SET
+  name = employee_posts.name,
+  updated_at = now()
+FROM employee_posts
+WHERE post.code = employee_posts.code
+  AND post.name IS DISTINCT FROM employee_posts.name;
