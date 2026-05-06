@@ -72,11 +72,16 @@ export type {
 } from './permission';
 
 export {
+  EMPLOYEE_POST_CODE_VALUES,
+  EmployeePostConfig,
   POST_CODE_VALUES,
   POST_STATUS_VALUES,
+  PostConfig,
   SALARY_TYPE_VALUES,
+  isEmployeePostCode,
+  isPostCode,
 } from './post';
-export type { PostCode, PostStatus, SalaryType } from './post';
+export type { EmployeePostCode, PostCode, PostStatus, SalaryType } from './post';
 
 export {
   PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES,

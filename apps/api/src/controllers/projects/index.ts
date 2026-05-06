@@ -28,7 +28,7 @@ import {
   ProjectStatusConfig,
   isProjectLogStageCode,
   isProjectStatus,
-  type PostCode,
+  type EmployeePostCode,
   type ProjectMemberRoleCode,
   type ProjectLogStageCode,
 } from "@gooes/domain";
@@ -1276,7 +1276,7 @@ class ProjectController extends BaseController<
       ProjectCreateSelectEmployeeQueryType = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes = this.getPostCodesByScene(scene);
+    const postCodes = this.getEmployeePostCodesByScene(scene);
     const postIds = await this.getPostIdsByCodes(postCodes);
     const result = await this.queryProjectCreateEmployees({
       from,
@@ -1355,7 +1355,7 @@ class ProjectController extends BaseController<
     const { page, pageSize, keyword, role_code } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes = this.getPostCodesByMemberRole(role_code);
+    const postCodes = this.getEmployeePostCodesByMemberRole(role_code);
     const postIds = await this.getPostIdsByCodes(postCodes);
     const result = await this.queryProjectCreateEmployees({
       from,
@@ -1410,53 +1410,96 @@ class ProjectController extends BaseController<
     });
   }
 
-  private getPostCodesByScene(scene: ProjectCreateSelectEmployeeScene): PostCode[] {
+  private getEmployeePostCodesByScene(
+    scene: ProjectCreateSelectEmployeeScene,
+  ): EmployeePostCode[] {
     if (scene === "project_designer") {
-      return ["INTERIOR_DESIGNER", "DESIGN_DIRECTOR"];
+      return ["DESIGN_DIRECTOR", "CHIEF_DESIGNER", "INTERIOR_DESIGNER"];
     }
 
     if (scene === "project_construction_manager") {
-      return ["PROJECT_MANAGER"];
+      return ["ENGINEERING_DIRECTOR", "PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
     }
 
-    return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+    return [
+      "ENGINEERING_DIRECTOR",
+      "PROJECT_MANAGER",
+      "CONSTRUCTION_SUPER",
+      "QUALITY_INSPECTOR",
+    ];
   }
 
-  private getPostCodesByMemberRole(
+  private getEmployeePostCodesByMemberRole(
     roleCode?: ProjectMemberCandidateQueryType["role_code"],
-  ): PostCode[] {
+  ): EmployeePostCode[] {
     if (!roleCode) {
       return [];
     }
 
-    if (roleCode === "customer_owner" || roleCode === "sales_followup") {
-      return ["MARKETING_DIRECTOR", "SALES_CONSULTANT"];
+    if (roleCode === "customer_owner") {
+      return [
+        "MARKETING_DIRECTOR",
+        "SALES_MANAGER",
+        "SALES_CONSULTANT",
+        "TELESALES",
+        "CHANNEL_MANAGER",
+      ];
+    }
+
+    if (roleCode === "sales_followup") {
+      return [
+        "SALES_CONSULTANT",
+        "TELESALES",
+        "CHANNEL_MANAGER",
+        "CUSTOMER_INVITER",
+      ];
     }
 
     if (roleCode === "designer") {
-      return ["INTERIOR_DESIGNER", "DESIGN_DIRECTOR"];
+      return ["DESIGN_DIRECTOR", "CHIEF_DESIGNER", "INTERIOR_DESIGNER"];
     }
 
     if (roleCode === "supervisor") {
-      return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+      return [
+        "ENGINEERING_DIRECTOR",
+        "PROJECT_MANAGER",
+        "CONSTRUCTION_SUPER",
+        "QUALITY_INSPECTOR",
+      ];
     }
 
-    if (roleCode === "construction_manager" || roleCode === "site_manager") {
-      return ["PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+    if (roleCode === "construction_manager") {
+      return ["ENGINEERING_DIRECTOR", "PROJECT_MANAGER", "CONSTRUCTION_SUPER"];
+    }
+
+    if (roleCode === "site_manager") {
+      return [
+        "PROJECT_MANAGER",
+        "CONSTRUCTION_SUPER",
+        "HYDROPOWER_FOREMAN",
+        "TILE_FOREMAN",
+        "CARPENTRY_FOREMAN",
+        "PAINT_FOREMAN",
+      ];
     }
 
     if (roleCode === "budget_manager") {
-      return ["FINANCE_ACCOUNTANT"];
+      return ["FINANCE_MANAGER", "FINANCE_ACCOUNTANT", "COST_ACCOUNTANT"];
     }
 
     if (roleCode === "material_manager") {
-      return ["PROCURE_OFFICER"];
+      return [
+        "PROCUREMENT_MANAGER",
+        "PROCURE_OFFICER",
+        "MATERIAL_CLERK",
+        "WAREHOUSE_KEEPER",
+      ];
     }
 
     return [];
   }
 
-  private async getPostIdsByCodes(codes: PostCode[]) {
+  private async getPostIdsByCodes(codes: EmployeePostCode[]) {
     if (codes.length === 0) {
       return [];
     }

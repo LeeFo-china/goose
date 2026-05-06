@@ -13,18 +13,13 @@ const PostCodeValueSchema = z
   .max(64, "岗位编码最多 64 个字符")
   .regex(POST_CODE_PATTERN, "岗位编码只能使用大写字母、数字、下划线，且必须以大写字母开头");
 
-const PostCodeSchema = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? null : value,
-  PostCodeValueSchema.nullable().optional(),
-);
-
 /**
  * 职位基础校验 (Base Schema)
  * 对应数据库中的 post 表结构
  */
 export const PostBaseSchema = z.object({
   id: z.uuid().describe("职位ID"),
-  code: PostCodeSchema.nullable().optional().describe("职位编码"),
+  code: PostCodeValueSchema.describe("职位编码"),
   name: z.string().min(1, "职位名称不能为空").max(50, "名称过长"),
   base_salary: z.number().nullable().optional().describe("基础薪资/日薪"),
   salary_type: z.enum(SALARY_TYPE_VALUES, {

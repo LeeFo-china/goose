@@ -2,10 +2,10 @@
 
 import { type ColumnDef } from "@tanstack/react-table";
 import {
-  PostConfig,
+  EmployeePostConfig,
   PostStatusConfig,
   SalaryTypeConfig,
-  type PostCode,
+  type EmployeePostCode,
   type PostStatus,
   type SalaryType,
 } from "@gooes/domain";
@@ -36,7 +36,7 @@ function formatMoney(value: number | null | undefined) {
 
 function postCodeLabel(code: string | null) {
   if (!code) return null;
-  return PostConfig[code as PostCode]?.label || code;
+  return EmployeePostConfig[code as EmployeePostCode]?.label || code;
 }
 
 function salaryTypeLabel(value: string | null) {

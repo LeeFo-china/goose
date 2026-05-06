@@ -1,5 +1,7 @@
 # 项目创建页选择器前端对接摘要
 
+> 2026-05-06 更新：岗位编码已扩展为完整 `EmployeePostCode` 体系，项目员工候选人的最新岗位范围以 [小程序岗位编码对接说明](./2026-05-03-miniprogram-post-code-integration-summary.md) 为准。本文档保留接口路径、字段结构说明，旧的岗位编码筛选口径不再作为最新依据。
+
 本文档只基于当前后端实际实现，用于前端直接对照修改项目创建页里的“客户 / 设计师 / 项目监理”选择弹层，尽量一次联调通过。
 
 请以前端旧需求稿 [2026-04-18-project-create-select-api-summary.md](./2026-04-18-project-create-select-api-summary.md) 为历史参考，不要再按其中的 `/customers`、`/employees` 路径联调。

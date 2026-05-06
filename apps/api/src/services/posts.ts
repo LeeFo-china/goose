@@ -42,9 +42,14 @@ class PostsService {
   }
 
   async createPost(input: CreatePostInput) {
+    const code = this.normalizeCode(input.code);
+    if (!code) {
+      throw Errors.badRequest("岗位编码不能为空");
+    }
+
     const normalized = {
       ...input,
-      code: this.normalizeCode(input.code) ?? null,
+      code,
       name: this.normalizeName(input.name) || input.name,
     };
     await this.ensureCodeUnique(normalized.code);
@@ -57,11 +62,17 @@ class PostsService {
       throw Errors.business(404, "岗位不存在", ErrorCodes.POST_NOT_FOUND);
     }
 
-    const normalized = {
+    const normalized: UpdatePostInput = {
       ...input,
-      ...(input.code !== undefined ? { code: this.normalizeCode(input.code) ?? null } : {}),
       ...(input.name !== undefined ? { name: this.normalizeName(input.name) || input.name } : {}),
     };
+    if (input.code !== undefined) {
+      const code = this.normalizeCode(input.code);
+      if (!code) {
+        throw Errors.badRequest("岗位编码不能为空");
+      }
+      normalized.code = code;
+    }
 
     await this.ensureCodeUnique(normalized.code, existing.id);
     return postsRepository.update(id, normalized);

@@ -2,9 +2,9 @@
 
 import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
-  POST_CODE_VALUES,
+  EMPLOYEE_POST_CODE_VALUES,
+  EmployeePostConfig,
   SALARY_TYPE_VALUES,
-  PostConfig,
   PostStatusConfig,
   SalaryTypeConfig,
   type SalaryType,
@@ -130,7 +130,7 @@ function PostDialog({
     const codeValue = code.trim().toUpperCase();
     const payload = {
       name: String(formData.get("name") || "").trim(),
-      code: codeValue || null,
+      code: codeValue,
       base_salary: baseSalaryValue ? Number(baseSalaryValue) : null,
       salary_type: salaryType === "__none" ? null : salaryType,
       sort: sortValue ? Number(sortValue) : 0,
@@ -193,18 +193,19 @@ function PostDialog({
                 list={`${mode}-post-code-suggestions`}
                 placeholder="例如 CUSTOMER_SERVICE"
                 maxLength={64}
+                required
                 disabled={pending}
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
               />
               <datalist id={`${mode}-post-code-suggestions`}>
-                {POST_CODE_VALUES.map((value) => (
+                {EMPLOYEE_POST_CODE_VALUES.map((value) => (
                   <option key={value} value={value}>
-                    {PostConfig[value].label}
+                    {EmployeePostConfig[value].label}
                   </option>
                 ))}
               </datalist>
               <FieldDescription>
-                使用大写字母、数字、下划线，且以大写字母开头；留空表示不设置。
+                使用大写字母、数字、下划线，且以大写字母开头；会用于项目角色匹配。
               </FieldDescription>
             </Field>
             <Field>

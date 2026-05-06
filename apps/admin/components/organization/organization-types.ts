@@ -14,7 +14,7 @@ export type DepartmentRecord = {
 
 export type PostRecord = {
   id: string;
-  code: string | null;
+  code: string;
   name: string;
   base_salary: number | null;
   salary_type: string | null;
