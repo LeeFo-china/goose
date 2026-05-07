@@ -176,10 +176,25 @@ function parseDeviceKey(value: string) {
   };
 }
 
+function compactIdentifier(value: string | null | undefined) {
+  if (!value) return "";
+  if (value.length <= 14) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
 function formatDeviceLabel(device: CameraDeviceChannel) {
   if (device.vendor === "tencent_iotvideo_industry") {
-    const name = [device.device_name, device.channel_name].filter(Boolean).join(" / ");
-    return `${name || device.channel_id} · ${device.device_id} · ${device.channel_id}`;
+    const deviceName =
+      device.device_name ||
+      device.device_code ||
+      compactIdentifier(device.device_id) ||
+      "未命名设备";
+    const channelName =
+      device.channel_name ||
+      device.channel_code ||
+      compactIdentifier(device.channel_id) ||
+      "未命名通道";
+    return `${deviceName} / ${channelName}`;
   }
 
   const name = [device.device_name, device.channel_name].filter(Boolean).join(" / ");

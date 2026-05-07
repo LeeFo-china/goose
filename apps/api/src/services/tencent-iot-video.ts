@@ -336,17 +336,24 @@ export class TencentIotVideoService {
         if (!channelId) continue;
 
         const rawStatus = channel.Status ?? device.Status ?? null;
+        const deviceName =
+          readString(device.NickName) ||
+          readString(device.ExtraInformation) ||
+          readString(device.DeviceCode);
+        const channelName =
+          readString(channel.ChannelName) ||
+          readString(channel.ExtraInformation) ||
+          readString(channel.ChannelCode) ||
+          deviceName ||
+          channelId;
         rows.push({
           device_id: deviceId,
           device_code: readString(device.DeviceCode),
-          device_name: readString(device.NickName),
+          device_name: deviceName,
           device_type: typeof device.DeviceType === "number" ? device.DeviceType : null,
           channel_id: channelId,
           channel_code: readString(channel.ChannelCode),
-          channel_name:
-            readString(channel.ChannelName) ||
-            readString(device.NickName) ||
-            channelId,
+          channel_name: channelName,
           channel_type: typeof channel.ChannelType === "number" ? channel.ChannelType : null,
           status: normalizeStatus(rawStatus),
           raw_status: rawStatus,

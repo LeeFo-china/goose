@@ -90,6 +90,20 @@ function renderStatus(status: string) {
   return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
 }
 
+function compactIdentifier(value: string | null | undefined) {
+  if (!value) return "-";
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
+function tencentDeviceName(device: TencentDeviceChannel) {
+  return device.device_name || device.device_code || compactIdentifier(device.device_id);
+}
+
+function tencentChannelName(device: TencentDeviceChannel) {
+  return device.channel_name || device.channel_code || compactIdentifier(device.channel_id);
+}
+
 async function fetchBackendData<T>(token: string, path: string) {
   const response = await fetch(buildBackendUrl(path), {
     headers: {
@@ -423,12 +437,11 @@ export default async function CamerasPage({
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1080px] border-t text-sm">
+                <table className="w-full min-w-[980px] border-t text-sm">
                   <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3">设备 / 通道</th>
-                      <th className="px-4 py-3">DeviceId</th>
-                      <th className="px-4 py-3">ChannelId</th>
+                      <th className="px-4 py-3">设备备注</th>
+                      <th className="px-4 py-3">通道备注</th>
                       <th className="px-4 py-3">状态</th>
                       <th className="px-4 py-3">协议</th>
                       <th className="px-4 py-3">绑定状态</th>
@@ -440,28 +453,26 @@ export default async function CamerasPage({
                         key={`${device.device_id}-${device.channel_id}`}
                         className="border-t"
                       >
-                        <td className="px-4 py-3">
+                        <td className="max-w-[320px] px-4 py-3">
                           <div className="font-medium">
-                            {device.device_name || "未命名设备"}
+                            {tencentDeviceName(device)}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {device.channel_name || device.channel_code || "未命名通道"}
-                          </div>
-                        </td>
-                        <td className="max-w-[260px] px-4 py-3">
-                          <div className="truncate text-muted-foreground">
-                            {device.device_id}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {device.device_code || "-"}
+                          <div
+                            className="truncate text-xs text-muted-foreground"
+                            title={device.device_id}
+                          >
+                            ID {compactIdentifier(device.device_id)}
                           </div>
                         </td>
-                        <td className="max-w-[260px] px-4 py-3">
-                          <div className="truncate text-muted-foreground">
-                            {device.channel_id}
+                        <td className="max-w-[320px] px-4 py-3">
+                          <div className="font-medium">
+                            {tencentChannelName(device)}
                           </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {device.channel_code || "-"}
+                          <div
+                            className="truncate text-xs text-muted-foreground"
+                            title={device.channel_id}
+                          >
+                            通道ID {compactIdentifier(device.channel_id)}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
@@ -492,7 +503,7 @@ export default async function CamerasPage({
                     ))}
                     {tencentDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={5} className="h-28 px-4 py-6 text-center text-muted-foreground">
                           暂无腾讯云行业版通道
                         </td>
                       </tr>
