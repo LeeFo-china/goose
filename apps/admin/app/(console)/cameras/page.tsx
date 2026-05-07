@@ -11,8 +11,10 @@ import { CamerasTable } from "@/components/cameras/cameras-table";
 import type {
   CameraProjectOption,
   CameraRecord,
+  CameraDeviceChannel,
   EzvizDeviceChannel,
   Pagination,
+  TencentDeviceChannel,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +52,10 @@ type CameraListData = {
 
 type EzvizDeviceListData = {
   list: EzvizDeviceChannel[];
+};
+
+type TencentDeviceListData = {
+  list: TencentDeviceChannel[];
 };
 
 type CamerasPageSearchParams = {
@@ -130,36 +136,60 @@ async function getCameraData(token: string | null, projectId: string) {
   if (!token || !projectId) {
     return {
       cameras: [] as CameraRecord[],
-      devices: [] as EzvizDeviceChannel[],
+      devices: [] as CameraDeviceChannel[],
+      ezvizDevices: [] as EzvizDeviceChannel[],
+      tencentDevices: [] as TencentDeviceChannel[],
       cameraError: null,
-      deviceError: null,
+      ezvizDeviceError: null,
+      tencentDeviceError: null,
     };
   }
 
-  const [cameraResult, deviceResult] = await Promise.allSettled([
+  const [cameraResult, ezvizDeviceResult, tencentDeviceResult] = await Promise.allSettled([
     fetchBackendData<CameraListData>(token, `/projects/${projectId}/cameras`),
     fetchBackendData<EzvizDeviceListData>(
       token,
       `/projects/${projectId}/cameras/ezviz-devices?only_unbound=false`,
     ),
+    fetchBackendData<TencentDeviceListData>(
+      token,
+      `/projects/${projectId}/cameras/tencent-devices?only_unbound=false`,
+    ),
   ]);
+  const ezvizDevices = ezvizDeviceResult.status === "fulfilled"
+    ? ezvizDeviceResult.value?.list || []
+    : [];
+  const tencentDevices = tencentDeviceResult.status === "fulfilled"
+    ? tencentDeviceResult.value?.list || []
+    : [];
 
   return {
     cameras: cameraResult.status === "fulfilled"
       ? cameraResult.value?.list || []
       : [],
-    devices: deviceResult.status === "fulfilled"
-      ? deviceResult.value?.list || []
-      : [],
+    devices: [
+      ...ezvizDevices.map((device) => ({ ...device, vendor: "ezviz" as const })),
+      ...tencentDevices.map((device) => ({
+        ...device,
+        vendor: "tencent_iotvideo_industry" as const,
+      })),
+    ],
+    ezvizDevices,
+    tencentDevices,
     cameraError: cameraResult.status === "rejected"
       ? cameraResult.reason instanceof Error
         ? cameraResult.reason.message
         : "摄像头列表加载失败"
       : null,
-    deviceError: deviceResult.status === "rejected"
-      ? deviceResult.reason instanceof Error
-        ? deviceResult.reason.message
+    ezvizDeviceError: ezvizDeviceResult.status === "rejected"
+      ? ezvizDeviceResult.reason instanceof Error
+        ? ezvizDeviceResult.reason.message
         : "萤石设备列表加载失败"
+      : null,
+    tencentDeviceError: tencentDeviceResult.status === "rejected"
+      ? tencentDeviceResult.reason instanceof Error
+        ? tencentDeviceResult.reason.message
+        : "腾讯云设备列表加载失败"
       : null,
   };
 }
@@ -177,13 +207,22 @@ export default async function CamerasPage({
     ? requestedProjectId
     : projects[0]?.id || "";
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
-  const { cameras, devices, cameraError, deviceError } = await getCameraData(
+  const {
+    cameras,
+    devices,
+    ezvizDevices,
+    tencentDevices,
+    cameraError,
+    ezvizDeviceError,
+    tencentDeviceError,
+  } = await getCameraData(
     token,
     selectedProjectId,
   );
   const onlineCount = cameras.filter((cameraItem) => cameraItem.status === "online").length;
   const hiddenCount = cameras.filter((cameraItem) => !cameraItem.can_view).length;
   const unboundDeviceCount = devices.filter((device) => device.can_bind).length;
+  const tencentCameraCount = cameras.filter((cameraItem) => cameraItem.vendor === "tencent_iotvideo_industry").length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -191,7 +230,7 @@ export default async function CamerasPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">工地监控</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            萤石设备通道选择、项目摄像头绑定、客户可见权限和 EZPlayer 播放参数。
+            萤石和腾讯云行业版设备通道选择、项目摄像头绑定、客户可见权限和播放参数。
           </p>
         </div>
         {selectedProjectId ? (
@@ -230,6 +269,7 @@ export default async function CamerasPage({
             <div>
               <div className="text-sm text-muted-foreground">隐藏摄像头</div>
               <div className="text-xl font-semibold">{hiddenCount}</div>
+              <div className="mt-1 text-xs text-muted-foreground">腾讯云 {tencentCameraCount}</div>
             </div>
           </CardContent>
         </Card>
@@ -254,9 +294,14 @@ export default async function CamerasPage({
 
       {projectError ? <StatusAlert>{projectError}</StatusAlert> : null}
       {cameraError ? <StatusAlert>{cameraError}</StatusAlert> : null}
-      {deviceError ? (
+      {ezvizDeviceError ? (
         <StatusAlert tone="warning">
-          {deviceError}。已绑定摄像头仍可管理，新增绑定需要萤石设备列表可用。
+          {ezvizDeviceError}。已绑定摄像头仍可管理，新增萤石绑定需要萤石设备列表可用。
+        </StatusAlert>
+      ) : null}
+      {tencentDeviceError ? (
+        <StatusAlert tone="warning">
+          {tencentDeviceError}。已绑定摄像头仍可管理，新增腾讯云绑定需要先完成腾讯云监控配置。
         </StatusAlert>
       ) : null}
 
@@ -265,7 +310,7 @@ export default async function CamerasPage({
           <EmptyHeader>
             <EmptyTitle>暂无可管理项目</EmptyTitle>
             <EmptyDescription>
-              创建项目后，可以在这里绑定萤石摄像头通道。
+              创建项目后，可以在这里绑定萤石或腾讯云行业版摄像头通道。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -293,7 +338,7 @@ export default async function CamerasPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
               <CardTitle>萤石设备通道</CardTitle>
-              <Badge variant="outline">共 {devices.length} 个通道</Badge>
+              <Badge variant="outline">共 {ezvizDevices.length} 个通道</Badge>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -309,7 +354,7 @@ export default async function CamerasPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {devices.map((device) => (
+                    {ezvizDevices.map((device) => (
                       <tr
                         key={`${device.device_serial}-${device.channel_no}`}
                         className="border-t"
@@ -358,10 +403,97 @@ export default async function CamerasPage({
                         </td>
                       </tr>
                     ))}
-                    {devices.length === 0 ? (
+                    {ezvizDevices.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
                           暂无萤石设备通道
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+              <CardTitle>腾讯云行业版通道</CardTitle>
+              <Badge variant="outline">共 {tencentDevices.length} 个通道</Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1080px] border-t text-sm">
+                  <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">设备 / 通道</th>
+                      <th className="px-4 py-3">DeviceId</th>
+                      <th className="px-4 py-3">ChannelId</th>
+                      <th className="px-4 py-3">状态</th>
+                      <th className="px-4 py-3">协议</th>
+                      <th className="px-4 py-3">绑定状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tencentDevices.map((device) => (
+                      <tr
+                        key={`${device.device_id}-${device.channel_id}`}
+                        className="border-t"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium">
+                            {device.device_name || "未命名设备"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {device.channel_name || device.channel_code || "未命名通道"}
+                          </div>
+                        </td>
+                        <td className="max-w-[260px] px-4 py-3">
+                          <div className="truncate text-muted-foreground">
+                            {device.device_id}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {device.device_code || "-"}
+                          </div>
+                        </td>
+                        <td className="max-w-[260px] px-4 py-3">
+                          <div className="truncate text-muted-foreground">
+                            {device.channel_id}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {device.channel_code || "-"}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {renderStatus(device.status)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          {device.protocol || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {device.is_bound ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge
+                                className="w-fit"
+                                variant={device.is_bound_to_current_project ? "success" : "secondary"}
+                              >
+                                <Link2 />
+                                {device.is_bound_to_current_project ? "当前项目" : "其他项目"}
+                              </Badge>
+                              <div className="text-xs text-muted-foreground">
+                                {device.bound_project_name || device.bound_camera_name || "-"}
+                              </div>
+                            </div>
+                          ) : (
+                            <Badge variant="outline">可绑定</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {tencentDevices.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                          暂无腾讯云行业版通道
                         </td>
                       </tr>
                     ) : null}

@@ -3,15 +3,20 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
+  ProjectCameraVendor,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
 
 export type ProjectCameraRow = {
   id: string;
   project_id: string;
-  vendor: "ezviz";
+  vendor: ProjectCameraVendor;
   vendor_device_serial: string;
+  vendor_channel_id: string | null;
+  vendor_device_code: string | null;
+  vendor_channel_code: string | null;
   channel_no: number;
+  play_protocol: "flv" | "rtmp" | "hls";
   name: string;
   position: string | null;
   status: "online" | "offline" | "unknown";
@@ -37,6 +42,9 @@ export type ProjectCameraBindingRow = Pick<
   | "project_id"
   | "vendor"
   | "vendor_device_serial"
+  | "vendor_channel_id"
+  | "vendor_device_code"
+  | "vendor_channel_code"
   | "channel_no"
   | "name"
 > & {
@@ -85,18 +93,25 @@ class ProjectCameraRepository {
   }
 
   async findActiveByDeviceChannel(input: {
-    vendor: "ezviz";
+    vendor: ProjectCameraVendor;
     vendor_device_serial: string;
+    vendor_channel_id?: string | null;
     channel_no: number;
   }) {
-    const { data, error } = await this.adminClient
+    let query = this.adminClient
       .from("project_cameras")
       .select("*")
       .eq("vendor", input.vendor)
       .eq("vendor_device_serial", input.vendor_device_serial)
-      .eq("channel_no", input.channel_no)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (input.vendor === "tencent_iotvideo_industry") {
+      query = query.eq("vendor_channel_id", input.vendor_channel_id || "");
+    } else {
+      query = query.eq("channel_no", input.channel_no);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询摄像头绑定状态失败", error);
@@ -105,7 +120,7 @@ class ProjectCameraRepository {
     return (data || null) as ProjectCameraRow | null;
   }
 
-  async listActiveBindingsByVendor(vendor: "ezviz") {
+  async listActiveBindingsByVendor(vendor: ProjectCameraVendor) {
     const { data, error } = await this.adminClient
       .from("project_cameras")
       .select(`
@@ -113,6 +128,9 @@ class ProjectCameraRepository {
         project_id,
         vendor,
         vendor_device_serial,
+        vendor_channel_id,
+        vendor_device_code,
+        vendor_channel_code,
         channel_no,
         name,
         project:projects(id, name)
@@ -131,6 +149,7 @@ class ProjectCameraRepository {
     const existing = await this.findActiveByDeviceChannel({
       vendor: input.vendor,
       vendor_device_serial: input.vendor_device_serial,
+      vendor_channel_id: input.vendor_channel_id,
       channel_no: input.channel_no,
     });
 

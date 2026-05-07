@@ -14,6 +14,7 @@ type SettingsData = {
 const groupLabels: Record<string, string> = {
   sms: "短信配置",
   ezviz: "萤石监控",
+  tencent_iot_video: "腾讯云监控",
   ai: "AI 配置",
   notify: "通知配置",
   wechat: "微信配置",
@@ -69,7 +70,7 @@ export default async function SettingsPage() {
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "ai", "ezviz", "wechat", "notify"];
+      const order = ["sms", "ai", "ezviz", "tencent_iot_video", "wechat", "notify"];
       return order.indexOf(left.code) - order.indexOf(right.code);
     });
 

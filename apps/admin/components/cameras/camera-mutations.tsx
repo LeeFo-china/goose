@@ -7,7 +7,6 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
   Edit3,
-  Eye,
   Loader2,
   Plus,
   Trash2,
@@ -35,8 +34,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+  CameraDeviceChannel,
   CameraRecord,
-  EzvizDeviceChannel,
 } from "@/components/cameras/camera-types";
 
 type CameraMode = "create" | "edit";
@@ -51,10 +50,17 @@ type PlayParams = {
   };
   player?: {
     provider: string;
-    plugin_version: string;
-    access_token: string;
-    play_url: string;
-    expires_at: string;
+    plugin_version?: string;
+    access_token?: string;
+    play_url?: string;
+    protocol?: string;
+    src?: string;
+    flv_url?: string | null;
+    rtmp_url?: string | null;
+    hls_url?: string | null;
+    rtsp_url?: string | null;
+    request_id?: string | null;
+    expires_at?: string | null;
   };
 };
 
@@ -69,7 +75,9 @@ const CAMERA_CAPABILITY_VALUES = [
 const CameraFormSchema = z.object({
   name: z.string().trim().min(1, "请输入摄像头名称").max(80, "摄像头名称过长"),
   position: z.string().max(80, "位置过长"),
+  vendor: z.enum(["ezviz", "tencent_iotvideo_industry"]),
   device_key: z.string(),
+  play_protocol: z.enum(["flv", "rtmp", "hls"]),
   can_view: z.enum(["true", "false"]),
   can_control: z.enum(["true", "false"]),
   capabilities: z.array(z.enum(CAMERA_CAPABILITY_VALUES)).min(1, "至少选择一个能力"),
@@ -105,6 +113,17 @@ const boolOptions = [
   ["false", "否"],
 ] as const;
 
+const vendorOptions = [
+  ["ezviz", "萤石云"],
+  ["tencent_iotvideo_industry", "腾讯云行业版"],
+] as const;
+
+const playProtocolOptions = [
+  ["flv", "FLV"],
+  ["rtmp", "RTMP"],
+  ["hls", "HLS"],
+] as const;
+
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
@@ -130,19 +149,39 @@ async function requestCamera(input: {
   return payload.data;
 }
 
-function buildDeviceKey(device: EzvizDeviceChannel) {
-  return `${device.device_serial}::${device.channel_no}`;
+function getVendorLabel(vendor: string) {
+  if (vendor === "tencent_iotvideo_industry") return "腾讯云行业版";
+  if (vendor === "ezviz") return "萤石云";
+  return vendor || "未知厂商";
+}
+
+function buildDeviceKey(device: CameraDeviceChannel) {
+  if (device.vendor === "tencent_iotvideo_industry") {
+    return `${device.vendor}::${device.device_id}::${device.channel_id}`;
+  }
+
+  return `${device.vendor}::${device.device_serial}::${device.channel_no}`;
 }
 
 function parseDeviceKey(value: string) {
-  const [deviceSerial, channelNo] = value.split("::");
+  const [vendor, deviceId, channelIdOrNo] = value.split("::");
   return {
-    deviceSerial: deviceSerial || "",
-    channelNo: Number(channelNo || 1),
+    vendor: vendor === "tencent_iotvideo_industry"
+      ? "tencent_iotvideo_industry" as const
+      : "ezviz" as const,
+    deviceId: deviceId || "",
+    deviceSerial: deviceId || "",
+    channelId: channelIdOrNo || "",
+    channelNo: Number(channelIdOrNo || 1),
   };
 }
 
-function formatDeviceLabel(device: EzvizDeviceChannel) {
+function formatDeviceLabel(device: CameraDeviceChannel) {
+  if (device.vendor === "tencent_iotvideo_industry") {
+    const name = [device.device_name, device.channel_name].filter(Boolean).join(" / ");
+    return `${name || device.channel_id} · ${device.device_id} · ${device.channel_id}`;
+  }
+
   const name = [device.device_name, device.channel_name].filter(Boolean).join(" / ");
   return `${name || device.device_serial} · ${device.device_serial} · 通道 ${device.channel_no}`;
 }
@@ -151,7 +190,11 @@ function buildDefaults(camera?: CameraRecord): CameraFormValues {
   return {
     name: camera?.name || "",
     position: camera?.position || "",
+    vendor: camera?.vendor === "tencent_iotvideo_industry" ? "tencent_iotvideo_industry" : "ezviz",
     device_key: "",
+    play_protocol: camera?.play_protocol === "rtmp" || camera?.play_protocol === "hls"
+      ? camera.play_protocol
+      : "flv",
     can_view: camera?.can_view === false ? "false" : "true",
     can_control: camera?.can_control ? "true" : "false",
     capabilities: camera?.capabilities?.length
@@ -181,7 +224,7 @@ function CameraDialog({
   mode: CameraMode;
   projectId: string;
   camera?: CameraRecord;
-  devices: EzvizDeviceChannel[];
+  devices: CameraDeviceChannel[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -189,11 +232,15 @@ function CameraDialog({
   const defaults = useMemo(() => buildDefaults(camera), [camera]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const availableDevices = useMemo(() => devices.filter((device) => device.can_bind), [devices]);
   const form = useForm<CameraFormValues>({
     resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
     defaultValues: defaults,
   });
+  const selectedVendor = form.watch("vendor");
+  const availableDevices = useMemo(
+    () => devices.filter((device) => device.vendor === selectedVendor && device.can_bind),
+    [devices, selectedVendor],
+  );
   const selectedCapabilities = form.watch("capabilities");
 
   useEffect(() => {
@@ -226,7 +273,7 @@ function CameraDialog({
   function submit(values: CameraFormValues) {
     setError("");
     if (mode === "create" && !values.device_key) {
-      setError("请选择一个未绑定的萤石设备通道");
+      setError(`请选择一个未绑定的${getVendorLabel(values.vendor)}设备通道`);
       return;
     }
 
@@ -242,10 +289,37 @@ function CameraDialog({
           sort_order: Number(values.sort_order || 0),
           remark: values.remark.trim() || null,
           video_encrypted: toBoolean(values.video_encrypted),
+          play_protocol: values.play_protocol,
         };
 
         if (mode === "create") {
           const device = parseDeviceKey(values.device_key);
+          if (device.vendor === "tencent_iotvideo_industry") {
+            const selectedDevice = availableDevices.find(
+              (item) => buildDeviceKey(item) === values.device_key,
+            );
+            await requestCamera({
+              path: `/projects/${projectId}/cameras`,
+              method: "POST",
+              payload: {
+                ...commonPayload,
+                vendor: "tencent_iotvideo_industry",
+                vendor_device_serial: device.deviceId,
+                vendor_channel_id: device.channelId,
+                vendor_device_code: selectedDevice?.vendor === "tencent_iotvideo_industry"
+                  ? selectedDevice.device_code
+                  : null,
+                vendor_channel_code: selectedDevice?.vendor === "tencent_iotvideo_industry"
+                  ? selectedDevice.channel_code
+                  : null,
+                channel_no: 1,
+              },
+            });
+            onOpenChange(false);
+            router.refresh();
+            return;
+          }
+
           await requestCamera({
             path: `/projects/${projectId}/cameras`,
             method: "POST",
@@ -279,19 +353,47 @@ function CameraDialog({
           <DialogTitle>{mode === "create" ? "绑定摄像头" : "编辑摄像头"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "从未绑定的萤石设备通道中选择，并维护展示名称、权限和播放配置。"
+              ? "从未绑定的设备通道中选择，并维护展示名称、权限和播放配置。"
               : "设备序列号和通道号绑定后不可修改，避免误切换到其他项目。"}
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             {mode === "create" ? (
+              <>
+              <Controller
+                name="vendor"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="camera-vendor">设备厂商</FieldLabel>
+                    <FormSelect
+                      id="camera-vendor"
+                      value={field.value}
+                      disabled={pending}
+                      invalid={fieldState.invalid}
+                      options={vendorOptions.map(([value, label]) => ({ value, label }))}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        const firstDevice = devices.find(
+                          (device) => device.vendor === value && device.can_bind,
+                        );
+                        form.setValue("device_key", firstDevice ? buildDeviceKey(firstDevice) : "", {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                    />
+                    <FieldError errors={[fieldState.error]} />
+                  </Field>
+                )}
+              />
               <Controller
                 name="device_key"
                 control={form.control}
                 render={({ field, fieldState }) => (
-                  <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="camera-device">萤石设备通道</FieldLabel>
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="camera-device">设备通道</FieldLabel>
                     <FormSelect
                       id="camera-device"
                       value={field.value}
@@ -305,12 +407,13 @@ function CameraDialog({
                       onChange={field.onChange}
                     />
                     <FieldDescription>
-                      只展示当前未绑定到任何项目的设备通道。
+                      只展示当前厂商下未绑定到任何项目的设备通道。
                     </FieldDescription>
                     <FieldError errors={[fieldState.error]} />
                   </Field>
                 )}
               />
+              </>
             ) : null}
             <Controller
               name="name"
@@ -422,6 +525,25 @@ function CameraDialog({
               )}
             />
             <Controller
+              name="play_protocol"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="camera-play-protocol">播放协议</FieldLabel>
+                  <FormSelect
+                    id="camera-play-protocol"
+                    value={field.value}
+                    disabled={pending}
+                    invalid={fieldState.invalid}
+                    options={playProtocolOptions.map(([value, label]) => ({ value, label }))}
+                    onChange={field.onChange}
+                  />
+                  <FieldDescription>腾讯云建议 FLV；萤石当前仍使用 EZPlayer 参数。</FieldDescription>
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+            <Controller
               name="sort_order"
               control={form.control}
               render={({ field, fieldState }) => (
@@ -507,14 +629,19 @@ function PlayParamsDialog({
         <DialogHeader>
           <DialogTitle>{camera.name} 播放参数</DialogTitle>
           <DialogDescription>
-            前端播放器使用 `player.play_url` 和 `player.access_token` 初始化 EZPlayer。
+            小程序端按 `player.provider` 选择 EZPlayer 或 live-player。
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
           <InfoItem label="播放器" value={`${data.player?.provider || "-"} ${data.player?.plugin_version || ""}`} />
+          <InfoItem label="协议" value={data.player?.protocol || "-"} />
           <InfoItem label="过期时间" value={formatDateTime(data.player?.expires_at)} />
-          <InfoItem label="播放地址" value={data.player?.play_url || "-"} wrap />
+          <InfoItem label="播放地址" value={data.player?.src || data.player?.play_url || "-"} wrap />
+          <InfoItem label="FLV" value={data.player?.flv_url || "-"} wrap />
+          <InfoItem label="RTMP" value={data.player?.rtmp_url || "-"} wrap />
+          <InfoItem label="HLS" value={data.player?.hls_url || "-"} wrap />
           <InfoItem label="访问令牌" value={data.player?.access_token || "-"} wrap />
+          <InfoItem label="RequestId" value={data.player?.request_id || "-"} wrap />
         </div>
         <DialogFooter>
           <Button type="button" onClick={onClose}>关闭</Button>
@@ -561,7 +688,7 @@ export function CreateCameraButton({
   devices,
 }: {
   projectId: string;
-  devices: EzvizDeviceChannel[];
+  devices: CameraDeviceChannel[];
 }) {
   const [open, setOpen] = useState(false);
   const availableCount = devices.filter((device) => device.can_bind).length;
@@ -590,7 +717,7 @@ export function CameraRowActions({
 }: {
   projectId: string;
   camera: CameraRecord;
-  devices: EzvizDeviceChannel[];
+  devices: CameraDeviceChannel[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();

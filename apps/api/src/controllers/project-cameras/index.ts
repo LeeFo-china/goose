@@ -6,6 +6,7 @@ import { ResponseHandler } from "@/utils/response";
 import {
   CreateProjectCameraSchema,
   ProjectCameraEzvizDevicesQuerySchema,
+  ProjectCameraTencentDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
   ProjectCameraParamsSchema,
   ProjectCameraPlayParamsBodySchema,
@@ -53,6 +54,26 @@ class ProjectCameraController extends BaseController {
       authUserId: request.user?.sub,
       projectId: paramsResult.data.project_id,
       onlyUnbound: queryResult.data.only_unbound,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/projects/:project_id/cameras/tencent-devices")
+  async listTencentDeviceChannels(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = ProjectCameraParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = ProjectCameraTencentDevicesQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectCameraService.listTencentDeviceChannels({
+      authUserId: request.user?.sub,
+      projectId: paramsResult.data.project_id,
+      onlyUnbound: queryResult.data.only_unbound,
+      keyword: queryResult.data.keyword,
     });
 
     return ResponseHandler.success(result);

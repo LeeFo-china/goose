@@ -8,6 +8,7 @@ import {
   ezvizTokenService,
   getEzplayerPluginVersion,
 } from "@/services/ezviz";
+import { tencentIotVideoService } from "@/services/tencent-iot-video";
 import {
   projectCameraRepository,
   type CameraAccessLogAction,
@@ -44,6 +45,7 @@ function normalizeCapabilities(value: unknown) {
 function serializeCamera(camera: ProjectCameraRow) {
   return {
     id: camera.id,
+    vendor: camera.vendor,
     name: camera.name,
     position: camera.position,
     status: camera.status,
@@ -53,12 +55,14 @@ function serializeCamera(camera: ProjectCameraRow) {
     cover_url: camera.cover_url,
     sort_order: camera.sort_order,
     video_encrypted: camera.video_encrypted,
+    play_protocol: camera.play_protocol,
   };
 }
 
 function serializeCameraForPlayer(camera: ProjectCameraRow) {
   return {
     id: camera.id,
+    vendor: camera.vendor,
     name: camera.name,
     status: camera.status,
     can_control: camera.can_control,
@@ -68,6 +72,10 @@ function serializeCameraForPlayer(camera: ProjectCameraRow) {
 
 function buildDeviceChannelKey(deviceSerial: string, channelNo: number) {
   return `${deviceSerial}:${channelNo}`;
+}
+
+function buildTencentDeviceChannelKey(deviceId: string, channelId: string | null | undefined) {
+  return `${deviceId}:${channelId || ""}`;
 }
 
 function getBindingProject(project: unknown) {
@@ -88,6 +96,50 @@ function getUserAgent(meta?: RequestLogMeta) {
 
 function getIp(meta?: RequestLogMeta) {
   return meta?.ip || null;
+}
+
+function chooseTencentPlayUrl(input: {
+  protocol: "flv" | "rtmp" | "hls";
+  flvUrl: string | null;
+  rtmpUrl: string | null;
+  hlsUrl: string | null;
+}) {
+  if (input.protocol === "rtmp" && input.rtmpUrl) {
+    return {
+      protocol: "rtmp" as const,
+      src: input.rtmpUrl,
+    };
+  }
+
+  if (input.protocol === "hls" && input.hlsUrl) {
+    return {
+      protocol: "hls" as const,
+      src: input.hlsUrl,
+    };
+  }
+
+  if (input.flvUrl) {
+    return {
+      protocol: "flv" as const,
+      src: input.flvUrl,
+    };
+  }
+
+  if (input.rtmpUrl) {
+    return {
+      protocol: "rtmp" as const,
+      src: input.rtmpUrl,
+    };
+  }
+
+  if (input.hlsUrl) {
+    return {
+      protocol: "hls" as const,
+      src: input.hlsUrl,
+    };
+  }
+
+  return null;
 }
 
 class ProjectCameraService {
@@ -303,6 +355,72 @@ class ProjectCameraService {
     };
   }
 
+  async listTencentDeviceChannels(input: {
+    authUserId?: string | null;
+    projectId: string;
+    onlyUnbound: boolean;
+    keyword?: string | null;
+  }) {
+    await this.resolveActor({
+      authUserId: input.authUserId,
+      projectId: input.projectId,
+      permissionCode: "project.update",
+      allowCustomer: false,
+    });
+
+    const [channels, bindings] = await Promise.all([
+      tencentIotVideoService.listDeviceChannels(input.keyword),
+      projectCameraRepository.listActiveBindingsByVendor("tencent_iotvideo_industry"),
+    ]);
+    const bindingMap = new Map(
+      bindings.map((binding) => [
+        buildTencentDeviceChannelKey(
+          binding.vendor_device_serial,
+          binding.vendor_channel_id,
+        ),
+        binding,
+      ]),
+    );
+
+    const list = channels.map((channel) => {
+      const binding = bindingMap.get(
+        buildTencentDeviceChannelKey(channel.device_id, channel.channel_id),
+      );
+      const isBound = Boolean(binding);
+      const isBoundToCurrentProject = binding?.project_id === input.projectId;
+      const boundProject = getBindingProject(binding?.project);
+
+      return {
+        device_id: channel.device_id,
+        device_code: channel.device_code,
+        device_name: channel.device_name,
+        device_type: channel.device_type,
+        channel_id: channel.channel_id,
+        channel_code: channel.channel_code,
+        channel_name: channel.channel_name,
+        channel_type: channel.channel_type,
+        status: channel.status,
+        raw_status: channel.raw_status,
+        protocol: channel.protocol,
+        group_id: channel.group_id,
+        group_name: channel.group_name,
+        is_bound: isBound,
+        is_bound_to_current_project: isBoundToCurrentProject,
+        bound_project_id: binding?.project_id || null,
+        bound_project_name: boundProject?.name || null,
+        bound_camera_id: binding?.id || null,
+        bound_camera_name: binding?.name || null,
+        can_bind: !isBound,
+      };
+    });
+
+    return {
+      list: input.onlyUnbound
+        ? list.filter((item) => item.can_bind)
+        : list,
+    };
+  }
+
   async getPlayParams(input: {
     authUserId?: string | null;
     projectId: string;
@@ -378,6 +496,91 @@ class ProjectCameraService {
         meta: input.meta,
       });
       throw Errors.business(409, "摄像头当前离线", ErrorCodes.CAMERA_OFFLINE);
+    }
+
+    if (camera.vendor === "tencent_iotvideo_industry") {
+      if (!camera.vendor_channel_id) {
+        await this.logAccess({
+          actor,
+          projectId: input.projectId,
+          cameraId: input.cameraId,
+          action: "play_params",
+          result: "failure",
+          errorMessage: "tencent channel id missing",
+          meta: input.meta,
+        });
+        throw Errors.business(
+          409,
+          "摄像头缺少腾讯云通道 ID",
+          ErrorCodes.TENCENT_IOT_VIDEO_PLAY_URL_ERROR,
+        );
+      }
+
+      let liveStream;
+      try {
+        liveStream = await tencentIotVideoService.getLiveStreamUrl({
+          deviceId: camera.vendor_device_serial,
+          channelId: camera.vendor_channel_id,
+        });
+      } catch (error) {
+        await this.logAccess({
+          actor,
+          projectId: input.projectId,
+          cameraId: input.cameraId,
+          action: "play_params",
+          result: "failure",
+          errorMessage: error instanceof Error ? error.message : "tencent live stream failed",
+          meta: input.meta,
+        });
+        throw error;
+      }
+
+      const selected = chooseTencentPlayUrl({
+        protocol: camera.play_protocol,
+        flvUrl: liveStream.flv_url,
+        rtmpUrl: liveStream.rtmp_url,
+        hlsUrl: liveStream.hls_url,
+      });
+      if (!selected) {
+        await this.logAccess({
+          actor,
+          projectId: input.projectId,
+          cameraId: input.cameraId,
+          action: "play_params",
+          result: "failure",
+          errorMessage: `tencent live stream empty, request_id=${liveStream.request_id || ""}`,
+          meta: input.meta,
+        });
+        throw Errors.business(
+          503,
+          "腾讯云播放地址为空",
+          ErrorCodes.TENCENT_IOT_VIDEO_PLAY_URL_ERROR,
+          { request_id: liveStream.request_id },
+        );
+      }
+
+      await this.logAccess({
+        actor,
+        projectId: input.projectId,
+        cameraId: input.cameraId,
+        action: "play_params",
+        meta: input.meta,
+      });
+
+      return {
+        camera: serializeCameraForPlayer(camera),
+        player: {
+          provider: "tencent_iot_video_industry",
+          protocol: selected.protocol,
+          src: selected.src,
+          flv_url: liveStream.flv_url,
+          rtmp_url: liveStream.rtmp_url,
+          hls_url: liveStream.hls_url,
+          rtsp_url: liveStream.rtsp_url,
+          request_id: liveStream.request_id,
+          expires_at: null,
+        },
+      };
     }
 
     const token = await ezvizTokenService.getValidAccessToken();

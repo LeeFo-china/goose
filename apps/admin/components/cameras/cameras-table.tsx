@@ -7,8 +7,8 @@ import {
   CameraRowActions,
 } from "@/components/cameras/camera-mutations";
 import type {
+  CameraDeviceChannel,
   CameraRecord,
-  EzvizDeviceChannel,
 } from "@/components/cameras/camera-types";
 
 const statusMeta: Record<string, {
@@ -51,6 +51,18 @@ function renderCapabilities(capabilities: string[]) {
   );
 }
 
+function renderVendor(vendor: string) {
+  if (vendor === "tencent_iotvideo_industry") {
+    return <Badge variant="default">腾讯云</Badge>;
+  }
+
+  if (vendor === "ezviz") {
+    return <Badge variant="outline">萤石</Badge>;
+  }
+
+  return <Badge variant="secondary">{vendor || "未知"}</Badge>;
+}
+
 const columns: ColumnDef<CameraRecord>[] = [
   {
     accessorKey: "name",
@@ -70,6 +82,14 @@ const columns: ColumnDef<CameraRecord>[] = [
     accessorKey: "status",
     header: "状态",
     cell: ({ row }) => renderStatus(row.original.status),
+    meta: {
+      cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    accessorKey: "vendor",
+    header: "厂商",
+    cell: ({ row }) => renderVendor(row.original.vendor),
     meta: {
       cellClassName: "whitespace-nowrap",
     },
@@ -119,7 +139,7 @@ const columns: ColumnDef<CameraRecord>[] = [
     cell: ({ row, table }) => {
       const meta = table.options.meta as {
         projectId: string;
-        devices: EzvizDeviceChannel[];
+        devices: CameraDeviceChannel[];
       };
 
       return (
@@ -144,7 +164,7 @@ export function CamerasTable({
 }: {
   projectId: string;
   cameras: CameraRecord[];
-  devices: EzvizDeviceChannel[];
+  devices: CameraDeviceChannel[];
 }) {
   return (
     <DataTable
