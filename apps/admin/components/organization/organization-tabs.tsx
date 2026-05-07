@@ -2,19 +2,21 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { Building2, BriefcaseBusiness, Loader2 } from "lucide-react";
+import { Building2, BriefcaseBusiness, Loader2, Workflow } from "lucide-react";
 import { DepartmentsClientShell } from "@/components/organization/departments-client-shell";
 import { PostsClientShell } from "@/components/organization/posts-client-shell";
+import { RolePostRulesClientShell } from "@/components/organization/role-post-rules-client-shell";
 import type {
   DepartmentRecord,
   Pagination,
+  ProjectMemberRolePostRuleConfig,
   PostRecord,
 } from "@/components/organization/organization-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type OrganizationTab = "departments" | "posts";
+type OrganizationTab = "departments" | "posts" | "role-rules";
 
 type ListData<T> = {
   list: T[];
@@ -33,12 +35,18 @@ const tabs = [
     label: "岗位",
     icon: BriefcaseBusiness,
   },
+  {
+    value: "role-rules" as const,
+    label: "候选规则",
+    icon: Workflow,
+  },
 ];
 
 export function OrganizationTabs({
   activeTab,
   departments,
   posts,
+  roleRuleConfig,
   departmentCode,
   departmentKeyword,
   postStatus,
@@ -48,6 +56,7 @@ export function OrganizationTabs({
   activeTab: OrganizationTab;
   departments: ListData<DepartmentRecord>;
   posts: ListData<PostRecord>;
+  roleRuleConfig: ProjectMemberRolePostRuleConfig & { error: string | null };
   departmentCode: string;
   departmentKeyword: string;
   postStatus: string;
@@ -75,7 +84,9 @@ export function OrganizationTabs({
           const Icon = tab.icon;
           const total = tab.value === "departments"
             ? departments.pagination.total
-            : posts.pagination.total;
+            : tab.value === "posts"
+              ? posts.pagination.total
+              : roleRuleConfig.roles.length;
 
           return (
             <Button
@@ -110,7 +121,7 @@ export function OrganizationTabs({
           keyword={departmentKeyword}
           error={departments.error}
         />
-      ) : (
+      ) : activeTab === "posts" ? (
         <PostsClientShell
           posts={posts.list}
           pagination={posts.pagination}
@@ -118,6 +129,12 @@ export function OrganizationTabs({
           salaryType={postSalaryType}
           keyword={postKeyword}
           error={posts.error}
+        />
+      ) : (
+        <RolePostRulesClientShell
+          roles={roleRuleConfig.roles}
+          postOptions={roleRuleConfig.post_options}
+          error={roleRuleConfig.error}
         />
       )}
     </div>

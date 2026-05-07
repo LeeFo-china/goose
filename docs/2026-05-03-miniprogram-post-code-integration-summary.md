@@ -3,6 +3,8 @@
 本文档给微信小程序前端对接 `posts.code` / `post_code` 使用。当前后端已将岗位编码语义明确为 `EmployeePostCode`：员工岗位的业务编码，用于项目成员候选人筛选，也可用于前端展示兜底。
 
 > 2026-05-06 第二阶段更新：项目成员角色到岗位编码的关系已从后端 hardcode 迁移到数据库映射表 `project_member_role_post_rules`。小程序接口路径和参数不变，候选人范围以后以后端配置为准。
+>
+> 2026-05-06 第三阶段更新：admin 后台“组织架构 / 候选规则”已开放可视化配置入口。小程序仍不需要改接口。
 
 ---
 
@@ -192,7 +194,7 @@ GET /projects/:id/member-candidates?page=1&pageSize=10&role_code=designer
 | `budget_manager` | `FINANCE_MANAGER`, `FINANCE_ACCOUNTANT`, `COST_ACCOUNTANT` |
 | `material_manager` | `PROCUREMENT_MANAGER`, `PROCURE_OFFICER`, `MATERIAL_CLERK`, `WAREHOUSE_KEEPER` |
 
-这些映射由后端表 `project_member_role_post_rules` 维护。MVP 阶段还没有开放小程序配置入口，小程序只消费接口返回结果。
+这些映射由后端表 `project_member_role_post_rules` 维护，并可在 admin 后台“组织架构 / 候选规则”中配置。小程序只消费接口返回结果。
 
 ---
 

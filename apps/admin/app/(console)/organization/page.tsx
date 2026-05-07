@@ -2,12 +2,13 @@ import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import type {
   DepartmentRecord,
   Pagination,
+  ProjectMemberRolePostRuleConfig,
   PostRecord,
 } from "@/components/organization/organization-types";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
-type OrganizationTab = "departments" | "posts";
+type OrganizationTab = "departments" | "posts" | "role-rules";
 
 type OrganizationSearchParams = {
   tab?: string;
@@ -42,6 +43,7 @@ function normalizePage(value: string | undefined) {
 }
 
 function normalizeTab(value: string | undefined): OrganizationTab {
+  if (value === "role-rules") return "role-rules";
   return value === "posts" ? "posts" : "departments";
 }
 
@@ -83,6 +85,41 @@ async function getList<T>(input: {
   }
 }
 
+async function getRoleRuleConfig(input: {
+  token: string | null;
+}): Promise<ProjectMemberRolePostRuleConfig & { error: string | null }> {
+  if (!input.token) {
+    return {
+      roles: [],
+      post_options: [],
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl("/project-member-role-post-rules"), {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<ProjectMemberRolePostRuleConfig>(response);
+    return {
+      ...(payload.data || {
+        roles: [],
+        post_options: [],
+      }),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      roles: [],
+      post_options: [],
+      error: error instanceof Error ? error.message : "候选规则加载失败",
+    };
+  }
+}
+
 function buildDepartmentQuery(params: OrganizationSearchParams) {
   const query = new URLSearchParams({
     page: String(normalizePage(params.departmentPage)),
@@ -117,7 +154,7 @@ export default async function OrganizationPage({
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
   const token = await getAdminToken();
-  const [departments, posts] = await Promise.all([
+  const [departments, posts, roleRuleConfig] = await Promise.all([
     getList<DepartmentRecord>({
       token,
       resource: "departments",
@@ -130,6 +167,7 @@ export default async function OrganizationPage({
       query: buildPostQuery(params),
       fallbackMessage: "岗位列表加载失败",
     }),
+    getRoleRuleConfig({ token }),
   ]);
 
   return (
@@ -145,6 +183,7 @@ export default async function OrganizationPage({
         activeTab={activeTab}
         departments={departments}
         posts={posts}
+        roleRuleConfig={roleRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
         postStatus={params.postStatus?.trim() || ""}
