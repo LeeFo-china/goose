@@ -24,7 +24,7 @@ export const ProjectCameraDetailParamsSchema = z.object({
   camera_id: z.uuid("无效的摄像头 ID"),
 });
 
-export const CreateProjectCameraSchema = z.object({
+const ProjectCameraWritableBaseSchema = z.object({
   name: z.string().trim().min(1, "摄像头名称不能为空").max(80, "摄像头名称过长"),
   position: z.string().trim().max(80, "摄像头位置过长").nullable().optional(),
   vendor: z.enum(PROJECT_CAMERA_VENDOR_VALUES, {
@@ -45,7 +45,9 @@ export const CreateProjectCameraSchema = z.object({
   play_protocol: z.enum(PROJECT_CAMERA_PLAY_PROTOCOL_VALUES, {
     message: "无效的播放协议",
   }).default("flv"),
-}).superRefine((value, ctx) => {
+});
+
+export const CreateProjectCameraSchema = ProjectCameraWritableBaseSchema.superRefine((value, ctx) => {
   if (value.vendor === "tencent_iotvideo_industry" && !value.vendor_channel_id) {
     ctx.addIssue({
       code: "custom",
@@ -55,7 +57,7 @@ export const CreateProjectCameraSchema = z.object({
   }
 });
 
-export const UpdateProjectCameraSchema = CreateProjectCameraSchema.pick({
+export const UpdateProjectCameraSchema = ProjectCameraWritableBaseSchema.pick({
   name: true,
   position: true,
   can_view: true,
