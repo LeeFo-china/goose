@@ -168,3 +168,20 @@ function renderPlayer(player) {
 - 播放地址是动态地址，切换摄像头、刷新播放、回前台都应重新请求后端。
 - `expires_at` 第一版可能是 `null`，不要依赖该字段做定时刷新。
 
+## 2026-05-07 联调补充
+
+后端已按小程序联调交接文档补齐两处兼容：
+
+1. `GET /projects/:project_id/cameras`
+   - 腾讯云摄像头列表会尝试实时合并腾讯云通道状态。
+   - 返回的 `status` 统一为 `online` / `offline` / `unknown`。
+   - 如果腾讯云配置异常或接口不可用，列表不会失败，会保留库内状态。
+
+2. `POST /projects/:project_id/cameras/:camera_id/play-params`
+   - 腾讯云播放地址获取成功时，返回的 `camera.status` 会明确置为 `online`。
+   - `player.provider` 固定为 `tencent_iot_video_industry`。
+   - `player.protocol` 固定为小写协议。
+   - `player.src` 必须与最终选择的协议地址一致。
+   - 腾讯云播放失败时，后端会回写 `offline/unknown` 状态用于后续列表展示。
+
+小程序端仍建议以 `play-params` 返回的 `camera.status` 覆盖当前选中摄像头状态，因为播放参数接口是用户真正发起播放时的最新结果。

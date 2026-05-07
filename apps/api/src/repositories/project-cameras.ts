@@ -209,6 +209,27 @@ class ProjectCameraRepository {
     return data as ProjectCameraRow;
   }
 
+  async updateStatus(input: {
+    cameraId: string;
+    status: ProjectCameraRow["status"];
+    errorMessage?: string | null;
+  }) {
+    const { error } = await this.adminClient
+      .from("project_cameras")
+      .update({
+        status: input.status,
+        last_status_checked_at: new Date().toISOString(),
+        last_status_error: input.errorMessage || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.cameraId)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw Errors.dbError("更新摄像头状态失败", error);
+    }
+  }
+
   async softDelete(projectId: string, cameraId: string) {
     const now = new Date().toISOString();
     const { data, error } = await this.adminClient

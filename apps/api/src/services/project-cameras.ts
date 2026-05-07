@@ -42,13 +42,49 @@ function normalizeCapabilities(value: unknown) {
     .filter(Boolean);
 }
 
+function normalizeCameraStatus(value: unknown): ProjectCameraRow["status"] {
+  if (
+    value === "online" ||
+    value === "1" ||
+    value === 1 ||
+    value === true ||
+    value === "true" ||
+    value === "connected"
+  ) {
+    return "online";
+  }
+
+  if (
+    value === "offline" ||
+    value === "0" ||
+    value === 0 ||
+    value === false ||
+    value === "false" ||
+    value === "disconnected"
+  ) {
+    return "offline";
+  }
+
+  return "unknown";
+}
+
+function withCameraStatus(
+  camera: ProjectCameraRow,
+  status: ProjectCameraRow["status"],
+): ProjectCameraRow {
+  return {
+    ...camera,
+    status,
+  };
+}
+
 function serializeCamera(camera: ProjectCameraRow) {
   return {
     id: camera.id,
     vendor: camera.vendor,
     name: camera.name,
     position: camera.position,
-    status: camera.status,
+    status: normalizeCameraStatus(camera.status),
     can_view: camera.can_view,
     can_control: camera.can_control,
     capabilities: normalizeCapabilities(camera.capabilities),
@@ -64,7 +100,7 @@ function serializeCameraForPlayer(camera: ProjectCameraRow) {
     id: camera.id,
     vendor: camera.vendor,
     name: camera.name,
-    status: camera.status,
+    status: normalizeCameraStatus(camera.status),
     can_control: camera.can_control,
     capabilities: normalizeCapabilities(camera.capabilities),
   };
@@ -144,6 +180,68 @@ function chooseTencentPlayUrl(input: {
 
 class ProjectCameraService {
   private adminClient = SupabaseDB.getAdminClient();
+
+  private async saveCameraStatus(input: {
+    cameraId: string;
+    status: ProjectCameraRow["status"];
+    errorMessage?: string | null;
+  }) {
+    try {
+      await projectCameraRepository.updateStatus(input);
+    } catch {
+      // 状态回写只用于提升列表体验，不能影响播放主链路。
+    }
+  }
+
+  private async enrichTencentCameraStatuses(cameras: ProjectCameraRow[]) {
+    const tencentCameras = cameras.filter((camera) =>
+      camera.vendor === "tencent_iotvideo_industry" && camera.vendor_channel_id
+    );
+    if (!tencentCameras.length) return cameras;
+
+    try {
+      const channels = await tencentIotVideoService.listDeviceChannels();
+      const statusMap = new Map(
+        channels.map((channel) => [
+          buildTencentDeviceChannelKey(channel.device_id, channel.channel_id),
+          normalizeCameraStatus(channel.status),
+        ]),
+      );
+
+      const changed: Array<{
+        cameraId: string;
+        status: ProjectCameraRow["status"];
+      }> = [];
+      const nextCameras = cameras.map((camera) => {
+        if (camera.vendor !== "tencent_iotvideo_industry" || !camera.vendor_channel_id) {
+          return camera;
+        }
+
+        const status = statusMap.get(
+          buildTencentDeviceChannelKey(camera.vendor_device_serial, camera.vendor_channel_id),
+        );
+        if (!status) return camera;
+        if (status !== camera.status) {
+          changed.push({
+            cameraId: camera.id,
+            status,
+          });
+        }
+        return withCameraStatus(camera, status);
+      });
+
+      await Promise.all(changed.map((item) =>
+        this.saveCameraStatus({
+          cameraId: item.cameraId,
+          status: item.status,
+        })
+      ));
+
+      return nextCameras;
+    } catch {
+      return cameras;
+    }
+  }
 
   private async isCustomerOwnedProject(authUserId: string, projectId: string) {
     const { data: customers, error: customerError } = await this.adminClient
@@ -283,7 +381,9 @@ class ProjectCameraService {
       permissionCode: "project.read",
       allowCustomer: true,
     });
-    const cameras = await projectCameraRepository.listByProjectId(input.projectId);
+    const cameras = await this.enrichTencentCameraStatuses(
+      await projectCameraRepository.listByProjectId(input.projectId),
+    );
     await this.logAccess({
       actor,
       projectId: input.projectId,
@@ -485,7 +585,7 @@ class ProjectCameraService {
       );
     }
 
-    if (camera.status === "offline") {
+    if (camera.status === "offline" && camera.vendor !== "tencent_iotvideo_industry") {
       await this.logAccess({
         actor,
         projectId: input.projectId,
@@ -523,13 +623,24 @@ class ProjectCameraService {
           channelId: camera.vendor_channel_id,
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "tencent live stream failed";
+        const errorCode = error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code || "")
+          : "";
+        await this.saveCameraStatus({
+          cameraId: camera.id,
+          status: errorCode === ErrorCodes.CAMERA_OFFLINE || errorMessage.includes("离线")
+            ? "offline"
+            : "unknown",
+          errorMessage,
+        });
         await this.logAccess({
           actor,
           projectId: input.projectId,
           cameraId: input.cameraId,
           action: "play_params",
           result: "failure",
-          errorMessage: error instanceof Error ? error.message : "tencent live stream failed",
+          errorMessage,
           meta: input.meta,
         });
         throw error;
@@ -566,9 +677,15 @@ class ProjectCameraService {
         action: "play_params",
         meta: input.meta,
       });
+      await this.saveCameraStatus({
+        cameraId: camera.id,
+        status: "online",
+      });
+
+      const onlineCamera = withCameraStatus(camera, "online");
 
       return {
-        camera: serializeCameraForPlayer(camera),
+        camera: serializeCameraForPlayer(onlineCamera),
         player: {
           provider: "tencent_iot_video_industry",
           protocol: selected.protocol,
