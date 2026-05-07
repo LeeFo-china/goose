@@ -126,6 +126,14 @@ function getBindingProject(project: unknown) {
   return undefined;
 }
 
+function getTencentDeviceTypeLabel(value: number | null | undefined) {
+  if (value === 2) return "IPC";
+  if (value === 3) return "NVR";
+  if (value === 1) return "VMS";
+  if (value === 9) return "智能告警设备";
+  return value == null ? "未知设备" : `类型 ${value}`;
+}
+
 function getUserAgent(meta?: RequestLogMeta) {
   return meta?.userAgent || null;
 }
@@ -472,6 +480,7 @@ class ProjectCameraService {
       tencentIotVideoService.listDeviceChannels(input.keyword),
       projectCameraRepository.listActiveBindingsByVendor("tencent_iotvideo_industry"),
     ]);
+    const sipServer = await tencentIotVideoService.getSipServerConfig().catch(() => null);
     const bindingMap = new Map(
       bindings.map((binding) => [
         buildTencentDeviceChannelKey(
@@ -495,6 +504,9 @@ class ProjectCameraService {
         device_code: channel.device_code,
         device_name: channel.device_name,
         device_type: channel.device_type,
+        device_type_label: getTencentDeviceTypeLabel(channel.device_type),
+        sip_username: channel.device_code,
+        sip_transport_protocol: "TCP",
         channel_id: channel.channel_id,
         channel_code: channel.channel_code,
         channel_name: channel.channel_name,
@@ -515,6 +527,7 @@ class ProjectCameraService {
     });
 
     return {
+      sip_server: sipServer,
       list: input.onlyUnbound
         ? list.filter((item) => item.can_bind)
         : list,

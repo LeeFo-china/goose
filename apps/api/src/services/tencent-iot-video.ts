@@ -57,6 +57,20 @@ type DescribeChannelsResponse = {
   RequestId?: string;
 };
 
+type TencentSipServerRecord = {
+  Host?: string;
+  Port?: number;
+  Serial?: string;
+  Realm?: string;
+};
+
+type DescribeSipServerResponse = TencentSipServerRecord & {
+  Data?: TencentSipServerRecord;
+  ServerConfiguration?: TencentSipServerRecord;
+  SipServer?: TencentSipServerRecord;
+  RequestId?: string;
+};
+
 type DescribeChannelLiveStreamURLResponse = {
   Data?: {
     RtspAddr?: string;
@@ -81,6 +95,15 @@ export type TencentIotVideoDeviceChannel = {
   protocol: string | null;
   group_id: string | null;
   group_name: string | null;
+};
+
+export type TencentIotVideoSipServerConfig = {
+  sip_server_id: string | null;
+  sip_domain: string | null;
+  sip_host: string | null;
+  sip_port: number | null;
+  transport_protocol: "TCP";
+  request_id: string | null;
 };
 
 export type TencentIotVideoLiveStream = {
@@ -126,6 +149,15 @@ function normalizeStatus(value: number | string | null | undefined) {
   }
 
   return "unknown" as const;
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 async function getRequiredSecretConfig(key: string) {
@@ -295,6 +327,28 @@ export class TencentIotVideoService {
     }
 
     return devices;
+  }
+
+  async getSipServerConfig(): Promise<TencentIotVideoSipServerConfig> {
+    const response = await this.request<DescribeSipServerResponse>(
+      "DescribeSIPServer",
+      {},
+    );
+    const record =
+      response.Data ||
+      response.ServerConfiguration ||
+      response.SipServer ||
+      response;
+    const serial = readString(record.Serial);
+
+    return {
+      sip_server_id: serial,
+      sip_domain: readString(record.Realm) || serial?.slice(0, 10) || null,
+      sip_host: readString(record.Host),
+      sip_port: readNumber(record.Port),
+      transport_protocol: "TCP",
+      request_id: response.RequestId || null,
+    };
   }
 
   async listChannels(deviceId: string) {

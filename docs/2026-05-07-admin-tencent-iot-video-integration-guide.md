@@ -57,12 +57,23 @@ TENCENT_IOT_VIDEO_LIVE_STREAM_ACTION=DescribeChannelLiveStreamURL
 {
   "success": true,
   "data": {
+    "sip_server": {
+      "sip_server_id": "44020000002000000008",
+      "sip_domain": "4402000000",
+      "sip_host": "106.53.137.246",
+      "sip_port": 50003,
+      "transport_protocol": "TCP",
+      "request_id": "腾讯云 RequestId"
+    },
     "list": [
       {
         "device_id": "34020000001180000036_34020000001180000036",
         "device_code": "34020000001180000036",
         "device_name": "NVR-1",
         "device_type": 3,
+        "device_type_label": "NVR",
+        "sip_username": "34020000001180000036",
+        "sip_transport_protocol": "TCP",
         "channel_id": "34020000001180000036_34020000001320000092",
         "channel_code": "34020000001320000092",
         "channel_name": "工地入口",
@@ -84,6 +95,21 @@ TENCENT_IOT_VIDEO_LIVE_STREAM_ACTION=DescribeChannelLiveStreamURL
   }
 }
 ```
+
+`sip_server` 来自腾讯云 `DescribeSIPServer`。设备本地注册时常用映射：
+
+| 本地摄像头字段 | 后端字段 |
+| --- | --- |
+| SIP服务器ID | `sip_server.sip_server_id` |
+| SIP服务器域 | `sip_server.sip_domain` |
+| SIP服务器地址 | `sip_server.sip_host` |
+| SIP服务器端口 | `sip_server.sip_port` |
+| SIP传输协议 | `sip_server.transport_protocol`，第一版固定 `TCP` |
+| SIP用户名 | `device.sip_username`，即腾讯云 `DeviceCode` |
+| 设备名称 | `device.device_name` |
+| 设备类型 | `device.device_type_label` |
+
+第一阶段不返回 SIP 认证密码。已有设备的认证密码需要使用创建时保存的密码；后续可单独接入腾讯云密码查询/重置和 admin 脱敏展示。
 
 ## Admin 页面改造建议
 
@@ -169,4 +195,3 @@ ChannelCode
 | 摄像头不存在或已解绑 | 重新同步腾讯云设备通道 |
 | 设备信令不通，请检查国标注册 | 提示检查 GB28181 注册、网络和 SIP 配置 |
 | 该摄像头已绑定到其他项目 | 展示已绑定项目名，不允许重复绑定 |
-

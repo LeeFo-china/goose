@@ -28,6 +28,15 @@ export type CameraRecord = {
   play_protocol?: "flv" | "rtmp" | "hls" | string;
 };
 
+export type TencentSipServerConfig = {
+  sip_server_id: string | null;
+  sip_domain: string | null;
+  sip_host: string | null;
+  sip_port: number | null;
+  transport_protocol: "TCP";
+  request_id: string | null;
+};
+
 export type EzvizDeviceChannel = {
   device_name: string | null;
   device_serial: string;
@@ -51,6 +60,9 @@ export type TencentDeviceChannel = {
   device_code: string | null;
   device_name: string | null;
   device_type: number | null;
+  device_type_label?: string | null;
+  sip_username?: string | null;
+  sip_transport_protocol?: "TCP" | string | null;
   channel_id: string;
   channel_code: string | null;
   channel_name: string | null;

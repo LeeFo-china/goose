@@ -3,7 +3,9 @@ import {
   CameraOff,
   CircuitBoard,
   Link2,
+  ShieldAlert,
 } from "lucide-react";
+import { CopyValueButton } from "@/components/admin/copy-value-button";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CameraProjectPicker } from "@/components/cameras/camera-list-actions";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
@@ -15,6 +17,7 @@ import type {
   EzvizDeviceChannel,
   Pagination,
   TencentDeviceChannel,
+  TencentSipServerConfig,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +58,7 @@ type EzvizDeviceListData = {
 };
 
 type TencentDeviceListData = {
+  sip_server: TencentSipServerConfig | null;
   list: TencentDeviceChannel[];
 };
 
@@ -102,6 +106,29 @@ function tencentDeviceName(device: TencentDeviceChannel) {
 
 function tencentChannelName(device: TencentDeviceChannel) {
   return device.channel_name || device.channel_code || compactIdentifier(device.channel_id);
+}
+
+function formatValue(value: string | number | null | undefined) {
+  if (value == null || value === "") return "-";
+  return String(value);
+}
+
+function AccessConfigItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="truncate text-sm font-medium">{formatValue(value)}</div>
+      </div>
+      <CopyValueButton value={value} />
+    </div>
+  );
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -153,6 +180,7 @@ async function getCameraData(token: string | null, projectId: string) {
       devices: [] as CameraDeviceChannel[],
       ezvizDevices: [] as EzvizDeviceChannel[],
       tencentDevices: [] as TencentDeviceChannel[],
+      tencentSipServer: null as TencentSipServerConfig | null,
       cameraError: null,
       ezvizDeviceError: null,
       tencentDeviceError: null,
@@ -176,6 +204,9 @@ async function getCameraData(token: string | null, projectId: string) {
   const tencentDevices = tencentDeviceResult.status === "fulfilled"
     ? tencentDeviceResult.value?.list || []
     : [];
+  const tencentSipServer = tencentDeviceResult.status === "fulfilled"
+    ? tencentDeviceResult.value?.sip_server || null
+    : null;
 
   return {
     cameras: cameraResult.status === "fulfilled"
@@ -190,6 +221,7 @@ async function getCameraData(token: string | null, projectId: string) {
     ],
     ezvizDevices,
     tencentDevices,
+    tencentSipServer,
     cameraError: cameraResult.status === "rejected"
       ? cameraResult.reason instanceof Error
         ? cameraResult.reason.message
@@ -226,6 +258,7 @@ export default async function CamerasPage({
     devices,
     ezvizDevices,
     tencentDevices,
+    tencentSipServer,
     cameraError,
     ezvizDeviceError,
     tencentDeviceError,
@@ -432,6 +465,37 @@ export default async function CamerasPage({
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+              <CardTitle>腾讯云 SIP 接入配置</CardTitle>
+              <Badge variant="outline">GB/T 28181</Badge>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {tencentSipServer ? (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <AccessConfigItem label="SIP服务器ID" value={tencentSipServer.sip_server_id} />
+                  <AccessConfigItem label="SIP服务器域" value={tencentSipServer.sip_domain} />
+                  <AccessConfigItem label="SIP服务器地址" value={tencentSipServer.sip_host} />
+                  <AccessConfigItem label="SIP服务器端口" value={tencentSipServer.sip_port} />
+                  <AccessConfigItem label="SIP传输协议" value={tencentSipServer.transport_protocol || "TCP"} />
+                </div>
+              ) : (
+                <StatusAlert tone="warning">
+                  暂未获取到腾讯云 SIP 服务器配置，请确认腾讯云监控配置可用。
+                </StatusAlert>
+              )}
+              <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <ShieldAlert />
+                <div>
+                  <div className="font-medium text-foreground">SIP认证密码本阶段不展示</div>
+                  <div className="mt-1">
+                    已有设备的认证密码需要使用创建时保存的密码；后续第二阶段再接入密码查询、重置和脱敏展示。
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
               <CardTitle>腾讯云行业版通道</CardTitle>
               <Badge variant="outline">共 {tencentDevices.length} 个通道</Badge>
             </CardHeader>
@@ -442,6 +506,7 @@ export default async function CamerasPage({
                     <tr>
                       <th className="px-4 py-3">设备备注</th>
                       <th className="px-4 py-3">通道备注</th>
+                      <th className="px-4 py-3">SIP用户</th>
                       <th className="px-4 py-3">状态</th>
                       <th className="px-4 py-3">协议</th>
                       <th className="px-4 py-3">绑定状态</th>
@@ -461,7 +526,7 @@ export default async function CamerasPage({
                             className="truncate text-xs text-muted-foreground"
                             title={device.device_id}
                           >
-                            ID {compactIdentifier(device.device_id)}
+                            {device.device_type_label || "未知设备"} · ID {compactIdentifier(device.device_id)}
                           </div>
                         </td>
                         <td className="max-w-[320px] px-4 py-3">
@@ -473,6 +538,15 @@ export default async function CamerasPage({
                             title={device.channel_id}
                           >
                             通道ID {compactIdentifier(device.channel_id)}
+                          </div>
+                        </td>
+                        <td className="max-w-[240px] px-4 py-3">
+                          <div className="truncate font-medium" title={device.sip_username || device.device_code || ""}>
+                            {device.sip_username || device.device_code || "-"}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Badge variant="outline">{device.sip_transport_protocol || "TCP"}</Badge>
+                            <CopyValueButton value={device.sip_username || device.device_code} />
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
@@ -503,7 +577,7 @@ export default async function CamerasPage({
                     ))}
                     {tencentDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
                           暂无腾讯云行业版通道
                         </td>
                       </tr>
