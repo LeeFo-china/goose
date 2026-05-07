@@ -4,12 +4,15 @@ import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import {
+  CreateProjectCameraTencentDeviceSchema,
   CreateProjectCameraSchema,
   ProjectCameraEzvizDevicesQuerySchema,
   ProjectCameraTencentDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
   ProjectCameraParamsSchema,
   ProjectCameraPlayParamsBodySchema,
+  ProjectCameraTencentDeviceParamsSchema,
+  UpdateProjectCameraTencentDevicePasswordSchema,
   UpdateProjectCameraSchema,
 } from "@/schema/project-cameras";
 import { projectCameraService } from "@/services/project-cameras";
@@ -74,6 +77,57 @@ class ProjectCameraController extends BaseController {
       projectId: paramsResult.data.project_id,
       onlyUnbound: queryResult.data.only_unbound,
       keyword: queryResult.data.keyword,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Post("/projects/:project_id/cameras/tencent-devices")
+  async createTencentDevice(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = ProjectCameraParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = CreateProjectCameraTencentDeviceSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const result = await projectCameraService.createTencentDevice({
+      authUserId: request.user?.sub,
+      projectId: paramsResult.data.project_id,
+      payload: bodyResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/projects/:project_id/cameras/tencent-devices/:device_id/password")
+  async getTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = ProjectCameraTencentDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await projectCameraService.getTencentDevicePassword({
+      authUserId: request.user?.sub,
+      projectId: paramsResult.data.project_id,
+      deviceId: paramsResult.data.device_id,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Post("/projects/:project_id/cameras/tencent-devices/:device_id/password")
+  async resetTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = ProjectCameraTencentDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = UpdateProjectCameraTencentDevicePasswordSchema.safeParse(
+      request.body ?? {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const result = await projectCameraService.resetTencentDevicePassword({
+      authUserId: request.user?.sub,
+      projectId: paramsResult.data.project_id,
+      deviceId: paramsResult.data.device_id,
+      payload: bodyResult.data,
     });
 
     return ResponseHandler.success(result);

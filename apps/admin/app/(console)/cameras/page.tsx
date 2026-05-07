@@ -10,6 +10,10 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { CameraProjectPicker } from "@/components/cameras/camera-list-actions";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
+import {
+  CreateTencentDeviceButton,
+  TencentDevicePasswordActions,
+} from "@/components/cameras/tencent-device-actions";
 import type {
   CameraProjectOption,
   CameraRecord,
@@ -466,7 +470,13 @@ export default async function CamerasPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
               <CardTitle>腾讯云 SIP 接入配置</CardTitle>
-              <Badge variant="outline">GB/T 28181</Badge>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Badge variant="outline">GB/T 28181</Badge>
+                <CreateTencentDeviceButton
+                  projectId={selectedProjectId}
+                  sipServer={tencentSipServer}
+                />
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {tencentSipServer ? (
@@ -507,6 +517,7 @@ export default async function CamerasPage({
                       <th className="px-4 py-3">设备备注</th>
                       <th className="px-4 py-3">通道备注</th>
                       <th className="px-4 py-3">SIP用户</th>
+                      <th className="px-4 py-3">密码</th>
                       <th className="px-4 py-3">状态</th>
                       <th className="px-4 py-3">协议</th>
                       <th className="px-4 py-3">绑定状态</th>
@@ -549,6 +560,13 @@ export default async function CamerasPage({
                             <CopyValueButton value={device.sip_username || device.device_code} />
                           </div>
                         </td>
+                        <td className="px-4 py-3">
+                          <TencentDevicePasswordActions
+                            projectId={selectedProjectId}
+                            deviceId={device.device_id}
+                            deviceName={tencentDeviceName(device)}
+                          />
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           {renderStatus(device.status)}
                         </td>
@@ -577,7 +595,7 @@ export default async function CamerasPage({
                     ))}
                     {tencentDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={7} className="h-28 px-4 py-6 text-center text-muted-foreground">
                           暂无腾讯云行业版通道
                         </td>
                       </tr>

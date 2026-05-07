@@ -1,3 +1,4 @@
+import { randomBytes, randomInt } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { accessPolicyService } from "@/services/access-policy";
@@ -17,6 +18,8 @@ import {
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
+  CreateProjectCameraTencentDeviceInput,
+  UpdateProjectCameraTencentDevicePasswordInput,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
 
@@ -132,6 +135,23 @@ function getTencentDeviceTypeLabel(value: number | null | undefined) {
   if (value === 1) return "VMS";
   if (value === 9) return "智能告警设备";
   return value == null ? "未知设备" : `类型 ${value}`;
+}
+
+function generateSipPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789_";
+  const bytes = randomBytes(12);
+  let password = "";
+
+  for (const byte of bytes) {
+    password += alphabet[byte % alphabet.length];
+  }
+
+  return password;
+}
+
+function generateDeviceNameFallback(deviceType: number) {
+  const prefix = deviceType === 3 ? "NVR" : "IPC";
+  return `${prefix}-${randomInt(1000, 9999)}`;
 }
 
 function getUserAgent(meta?: RequestLogMeta) {
@@ -531,6 +551,102 @@ class ProjectCameraService {
       list: input.onlyUnbound
         ? list.filter((item) => item.can_bind)
         : list,
+    };
+  }
+
+  async createTencentDevice(input: {
+    authUserId?: string | null;
+    projectId: string;
+    payload: CreateProjectCameraTencentDeviceInput;
+  }) {
+    await this.resolveActor({
+      authUserId: input.authUserId,
+      projectId: input.projectId,
+      permissionCode: "project.update",
+      allowCustomer: false,
+    });
+
+    const password = input.payload.password?.trim() || generateSipPassword();
+    const name = input.payload.name.trim() || generateDeviceNameFallback(input.payload.device_type);
+    const created = await tencentIotVideoService.createDevice({
+      name,
+      password,
+      deviceType: input.payload.device_type,
+      groupId: input.payload.group_id,
+    });
+    const sipServer = await tencentIotVideoService.getSipServerConfig().catch(() => null);
+
+    return {
+      device: {
+        device_id: created.device_id,
+        device_code: created.device_code,
+        device_name: name,
+        device_type: input.payload.device_type,
+        device_type_label: getTencentDeviceTypeLabel(input.payload.device_type),
+        virtual_group_id: created.virtual_group_id,
+        sip_username: created.device_code,
+        sip_password: password,
+        sip_transport_protocol: "TCP",
+        request_id: created.request_id,
+      },
+      sip_server: sipServer,
+    };
+  }
+
+  async getTencentDevicePassword(input: {
+    authUserId?: string | null;
+    projectId: string;
+    deviceId: string;
+  }) {
+    await this.resolveActor({
+      authUserId: input.authUserId,
+      projectId: input.projectId,
+      permissionCode: "project.update",
+      allowCustomer: false,
+    });
+
+    const result = await tencentIotVideoService.getDevicePassword(input.deviceId);
+
+    return {
+      device_id: input.deviceId,
+      sip_password: result.password,
+      request_id: result.request_id,
+    };
+  }
+
+  async resetTencentDevicePassword(input: {
+    authUserId?: string | null;
+    projectId: string;
+    deviceId: string;
+    payload: UpdateProjectCameraTencentDevicePasswordInput;
+  }) {
+    await this.resolveActor({
+      authUserId: input.authUserId,
+      projectId: input.projectId,
+      permissionCode: "project.update",
+      allowCustomer: false,
+    });
+
+    const password = input.payload.password?.trim() || generateSipPassword();
+    const result = await tencentIotVideoService.updateDevicePassword({
+      deviceId: input.deviceId,
+      password,
+    });
+
+    if (result.status !== "OK") {
+      throw Errors.business(
+        503,
+        "腾讯云设备密码重置失败",
+        ErrorCodes.TENCENT_IOT_VIDEO_API_ERROR,
+        result,
+      );
+    }
+
+    return {
+      device_id: input.deviceId,
+      sip_password: password,
+      status: result.status,
+      request_id: result.request_id,
     };
   }
 

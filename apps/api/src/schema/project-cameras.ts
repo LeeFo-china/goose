@@ -24,6 +24,31 @@ export const ProjectCameraDetailParamsSchema = z.object({
   camera_id: z.uuid("无效的摄像头 ID"),
 });
 
+export const ProjectCameraTencentDeviceParamsSchema = z.object({
+  project_id: z.uuid("无效的项目 ID"),
+  device_id: z.string().trim().min(1, "设备 ID 不能为空").max(160, "设备 ID 过长"),
+});
+
+const TencentDevicePasswordSchema = z.string()
+  .trim()
+  .min(1, "SIP认证密码不能为空")
+  .max(16, "SIP认证密码不能超过 16 个字符")
+  .regex(/^[A-Za-z0-9_]+$/, "SIP认证密码只支持英文、数字和下划线");
+
+export const CreateProjectCameraTencentDeviceSchema = z.object({
+  name: z.string().trim().min(1, "设备名称不能为空").max(48, "设备名称不能超过 48 个字符"),
+  password: TencentDevicePasswordSchema.nullable().optional(),
+  device_type: z.coerce.number().int("设备类型非法").refine(
+    (value) => value === 2 || value === 3,
+    "设备类型仅支持 IPC 或 NVR",
+  ).default(2),
+  group_id: z.string().trim().max(80, "分组 ID 过长").nullable().optional(),
+});
+
+export const UpdateProjectCameraTencentDevicePasswordSchema = z.object({
+  password: TencentDevicePasswordSchema.nullable().optional(),
+}).default({});
+
 const ProjectCameraWritableBaseSchema = z.object({
   name: z.string().trim().min(1, "摄像头名称不能为空").max(80, "摄像头名称过长"),
   position: z.string().trim().max(80, "摄像头位置过长").nullable().optional(),
@@ -103,6 +128,12 @@ export const ProjectCameraTencentDevicesQuerySchema = z.object({
 
 export type CreateProjectCameraInput = z.infer<typeof CreateProjectCameraSchema>;
 export type UpdateProjectCameraInput = z.infer<typeof UpdateProjectCameraSchema>;
+export type CreateProjectCameraTencentDeviceInput = z.infer<
+  typeof CreateProjectCameraTencentDeviceSchema
+>;
+export type UpdateProjectCameraTencentDevicePasswordInput = z.infer<
+  typeof UpdateProjectCameraTencentDevicePasswordSchema
+>;
 export type ProjectCameraPlayParamsInput = z.infer<
   typeof ProjectCameraPlayParamsBodySchema
 >;

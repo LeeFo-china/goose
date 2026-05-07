@@ -71,6 +71,23 @@ type DescribeSipServerResponse = TencentSipServerRecord & {
   RequestId?: string;
 };
 
+type CreateDeviceResponse = {
+  DeviceCode?: string;
+  DeviceId?: string;
+  VirtualGroupId?: string;
+  RequestId?: string;
+};
+
+type DescribeDevicePasswordResponse = {
+  PassWord?: string;
+  RequestId?: string;
+};
+
+type UpdateDevicePasswordResponse = {
+  Status?: string;
+  RequestId?: string;
+};
+
 type DescribeChannelLiveStreamURLResponse = {
   Data?: {
     RtspAddr?: string;
@@ -103,6 +120,23 @@ export type TencentIotVideoSipServerConfig = {
   sip_host: string | null;
   sip_port: number | null;
   transport_protocol: "TCP";
+  request_id: string | null;
+};
+
+export type TencentIotVideoCreatedDevice = {
+  device_id: string | null;
+  device_code: string | null;
+  virtual_group_id: string | null;
+  request_id: string | null;
+};
+
+export type TencentIotVideoDevicePassword = {
+  password: string | null;
+  request_id: string | null;
+};
+
+export type TencentIotVideoPasswordUpdate = {
+  status: string | null;
   request_id: string | null;
 };
 
@@ -347,6 +381,62 @@ export class TencentIotVideoService {
       sip_host: readString(record.Host),
       sip_port: readNumber(record.Port),
       transport_protocol: "TCP",
+      request_id: response.RequestId || null,
+    };
+  }
+
+  async createDevice(input: {
+    name: string;
+    password: string;
+    deviceType: number;
+    groupId?: string | null;
+  }): Promise<TencentIotVideoCreatedDevice> {
+    const response = await this.request<CreateDeviceResponse>(
+      "CreateDevice",
+      {
+        NickName: input.name,
+        PassWord: input.password,
+        DeviceType: input.deviceType,
+        ...(input.groupId ? { GroupId: input.groupId } : {}),
+      },
+    );
+
+    return {
+      device_id: readString(response.DeviceId),
+      device_code: readString(response.DeviceCode),
+      virtual_group_id: readString(response.VirtualGroupId),
+      request_id: response.RequestId || null,
+    };
+  }
+
+  async getDevicePassword(deviceId: string): Promise<TencentIotVideoDevicePassword> {
+    const response = await this.request<DescribeDevicePasswordResponse>(
+      "DescribeDevicePassWord",
+      {
+        DeviceId: deviceId,
+      },
+    );
+
+    return {
+      password: readString(response.PassWord),
+      request_id: response.RequestId || null,
+    };
+  }
+
+  async updateDevicePassword(input: {
+    deviceId: string;
+    password: string;
+  }): Promise<TencentIotVideoPasswordUpdate> {
+    const response = await this.request<UpdateDevicePasswordResponse>(
+      "UpdateDevicePassWord",
+      {
+        DeviceId: input.deviceId,
+        PassWord: input.password,
+      },
+    );
+
+    return {
+      status: readString(response.Status),
       request_id: response.RequestId || null,
     };
   }
