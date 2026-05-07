@@ -30,7 +30,6 @@ import type { DepartmentRecord } from "@/components/organization/organization-ty
 type DepartmentMode = "create" | "edit";
 
 const departmentCodeOptions = [
-  { value: "__none", label: "不设置编码" },
   ...DEPARTMENT_CODE_VALUES.map((value) => ({
     value,
     label: `${DepartmentConfig[value].label} · ${value}`,
@@ -68,7 +67,7 @@ async function mutateDepartment(input: {
 function toDepartmentCode(value: string | null | undefined) {
   return value && DEPARTMENT_CODE_VALUES.includes(value as DepartmentCode)
     ? value
-    : "__none";
+    : DEPARTMENT_CODE_VALUES[0];
 }
 
 function DepartmentDialog({
@@ -109,7 +108,7 @@ function DepartmentDialog({
     const name = String(formData.get("name") || "").trim();
     const payload = {
       name,
-      code: code === "__none" ? null : code,
+      code,
     };
 
     setError("");

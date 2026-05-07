@@ -1,6 +1,7 @@
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import type {
   DepartmentRecord,
+  DepartmentPostRuleConfig,
   Pagination,
   ProjectMemberRolePostRuleConfig,
   PostRecord,
@@ -8,7 +9,7 @@ import type {
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
-type OrganizationTab = "departments" | "posts" | "role-rules";
+type OrganizationTab = "departments" | "posts" | "role-rules" | "department-post-rules";
 
 type OrganizationSearchParams = {
   tab?: string;
@@ -43,6 +44,7 @@ function normalizePage(value: string | undefined) {
 }
 
 function normalizeTab(value: string | undefined): OrganizationTab {
+  if (value === "department-post-rules") return "department-post-rules";
   if (value === "role-rules") return "role-rules";
   return value === "posts" ? "posts" : "departments";
 }
@@ -120,6 +122,41 @@ async function getRoleRuleConfig(input: {
   }
 }
 
+async function getDepartmentPostRuleConfig(input: {
+  token: string | null;
+}): Promise<DepartmentPostRuleConfig & { error: string | null }> {
+  if (!input.token) {
+    return {
+      departments: [],
+      post_options: [],
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl("/department-post-rules"), {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<DepartmentPostRuleConfig>(response);
+    return {
+      ...(payload.data || {
+        departments: [],
+        post_options: [],
+      }),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      departments: [],
+      post_options: [],
+      error: error instanceof Error ? error.message : "部门岗位规则加载失败",
+    };
+  }
+}
+
 function buildDepartmentQuery(params: OrganizationSearchParams) {
   const query = new URLSearchParams({
     page: String(normalizePage(params.departmentPage)),
@@ -154,7 +191,7 @@ export default async function OrganizationPage({
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
   const token = await getAdminToken();
-  const [departments, posts, roleRuleConfig] = await Promise.all([
+  const [departments, posts, roleRuleConfig, departmentPostRuleConfig] = await Promise.all([
     getList<DepartmentRecord>({
       token,
       resource: "departments",
@@ -168,6 +205,7 @@ export default async function OrganizationPage({
       fallbackMessage: "岗位列表加载失败",
     }),
     getRoleRuleConfig({ token }),
+    getDepartmentPostRuleConfig({ token }),
   ]);
 
   return (
@@ -184,6 +222,7 @@ export default async function OrganizationPage({
         departments={departments}
         posts={posts}
         roleRuleConfig={roleRuleConfig}
+        departmentPostRuleConfig={departmentPostRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
         postStatus={params.postStatus?.trim() || ""}

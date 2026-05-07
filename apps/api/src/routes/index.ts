@@ -38,6 +38,7 @@ import AdminOpsController from "@/controllers/admin-ops";
 import SystemSettingsController from "@/controllers/system-settings";
 import MarketingPagesController from "@/controllers/marketing-pages";
 import ProjectMemberRolePostRulesController from "@/controllers/project-member-role-post-rules";
+import DepartmentPostRulesController from "@/controllers/department-post-rules";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -51,6 +52,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   SystemSettingsController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   ProjectMemberRolePostRulesController.registerExtraRoutes(app);
+  DepartmentPostRulesController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);

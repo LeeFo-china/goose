@@ -55,3 +55,34 @@ export type ProjectMemberRolePostRuleConfig = {
   roles: ProjectMemberRolePostRuleRole[];
   post_options: ProjectMemberRolePostOption[];
 };
+
+export type DepartmentPostRuleRecord = {
+  id: string;
+  department_code: string;
+  post_code: string;
+  enabled: boolean;
+  sort: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type DepartmentPostRuleDepartment = {
+  id: string;
+  code: string;
+  name: string;
+  selected_post_codes: string[];
+  rules: DepartmentPostRuleRecord[];
+};
+
+export type DepartmentPostRulePostOption = {
+  id: string;
+  code: string;
+  name: string;
+  sort: number | null;
+  status: number | null;
+};
+
+export type DepartmentPostRuleConfig = {
+  departments: DepartmentPostRuleDepartment[];
+  post_options: DepartmentPostRulePostOption[];
+};

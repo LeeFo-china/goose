@@ -20,6 +20,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { departmentPostRuleService } from "@/services/department-post-rules";
 
 function escapeSupabaseOrValue(value: string) {
   return value
@@ -191,6 +192,11 @@ class EmployeeController extends BaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
+    await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
+      departmentId: result.data.department_id,
+      postId: result.data.post_id,
+    });
+
     const { data, error } = await SupabaseDB.getAdminClient()
       .from(this.tableName)
       .insert(result.data)
@@ -210,7 +216,7 @@ class EmployeeController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("id, department_id")
+      .select("id, department_id, post_id")
       .eq("id", idVerify.data.id)
       .maybeSingle();
 
@@ -227,6 +233,15 @@ class EmployeeController extends BaseController<
 
     const result = this.updateSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
+
+    await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
+      departmentId: result.data.department_id !== undefined
+        ? result.data.department_id
+        : existing.data.department_id,
+      postId: result.data.post_id !== undefined
+        ? result.data.post_id
+        : existing.data.post_id,
+    });
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from(this.tableName)

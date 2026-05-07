@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEPARTMENT_CODE_VALUES } from "@gooes/domain";
 
 /**
  * 基础部门 Schema
@@ -14,8 +15,10 @@ export const DepartmentBaseSchema = z.object({
     .min(1, "部门名称不能为空")
     .max(50, "部门名称最多 50 个字符"),
 
-  // code: 部门代码，可选，但如果填写则通常有长度或格式限制
-  code: z.string().trim().min(1, "部门代码不能为空").nullable().optional(),
+  // code: 部门代码，必须来自标准部门字典
+  code: z.enum(DEPARTMENT_CODE_VALUES, {
+    message: "无效的部门编码",
+  }),
 
   // 创建时间
   created_at: z.string().datetime().nullable().optional(),
