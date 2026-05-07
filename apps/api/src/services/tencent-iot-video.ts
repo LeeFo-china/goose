@@ -234,12 +234,7 @@ export class TencentIotVideoService {
     const secretService = hmac(secretDate, SERVICE);
     const secretSigning = hmac(secretService, "tc3_request");
     const signature = hmacHex(secretSigning, stringToSign);
-    const authorization = [
-      "TC3-HMAC-SHA256",
-      `Credential=${config.secretId}/${credentialScope}`,
-      `SignedHeaders=${signedHeaders}`,
-      `Signature=${signature}`,
-    ].join(", ");
+    const authorization = `TC3-HMAC-SHA256 Credential=${config.secretId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
     let response: Response;
     try {
