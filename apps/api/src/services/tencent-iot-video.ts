@@ -7,7 +7,7 @@ const API_VERSION = "2020-12-01";
 const SERVICE = "iotvideoindustry";
 const DEFAULT_ENDPOINT = "iotvideoindustry.tencentcloudapi.com";
 const MAX_PAGES = 10;
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 type TencentApiError = {
   Code?: string;
