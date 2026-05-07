@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
@@ -232,11 +232,31 @@ function CameraDialog({
   const defaults = useMemo(() => buildDefaults(camera), [camera]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const initializedOpenRef = useRef(false);
   const form = useForm<CameraFormValues>({
     resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
     defaultValues: defaults,
   });
   const selectedVendor = form.watch("vendor");
+  const firstDeviceKeyByVendor = useMemo<Record<CameraFormValues["vendor"], string>>(() => {
+    const keys: Record<CameraFormValues["vendor"], string> = {
+      ezviz: "",
+      tencent_iotvideo_industry: "",
+    };
+
+    for (const device of devices) {
+      if (!device.can_bind || keys[device.vendor]) continue;
+      keys[device.vendor] = buildDeviceKey(device);
+    }
+
+    return keys;
+  }, [devices]);
+  const initialCreateVendor = useMemo<CameraFormValues["vendor"]>(() => {
+    if (firstDeviceKeyByVendor[defaults.vendor]) return defaults.vendor;
+    if (firstDeviceKeyByVendor.tencent_iotvideo_industry) return "tencent_iotvideo_industry";
+    if (firstDeviceKeyByVendor.ezviz) return "ezviz";
+    return defaults.vendor;
+  }, [defaults.vendor, firstDeviceKeyByVendor]);
   const availableDevices = useMemo(
     () => devices.filter((device) => device.vendor === selectedVendor && device.can_bind),
     [devices, selectedVendor],
@@ -244,14 +264,21 @@ function CameraDialog({
   const selectedCapabilities = form.watch("capabilities");
 
   useEffect(() => {
-    if (open) {
-      form.reset({
-        ...defaults,
-        device_key: availableDevices[0] ? buildDeviceKey(availableDevices[0]) : "",
-      });
-      setError("");
+    if (!open) {
+      initializedOpenRef.current = false;
+      return;
     }
-  }, [availableDevices, defaults, form, open]);
+    if (initializedOpenRef.current) return;
+
+    initializedOpenRef.current = true;
+    const initialVendor = mode === "create" ? initialCreateVendor : defaults.vendor;
+    form.reset({
+      ...defaults,
+      vendor: initialVendor,
+      device_key: mode === "create" ? firstDeviceKeyByVendor[initialVendor] : "",
+    });
+    setError("");
+  }, [defaults, firstDeviceKeyByVendor, form, initialCreateVendor, mode, open]);
 
   function close() {
     if (pending) return;
@@ -374,11 +401,9 @@ function CameraDialog({
                       invalid={fieldState.invalid}
                       options={vendorOptions.map(([value, label]) => ({ value, label }))}
                       onChange={(value) => {
-                        field.onChange(value);
-                        const firstDevice = devices.find(
-                          (device) => device.vendor === value && device.can_bind,
-                        );
-                        form.setValue("device_key", firstDevice ? buildDeviceKey(firstDevice) : "", {
+                        const nextVendor = value as CameraFormValues["vendor"];
+                        field.onChange(nextVendor);
+                        form.setValue("device_key", firstDeviceKeyByVendor[nextVendor], {
                           shouldDirty: true,
                           shouldValidate: true,
                         });
