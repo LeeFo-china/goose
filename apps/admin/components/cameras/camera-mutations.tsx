@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
+  Copy,
   Edit3,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
   Video,
 } from "lucide-react";
@@ -62,6 +64,13 @@ type PlayParams = {
     request_id?: string | null;
     expires_at?: string | null;
   };
+};
+
+type PreviewSource = {
+  label: string;
+  protocol: string;
+  url: string;
+  previewable: boolean;
 };
 
 const CAMERA_CAPABILITY_VALUES = [
@@ -199,6 +208,63 @@ function formatDeviceLabel(device: CameraDeviceChannel) {
 
   const name = [device.device_name, device.channel_name].filter(Boolean).join(" / ");
   return `${name || device.device_serial} · ${device.device_serial} · 通道 ${device.channel_no}`;
+}
+
+function addPreviewSource(
+  sources: PreviewSource[],
+  seen: Set<string>,
+  input: {
+    label: string;
+    protocol: string;
+    url?: string | null;
+    previewable?: boolean;
+  },
+) {
+  const url = input.url?.trim();
+  if (!url || seen.has(url)) return;
+  seen.add(url);
+  sources.push({
+    label: input.label,
+    protocol: input.protocol,
+    url,
+    previewable: input.previewable ?? false,
+  });
+}
+
+function getPreviewSources(data: PlayParams): PreviewSource[] {
+  const player = data.player;
+  const sources: PreviewSource[] = [];
+  const seen = new Set<string>();
+
+  addPreviewSource(sources, seen, {
+    label: "HLS",
+    protocol: "hls",
+    url: player?.hls_url || (player?.protocol === "hls" ? player.src || player.play_url : null),
+    previewable: true,
+  });
+  addPreviewSource(sources, seen, {
+    label: "FLV",
+    protocol: "flv",
+    url: player?.flv_url || (player?.protocol === "flv" ? player.src || player.play_url : null),
+  });
+  addPreviewSource(sources, seen, {
+    label: "播放地址",
+    protocol: player?.protocol || "url",
+    url: player?.src || player?.play_url,
+    previewable: player?.protocol === "hls",
+  });
+  addPreviewSource(sources, seen, {
+    label: "RTMP",
+    protocol: "rtmp",
+    url: player?.rtmp_url,
+  });
+  addPreviewSource(sources, seen, {
+    label: "RTSP",
+    protocol: "rtsp",
+    url: player?.rtsp_url,
+  });
+
+  return sources;
 }
 
 function buildDefaults(camera?: CameraRecord): CameraFormValues {
@@ -654,36 +720,165 @@ function CameraDialog({
   );
 }
 
-function PlayParamsDialog({
+function PlayPreviewDialog({
   camera,
   data,
+  pending,
   onClose,
+  onRefresh,
 }: {
   camera: CameraRecord;
   data: PlayParams;
+  pending: boolean;
   onClose: () => void;
+  onRefresh: () => void;
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const sources = useMemo(() => getPreviewSources(data), [data]);
+  const firstPlayableUrl = sources.find((source) => source.previewable)?.url || sources[0]?.url || "";
+  const [selectedUrl, setSelectedUrl] = useState(firstPlayableUrl);
+  const [playerError, setPlayerError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const selectedSource = sources.find((source) => source.url === selectedUrl) || sources[0] || null;
+
+  useEffect(() => {
+    setSelectedUrl(firstPlayableUrl);
+    setPlayerError("");
+  }, [firstPlayableUrl]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !selectedSource?.previewable || !selectedSource.url) return;
+
+    let disposed = false;
+    let hlsInstance: { destroy: () => void } | null = null;
+    setPlayerError("");
+
+    if (selectedSource.protocol === "hls") {
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = selectedSource.url;
+        void video.play().catch(() => undefined);
+      } else {
+        import("hls.js")
+          .then((module) => {
+            if (disposed) return;
+            const Hls = module.default;
+            if (!Hls.isSupported()) {
+              setPlayerError("当前浏览器不支持 HLS 实时预览，可复制地址到播放器验证。");
+              return;
+            }
+
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+            });
+            hlsInstance = hls;
+            hls.loadSource(selectedSource.url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.ERROR, (_event, payload) => {
+              if (payload.fatal) {
+                setPlayerError("实时画面加载失败，请刷新播放地址或检查摄像头在线状态。");
+              }
+            });
+            void video.play().catch(() => undefined);
+          })
+          .catch(() => {
+            if (!disposed) {
+              setPlayerError("播放器加载失败，请稍后重试。");
+            }
+          });
+      }
+    }
+
+    return () => {
+      disposed = true;
+      hlsInstance?.destroy();
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [selectedSource]);
+
+  async function copyUrl() {
+    if (!selectedUrl) return;
+    try {
+      await navigator.clipboard.writeText(selectedUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setPlayerError("复制失败，请手动选中播放地址复制。");
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[760px]">
+      <DialogContent className="max-h-[90vh] max-w-[960px] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{camera.name} 播放参数</DialogTitle>
+          <DialogTitle>{camera.name} 实时预览</DialogTitle>
           <DialogDescription>
-            小程序端按 `player.provider` 选择 EZPlayer 或 live-player。
+            播放地址由后端实时换取，优先使用 HLS 在后台预览；RTMP/RTSP 仅保留为调试地址。
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
-          <InfoItem label="播放器" value={`${data.player?.provider || "-"} ${data.player?.plugin_version || ""}`} />
-          <InfoItem label="协议" value={data.player?.protocol || "-"} />
-          <InfoItem label="过期时间" value={formatDateTime(data.player?.expires_at)} />
-          <InfoItem label="播放地址" value={data.player?.src || data.player?.play_url || "-"} wrap />
-          <InfoItem label="FLV" value={data.player?.flv_url || "-"} wrap />
-          <InfoItem label="RTMP" value={data.player?.rtmp_url || "-"} wrap />
-          <InfoItem label="HLS" value={data.player?.hls_url || "-"} wrap />
-          <InfoItem label="访问令牌" value={data.player?.access_token || "-"} wrap />
-          <InfoItem label="RequestId" value={data.player?.request_id || "-"} wrap />
+        <div className="flex flex-col gap-4">
+          <div className="overflow-hidden rounded-md border bg-muted">
+            <div className="aspect-video bg-foreground">
+              {selectedSource?.previewable ? (
+                <video
+                  ref={videoRef}
+                  className="size-full object-contain"
+                  controls
+                  muted
+                  playsInline
+                  autoPlay
+                  onError={() => setPlayerError("实时画面播放失败，请刷新地址或切换协议。")}
+                />
+              ) : (
+                <div className="flex size-full flex-col items-center justify-center gap-3 bg-foreground text-background">
+                  <Video />
+                  <div className="text-sm font-medium">当前协议暂不支持浏览器内直接预览</div>
+                  <div className="max-w-[520px] px-6 text-center text-xs text-background/70">
+                    请切换到 HLS，或复制当前地址到支持该协议的播放器中验证。
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {playerError ? <StatusAlert>{playerError}</StatusAlert> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {sources.map((source) => (
+              <Button
+                key={`${source.protocol}-${source.url}`}
+                type="button"
+                size="sm"
+                variant={source.url === selectedUrl ? "default" : "outline"}
+                onClick={() => setSelectedUrl(source.url)}
+              >
+                {source.label}
+              </Button>
+            ))}
+            {sources.length === 0 ? (
+              <Badge variant="secondary">暂无播放地址</Badge>
+            ) : null}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <InfoItem label="播放器" value={`${data.player?.provider || "-"} ${data.player?.plugin_version || ""}`} />
+            <InfoItem label="当前协议" value={selectedSource?.label || data.player?.protocol || "-"} />
+            <InfoItem label="过期时间" value={formatDateTime(data.player?.expires_at)} />
+          </div>
+          <InfoItem label="当前播放地址" value={selectedUrl || "-"} wrap />
+          {data.player?.request_id ? (
+            <InfoItem label="RequestId" value={data.player.request_id} wrap />
+          ) : null}
         </div>
         <DialogFooter>
+          <Button type="button" variant="outline" disabled={pending} onClick={onRefresh}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
+            刷新地址
+          </Button>
+          <Button type="button" variant="outline" disabled={!selectedUrl} onClick={copyUrl}>
+            <Copy data-icon="inline-start" />
+            {copied ? "已复制" : "复制地址"}
+          </Button>
           <Button type="button" onClick={onClose}>关闭</Button>
         </DialogFooter>
       </DialogContent>
@@ -765,7 +960,7 @@ export function CameraRowActions({
   const [editOpen, setEditOpen] = useState(false);
   const [playParams, setPlayParams] = useState<PlayParams | null>(null);
 
-  function showPlayParams() {
+  function showPreview() {
     setError("");
     startTransition(async () => {
       try {
@@ -799,16 +994,16 @@ export function CameraRowActions({
 
   return (
     <div className="flex min-w-[250px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={showPlayParams}>
-        {pending ? <Loader2 className="animate-spin" /> : <Video />}
-        播放
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={showPreview}>
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Video data-icon="inline-start" />}
+        预览
       </Button>
       <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setEditOpen(true)}>
-        <Edit3 />
+        <Edit3 data-icon="inline-start" />
         编辑
       </Button>
       <Button type="button" variant="outline" size="sm" disabled={pending} onClick={deleteCamera}>
-        <Trash2 />
+        <Trash2 data-icon="inline-start" />
         解绑
       </Button>
       <CameraDialog
@@ -820,10 +1015,12 @@ export function CameraRowActions({
         onOpenChange={setEditOpen}
       />
       {playParams ? (
-        <PlayParamsDialog
+        <PlayPreviewDialog
           camera={camera}
           data={playParams}
+          pending={pending}
           onClose={() => setPlayParams(null)}
+          onRefresh={showPreview}
         />
       ) : null}
       {error ? (
