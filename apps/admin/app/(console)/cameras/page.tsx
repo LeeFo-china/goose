@@ -10,6 +10,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { CameraProjectPicker } from "@/components/cameras/camera-list-actions";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
+import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
 import { TencentDeviceChannelTree } from "@/components/cameras/tencent-device-channel-tree";
 import {
   CreateTencentDeviceButton,
@@ -368,159 +369,165 @@ export default async function CamerasPage({
       ) : null}
 
       {selectedProjectId ? (
-        <>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>项目摄像头</CardTitle>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Badge variant="success">在线 {onlineCount}</Badge>
-                <Badge variant="outline">共 {cameras.length}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <CamerasTable
-                projectId={selectedProjectId}
-                cameras={cameras}
-                devices={devices}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>萤石设备通道</CardTitle>
-              <Badge variant="outline">共 {ezvizDevices.length} 个通道</Badge>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] border-t text-sm">
-                  <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3">设备</th>
-                      <th className="px-4 py-3">序列号</th>
-                      <th className="px-4 py-3">通道</th>
-                      <th className="px-4 py-3">状态</th>
-                      <th className="px-4 py-3">加密</th>
-                      <th className="px-4 py-3">绑定状态</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ezvizDevices.map((device) => (
-                      <tr
-                        key={`${device.device_serial}-${device.channel_no}`}
-                        className="border-t"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="font-medium">
-                            {device.device_name || "未命名设备"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {device.channel_name || "未命名通道"}
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                          {device.device_serial}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {device.channel_no}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {renderStatus(device.status)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {device.video_encrypted ? (
-                            <Badge variant="warning">已加密</Badge>
-                          ) : (
-                            <Badge variant="success">未加密</Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {device.is_bound ? (
-                            <div className="flex flex-col gap-1">
-                              <Badge
-                                className="w-fit"
-                                variant={device.is_bound_to_current_project ? "success" : "secondary"}
-                              >
-                                <Link2 />
-                                {device.is_bound_to_current_project ? "当前项目" : "其他项目"}
-                              </Badge>
-                              <div className="text-xs text-muted-foreground">
-                                {device.bound_project_name || device.bound_camera_name || "-"}
-                              </div>
-                            </div>
-                          ) : (
-                            <Badge variant="outline">可绑定</Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {ezvizDevices.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
-                          暂无萤石设备通道
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>腾讯云 SIP 接入配置</CardTitle>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Badge variant="outline">GB/T 28181</Badge>
-                <CreateTencentDeviceButton
-                  projectId={selectedProjectId}
-                  sipServer={tencentSipServer}
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {tencentSipServer ? (
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <AccessConfigItem label="SIP服务器ID" value={tencentSipServer.sip_server_id} />
-                  <AccessConfigItem label="SIP服务器域" value={tencentSipServer.sip_domain} />
-                  <AccessConfigItem label="SIP服务器地址" value={tencentSipServer.sip_host} />
-                  <AccessConfigItem label="SIP服务器端口" value={tencentSipServer.sip_port} />
-                  <AccessConfigItem label="SIP传输协议" value={tencentSipServer.transport_protocol || "TCP"} />
+        <CamerasWorkspaceTabs
+          cameras={(
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                <CardTitle>项目摄像头</CardTitle>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Badge variant="success">在线 {onlineCount}</Badge>
+                  <Badge variant="outline">共 {cameras.length}</Badge>
                 </div>
-              ) : (
-                <StatusAlert tone="warning">
-                  暂未获取到腾讯云 SIP 服务器配置，请确认腾讯云监控配置可用。
-                </StatusAlert>
-              )}
-              <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                <ShieldAlert />
-                <div>
-                  <div className="font-medium text-foreground">SIP认证密码本阶段不展示</div>
-                  <div className="mt-1">
-                    已有设备的认证密码需要使用创建时保存的密码；后续第二阶段再接入密码查询、重置和脱敏展示。
+              </CardHeader>
+              <CardContent className="p-0">
+                <CamerasTable
+                  projectId={selectedProjectId}
+                  cameras={cameras}
+                  devices={devices}
+                />
+              </CardContent>
+            </Card>
+          )}
+          devices={(
+            <div className="flex flex-col gap-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                  <CardTitle>腾讯云设备与通道</CardTitle>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
+                    <Badge variant="outline">通道 {tencentDevices.length}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <TencentDeviceChannelTree
+                    projectId={selectedProjectId}
+                    devices={tencentDeviceRecords}
+                    channels={tencentDevices}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                  <CardTitle>萤石设备通道</CardTitle>
+                  <Badge variant="outline">共 {ezvizDevices.length} 个通道</Badge>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[980px] border-t text-sm">
+                      <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">设备</th>
+                          <th className="px-4 py-3">序列号</th>
+                          <th className="px-4 py-3">通道</th>
+                          <th className="px-4 py-3">状态</th>
+                          <th className="px-4 py-3">加密</th>
+                          <th className="px-4 py-3">绑定状态</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ezvizDevices.map((device) => (
+                          <tr
+                            key={`${device.device_serial}-${device.channel_no}`}
+                            className="border-t"
+                          >
+                            <td className="px-4 py-3">
+                              <div className="font-medium">
+                                {device.device_name || "未命名设备"}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {device.channel_name || "未命名通道"}
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                              {device.device_serial}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {device.channel_no}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {renderStatus(device.status)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {device.video_encrypted ? (
+                                <Badge variant="warning">已加密</Badge>
+                              ) : (
+                                <Badge variant="success">未加密</Badge>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {device.is_bound ? (
+                                <div className="flex flex-col gap-1">
+                                  <Badge
+                                    className="w-fit"
+                                    variant={device.is_bound_to_current_project ? "success" : "secondary"}
+                                  >
+                                    <Link2 />
+                                    {device.is_bound_to_current_project ? "当前项目" : "其他项目"}
+                                  </Badge>
+                                  <div className="text-xs text-muted-foreground">
+                                    {device.bound_project_name || device.bound_camera_name || "-"}
+                                  </div>
+                                </div>
+                              ) : (
+                                <Badge variant="outline">可绑定</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {ezvizDevices.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                              暂无萤石设备通道
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          config={(
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                <CardTitle>腾讯云 SIP 接入配置</CardTitle>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Badge variant="outline">GB/T 28181</Badge>
+                  <CreateTencentDeviceButton
+                    projectId={selectedProjectId}
+                    sipServer={tencentSipServer}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                {tencentSipServer ? (
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <AccessConfigItem label="SIP服务器ID" value={tencentSipServer.sip_server_id} />
+                    <AccessConfigItem label="SIP服务器域" value={tencentSipServer.sip_domain} />
+                    <AccessConfigItem label="SIP服务器地址" value={tencentSipServer.sip_host} />
+                    <AccessConfigItem label="SIP服务器端口" value={tencentSipServer.sip_port} />
+                    <AccessConfigItem label="SIP传输协议" value={tencentSipServer.transport_protocol || "TCP"} />
+                  </div>
+                ) : (
+                  <StatusAlert tone="warning">
+                    暂未获取到腾讯云 SIP 服务器配置，请确认腾讯云监控配置可用。
+                  </StatusAlert>
+                )}
+                <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <ShieldAlert />
+                  <div>
+                    <div className="font-medium text-foreground">SIP认证密码本阶段不展示</div>
+                    <div className="mt-1">
+                      已有设备的认证密码需要使用创建时保存的密码；后续第二阶段再接入密码查询、重置和脱敏展示。
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>腾讯云设备与通道</CardTitle>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
-                <Badge variant="outline">通道 {tencentDevices.length}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <TencentDeviceChannelTree
-                projectId={selectedProjectId}
-                devices={tencentDeviceRecords}
-                channels={tencentDevices}
-              />
-            </CardContent>
-          </Card>
-        </>
+              </CardContent>
+            </Card>
+          )}
+        />
       ) : null}
     </div>
   );
