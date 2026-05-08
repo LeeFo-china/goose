@@ -48,7 +48,9 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
     images: string[];
     rectification_images: string[];
   }>;
-  actions: ProjectAcceptanceActionRow[];
+  actions: Array<ProjectAcceptanceActionRow & {
+    operator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceCustomerRow | null;
+  }>;
   project: ProjectAcceptanceProjectRow | null;
   initiator: ProjectAcceptanceEmployeeRow | null;
   reviewer: ProjectAcceptanceEmployeeRow | null;
@@ -124,18 +126,30 @@ class ProjectAcceptanceService {
   }
 
   private async buildDetail(row: ProjectAcceptanceRow): Promise<AcceptanceDetail> {
+    const rawActions = await projectAcceptanceRepository.listActions(row.id);
+    const actionEmployeeIds = rawActions
+      .filter((item) => item.operator_type === "employee" && item.operator_id)
+      .map((item) => item.operator_id as string);
+    const actionCustomerIds = rawActions
+      .filter((item) => item.operator_type === "customer" && item.operator_id)
+      .map((item) => item.operator_id as string);
+
     const [items, actions, project, employees, customers] = await Promise.all([
       projectAcceptanceRepository.listItems(row.id),
-      projectAcceptanceRepository.listActions(row.id),
+      Promise.resolve(rawActions),
       projectAcceptanceRepository.getProject(row.project_id),
       projectAcceptanceRepository.listEmployees(
         Array.from(new Set([
           row.initiator_id,
           row.reviewer_id,
+          ...actionEmployeeIds,
         ].filter((item): item is string => Boolean(item)))),
       ),
       projectAcceptanceRepository.listCustomers(
-        row.customer_id ? [row.customer_id] : [],
+        Array.from(new Set([
+          row.customer_id,
+          ...actionCustomerIds,
+        ].filter((item): item is string => Boolean(item)))),
       ),
     ]);
 
@@ -151,7 +165,14 @@ class ProjectAcceptanceService {
         images: this.normalizeImageArray(item.images),
         rectification_images: this.normalizeImageArray(item.rectification_images),
       })),
-      actions,
+      actions: actions.map((item) => ({
+        ...item,
+        operator: item.operator_type === "employee" && item.operator_id
+          ? employeeMap.get(item.operator_id) || null
+          : item.operator_type === "customer" && item.operator_id
+          ? customerMap.get(item.operator_id) || null
+          : null,
+      })),
       project,
       initiator: employeeMap.get(row.initiator_id) || null,
       reviewer: row.reviewer_id ? employeeMap.get(row.reviewer_id) || null : null,

@@ -124,6 +124,25 @@ GET /project-acceptances/:id
 - `reviewer`
 - `customer`
 
+`actions` 中每条操作记录会返回操作人：
+
+```json
+{
+  "action": "leader_approve",
+  "comment": "复核通过",
+  "created_at": "2026-05-08T10:00:00.000Z",
+  "operator_type": "employee",
+  "operator_id": "employee-id",
+  "operator": {
+    "id": "employee-id",
+    "name": "张三",
+    "avatar": null
+  }
+}
+```
+
+如果 `operator_type = customer`，`operator` 为客户对象，包含 `id`、`name`、`phone`。
+
 ### 保存草稿
 
 ```http
