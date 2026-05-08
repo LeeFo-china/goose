@@ -114,6 +114,18 @@ export type TencentIotVideoDeviceChannel = {
   group_name: string | null;
 };
 
+export type TencentIotVideoDevice = {
+  device_id: string;
+  device_code: string | null;
+  device_name: string | null;
+  device_type: number | null;
+  status: "online" | "offline" | "unknown";
+  raw_status: number | string | null;
+  protocol: string | null;
+  group_id: string | null;
+  group_name: string | null;
+};
+
 export type TencentIotVideoSipServerConfig = {
   sip_server_id: string | null;
   sip_domain: string | null;
@@ -361,6 +373,31 @@ export class TencentIotVideoService {
     }
 
     return devices;
+  }
+
+  async listDeviceSummaries(keyword?: string | null): Promise<TencentIotVideoDevice[]> {
+    const devices = await this.listDevices(keyword);
+    return devices
+      .map((device) => {
+        const deviceId = readString(device.DeviceId);
+        if (!deviceId) return null;
+
+        return {
+          device_id: deviceId,
+          device_code: readString(device.DeviceCode),
+          device_name:
+            readString(device.NickName) ||
+            readString(device.ExtraInformation) ||
+            readString(device.DeviceCode),
+          device_type: typeof device.DeviceType === "number" ? device.DeviceType : null,
+          status: normalizeStatus(device.Status ?? null),
+          raw_status: device.Status ?? null,
+          protocol: readString(device.Protocol),
+          group_id: readString(device.GroupId),
+          group_name: readString(device.GroupName),
+        };
+      })
+      .filter((device): device is TencentIotVideoDevice => Boolean(device));
   }
 
   async getSipServerConfig(): Promise<TencentIotVideoSipServerConfig> {

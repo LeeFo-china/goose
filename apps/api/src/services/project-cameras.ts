@@ -496,7 +496,8 @@ class ProjectCameraService {
       allowCustomer: false,
     });
 
-    const [channels, bindings] = await Promise.all([
+    const [deviceSummaries, channels, bindings] = await Promise.all([
+      tencentIotVideoService.listDeviceSummaries(input.keyword),
       tencentIotVideoService.listDeviceChannels(input.keyword),
       projectCameraRepository.listActiveBindingsByVendor("tencent_iotvideo_industry"),
     ]);
@@ -510,6 +511,21 @@ class ProjectCameraService {
         binding,
       ]),
     );
+
+    const devices = deviceSummaries.map((device) => ({
+      device_id: device.device_id,
+      device_code: device.device_code,
+      device_name: device.device_name,
+      device_type: device.device_type,
+      device_type_label: getTencentDeviceTypeLabel(device.device_type),
+      sip_username: device.device_code,
+      sip_transport_protocol: "TCP",
+      status: device.status,
+      raw_status: device.raw_status,
+      protocol: device.protocol,
+      group_id: device.group_id,
+      group_name: device.group_name,
+    }));
 
     const list = channels.map((channel) => {
       const binding = bindingMap.get(
@@ -548,6 +564,7 @@ class ProjectCameraService {
 
     return {
       sip_server: sipServer,
+      devices,
       list: input.onlyUnbound
         ? list.filter((item) => item.can_bind)
         : list,

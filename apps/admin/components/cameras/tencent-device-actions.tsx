@@ -260,10 +260,12 @@ export function TencentDevicePasswordActions({
   projectId,
   deviceId,
   deviceName,
+  deviceCode,
 }: {
   projectId: string;
   deviceId: string;
   deviceName: string;
+  deviceCode?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -280,7 +282,7 @@ export function TencentDevicePasswordActions({
           ...data,
           device_id: deviceId,
           device_name: deviceName,
-          sip_username: data.device_code || deviceId.split("_")[0],
+          sip_username: data.device_code || deviceCode || deviceId.split("_")[0],
           sip_transport_protocol: "TCP",
         });
       } catch (err) {
@@ -305,7 +307,7 @@ export function TencentDevicePasswordActions({
           ...data,
           device_id: deviceId,
           device_name: deviceName,
-          sip_username: data.device_code || deviceId.split("_")[0],
+          sip_username: data.device_code || deviceCode || deviceId.split("_")[0],
           sip_transport_protocol: "TCP",
         });
       } catch (err) {

@@ -65,6 +65,21 @@ TENCENT_IOT_VIDEO_LIVE_STREAM_ACTION=DescribeChannelLiveStreamURL
       "transport_protocol": "TCP",
       "request_id": "腾讯云 RequestId"
     },
+    "devices": [
+      {
+        "device_id": "34020000001180000036_34020000001180000036",
+        "device_code": "34020000001180000036",
+        "device_name": "IPC-1",
+        "device_type": 2,
+        "device_type_label": "IPC",
+        "sip_username": "34020000001180000036",
+        "sip_transport_protocol": "TCP",
+        "status": "unknown",
+        "protocol": "GB28181",
+        "group_id": "group_root",
+        "group_name": "全部"
+      }
+    ],
     "list": [
       {
         "device_id": "34020000001180000036_34020000001180000036",
@@ -110,6 +125,8 @@ TENCENT_IOT_VIDEO_LIVE_STREAM_ACTION=DescribeChannelLiveStreamURL
 | 设备类型 | `device.device_type_label` |
 
 第一阶段不返回 SIP 认证密码。已有设备的认证密码需要使用创建时保存的密码；后续可单独接入腾讯云密码查询/重置和 admin 脱敏展示。
+
+`devices` 是腾讯云设备列表，即使设备刚创建、尚未完成 SIP 注册、还没有产生通道，也会出现在这里。`list` 是通道列表，只有设备注册并上报通道后才会有数据。Admin 页面应同时展示“腾讯云设备”和“腾讯云行业版通道”，避免新建设备因无通道而看不到。
 
 ## 腾讯云设备创建与密码管理
 

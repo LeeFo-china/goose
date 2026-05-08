@@ -21,6 +21,7 @@ import type {
   EzvizDeviceChannel,
   Pagination,
   TencentDeviceChannel,
+  TencentDeviceRecord,
   TencentSipServerConfig,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +64,7 @@ type EzvizDeviceListData = {
 
 type TencentDeviceListData = {
   sip_server: TencentSipServerConfig | null;
+  devices: TencentDeviceRecord[];
   list: TencentDeviceChannel[];
 };
 
@@ -110,6 +112,10 @@ function tencentDeviceName(device: TencentDeviceChannel) {
 
 function tencentChannelName(device: TencentDeviceChannel) {
   return device.channel_name || device.channel_code || compactIdentifier(device.channel_id);
+}
+
+function tencentDeviceRecordName(device: TencentDeviceRecord) {
+  return device.device_name || device.device_code || compactIdentifier(device.device_id);
 }
 
 function formatValue(value: string | number | null | undefined) {
@@ -183,6 +189,7 @@ async function getCameraData(token: string | null, projectId: string) {
       cameras: [] as CameraRecord[],
       devices: [] as CameraDeviceChannel[],
       ezvizDevices: [] as EzvizDeviceChannel[],
+      tencentDeviceRecords: [] as TencentDeviceRecord[],
       tencentDevices: [] as TencentDeviceChannel[],
       tencentSipServer: null as TencentSipServerConfig | null,
       cameraError: null,
@@ -208,6 +215,9 @@ async function getCameraData(token: string | null, projectId: string) {
   const tencentDevices = tencentDeviceResult.status === "fulfilled"
     ? tencentDeviceResult.value?.list || []
     : [];
+  const tencentDeviceRecords = tencentDeviceResult.status === "fulfilled"
+    ? tencentDeviceResult.value?.devices || []
+    : [];
   const tencentSipServer = tencentDeviceResult.status === "fulfilled"
     ? tencentDeviceResult.value?.sip_server || null
     : null;
@@ -224,6 +234,7 @@ async function getCameraData(token: string | null, projectId: string) {
       })),
     ],
     ezvizDevices,
+    tencentDeviceRecords,
     tencentDevices,
     tencentSipServer,
     cameraError: cameraResult.status === "rejected"
@@ -261,6 +272,7 @@ export default async function CamerasPage({
     cameras,
     devices,
     ezvizDevices,
+    tencentDeviceRecords,
     tencentDevices,
     tencentSipServer,
     cameraError,
@@ -506,6 +518,81 @@ export default async function CamerasPage({
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+              <CardTitle>腾讯云设备</CardTitle>
+              <Badge variant="outline">共 {tencentDeviceRecords.length} 台设备</Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] border-t text-sm">
+                  <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">设备</th>
+                      <th className="px-4 py-3">SIP用户</th>
+                      <th className="px-4 py-3">密码</th>
+                      <th className="px-4 py-3">状态</th>
+                      <th className="px-4 py-3">协议</th>
+                      <th className="px-4 py-3">分组</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tencentDeviceRecords.map((device) => (
+                      <tr key={device.device_id} className="border-t">
+                        <td className="max-w-[320px] px-4 py-3">
+                          <div className="font-medium">
+                            {tencentDeviceRecordName(device)}
+                          </div>
+                          <div
+                            className="truncate text-xs text-muted-foreground"
+                            title={device.device_id}
+                          >
+                            {device.device_type_label || "未知设备"} · ID {compactIdentifier(device.device_id)}
+                          </div>
+                        </td>
+                        <td className="max-w-[240px] px-4 py-3">
+                          <div className="truncate font-medium" title={device.sip_username || device.device_code || ""}>
+                            {device.sip_username || device.device_code || "-"}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Badge variant="outline">{device.sip_transport_protocol || "TCP"}</Badge>
+                            <CopyValueButton value={device.sip_username || device.device_code} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <TencentDevicePasswordActions
+                            projectId={selectedProjectId}
+                            deviceId={device.device_id}
+                            deviceName={tencentDeviceRecordName(device)}
+                            deviceCode={device.device_code}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {renderStatus(device.status)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          {device.protocol || "-"}
+                        </td>
+                        <td className="max-w-[220px] px-4 py-3">
+                          <div className="truncate text-muted-foreground">
+                            {device.group_name || device.group_id || "-"}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {tencentDeviceRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                          暂无腾讯云设备。新增设备后如仍未出现，请稍后刷新腾讯云列表。
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
               <CardTitle>腾讯云行业版通道</CardTitle>
               <Badge variant="outline">共 {tencentDevices.length} 个通道</Badge>
             </CardHeader>
@@ -565,6 +652,7 @@ export default async function CamerasPage({
                             projectId={selectedProjectId}
                             deviceId={device.device_id}
                             deviceName={tencentDeviceName(device)}
+                            deviceCode={device.device_code}
                           />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">

@@ -81,6 +81,21 @@ export type TencentDeviceChannel = {
   can_bind: boolean;
 };
 
+export type TencentDeviceRecord = {
+  device_id: string;
+  device_code: string | null;
+  device_name: string | null;
+  device_type: number | null;
+  device_type_label?: string | null;
+  sip_username?: string | null;
+  sip_transport_protocol?: "TCP" | string | null;
+  status: "online" | "offline" | "unknown" | string;
+  raw_status: number | string | null;
+  protocol: string | null;
+  group_id: string | null;
+  group_name: string | null;
+};
+
 export type CameraDeviceChannel =
   | (EzvizDeviceChannel & { vendor: "ezviz" })
   | (TencentDeviceChannel & { vendor: "tencent_iotvideo_industry" });
