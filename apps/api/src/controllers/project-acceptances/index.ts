@@ -6,6 +6,7 @@ import {
   CreateProjectAcceptanceSchema,
   CustomerConfirmProjectAcceptanceSchema,
   CustomerDisputeProjectAcceptanceSchema,
+  NotifyProjectAcceptanceCustomerSchema,
   ProjectAcceptanceListQuerySchema,
   ProjectAcceptanceTemplateListQuerySchema,
   RejectProjectAcceptanceSchema,
@@ -143,6 +144,24 @@ class ProjectAcceptancesController extends BaseController<
     return ResponseHandler.success(data);
   }
 
+  @Post("/project-acceptances/:id/notify-customer")
+  async notifyCustomer(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = NotifyProjectAcceptanceCustomerSchema.safeParse(
+      request.body ?? {},
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.notifyCustomerForAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/project-acceptances/:id/reject")
   async reject(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
@@ -161,7 +180,6 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/customer-confirm")
   async customerConfirm(request: FastifyRequest, reply: FastifyReply) {
-    if (!request.user?.sub) throw Errors.unauthorized();
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = CustomerConfirmProjectAcceptanceSchema.safeParse(
@@ -170,7 +188,7 @@ class ProjectAcceptancesController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await projectAcceptanceService.customerConfirmAcceptance(
-      request.user.sub,
+      request.user?.sub,
       idVerify.data.id,
       result.data,
     );
@@ -179,7 +197,6 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/customer-dispute")
   async customerDispute(request: FastifyRequest, reply: FastifyReply) {
-    if (!request.user?.sub) throw Errors.unauthorized();
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = CustomerDisputeProjectAcceptanceSchema.safeParse(
@@ -188,7 +205,7 @@ class ProjectAcceptancesController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await projectAcceptanceService.customerDisputeAcceptance(
-      request.user.sub,
+      request.user?.sub,
       idVerify.data.id,
       result.data,
     );

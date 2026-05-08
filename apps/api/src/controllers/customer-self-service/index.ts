@@ -2,7 +2,11 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { projectMemberService } from "@/services/project-members";
 import { projectAcceptanceService } from "@/services/project-acceptances";
-import { Get, Patch } from "@/utils/decorators/route";
+import {
+  CustomerProjectAcceptanceOpenTicketQuerySchema,
+  VerifyProjectAcceptanceOpenTicketSchema,
+} from "@/schema/project-acceptances";
+import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { FastifyRequest, FastifyReply } from "fastify";
@@ -925,20 +929,39 @@ class CustomerSelfServiceController extends BaseController {
     );
   }
 
+  @Post("/customer/project-acceptances/open-ticket/verify")
+  async verifyProjectAcceptanceOpenTicket(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const result = VerifyProjectAcceptanceOpenTicketSchema.safeParse(
+      request.body,
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    return ResponseHandler.success(
+      await projectAcceptanceService.verifyOpenTicket(result.data),
+    );
+  }
+
   @Get("/customer/project-acceptances/:id")
   async getCustomerProjectAcceptanceById(
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authUserId = await this.getRequiredAuthUserId(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const queryResult = CustomerProjectAcceptanceOpenTicketQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     return ResponseHandler.success(
-      await projectAcceptanceService.getCustomerAcceptance(
-        authUserId,
-        idVerify.data.id,
-      ),
+      await projectAcceptanceService.getCustomerAcceptanceByAuthOrTicket({
+        authUserId: request.user?.sub,
+        id: idVerify.data.id,
+        ticketQuery: queryResult.data,
+      }),
     );
   }
 

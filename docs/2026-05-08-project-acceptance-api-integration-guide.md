@@ -13,6 +13,7 @@
 - 支持业主确认或提出疑问。
 - 支持同一项目同一工序进行中验收单防重复。
 - 支持整改后失败项复验校验。
+- 支持领导复核通过后短信通知客户，并通过短期 ticket 拉起小程序验收详情。
 
 ## 二、上传图片
 
@@ -253,6 +254,46 @@ POST /project-acceptances/:id/approve
 leader_approved
 ```
 
+补充说明：
+
+- 后端会在状态变为 `leader_approved` 后自动尝试给客户发送验收确认短信。
+- 短信发送失败不会回滚领导复核结果。
+- 如果需要手动重发，可调用下面的通知接口。
+
+### 手动发送或重发客户短信
+
+```http
+POST /project-acceptances/:id/notify-customer
+```
+
+请求：
+
+```json
+{
+  "scene": "customer_review",
+  "force": false
+}
+```
+
+响应：
+
+```json
+{
+  "sent": true,
+  "reused": false,
+  "phone": "155****9999",
+  "link_type": "scheme",
+  "expire_at": "2026-05-11T10:00:00.000Z"
+}
+```
+
+规则：
+
+- 仅 `leader_approved` 状态允许发送。
+- `force=false` 时，未过期且已发送成功的 ticket 会复用，不重复生成新入口。
+- `force=true` 时重新生成 ticket 并发送。
+- `link_type` 由系统配置 `PROJECT_ACCEPTANCE_SMS_LINK_TYPE` 决定，支持 `scheme` 和 `url_link`。
+
 ### 驳回
 
 ```http
@@ -301,7 +342,65 @@ GET /customer/project-acceptances?project_id=project-id&page=1&pageSize=10
 GET /customer/project-acceptances/:id
 ```
 
-后端按验收单 `customer_id` 校验当前客户归属，不需要员工权限码。
+后端支持两种校验方式：
+
+1. 已登录客户：按验收单 `customer_id` 校验当前客户归属，不需要员工权限码。
+2. 短信 ticket：传 `ticket` 和 `project_id` 后，后端校验 ticket 与验收单、项目、客户是否匹配。
+
+短信入口示例：
+
+```http
+GET /customer/project-acceptances/:id?project_id=project-id&ticket=ticket_xxx
+```
+
+注意：如果小程序端使用 ticket 兜底读取详情，请求时不要携带已过期或无效的旧登录 token，否则会先被全局鉴权拦截。
+
+### 校验短信 ticket
+
+```http
+POST /customer/project-acceptances/open-ticket/verify
+```
+
+请求：
+
+```json
+{
+  "ticket": "ticket_xxx",
+  "acceptance_id": "acceptance-id",
+  "project_id": "project-id"
+}
+```
+
+成功响应：
+
+```json
+{
+  "valid": true,
+  "acceptance_id": "acceptance-id",
+  "project_id": "project-id",
+  "customer_id": "customer-id",
+  "status": "leader_approved",
+  "expires_at": "2026-05-11T10:00:00.000Z"
+}
+```
+
+失败响应：
+
+```json
+{
+  "valid": false,
+  "reason": "expired"
+}
+```
+
+`reason` 可选：
+
+- `expired`
+- `revoked`
+- `not_found`
+- `acceptance_mismatch`
+- `customer_mismatch`
+- `not_reviewable`
 
 ### 确认通过
 
@@ -313,7 +412,9 @@ POST /project-acceptances/:id/customer-confirm
 
 ```json
 {
-  "comment": "已确认"
+  "comment": "已确认",
+  "ticket": "ticket_xxx",
+  "project_id": "project-id"
 }
 ```
 
@@ -334,7 +435,9 @@ POST /project-acceptances/:id/customer-dispute
 ```json
 {
   "comment": "卫生间地面照片看不清楚，请补充",
-  "images": []
+  "images": [],
+  "ticket": "ticket_xxx",
+  "project_id": "project-id"
 }
 ```
 
@@ -371,7 +474,20 @@ POST /project-acceptances/:id/customer-dispute
 - `project_acceptance.reject`
 - `project_acceptance.manage`
 
-业主确认接口使用客户登录态，根据 `customers.user_id` 匹配当前客户。
+业主确认接口支持两种校验：
+
+- 当前客户登录态，根据 `customers.user_id` 匹配当前客户。
+- 短信 ticket，校验 ticket 与验收单、项目、客户匹配且未过期。
+
+短信和小程序拉起相关配置：
+
+- `SMS_PROVIDER`：`mock`、`disabled`、`aliyun`。
+- `ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE`：项目验收通知短信模板 Code。
+- `PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS`：ticket 有效期，默认 72 小时。
+- `PROJECT_ACCEPTANCE_SMS_LINK_TYPE`：`scheme` 或 `url_link`，默认 `scheme`。
+- `WECHAT_APPID`、`WECHAT_SECRET`：微信小程序配置。
+- `WECHAT_PROJECT_ACCEPTANCE_PAGE`：默认 `packageCustomerPortal/pages/customer-project-acceptance/index`。
+- `WECHAT_MINIPROGRAM_ENV_VERSION`：`release`、`trial` 或 `develop`。
 
 ## 九、推荐前端落地顺序
 

@@ -3,17 +3,25 @@ import type {
   ApproveProjectAcceptanceInput,
   CancelProjectAcceptanceInput,
   CreateProjectAcceptanceInput,
+  CustomerProjectAcceptanceOpenTicketQuery,
   CustomerConfirmProjectAcceptanceInput,
   CustomerDisputeProjectAcceptanceInput,
+  NotifyProjectAcceptanceCustomerInput,
   ProjectAcceptanceListQuery,
   ProjectAcceptanceTemplateListQuery,
   RejectProjectAcceptanceInput,
   SubmitProjectAcceptanceInput,
   UpdateProjectAcceptanceInput,
+  VerifyProjectAcceptanceOpenTicketInput,
 } from "@/schema/project-acceptances";
+import { randomBytes } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
+import { projectAcceptanceOpenTicketRepository } from "@/repositories/project-acceptance-open-tickets";
+import { systemSettingsService } from "@/services/system-settings";
+import { sendSmsTemplate } from "@/services/sms";
+import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import type {
   ProjectAcceptanceActionRow,
   ProjectAcceptanceCustomerRow,
@@ -67,6 +75,18 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
   initiator: ProjectAcceptanceEmployeeRow | null;
   reviewer: ProjectAcceptanceEmployeeRow | null;
   customer: ProjectAcceptanceCustomerRow | null;
+  latest_customer_notification: {
+    id: string;
+    status: string;
+    send_status: string | null;
+    send_error: string | null;
+    phone: string;
+    link_type: string | null;
+    sent_at: string | null;
+    expire_at: string;
+    used_at: string | null;
+    created_at: string;
+  } | null;
 };
 
 class ProjectAcceptanceWorkflowService {
@@ -157,7 +177,7 @@ class ProjectAcceptanceService {
       .filter((item) => item.operator_type === "customer" && item.operator_id)
       .map((item) => item.operator_id as string);
 
-    const [items, actions, project, employees, customers] = await Promise.all([
+    const [items, actions, project, employees, customers, latestNotification] = await Promise.all([
       projectAcceptanceRepository.listItems(row.id),
       Promise.resolve(rawActions),
       projectAcceptanceRepository.getProject(row.project_id),
@@ -174,6 +194,7 @@ class ProjectAcceptanceService {
           ...actionCustomerIds,
         ].filter((item): item is string => Boolean(item)))),
       ),
+      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(row.id),
     ]);
 
     const employeeMap = new Map(employees.map((item) => [item.id, item]));
@@ -212,6 +233,20 @@ class ProjectAcceptanceService {
       initiator: employeeMap.get(row.initiator_id) || null,
       reviewer: row.reviewer_id ? employeeMap.get(row.reviewer_id) || null : null,
       customer: row.customer_id ? customerMap.get(row.customer_id) || null : null,
+      latest_customer_notification: latestNotification
+        ? {
+          id: latestNotification.id,
+          status: latestNotification.status,
+          send_status: latestNotification.send_status,
+          send_error: latestNotification.send_error,
+          phone: this.maskPhone(latestNotification.phone),
+          link_type: latestNotification.link_type,
+          sent_at: latestNotification.sent_at,
+          expire_at: latestNotification.expire_at,
+          used_at: latestNotification.used_at,
+          created_at: latestNotification.created_at,
+        }
+        : null,
     };
   }
 
@@ -378,6 +413,252 @@ class ProjectAcceptanceService {
     });
   }
 
+  private maskPhone(phone: string) {
+    const normalized = phone.trim();
+    if (normalized.length < 7) {
+      return normalized.replace(/.(?=.{2})/g, "*");
+    }
+
+    return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
+  }
+
+  private createTicketValue() {
+    return randomBytes(32).toString("hex");
+  }
+
+  private async getAcceptanceSmsExpireHours() {
+    const value = await systemSettingsService.getNumber(
+      "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
+      72,
+    );
+    if (!Number.isFinite(value) || value <= 0) {
+      return 72;
+    }
+
+    return Math.min(Math.max(Math.floor(value), 1), 720);
+  }
+
+  private async getAcceptanceSmsLink(input: {
+    row: ProjectAcceptanceRow;
+    ticket: string;
+    expireAt: Date;
+  }) {
+    const pagePath = (await systemSettingsService.getString(
+      "WECHAT_PROJECT_ACCEPTANCE_PAGE",
+      "packageCustomerPortal/pages/customer-project-acceptance/index",
+    )).replace(/^\/+/, "");
+    const envVersion = wechatOpenLinkService.normalizeEnvVersion(
+      await systemSettingsService.getString(
+        "WECHAT_MINIPROGRAM_ENV_VERSION",
+        "release",
+      ),
+    );
+    const linkType = (await systemSettingsService.getString(
+      "PROJECT_ACCEPTANCE_SMS_LINK_TYPE",
+      "scheme",
+    )).trim().toLowerCase() === "url_link"
+      ? "url_link"
+      : "scheme";
+    const query = new URLSearchParams({
+      id: input.row.id,
+      projectId: input.row.project_id,
+      ticket: input.ticket,
+      source: "sms_acceptance",
+    }).toString();
+
+    const link = linkType === "url_link"
+      ? await wechatOpenLinkService.generateUrlLink({
+        path: pagePath,
+        query,
+        envVersion,
+        expireAt: input.expireAt,
+      })
+      : await wechatOpenLinkService.generateScheme({
+        path: pagePath,
+        query,
+        envVersion,
+      });
+
+    return { link, linkType };
+  }
+
+  private async getAcceptanceCustomer(row: ProjectAcceptanceRow) {
+    if (!row.customer_id) {
+      throw Errors.badRequest("该验收单未关联客户");
+    }
+
+    const [customer] = await projectAcceptanceRepository.listCustomers([
+      row.customer_id,
+    ]);
+    if (!customer) {
+      throw Errors.badRequest("验收单关联客户不存在");
+    }
+    if (!customer.phone?.trim()) {
+      throw Errors.badRequest("客户未配置手机号，无法发送验收通知");
+    }
+
+    return customer;
+  }
+
+  private async sendAcceptanceCustomerSms(input: {
+    phone: string;
+    stageName: string;
+    link: string;
+    expireHours: number;
+  }) {
+    const provider = (await systemSettingsService.getString("SMS_PROVIDER", "mock"))
+      .trim()
+      .toLowerCase();
+    const templateCode = await systemSettingsService.getString(
+      "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
+    );
+
+    if (provider === "aliyun" && !templateCode) {
+      throw Errors.badRequest("缺少项目验收通知短信模板 Code");
+    }
+
+    await sendSmsTemplate({
+      phone: input.phone,
+      templateCode,
+      templateParam: {
+        stageName: input.stageName,
+        link: input.link,
+        expireHours: input.expireHours,
+      },
+    });
+  }
+
+  private async notifyCustomerForAcceptanceInternal(input: {
+    row: ProjectAcceptanceRow;
+    createdBy: string | null;
+    force: boolean;
+  }) {
+    if (input.row.status !== "leader_approved") {
+      throw Errors.badRequest("只有待业主确认的验收单可以发送客户通知");
+    }
+
+    const customer = await this.getAcceptanceCustomer(input.row);
+    const reusable = input.force
+      ? null
+      : await projectAcceptanceOpenTicketRepository.findReusable({
+        acceptance_id: input.row.id,
+        customer_id: customer.id,
+        phone: customer.phone!,
+      });
+
+    if (reusable?.sent_at && reusable.send_status === "sent") {
+      return {
+        sent: true,
+        reused: true,
+        phone: this.maskPhone(reusable.phone),
+        link_type: reusable.link_type || "scheme",
+        expire_at: reusable.expire_at,
+      };
+    }
+
+    const expireHours = await this.getAcceptanceSmsExpireHours();
+    const expireAt = new Date(Date.now() + expireHours * 60 * 60 * 1000);
+    const ticket = this.createTicketValue();
+    const { link, linkType } = await this.getAcceptanceSmsLink({
+      row: input.row,
+      ticket,
+      expireAt,
+    });
+    const openTicket = await projectAcceptanceOpenTicketRepository.create({
+      ticket,
+      acceptance_id: input.row.id,
+      project_id: input.row.project_id,
+      customer_id: customer.id,
+      phone: customer.phone!,
+      expire_at: expireAt.toISOString(),
+      created_by: input.createdBy,
+      link_type: linkType,
+      link_url: link,
+    });
+
+    try {
+      await this.sendAcceptanceCustomerSms({
+        phone: customer.phone!,
+        stageName: this.getStageLabel(input.row.stage_code) || input.row.title,
+        link,
+        expireHours,
+      });
+
+      const sent = await projectAcceptanceOpenTicketRepository.update(
+        openTicket.id,
+        {
+          send_status: "sent",
+          send_error: null,
+          sent_at: new Date().toISOString(),
+        },
+      );
+
+      return {
+        sent: true,
+        reused: false,
+        phone: this.maskPhone(sent.phone),
+        link_type: sent.link_type || linkType,
+        expire_at: sent.expire_at,
+      };
+    } catch (error) {
+      await projectAcceptanceOpenTicketRepository.update(openTicket.id, {
+        send_status: "failed",
+        send_error: error instanceof Error ? error.message : "短信发送失败",
+      });
+      throw error;
+    }
+  }
+
+  private async verifyOpenTicketRow(input: VerifyProjectAcceptanceOpenTicketInput) {
+    const ticket = await projectAcceptanceOpenTicketRepository.findByTicket(
+      input.ticket,
+    );
+    if (!ticket) {
+      return { valid: false as const, reason: "not_found" as const };
+    }
+
+    if (ticket.acceptance_id !== input.acceptance_id || ticket.project_id !== input.project_id) {
+      return { valid: false as const, reason: "acceptance_mismatch" as const };
+    }
+
+    if (ticket.status === "revoked") {
+      return { valid: false as const, reason: "revoked" as const };
+    }
+
+    if (ticket.status === "expired" || new Date(ticket.expire_at).getTime() <= Date.now()) {
+      if (ticket.status === "active") {
+        await projectAcceptanceOpenTicketRepository.update(ticket.id, {
+          status: "expired",
+        });
+      }
+      return { valid: false as const, reason: "expired" as const };
+    }
+
+    const row = await projectAcceptanceRepository.getAcceptanceById(
+      ticket.acceptance_id,
+    );
+    if (!row) {
+      return { valid: false as const, reason: "not_found" as const };
+    }
+
+    if (row.customer_id !== ticket.customer_id) {
+      return { valid: false as const, reason: "customer_mismatch" as const };
+    }
+
+    if (row.status !== "leader_approved") {
+      return { valid: false as const, reason: "not_reviewable" as const };
+    }
+
+    const now = new Date().toISOString();
+    const verified = await projectAcceptanceOpenTicketRepository.update(ticket.id, {
+      used_at: ticket.used_at || now,
+      last_verified_at: now,
+      verify_count: (ticket.verify_count || 0) + 1,
+    });
+
+    return { valid: true as const, ticket: verified, row };
+  }
+
   async listTemplates(input: ProjectAcceptanceTemplateListQuery) {
     const templates = await projectAcceptanceRepository.listTemplates({
       stage_code: input.stage_code,
@@ -485,6 +766,96 @@ class ProjectAcceptanceService {
     }
 
     return this.buildDetail(row);
+  }
+
+  async getCustomerAcceptanceByAuthOrTicket(input: {
+    authUserId?: string | null;
+    id: string;
+    ticketQuery?: CustomerProjectAcceptanceOpenTicketQuery;
+  }) {
+    const row = await this.getRequiredAcceptance(input.id);
+
+    if (input.authUserId) {
+      const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+        input.authUserId,
+      );
+      if (customer && row.customer_id === customer.id) {
+        return this.buildDetail(row);
+      }
+    }
+
+    if (input.ticketQuery?.ticket && input.ticketQuery.project_id) {
+      const result = await this.verifyOpenTicketRow({
+        ticket: input.ticketQuery.ticket,
+        acceptance_id: row.id,
+        project_id: input.ticketQuery.project_id,
+      });
+      if (result.valid) {
+        return this.buildDetail(row);
+      }
+
+      throw Errors.business(403, "验收短信访问票据无效或已失效", "FORBIDDEN", {
+        reason: result.reason,
+      });
+    }
+
+    if (input.authUserId) {
+      throw Errors.notFound("项目验收单不存在");
+    }
+
+    throw Errors.unauthorized("请先登录或提供有效访问票据");
+  }
+
+  async verifyOpenTicket(input: VerifyProjectAcceptanceOpenTicketInput) {
+    const result = await this.verifyOpenTicketRow(input);
+    if (!result.valid) {
+      return result;
+    }
+
+    return {
+      valid: true,
+      acceptance_id: result.ticket.acceptance_id,
+      project_id: result.ticket.project_id,
+      customer_id: result.ticket.customer_id,
+      status: result.row.status,
+      expires_at: result.ticket.expire_at,
+    };
+  }
+
+  private async resolveCustomerActor(input: {
+    authUserId?: string | null;
+    row: ProjectAcceptanceRow;
+    ticket?: string;
+    projectId?: string;
+  }) {
+    if (input.authUserId) {
+      const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+        input.authUserId,
+      );
+      if (customer && input.row.customer_id === customer.id) {
+        return customer;
+      }
+    }
+
+    if (input.ticket && input.projectId) {
+      const result = await this.verifyOpenTicketRow({
+        ticket: input.ticket,
+        acceptance_id: input.row.id,
+        project_id: input.projectId,
+      });
+      if (result.valid) {
+        const [customer] = await projectAcceptanceRepository.listCustomers([
+          result.ticket.customer_id,
+        ]);
+        if (customer) return customer;
+      }
+    }
+
+    if (input.authUserId || input.ticket) {
+      throw Errors.forbidden();
+    }
+
+    throw Errors.unauthorized("请先登录或提供有效访问票据");
   }
 
   async createAcceptance(
@@ -768,7 +1139,32 @@ class ProjectAcceptanceService {
       comment: input.comment,
     });
 
+    try {
+      await this.notifyCustomerForAcceptanceInternal({
+        row: nextRow,
+        createdBy: authContext.employeeId,
+        force: false,
+      });
+    } catch {
+      // 短信是客户触达能力，不能阻断领导复核主流程。
+    }
+
     return this.buildDetail(nextRow);
+  }
+
+  async notifyCustomerForAcceptance(
+    authContext: AuthContext,
+    id: string,
+    input: NotifyProjectAcceptanceCustomerInput,
+  ) {
+    const row = await this.getRequiredAcceptance(id);
+    this.assertCanReview(authContext, row);
+
+    return this.notifyCustomerForAcceptanceInternal({
+      row,
+      createdBy: authContext.employeeId,
+      force: input.force,
+    });
   }
 
   async rejectAcceptance(
@@ -804,24 +1200,21 @@ class ProjectAcceptanceService {
   }
 
   async customerConfirmAcceptance(
-    authUserId: string,
+    authUserId: string | null | undefined,
     id: string,
     input: CustomerConfirmProjectAcceptanceInput,
   ) {
-    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
-      authUserId,
-    );
-    if (!customer) throw Errors.forbidden();
-
     const row = await this.getRequiredAcceptance(id);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "customer_confirm",
     });
-
-    if (row.customer_id !== customer.id) {
-      throw Errors.forbidden();
-    }
+    const customer = await this.resolveCustomerActor({
+      authUserId,
+      row,
+      ticket: input.ticket,
+      projectId: input.project_id,
+    });
 
     const now = new Date().toISOString();
     const nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, {
@@ -844,24 +1237,21 @@ class ProjectAcceptanceService {
   }
 
   async customerDisputeAcceptance(
-    authUserId: string,
+    authUserId: string | null | undefined,
     id: string,
     input: CustomerDisputeProjectAcceptanceInput,
   ) {
-    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
-      authUserId,
-    );
-    if (!customer) throw Errors.forbidden();
-
     const row = await this.getRequiredAcceptance(id);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "customer_dispute",
     });
-
-    if (row.customer_id !== customer.id) {
-      throw Errors.forbidden();
-    }
+    const customer = await this.resolveCustomerActor({
+      authUserId,
+      row,
+      ticket: input.ticket,
+      projectId: input.project_id,
+    });
 
     const comment = input.images?.length
       ? `${input.comment}\n图片：${input.images.join(",")}`

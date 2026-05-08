@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   PROJECT_ACCEPTANCE_STAGE_LABELS,
   ProjectAcceptanceStatusConfig,
@@ -11,6 +12,7 @@ import {
 import {
   CheckCircle2,
   Loader2,
+  MessageSquareText,
   Plus,
   RefreshCw,
   Send,
@@ -68,6 +70,20 @@ type ProjectAcceptance = {
   items: AcceptanceItem[];
   initiator?: { name?: string | null } | null;
   reviewer?: { name?: string | null } | null;
+  latest_customer_notification?: AcceptanceNotification | null;
+};
+
+type AcceptanceNotification = {
+  id: string;
+  status: "active" | "used" | "expired" | "revoked" | string;
+  send_status: "sent" | "failed" | null | string;
+  send_error: string | null;
+  phone: string;
+  link_type: string | null;
+  sent_at: string | null;
+  expire_at: string;
+  used_at: string | null;
+  created_at: string;
 };
 
 type AcceptanceListData = {
@@ -75,6 +91,14 @@ type AcceptanceListData = {
   pagination: {
     total: number;
   };
+};
+
+type NotifyCustomerResult = {
+  sent: boolean;
+  reused?: boolean;
+  phone: string;
+  link_type: string;
+  expire_at: string;
 };
 
 type EditableItem = {
@@ -166,6 +190,24 @@ function statusVariant(status: ProjectAcceptanceStatus) {
     : ProjectAcceptanceStatusConfig[status]?.type === "primary"
     ? "default"
     : "secondary";
+}
+
+function notificationVariant(notification: AcceptanceNotification | null | undefined) {
+  if (!notification) return "secondary";
+  if (notification.send_status === "failed") return "danger";
+  if (notification.status === "revoked" || notification.status === "expired") return "secondary";
+  if (new Date(notification.expire_at).getTime() <= Date.now()) return "secondary";
+  return notification.send_status === "sent" ? "success" : "warning";
+}
+
+function notificationLabel(notification: AcceptanceNotification | null | undefined) {
+  if (!notification) return "未发送";
+  if (notification.send_status === "failed") return "发送失败";
+  if (notification.status === "revoked") return "已撤销";
+  if (notification.status === "expired") return "已过期";
+  if (new Date(notification.expire_at).getTime() <= Date.now()) return "已过期";
+  if (notification.send_status === "sent") return "已发送";
+  return "待发送";
 }
 
 export function ProjectAcceptancesPanel({
@@ -296,6 +338,21 @@ export function ProjectAcceptancesPanel({
       await requestBackend(`/project-acceptances/${selected.id}/reject`, {
         method: "POST",
         payload: { comment },
+      });
+    });
+
+  const notifyCustomer = (force = false) =>
+    runAction(async () => {
+      if (!selected) return;
+      const data = await requestBackend<NotifyCustomerResult>(
+        `/project-acceptances/${selected.id}/notify-customer`,
+        {
+          method: "POST",
+          payload: { scene: "customer_review", force },
+        },
+      );
+      toast.success(data.reused ? "已复用未过期通知" : "客户通知已发送", {
+        description: `${data.phone} · ${formatDateTime(data.expire_at)} 过期`,
       });
     });
 
@@ -485,8 +542,30 @@ export function ProjectAcceptancesPanel({
                       </Button>
                     </>
                   ) : null}
+                  {selected.status === "leader_approved" ? (
+                    <Button
+                      type="button"
+                      variant={selected.latest_customer_notification ? "outline" : "default"}
+                      onClick={() => notifyCustomer(Boolean(selected.latest_customer_notification))}
+                      disabled={actionLoading}
+                    >
+                      {actionLoading
+                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                        : <MessageSquareText data-icon="inline-start" />}
+                      {selected.latest_customer_notification ? "重发客户通知" : "发送客户通知"}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
+
+              {selected.status === "leader_approved" || selected.latest_customer_notification ? (
+                <CustomerNotificationPanel
+                  notification={selected.latest_customer_notification || null}
+                  onSend={() => notifyCustomer(false)}
+                  onResend={() => notifyCustomer(true)}
+                  disabled={actionLoading || selected.status !== "leader_approved"}
+                />
+              ) : null}
 
               <div className="space-y-4 p-4">
                 <div className="space-y-2">
@@ -611,6 +690,73 @@ export function ProjectAcceptancesPanel({
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+function CustomerNotificationPanel({
+  notification,
+  disabled,
+  onSend,
+  onResend,
+}: {
+  notification: AcceptanceNotification | null;
+  disabled: boolean;
+  onSend: () => void;
+  onResend: () => void;
+}) {
+  return (
+    <div className="border-b bg-muted/30 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">客户短信通知</span>
+            <Badge variant={notificationVariant(notification)}>
+              {notificationLabel(notification)}
+            </Badge>
+          </div>
+          {notification ? (
+            <div className="text-sm text-muted-foreground">
+              手机：{notification.phone} · 链接：{notification.link_type || "-"} · 过期：
+              {formatDateTime(notification.expire_at)}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              复核通过后可短信通知业主打开小程序确认验收
+            </div>
+          )}
+          {notification?.send_error ? (
+            <div className="text-sm text-destructive">
+              失败原因：{notification.send_error}
+            </div>
+          ) : null}
+          {notification?.sent_at ? (
+            <div className="text-xs text-muted-foreground">
+              发送时间：{formatDateTime(notification.sent_at)}
+              {notification.used_at ? ` · 最近打开：${formatDateTime(notification.used_at)}` : ""}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex gap-2">
+          {notification ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onResend}
+              disabled={disabled}
+            >
+              <RefreshCw data-icon="inline-start" />
+              重新发送
+            </Button>
+          ) : (
+            <Button type="button" size="sm" onClick={onSend} disabled={disabled}>
+              <MessageSquareText data-icon="inline-start" />
+              发送通知
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -54,6 +54,28 @@ function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    method === "POST"
+    && url === "/customer/project-acceptances/open-ticket/verify"
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/customer/project-acceptances/")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url.startsWith("/project-acceptances/")
+    && (url.endsWith("/customer-confirm") || url.endsWith("/customer-dispute"))
+  ) {
+    return true;
+  }
+
   return false;
 }
 

@@ -114,6 +114,52 @@ async function sendAliyunSmsCode(phone: string, code: string, scene: SmsScene) {
   }
 }
 
+async function sendAliyunSmsTemplate(input: {
+  phone: string;
+  templateCode: string;
+  templateParam: Record<string, string | number>;
+}) {
+  const client = await getAliyunSmsClient();
+  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME") ||
+    await requireSmsConfig("ALIYUN_SMS_SIGN_NAME");
+
+  const request = new SendSmsRequest({
+    phoneNumbers: input.phone,
+    signName,
+    templateCode: input.templateCode,
+    templateParam: JSON.stringify(input.templateParam),
+  });
+
+  const runtime = new RuntimeOptions({
+    connectTimeout: 5000,
+    readTimeout: 5000,
+    autoretry: false,
+  });
+
+  try {
+    const response = await client.sendSmsWithOptions(request, runtime);
+    const responseCode = response.body?.code;
+
+    if (responseCode !== "OK") {
+      throw new Error(
+        `阿里云短信发送失败: ${responseCode || "UNKNOWN"} ${response.body?.message || "未知错误"}`,
+      );
+    }
+  } catch (error) {
+    const err = error as {
+      message?: string;
+      data?: { Recommend?: string };
+    };
+
+    const recommend = err.data?.Recommend;
+    if (recommend) {
+      throw new Error(`${err.message || "阿里云短信发送异常"}，诊断信息：${recommend}`);
+    }
+
+    throw error;
+  }
+}
+
 export async function sendSmsCode(
   phone: string,
   code: string,
@@ -131,5 +177,25 @@ export async function sendSmsCode(
 
   if (provider === "aliyun") {
     await sendAliyunSmsCode(phone, code, scene);
+  }
+}
+
+export async function sendSmsTemplate(input: {
+  phone: string;
+  templateCode: string;
+  templateParam: Record<string, string | number>;
+}): Promise<void> {
+  const provider = await getSmsProvider();
+
+  if (provider === "disabled") {
+    throw new Error("短信服务未启用");
+  }
+
+  if (provider === "mock") {
+    return;
+  }
+
+  if (provider === "aliyun") {
+    await sendAliyunSmsTemplate(input);
   }
 }

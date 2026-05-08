@@ -83,6 +83,8 @@ export const CustomerConfirmProjectAcceptanceSchema = z.object({
   comment: z.string().trim().max(1000, "确认说明不能超过1000个字符")
     .nullable()
     .optional(),
+  ticket: z.string().trim().min(16, "访问票据无效").optional(),
+  project_id: z.uuid("无效的项目 ID").optional(),
 });
 
 export const CustomerDisputeProjectAcceptanceSchema = z.object({
@@ -91,12 +93,30 @@ export const CustomerDisputeProjectAcceptanceSchema = z.object({
     "疑问说明不能超过1000个字符",
   ),
   images: ImageListSchema.optional(),
+  ticket: z.string().trim().min(16, "访问票据无效").optional(),
+  project_id: z.uuid("无效的项目 ID").optional(),
 });
 
 export const CancelProjectAcceptanceSchema = z.object({
   comment: z.string().trim().max(1000, "作废说明不能超过1000个字符")
     .nullable()
     .optional(),
+});
+
+export const NotifyProjectAcceptanceCustomerSchema = z.object({
+  scene: z.enum(["customer_review"]).default("customer_review"),
+  force: z.boolean().default(false),
+});
+
+export const VerifyProjectAcceptanceOpenTicketSchema = z.object({
+  ticket: z.string().trim().min(16, "访问票据无效"),
+  acceptance_id: z.uuid("无效的验收单 ID"),
+  project_id: z.uuid("无效的项目 ID"),
+});
+
+export const CustomerProjectAcceptanceOpenTicketQuerySchema = z.object({
+  ticket: z.string().trim().min(16, "访问票据无效").optional(),
+  project_id: z.uuid("无效的项目 ID").optional(),
 });
 
 export type ProjectAcceptanceListQuery = z.infer<
@@ -128,4 +148,13 @@ export type CustomerDisputeProjectAcceptanceInput = z.infer<
 >;
 export type CancelProjectAcceptanceInput = z.infer<
   typeof CancelProjectAcceptanceSchema
+>;
+export type NotifyProjectAcceptanceCustomerInput = z.infer<
+  typeof NotifyProjectAcceptanceCustomerSchema
+>;
+export type VerifyProjectAcceptanceOpenTicketInput = z.infer<
+  typeof VerifyProjectAcceptanceOpenTicketSchema
+>;
+export type CustomerProjectAcceptanceOpenTicketQuery = z.infer<
+  typeof CustomerProjectAcceptanceOpenTicketQuerySchema
 >;
