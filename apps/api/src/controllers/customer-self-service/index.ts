@@ -1,6 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { projectMemberService } from "@/services/project-members";
+import { projectAcceptanceService } from "@/services/project-acceptances";
 import { Get, Patch } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
@@ -13,6 +14,8 @@ import {
 import { z } from "zod";
 import {
   PROJECT_LOG_STAGE_CONFIG,
+  PROJECT_LOG_STAGE_CODE_VALUES,
+  PROJECT_ACCEPTANCE_STATUS_VALUES,
   ProjectStatusConfig,
   isProjectLogStageCode,
   isProjectStatus,
@@ -176,6 +179,16 @@ const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
     "每页日志不能超过 20 条",
   ).default(10),
   imageMode: optionalCustomerQueryValue(z.enum(["thumb", "full"])).default("thumb"),
+});
+
+const CustomerProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
+  project_id: z.uuid("无效的项目 ID"),
+  status: optionalCustomerQueryValue(z.enum(PROJECT_ACCEPTANCE_STATUS_VALUES)),
+  stage_code: optionalCustomerQueryValue(z.enum(PROJECT_LOG_STAGE_CODE_VALUES)),
+  pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(
+    20,
+    "每页验收单不能超过 20 条",
+  ).default(10),
 });
 
 const CustomerProjectLogCommentListQuerySchema = PaginationQuerySchema.extend({
@@ -889,6 +902,42 @@ class CustomerSelfServiceController extends BaseController {
     return ResponseHandler.success(
       await this.serializeCustomerProjectDetailItem(
         await this.getOwnedProject(idVerify.data.id, customer!.id),
+      ),
+    );
+  }
+
+  @Get("/customer/project-acceptances")
+  async listCustomerProjectAcceptances(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const queryResult = CustomerProjectAcceptanceListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    return ResponseHandler.success(
+      await projectAcceptanceService.listCustomerAcceptances(
+        authUserId,
+        queryResult.data,
+      ),
+    );
+  }
+
+  @Get("/customer/project-acceptances/:id")
+  async getCustomerProjectAcceptanceById(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    return ResponseHandler.success(
+      await projectAcceptanceService.getCustomerAcceptance(
+        authUserId,
+        idVerify.data.id,
       ),
     );
   }

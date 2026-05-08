@@ -381,6 +381,56 @@ class ProjectAcceptanceService {
     return this.buildDetail(row);
   }
 
+  async listCustomerAcceptances(
+    authUserId: string,
+    query: {
+      project_id: string;
+      page: number;
+      pageSize: number;
+      status?: ProjectAcceptanceStatus;
+      stage_code?: ProjectLogStageCode;
+    },
+  ) {
+    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+      authUserId,
+    );
+    if (!customer) throw Errors.forbidden();
+
+    const project = await projectAcceptanceRepository.getProject(query.project_id);
+    if (!project || project.customer_id !== customer.id) {
+      throw Errors.notFound("项目不存在");
+    }
+
+    const { list, total } = await projectAcceptanceRepository.listAcceptances({
+      ...query,
+      customer_id: customer.id,
+    });
+
+    return {
+      list: await Promise.all(list.map((item) => this.buildDetail(item))),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / query.pageSize) : 0,
+      },
+    };
+  }
+
+  async getCustomerAcceptance(authUserId: string, id: string) {
+    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+      authUserId,
+    );
+    if (!customer) throw Errors.forbidden();
+
+    const row = await this.getRequiredAcceptance(id);
+    if (row.customer_id !== customer.id) {
+      throw Errors.notFound("项目验收单不存在");
+    }
+
+    return this.buildDetail(row);
+  }
+
   async createAcceptance(
     authContext: AuthContext,
     input: CreateProjectAcceptanceInput,

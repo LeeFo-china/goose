@@ -223,6 +223,34 @@ POST /project-acceptances/:id/reject
 
 ## 六、业主确认
 
+### 客户侧查询验收列表
+
+小程序客户项目详情页不要调用员工端列表接口，应使用客户侧只读接口：
+
+```http
+GET /customer/project-acceptances?project_id=project-id&page=1&pageSize=10
+```
+
+可选过滤：
+
+- `status`
+- `stage_code`
+
+后端按当前客户登录态校验：
+
+- `customers.user_id = 当前 authUserId`
+- `projects.customer_id = 当前 customer.id`
+
+客户只能看到自己项目的验收单。
+
+### 客户侧查询验收详情
+
+```http
+GET /customer/project-acceptances/:id
+```
+
+后端按验收单 `customer_id` 校验当前客户归属，不需要员工权限码。
+
 ### 确认通过
 
 ```http
