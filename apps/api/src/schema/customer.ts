@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CUSTOMER_ORIGIN_VALUES,
   CUSTOMER_SOURCE_VALUES,
   CUSTOMER_STATUS_VALUES,
 } from "@gooes/domain";
@@ -130,6 +131,9 @@ export const CustomerListQuerySchema = PaginationQuerySchema.extend({
   })),
   source: optionalQueryValue(z.enum(CUSTOMER_SOURCE_VALUES, {
     message: "无效的客户来源",
+  })),
+  customer_origin: optionalQueryValue(z.enum(CUSTOMER_ORIGIN_VALUES, {
+    message: "无效的客户创建渠道",
   })),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
   follow: optionalQueryValue(z.enum(["due", "overdue"], {

@@ -896,6 +896,7 @@ class CustomerController extends BaseController<
     visibleOwnerIds: string[] | null,
     status?: string,
     source?: string,
+    customerOrigin?: string,
     keyword?: string,
   ) {
     let filteredQuery = query;
@@ -914,6 +915,10 @@ class CustomerController extends BaseController<
 
     if (source) {
       filteredQuery = filteredQuery.eq("source", source);
+    }
+
+    if (customerOrigin) {
+      filteredQuery = filteredQuery.eq("customer_origin", customerOrigin);
     }
 
     if (keyword) {
@@ -935,7 +940,15 @@ class CustomerController extends BaseController<
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, status, source, keyword, follow } = queryResult.data;
+    const {
+      page,
+      pageSize,
+      status,
+      source,
+      customer_origin: customerOrigin,
+      keyword,
+      follow,
+    } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -955,6 +968,7 @@ class CustomerController extends BaseController<
         visibleOwnerIds,
         status,
         source,
+        customerOrigin,
         normalizedKeyword,
       );
       const { data: idRows, error: idError } = await idQuery;
@@ -1018,6 +1032,7 @@ class CustomerController extends BaseController<
       visibleOwnerIds,
       status,
       source,
+      customerOrigin,
       normalizedKeyword,
     );
 
@@ -1041,6 +1056,7 @@ class CustomerController extends BaseController<
       visibleOwnerIds,
       status,
       source,
+      customerOrigin,
       normalizedKeyword,
     );
     const { data, error } = await query.range(from, to);

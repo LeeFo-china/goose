@@ -2,8 +2,10 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import {
+  CUSTOMER_ORIGIN_VALUES,
   CUSTOMER_SOURCE_VALUES,
   CUSTOMER_STATUS_VALUES,
+  CustomerOriginConfig,
   CustomerSourceConfig,
   CustomerStatusConfig,
 } from "@gooes/domain";
@@ -42,10 +44,19 @@ const sourceOptions = [
   ] as const),
 ] as const;
 
+const originOptions = [
+  ["", "全部渠道"],
+  ...CUSTOMER_ORIGIN_VALUES.map((value) => [
+    value,
+    CustomerOriginConfig[value].label,
+  ] as const),
+] as const;
+
 function buildCustomersHref(input: {
   page?: number;
   status?: string;
   source?: string;
+  customerOrigin?: string;
   keyword?: string;
   follow?: string;
 }) {
@@ -53,6 +64,7 @@ function buildCustomersHref(input: {
   if (input.page && input.page > 1) params.set("page", String(input.page));
   if (input.status) params.set("status", input.status);
   if (input.source) params.set("source", input.source);
+  if (input.customerOrigin) params.set("customer_origin", input.customerOrigin);
   if (input.keyword) params.set("keyword", input.keyword);
   if (input.follow) params.set("follow", input.follow);
   const query = params.toString();
@@ -62,6 +74,7 @@ function buildCustomersHref(input: {
 export function CustomerFilters({
   status,
   source,
+  customerOrigin,
   keyword,
   follow,
   pending,
@@ -69,6 +82,7 @@ export function CustomerFilters({
 }: {
   status: string;
   source: string;
+  customerOrigin: string;
   keyword: string;
   follow: string;
   pending: boolean;
@@ -76,24 +90,28 @@ export function CustomerFilters({
 }) {
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedSource, setSelectedSource] = useState(source);
+  const [selectedOrigin, setSelectedOrigin] = useState(customerOrigin);
   const [selectedFollow, setSelectedFollow] = useState(follow);
   const [selectedKeyword, setSelectedKeyword] = useState(keyword);
 
   useEffect(() => {
     setSelectedStatus(status);
     setSelectedSource(source);
+    setSelectedOrigin(customerOrigin);
     setSelectedFollow(follow);
     setSelectedKeyword(keyword);
-  }, [follow, keyword, source, status]);
+  }, [customerOrigin, follow, keyword, source, status]);
 
   function applySelectFilters(input: {
     status?: string;
     source?: string;
+    customerOrigin?: string;
     follow?: string;
   }) {
     onNavigate(buildCustomersHref({
       status: input.status ?? status,
       source: input.source ?? source,
+      customerOrigin: input.customerOrigin ?? customerOrigin,
       follow: input.follow ?? follow,
       keyword,
     }));
@@ -104,15 +122,17 @@ export function CustomerFilters({
     onNavigate(buildCustomersHref({
       status: selectedStatus,
       source: selectedSource,
+      customerOrigin: selectedOrigin,
       follow: selectedFollow,
       keyword: selectedKeyword.trim(),
     }));
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[150px_150px_160px_1fr_72px]" onSubmit={submit}>
+    <form className="grid gap-3 lg:grid-cols-[150px_150px_150px_160px_1fr_72px]" onSubmit={submit}>
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="source" value={selectedSource} />
+      <input type="hidden" name="customer_origin" value={selectedOrigin} />
       <input type="hidden" name="follow" value={selectedFollow} />
       <FormSelect
         id="customer-status-filter"
@@ -140,6 +160,20 @@ export function CustomerFilters({
           const nextSource = value === "__all" ? "" : value;
           setSelectedSource(nextSource);
           applySelectFilters({ source: nextSource });
+        }}
+      />
+      <FormSelect
+        id="customer-origin-filter"
+        value={selectedOrigin || "__all"}
+        disabled={pending}
+        options={originOptions.map(([value, label]) => ({
+          value: value || "__all",
+          label,
+        }))}
+        onChange={(value) => {
+          const nextOrigin = value === "__all" ? "" : value;
+          setSelectedOrigin(nextOrigin);
+          applySelectFilters({ customerOrigin: nextOrigin });
         }}
       />
       <FormSelect
@@ -193,6 +227,7 @@ export function CustomersPagination({
   pagination,
   status,
   source,
+  customerOrigin,
   keyword,
   follow,
   pending,
@@ -201,6 +236,7 @@ export function CustomersPagination({
   pagination: Pagination;
   status: string;
   source: string;
+  customerOrigin: string;
   keyword: string;
   follow: string;
   pending: boolean;
@@ -219,6 +255,7 @@ export function CustomersPagination({
           page: Math.max(1, pagination.page - 1),
           status,
           source,
+          customerOrigin,
           keyword,
           follow,
         }))}
@@ -234,6 +271,7 @@ export function CustomersPagination({
           page: pagination.page + 1,
           status,
           source,
+          customerOrigin,
           keyword,
           follow,
         }))}

@@ -81,6 +81,9 @@ export type CustomerRecord = {
   owner?: Owner | Owner[] | null;
   owner_name?: string | null;
   source: string | null;
+  customer_origin?: string | null;
+  self_registered_at?: string | null;
+  claimed_at?: string | null;
   status: string | null;
   created_at: string | null;
   douyin_screenshot_images?: string[];

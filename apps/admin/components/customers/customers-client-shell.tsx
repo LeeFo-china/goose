@@ -25,6 +25,7 @@ export function CustomersClientShell({
   pagination,
   status,
   source,
+  customerOrigin,
   keyword,
   follow,
   error,
@@ -33,6 +34,7 @@ export function CustomersClientShell({
   pagination: Pagination;
   status: string;
   source: string;
+  customerOrigin: string;
   keyword: string;
   follow: string;
   error: string | null;
@@ -54,6 +56,7 @@ export function CustomersClientShell({
           <CustomerFilters
             status={status}
             source={source}
+            customerOrigin={customerOrigin}
             keyword={keyword}
             follow={follow}
             pending={pending}
@@ -101,6 +104,7 @@ export function CustomersClientShell({
           pagination={pagination}
           status={status}
           source={source}
+          customerOrigin={customerOrigin}
           keyword={keyword}
           follow={follow}
           pending={pending}

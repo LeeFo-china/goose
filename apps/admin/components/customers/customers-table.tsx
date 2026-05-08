@@ -1,6 +1,10 @@
 "use client";
 
 import { type ColumnDef } from "@tanstack/react-table";
+import {
+  CustomerOriginConfig,
+  isCustomerOrigin,
+} from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import {
@@ -33,6 +37,22 @@ const sourceMeta: Record<string, string> = {
   telemarketing: "电销开发",
   platform: "装修平台",
 };
+
+function originBadge(origin: string | null | undefined) {
+  if (!isCustomerOrigin(origin)) {
+    return <Badge variant="outline">员工登记</Badge>;
+  }
+
+  if (origin === "visitor_self_registered") {
+    return <Badge variant="warning">{CustomerOriginConfig[origin].label}</Badge>;
+  }
+
+  if (origin === "employee_created") {
+    return <Badge variant="outline">{CustomerOriginConfig[origin].label}</Badge>;
+  }
+
+  return <Badge variant="secondary">{CustomerOriginConfig[origin].label}</Badge>;
+}
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -147,6 +167,14 @@ const columns: ColumnDef<CustomerRecord>[] = [
     cell: ({ row }) => sourceMeta[row.original.source || ""] || row.original.source || "-",
     meta: {
       cellClassName: "whitespace-nowrap text-muted-foreground",
+    },
+  },
+  {
+    accessorKey: "customer_origin",
+    header: "创建渠道",
+    cell: ({ row }) => originBadge(row.original.customer_origin),
+    meta: {
+      cellClassName: "whitespace-nowrap",
     },
   },
   {

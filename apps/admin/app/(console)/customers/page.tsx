@@ -24,6 +24,7 @@ type CustomerPageSearchParams = {
   page?: string;
   status?: string;
   source?: string;
+  customer_origin?: string;
   keyword?: string;
   follow?: string;
 };
@@ -46,6 +47,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
   const page = normalizePage(params.page);
   const status = params.status?.trim() || "";
   const source = params.source?.trim() || "";
+  const customerOrigin = params.customer_origin?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const follow = params.follow?.trim() || "";
   const query = new URLSearchParams({
@@ -54,6 +56,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
   });
   if (status) query.set("status", status);
   if (source) query.set("source", source);
+  if (customerOrigin) query.set("customer_origin", customerOrigin);
   if (keyword) query.set("keyword", keyword);
   if (follow) query.set("follow", follow);
 
@@ -89,6 +92,7 @@ export default async function CustomersPage({
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const source = params.source?.trim() || "";
+  const customerOrigin = params.customer_origin?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const follow = params.follow?.trim() || "";
   const { list, pagination, error } = await getCustomers(params);
@@ -151,6 +155,7 @@ export default async function CustomersPage({
         pagination={pagination}
         status={status}
         source={source}
+        customerOrigin={customerOrigin}
         keyword={keyword}
         follow={follow}
         error={error}
