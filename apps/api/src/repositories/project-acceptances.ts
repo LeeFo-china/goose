@@ -331,6 +331,15 @@ class ProjectAcceptanceRepository {
     return data as ProjectAcceptanceRow;
   }
 
+  async deleteAcceptance(id: string) {
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptances")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw Errors.dbError("删除项目验收草稿失败", error);
+  }
+
   async updateItem(
     acceptanceId: string,
     itemId: string,

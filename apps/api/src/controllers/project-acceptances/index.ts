@@ -15,7 +15,7 @@ import {
 } from "@/schema/project-acceptances";
 import { authorizationService } from "@/services/authorization";
 import { projectAcceptanceService } from "@/services/project-acceptances";
-import { Get, Post } from "@/utils/decorators/route";
+import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -89,6 +89,19 @@ class ProjectAcceptancesController extends BaseController<
     );
     return ResponseHandler.success(data);
   };
+
+  @Delete("/project-acceptances/:id")
+  async deleteDraft(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectAcceptanceService.deleteDraftAcceptance(
+      authContext,
+      idVerify.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
 
   @Get("/project-acceptance-templates")
   async listTemplates(request: FastifyRequest, reply: FastifyReply) {

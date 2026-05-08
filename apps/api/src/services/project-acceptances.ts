@@ -985,6 +985,26 @@ class ProjectAcceptanceService {
     return this.buildDetail(nextRow);
   }
 
+  async deleteDraftAcceptance(authContext: AuthContext, id: string) {
+    const row = await this.getRequiredAcceptance(id);
+    if (row.status !== "draft") {
+      throw Errors.business(
+        400,
+        "只有草稿状态的验收单可以删除",
+        "ACCEPTANCE_NOT_DRAFT",
+        { status: row.status },
+      );
+    }
+
+    this.assertCanUpdateOwn(authContext, row);
+    await projectAcceptanceRepository.deleteAcceptance(row.id);
+
+    return {
+      id: row.id,
+      deleted: true,
+    };
+  }
+
   private validateSubmitItems(input: {
     beforeItems: ProjectAcceptanceItemRow[];
     afterItems: ProjectAcceptanceItemRow[];

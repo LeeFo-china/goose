@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Trash2,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -137,7 +138,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
 
 async function requestBackend<T>(
   path: string,
-  input?: { method?: "GET" | "POST" | "PATCH"; payload?: unknown },
+  input?: { method?: "GET" | "POST" | "PATCH" | "DELETE"; payload?: unknown },
 ) {
   const response = await fetch(`/api/backend${path}`, {
     method: input?.method || "GET",
@@ -389,6 +390,17 @@ export function ProjectAcceptancesPanel({
       });
     });
 
+  const deleteDraftAcceptance = () =>
+    runAction(async () => {
+      if (!selected) return;
+      if (!window.confirm(`确认删除「${selected.title}」草稿？删除后可重新发起该工序验收。`)) {
+        return;
+      }
+      await requestBackend(`/project-acceptances/${selected.id}`, {
+        method: "DELETE",
+      });
+    });
+
   const updateEditableItem = (
     itemId: string,
     patch: Partial<EditableItem>,
@@ -555,6 +567,17 @@ export function ProjectAcceptancesPanel({
                 <div className="flex flex-wrap gap-2">
                   {canEdit(selected.status) ? (
                     <>
+                      {selected.status === "draft" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={deleteDraftAcceptance}
+                          disabled={actionLoading}
+                        >
+                          <Trash2 />
+                          删除草稿
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"
