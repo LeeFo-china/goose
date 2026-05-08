@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   Camera,
   CameraOff,
@@ -104,10 +105,6 @@ function compactIdentifier(value: string | null | undefined) {
   if (!value) return "-";
   if (value.length <= 18) return value;
   return `${value.slice(0, 8)}...${value.slice(-6)}`;
-}
-
-function tencentDeviceName(device: TencentDeviceChannel) {
-  return device.device_name || device.device_code || compactIdentifier(device.device_id);
 }
 
 function tencentChannelName(device: TencentDeviceChannel) {
@@ -286,6 +283,12 @@ export default async function CamerasPage({
   const hiddenCount = cameras.filter((cameraItem) => !cameraItem.can_view).length;
   const unboundDeviceCount = devices.filter((device) => device.can_bind).length;
   const tencentCameraCount = cameras.filter((cameraItem) => cameraItem.vendor === "tencent_iotvideo_industry").length;
+  const tencentChannelsByDevice = new Map<string, TencentDeviceChannel[]>();
+  for (const channel of tencentDevices) {
+    const channels = tencentChannelsByDevice.get(channel.device_id) || [];
+    channels.push(channel);
+    tencentChannelsByDevice.set(channel.device_id, channels);
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -518,173 +521,136 @@ export default async function CamerasPage({
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>腾讯云设备</CardTitle>
-              <Badge variant="outline">共 {tencentDeviceRecords.length} 台设备</Badge>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] border-t text-sm">
-                  <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3">设备</th>
-                      <th className="px-4 py-3">SIP用户</th>
-                      <th className="px-4 py-3">密码</th>
-                      <th className="px-4 py-3">状态</th>
-                      <th className="px-4 py-3">协议</th>
-                      <th className="px-4 py-3">分组</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tencentDeviceRecords.map((device) => (
-                      <tr key={device.device_id} className="border-t">
-                        <td className="max-w-[320px] px-4 py-3">
-                          <div className="font-medium">
-                            {tencentDeviceRecordName(device)}
-                          </div>
-                          <div
-                            className="truncate text-xs text-muted-foreground"
-                            title={device.device_id}
-                          >
-                            {device.device_type_label || "未知设备"} · ID {compactIdentifier(device.device_id)}
-                          </div>
-                        </td>
-                        <td className="max-w-[240px] px-4 py-3">
-                          <div className="truncate font-medium" title={device.sip_username || device.device_code || ""}>
-                            {device.sip_username || device.device_code || "-"}
-                          </div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <Badge variant="outline">{device.sip_transport_protocol || "TCP"}</Badge>
-                            <CopyValueButton value={device.sip_username || device.device_code} />
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <TencentDevicePasswordActions
-                            projectId={selectedProjectId}
-                            deviceId={device.device_id}
-                            deviceName={tencentDeviceRecordName(device)}
-                            deviceCode={device.device_code}
-                          />
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {renderStatus(device.status)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                          {device.protocol || "-"}
-                        </td>
-                        <td className="max-w-[220px] px-4 py-3">
-                          <div className="truncate text-muted-foreground">
-                            {device.group_name || device.group_id || "-"}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {tencentDeviceRecords.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
-                          暂无腾讯云设备。新增设备后如仍未出现，请稍后刷新腾讯云列表。
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+              <CardTitle>腾讯云设备与通道</CardTitle>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
+                <Badge variant="outline">通道 {tencentDevices.length}</Badge>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <CardTitle>腾讯云行业版通道</CardTitle>
-              <Badge variant="outline">共 {tencentDevices.length} 个通道</Badge>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[980px] border-t text-sm">
                   <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3">设备备注</th>
-                      <th className="px-4 py-3">通道备注</th>
+                      <th className="px-4 py-3">设备 / 通道</th>
                       <th className="px-4 py-3">SIP用户</th>
                       <th className="px-4 py-3">密码</th>
                       <th className="px-4 py-3">状态</th>
-                      <th className="px-4 py-3">协议</th>
+                      <th className="px-4 py-3">协议 / 分组</th>
                       <th className="px-4 py-3">绑定状态</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {tencentDevices.map((device) => (
-                      <tr
-                        key={`${device.device_id}-${device.channel_id}`}
-                        className="border-t"
-                      >
-                        <td className="max-w-[320px] px-4 py-3">
-                          <div className="font-medium">
-                            {tencentDeviceName(device)}
-                          </div>
-                          <div
-                            className="truncate text-xs text-muted-foreground"
-                            title={device.device_id}
-                          >
-                            {device.device_type_label || "未知设备"} · ID {compactIdentifier(device.device_id)}
-                          </div>
-                        </td>
-                        <td className="max-w-[320px] px-4 py-3">
-                          <div className="font-medium">
-                            {tencentChannelName(device)}
-                          </div>
-                          <div
-                            className="truncate text-xs text-muted-foreground"
-                            title={device.channel_id}
-                          >
-                            通道ID {compactIdentifier(device.channel_id)}
-                          </div>
-                        </td>
-                        <td className="max-w-[240px] px-4 py-3">
-                          <div className="truncate font-medium" title={device.sip_username || device.device_code || ""}>
-                            {device.sip_username || device.device_code || "-"}
-                          </div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <Badge variant="outline">{device.sip_transport_protocol || "TCP"}</Badge>
-                            <CopyValueButton value={device.sip_username || device.device_code} />
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <TencentDevicePasswordActions
-                            projectId={selectedProjectId}
-                            deviceId={device.device_id}
-                            deviceName={tencentDeviceName(device)}
-                            deviceCode={device.device_code}
-                          />
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {renderStatus(device.status)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                          {device.protocol || "-"}
-                        </td>
-                        <td className="px-4 py-3">
-                          {device.is_bound ? (
-                            <div className="flex flex-col gap-1">
-                              <Badge
-                                className="w-fit"
-                                variant={device.is_bound_to_current_project ? "success" : "secondary"}
-                              >
-                                <Link2 />
-                                {device.is_bound_to_current_project ? "当前项目" : "其他项目"}
-                              </Badge>
-                              <div className="text-xs text-muted-foreground">
-                                {device.bound_project_name || device.bound_camera_name || "-"}
+                    {tencentDeviceRecords.map((device) => {
+                      const channels = tencentChannelsByDevice.get(device.device_id) || [];
+
+                      return (
+                        <Fragment key={device.device_id}>
+                          <tr className="border-t bg-muted/20">
+                            <td className="max-w-[360px] px-4 py-3">
+                              <div className="font-medium">
+                                {tencentDeviceRecordName(device)}
                               </div>
-                            </div>
+                              <div
+                                className="truncate text-xs text-muted-foreground"
+                                title={device.device_id}
+                              >
+                                {device.device_type_label || "未知设备"} · ID {compactIdentifier(device.device_id)}
+                              </div>
+                            </td>
+                            <td className="max-w-[240px] px-4 py-3">
+                              <div className="truncate font-medium" title={device.sip_username || device.device_code || ""}>
+                                {device.sip_username || device.device_code || "-"}
+                              </div>
+                              <div className="mt-1 flex items-center gap-2">
+                                <Badge variant="outline">{device.sip_transport_protocol || "TCP"}</Badge>
+                                <CopyValueButton value={device.sip_username || device.device_code} />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <TencentDevicePasswordActions
+                                projectId={selectedProjectId}
+                                deviceId={device.device_id}
+                                deviceName={tencentDeviceRecordName(device)}
+                                deviceCode={device.device_code}
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {renderStatus(device.status)}
+                            </td>
+                            <td className="max-w-[220px] px-4 py-3">
+                              <div className="truncate text-muted-foreground">
+                                {device.protocol || "-"}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {device.group_name || device.group_id || "未分组"}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge variant="outline">通道 {channels.length}</Badge>
+                            </td>
+                          </tr>
+                          {channels.length ? (
+                            channels.map((channel) => (
+                              <tr
+                                key={`${channel.device_id}-${channel.channel_id}`}
+                                className="border-t"
+                              >
+                                <td className="max-w-[360px] px-4 py-3">
+                                  <div className="pl-5">
+                                    <div className="font-medium">
+                                      {tencentChannelName(channel)}
+                                    </div>
+                                    <div
+                                      className="truncate text-xs text-muted-foreground"
+                                      title={channel.channel_id}
+                                    >
+                                      通道ID {compactIdentifier(channel.channel_id)}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">继承设备</td>
+                                <td className="px-4 py-3 text-muted-foreground">-</td>
+                                <td className="whitespace-nowrap px-4 py-3">
+                                  {renderStatus(channel.status)}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                                  {channel.protocol || device.protocol || "-"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {channel.is_bound ? (
+                                    <div className="flex flex-col gap-1">
+                                      <Badge
+                                        className="w-fit"
+                                        variant={channel.is_bound_to_current_project ? "success" : "secondary"}
+                                      >
+                                        <Link2 />
+                                        {channel.is_bound_to_current_project ? "当前项目" : "其他项目"}
+                                      </Badge>
+                                      <div className="text-xs text-muted-foreground">
+                                        {channel.bound_project_name || channel.bound_camera_name || "-"}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Badge variant="outline">可绑定</Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
                           ) : (
-                            <Badge variant="outline">可绑定</Badge>
+                            <tr className="border-t">
+                              <td colSpan={6} className="px-9 py-4 text-sm text-muted-foreground">
+                                暂无通道。请在设备本地配置 SIP 信息，设备上线并上报通道后刷新列表。
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                    {tencentDevices.length === 0 ? (
+                        </Fragment>
+                      );
+                    })}
+                    {tencentDeviceRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="h-28 px-4 py-6 text-center text-muted-foreground">
-                          暂无腾讯云行业版通道
+                        <td colSpan={6} className="h-28 px-4 py-6 text-center text-muted-foreground">
+                          暂无腾讯云设备。新增设备后如仍未出现，请稍后刷新腾讯云列表。
                         </td>
                       </tr>
                     ) : null}
