@@ -5,7 +5,6 @@ import {
   Link2,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { CameraProjectPicker } from "@/components/cameras/camera-list-actions";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
@@ -226,7 +225,6 @@ export default async function CamerasPage({
   const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
     ? requestedProjectId
     : projects[0]?.id || "";
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
   const {
     cameras,
     devices,
@@ -296,23 +294,6 @@ export default async function CamerasPage({
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
-            <CameraProjectPicker
-              projects={projects}
-              selectedProjectId={selectedProjectId}
-            />
-            <div className="rounded-md border bg-background p-3 text-sm">
-              <div className="font-medium">{selectedProject?.name || "未选择项目"}</div>
-              <div className="mt-1 truncate text-muted-foreground">
-                {[selectedProject?.customer_name, selectedProject?.address].filter(Boolean).join(" · ") || "请选择项目后管理摄像头"}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {projectError ? <StatusAlert>{projectError}</StatusAlert> : null}
       {cameraError ? <StatusAlert>{cameraError}</StatusAlert> : null}
