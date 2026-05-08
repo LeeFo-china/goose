@@ -7,10 +7,19 @@ export type Pagination = {
 
 export type CameraProjectOption = {
   id: string;
+  label?: string;
   name: string | null;
   status?: string | null;
   customer_name?: string | null;
+  phone_masked?: string | null;
   address?: string | null;
+  property?: {
+    id: string | null;
+    community: string | null;
+    building_info: string | null;
+    layout: string | null;
+    area: number | null;
+  } | null;
 };
 
 export type CameraRecord = {

@@ -18,6 +18,7 @@ import {
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
+  ProjectCameraBindOptionsQueryInput,
   CreateProjectCameraTencentDeviceInput,
   UpdateProjectCameraTencentDevicePasswordInput,
   UpdateProjectCameraInput,
@@ -424,6 +425,36 @@ class ProjectCameraService {
         .filter((camera) => actor.userRole === "employee" || camera.can_view)
         .map(serializeCamera),
     };
+  }
+
+  async listCameraBindProjectOptions(input: {
+    authUserId?: string | null;
+    query: ProjectCameraBindOptionsQueryInput;
+  }) {
+    if (!input.authUserId) {
+      throw Errors.unauthorized("缺少登录凭证");
+    }
+
+    const authContext = await authorizationService.getRequiredAuthContext(
+      input.authUserId,
+    );
+    if (!authContext.employeeId) {
+      throw Errors.business(
+        403,
+        "无权绑定项目摄像头",
+        ErrorCodes.CAMERA_ACCESS_DENIED,
+      );
+    }
+
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.update",
+    );
+
+    return projectCameraRepository.listCameraBindProjectOptions({
+      ...input.query,
+      visibleProjectIds,
+    });
   }
 
   async listEzvizDeviceChannels(input: {

@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
+  ProjectCameraBindOptionsQueryInput,
   ProjectCameraVendor,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
@@ -57,6 +58,92 @@ export type ProjectCameraBindingRow = Pick<
   }> | null;
 };
 
+type ProjectCameraBindProjectRow = {
+  id: string;
+  name: string | null;
+  status: string | null;
+  address: string | null;
+  customer_id: string | null;
+  property_id: string | null;
+  customer?: {
+    id?: string | null;
+    name?: string | null;
+    phone?: string | null;
+  } | Array<{
+    id?: string | null;
+    name?: string | null;
+    phone?: string | null;
+  }> | null;
+  property?: {
+    id?: string | null;
+    community?: string | null;
+    building_info?: string | null;
+    layout?: string | null;
+    area?: number | null;
+  } | Array<{
+    id?: string | null;
+    community?: string | null;
+    building_info?: string | null;
+    layout?: string | null;
+    area?: number | null;
+  }> | null;
+};
+
+function firstRelation<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
+function cleanSearchKeyword(value: string | null | undefined) {
+  return (value || "")
+    .trim()
+    .replace(/[%,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 100);
+}
+
+function maskPhone(phone: string | null | undefined) {
+  const normalized = (phone || "").trim();
+  if (!normalized) return null;
+  if (normalized.length <= 7) return normalized;
+  return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
+}
+
+function buildPropertyAddress(row: ProjectCameraBindProjectRow) {
+  const property = firstRelation(row.property);
+  return [
+    property?.community,
+    property?.building_info,
+  ].filter(Boolean).join(" ") || row.address || null;
+}
+
+function serializeBindProjectOption(row: ProjectCameraBindProjectRow) {
+  const customer = firstRelation(row.customer);
+  const property = firstRelation(row.property);
+  const address = buildPropertyAddress(row);
+  const name = row.name || address || "未命名项目";
+  const customerName = customer?.name || null;
+
+  return {
+    id: row.id,
+    label: [address || name, customerName].filter(Boolean).join(" · "),
+    name,
+    status: row.status || null,
+    customer_name: customerName,
+    phone_masked: maskPhone(customer?.phone),
+    address,
+    property: property
+      ? {
+        id: property.id || null,
+        community: property.community || null,
+        building_info: property.building_info || null,
+        layout: property.layout || null,
+        area: property.area ?? null,
+      }
+      : null,
+  };
+}
+
 class ProjectCameraRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -74,6 +161,159 @@ class ProjectCameraRepository {
     }
 
     return (data || []) as ProjectCameraRow[];
+  }
+
+  private async findSearchCustomerIds(keyword: string) {
+    if (!keyword) return [] as string[];
+
+    const likeKeyword = `%${keyword}%`;
+    const { data, error } = await this.adminClient
+      .from("customers")
+      .select("id")
+      .or(`name.ilike.${likeKeyword},phone.ilike.${likeKeyword}`)
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询客户匹配项目失败", error);
+    }
+
+    return (data || [])
+      .map((item) => (item as { id?: string | null }).id)
+      .filter((id): id is string => Boolean(id));
+  }
+
+  private async findSearchPropertyIds(keyword: string) {
+    if (!keyword) return [] as string[];
+
+    const likeKeyword = `%${keyword}%`;
+    const { data, error } = await this.adminClient
+      .from("properties")
+      .select("id")
+      .or(`community.ilike.${likeKeyword},building_info.ilike.${likeKeyword},layout.ilike.${likeKeyword}`)
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询房产匹配项目失败", error);
+    }
+
+    return (data || [])
+      .map((item) => (item as { id?: string | null }).id)
+      .filter((id): id is string => Boolean(id));
+  }
+
+  async listCameraBindProjectOptions(
+    input: ProjectCameraBindOptionsQueryInput & {
+      visibleProjectIds: string[] | null;
+    },
+  ) {
+    const page = input.page;
+    const pageSize = input.pageSize;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const keyword = cleanSearchKeyword(input.keyword);
+
+    if (Array.isArray(input.visibleProjectIds) && input.visibleProjectIds.length === 0) {
+      return {
+        list: [],
+        pagination: {
+          page,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    const [customerIds, propertyIds] = await Promise.all([
+      this.findSearchCustomerIds(keyword),
+      this.findSearchPropertyIds(keyword),
+    ]);
+
+    let query = this.adminClient
+      .from("projects")
+      .select(
+        `
+        id,
+        name,
+        status,
+        address,
+        customer_id,
+        property_id,
+        customer:customers!projects_customer_id_fkey(id, name, phone),
+        property:properties!projects_property_id_fkey(id, community, building_info, layout, area)
+        `,
+        { count: "exact" },
+      );
+
+    if (input.visibleProjectIds) {
+      query = query.in("id", input.visibleProjectIds);
+    }
+
+    if (keyword) {
+      const likeKeyword = `%${keyword}%`;
+      const filters = [
+        `name.ilike.${likeKeyword}`,
+        `address.ilike.${likeKeyword}`,
+      ];
+      if (customerIds.length) {
+        filters.push(`customer_id.in.(${customerIds.join(",")})`);
+      }
+      if (propertyIds.length) {
+        filters.push(`property_id.in.(${propertyIds.join(",")})`);
+      }
+      query = query.or(filters.join(","));
+    }
+
+    const { data, error, count } = await query
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询绑定项目选项失败", error);
+    }
+
+    const rows = ((data || []) as ProjectCameraBindProjectRow[]).map(
+      serializeBindProjectOption,
+    );
+    const selectedProjectId = input.selected_project_id;
+    if (
+      selectedProjectId &&
+      !rows.some((item) => item.id === selectedProjectId) &&
+      (!input.visibleProjectIds || input.visibleProjectIds.includes(selectedProjectId))
+    ) {
+      const { data: selected, error: selectedError } = await this.adminClient
+        .from("projects")
+        .select(`
+          id,
+          name,
+          status,
+          address,
+          customer_id,
+          property_id,
+          customer:customers!projects_customer_id_fkey(id, name, phone),
+          property:properties!projects_property_id_fkey(id, community, building_info, layout, area)
+        `)
+        .eq("id", selectedProjectId)
+        .maybeSingle();
+
+      if (selectedError) {
+        throw Errors.dbError("查询当前绑定项目失败", selectedError);
+      }
+
+      if (selected) {
+        rows.unshift(serializeBindProjectOption(selected as ProjectCameraBindProjectRow));
+      }
+    }
+
+    return {
+      list: rows,
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
   }
 
   async findByProjectCamera(projectId: string, cameraId: string) {

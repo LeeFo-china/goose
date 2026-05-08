@@ -37,7 +37,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   CameraDeviceChannel,
+  CameraProjectOption,
   CameraRecord,
+  EzvizDeviceChannel,
+  TencentDeviceChannel,
 } from "@/components/cameras/camera-types";
 
 type CameraMode = "create" | "edit";
@@ -71,6 +74,18 @@ type PreviewSource = {
   protocol: string;
   url: string;
   previewable: boolean;
+};
+
+type CameraBindProjectOptionsData = {
+  list?: CameraProjectOption[];
+};
+
+type EzvizDeviceListData = {
+  list?: EzvizDeviceChannel[];
+};
+
+type TencentDeviceListData = {
+  list?: TencentDeviceChannel[];
 };
 
 const CAMERA_CAPABILITY_VALUES = [
@@ -162,6 +177,38 @@ function getVendorLabel(vendor: string) {
   if (vendor === "tencent_iotvideo_industry") return "腾讯云行业版";
   if (vendor === "ezviz") return "萤石云";
   return vendor || "未知厂商";
+}
+
+function getProjectOptionLabel(project: CameraProjectOption | null | undefined) {
+  if (!project) return "";
+  return project.label || [project.address || project.name || "未命名项目", project.customer_name]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function getProjectOptionDescription(project: CameraProjectOption) {
+  const parts = [
+    project.phone_masked ? `电话 ${project.phone_masked}` : null,
+    project.property?.layout || null,
+    project.property?.area ? `${project.property.area}㎡` : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function withVendorDevices(input: {
+  ezviz?: EzvizDeviceChannel[];
+  tencent?: TencentDeviceChannel[];
+}) {
+  return [
+    ...(input.ezviz || []).map((device) => ({
+      ...device,
+      vendor: "ezviz" as const,
+    })),
+    ...(input.tencent || []).map((device) => ({
+      ...device,
+      vendor: "tencent_iotvideo_industry" as const,
+    })),
+  ];
 }
 
 function buildDeviceKey(device: CameraDeviceChannel) {
@@ -313,25 +360,35 @@ function CameraDialog({
   const defaults = useMemo(() => buildDefaults(camera), [camera]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [projectKeyword, setProjectKeyword] = useState("");
+  const [projectOptions, setProjectOptions] = useState<CameraProjectOption[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(projectId);
+  const [selectedProject, setSelectedProject] = useState<CameraProjectOption | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectSelectError, setProjectSelectError] = useState("");
+  const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>(devices);
+  const [deviceLoading, setDeviceLoading] = useState(false);
   const initializedOpenRef = useRef(false);
   const form = useForm<CameraFormValues>({
     resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
     defaultValues: defaults,
   });
   const selectedVendor = form.watch("vendor");
+  const activeProjectId = mode === "create" ? selectedProjectId : projectId;
+  const activeDevices = mode === "create" ? createDevices : devices;
   const firstDeviceKeyByVendor = useMemo<Record<CameraFormValues["vendor"], string>>(() => {
     const keys: Record<CameraFormValues["vendor"], string> = {
       ezviz: "",
       tencent_iotvideo_industry: "",
     };
 
-    for (const device of devices) {
+    for (const device of activeDevices) {
       if (!device.can_bind || keys[device.vendor]) continue;
       keys[device.vendor] = buildDeviceKey(device);
     }
 
     return keys;
-  }, [devices]);
+  }, [activeDevices]);
   const initialCreateVendor = useMemo<CameraFormValues["vendor"]>(() => {
     if (firstDeviceKeyByVendor[defaults.vendor]) return defaults.vendor;
     if (firstDeviceKeyByVendor.tencent_iotvideo_industry) return "tencent_iotvideo_industry";
@@ -339,8 +396,8 @@ function CameraDialog({
     return defaults.vendor;
   }, [defaults.vendor, firstDeviceKeyByVendor]);
   const availableDevices = useMemo(
-    () => devices.filter((device) => device.vendor === selectedVendor && device.can_bind),
-    [devices, selectedVendor],
+    () => activeDevices.filter((device) => device.vendor === selectedVendor && device.can_bind),
+    [activeDevices, selectedVendor],
   );
   const selectedCapabilities = form.watch("capabilities");
 
@@ -352,6 +409,12 @@ function CameraDialog({
     if (initializedOpenRef.current) return;
 
     initializedOpenRef.current = true;
+    setSelectedProjectId(projectId);
+    setSelectedProject(null);
+    setProjectKeyword("");
+    setProjectOptions([]);
+    setProjectSelectError("");
+    setCreateDevices(devices);
     const initialVendor = mode === "create" ? initialCreateVendor : defaults.vendor;
     form.reset({
       ...defaults,
@@ -359,7 +422,112 @@ function CameraDialog({
       device_key: mode === "create" ? firstDeviceKeyByVendor[initialVendor] : "",
     });
     setError("");
-  }, [defaults, firstDeviceKeyByVendor, form, initialCreateVendor, mode, open]);
+  }, [defaults, devices, firstDeviceKeyByVendor, form, initialCreateVendor, mode, open, projectId]);
+
+  useEffect(() => {
+    if (!open || mode !== "create") return;
+
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      setProjectLoading(true);
+      setProjectSelectError("");
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "20",
+      });
+      if (projectKeyword.trim()) {
+        params.set("keyword", projectKeyword.trim());
+      }
+      if (selectedProjectId) {
+        params.set("selected_project_id", selectedProjectId);
+      }
+
+      requestCamera({
+        path: `/projects/camera-bind-options?${params.toString()}`,
+      })
+        .then((data: CameraBindProjectOptionsData) => {
+          if (disposed) return;
+          const list = data?.list || [];
+          setProjectOptions(list);
+          const current = list.find((item) => item.id === selectedProjectId) || null;
+          if (current) {
+            setSelectedProject(current);
+          }
+        })
+        .catch((err) => {
+          if (disposed) return;
+          setProjectSelectError(err instanceof Error ? err.message : "房产项目加载失败");
+        })
+        .finally(() => {
+          if (!disposed) setProjectLoading(false);
+        });
+    }, projectKeyword.trim() ? 300 : 0);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [mode, open, projectKeyword, selectedProjectId]);
+
+  useEffect(() => {
+    if (!open || mode !== "create" || !selectedProjectId) return;
+
+    let disposed = false;
+    setDeviceLoading(true);
+    setError("");
+    Promise.all([
+      requestCamera({
+        path: `/projects/${selectedProjectId}/cameras/ezviz-devices?only_unbound=true`,
+      }),
+      requestCamera({
+        path: `/projects/${selectedProjectId}/cameras/tencent-devices?only_unbound=true`,
+      }),
+    ])
+      .then(([ezvizData, tencentData]: [EzvizDeviceListData, TencentDeviceListData]) => {
+        if (disposed) return;
+        const nextDevices = withVendorDevices({
+          ezviz: ezvizData?.list || [],
+          tencent: tencentData?.list || [],
+        });
+        const nextKeys: Record<CameraFormValues["vendor"], string> = {
+          ezviz: "",
+          tencent_iotvideo_industry: "",
+        };
+        for (const device of nextDevices) {
+          if (!device.can_bind || nextKeys[device.vendor]) continue;
+          nextKeys[device.vendor] = buildDeviceKey(device);
+        }
+        const currentVendor = form.getValues("vendor");
+        const nextVendor = nextKeys[currentVendor]
+          ? currentVendor
+          : nextKeys.tencent_iotvideo_industry
+            ? "tencent_iotvideo_industry"
+            : "ezviz";
+
+        setCreateDevices(nextDevices);
+        form.setValue("vendor", nextVendor, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        form.setValue("device_key", nextKeys[nextVendor], {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      })
+      .catch((err) => {
+        if (!disposed) {
+          setCreateDevices([]);
+          setError(err instanceof Error ? err.message : "设备通道加载失败");
+        }
+      })
+      .finally(() => {
+        if (!disposed) setDeviceLoading(false);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [form, mode, open, selectedProjectId]);
 
   function close() {
     if (pending) return;
@@ -380,6 +548,10 @@ function CameraDialog({
 
   function submit(values: CameraFormValues) {
     setError("");
+    if (mode === "create" && !activeProjectId) {
+      setError("请选择要绑定的房产项目");
+      return;
+    }
     if (mode === "create" && !values.device_key) {
       setError(`请选择一个未绑定的${getVendorLabel(values.vendor)}设备通道`);
       return;
@@ -407,7 +579,7 @@ function CameraDialog({
               (item) => buildDeviceKey(item) === values.device_key,
             );
             await requestCamera({
-              path: `/projects/${projectId}/cameras`,
+              path: `/projects/${activeProjectId}/cameras`,
               method: "POST",
               payload: {
                 ...commonPayload,
@@ -429,7 +601,7 @@ function CameraDialog({
           }
 
           await requestCamera({
-            path: `/projects/${projectId}/cameras`,
+            path: `/projects/${activeProjectId}/cameras`,
             method: "POST",
             payload: {
               ...commonPayload,
@@ -469,6 +641,62 @@ function CameraDialog({
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             {mode === "create" ? (
               <>
+              <Field className="md:col-span-2" data-invalid={Boolean(projectSelectError)}>
+                <FieldLabel htmlFor="camera-project-search">房产 / 项目</FieldLabel>
+                <Input
+                  id="camera-project-search"
+                  value={projectKeyword}
+                  disabled={pending}
+                  aria-invalid={Boolean(projectSelectError)}
+                  placeholder="搜索客户、手机号、小区、房号或项目名"
+                  onChange={(event) => setProjectKeyword(event.target.value)}
+                />
+                <div className="rounded-md border bg-background">
+                  <div className="max-h-48 overflow-y-auto p-1">
+                    {projectOptions.map((project) => {
+                      const selected = project.id === selectedProjectId;
+                      const description = getProjectOptionDescription(project);
+                      return (
+                        <button
+                          key={project.id}
+                          type="button"
+                          disabled={pending}
+                          className={`flex w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left text-sm transition-colors ${
+                            selected ? "bg-accent text-accent-foreground" : "hover:bg-accent"
+                          }`}
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setSelectedProject(project);
+                            setProjectKeyword(getProjectOptionLabel(project));
+                          }}
+                        >
+                          <span className="font-medium">{getProjectOptionLabel(project)}</span>
+                          {description ? (
+                            <span className="text-xs text-muted-foreground">{description}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                    {!projectLoading && projectOptions.length === 0 ? (
+                      <div className="px-3 py-5 text-center text-sm text-muted-foreground">
+                        暂无匹配房产项目
+                      </div>
+                    ) : null}
+                    {projectLoading ? (
+                      <div className="flex items-center justify-center gap-2 px-3 py-5 text-sm text-muted-foreground">
+                        <Loader2 className="animate-spin" data-icon="inline-start" />
+                        正在加载
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <FieldDescription>
+                  {selectedProject
+                    ? `当前绑定到：${getProjectOptionLabel(selectedProject)}`
+                    : "选择房产项目后，设备通道会按该项目权限实时加载。"}
+                </FieldDescription>
+                {projectSelectError ? <StatusAlert>{projectSelectError}</StatusAlert> : null}
+              </Field>
               <Controller
                 name="vendor"
                 control={form.control}
@@ -503,9 +731,9 @@ function CameraDialog({
                     <FormSelect
                       id="camera-device"
                       value={field.value}
-                      disabled={pending || availableDevices.length === 0}
+                      disabled={pending || deviceLoading || availableDevices.length === 0}
                       invalid={fieldState.invalid}
-                      placeholder={availableDevices.length ? "请选择设备通道" : "暂无未绑定设备"}
+                      placeholder={deviceLoading ? "设备通道加载中" : availableDevices.length ? "请选择设备通道" : "暂无未绑定设备"}
                       options={availableDevices.map((device) => ({
                         value: buildDeviceKey(device),
                         label: formatDeviceLabel(device),
@@ -513,7 +741,9 @@ function CameraDialog({
                       onChange={field.onChange}
                     />
                     <FieldDescription>
-                      只展示当前厂商下未绑定到任何项目的设备通道。
+                      {deviceLoading
+                        ? "正在按所选房产项目加载可绑定设备通道。"
+                        : "只展示当前厂商下未绑定到任何项目的设备通道。"}
                     </FieldDescription>
                     <FieldError errors={[fieldState.error]} />
                   </Field>
@@ -709,7 +939,17 @@ function CameraDialog({
             <Button type="button" variant="outline" disabled={pending} onClick={close}>
               取消
             </Button>
-            <Button type="submit" disabled={pending || (mode === "create" && availableDevices.length === 0)}>
+            <Button
+              type="submit"
+              disabled={
+                pending ||
+                (mode === "create" && (
+                  deviceLoading ||
+                  !activeProjectId ||
+                  availableDevices.length === 0
+                ))
+              }
+            >
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {mode === "create" ? "绑定摄像头" : "保存修改"}
             </Button>
@@ -926,12 +1166,11 @@ export function CreateCameraButton({
   devices: CameraDeviceChannel[];
 }) {
   const [open, setOpen] = useState(false);
-  const availableCount = devices.filter((device) => device.can_bind).length;
 
   return (
     <>
-      <Button type="button" disabled={!projectId || availableCount === 0} onClick={() => setOpen(true)}>
-        <Plus />
+      <Button type="button" disabled={!projectId} onClick={() => setOpen(true)}>
+        <Plus data-icon="inline-start" />
         绑定摄像头
       </Button>
       <CameraDialog

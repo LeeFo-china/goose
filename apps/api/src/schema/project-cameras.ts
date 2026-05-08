@@ -19,6 +19,18 @@ export const ProjectCameraParamsSchema = z.object({
   project_id: z.uuid("无效的项目 ID"),
 });
 
+export const ProjectCameraBindOptionsQuerySchema = z.object({
+  keyword: z.string().trim().max(100, "关键词过长").optional(),
+  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0").default(1),
+  pageSize: z.coerce
+    .number()
+    .int("每页数量必须是整数")
+    .min(1, "每页数量必须大于 0")
+    .max(20, "每页最多 20 条")
+    .default(20),
+  selected_project_id: z.uuid("无效的项目 ID").optional(),
+});
+
 export const ProjectCameraDetailParamsSchema = z.object({
   project_id: z.uuid("无效的项目 ID"),
   camera_id: z.uuid("无效的摄像头 ID"),
@@ -142,6 +154,9 @@ export type ProjectCameraEzvizDevicesQueryInput = z.infer<
 >;
 export type ProjectCameraTencentDevicesQueryInput = z.infer<
   typeof ProjectCameraTencentDevicesQuerySchema
+>;
+export type ProjectCameraBindOptionsQueryInput = z.infer<
+  typeof ProjectCameraBindOptionsQuerySchema
 >;
 export type ProjectCameraVendor = (typeof PROJECT_CAMERA_VENDOR_VALUES)[number];
 export type ProjectCameraPlayProtocol =

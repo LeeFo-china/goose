@@ -6,6 +6,7 @@ import { ResponseHandler } from "@/utils/response";
 import {
   CreateProjectCameraTencentDeviceSchema,
   CreateProjectCameraSchema,
+  ProjectCameraBindOptionsQuerySchema,
   ProjectCameraEzvizDevicesQuerySchema,
   ProjectCameraTencentDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
@@ -27,6 +28,19 @@ class ProjectCameraController extends BaseController {
       ip: request.ip,
       userAgent: request.headers["user-agent"] || null,
     };
+  }
+
+  @Get("/projects/camera-bind-options")
+  async listCameraBindProjectOptions(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = ProjectCameraBindOptionsQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectCameraService.listCameraBindProjectOptions({
+      authUserId: request.user?.sub,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success(result);
   }
 
   @Get("/projects/:project_id/cameras")
