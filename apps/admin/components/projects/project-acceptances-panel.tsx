@@ -120,6 +120,13 @@ const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES.map((value) => ({
   label: PROJECT_ACCEPTANCE_STAGE_LABELS[value],
 }));
 
+const openAcceptanceStatuses = new Set<ProjectAcceptanceStatus>([
+  "draft",
+  "submitted",
+  "leader_approved",
+  "rejected",
+]);
+
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
@@ -234,6 +241,22 @@ export function ProjectAcceptancesPanel({
     () => acceptances.find((item) => item.id === selectedId) || null,
     [acceptances, selectedId],
   );
+  const occupiedStages = useMemo(() => {
+    return new Map(
+      acceptances
+        .filter((item) => openAcceptanceStatuses.has(item.status))
+        .map((item) => [item.stage_code, item]),
+    );
+  }, [acceptances]);
+  const selectableStageOptions = useMemo(() => {
+    return stageOptions.map((item) => ({
+      ...item,
+      acceptance: occupiedStages.get(item.value),
+    }));
+  }, [occupiedStages]);
+  const firstAvailableStage = selectableStageOptions.find((item) => !item.acceptance);
+  const selectedStageBlocked = Boolean(occupiedStages.get(stageCode));
+  const canCreateAcceptance = Boolean(firstAvailableStage) && !selectedStageBlocked;
 
   const loadAcceptances = async () => {
     setLoading(true);
@@ -268,6 +291,13 @@ export function ProjectAcceptancesPanel({
     setEditable(buildEditable(selected));
   }, [selected?.id]);
 
+  useEffect(() => {
+    if (!firstAvailableStage) return;
+    if (!stageCode || occupiedStages.has(stageCode)) {
+      setStageCode(firstAvailableStage.value);
+    }
+  }, [firstAvailableStage?.value, occupiedStages, stageCode]);
+
   const runAction = async (action: () => Promise<void>) => {
     setActionLoading(true);
     setError("");
@@ -283,6 +313,9 @@ export function ProjectAcceptancesPanel({
 
   const createAcceptance = () =>
     runAction(async () => {
+      if (!canCreateAcceptance) {
+        throw new Error("当前无可发起的工序验收");
+      }
       const created = await requestBackend<ProjectAcceptance>("/project-acceptances", {
         method: "POST",
         payload: {
@@ -425,20 +458,39 @@ export function ProjectAcceptancesPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {stageOptions.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
+              {selectableStageOptions.map((item) => (
+                <SelectItem
+                  key={item.value}
+                  value={item.value}
+                  disabled={Boolean(item.acceptance)}
+                >
+                  {item.acceptance
+                    ? `${item.label}（${item.acceptance.status_label}）`
+                    : item.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {!firstAvailableStage ? (
+            <p className="text-xs text-muted-foreground">
+              当前无可发起的工序验收
+            </p>
+          ) : selectedStageBlocked ? (
+            <p className="text-xs text-muted-foreground">
+              该工序已有进行中的验收单
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={loadAcceptances} disabled={loading}>
             <RefreshCw className={loading ? "animate-spin" : ""} />
             刷新
           </Button>
-          <Button type="button" onClick={createAcceptance} disabled={actionLoading}>
+          <Button
+            type="button"
+            onClick={createAcceptance}
+            disabled={actionLoading || !canCreateAcceptance}
+          >
             {actionLoading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus />}
             发起验收
           </Button>
