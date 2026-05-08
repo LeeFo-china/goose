@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   AUTH_TARGET_ROLE_VALUES,
+  CUSTOMER_ORIGIN_VALUES,
   SMS_SCENE_VALUES,
 } from "@gooes/domain";
 
@@ -19,6 +20,10 @@ export const VerifyRoleSchema = z.object({
   target_role: z.enum(AUTH_TARGET_ROLE_VALUES, {
     message: "无效的目标角色",
   }),
+  create_customer_if_missing: z.boolean().optional().default(false),
+  customer_origin: z.enum(CUSTOMER_ORIGIN_VALUES, {
+    message: "无效的客户创建渠道",
+  }).optional(),
 });
 
 // 导出类型供 TypeScript 使用

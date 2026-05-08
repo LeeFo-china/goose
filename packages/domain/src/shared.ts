@@ -12,8 +12,12 @@ export type {
   SmsVerificationStatus,
 } from './auth';
 
-export { CUSTOMER_SOURCE_VALUES, CUSTOMER_STATUS_VALUES } from './customer';
-export type { CustomerSource, CustomerStatus } from './customer';
+export {
+  CUSTOMER_ORIGIN_VALUES,
+  CUSTOMER_SOURCE_VALUES,
+  CUSTOMER_STATUS_VALUES,
+} from './customer';
+export type { CustomerOrigin, CustomerSource, CustomerStatus } from './customer';
 
 export { DEPARTMENT_CODE_VALUES } from './department';
 export type { DepartmentCode } from './department';

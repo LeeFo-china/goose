@@ -117,6 +117,8 @@ export type Database = {
       customers: {
         Row: {
           created_at: string | null
+          claimed_at: string | null
+          customer_origin: string
           douyin_screenshot_images: string[]
           id: string
           last_follow_at: string | null
@@ -125,11 +127,14 @@ export type Database = {
           phone: string | null
           source: string | null
           status: string | null
+          self_registered_at: string | null
           tags: Json | null
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
+          claimed_at?: string | null
+          customer_origin?: string
           douyin_screenshot_images?: string[]
           id?: string
           last_follow_at?: string | null
@@ -138,11 +143,14 @@ export type Database = {
           phone?: string | null
           source?: string | null
           status?: string | null
+          self_registered_at?: string | null
           tags?: Json | null
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
+          claimed_at?: string | null
+          customer_origin?: string
           douyin_screenshot_images?: string[]
           id?: string
           last_follow_at?: string | null
@@ -151,6 +159,7 @@ export type Database = {
           phone?: string | null
           source?: string | null
           status?: string | null
+          self_registered_at?: string | null
           tags?: Json | null
           user_id?: string | null
         }

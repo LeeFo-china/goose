@@ -20,6 +20,16 @@ export const CUSTOMER_SOURCE_VALUES = [
 
 export type CustomerSource = (typeof CUSTOMER_SOURCE_VALUES)[number];
 
+export const CUSTOMER_ORIGIN_VALUES = [
+  'employee_created',
+  'visitor_self_registered',
+  'h5_lead_converted',
+  'imported',
+  'system_created',
+] as const;
+
+export type CustomerOrigin = (typeof CUSTOMER_ORIGIN_VALUES)[number];
+
 export interface CustomerStatusConfigItem {
   label: string;
   type: 'default' | 'primary' | 'success' | 'warning' | 'danger';
@@ -46,6 +56,14 @@ export const CustomerSourceConfig: Record<CustomerSource, { label: string }> = {
   platform: { label: '装修平台' },
 };
 
+export const CustomerOriginConfig: Record<CustomerOrigin, { label: string }> = {
+  employee_created: { label: '员工登记' },
+  visitor_self_registered: { label: '访客自助注册' },
+  h5_lead_converted: { label: 'H5线索转化' },
+  imported: { label: '批量导入' },
+  system_created: { label: '系统生成' },
+};
+
 export const isCustomerStatus = (
   value: string | null | undefined,
 ): value is CustomerStatus =>
@@ -57,3 +75,9 @@ export const isCustomerSource = (
 ): value is CustomerSource =>
   typeof value === 'string' &&
   CUSTOMER_SOURCE_VALUES.includes(value as CustomerSource);
+
+export const isCustomerOrigin = (
+  value: string | null | undefined,
+): value is CustomerOrigin =>
+  typeof value === 'string' &&
+  CUSTOMER_ORIGIN_VALUES.includes(value as CustomerOrigin);

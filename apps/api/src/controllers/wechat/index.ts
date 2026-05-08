@@ -51,6 +51,14 @@ type SmsVerificationCodeRow = {
   request_ip: string | null;
 };
 
+type CustomerIdentityRow = {
+  id: string;
+  phone: string | null;
+  user_id: string | null;
+  customer_origin?: string | null;
+  claimed_at?: string | null;
+};
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
@@ -200,7 +208,10 @@ export class WeChatController extends BaseController {
     }
 
     if (target_role === "customer") {
-      await this.bindCustomerRole(request.user.sub, phone);
+      await this.bindCustomerRole(request.user.sub, phone, {
+        createIfMissing: bodyResult.data.create_customer_if_missing,
+        customerOrigin: bodyResult.data.customer_origin,
+      });
     } else {
       await this.bindEmployeeRole(request.user.sub, phone);
     }
@@ -436,47 +447,104 @@ export class WeChatController extends BaseController {
     return data;
   }
 
-  private async bindCustomerRole(authUserId: string, phone: string) {
+  private async bindCustomerRole(
+    authUserId: string,
+    phone: string,
+    options?: {
+      createIfMissing?: boolean;
+      customerOrigin?: string | null;
+    },
+  ) {
     const adminClient = SupabaseDB.getAdminClient();
-    const { data, error } = await adminClient
-      .from("customers")
-      .select("id, user_id")
-      .eq("phone", phone);
+    const [{ data, error }, { data: boundCustomers, error: boundError }] = await Promise.all([
+      adminClient
+        .from("customers")
+        .select("id, phone, user_id, customer_origin, claimed_at")
+        .eq("phone", phone),
+      adminClient
+        .from("customers")
+        .select("id, phone, user_id")
+        .eq("user_id", authUserId)
+        .limit(2),
+    ]);
 
     if (error) {
       throw Errors.dbError("查询客户身份失败", error);
     }
 
+    if (boundError) {
+      throw Errors.dbError("查询当前账号客户绑定失败", boundError);
+    }
+
+    const currentBindings = (boundCustomers || []) as CustomerIdentityRow[];
+    if (currentBindings.length > 1) {
+      throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
+    }
+    const currentBinding = currentBindings[0] || null;
+
     if (!data || data.length === 0) {
-      throw Errors.badRequest("该手机号未绑定客户身份");
+      if (!options?.createIfMissing) {
+        throw Errors.badRequest("该手机号未绑定客户身份");
+      }
+
+      if (currentBinding) {
+        throw Errors.badRequest("当前微信已绑定其他客户，请联系工作人员");
+      }
+
+      const customerOrigin = options.customerOrigin || "visitor_self_registered";
+      if (customerOrigin !== "visitor_self_registered") {
+        throw Errors.badRequest("当前客户创建渠道不支持自助注册");
+      }
+
+      const now = new Date().toISOString();
+      const { error: insertError } = await adminClient
+        .from("customers")
+        .insert({
+          phone,
+          name: `客户${phone.slice(-4)}`,
+          status: "potential",
+          source: null,
+          user_id: authUserId,
+          customer_origin: "visitor_self_registered",
+          self_registered_at: now,
+        });
+
+      if (insertError) {
+        throw Errors.dbError("自助创建客户失败", insertError);
+      }
+
+      return;
     }
 
     if (data.length > 1) {
       throw Errors.badRequest("该手机号绑定了多个客户档案，请联系管理员处理");
     }
 
-    const customer = data[0];
+    const customer = data[0] as CustomerIdentityRow | undefined;
     if (!customer) {
       throw Errors.badRequest("该手机号未绑定客户身份");
+    }
+
+    if (currentBinding && currentBinding.id !== customer.id) {
+      throw Errors.badRequest("当前微信已绑定其他客户，请联系工作人员");
     }
 
     if (customer.user_id && customer.user_id !== authUserId) {
       throw Errors.badRequest("该客户档案已绑定其他账号");
     }
 
-    const { error: cleanupError } = await adminClient
-      .from("customers")
-      .update({ user_id: null })
-      .eq("user_id", authUserId)
-      .neq("id", customer.id);
-
-    if (cleanupError) {
-      throw Errors.dbError("清理历史客户绑定失败", cleanupError);
+    const updatePayload: {
+      user_id: string;
+      claimed_at?: string;
+    } = {
+      user_id: authUserId,
+    };
+    if (!customer.claimed_at) {
+      updatePayload.claimed_at = new Date().toISOString();
     }
-
     const { error: updateError } = await adminClient
       .from("customers")
-      .update({ user_id: authUserId })
+      .update(updatePayload)
       .eq("id", customer.id);
 
     if (updateError) {
