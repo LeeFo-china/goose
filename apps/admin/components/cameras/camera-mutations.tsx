@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
+import { toast } from "sonner";
 import { z } from "zod";
 import {
   Copy,
@@ -1228,12 +1229,10 @@ export function CameraRowActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [playParams, setPlayParams] = useState<PlayParams | null>(null);
 
   function showPreview() {
-    setError("");
     startTransition(async () => {
       try {
         const data = await requestCamera({
@@ -1243,14 +1242,13 @@ export function CameraRowActions({
         });
         setPlayParams(data as PlayParams);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "播放参数获取失败");
+        toast.error(err instanceof Error ? err.message : "播放参数获取失败");
       }
     });
   }
 
   function deleteCamera() {
     if (!window.confirm(`确认解绑摄像头「${camera.name}」？`)) return;
-    setError("");
     startTransition(async () => {
       try {
         await requestCamera({
@@ -1259,7 +1257,7 @@ export function CameraRowActions({
         });
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "解绑失败");
+        toast.error(err instanceof Error ? err.message : "解绑失败");
       }
     });
   }
@@ -1294,11 +1292,6 @@ export function CameraRowActions({
           onClose={() => setPlayParams(null)}
           onRefresh={showPreview}
         />
-      ) : null}
-      {error ? (
-        <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
-          {error}
-        </div>
       ) : null}
     </div>
   );
