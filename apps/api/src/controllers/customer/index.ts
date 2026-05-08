@@ -34,6 +34,7 @@ import {
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
 import { ErrorCodes } from "@/errors/error-codes";
+import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 
 type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
@@ -898,6 +899,7 @@ class CustomerController extends BaseController<
     source?: string,
     customerOrigin?: string,
     keyword?: string,
+    customerIds?: string[] | null,
   ) {
     let filteredQuery = query;
 
@@ -932,7 +934,85 @@ class CustomerController extends BaseController<
       );
     }
 
+    if (customerIds !== undefined && customerIds !== null) {
+      if (customerIds.length === 0) {
+        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      } else {
+        filteredQuery = filteredQuery.in("id", customerIds);
+      }
+    }
+
     return filteredQuery;
+  }
+
+  private async getTodayWorkCustomerIds() {
+    const { startIso, endIso } = getAsiaShanghaiTodayRange();
+    const ids = new Set<string>();
+
+    const addCustomerRows = (rows: Array<{ id?: string | null }> | null) => {
+      (rows || []).forEach((item) => {
+        if (item.id) ids.add(item.id);
+      });
+    };
+    const addFollowUpRows = (
+      rows: Array<{ customer_id?: string | null }> | null,
+    ) => {
+      (rows || []).forEach((item) => {
+        if (item.customer_id) ids.add(item.customer_id);
+      });
+    };
+
+    const [
+      createdCustomers,
+      updatedCustomers,
+      createdFollowUps,
+      plannedFollowUps,
+    ] = await Promise.all([
+      SupabaseDB.getAdminClient()
+        .from("customers")
+        .select("id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("customers")
+        .select("id")
+        .gte("updated_at", startIso)
+        .lt("updated_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("customer_follow_ups")
+        .select("customer_id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("customer_follow_ups")
+        .select("customer_id")
+        .gte("next_follow_at", startIso)
+        .lt("next_follow_at", endIso),
+    ]);
+
+    if (createdCustomers.error) {
+      throw Errors.dbError("查询今日新增客户失败", createdCustomers.error);
+    }
+    if (updatedCustomers.error) {
+      throw Errors.dbError("查询今日更新客户失败", updatedCustomers.error);
+    }
+    if (createdFollowUps.error) {
+      throw Errors.dbError("查询今日客户跟进失败", createdFollowUps.error);
+    }
+    if (plannedFollowUps.error) {
+      throw Errors.dbError("查询今日计划跟进失败", plannedFollowUps.error);
+    }
+
+    addCustomerRows(createdCustomers.data as Array<{ id: string }> | null);
+    addCustomerRows(updatedCustomers.data as Array<{ id: string }> | null);
+    addFollowUpRows(
+      createdFollowUps.data as Array<{ customer_id: string | null }> | null,
+    );
+    addFollowUpRows(
+      plannedFollowUps.data as Array<{ customer_id: string | null }> | null,
+    );
+
+    return Array.from(ids);
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -948,6 +1028,7 @@ class CustomerController extends BaseController<
       customer_origin: customerOrigin,
       keyword,
       follow,
+      work_scope: workScope,
     } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -958,6 +1039,9 @@ class CustomerController extends BaseController<
     );
 
     const normalizedKeyword = keyword?.trim();
+    const todayCustomerIds = workScope === "today"
+      ? await this.getTodayWorkCustomerIds()
+      : null;
     if (follow) {
       let idQuery = SupabaseDB.getAdminClient()
         .from("customers")
@@ -970,6 +1054,7 @@ class CustomerController extends BaseController<
         source,
         customerOrigin,
         normalizedKeyword,
+        todayCustomerIds,
       );
       const { data: idRows, error: idError } = await idQuery;
       if (idError) throw Errors.dbError("列表查询失败", idError);
@@ -1034,6 +1119,7 @@ class CustomerController extends BaseController<
       source,
       customerOrigin,
       normalizedKeyword,
+      todayCustomerIds,
     );
 
     const { error: countError, count } = await countQuery;
@@ -1058,6 +1144,7 @@ class CustomerController extends BaseController<
       source,
       customerOrigin,
       normalizedKeyword,
+      todayCustomerIds,
     );
     const { data, error } = await query.range(from, to);
 

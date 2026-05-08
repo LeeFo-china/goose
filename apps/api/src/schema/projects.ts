@@ -131,6 +131,9 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
   status: ProjectStatusFilterSchema, // 允许按状态过滤
   keyword: optionalQueryValue(z.string()), // 允许关键词搜索
   ownership: ProjectOwnershipFilterSchema,
+  work_scope: optionalQueryValue(z.enum(["all", "today"], {
+    message: "work_scope must be one of: all, today",
+  })),
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;

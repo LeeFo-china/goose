@@ -139,6 +139,9 @@ export const CustomerListQuerySchema = PaginationQuerySchema.extend({
   follow: optionalQueryValue(z.enum(["due", "overdue"], {
     message: "无效的跟进筛选",
   })),
+  work_scope: optionalQueryValue(z.enum(["all", "today"], {
+    message: "work_scope must be one of: all, today",
+  })),
 });
 
 export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;

@@ -38,6 +38,7 @@ import {
   customerPhonePrivacyService,
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
+import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 
 function escapeSupabaseOrValue(value: string) {
   return value
@@ -309,6 +310,7 @@ class ProjectController extends BaseController<
     visibleProjectIds: string[] | null,
     status?: string,
     keyword?: string,
+    projectIds?: string[] | null,
   ) {
     let filteredQuery = this.applyProjectIdsFilter(query, visibleProjectIds);
 
@@ -323,7 +325,119 @@ class ProjectController extends BaseController<
       );
     }
 
+    if (projectIds !== undefined && projectIds !== null) {
+      if (projectIds.length === 0) {
+        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      } else {
+        filteredQuery = filteredQuery.in("id", projectIds);
+      }
+    }
+
     return filteredQuery;
+  }
+
+  private async getTodayWorkProjectIds() {
+    const { startIso, endIso } = getAsiaShanghaiTodayRange();
+    const ids = new Set<string>();
+
+    const addProjectRows = (rows: Array<{ id?: string | null }> | null) => {
+      (rows || []).forEach((item) => {
+        if (item.id) ids.add(item.id);
+      });
+    };
+    const addProjectIdRows = (
+      rows: Array<{ project_id?: string | null }> | null,
+    ) => {
+      (rows || []).forEach((item) => {
+        if (item.project_id) ids.add(item.project_id);
+      });
+    };
+
+    const [
+      createdProjects,
+      updatedProjects,
+      todayLogs,
+      createdAcceptances,
+      submittedAcceptances,
+      reviewedAcceptances,
+      customerConfirmedAcceptances,
+    ] = await Promise.all([
+      SupabaseDB.getAdminClient()
+        .from("projects")
+        .select("id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("projects")
+        .select("id")
+        .gte("updated_at", startIso)
+        .lt("updated_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("project_logs")
+        .select("project_id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("project_acceptances")
+        .select("project_id")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("project_acceptances")
+        .select("project_id")
+        .gte("submitted_at", startIso)
+        .lt("submitted_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("project_acceptances")
+        .select("project_id")
+        .gte("reviewed_at", startIso)
+        .lt("reviewed_at", endIso),
+      SupabaseDB.getAdminClient()
+        .from("project_acceptances")
+        .select("project_id")
+        .gte("customer_confirmed_at", startIso)
+        .lt("customer_confirmed_at", endIso),
+    ]);
+
+    if (createdProjects.error) {
+      throw Errors.dbError("查询今日新增项目失败", createdProjects.error);
+    }
+    if (updatedProjects.error) {
+      throw Errors.dbError("查询今日更新项目失败", updatedProjects.error);
+    }
+    if (todayLogs.error) {
+      throw Errors.dbError("查询今日项目日志失败", todayLogs.error);
+    }
+    if (createdAcceptances.error) {
+      throw Errors.dbError("查询今日发起验收失败", createdAcceptances.error);
+    }
+    if (submittedAcceptances.error) {
+      throw Errors.dbError("查询今日提交验收失败", submittedAcceptances.error);
+    }
+    if (reviewedAcceptances.error) {
+      throw Errors.dbError("查询今日复核验收失败", reviewedAcceptances.error);
+    }
+    if (customerConfirmedAcceptances.error) {
+      throw Errors.dbError("查询今日客户确认验收失败", customerConfirmedAcceptances.error);
+    }
+
+    addProjectRows(createdProjects.data as Array<{ id: string }> | null);
+    addProjectRows(updatedProjects.data as Array<{ id: string }> | null);
+    addProjectIdRows(todayLogs.data as Array<{ project_id: string | null }> | null);
+    addProjectIdRows(
+      createdAcceptances.data as Array<{ project_id: string | null }> | null,
+    );
+    addProjectIdRows(
+      submittedAcceptances.data as Array<{ project_id: string | null }> | null,
+    );
+    addProjectIdRows(
+      reviewedAcceptances.data as Array<{ project_id: string | null }> | null,
+    );
+    addProjectIdRows(
+      customerConfirmedAcceptances.data as Array<{ project_id: string | null }> | null,
+    );
+
+    return Array.from(ids);
   }
 
   private async getProjectListVisibleIds(
@@ -733,10 +847,13 @@ class ProjectController extends BaseController<
       queryResult.data.ownership,
     );
 
-    const { page, pageSize, status, keyword } = queryResult.data;
+    const { page, pageSize, status, keyword, work_scope: workScope } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const normalizedKeyword = keyword?.trim();
+    const todayProjectIds = workScope === "today"
+      ? await this.getTodayWorkProjectIds()
+      : null;
 
     let countQuery = SupabaseDB.getAdminClient()
       .from("projects")
@@ -746,6 +863,7 @@ class ProjectController extends BaseController<
       visibleProjectIds,
       status,
       normalizedKeyword,
+      todayProjectIds,
     );
 
     const { error: countError, count } = await countQuery;
@@ -768,6 +886,7 @@ class ProjectController extends BaseController<
       visibleProjectIds,
       status,
       normalizedKeyword,
+      todayProjectIds,
     );
 
     const { data, error } = await query.range(from, to);
@@ -1114,10 +1233,13 @@ class ProjectController extends BaseController<
       request,
       queryResult.data.ownership,
     );
-    const { page, pageSize, status, keyword } = queryResult.data;
+    const { page, pageSize, status, keyword, work_scope: workScope } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const normalizedKeyword = keyword?.trim();
+    const todayProjectIds = workScope === "today"
+      ? await this.getTodayWorkProjectIds()
+      : null;
 
     let countQuery = SupabaseDB
       .from("projects")
@@ -1127,6 +1249,7 @@ class ProjectController extends BaseController<
       visibleProjectIds,
       status,
       normalizedKeyword,
+      todayProjectIds,
     );
 
     const { error: countError, count } = await countQuery;
@@ -1183,6 +1306,7 @@ class ProjectController extends BaseController<
       visibleProjectIds,
       status,
       normalizedKeyword,
+      todayProjectIds,
     );
 
     const { data, error } = await query
