@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Link2 } from "lucide-react";
 import { CopyValueButton } from "@/components/admin/copy-value-button";
-import { TencentDevicePasswordActions } from "@/components/cameras/tencent-device-actions";
+import {
+  TencentDevicePasswordActions,
+  TencentSipAccessButton,
+} from "@/components/cameras/tencent-device-actions";
 import type {
   TencentDeviceChannel,
   TencentDeviceRecord,
+  TencentSipServerConfig,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,10 +76,12 @@ export function TencentDeviceChannelTree({
   projectId,
   devices,
   channels,
+  sipServer,
 }: {
   projectId: string;
   devices: TencentDeviceRecord[];
   channels: TencentDeviceChannel[];
+  sipServer: TencentSipServerConfig | null;
 }) {
   const [expandedDeviceIds, setExpandedDeviceIds] = useState<Set<string>>(new Set());
   const channelsByDevice = useMemo(() => {
@@ -120,7 +126,7 @@ export function TencentDeviceChannelTree({
             open={expanded}
             onOpenChange={() => toggle(device.device_id)}
           >
-            <div className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(180px,0.75fr)_minmax(190px,0.85fr)_minmax(120px,0.5fr)_minmax(160px,0.7fr)_minmax(120px,0.5fr)] lg:items-center">
+            <div className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(180px,0.7fr)_minmax(190px,0.85fr)_minmax(120px,0.5fr)_minmax(150px,0.65fr)_minmax(220px,0.9fr)] lg:items-center">
               <CollapsibleTrigger asChild>
                 <Button
                   type="button"
@@ -162,7 +168,21 @@ export function TencentDeviceChannelTree({
                   {device.group_name || device.group_id || "未分组"}
                 </div>
               </div>
-              <Badge className="w-fit" variant="outline">通道 {deviceChannels.length}</Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">通道 {deviceChannels.length}</Badge>
+                <TencentSipAccessButton
+                  sipServer={sipServer}
+                  device={{
+                    device_id: device.device_id,
+                    device_code: device.device_code,
+                    device_name: tencentDeviceRecordName(device),
+                    device_type_label: device.device_type_label,
+                    sip_username: device.sip_username || device.device_code,
+                    sip_password: "通过查密码或重置获取",
+                    sip_transport_protocol: device.sip_transport_protocol || "TCP",
+                  }}
+                />
+              </div>
             </div>
             <CollapsibleContent>
               <Separator />
@@ -171,7 +191,7 @@ export function TencentDeviceChannelTree({
                   {deviceChannels.map((channel) => (
                     <div
                       key={`${channel.device_id}-${channel.channel_id}`}
-                      className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(180px,0.75fr)_minmax(190px,0.85fr)_minmax(120px,0.5fr)_minmax(160px,0.7fr)_minmax(120px,0.5fr)] lg:items-center"
+                      className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(180px,0.7fr)_minmax(190px,0.85fr)_minmax(120px,0.5fr)_minmax(150px,0.65fr)_minmax(220px,0.9fr)] lg:items-center"
                     >
                       <div className="min-w-0 pl-8">
                         <div className="truncate font-medium">

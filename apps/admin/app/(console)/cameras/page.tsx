@@ -3,9 +3,7 @@ import {
   CameraOff,
   CircuitBoard,
   Link2,
-  ShieldAlert,
 } from "lucide-react";
-import { CopyValueButton } from "@/components/admin/copy-value-button";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CameraProjectPicker } from "@/components/cameras/camera-list-actions";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
@@ -14,6 +12,7 @@ import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tab
 import { TencentDeviceChannelTree } from "@/components/cameras/tencent-device-channel-tree";
 import {
   CreateTencentDeviceButton,
+  TencentSipAccessButton,
 } from "@/components/cameras/tencent-device-actions";
 import type {
   CameraProjectOption,
@@ -99,35 +98,6 @@ function renderStatus(status: string) {
   };
 
   return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
-}
-
-function compactIdentifier(value: string | null | undefined) {
-  if (!value) return "-";
-  if (value.length <= 18) return value;
-  return `${value.slice(0, 8)}...${value.slice(-6)}`;
-}
-
-function formatValue(value: string | number | null | undefined) {
-  if (value == null || value === "") return "-";
-  return String(value);
-}
-
-function AccessConfigItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
-      <div className="min-w-0">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="truncate text-sm font-medium">{formatValue(value)}</div>
-      </div>
-      <CopyValueButton value={value} />
-    </div>
-  );
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -396,6 +366,11 @@ export default async function CamerasPage({
                   <div className="flex flex-wrap justify-end gap-2">
                     <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
                     <Badge variant="outline">通道 {tencentDevices.length}</Badge>
+                    <TencentSipAccessButton sipServer={tencentSipServer} />
+                    <CreateTencentDeviceButton
+                      projectId={selectedProjectId}
+                      sipServer={tencentSipServer}
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -403,6 +378,7 @@ export default async function CamerasPage({
                     projectId={selectedProjectId}
                     devices={tencentDeviceRecords}
                     channels={tencentDevices}
+                    sipServer={tencentSipServer}
                   />
                 </CardContent>
               </Card>
@@ -488,44 +464,6 @@ export default async function CamerasPage({
                 </CardContent>
               </Card>
             </div>
-          )}
-          config={(
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                <CardTitle>腾讯云 SIP 接入配置</CardTitle>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Badge variant="outline">GB/T 28181</Badge>
-                  <CreateTencentDeviceButton
-                    projectId={selectedProjectId}
-                    sipServer={tencentSipServer}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {tencentSipServer ? (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                    <AccessConfigItem label="SIP服务器ID" value={tencentSipServer.sip_server_id} />
-                    <AccessConfigItem label="SIP服务器域" value={tencentSipServer.sip_domain} />
-                    <AccessConfigItem label="SIP服务器地址" value={tencentSipServer.sip_host} />
-                    <AccessConfigItem label="SIP服务器端口" value={tencentSipServer.sip_port} />
-                    <AccessConfigItem label="SIP传输协议" value={tencentSipServer.transport_protocol || "TCP"} />
-                  </div>
-                ) : (
-                  <StatusAlert tone="warning">
-                    暂未获取到腾讯云 SIP 服务器配置，请确认腾讯云监控配置可用。
-                  </StatusAlert>
-                )}
-                <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  <ShieldAlert />
-                  <div>
-                    <div className="font-medium text-foreground">SIP认证密码本阶段不展示</div>
-                    <div className="mt-1">
-                      已有设备的认证密码需要使用创建时保存的密码；后续第二阶段再接入密码查询、重置和脱敏展示。
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           )}
         />
       ) : null}

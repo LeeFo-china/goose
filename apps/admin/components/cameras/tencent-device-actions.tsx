@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Eye, Info, Loader2, Plus, RefreshCw } from "lucide-react";
 import { CopyValueButton } from "@/components/admin/copy-value-button";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -132,6 +132,50 @@ function DeviceSecretDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function TencentSipAccessButton({
+  sipServer,
+  device,
+  size = "sm",
+}: {
+  sipServer: TencentSipServerConfig | null;
+  device?: TencentDeviceSecretResult;
+  size?: "sm" | "default";
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        type="button"
+        size={size}
+        variant="outline"
+        onClick={() => setOpen(true)}
+      >
+        <Info data-icon="inline-start" />
+        接入信息
+      </Button>
+      {open ? (
+        <DeviceSecretDialog
+          title={device ? "设备接入信息" : "腾讯云 SIP 接入信息"}
+          description={device
+            ? "请把以下服务器和设备信息配置到现场设备本地页面。"
+            : "现场设备注册腾讯云行业版时使用这些 SIP 服务器参数。"}
+          device={device || {
+            device_name: "请选择或新增设备",
+            device_type_label: "-",
+            sip_username: "来自设备行的 SIP 用户",
+            sip_password: "通过设备行查密码或重置获取",
+            sip_transport_protocol: "TCP",
+            device_id: "-",
+          }}
+          sipServer={sipServer}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }
 
