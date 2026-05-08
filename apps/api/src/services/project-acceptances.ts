@@ -44,9 +44,21 @@ const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
 type AcceptanceDetail = ProjectAcceptanceRow & {
   stage_label: string | null;
   status_label: string;
+  customer_status_label: string;
+  has_customer_dispute: boolean;
   items: Array<ProjectAcceptanceItemRow & {
     images: string[];
+    image_items: Array<{
+      path: string;
+      url: string;
+      thumb_url: string;
+    }>;
     rectification_images: string[];
+    rectification_image_items: Array<{
+      path: string;
+      url: string;
+      thumb_url: string;
+    }>;
   }>;
   actions: Array<ProjectAcceptanceActionRow & {
     operator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceCustomerRow | null;
@@ -93,15 +105,26 @@ class ProjectAcceptanceService {
   }
 
   private normalizeImageArray(value: unknown) {
+    return this.normalizeImageItems(value).map((item) => item.url);
+  }
+
+  private normalizeImageItems(value: unknown) {
     if (!Array.isArray(value)) {
-      return [] as string[];
+      return [] as Array<{ path: string; url: string; thumb_url: string }>;
     }
 
     return value
       .filter((item): item is string => typeof item === "string")
       .map((item) => item.trim())
       .filter(Boolean)
-      .map((item) => this.getImagePublicUrl(item));
+      .map((item) => {
+        const url = this.getImagePublicUrl(item);
+        return {
+          path: /^https?:\/\//i.test(item) ? "" : item,
+          url,
+          thumb_url: url,
+        };
+      });
   }
 
   private getImagePublicUrl(path: string) {
@@ -155,15 +178,27 @@ class ProjectAcceptanceService {
 
     const employeeMap = new Map(employees.map((item) => [item.id, item]));
     const customerMap = new Map(customers.map((item) => [item.id, item]));
+    const hasCustomerDispute = actions.some((item) =>
+      item.action === "customer_dispute"
+    );
+    const customerStatusLabel = row.status === "leader_approved" && hasCustomerDispute
+      ? "整改完成，待你确认"
+      : this.getStatusLabel(row.status);
 
     return {
       ...row,
       stage_label: this.getStageLabel(row.stage_code),
       status_label: this.getStatusLabel(row.status),
+      customer_status_label: customerStatusLabel,
+      has_customer_dispute: hasCustomerDispute,
       items: items.map((item) => ({
         ...item,
         images: this.normalizeImageArray(item.images),
+        image_items: this.normalizeImageItems(item.images),
         rectification_images: this.normalizeImageArray(item.rectification_images),
+        rectification_image_items: this.normalizeImageItems(
+          item.rectification_images,
+        ),
       })),
       actions: actions.map((item) => ({
         ...item,

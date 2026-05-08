@@ -123,6 +123,39 @@ GET /project-acceptances/:id
 - `initiator`
 - `reviewer`
 - `customer`
+- `has_customer_dispute`
+- `customer_status_label`
+
+客户侧状态展示建议：
+
+- 普通 `leader_approved`：显示 `customer_status_label = 待业主确认`
+- 如果之前有 `customer_dispute`，且当前状态又回到 `leader_approved`：显示 `customer_status_label = 整改完成，待你确认`
+
+验收项里会返回整改信息：
+
+```json
+{
+  "id": "acceptance-item-id",
+  "title": "卫生间坡度",
+  "rectification_remark": "已重新补拍卫生间地面照片",
+  "rectification_images": [
+    "https://.../image.jpg"
+  ],
+  "rectification_image_items": [
+    {
+      "path": "project-id/acceptance/2026/05/08/a.jpg",
+      "url": "https://.../image.jpg",
+      "thumb_url": "https://.../image.jpg"
+    }
+  ]
+}
+```
+
+前端展示规则：
+
+- `rectification_remark` 或 `rectification_images` 有值时，在该验收项下显示“整改说明”。
+- 整改详情从验收项读取，不要从 `actions` 里反推。
+- `actions` 只用于展示“谁在什么时候做了什么”。
 
 `actions` 中每条操作记录会返回操作人：
 
