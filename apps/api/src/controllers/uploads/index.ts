@@ -30,6 +30,7 @@ const ALLOWED_UPLOAD_SCENES = [
   "customer_avatar",
   "customer_douyin_screenshot",
   "h5_marketing_page",
+  "project_acceptance",
 ] as const;
 
 const UploadImageFieldSchema = z.object({
@@ -179,6 +180,9 @@ class UploadController extends BaseController {
       customer_avatar: "customer-avatar",
       customer_douyin_screenshot: "customer-douyin-screenshots",
       h5_marketing_page: "h5-marketing-pages",
+      project_acceptance: options.projectId?.trim()
+        ? `${options.projectId.trim()}/acceptance`
+        : "project-acceptance",
     };
     const prefix = prefixByScene[options.scene];
 

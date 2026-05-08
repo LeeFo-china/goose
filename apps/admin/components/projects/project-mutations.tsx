@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
+import { ProjectAcceptancesPanel } from "@/components/projects/project-acceptances-panel";
 import {
   Tabs,
   TabsContent,
@@ -94,7 +95,7 @@ type Option = {
 };
 
 type ProjectMode = "create" | "edit";
-type ProjectDetailTab = "overview" | "members" | "logs";
+type ProjectDetailTab = "overview" | "members" | "logs" | "acceptances";
 
 type ProjectFormState = {
   name: string;
@@ -592,7 +593,12 @@ function ProjectDetailDialog({
 }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
   const updateActiveTab = (value: string) => {
-    if (value === "overview" || value === "members" || value === "logs") {
+    if (
+      value === "overview" ||
+      value === "members" ||
+      value === "logs" ||
+      value === "acceptances"
+    ) {
       setActiveTab(value);
     }
   };
@@ -617,6 +623,7 @@ function ProjectDetailDialog({
               <TabsTrigger value="overview">概览</TabsTrigger>
               <TabsTrigger value="members">成员</TabsTrigger>
               <TabsTrigger value="logs">施工日志</TabsTrigger>
+              <TabsTrigger value="acceptances">工序验收</TabsTrigger>
             </TabsList>
           </div>
           <div className="max-h-[calc(88vh-138px)] overflow-y-auto p-5">
@@ -664,6 +671,12 @@ function ProjectDetailDialog({
             </TabsContent>
             <TabsContent value="logs">
               <ProjectLogsPanel project={project} active={activeTab === "logs"} />
+            </TabsContent>
+            <TabsContent value="acceptances">
+              <ProjectAcceptancesPanel
+                project={project}
+                active={activeTab === "acceptances"}
+              />
             </TabsContent>
           </div>
         </Tabs>

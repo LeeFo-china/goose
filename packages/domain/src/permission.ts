@@ -37,6 +37,13 @@ export const PERMISSION_CODE_VALUES = [
   'project.create',
   'project.update',
   'project.delete',
+  'project_acceptance.read',
+  'project_acceptance.create',
+  'project_acceptance.update_own',
+  'project_acceptance.submit',
+  'project_acceptance.review',
+  'project_acceptance.reject',
+  'project_acceptance.manage',
   'project_log.create',
   'employee.read',
   'employee.create',
@@ -135,6 +142,34 @@ export const PermissionCodeConfig: Record<
   'project.create': { label: '新建项目', module: 'project' },
   'project.update': { label: '编辑项目', module: 'project' },
   'project.delete': { label: '删除项目', module: 'project' },
+  'project_acceptance.read': {
+    label: '查看项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.create': {
+    label: '发起项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.update_own': {
+    label: '编辑自己发起的项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.submit': {
+    label: '提交项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.review': {
+    label: '复核项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.reject': {
+    label: '驳回项目验收',
+    module: 'project_acceptance',
+  },
+  'project_acceptance.manage': {
+    label: '管理项目验收',
+    module: 'project_acceptance',
+  },
   'project_log.create': {
     label: '新建施工日志',
     module: 'project_log',

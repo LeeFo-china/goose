@@ -9,6 +9,7 @@ export * from './marketing-page';
 export * from './payment';
 export * from './permission';
 export * from './post';
+export * from './project-acceptance';
 export * from './project-log';
 export * from './project';
 export * from './referral';

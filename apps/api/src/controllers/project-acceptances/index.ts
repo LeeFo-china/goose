@@ -1,0 +1,215 @@
+import { BaseController } from "@/controllers/BaseController";
+import { Errors } from "@/errors/error-factory";
+import {
+  ApproveProjectAcceptanceSchema,
+  CancelProjectAcceptanceSchema,
+  CreateProjectAcceptanceSchema,
+  CustomerConfirmProjectAcceptanceSchema,
+  CustomerDisputeProjectAcceptanceSchema,
+  ProjectAcceptanceListQuerySchema,
+  ProjectAcceptanceTemplateListQuerySchema,
+  RejectProjectAcceptanceSchema,
+  SubmitProjectAcceptanceSchema,
+  UpdateProjectAcceptanceSchema,
+} from "@/schema/project-acceptances";
+import { authorizationService } from "@/services/authorization";
+import { projectAcceptanceService } from "@/services/project-acceptances";
+import { Get, Post } from "@/utils/decorators/route";
+import { ResponseHandler } from "@/utils/response";
+import type { FastifyReply, FastifyRequest } from "fastify";
+
+class ProjectAcceptancesController extends BaseController<
+  typeof CreateProjectAcceptanceSchema,
+  typeof UpdateProjectAcceptanceSchema
+> {
+  constructor() {
+    super(
+      "project_acceptances",
+      CreateProjectAcceptanceSchema,
+      UpdateProjectAcceptanceSchema,
+    );
+  }
+
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
+  override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = ProjectAcceptanceListQuerySchema.safeParse(request.query);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.listAcceptances(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  };
+
+  override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectAcceptanceService.getAcceptance(
+      authContext,
+      idVerify.data.id,
+    );
+    return ResponseHandler.success(data);
+  };
+
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = CreateProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.createAcceptance(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  };
+
+  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = UpdateProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.updateAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  };
+
+  @Get("/project-acceptance-templates")
+  async listTemplates(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredAuthContext(request);
+    const result = ProjectAcceptanceTemplateListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.listTemplates(result.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/project-acceptance-templates/:id")
+  async getTemplate(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectAcceptanceService.getTemplate(idVerify.data.id);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/submit")
+  async submit(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = SubmitProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.submitAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/approve")
+  async approve(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = ApproveProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.approveAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/reject")
+  async reject(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = RejectProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.rejectAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/customer-confirm")
+  async customerConfirm(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) throw Errors.unauthorized();
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = CustomerConfirmProjectAcceptanceSchema.safeParse(
+      request.body,
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.customerConfirmAcceptance(
+      request.user.sub,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/customer-dispute")
+  async customerDispute(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) throw Errors.unauthorized();
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = CustomerDisputeProjectAcceptanceSchema.safeParse(
+      request.body,
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.customerDisputeAcceptance(
+      request.user.sub,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/cancel")
+  async cancel(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = CancelProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.cancelAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+}
+
+export default new ProjectAcceptancesController();

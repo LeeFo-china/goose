@@ -33,6 +33,7 @@ import CustomerProjectLogSharesController from "@/controllers/customer-project-l
 import CustomerFollowUpCommentsController from "@/controllers/customer-follow-up-comments";
 import ExpenseRequestCategoriesController from "@/controllers/expense-request-categories";
 import ProjectCameraController from "@/controllers/project-cameras";
+import ProjectAcceptancesController from "@/controllers/project-acceptances";
 import AdminAuthController from "@/controllers/admin-auth";
 import AdminOpsController from "@/controllers/admin-ops";
 import SystemSettingsController from "@/controllers/system-settings";
@@ -76,6 +77,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("external-referrers", ExternalReferrersController));
   app.register(createResourceRoutes("project-referrals", ProjectReferralsController));
   app.register(createResourceRoutes("project-logs", ProjectLogController));
+  app.register(createResourceRoutes("project-acceptances", ProjectAcceptancesController));
   app.register(createResourceRoutes("posts", PostsController));
   app.register(createResourceRoutes("properties", PropertyControlle));
 };
