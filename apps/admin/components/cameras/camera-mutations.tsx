@@ -366,7 +366,9 @@ function CameraDialog({
   const [selectedProject, setSelectedProject] = useState<CameraProjectOption | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectSelectError, setProjectSelectError] = useState("");
-  const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>(devices);
+  const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>(
+    projectId ? devices : [],
+  );
   const [deviceLoading, setDeviceLoading] = useState(false);
   const initializedOpenRef = useRef(false);
   const form = useForm<CameraFormValues>({
@@ -414,12 +416,12 @@ function CameraDialog({
     setProjectKeyword("");
     setProjectOptions([]);
     setProjectSelectError("");
-    setCreateDevices(devices);
-    const initialVendor = mode === "create" ? initialCreateVendor : defaults.vendor;
+    setCreateDevices(projectId ? devices : []);
+    const initialVendor = mode === "create" && projectId ? initialCreateVendor : defaults.vendor;
     form.reset({
       ...defaults,
       vendor: initialVendor,
-      device_key: mode === "create" ? firstDeviceKeyByVendor[initialVendor] : "",
+      device_key: mode === "create" && projectId ? firstDeviceKeyByVendor[initialVendor] : "",
     });
     setError("");
   }, [defaults, devices, firstDeviceKeyByVendor, form, initialCreateVendor, mode, open, projectId]);
@@ -429,6 +431,14 @@ function CameraDialog({
 
     let disposed = false;
     const timer = window.setTimeout(() => {
+      if (!projectKeyword.trim() && !selectedProjectId) {
+        setProjectOptions([]);
+        setSelectedProject(null);
+        setProjectSelectError("");
+        setProjectLoading(false);
+        return;
+      }
+
       setProjectLoading(true);
       setProjectSelectError("");
       const params = new URLSearchParams({
@@ -470,7 +480,16 @@ function CameraDialog({
   }, [mode, open, projectKeyword, selectedProjectId]);
 
   useEffect(() => {
-    if (!open || mode !== "create" || !selectedProjectId) return;
+    if (!open || mode !== "create" || !selectedProjectId) {
+      if (mode === "create" && !selectedProjectId) {
+        setCreateDevices([]);
+        form.setValue("device_key", "", {
+          shouldDirty: false,
+          shouldValidate: true,
+        });
+      }
+      return;
+    }
 
     let disposed = false;
     setDeviceLoading(true);
@@ -649,7 +668,11 @@ function CameraDialog({
                   disabled={pending}
                   aria-invalid={Boolean(projectSelectError)}
                   placeholder="搜索客户、手机号、小区、房号或项目名"
-                  onChange={(event) => setProjectKeyword(event.target.value)}
+                  onChange={(event) => {
+                    setProjectKeyword(event.target.value);
+                    setSelectedProjectId("");
+                    setSelectedProject(null);
+                  }}
                 />
                 <div className="rounded-md border bg-background">
                   <div className="max-h-48 overflow-y-auto p-1">
@@ -679,7 +702,7 @@ function CameraDialog({
                     })}
                     {!projectLoading && projectOptions.length === 0 ? (
                       <div className="px-3 py-5 text-center text-sm text-muted-foreground">
-                        暂无匹配房产项目
+                        {projectKeyword.trim() ? "暂无匹配房产项目" : "请输入关键词搜索房产项目"}
                       </div>
                     ) : null}
                     {projectLoading ? (
@@ -693,7 +716,7 @@ function CameraDialog({
                 <FieldDescription>
                   {selectedProject
                     ? `当前绑定到：${getProjectOptionLabel(selectedProject)}`
-                    : "选择房产项目后，设备通道会按该项目权限实时加载。"}
+                    : "请先选择要绑定的房产项目，再选择设备厂商和通道。"}
                 </FieldDescription>
                 {projectSelectError ? <StatusAlert>{projectSelectError}</StatusAlert> : null}
               </Field>
@@ -706,7 +729,7 @@ function CameraDialog({
                     <FormSelect
                       id="camera-vendor"
                       value={field.value}
-                      disabled={pending}
+                      disabled={pending || !activeProjectId}
                       invalid={fieldState.invalid}
                       options={vendorOptions.map(([value, label]) => ({ value, label }))}
                       onChange={(value) => {
@@ -731,9 +754,17 @@ function CameraDialog({
                     <FormSelect
                       id="camera-device"
                       value={field.value}
-                      disabled={pending || deviceLoading || availableDevices.length === 0}
+                      disabled={pending || !activeProjectId || deviceLoading || availableDevices.length === 0}
                       invalid={fieldState.invalid}
-                      placeholder={deviceLoading ? "设备通道加载中" : availableDevices.length ? "请选择设备通道" : "暂无未绑定设备"}
+                      placeholder={
+                        !activeProjectId
+                          ? "请先选择房产项目"
+                          : deviceLoading
+                            ? "设备通道加载中"
+                            : availableDevices.length
+                              ? "请选择设备通道"
+                              : "暂无未绑定设备"
+                      }
                       options={availableDevices.map((device) => ({
                         value: buildDeviceKey(device),
                         label: formatDeviceLabel(device),
@@ -743,7 +774,9 @@ function CameraDialog({
                     <FieldDescription>
                       {deviceLoading
                         ? "正在按所选房产项目加载可绑定设备通道。"
-                        : "只展示当前厂商下未绑定到任何项目的设备通道。"}
+                        : activeProjectId
+                          ? "只展示当前厂商下未绑定到任何项目的设备通道。"
+                          : "选择房产项目后才会加载可绑定设备通道。"}
                     </FieldDescription>
                     <FieldError errors={[fieldState.error]} />
                   </Field>
@@ -1169,7 +1202,7 @@ export function CreateCameraButton({
 
   return (
     <>
-      <Button type="button" disabled={!projectId} onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => setOpen(true)}>
         <Plus data-icon="inline-start" />
         绑定摄像头
       </Button>

@@ -332,8 +332,8 @@ export default async function CamerasPage({
             萤石和腾讯云行业版设备通道选择、项目摄像头绑定、客户可见权限和播放参数。
           </p>
         </div>
-        {selectedProjectId ? (
-          <CreateCameraButton projectId={selectedProjectId} devices={devices} />
+        {projects.length ? (
+          <CreateCameraButton projectId="" devices={[]} />
         ) : null}
       </div>
 
