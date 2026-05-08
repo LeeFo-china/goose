@@ -20,6 +20,7 @@ import {
   Save,
   Search,
   Send,
+  Sparkles,
   Trash2,
   Type,
   Upload,
@@ -151,6 +152,18 @@ type H5PageEditorVersion = {
   config: H5PageConfig;
 };
 
+type AiFieldDefinition = {
+  type: "string" | "text" | "select";
+  label: string;
+  maxLength: number;
+  options?: string[];
+};
+
+type AiFillBlockResponse = {
+  patch: Record<string, string>;
+  fields: string[];
+};
+
 const moduleTemplates: Array<{
   type: H5BlockType;
   label: string;
@@ -173,6 +186,51 @@ const moduleTemplates: Array<{
 const blockLabel = Object.fromEntries(
   moduleTemplates.map((item) => [item.type, item.label]),
 ) as Record<H5BlockType, string>;
+
+const blockAiFieldSchema: Record<H5BlockType, Record<string, AiFieldDefinition>> = {
+  hero: {
+    kicker: { type: "string", label: "角标", maxLength: 12 },
+    title: { type: "string", label: "标题", maxLength: 24 },
+    subtitle: { type: "text", label: "副标题", maxLength: 90 },
+    buttonText: { type: "string", label: "按钮文案", maxLength: 8 },
+  },
+  image: {
+    caption: { type: "string", label: "图片说明", maxLength: 60 },
+  },
+  text: {
+    title: { type: "string", label: "标题", maxLength: 24 },
+    content: { type: "text", label: "正文", maxLength: 360 },
+    align: { type: "select", label: "对齐", maxLength: 10, options: ["left", "center", "right"] },
+  },
+  button: {
+    text: { type: "string", label: "按钮文案", maxLength: 8 },
+  },
+  image_text: {
+    title: { type: "string", label: "标题", maxLength: 24 },
+    content: { type: "text", label: "正文", maxLength: 220 },
+    buttonText: { type: "string", label: "按钮文案", maxLength: 8 },
+  },
+  case_list: {
+    title: { type: "string", label: "标题", maxLength: 24 },
+  },
+  countdown: {
+    title: { type: "string", label: "标题", maxLength: 24 },
+  },
+  lead_form: {
+    title: { type: "string", label: "标题", maxLength: 24 },
+    description: { type: "text", label: "说明", maxLength: 90 },
+    submitText: { type: "string", label: "提交按钮", maxLength: 8 },
+  },
+  phone_cta: {
+    text: { type: "string", label: "按钮文案", maxLength: 8 },
+  },
+  floating_phone_cta: {
+    text: { type: "string", label: "按钮文案", maxLength: 8 },
+  },
+  footer: {
+    text: { type: "string", label: "底部文字", maxLength: 60 },
+  },
+};
 
 function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
@@ -1109,10 +1167,14 @@ function FloatingPhonePreview({
 
 function PropertyPanel({
   block,
+  aiPending,
   onChange,
+  onAiFill,
 }: {
   block: H5Block | null;
+  aiPending?: boolean;
   onChange: (props: Record<string, unknown>) => void;
+  onAiFill?: (block: H5Block) => void;
 }) {
   if (!block) {
     return (
@@ -1136,8 +1198,28 @@ function PropertyPanel({
   return (
     <FieldGroup>
       <div>
-        <div className="text-sm font-medium">{blockLabel[block.type]}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{block.id}</div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{blockLabel[block.type]}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">{block.id}</div>
+          </div>
+          {onAiFill && Object.keys(blockAiFieldSchema[block.type] || {}).length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={aiPending}
+              onClick={() => onAiFill(block)}
+            >
+              {aiPending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Sparkles data-icon="inline-start" />
+              )}
+              AI 填写
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {block.type === "hero" ? (
@@ -1907,11 +1989,20 @@ export function H5PageEditor({
   const [config, setConfig] = useState(() => normalizeConfig(draftVersion.config, page));
   const [selectedBlockId, setSelectedBlockId] = useState(config.blocks[0]?.id || "");
   const [dragBlockId, setDragBlockId] = useState("");
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiTargetBlockId, setAiTargetBlockId] = useState("");
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiPatch, setAiPatch] = useState<Record<string, string> | null>(null);
+  const [aiPending, setAiPending] = useState(false);
   const phoneFrameRef = useRef<HTMLDivElement | null>(null);
   const [pending, startTransition] = useTransition();
   const selectedBlock = useMemo(
     () => config.blocks.find((block) => block.id === selectedBlockId) || null,
     [config.blocks, selectedBlockId],
+  );
+  const aiTargetBlock = useMemo(
+    () => config.blocks.find((block) => block.id === aiTargetBlockId) || null,
+    [config.blocks, aiTargetBlockId],
   );
   const pageUrl = `${getH5BaseUrl()}/p/${page.slug}`;
   const normalBlocks = config.blocks.filter((block) => block.type !== "floating_phone_cta");
@@ -1989,6 +2080,62 @@ export function H5PageEditor({
       blocks: moveItem(current.blocks, fromIndex, toIndex),
     }));
     setDragBlockId("");
+  }
+
+  function openAiFillDialog(block: H5Block) {
+    setAiTargetBlockId(block.id);
+    setAiPatch(null);
+    setAiInstruction("");
+    setAiDialogOpen(true);
+  }
+
+  async function generateAiPatch() {
+    if (!aiTargetBlock) return;
+    const fieldSchema = blockAiFieldSchema[aiTargetBlock.type] || {};
+    if (Object.keys(fieldSchema).length === 0) {
+      toast.error("当前模块暂无可由 AI 填写的字段");
+      return;
+    }
+
+    setAiPending(true);
+    setAiPatch(null);
+    try {
+      const data = await requestEditor<AiFillBlockResponse>({
+        path: `/marketing-pages/${page.id}/ai-fill-block`,
+        method: "POST",
+        payload: {
+          page: {
+            id: page.id,
+            title: page.title,
+            slug: page.slug,
+            status: page.status,
+          },
+          config: normalizeConfig(config, page),
+          block: aiTargetBlock,
+          field_schema: fieldSchema,
+          instruction: aiInstruction,
+        },
+      });
+      setAiPatch(data.patch);
+      toast.success("AI 已生成建议内容");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "AI 填写失败");
+    } finally {
+      setAiPending(false);
+    }
+  }
+
+  function applyAiPatch() {
+    if (!aiTargetBlock || !aiPatch) return;
+    const currentBlock = config.blocks.find((block) => block.id === aiTargetBlock.id);
+    if (!currentBlock) return;
+    updateBlockProps(currentBlock.id, {
+      ...currentBlock.props,
+      ...aiPatch,
+    });
+    setSelectedBlockId(currentBlock.id);
+    setAiDialogOpen(false);
+    toast.success("AI 内容已回填，保存草稿后生效");
   }
 
   function saveDraft() {
@@ -2160,12 +2307,91 @@ export function H5PageEditor({
           </div>
           <PropertyPanel
             block={selectedBlock}
+            aiPending={aiPending && aiTargetBlockId === selectedBlock?.id}
             onChange={(props) => {
               if (selectedBlock) updateBlockProps(selectedBlock.id, props);
             }}
+            onAiFill={openAiFillDialog}
           />
         </aside>
       </div>
+
+      <Dialog open={aiDialogOpen} onOpenChange={(open) => {
+        setAiDialogOpen(open);
+        if (!open) {
+          setAiPatch(null);
+          setAiPending(false);
+        }
+      }}>
+        <DialogContent className="max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>AI 填写模块内容</DialogTitle>
+            <DialogDescription>
+              AI 会读取当前页面和模块上下文，只回填文案字段。图片、电话、链接和发布状态不会自动修改。
+            </DialogDescription>
+          </DialogHeader>
+
+          {aiTargetBlock ? (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="font-medium">{blockLabel[aiTargetBlock.type]}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  可填写字段：{Object.values(blockAiFieldSchema[aiTargetBlock.type] || {}).map((field) => field.label).join("、") || "无"}
+                </div>
+              </div>
+
+              <Field>
+                <FieldLabel>补充要求</FieldLabel>
+                <Textarea
+                  value={aiInstruction}
+                  placeholder="例如：突出五一活动、强调免费量房、语气更克制专业"
+                  rows={3}
+                  onChange={(event) => setAiInstruction(event.target.value)}
+                />
+                <FieldDescription>
+                  可留空。生成后需要点击“应用回填”，不会直接保存或发布。
+                </FieldDescription>
+              </Field>
+
+              {aiPatch ? (
+                <div className="space-y-2 rounded-md border bg-background p-3">
+                  <div className="text-sm font-medium">建议回填内容</div>
+                  {Object.entries(aiPatch).map(([key, value]) => {
+                    const field = blockAiFieldSchema[aiTargetBlock.type]?.[key];
+                    return (
+                      <div key={key} className="rounded-md bg-muted/40 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">{field?.label || key}</div>
+                        <div className="mt-1 whitespace-pre-wrap text-sm leading-6">{value}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                  点击生成后，这里会展示 AI 建议内容。
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAiDialogOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" variant="outline" disabled={aiPending || !aiTargetBlock} onClick={() => void generateAiPatch()}>
+              {aiPending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Sparkles data-icon="inline-start" />
+              )}
+              生成建议
+            </Button>
+            <Button type="button" disabled={!aiPatch || aiPending} onClick={applyAiPatch}>
+              应用回填
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
