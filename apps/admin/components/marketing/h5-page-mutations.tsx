@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings } from "lucide-react";
+import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { FormSelect } from "@/components/admin/form-select";
@@ -48,6 +48,30 @@ const H5PageFormSchema = z.object({
 });
 
 type H5PageFormValues = z.infer<typeof H5PageFormSchema>;
+
+type AiFieldDefinition = {
+  type: "string" | "text" | "select";
+  label: string;
+  maxLength: number;
+  options?: string[];
+};
+
+type AiFillSettingsResponse = {
+  patch: Partial<Record<keyof H5PageFormValues, string>>;
+  fields: string[];
+};
+
+const settingsAiFieldSchema: Record<string, AiFieldDefinition> = {
+  title: { type: "string", label: "页面标题", maxLength: 120 },
+  slug: { type: "string", label: "页面路径", maxLength: 80 },
+  description: { type: "text", label: "页面描述", maxLength: 500 },
+  display_scene: {
+    type: "select",
+    label: "展示场景",
+    maxLength: 20,
+    options: h5PageDisplaySceneOptions.map(([value]) => value),
+  },
+};
 
 function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
@@ -341,10 +365,19 @@ export function CreateH5MarketingPageButton() {
   );
 }
 
-function H5PageSettingsButton({ page }: { page: H5MarketingPageRecord }) {
+function H5PageSettingsButton({
+  page,
+  pages = [],
+}: {
+  page: H5MarketingPageRecord;
+  pages?: H5MarketingPageRecord[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [aiPending, setAiPending] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiPatch, setAiPatch] = useState<AiFillSettingsResponse["patch"] | null>(null);
   const [error, setError] = useState("");
   const [values, setValues] = useState<H5PageFormValues>({
     title: page.title || "",
@@ -360,10 +393,64 @@ function H5PageSettingsButton({ page }: { page: H5MarketingPageRecord }) {
 
   function updateValue(key: keyof H5PageFormValues, value: string | number) {
     setError("");
+    setAiPatch(null);
     setValues((current) => ({
       ...current,
       [key]: key === "slug" && typeof value === "string" ? normalizeSlug(value) : value,
     }));
+  }
+
+  async function generateAiSettings() {
+    setError("");
+    setAiPatch(null);
+    setAiPending(true);
+    try {
+      const data = await requestH5Page<AiFillSettingsResponse>({
+        path: `/marketing-pages/${page.id}/ai-fill-settings`,
+        method: "POST",
+        payload: {
+          page: {
+            id: page.id,
+            title: values.title,
+            slug: values.slug,
+            status: page.status,
+            description: values.description || null,
+            display_scene: values.display_scene,
+          },
+          pages: pages.map((item) => ({
+            title: item.title,
+            slug: item.slug,
+            status: item.status,
+            description: item.description,
+            display_scene: item.display_scene,
+          })),
+          field_schema: settingsAiFieldSchema,
+          instruction: aiInstruction,
+        },
+      });
+      setAiPatch(data.patch);
+      toast.success("AI 已生成展示配置建议");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "AI 回填失败");
+    } finally {
+      setAiPending(false);
+    }
+  }
+
+  function applyAiSettings() {
+    if (!aiPatch) return;
+
+    setValues((current) => ({
+      ...current,
+      title: typeof aiPatch.title === "string" ? aiPatch.title : current.title,
+      slug: typeof aiPatch.slug === "string" ? normalizeSlug(aiPatch.slug) : current.slug,
+      description: typeof aiPatch.description === "string" ? aiPatch.description : current.description,
+      display_scene: typeof aiPatch.display_scene === "string"
+        ? aiPatch.display_scene as H5MarketingPageDisplayScene
+        : current.display_scene,
+    }));
+    setAiPatch(null);
+    toast.success("AI 建议已回填，请确认后保存");
   }
 
   function submit() {
@@ -403,6 +490,57 @@ function H5PageSettingsButton({ page }: { page: H5MarketingPageRecord }) {
               配置小程序展示场景、排序和活动有效时间，发布页列表会按这里过滤。
             </DialogDescription>
           </DialogHeader>
+          <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="text-sm font-medium">AI 配置回填</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  根据当前活动页和列表上下文生成标题、路径、描述和展示场景建议。
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={aiPending}
+                onClick={() => void generateAiSettings()}
+              >
+                {aiPending ? (
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <Sparkles data-icon="inline-start" />
+                )}
+                生成建议
+              </Button>
+            </div>
+            <Field>
+              <FieldLabel htmlFor={`h5-page-ai-instruction-${page.id}`}>补充要求</FieldLabel>
+              <Textarea
+                id={`h5-page-ai-instruction-${page.id}`}
+                value={aiInstruction}
+                rows={2}
+                placeholder="例如：突出老客户专属、面向首页展示、标题更短"
+                onChange={(event) => setAiInstruction(event.target.value)}
+              />
+            </Field>
+            {aiPatch ? (
+              <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
+                <div className="text-sm font-medium">建议内容</div>
+                {Object.entries(aiPatch).map(([key, value]) => {
+                  const field = settingsAiFieldSchema[key];
+                  return (
+                    <div key={key} className="rounded-md bg-muted/40 px-3 py-2">
+                      <div className="text-xs text-muted-foreground">{field?.label || key}</div>
+                      <div className="mt-1 whitespace-pre-wrap text-sm leading-6">{String(value || "")}</div>
+                    </div>
+                  );
+                })}
+                <Button type="button" size="sm" disabled={aiPending} onClick={applyAiSettings}>
+                  应用回填
+                </Button>
+              </div>
+            ) : null}
+          </div>
           <FieldGroup>
             <Field data-invalid={Boolean(firstIssue?.path[0] === "title")}>
               <FieldLabel htmlFor={`h5-page-title-${page.id}`}>页面标题</FieldLabel>
@@ -498,7 +636,13 @@ function H5PageSettingsButton({ page }: { page: H5MarketingPageRecord }) {
   );
 }
 
-export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
+export function H5PageRowActions({
+  page,
+  pages = [],
+}: {
+  page: H5MarketingPageRecord;
+  pages?: H5MarketingPageRecord[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -531,7 +675,7 @@ export function H5PageRowActions({ page }: { page: H5MarketingPageRecord }) {
             编辑
           </Link>
         </Button>
-        <H5PageSettingsButton page={page} />
+        <H5PageSettingsButton page={page} pages={pages} />
         <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
           <Copy data-icon="inline-start" />
           复制链接

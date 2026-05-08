@@ -189,6 +189,28 @@ export const MarketingPageBlockAiFillSchema = z.object({
   instruction: z.string().trim().max(500, "AI 补充要求不能超过 500 个字符").optional(),
 });
 
+export const MarketingPageSettingsAiFillSchema = z.object({
+  page: z.object({
+    id: z.uuid("无效的营销页 ID").optional(),
+    title: z.string().trim().max(120, "页面标题不能超过 120 个字符").optional(),
+    slug: MarketingPageSlugSchema.optional(),
+    status: z.string().trim().max(40, "页面状态过长").optional(),
+    description: z.string().trim().max(500, "页面描述不能超过 500 个字符").nullable().optional(),
+    display_scene: z.enum(MARKETING_PAGE_DISPLAY_SCENE_VALUES, {
+      message: "无效的展示场景",
+    }).optional(),
+  }).optional(),
+  pages: z.array(z.object({
+    title: z.string().trim().max(120).optional(),
+    slug: MarketingPageSlugSchema.optional(),
+    status: z.string().trim().max(40).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    display_scene: z.enum(MARKETING_PAGE_DISPLAY_SCENE_VALUES).optional(),
+  })).max(30).optional(),
+  field_schema: z.record(z.string(), MarketingPageAiFieldSchema),
+  instruction: z.string().trim().max(500, "AI 补充要求不能超过 500 个字符").optional(),
+});
+
 export const DuplicateMarketingPageSchema = z.object({
   title: z.string().trim().min(1, "页面标题不能为空").max(120, "页面标题不能超过 120 个字符").optional(),
   slug: MarketingPageSlugSchema.optional(),
@@ -250,6 +272,7 @@ export type MarketingPageProjectOptionQuery = z.infer<typeof MarketingPageProjec
 export type PublicMarketingPageListQuery = z.infer<typeof PublicMarketingPageListQuerySchema>;
 export type MarketingPageConfigInput = z.infer<typeof MarketingPageConfigSchema>;
 export type MarketingPageBlockAiFillInput = z.infer<typeof MarketingPageBlockAiFillSchema>;
+export type MarketingPageSettingsAiFillInput = z.infer<typeof MarketingPageSettingsAiFillSchema>;
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;
 export type MarketingLeadListQuery = z.infer<typeof MarketingLeadListQuerySchema>;
 export type UpdateMarketingLeadInput = z.infer<typeof UpdateMarketingLeadSchema>;

@@ -10,6 +10,7 @@ import {
   MarketingPageBlockAiFillSchema,
   MarketingPageListQuerySchema,
   MarketingPageProjectOptionQuerySchema,
+  MarketingPageSettingsAiFillSchema,
   MarketingPageSlugParamsSchema,
   PublicMarketingPageListQuerySchema,
   SaveMarketingPageDraftSchema,
@@ -20,7 +21,10 @@ import {
 } from "@/schema/marketing-pages";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
-import { fillMarketingPageBlockWithAi } from "@/services/marketing-page-ai";
+import {
+  fillMarketingPageBlockWithAi,
+  fillMarketingPageSettingsWithAi,
+} from "@/services/marketing-page-ai";
 import { marketingPageService } from "@/services/marketing-pages";
 import { Delete, Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -193,6 +197,31 @@ class MarketingPagesController extends BaseController {
     }
 
     const data = await fillMarketingPageBlockWithAi({
+      ...bodyResult.data,
+      page: {
+        ...bodyResult.data.page,
+        id: paramsResult.data.id,
+      },
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/marketing-pages/:id/ai-fill-settings")
+  async fillSettingsWithAi(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_page.update");
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = MarketingPageSettingsAiFillSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    if (bodyResult.data.page?.id && bodyResult.data.page.id !== paramsResult.data.id) {
+      throw Errors.badRequest("营销页上下文不匹配");
+    }
+
+    const data = await fillMarketingPageSettingsWithAi({
       ...bodyResult.data,
       page: {
         ...bodyResult.data.page,

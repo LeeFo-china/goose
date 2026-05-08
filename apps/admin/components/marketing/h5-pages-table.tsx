@@ -40,109 +40,113 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-const columns: ColumnDef<H5MarketingPageRecord>[] = [
-  {
-    accessorKey: "title",
-    header: "页面",
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="truncate font-medium">
-          {row.original.title || "未命名 H5 页面"}
+function createColumns(pages: H5MarketingPageRecord[]): ColumnDef<H5MarketingPageRecord>[] {
+  return [
+    {
+      accessorKey: "title",
+      header: "页面",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">
+            {row.original.title || "未命名 H5 页面"}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            /p/{row.original.slug}
+          </div>
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          /p/{row.original.slug}
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={statusVariant[row.original.status] || "outline"}>
+          {statusLabel[row.original.status] || row.original.status}
+        </Badge>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "public_url",
+      header: "访问地址",
+      cell: ({ row }) => {
+        const url = buildPageUrl(row.original.slug);
+        return (
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto max-w-[260px] justify-start truncate p-0 text-muted-foreground"
+            onClick={() => window.open(url, "_blank")}
+          >
+            <ExternalLink data-icon="inline-start" />
+            <span className="truncate">{url}</span>
+          </Button>
+        );
+      },
+    },
+    {
+      accessorKey: "display_scene",
+      header: "小程序展示",
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm">{sceneLabel[row.original.display_scene] || row.original.display_scene}</span>
+          <span className="text-xs text-muted-foreground">排序 {row.original.sort_order ?? 100}</span>
         </div>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "状态",
-    cell: ({ row }) => (
-      <Badge variant={statusVariant[row.original.status] || "outline"}>
-        {statusLabel[row.original.status] || row.original.status}
-      </Badge>
-    ),
-    meta: {
-      cellClassName: "whitespace-nowrap",
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
     },
-  },
-  {
-    id: "public_url",
-    header: "访问地址",
-    cell: ({ row }) => {
-      const url = buildPageUrl(row.original.slug);
-      return (
-        <Button
-          type="button"
-          variant="link"
-          className="h-auto max-w-[260px] justify-start truncate p-0 text-muted-foreground"
-          onClick={() => window.open(url, "_blank")}
-        >
-          <ExternalLink data-icon="inline-start" />
-          <span className="truncate">{url}</span>
-        </Button>
-      );
+    {
+      id: "active_window",
+      header: "展示时间",
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span>开始 {formatDateTime(row.original.start_at)}</span>
+          <span>结束 {formatDateTime(row.original.end_at)}</span>
+        </div>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
     },
-  },
-  {
-    accessorKey: "display_scene",
-    header: "小程序展示",
-    cell: ({ row }) => (
-      <div className="flex flex-col gap-1">
-        <span className="text-sm">{sceneLabel[row.original.display_scene] || row.original.display_scene}</span>
-        <span className="text-xs text-muted-foreground">排序 {row.original.sort_order ?? 100}</span>
-      </div>
-    ),
-    meta: {
-      cellClassName: "whitespace-nowrap",
+    {
+      accessorKey: "published_at",
+      header: "发布时间",
+      cell: ({ row }) => formatDateTime(row.original.published_at),
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
     },
-  },
-  {
-    id: "active_window",
-    header: "展示时间",
-    cell: ({ row }) => (
-      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-        <span>开始 {formatDateTime(row.original.start_at)}</span>
-        <span>结束 {formatDateTime(row.original.end_at)}</span>
-      </div>
-    ),
-    meta: {
-      cellClassName: "whitespace-nowrap",
+    {
+      accessorKey: "updated_at",
+      header: "更新时间",
+      cell: ({ row }) => formatDateTime(row.original.updated_at),
+      meta: {
+        cellClassName: "whitespace-nowrap text-muted-foreground",
+      },
     },
-  },
-  {
-    accessorKey: "published_at",
-    header: "发布时间",
-    cell: ({ row }) => formatDateTime(row.original.published_at),
-    meta: {
-      cellClassName: "whitespace-nowrap text-muted-foreground",
+    {
+      id: "actions",
+      header: "操作",
+      cell: ({ row }) => <H5PageRowActions page={row.original} pages={pages} />,
+      meta: {
+        headerClassName: "text-right",
+        cellClassName: "relative min-w-[500px] whitespace-nowrap text-right",
+      },
     },
-  },
-  {
-    accessorKey: "updated_at",
-    header: "更新时间",
-    cell: ({ row }) => formatDateTime(row.original.updated_at),
-    meta: {
-      cellClassName: "whitespace-nowrap text-muted-foreground",
-    },
-  },
-  {
-    id: "actions",
-    header: "操作",
-    cell: ({ row }) => <H5PageRowActions page={row.original} />,
-    meta: {
-      headerClassName: "text-right",
-      cellClassName: "relative min-w-[500px] whitespace-nowrap text-right",
-    },
-  },
-];
+  ];
+}
 
 export function H5MarketingPagesTable({
   pages,
 }: {
   pages: H5MarketingPageRecord[];
 }) {
+  const columns = createColumns(pages);
+
   return (
     <DataTable
       columns={columns}
