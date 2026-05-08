@@ -4,6 +4,7 @@ import {
   CircuitBoard,
   Link2,
 } from "lucide-react";
+import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
@@ -15,8 +16,8 @@ import {
 } from "@/components/cameras/tencent-device-actions";
 import type {
   CameraProjectOption,
-  CameraRecord,
   CameraDeviceChannel,
+  CameraProjectGroup,
   EzvizDeviceChannel,
   Pagination,
   TencentDeviceChannel,
@@ -31,6 +32,8 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -53,10 +56,6 @@ type ProjectListData = {
   pagination: Pagination;
 };
 
-type CameraListData = {
-  list: CameraRecord[];
-};
-
 type EzvizDeviceListData = {
   list: EzvizDeviceChannel[];
 };
@@ -69,6 +68,20 @@ type TencentDeviceListData = {
 
 type CamerasPageSearchParams = {
   project_id?: string;
+  camera_page?: string;
+  camera_keyword?: string;
+};
+
+type CameraProjectGroupsData = {
+  list: CameraProjectGroup[];
+  pagination: Pagination;
+  summary: {
+    project_count: number;
+    total_camera_count: number;
+    online_count: number;
+    hidden_count: number;
+    tencent_count: number;
+  };
 };
 
 const statusMeta: Record<string, {
@@ -144,20 +157,17 @@ async function getProjects(token: string | null) {
 async function getCameraData(token: string | null, projectId: string) {
   if (!token || !projectId) {
     return {
-      cameras: [] as CameraRecord[],
       devices: [] as CameraDeviceChannel[],
       ezvizDevices: [] as EzvizDeviceChannel[],
       tencentDeviceRecords: [] as TencentDeviceRecord[],
       tencentDevices: [] as TencentDeviceChannel[],
       tencentSipServer: null as TencentSipServerConfig | null,
-      cameraError: null,
       ezvizDeviceError: null,
       tencentDeviceError: null,
     };
   }
 
-  const [cameraResult, ezvizDeviceResult, tencentDeviceResult] = await Promise.allSettled([
-    fetchBackendData<CameraListData>(token, `/projects/${projectId}/cameras`),
+  const [ezvizDeviceResult, tencentDeviceResult] = await Promise.allSettled([
     fetchBackendData<EzvizDeviceListData>(
       token,
       `/projects/${projectId}/cameras/ezviz-devices?only_unbound=false`,
@@ -181,9 +191,6 @@ async function getCameraData(token: string | null, projectId: string) {
     : null;
 
   return {
-    cameras: cameraResult.status === "fulfilled"
-      ? cameraResult.value?.list || []
-      : [],
     devices: [
       ...ezvizDevices.map((device) => ({ ...device, vendor: "ezviz" as const })),
       ...tencentDevices.map((device) => ({
@@ -195,11 +202,6 @@ async function getCameraData(token: string | null, projectId: string) {
     tencentDeviceRecords,
     tencentDevices,
     tencentSipServer,
-    cameraError: cameraResult.status === "rejected"
-      ? cameraResult.reason instanceof Error
-        ? cameraResult.reason.message
-        : "摄像头列表加载失败"
-      : null,
     ezvizDeviceError: ezvizDeviceResult.status === "rejected"
       ? ezvizDeviceResult.reason instanceof Error
         ? ezvizDeviceResult.reason.message
@@ -213,6 +215,76 @@ async function getCameraData(token: string | null, projectId: string) {
   };
 }
 
+async function getCameraProjectGroups(input: {
+  token: string | null;
+  page: number;
+  keyword: string;
+}) {
+  if (!input.token) {
+    return {
+      list: [] as CameraProjectGroup[],
+      pagination: { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      summary: {
+        project_count: 0,
+        total_camera_count: 0,
+        online_count: 0,
+        hidden_count: 0,
+        tencent_count: 0,
+      },
+      error: "缺少登录凭证",
+    };
+  }
+
+  const params = new URLSearchParams({
+    page: String(input.page),
+    pageSize: "5",
+  });
+  if (input.keyword) params.set("keyword", input.keyword);
+
+  try {
+    const data = await fetchBackendData<CameraProjectGroupsData>(
+      input.token,
+      `/project-cameras/projects?${params.toString()}`,
+    );
+    return {
+      list: data?.list || [],
+      pagination: data?.pagination || { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      summary: data?.summary || {
+        project_count: 0,
+        total_camera_count: 0,
+        online_count: 0,
+        hidden_count: 0,
+        tencent_count: 0,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [] as CameraProjectGroup[],
+      pagination: { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      summary: {
+        project_count: 0,
+        total_camera_count: 0,
+        online_count: 0,
+        hidden_count: 0,
+        tencent_count: 0,
+      },
+      error: error instanceof Error ? error.message : "项目摄像头加载失败",
+    };
+  }
+}
+
+function buildCameraPageHref(input: {
+  page: number;
+  keyword: string;
+}) {
+  const params = new URLSearchParams();
+  if (input.page > 1) params.set("camera_page", String(input.page));
+  if (input.keyword) params.set("camera_keyword", input.keyword);
+  const query = params.toString();
+  return query ? `/cameras?${query}` : "/cameras";
+}
+
 export default async function CamerasPage({
   searchParams,
 }: {
@@ -221,28 +293,35 @@ export default async function CamerasPage({
   const params = await searchParams;
   const token = await getAdminToken();
   const { list: projects, error: projectError } = await getProjects(token);
+  const cameraPage = Math.max(Number(params.camera_page || 1) || 1, 1);
+  const cameraKeyword = params.camera_keyword?.trim() || "";
+  const {
+    list: cameraProjectGroups,
+    pagination: cameraProjectPagination,
+    summary: cameraProjectSummary,
+    error: cameraProjectError,
+  } = await getCameraProjectGroups({
+    token,
+    page: cameraPage,
+    keyword: cameraKeyword,
+  });
   const requestedProjectId = params.project_id?.trim() || "";
   const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
     ? requestedProjectId
     : projects[0]?.id || "";
   const {
-    cameras,
     devices,
     ezvizDevices,
     tencentDeviceRecords,
     tencentDevices,
     tencentSipServer,
-    cameraError,
     ezvizDeviceError,
     tencentDeviceError,
   } = await getCameraData(
     token,
     selectedProjectId,
   );
-  const onlineCount = cameras.filter((cameraItem) => cameraItem.status === "online").length;
-  const hiddenCount = cameras.filter((cameraItem) => !cameraItem.can_view).length;
   const unboundDeviceCount = devices.filter((device) => device.can_bind).length;
-  const tencentCameraCount = cameras.filter((cameraItem) => cameraItem.vendor === "tencent_iotvideo_industry").length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -265,8 +344,8 @@ export default async function CamerasPage({
               <Camera />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">当前项目摄像头</div>
-              <div className="text-xl font-semibold">{cameras.length}</div>
+              <div className="text-sm text-muted-foreground">已绑定项目</div>
+              <div className="text-xl font-semibold">{cameraProjectSummary.project_count}</div>
             </div>
           </CardContent>
         </Card>
@@ -288,15 +367,17 @@ export default async function CamerasPage({
             </div>
             <div>
               <div className="text-sm text-muted-foreground">隐藏摄像头</div>
-              <div className="text-xl font-semibold">{hiddenCount}</div>
-              <div className="mt-1 text-xs text-muted-foreground">腾讯云 {tencentCameraCount}</div>
+              <div className="text-xl font-semibold">{cameraProjectSummary.hidden_count}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                总摄像头 {cameraProjectSummary.total_camera_count} · 在线 {cameraProjectSummary.online_count}
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {projectError ? <StatusAlert>{projectError}</StatusAlert> : null}
-      {cameraError ? <StatusAlert>{cameraError}</StatusAlert> : null}
+      {cameraProjectError ? <StatusAlert>{cameraProjectError}</StatusAlert> : null}
       {ezvizDeviceError ? (
         <StatusAlert tone="warning">
           {ezvizDeviceError}。已绑定摄像头仍可管理，新增萤石绑定需要萤石设备列表可用。
@@ -319,28 +400,126 @@ export default async function CamerasPage({
         </Empty>
       ) : null}
 
-      {selectedProjectId ? (
+      {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
         <CamerasWorkspaceTabs
           cameras={(
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                <CardTitle>项目摄像头</CardTitle>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Badge variant="success">在线 {onlineCount}</Badge>
-                  <Badge variant="outline">共 {cameras.length}</Badge>
+            <div className="flex flex-col gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <form className="flex flex-col gap-3 md:flex-row md:items-center" action="/cameras">
+                    <Input
+                      name="camera_keyword"
+                      defaultValue={cameraKeyword}
+                      placeholder="搜索项目、客户、手机号、小区或房号"
+                      className="md:max-w-[360px]"
+                    />
+                    <div className="flex gap-2">
+                      <Button type="submit">搜索</Button>
+                      {cameraKeyword ? (
+                        <Button type="button" variant="outline" asChild>
+                          <Link href="/cameras">清除</Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="text-sm text-muted-foreground md:ml-auto">
+                      每页 {cameraProjectPagination.pageSize} 个项目，共 {cameraProjectPagination.total} 个
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {cameraProjectGroups.map((group) => (
+                <Card key={group.project.id}>
+                  <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <CardTitle className="truncate">
+                        {group.project.address || group.project.name || "未命名项目"}
+                      </CardTitle>
+                      <div className="mt-1 flex flex-wrap gap-2 text-sm text-muted-foreground">
+                        {group.project.customer_name ? <span>{group.project.customer_name}</span> : null}
+                        {group.project.phone_masked ? <span>{group.project.phone_masked}</span> : null}
+                        {group.project.property?.layout ? <span>{group.project.property.layout}</span> : null}
+                        {group.project.property?.area ? <span>{group.project.property.area}㎡</span> : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="success">在线 {group.summary.online_count}</Badge>
+                      <Badge variant="secondary">隐藏 {group.summary.hidden_count}</Badge>
+                      <Badge variant="outline">腾讯云 {group.summary.tencent_count}</Badge>
+                      <Badge variant="outline">共 {group.summary.camera_count}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <CamerasTable
+                      projectId={group.project.id}
+                      cameras={group.cameras}
+                      devices={[]}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+
+              {!cameraProjectGroups.length && !cameraProjectError ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>暂无已绑定摄像头的项目</EmptyTitle>
+                    <EmptyDescription>
+                      点击右上角绑定摄像头，选择房产项目后会出现在这里。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : null}
+
+              {cameraProjectPagination.totalPages > 1 ? (
+                <div className="flex items-center justify-between gap-3 rounded-md border bg-background p-3">
+                  <div className="text-sm text-muted-foreground">
+                    第 {cameraProjectPagination.page} / {cameraProjectPagination.totalPages} 页
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={cameraProjectPagination.page <= 1}
+                      asChild={cameraProjectPagination.page > 1}
+                    >
+                      {cameraProjectPagination.page > 1 ? (
+                        <Link href={buildCameraPageHref({
+                          page: cameraProjectPagination.page - 1,
+                          keyword: cameraKeyword,
+                        })}
+                        >
+                          上一页
+                        </Link>
+                      ) : (
+                        "上一页"
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={cameraProjectPagination.page >= cameraProjectPagination.totalPages}
+                      asChild={cameraProjectPagination.page < cameraProjectPagination.totalPages}
+                    >
+                      {cameraProjectPagination.page < cameraProjectPagination.totalPages ? (
+                        <Link href={buildCameraPageHref({
+                          page: cameraProjectPagination.page + 1,
+                          keyword: cameraKeyword,
+                        })}
+                        >
+                          下一页
+                        </Link>
+                      ) : (
+                        "下一页"
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <CamerasTable
-                  projectId={selectedProjectId}
-                  cameras={cameras}
-                  devices={devices}
-                />
-              </CardContent>
-            </Card>
+              ) : null}
+            </div>
           )}
           devices={(
-            <div className="flex flex-col gap-4">
+            selectedProjectId ? (
+              <div className="flex flex-col gap-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
                   <CardTitle>腾讯云设备与通道</CardTitle>
@@ -445,6 +624,16 @@ export default async function CamerasPage({
                 </CardContent>
               </Card>
             </div>
+            ) : (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyTitle>暂无设备接入上下文</EmptyTitle>
+                  <EmptyDescription>
+                    创建项目后，可以在这里查看并绑定腾讯云或萤石设备通道。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )
           )}
         />
       ) : null}

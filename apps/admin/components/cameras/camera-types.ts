@@ -37,6 +37,17 @@ export type CameraRecord = {
   play_protocol?: "flv" | "rtmp" | "hls" | string;
 };
 
+export type CameraProjectGroup = {
+  project: CameraProjectOption;
+  cameras: CameraRecord[];
+  summary: {
+    camera_count: number;
+    online_count: number;
+    hidden_count: number;
+    tencent_count: number;
+  };
+};
+
 export type TencentSipServerConfig = {
   sip_server_id: string | null;
   sip_domain: string | null;

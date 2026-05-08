@@ -8,6 +8,7 @@ import {
   CreateProjectCameraSchema,
   ProjectCameraBindOptionsQuerySchema,
   ProjectCameraEzvizDevicesQuerySchema,
+  ProjectCameraProjectGroupsQuerySchema,
   ProjectCameraTencentDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
   ProjectCameraParamsSchema,
@@ -36,6 +37,19 @@ class ProjectCameraController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const result = await projectCameraService.listCameraBindProjectOptions({
+      authUserId: request.user?.sub,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/project-cameras/projects")
+  async listCameraProjectGroups(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = ProjectCameraProjectGroupsQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectCameraService.listCameraProjectGroups({
       authUserId: request.user?.sub,
       query: queryResult.data,
     });

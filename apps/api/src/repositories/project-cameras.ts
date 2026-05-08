@@ -4,6 +4,7 @@ import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
   ProjectCameraBindOptionsQueryInput,
+  ProjectCameraProjectGroupsQueryInput,
   ProjectCameraVendor,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
@@ -87,6 +88,15 @@ type ProjectCameraBindProjectRow = {
     layout?: string | null;
     area?: number | null;
   }> | null;
+};
+
+export type ProjectCameraProjectGroupRow = {
+  project: ReturnType<typeof serializeBindProjectOption>;
+  cameras: ProjectCameraRow[];
+};
+
+type ProjectCameraWithProjectRow = ProjectCameraRow & {
+  project?: ProjectCameraBindProjectRow | ProjectCameraBindProjectRow[] | null;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -312,6 +322,119 @@ class ProjectCameraRepository {
         pageSize,
         total: count || 0,
         totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
+  }
+
+  async listCameraProjectGroups(
+    input: ProjectCameraProjectGroupsQueryInput & {
+      visibleProjectIds: string[] | null;
+    },
+  ) {
+    const page = input.page;
+    const pageSize = input.pageSize;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize;
+    const keyword = cleanSearchKeyword(input.keyword).toLowerCase();
+
+    if (Array.isArray(input.visibleProjectIds) && input.visibleProjectIds.length === 0) {
+      return {
+        list: [] as ProjectCameraProjectGroupRow[],
+        pagination: {
+          page,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+        summary: {
+          project_count: 0,
+          total_camera_count: 0,
+          online_count: 0,
+          hidden_count: 0,
+          tencent_count: 0,
+        },
+      };
+    }
+
+    let query = this.adminClient
+      .from("project_cameras")
+      .select(`
+        *,
+        project:projects!project_cameras_project_id_fkey(
+          id,
+          name,
+          status,
+          address,
+          customer_id,
+          property_id,
+          customer:customers!projects_customer_id_fkey(id, name, phone),
+          property:properties!projects_property_id_fkey(id, community, building_info, layout, area)
+        )
+      `)
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false });
+
+    if (input.visibleProjectIds) {
+      query = query.in("project_id", input.visibleProjectIds);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询项目摄像头分组失败", error);
+    }
+
+    const groupMap = new Map<string, ProjectCameraProjectGroupRow>();
+
+    for (const row of (data || []) as ProjectCameraWithProjectRow[]) {
+      const project = firstRelation(row.project);
+      if (!project?.id) continue;
+
+      const projectOption = serializeBindProjectOption(project);
+      const searchable = [
+        projectOption.label,
+        projectOption.name,
+        projectOption.customer_name,
+        projectOption.phone_masked,
+        projectOption.address,
+        projectOption.property?.community,
+        projectOption.property?.building_info,
+        projectOption.property?.layout,
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      if (keyword && !searchable.includes(keyword)) continue;
+
+      const existing = groupMap.get(project.id);
+      if (existing) {
+        existing.cameras.push(row);
+      } else {
+        groupMap.set(project.id, {
+          project: projectOption,
+          cameras: [row],
+        });
+      }
+    }
+
+    const groups = Array.from(groupMap.values());
+    const allCameras = groups.flatMap((group) => group.cameras);
+    const pageGroups = groups.slice(from, to);
+
+    return {
+      list: pageGroups,
+      pagination: {
+        page,
+        pageSize,
+        total: groups.length,
+        totalPages: groups.length ? Math.ceil(groups.length / pageSize) : 0,
+      },
+      summary: {
+        project_count: groups.length,
+        total_camera_count: allCameras.length,
+        online_count: allCameras.filter((camera) => camera.status === "online").length,
+        hidden_count: allCameras.filter((camera) => !camera.can_view).length,
+        tencent_count: allCameras.filter((camera) =>
+          camera.vendor === "tencent_iotvideo_industry"
+        ).length,
       },
     };
   }

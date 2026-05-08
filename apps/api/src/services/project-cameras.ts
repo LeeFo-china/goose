@@ -19,6 +19,7 @@ import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
   ProjectCameraBindOptionsQueryInput,
+  ProjectCameraProjectGroupsQueryInput,
   CreateProjectCameraTencentDeviceInput,
   UpdateProjectCameraTencentDevicePasswordInput,
   UpdateProjectCameraInput,
@@ -455,6 +456,66 @@ class ProjectCameraService {
       ...input.query,
       visibleProjectIds,
     });
+  }
+
+  async listCameraProjectGroups(input: {
+    authUserId?: string | null;
+    query: ProjectCameraProjectGroupsQueryInput;
+  }) {
+    if (!input.authUserId) {
+      throw Errors.unauthorized("缺少登录凭证");
+    }
+
+    const authContext = await authorizationService.getRequiredAuthContext(
+      input.authUserId,
+    );
+    if (!authContext.employeeId) {
+      throw Errors.business(
+        403,
+        "无权查看项目摄像头",
+        ErrorCodes.CAMERA_ACCESS_DENIED,
+      );
+    }
+
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      authContext,
+      "project.read",
+    );
+    const result = await projectCameraRepository.listCameraProjectGroups({
+      ...input.query,
+      visibleProjectIds,
+    });
+    const enrichedCameras = await this.enrichTencentCameraStatuses(
+      result.list.flatMap((group) => group.cameras),
+    );
+    const cameraMap = new Map(
+      enrichedCameras.map((camera) => [camera.id, camera]),
+    );
+
+    return {
+      list: result.list.map((group) => {
+        const cameras = group.cameras.map((camera) =>
+          cameraMap.get(camera.id) || camera
+        );
+
+        return {
+          project: group.project,
+          cameras: cameras.map(serializeCamera),
+          summary: {
+            camera_count: cameras.length,
+            online_count: cameras.filter((camera) =>
+              normalizeCameraStatus(camera.status) === "online"
+            ).length,
+            hidden_count: cameras.filter((camera) => !camera.can_view).length,
+            tencent_count: cameras.filter((camera) =>
+              camera.vendor === "tencent_iotvideo_industry"
+            ).length,
+          },
+        };
+      }),
+      pagination: result.pagination,
+      summary: result.summary,
+    };
   }
 
   async listEzvizDeviceChannels(input: {
