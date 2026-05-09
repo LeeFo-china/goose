@@ -514,6 +514,7 @@ class ProjectAcceptanceService {
   }
 
   private async sendAcceptanceCustomerSms(input: {
+    tenantId: string | null;
     phone: string;
     stageName: string;
     link: string;
@@ -538,6 +539,7 @@ class ProjectAcceptanceService {
         link: input.link,
         expireHours: input.expireHours,
       },
+      tenantId: input.tenantId,
     });
   }
 
@@ -593,6 +595,7 @@ class ProjectAcceptanceService {
 
     try {
       await this.sendAcceptanceCustomerSms({
+        tenantId: input.row.tenant_id,
         phone: customer.phone!,
         stageName: this.getStageLabel(input.row.stage_code) || input.row.title,
         link,

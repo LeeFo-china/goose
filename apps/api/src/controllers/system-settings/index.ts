@@ -21,7 +21,7 @@ class SystemSettingsController extends BaseController {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
     accessPolicyService.assertPermission(authContext, "system.settings.read");
 
-    const data = await systemSettingsService.listSettings();
+    const data = await systemSettingsService.listSettings(authContext);
     return ResponseHandler.success(data);
   }
 

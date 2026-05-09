@@ -71,9 +71,15 @@ async function getAliyunSmsClient() {
   return aliyunSmsClient;
 }
 
-async function sendAliyunSmsCode(phone: string, code: string, scene: SmsScene) {
+async function sendAliyunSmsCode(
+  phone: string,
+  code: string,
+  scene: SmsScene,
+  tenantId?: string | null,
+) {
   const client = await getAliyunSmsClient();
-  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME") ||
+  const options = tenantId ? { tenantId } : undefined;
+  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME", "", options) ||
     await requireSmsConfig("ALIYUN_SMS_SIGN_NAME");
   const templateCode = await getAliyunTemplateCode(scene);
 
@@ -118,9 +124,11 @@ async function sendAliyunSmsTemplate(input: {
   phone: string;
   templateCode: string;
   templateParam: Record<string, string | number>;
+  tenantId?: string | null;
 }) {
   const client = await getAliyunSmsClient();
-  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME") ||
+  const options = input.tenantId ? { tenantId: input.tenantId } : undefined;
+  const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME", "", options) ||
     await requireSmsConfig("ALIYUN_SMS_SIGN_NAME");
 
   const request = new SendSmsRequest({
@@ -164,6 +172,7 @@ export async function sendSmsCode(
   phone: string,
   code: string,
   scene: SmsScene,
+  options?: { tenantId?: string | null },
 ): Promise<void> {
   const provider = await getSmsProvider();
 
@@ -176,7 +185,7 @@ export async function sendSmsCode(
   }
 
   if (provider === "aliyun") {
-    await sendAliyunSmsCode(phone, code, scene);
+    await sendAliyunSmsCode(phone, code, scene, options?.tenantId);
   }
 }
 
@@ -184,6 +193,7 @@ export async function sendSmsTemplate(input: {
   phone: string;
   templateCode: string;
   templateParam: Record<string, string | number>;
+  tenantId?: string | null;
 }): Promise<void> {
   const provider = await getSmsProvider();
 

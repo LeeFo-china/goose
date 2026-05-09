@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import { systemSettingRepository, type SystemSettingRecord } from "@/repositories/system-settings";
+import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
 type SettingDefinition = {
@@ -15,12 +16,15 @@ type SettingDefinition = {
 };
 
 type SettingSource = "database" | "env" | "default" | "empty";
+type SettingScope = "platform" | "tenant";
 
 type EffectiveSetting = SystemSettingRecord & {
   effective_value: string | null;
   stored_value: string | null;
   source: SettingSource;
   is_configured: boolean;
+  effective_scope: SettingScope;
+  can_override_by_tenant: boolean;
 };
 
 const CACHE_TTL_MS = 30 * 1000;
@@ -639,6 +643,10 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
 
 const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
 
+const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
+  "ALIYUN_SMS_SIGN_NAME",
+]);
+
 function normalizeStoredValue(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -782,20 +790,100 @@ class SystemSettingsService {
     this.cache = null;
   }
 
-  private toEffective(record: SystemSettingRecord): EffectiveSetting {
-    const effective = resolveEffectiveValue(record);
+  private isTenantOverridable(key: string) {
+    return TENANT_OVERRIDABLE_SETTING_KEYS.has(key);
+  }
+
+  private getPlatformRecord(records: SystemSettingRecord[], key: string) {
+    return records.find((item) => item.key === key && !item.tenant_id) || null;
+  }
+
+  private getTenantRecord(records: SystemSettingRecord[], key: string, tenantId?: string | null) {
+    if (!tenantId || !this.isTenantOverridable(key)) {
+      return null;
+    }
+
+    return records.find((item) => item.key === key && item.tenant_id === tenantId) || null;
+  }
+
+  private resolveEffectiveRecord(input: {
+    key: string;
+    tenantId?: string | null;
+    records: SystemSettingRecord[];
+  }) {
+    const tenantRecord = this.getTenantRecord(input.records, input.key, input.tenantId);
+    if (tenantRecord) {
+      const tenantEffective = resolveEffectiveValue(tenantRecord);
+      if (tenantEffective.value) {
+        return {
+          record: tenantRecord,
+          effective: tenantEffective,
+          effectiveScope: "tenant" as const,
+        };
+      }
+    }
+
+    const platformRecord = this.getPlatformRecord(input.records, input.key);
+    if (platformRecord) {
+      return {
+        record: platformRecord,
+        effective: resolveEffectiveValue(platformRecord),
+        effectiveScope: "platform" as const,
+      };
+    }
+
+    const definition = definitionByKey.get(input.key);
+    const fallbackValue = readEnvValue(definition?.envNames || [input.key])
+      || definition?.defaultValue
+      || null;
+    return {
+      record: null,
+      effective: {
+        value: fallbackValue,
+        source: fallbackValue
+          ? readEnvValue(definition?.envNames || [input.key])
+            ? "env" as const
+            : "default" as const
+          : "empty" as const,
+      },
+      effectiveScope: "platform" as const,
+    };
+  }
+
+  private toEffective(
+    record: SystemSettingRecord,
+    options?: {
+      effective?: ReturnType<typeof resolveEffectiveValue>;
+      effectiveScope?: SettingScope;
+    },
+  ): EffectiveSetting {
+    const effective = options?.effective || resolveEffectiveValue(record);
     return {
       ...record,
       stored_value: record.is_secret && record.value_text ? "******" : record.value_text,
       effective_value: record.is_secret && effective.value ? "******" : effective.value,
       source: effective.source,
       is_configured: effective.source !== "empty",
+      effective_scope: options?.effectiveScope || (record.tenant_id ? "tenant" : "platform"),
+      can_override_by_tenant: this.isTenantOverridable(record.key),
     };
   }
 
-  async listSettings() {
+  async listSettings(authContext?: AuthContext) {
     const records = await this.listRecords();
-    const list = records.map((record) => this.toEffective(record));
+    const tenantId = authContext?.isPlatformAdmin ? null : authContext?.tenantId || null;
+    const platformRecords = records.filter((record) => !record.tenant_id);
+    const list = platformRecords.map((platformRecord) => {
+      const resolved = this.resolveEffectiveRecord({
+        key: platformRecord.key,
+        tenantId,
+        records,
+      });
+      return this.toEffective(resolved.record || platformRecord, {
+        effective: resolved.effective,
+        effectiveScope: resolved.effectiveScope,
+      });
+    });
 
     const groups = list.reduce<Record<string, EffectiveSetting[]>>((result, item) => {
       const group = result[item.group_code] || [];
@@ -808,33 +896,72 @@ class SystemSettingsService {
   }
 
   async updateSetting(authContext: AuthContext, key: string, value: string | null) {
-    const record = await systemSettingRepository.findByKey(key);
+    const tenantId = authContext.isPlatformAdmin
+      ? null
+      : accessPolicyService.assertTenantId(authContext);
+    if (tenantId && !this.isTenantOverridable(key)) {
+      throw Errors.business(
+        403,
+        "该配置为平台级配置，不支持租户覆盖",
+        "SYSTEM_SETTING_PLATFORM_ONLY",
+      );
+    }
+
+    const platformRecord = await systemSettingRepository.findByKey(key, null);
+    const record = tenantId
+      ? await systemSettingRepository.findByKey(key, tenantId) || platformRecord
+      : platformRecord;
     if (!record) {
       throw Errors.notFound("系统配置不存在");
     }
     const normalizedValue = normalizeStoredValue(value);
     const validatedValue = validateSettingValue(record, normalizedValue);
-    const updated = await systemSettingRepository.updateValue({
-      key,
-      valueText: record.is_secret && validatedValue
-        ? encryptSecretValue(validatedValue)
-        : validatedValue,
-      employeeId: authContext.employeeId,
-    });
+    const valueText = record.is_secret && validatedValue
+      ? encryptSecretValue(validatedValue)
+      : validatedValue;
+    const existingExact = await systemSettingRepository.findByKey(key, tenantId);
+    const updated = existingExact
+      ? await systemSettingRepository.updateValue({
+        key,
+        tenantId,
+        valueText,
+        employeeId: authContext.employeeId,
+      })
+      : await systemSettingRepository.createValue({
+        key,
+        tenantId,
+        groupCode: record.group_code,
+        name: record.name,
+        description: record.description,
+        valueType: record.value_type,
+        valueText,
+        isSecret: record.is_secret,
+        status: record.status,
+        employeeId: authContext.employeeId,
+      });
     this.clearCache();
 
     return this.toEffective(updated);
   }
 
-  async getString(key: string, fallbackValue = "") {
+  async getString(
+    key: string,
+    fallbackValue = "",
+    options?: { tenantId?: string | null },
+  ) {
     const records = await this.listRecords();
-    const record = records.find((item) => item.key === key);
+    const resolved = this.resolveEffectiveRecord({
+      key,
+      tenantId: options?.tenantId,
+      records,
+    });
+    const record = resolved.record;
     if (!record) {
       const definition = definitionByKey.get(key);
       return readEnvValue(definition?.envNames || [key]) || definition?.defaultValue || fallbackValue;
     }
 
-    const effective = resolveEffectiveValue(record);
+    const effective = resolved.effective;
     if (record.is_secret && effective.source === "database" && effective.value) {
       return decryptSecretValue(effective.value) || fallbackValue;
     }
@@ -842,18 +969,30 @@ class SystemSettingsService {
     return effective.value || fallbackValue;
   }
 
-  async getSecretString(key: string, fallbackValue = "") {
-    return this.getString(key, fallbackValue);
+  async getSecretString(
+    key: string,
+    fallbackValue = "",
+    options?: { tenantId?: string | null },
+  ) {
+    return this.getString(key, fallbackValue, options);
   }
 
-  async getNumber(key: string, fallbackValue: number) {
-    const value = await this.getString(key, String(fallbackValue));
+  async getNumber(
+    key: string,
+    fallbackValue: number,
+    options?: { tenantId?: string | null },
+  ) {
+    const value = await this.getString(key, String(fallbackValue), options);
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallbackValue;
   }
 
-  async getBoolean(key: string, fallbackValue: boolean) {
-    const value = (await this.getString(key, String(fallbackValue))).toLowerCase();
+  async getBoolean(
+    key: string,
+    fallbackValue: boolean,
+    options?: { tenantId?: string | null },
+  ) {
+    const value = (await this.getString(key, String(fallbackValue), options)).toLowerCase();
     if (value === "true") return true;
     if (value === "false") return false;
     return fallbackValue;
