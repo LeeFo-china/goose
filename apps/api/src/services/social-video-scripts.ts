@@ -6,6 +6,7 @@ import {
 import { socialVideoTranscriptionRepository } from "@/repositories/social-video-transcriptions";
 import type {
   CreateSocialVideoScriptInput,
+  ListSocialVideoScriptsQuery,
   SocialVideoScriptGoal,
   SocialVideoScriptStyle,
   SocialVideoScriptTargetPlatform,
@@ -476,6 +477,12 @@ class SocialVideoScriptService {
       || accessPolicyService.hasPermission(authContext, "social_video_transcription.manage");
   }
 
+  private assertCanManage(authContext: AuthContext) {
+    if (!this.canManage(authContext)) {
+      throw Errors.forbidden();
+    }
+  }
+
   private assertCanUseTranscription(
     authContext: AuthContext,
     transcription: { created_by_auth_user_id: string | null },
@@ -596,15 +603,17 @@ class SocialVideoScriptService {
     }
 
     const normalizedInput = this.normalizeScriptInput(input);
-    const cached = await this.findCached({
-      transcriptionId,
-      targetPlatform: normalizedInput.targetPlatform,
-      style: normalizedInput.style,
-      durationSeconds: normalizedInput.durationSeconds,
-      goal: normalizedInput.goal,
-    });
-    if (cached) {
-      return serializeScript(cached, true);
+    if (!input.regenerate) {
+      const cached = await this.findCached({
+        transcriptionId,
+        targetPlatform: normalizedInput.targetPlatform,
+        style: normalizedInput.style,
+        durationSeconds: normalizedInput.durationSeconds,
+        goal: normalizedInput.goal,
+      });
+      if (cached) {
+        return serializeScript(cached, true);
+      }
     }
 
     await this.assertDailyLimit(authContext.authUserId);
@@ -646,6 +655,61 @@ class SocialVideoScriptService {
     });
 
     return serializeScript(record);
+  }
+
+  async listScripts(
+    transcriptionId: string,
+    query: ListSocialVideoScriptsQuery,
+    authContext: AuthContext,
+  ) {
+    const transcription = await socialVideoTranscriptionRepository.findById(transcriptionId);
+    if (!transcription) {
+      throw Errors.business(
+        404,
+        "转写任务不存在",
+        "SOCIAL_VIDEO_TRANSCRIPTION_NOT_FOUND",
+      );
+    }
+
+    this.assertCanUseTranscription(authContext, transcription);
+
+    const result = await socialVideoScriptRepository.listByTranscription({
+      transcriptionId,
+      page: query.page,
+      pageSize: query.pageSize,
+      targetPlatform: query.target_platform,
+      style: query.style,
+      status: query.status,
+    });
+
+    return {
+      items: result.items.map((item) => serializeScript(item)),
+      total: result.total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  async listAdminScripts(
+    query: ListSocialVideoScriptsQuery,
+    authContext: AuthContext,
+  ) {
+    this.assertCanManage(authContext);
+
+    const result = await socialVideoScriptRepository.listAll({
+      page: query.page,
+      pageSize: query.pageSize,
+      targetPlatform: query.target_platform,
+      style: query.style,
+      status: query.status,
+    });
+
+    return {
+      items: result.items.map((item) => serializeScript(item)),
+      total: result.total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
 }
 

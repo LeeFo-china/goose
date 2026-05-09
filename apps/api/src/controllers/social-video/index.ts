@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   CreateSocialVideoScriptSchema,
   CreateSocialVideoTranscriptionSchema,
+  ListSocialVideoScriptsQuerySchema,
   SocialVideoTranscriptionIdParamsSchema,
   TestSocialVideoTranscriptionSchema,
 } from "@/schema/social-video";
@@ -74,6 +75,24 @@ class SocialVideoController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/social-video/transcriptions/:id/scripts")
+  async listScripts(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+
+    const paramsResult = SocialVideoTranscriptionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = ListSocialVideoScriptsQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await socialVideoScriptService.listScripts(
+      paramsResult.data.id,
+      queryResult.data,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/admin/social-video/transcriptions/test")
   async testApifyTranscription(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
@@ -83,6 +102,20 @@ class SocialVideoController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await socialVideoTranscriptionService.testApify(bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/social-video/scripts")
+  async listAdminScripts(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+
+    const queryResult = ListSocialVideoScriptsQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await socialVideoScriptService.listAdminScripts(
+      queryResult.data,
+      authContext,
+    );
     return ResponseHandler.success(data);
   }
 }

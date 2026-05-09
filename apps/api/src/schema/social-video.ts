@@ -61,6 +61,15 @@ export const CreateSocialVideoScriptSchema = z.object({
     .optional()
     .default(60),
   goal: SocialVideoScriptGoalSchema.optional().default("lead_generation"),
+  regenerate: z.boolean().optional().default(false),
+});
+
+export const ListSocialVideoScriptsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).optional().default(20),
+  target_platform: SocialVideoScriptTargetPlatformSchema.optional(),
+  style: SocialVideoScriptStyleSchema.optional(),
+  status: z.enum(["completed", "failed"]).optional(),
 });
 
 export type CreateSocialVideoTranscriptionInput = z.infer<
@@ -71,6 +80,9 @@ export type TestSocialVideoTranscriptionInput = z.infer<
 >;
 export type CreateSocialVideoScriptInput = z.infer<
   typeof CreateSocialVideoScriptSchema
+>;
+export type ListSocialVideoScriptsQuery = z.infer<
+  typeof ListSocialVideoScriptsQuerySchema
 >;
 export type SocialVideoScriptStyle = z.infer<typeof SocialVideoScriptStyleSchema>;
 export type SocialVideoScriptGoal = z.infer<typeof SocialVideoScriptGoalSchema>;

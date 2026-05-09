@@ -347,6 +347,50 @@ style=xiaohongshu      -> target_platform=xiaohongshu, style=seeding
 
 同一个 `transcription_id + target_platform + style + duration_seconds + goal` 在缓存时间内会直接返回最近成功结果，`cached=true`。小程序不需要直接调用 AI，也不需要传转写长文本。
 
+如果需要绕过缓存重新生成，可在请求体增加：
+
+```json
+{
+  "regenerate": true
+}
+```
+
+`regenerate=true` 会重新请求 AI，并计入每日生成次数。
+
+### 6.1 历史脚本列表
+
+转写任务完成后，小程序可以查询历史生成结果：
+
+```http
+GET /social-video/transcriptions/:id/scripts?page=1&pageSize=20
+```
+
+支持按平台筛选：
+
+```http
+GET /social-video/transcriptions/:id/scripts?target_platform=douyin&page=1&pageSize=20
+```
+
+返回结构：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [],
+    "total": 0,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+详细对接说明见：
+
+```text
+docs/2026-05-09-miniprogram-social-video-script-history-regenerate-integration.md
+```
+
 ## 7. 安全要求
 
 - 小程序端不要保存 Apify Token。

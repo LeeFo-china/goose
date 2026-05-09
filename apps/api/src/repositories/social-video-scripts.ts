@@ -132,6 +132,84 @@ class SocialVideoScriptRepository {
     return (data || null) as SocialVideoScriptRecord | null;
   }
 
+  async listByTranscription(input: {
+    transcriptionId: string;
+    page: number;
+    pageSize: number;
+    targetPlatform?: SocialVideoScriptTargetPlatform;
+    style?: SocialVideoScriptStyle;
+    status?: "completed" | "failed";
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    let query = this.table()
+      .select("*", { count: "exact" })
+      .eq("transcription_id", input.transcriptionId)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.targetPlatform) {
+      query = query.eq("target_platform", input.targetPlatform);
+    }
+
+    if (input.style) {
+      query = query.eq("style", input.style);
+    }
+
+    if (input.status) {
+      query = query.eq("status", input.status);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询短视频脚本历史失败", error);
+    }
+
+    return {
+      items: (data || []) as SocialVideoScriptRecord[],
+      total: count || 0,
+    };
+  }
+
+  async listAll(input: {
+    page: number;
+    pageSize: number;
+    targetPlatform?: SocialVideoScriptTargetPlatform;
+    style?: SocialVideoScriptStyle;
+    status?: "completed" | "failed";
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    let query = this.table()
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.targetPlatform) {
+      query = query.eq("target_platform", input.targetPlatform);
+    }
+
+    if (input.style) {
+      query = query.eq("style", input.style);
+    }
+
+    if (input.status) {
+      query = query.eq("status", input.status);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询短视频脚本列表失败", error);
+    }
+
+    return {
+      items: (data || []) as SocialVideoScriptRecord[],
+      total: count || 0,
+    };
+  }
+
   async countCreatedByUserSince(input: {
     userId: string;
     since: string;
