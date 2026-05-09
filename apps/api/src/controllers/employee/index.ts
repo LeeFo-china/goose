@@ -99,12 +99,17 @@ class EmployeeController extends BaseController<
 
   private applyEmployeeListFilters(
     query: any,
+    tenantId: string | null,
     scope: "self" | "department" | "assigned" | "all" | null,
     authContext: Awaited<ReturnType<EmployeeController["getRequiredAuthContext"]>>,
     status?: string,
     keyword?: string,
   ) {
     let filteredQuery = this.applyEmployeeScope(query, scope, authContext);
+
+    if (tenantId) {
+      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       filteredQuery = filteredQuery.eq("status", status);
@@ -143,6 +148,7 @@ class EmployeeController extends BaseController<
       .select("id", { count: "exact", head: true });
     countQuery = this.applyEmployeeListFilters(
       countQuery,
+      authContext.tenantId,
       scope,
       authContext,
       status,
@@ -166,6 +172,7 @@ class EmployeeController extends BaseController<
       .order("created_at", { ascending: false });
     query = this.applyEmployeeListFilters(
       query,
+      authContext.tenantId,
       scope,
       authContext,
       status,
@@ -199,7 +206,10 @@ class EmployeeController extends BaseController<
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .insert(result.data)
+      .insert({
+        ...result.data,
+        tenant_id: authContext.tenantId ?? null,
+      })
       .select()
       .single();
 
@@ -216,8 +226,9 @@ class EmployeeController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("id, department_id, post_id")
+      .select("id, department_id, post_id, tenant_id")
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (existing.error) throw Errors.dbError("查询失败", existing.error);
@@ -247,6 +258,7 @@ class EmployeeController extends BaseController<
       .from(this.tableName)
       .update(result.data)
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .select()
       .single();
 
@@ -264,8 +276,9 @@ class EmployeeController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("id, user_id, department_id")
+      .select("id, user_id, department_id, tenant_id")
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (existing.error) throw Errors.dbError("查询失败", existing.error);
@@ -282,6 +295,7 @@ class EmployeeController extends BaseController<
         user_id: null,
       })
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .select()
       .single();
 
@@ -343,6 +357,9 @@ class EmployeeController extends BaseController<
       `);
 
     query = this.applyEmployeeScope(query, scope, authContext);
+    if (authContext.tenantId) {
+      query = query.eq("tenant_id", authContext.tenantId);
+    }
 
     const { data, error } = await query;
 
@@ -379,6 +396,7 @@ class EmployeeController extends BaseController<
         )
       `)
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .single();
 
     // 3. 错误处理
@@ -431,6 +449,9 @@ class EmployeeController extends BaseController<
       `);
 
     query = this.applyEmployeeScope(query, scope, authContext);
+    if (authContext.tenantId) {
+      query = query.eq("tenant_id", authContext.tenantId);
+    }
 
     const { data, error } = await query;
 
@@ -446,12 +467,14 @@ class EmployeeController extends BaseController<
     let { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
       .select()
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (!data && !error) {
       const fallback = await SupabaseDB.getAdminClient().from(this.tableName)
         .select()
         .eq("user_id", idVerify.data.id)
+        .eq("tenant_id", authContext.tenantId)
         .maybeSingle();
       data = fallback.data;
       error = fallback.error;

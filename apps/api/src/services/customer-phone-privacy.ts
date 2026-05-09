@@ -15,6 +15,7 @@ export type CustomerPhoneAction = "reveal" | "call" | "copy";
 export type CustomerPhoneTarget = {
   id: string;
   owner_id: string | null;
+  tenant_id?: string | null;
   phone?: string | null;
 };
 
@@ -83,6 +84,7 @@ class CustomerPhonePrivacyService {
       needsDepartmentScope && authContext.departmentId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
           authContext.departmentId,
+          authContext.tenantId,
         )
         : [];
 
@@ -189,8 +191,9 @@ class CustomerPhonePrivacyService {
   }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id, phone")
+      .select("id, owner_id, tenant_id, phone")
       .eq("id", input.customerId)
+      .eq("tenant_id", input.authContext.tenantId)
       .maybeSingle();
 
     if (error) {

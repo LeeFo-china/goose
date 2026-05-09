@@ -513,11 +513,17 @@ class PermissionRepository {
       .filter((item): item is { id: string; user_id: string | null } => Boolean(item));
   }
 
-  async listEmployeeIdsByDepartmentId(departmentId: string) {
-    const { data, error } = await this.adminClient
+  async listEmployeeIdsByDepartmentId(departmentId: string, tenantId?: string | null) {
+    let query = this.adminClient
       .from("employees")
       .select("id")
       .eq("department_id", departmentId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询部门员工失败", error);
@@ -530,11 +536,18 @@ class PermissionRepository {
     scope: "self" | "department" | "assigned" | "all";
     employeeId: string;
     departmentId: string | null;
+    tenantId?: string | null;
   }) {
     if (params.scope === "all") {
-      const { data, error } = await this.adminClient
+      let query = this.adminClient
         .from("projects")
         .select("id");
+
+      if (params.tenantId) {
+        query = query.eq("tenant_id", params.tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         throw Errors.dbError("查询项目权限范围失败", error);
@@ -545,7 +558,10 @@ class PermissionRepository {
 
     let employeeIds = [params.employeeId];
     if (params.scope === "department" && params.departmentId) {
-      employeeIds = await this.listEmployeeIdsByDepartmentId(params.departmentId);
+      employeeIds = await this.listEmployeeIdsByDepartmentId(
+        params.departmentId,
+        params.tenantId,
+      );
     }
 
     const visibleIds = employeeIds.filter(Boolean);
@@ -553,16 +569,23 @@ class PermissionRepository {
       return [] as string[];
     }
 
-    const [memberResult, customerResult] = await Promise.all([
-      this.adminClient
+    let memberQuery = this.adminClient
         .from("project_members")
         .select("project_id")
         .in("employee_id", visibleIds)
-        .is("deleted_at", null),
-      this.adminClient
+        .is("deleted_at", null);
+    let customerQuery = this.adminClient
         .from("customers")
         .select("id")
-        .in("owner_id", visibleIds),
+        .in("owner_id", visibleIds);
+
+    if (params.tenantId) {
+      customerQuery = customerQuery.eq("tenant_id", params.tenantId);
+    }
+
+    const [memberResult, customerResult] = await Promise.all([
+      memberQuery,
+      customerQuery,
     ]);
 
     if (memberResult.error) {
@@ -584,10 +607,16 @@ class PermissionRepository {
       .filter(Boolean);
 
     if (customerIds.length > 0) {
-      const { data, error } = await this.adminClient
+      let projectQuery = this.adminClient
         .from("projects")
         .select("id")
         .in("customer_id", customerIds);
+
+      if (params.tenantId) {
+        projectQuery = projectQuery.eq("tenant_id", params.tenantId);
+      }
+
+      const { data, error } = await projectQuery;
 
       if (error) {
         throw Errors.dbError("查询项目权限范围失败", error);
@@ -600,7 +629,36 @@ class PermissionRepository {
       });
     }
 
-    return [...projectIdSet];
+    const scopedProjectIds = [...projectIdSet];
+    if (params.tenantId && scopedProjectIds.length > 0) {
+      const { data, error } = await this.adminClient
+        .from("projects")
+        .select("id")
+        .in("id", scopedProjectIds)
+        .eq("tenant_id", params.tenantId);
+
+      if (error) {
+        throw Errors.dbError("查询项目权限范围失败", error);
+      }
+
+      return ((data || []) as Array<{ id: string }>).map((item) => item.id);
+    }
+
+    return scopedProjectIds;
+  }
+
+  async findProjectTenantById(projectId: string) {
+    const { data, error } = await this.adminClient
+      .from("projects")
+      .select("id, tenant_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目权限范围失败", error);
+    }
+
+    return data as { id: string; tenant_id: string | null } | null;
   }
 
   async listRolePermissions(roleIds: string[]) {

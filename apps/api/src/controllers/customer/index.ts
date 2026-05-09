@@ -333,13 +333,19 @@ class CustomerController extends BaseController<
 
   private async getAssignableTargetEmployee(
     ownerId: string,
+    tenantId: string | null,
   ) {
-    const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
+    let query = SupabaseDB
       .getAdminClient()
       .from("employees")
-      .select("id, name, department_id, status")
-      .eq("id", ownerId)
-      .maybeSingle();
+      .select("id, name, department_id, status, tenant_id")
+      .eq("id", ownerId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data: targetEmployee, error: targetEmployeeError } = await query.maybeSingle();
 
     if (targetEmployeeError) {
       throw Errors.dbError("查询目标负责人失败", targetEmployeeError);
@@ -348,14 +354,18 @@ class CustomerController extends BaseController<
     return targetEmployee;
   }
 
-  private async getPrimaryCustomerPropertySummary(customerId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async getPrimaryCustomerPropertySummary(customerId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect)
       .eq("customer_id", customerId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询客户主房产失败", error);
@@ -389,16 +399,22 @@ class CustomerController extends BaseController<
     };
   }
 
-  private async getCustomerPropertySummaryMap(customerIds: string[]) {
+  private async getCustomerPropertySummaryMap(customerIds: string[], tenantId?: string | null) {
     if (customerIds.length === 0) {
       return new Map<string, PrimaryPropertySummary[]>();
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect + ", customer_id")
       .in("customer_id", customerIds)
       .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询客户房产摘要失败", error);
@@ -460,14 +476,20 @@ class CustomerController extends BaseController<
   }
 
   private async getRequiredCustomerRecord(
+    authContext: Awaited<ReturnType<CustomerController["getRequiredAuthContext"]>>,
     customerId: string,
     message = "客户不存在",
   ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id, property_id")
-      .eq("id", customerId)
-      .maybeSingle();
+      .select("id, owner_id, property_id, tenant_id")
+      .eq("id", customerId);
+
+    if (authContext.tenantId) {
+      query = query.eq("tenant_id", authContext.tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询客户失败", error);
@@ -481,18 +503,25 @@ class CustomerController extends BaseController<
       id: string;
       owner_id: string | null;
       property_id: string | null;
+      tenant_id: string | null;
     };
   }
 
   private async getRequiredCustomerPropertyRecord(
     customerId: string,
     propertyId: string,
+    tenantId?: string | null,
   ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect + ", customer_id")
-      .eq("id", propertyId)
-      .maybeSingle();
+      .eq("id", propertyId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询房产失败", error);
@@ -513,12 +542,18 @@ class CustomerController extends BaseController<
     return (data as unknown) as PrimaryPropertySummary & { customer_id: string | null };
   }
 
-  private async getCustomerPropertySummaries(customerId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async getCustomerPropertySummaries(customerId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect)
       .eq("customer_id", customerId)
       .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询客户房产摘要失败", error);
@@ -613,18 +648,23 @@ class CustomerController extends BaseController<
   private async upsertCustomerPrimaryProperty(
     customerId: string,
     propertyPayload: NormalizedCustomerPropertyPayload | undefined,
+    tenantId?: string | null,
   ) {
     if (!propertyPayload) {
-      return this.getPrimaryCustomerPropertySummary(customerId);
+      return this.getPrimaryCustomerPropertySummary(customerId, tenantId);
     }
 
-    const primaryProperty = await this.getPrimaryCustomerPropertySummary(customerId);
+    const primaryProperty = await this.getPrimaryCustomerPropertySummary(
+      customerId,
+      tenantId,
+    );
 
     if (primaryProperty?.id) {
       const { error } = await SupabaseDB.getAdminClient()
         .from("properties")
         .update(propertyPayload)
-        .eq("id", primaryProperty.id);
+        .eq("id", primaryProperty.id)
+        .eq("tenant_id", tenantId);
 
       if (error) {
         throw Errors.dbError("更新客户主房产失败", error);
@@ -635,6 +675,7 @@ class CustomerController extends BaseController<
         .insert({
           id: randomUUID(),
           customer_id: customerId,
+          tenant_id: tenantId ?? null,
           ...propertyPayload,
         });
 
@@ -643,7 +684,7 @@ class CustomerController extends BaseController<
       }
     }
 
-    return this.getPrimaryCustomerPropertySummary(customerId);
+    return this.getPrimaryCustomerPropertySummary(customerId, tenantId);
   }
 
   private async buildCustomerDetailResponse(
@@ -652,13 +693,15 @@ class CustomerController extends BaseController<
       primaryProperty?: PrimaryPropertySummary | null;
       includeProperties?: boolean;
       phonePrivacyContext?: CustomerPhonePrivacyContext;
+      tenantId?: string | null;
     },
   ) {
     const primaryProperty = options?.primaryProperty ?? await this.getPrimaryCustomerPropertySummary(
       customer.id,
+      options?.tenantId,
     );
     const properties = options?.includeProperties
-      ? await this.getCustomerPropertySummaries(customer.id)
+      ? await this.getCustomerPropertySummaries(customer.id, options?.tenantId)
       : undefined;
     const followUpMap = await this.getLatestFollowUpMap([customer.id]);
 
@@ -694,7 +737,10 @@ class CustomerController extends BaseController<
     const paramsResult = CustomerPropertyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const customer = await this.getRequiredCustomerRecord(paramsResult.data.customerId);
+    const customer = await this.getRequiredCustomerRecord(
+      authContext,
+      paramsResult.data.customerId,
+    );
     const canAccess = await accessPolicyService.canAccessCustomer(
       authContext,
       customer,
@@ -704,7 +750,10 @@ class CustomerController extends BaseController<
       throw Errors.forbidden();
     }
 
-    const properties = await this.getCustomerPropertySummaries(customer.id);
+    const properties = await this.getCustomerPropertySummaries(
+      customer.id,
+      authContext.tenantId,
+    );
     return ResponseHandler.success({
       list: properties.map((item) =>
         this.serializePropertySummary(
@@ -726,7 +775,10 @@ class CustomerController extends BaseController<
     const bodyResult = CreateCustomerPropertySchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const customer = await this.getRequiredCustomerRecord(paramsResult.data.customerId);
+    const customer = await this.getRequiredCustomerRecord(
+      authContext,
+      paramsResult.data.customerId,
+    );
     const canAccess = await accessPolicyService.canAccessCustomer(
       authContext,
       customer,
@@ -742,6 +794,7 @@ class CustomerController extends BaseController<
       .insert({
         id: randomUUID(),
         customer_id: customer.id,
+        tenant_id: authContext.tenantId ?? null,
         community: payload.community,
         building_info: payload.building_info ?? null,
         area: payload.area ?? null,
@@ -763,7 +816,8 @@ class CustomerController extends BaseController<
       const { error: updateError } = await SupabaseDB.getAdminClient()
         .from("customers")
         .update({ property_id: property.id })
-        .eq("id", customer.id);
+        .eq("id", customer.id)
+        .eq("tenant_id", authContext.tenantId);
 
       if (updateError) {
         throw Errors.dbError("设置主房产失败", updateError);
@@ -786,7 +840,10 @@ class CustomerController extends BaseController<
     const paramsResult = CustomerPropertyDetailParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const customer = await this.getRequiredCustomerRecord(paramsResult.data.customerId);
+    const customer = await this.getRequiredCustomerRecord(
+      authContext,
+      paramsResult.data.customerId,
+    );
     const canAccess = await accessPolicyService.canAccessCustomer(
       authContext,
       customer,
@@ -799,12 +856,14 @@ class CustomerController extends BaseController<
     await this.getRequiredCustomerPropertyRecord(
       customer.id,
       paramsResult.data.propertyId,
+      authContext.tenantId,
     );
 
     const { error } = await SupabaseDB.getAdminClient()
       .from("customers")
       .update({ property_id: paramsResult.data.propertyId })
-      .eq("id", customer.id);
+      .eq("id", customer.id)
+      .eq("tenant_id", authContext.tenantId);
 
     if (error) {
       throw Errors.dbError("设置主房产失败", error);
@@ -826,7 +885,10 @@ class CustomerController extends BaseController<
     const bodyResult = UpdateCustomerPropertySchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const customer = await this.getRequiredCustomerRecord(paramsResult.data.customerId);
+    const customer = await this.getRequiredCustomerRecord(
+      authContext,
+      paramsResult.data.customerId,
+    );
     const canAccess = await accessPolicyService.canAccessCustomer(
       authContext,
       customer,
@@ -839,6 +901,7 @@ class CustomerController extends BaseController<
     await this.getRequiredCustomerPropertyRecord(
       customer.id,
       paramsResult.data.propertyId,
+      authContext.tenantId,
     );
 
     const payload = bodyResult.data;
@@ -863,6 +926,7 @@ class CustomerController extends BaseController<
           : {}),
       })
       .eq("id", paramsResult.data.propertyId)
+      .eq("tenant_id", authContext.tenantId)
       .select(this.propertySummarySelect)
       .single();
 
@@ -894,6 +958,7 @@ class CustomerController extends BaseController<
 
   private applyCustomerListFilters(
     query: any,
+    tenantId: string | null,
     visibleOwnerIds: string[] | null,
     status?: string,
     source?: string,
@@ -902,6 +967,10 @@ class CustomerController extends BaseController<
     customerIds?: string[] | null,
   ) {
     let filteredQuery = query;
+
+    if (tenantId) {
+      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
+    }
 
     if (visibleOwnerIds !== null) {
       if (visibleOwnerIds.length === 0) {
@@ -945,7 +1014,7 @@ class CustomerController extends BaseController<
     return filteredQuery;
   }
 
-  private async getTodayWorkCustomerIds() {
+  private async getTodayWorkCustomerIds(tenantId: string | null) {
     const { startIso, endIso } = getAsiaShanghaiTodayRange();
     const ids = new Set<string>();
 
@@ -971,11 +1040,13 @@ class CustomerController extends BaseController<
       SupabaseDB.getAdminClient()
         .from("customers")
         .select("id")
+        .eq("tenant_id", tenantId)
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       SupabaseDB.getAdminClient()
         .from("customers")
         .select("id")
+        .eq("tenant_id", tenantId)
         .gte("updated_at", startIso)
         .lt("updated_at", endIso),
       SupabaseDB.getAdminClient()
@@ -1040,7 +1111,7 @@ class CustomerController extends BaseController<
 
     const normalizedKeyword = keyword?.trim();
     const todayCustomerIds = workScope === "today"
-      ? await this.getTodayWorkCustomerIds()
+      ? await this.getTodayWorkCustomerIds(authContext.tenantId)
       : null;
     if (follow) {
       let idQuery = SupabaseDB.getAdminClient()
@@ -1049,6 +1120,7 @@ class CustomerController extends BaseController<
         .order("created_at", { ascending: false });
       idQuery = this.applyCustomerListFilters(
         idQuery,
+        authContext.tenantId,
         visibleOwnerIds,
         status,
         source,
@@ -1093,6 +1165,7 @@ class CustomerController extends BaseController<
       );
       const propertyMap = await this.getCustomerPropertySummaryMap(
         rows.map((item) => item.id),
+        authContext.tenantId,
       );
 
       return ResponseHandler.success({
@@ -1114,6 +1187,7 @@ class CustomerController extends BaseController<
       .select("id", { count: "exact", head: true });
     countQuery = this.applyCustomerListFilters(
       countQuery,
+      authContext.tenantId,
       visibleOwnerIds,
       status,
       source,
@@ -1139,6 +1213,7 @@ class CustomerController extends BaseController<
       .order("created_at", { ascending: false });
     query = this.applyCustomerListFilters(
       query,
+      authContext.tenantId,
       visibleOwnerIds,
       status,
       source,
@@ -1156,6 +1231,7 @@ class CustomerController extends BaseController<
     );
     const propertyMap = await this.getCustomerPropertySummaryMap(
       rows.map((item) => item.id),
+      authContext.tenantId,
     );
     return ResponseHandler.success({
       list: rows.map((item) =>
@@ -1225,6 +1301,7 @@ class CustomerController extends BaseController<
     const payload = {
       ...customerPayload,
       owner_id: customerPayload.owner_id ?? authContext.employeeId ?? null,
+      tenant_id: authContext.tenantId ?? null,
       douyin_screenshot_images: customerPayload.source === "douyin"
         ? douyinScreenshotImages
         : [],
@@ -1252,6 +1329,7 @@ class CustomerController extends BaseController<
     const primaryProperty = await this.upsertCustomerPrimaryProperty(
       customer.id,
       propertyPayload,
+      authContext.tenantId,
     );
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(customer, {
@@ -1259,6 +1337,7 @@ class CustomerController extends BaseController<
         phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
           authContext,
         ),
+        tenantId: authContext.tenantId,
       }),
     );
   };
@@ -1277,8 +1356,9 @@ class CustomerController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id, source, douyin_screenshot_images")
+      .select("id, owner_id, source, douyin_screenshot_images, tenant_id")
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (existing.error) {
@@ -1344,8 +1424,9 @@ class CustomerController extends BaseController<
       const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
         .getAdminClient()
         .from("employees")
-        .select("id, department_id, status")
+        .select("id, department_id, status, tenant_id")
         .eq("id", payload.owner_id)
+        .eq("tenant_id", authContext.tenantId)
         .maybeSingle();
 
       if (targetEmployeeError) {
@@ -1393,6 +1474,7 @@ class CustomerController extends BaseController<
     const primaryProperty = await this.upsertCustomerPrimaryProperty(
       customer.id,
       propertyPayload,
+      authContext.tenantId,
     );
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(customer, {
@@ -1400,6 +1482,7 @@ class CustomerController extends BaseController<
         phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
           authContext,
         ),
+        tenantId: authContext.tenantId,
       }),
     );
   };
@@ -1412,8 +1495,9 @@ class CustomerController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id")
+      .select("id, owner_id, tenant_id")
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (existing.error) {
@@ -1437,6 +1521,7 @@ class CustomerController extends BaseController<
       .from("customers")
       .update({ status: "invalid" })
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .select(this.customerSelect)
       .single();
 
@@ -1462,7 +1547,10 @@ class CustomerController extends BaseController<
     }
 
     const payload: BatchAssignCustomerOwnerInput = result.data;
-    const targetEmployee = await this.getAssignableTargetEmployee(payload.owner_id);
+    const targetEmployee = await this.getAssignableTargetEmployee(
+      payload.owner_id,
+      authContext.tenantId,
+    );
 
     if (!targetEmployee) {
       throw Errors.badRequest("目标负责人不存在或不可用");
@@ -1480,8 +1568,9 @@ class CustomerController extends BaseController<
     const { data: customers, error: customerQueryError } = await SupabaseDB
       .getAdminClient()
       .from("customers")
-      .select("id, owner_id")
-      .in("id", customerIds);
+      .select("id, owner_id, tenant_id")
+      .in("id", customerIds)
+      .eq("tenant_id", authContext.tenantId);
 
     if (customerQueryError) {
       throw Errors.dbError("查询客户失败", customerQueryError);
@@ -1561,7 +1650,8 @@ class CustomerController extends BaseController<
       const { error: updateError } = await SupabaseDB.getAdminClient()
         .from("customers")
         .update({ owner_id: payload.owner_id })
-        .in("id", successCustomerIds);
+        .in("id", successCustomerIds)
+        .eq("tenant_id", authContext.tenantId);
 
       if (updateError) {
         throw Errors.dbError("批量分配负责人失败", updateError);
@@ -1588,7 +1678,7 @@ class CustomerController extends BaseController<
     const { data, error } = await SupabaseDB.getAdminClient().from("customers").select(this.customerSelect).eq(
       "id",
       id,
-    ).single();
+    ).eq("tenant_id", authContext.tenantId).single();
 
     if (error) {
       throw Errors.dbError("get customers data by id error", error);
@@ -1611,6 +1701,7 @@ class CustomerController extends BaseController<
           phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
             authContext,
           ),
+          tenantId: authContext.tenantId,
         },
       ),
     );
@@ -1673,8 +1764,9 @@ class CustomerController extends BaseController<
 
     const customer = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id")
+      .select("id, owner_id, tenant_id")
       .eq("id", id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (customer.error) {
@@ -1740,8 +1832,9 @@ class CustomerController extends BaseController<
     const { id } = request.params;
     const customer = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id")
+      .select("id, owner_id, tenant_id")
       .eq("id", id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (customer.error) {

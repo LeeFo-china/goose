@@ -77,8 +77,8 @@ class ProjectService {
     async searchProjectsByName() {
     }
 
-    async updateProject(id: string, input: UpdateProjectInput) {
-        const existing = await projectRepository.findById(id);
+    async updateProject(id: string, input: UpdateProjectInput, tenantId?: string | null) {
+        const existing = await projectRepository.findById(id, tenantId);
 
         if (!existing) {
             throw Errors.badRequest("项目不存在");
@@ -93,11 +93,11 @@ class ProjectService {
             }
         }
 
-        return projectRepository.update(id, input);
+        return projectRepository.update(id, input, tenantId);
     }
 
-    async deleteProject(id: string) {
-        const existing = await projectRepository.findById(id);
+    async deleteProject(id: string, tenantId?: string | null) {
+        const existing = await projectRepository.findById(id, tenantId);
 
         if (!existing) {
             throw Errors.badRequest("项目不存在");
@@ -105,7 +105,7 @@ class ProjectService {
 
         return projectRepository.update(id, {
             status: "invalid",
-        });
+        }, tenantId);
     }
 }
 

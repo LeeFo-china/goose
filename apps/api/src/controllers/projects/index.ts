@@ -307,12 +307,17 @@ class ProjectController extends BaseController<
 
   private applyProjectListFilters(
     query: any,
+    tenantId: string | null,
     visibleProjectIds: string[] | null,
     status?: string,
     keyword?: string,
     projectIds?: string[] | null,
   ) {
     let filteredQuery = this.applyProjectIdsFilter(query, visibleProjectIds);
+
+    if (tenantId) {
+      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       filteredQuery = filteredQuery.eq("status", status);
@@ -336,7 +341,7 @@ class ProjectController extends BaseController<
     return filteredQuery;
   }
 
-  private async getTodayWorkProjectIds() {
+  private async getTodayWorkProjectIds(tenantId: string | null) {
     const { startIso, endIso } = getAsiaShanghaiTodayRange();
     const ids = new Set<string>();
 
@@ -365,11 +370,13 @@ class ProjectController extends BaseController<
       SupabaseDB.getAdminClient()
         .from("projects")
         .select("id")
+        .eq("tenant_id", tenantId)
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       SupabaseDB.getAdminClient()
         .from("projects")
         .select("id")
+        .eq("tenant_id", tenantId)
         .gte("updated_at", startIso)
         .lt("updated_at", endIso),
       SupabaseDB.getAdminClient()
@@ -780,6 +787,55 @@ class ProjectController extends BaseController<
     };
   }
 
+  private async assertProjectRelationsInTenant(
+    input: {
+      customer_id?: string | null;
+      property_id?: string | null;
+      designer_id?: string | null;
+      supervisor_id?: string | null;
+    },
+    tenantId: string | null,
+  ) {
+    if (input.customer_id) {
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("customers")
+        .select("id")
+        .eq("id", input.customer_id)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (error) throw Errors.dbError("校验项目客户失败", error);
+      if (!data) throw Errors.badRequest("客户不存在或不属于当前租户");
+    }
+
+    if (input.property_id) {
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("properties")
+        .select("id")
+        .eq("id", input.property_id)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (error) throw Errors.dbError("校验项目房产失败", error);
+      if (!data) throw Errors.badRequest("房产不存在或不属于当前租户");
+    }
+
+    const employeeIds = [input.designer_id, input.supervisor_id]
+      .filter((item): item is string => Boolean(item));
+    if (employeeIds.length > 0) {
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("employees")
+        .select("id")
+        .in("id", Array.from(new Set(employeeIds)))
+        .eq("tenant_id", tenantId);
+
+      if (error) throw Errors.dbError("校验项目成员失败", error);
+      if ((data || []).length !== new Set(employeeIds).size) {
+        throw Errors.badRequest("设计师或监理不存在或不属于当前租户");
+      }
+    }
+  }
+
   private serializeProjectListItem<T extends Record<string, unknown>>(
     row: T,
     phonePrivacyContext?: CustomerPhonePrivacyContext,
@@ -852,7 +908,7 @@ class ProjectController extends BaseController<
     const to = from + pageSize - 1;
     const normalizedKeyword = keyword?.trim();
     const todayProjectIds = workScope === "today"
-      ? await this.getTodayWorkProjectIds()
+      ? await this.getTodayWorkProjectIds(authContext.tenantId)
       : null;
 
     let countQuery = SupabaseDB.getAdminClient()
@@ -860,6 +916,7 @@ class ProjectController extends BaseController<
       .select("id", { count: "exact", head: true });
     countQuery = this.applyProjectListFilters(
       countQuery,
+      authContext.tenantId,
       visibleProjectIds,
       status,
       normalizedKeyword,
@@ -883,6 +940,7 @@ class ProjectController extends BaseController<
       .order("created_at", { ascending: false });
     query = this.applyProjectListFilters(
       query,
+      authContext.tenantId,
       visibleProjectIds,
       status,
       normalizedKeyword,
@@ -920,6 +978,7 @@ class ProjectController extends BaseController<
     const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
       .select(this.projectDetailSelect)
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询失败", error);
@@ -944,9 +1003,14 @@ class ProjectController extends BaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
+    await this.assertProjectRelationsInTenant(result.data, authContext.tenantId);
+
     const { data, error } = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .insert(result.data)
+      .insert({
+        ...result.data,
+        tenant_id: authContext.tenantId ?? null,
+      })
       .select()
       .single();
 
@@ -978,8 +1042,13 @@ class ProjectController extends BaseController<
 
     const result = this.updateSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
+    await this.assertProjectRelationsInTenant(result.data, authContext.tenantId);
 
-    const data = await projectSer.updateProject(idVerify.data.id, result.data);
+    const data = await projectSer.updateProject(
+      idVerify.data.id,
+      result.data,
+      authContext.tenantId,
+    );
     await projectMemberService.syncLegacyProjectMembers(idVerify.data.id, {
       designer_id: result.data.designer_id,
       supervisor_id: result.data.supervisor_id,
@@ -1002,7 +1071,7 @@ class ProjectController extends BaseController<
       throw Errors.forbidden();
     }
 
-    const data = await projectSer.deleteProject(idVerify.data.id);
+    const data = await projectSer.deleteProject(idVerify.data.id, authContext.tenantId);
     return ResponseHandler.success(data);
   }
 
@@ -1025,6 +1094,7 @@ class ProjectController extends BaseController<
       .from(this.tableName)
       .select(this.projectDetailSelect)
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询项目成员失败", error);
@@ -1238,7 +1308,7 @@ class ProjectController extends BaseController<
     const to = from + pageSize - 1;
     const normalizedKeyword = keyword?.trim();
     const todayProjectIds = workScope === "today"
-      ? await this.getTodayWorkProjectIds()
+      ? await this.getTodayWorkProjectIds(authContext.tenantId)
       : null;
 
     let countQuery = SupabaseDB
@@ -1246,6 +1316,7 @@ class ProjectController extends BaseController<
       .select("id", { count: "exact", head: true });
     countQuery = this.applyProjectListFilters(
       countQuery,
+      authContext.tenantId,
       visibleProjectIds,
       status,
       normalizedKeyword,
@@ -1303,6 +1374,7 @@ class ProjectController extends BaseController<
       );
     query = this.applyProjectListFilters(
       query,
+      authContext.tenantId,
       visibleProjectIds,
       status,
       normalizedKeyword,
@@ -1346,6 +1418,7 @@ class ProjectController extends BaseController<
 
     let query = SupabaseDB.from("customers")
       .select("id, name, phone, owner_id", { count: "exact" })
+      .eq("tenant_id", authContext.tenantId)
       .order("created_at", { ascending: false });
 
     const normalizedKeyword = keyword?.trim();
@@ -1409,6 +1482,7 @@ class ProjectController extends BaseController<
       to,
       keyword,
       postIds,
+      tenantId: authContext.tenantId,
     });
 
     const list: ProjectCreateEmployeeOption[] =
@@ -1492,6 +1566,7 @@ class ProjectController extends BaseController<
       to,
       keyword,
       postIds: postIds.length > 0 ? postIds : undefined,
+      tenantId: authContext.tenantId,
     });
 
     const list: ProjectCreateEmployeeOption[] =
@@ -1563,6 +1638,7 @@ class ProjectController extends BaseController<
     to: number;
     keyword?: string;
     postIds?: string[];
+    tenantId: string | null;
   }) {
     let query = SupabaseDB.from("employees")
       .select(
@@ -1577,6 +1653,7 @@ class ProjectController extends BaseController<
         { count: "exact" },
       )
       .eq("status", "active")
+      .eq("tenant_id", params.tenantId)
       .order("created_at", { ascending: false });
 
     if (params.postIds && params.postIds.length > 0) {

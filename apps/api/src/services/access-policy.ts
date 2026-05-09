@@ -4,6 +4,25 @@ import { permissionRepository } from "@/repositories/permissions";
 import { isEmployeeOperableStatus } from "@gooes/domain";
 
 class AccessPolicyService {
+  assertTenantId(authContext: AuthContext) {
+    if (!authContext.tenantId && !authContext.isPlatformAdmin) {
+      throw Errors.business(403, "缺少租户上下文", "FORBIDDEN");
+    }
+
+    return authContext.tenantId;
+  }
+
+  matchesTenant(
+    authContext: AuthContext,
+    target: { tenant_id?: string | null },
+  ) {
+    if (authContext.isPlatformAdmin) {
+      return true;
+    }
+
+    return Boolean(authContext.tenantId && target.tenant_id === authContext.tenantId);
+  }
+
   hasPermission(authContext: AuthContext, permissionCode: string) {
     return authContext.permissions.some((item) => item.code === permissionCode);
   }
@@ -26,11 +45,15 @@ class AccessPolicyService {
 
   canAccessEmployee(
     authContext: AuthContext,
-    target: { id: string; department_id: string | null },
+    target: { id: string; department_id: string | null; tenant_id?: string | null },
     permissionCode = "employee.read",
   ) {
     const scope = this.assertPermission(authContext, permissionCode);
     if (!scope || !authContext.employeeId) {
+      return false;
+    }
+
+    if (!this.matchesTenant(authContext, target)) {
       return false;
     }
 
@@ -66,6 +89,7 @@ class AccessPolicyService {
       scope,
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
+      tenantId: authContext.tenantId,
     });
   }
 
@@ -78,6 +102,7 @@ class AccessPolicyService {
       scope: "self",
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
+      tenantId: authContext.tenantId,
     });
   }
 
@@ -115,7 +140,8 @@ class AccessPolicyService {
     );
 
     if (visibleProjectIds === null) {
-      return true;
+      const project = await permissionRepository.findProjectTenantById(projectId);
+      return Boolean(project && this.matchesTenant(authContext, project));
     }
 
     return visibleProjectIds.includes(projectId);
@@ -141,6 +167,7 @@ class AccessPolicyService {
 
       return permissionRepository.listEmployeeIdsByDepartmentId(
         authContext.departmentId,
+        authContext.tenantId,
       );
     }
 
@@ -149,13 +176,17 @@ class AccessPolicyService {
 
   async canAccessCustomer(
     authContext: AuthContext,
-    customer: { owner_id: string | null },
+    customer: { owner_id: string | null; tenant_id?: string | null },
     permissionCode = "customer.read",
   ) {
     const visibleOwnerIds = await this.getVisibleCustomerOwnerIds(
       authContext,
       permissionCode,
     );
+
+    if (!this.matchesTenant(authContext, customer)) {
+      return false;
+    }
 
     if (visibleOwnerIds === null) {
       return true;
@@ -170,11 +201,12 @@ class AccessPolicyService {
 
   async canAssignCustomerOwner(
     authContext: AuthContext,
-    customer: { owner_id: string | null },
+    customer: { owner_id: string | null; tenant_id?: string | null },
     targetEmployee: {
       id: string;
       department_id: string | null;
       status: string | null;
+      tenant_id?: string | null;
     },
   ) {
     const canAccessCustomer = customer.owner_id
@@ -197,6 +229,7 @@ class AccessPolicyService {
       id: string;
       department_id: string | null;
       status: string | null;
+      tenant_id?: string | null;
     },
   ) {
     const scope = this.assertPermission(authContext, "customer.assign_owner");
@@ -205,6 +238,10 @@ class AccessPolicyService {
     }
 
     if (!isEmployeeOperableStatus(targetEmployee.status)) {
+      return false;
+    }
+
+    if (!this.matchesTenant(authContext, targetEmployee)) {
       return false;
     }
 
@@ -246,6 +283,7 @@ class AccessPolicyService {
       const employeeIds = authContext.departmentId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
           authContext.departmentId,
+          authContext.tenantId,
         )
         : [];
 
