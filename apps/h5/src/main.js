@@ -3,6 +3,7 @@ const runtimeConfig = window.__GOOES_H5_CONFIG__ || {};
 let h5SessionToken = "";
 let miniProgramReturnPath = "";
 let miniProgramReturnMethod = "navigateBack";
+let currentTenantSlug = "";
 
 const DEFAULT_THEME = {
   primaryColor: "#0f766e",
@@ -31,8 +32,23 @@ function getApiBaseUrl() {
 }
 
 function getSlugFromPath() {
+  const tenantMatch = location.pathname.match(/^\/t\/([^/?#]+)\/p\/([^/?#]+)/);
+  if (tenantMatch) {
+    currentTenantSlug = decodeURIComponent(tenantMatch[1]);
+    return decodeURIComponent(tenantMatch[2]);
+  }
+
   const match = location.pathname.match(/^\/p\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getMarketingPageApiPath(slug, suffix = "") {
+  const encodedSlug = encodeURIComponent(slug);
+  const encodedTenant = currentTenantSlug ? encodeURIComponent(currentTenantSlug) : "";
+  const base = encodedTenant
+    ? `/public/tenants/${encodedTenant}/marketing-pages/${encodedSlug}`
+    : `/public/marketing-pages/${encodedSlug}`;
+  return `${base}${suffix}`;
 }
 
 function getH5TokenFromUrl() {
@@ -119,7 +135,7 @@ function addHours(date, hours) {
 }
 
 function getLeadCacheKey(slug) {
-  return `gooes:h5:lead:${slug}`;
+  return `gooes:h5:lead:${currentTenantSlug || "global"}:${slug}`;
 }
 
 function readLeadCache(slug) {
@@ -183,7 +199,7 @@ async function requestJson(path, options = {}) {
 }
 
 function trackEvent(slug, eventName, blockId, payload = {}) {
-  return requestJson(`/public/marketing-pages/${encodeURIComponent(slug)}/events`, {
+  return requestJson(getMarketingPageApiPath(slug, "/events"), {
     method: "POST",
     body: JSON.stringify({
       event_name: eventName,
@@ -807,7 +823,7 @@ function renderLeadForm(block, slug) {
 
     try {
       trackEvent(slug, "form_submit", block.id, { phase: "submit" });
-      const leadResult = await requestJson(`/public/marketing-pages/${encodeURIComponent(slug)}/leads`, {
+      const leadResult = await requestJson(getMarketingPageApiPath(slug, "/leads"), {
         method: "POST",
         body: JSON.stringify({
           name: formData.name || null,
@@ -936,7 +952,7 @@ function renderPage(slug, response) {
 async function boot() {
   const slug = getSlugFromPath();
   if (!slug) {
-    renderState("页面地址无效", "请使用 /p/活动路径 访问 H5 页面。");
+    renderState("页面地址无效", "请使用 /p/活动路径 或 /t/租户/p/活动路径 访问 H5 页面。");
     return;
   }
 
@@ -948,7 +964,7 @@ async function boot() {
   }
 
   try {
-    const data = await requestJson(`/public/marketing-pages/${encodeURIComponent(slug)}`);
+    const data = await requestJson(getMarketingPageApiPath(slug));
     renderPage(slug, data);
     trackEvent(slug, "page_view", null, {
       path: location.pathname,

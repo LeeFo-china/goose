@@ -11,7 +11,7 @@ import { sendSmsCode } from "@/services/sms";
 import { authorizationService } from "@/services/authorization";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
-import { MarketingPageSlugSchema } from "@/schema/marketing-pages";
+import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import type {
   AuthTargetRole,
   SmsScene,
@@ -65,6 +65,9 @@ const WeChatAuthBodySchema = z.object({
 
 const H5MarketingSessionBodySchema = z.object({
   slug: MarketingPageSlugSchema,
+  tenant_slug: TenantSlugSchema
+    .nullable()
+    .optional(),
   scene: z.string().trim().max(80, "场景值过长").nullable().optional(),
 });
 
@@ -263,6 +266,7 @@ export class WeChatController extends BaseController {
       authUserId: request.user.sub,
       openid: request.user.openid ?? null,
       slug: bodyResult.data.slug,
+      tenantSlug: bodyResult.data.tenant_slug ?? null,
       scene: bodyResult.data.scene ?? null,
     });
 

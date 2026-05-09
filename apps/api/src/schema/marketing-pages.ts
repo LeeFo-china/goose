@@ -53,6 +53,17 @@ export const MarketingPageSlugSchema = z
     "页面路径只能包含小写字母、数字和中划线，且不能以中划线开头或结尾",
   );
 
+export const TenantSlugSchema = z
+  .string("租户标识不能为空")
+  .trim()
+  .toLowerCase()
+  .min(1, "租户标识不能为空")
+  .max(80, "租户标识过长")
+  .regex(
+    /^[a-z0-9]([a-z0-9_-]{0,78}[a-z0-9])?$/,
+    "租户标识格式不合法",
+  );
+
 export const MarketingPageBlockSchema = z.object({
   id: z.string().trim().min(1, "模块 ID 不能为空").max(80, "模块 ID 过长"),
   type: z.enum(MARKETING_PAGE_BLOCK_TYPE_VALUES, {
@@ -153,6 +164,9 @@ export const PublicMarketingPageListQuerySchema = z.object({
       message: "无效的展示场景",
     }),
   ),
+  tenant_slug: optionalQueryValue(
+    TenantSlugSchema,
+  ),
 });
 
 export const MarketingPageIdParamsSchema = z.object({
@@ -160,6 +174,11 @@ export const MarketingPageIdParamsSchema = z.object({
 });
 
 export const MarketingPageSlugParamsSchema = z.object({
+  slug: MarketingPageSlugSchema,
+});
+
+export const PublicTenantMarketingPageParamsSchema = z.object({
+  tenantSlug: TenantSlugSchema,
   slug: MarketingPageSlugSchema,
 });
 

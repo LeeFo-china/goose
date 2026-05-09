@@ -14,6 +14,7 @@ export type JwtPayload = {
 
 export type H5MarketingTokenPayload = JwtPayload & {
   token_type: "h5_marketing";
+  tenant_id?: string | null;
   slug: string;
   customer_id?: string | null;
   scene?: string | null;

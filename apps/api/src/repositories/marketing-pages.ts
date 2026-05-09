@@ -168,6 +168,10 @@ class MarketingPageRepository {
     return this.from("marketing_events");
   }
 
+  private tenants() {
+    return this.from("tenants");
+  }
+
   private customers() {
     return this.from("customers");
   }
@@ -238,13 +242,17 @@ class MarketingPageRepository {
     };
   }
 
-  async listPublishedPageEntries(query: PublicMarketingPageListQuery = {}) {
+  async listPublishedPageEntries(query: PublicMarketingPageListQuery = {}, tenantId?: string | null) {
     const now = new Date().toISOString();
     let request = this.pages()
-      .select("id,title,slug,description,cover_image,display_scene,sort_order,start_at,end_at,published_at,updated_at")
+      .select("id,tenant_id,title,slug,description,cover_image,display_scene,sort_order,start_at,end_at,published_at,updated_at")
       .eq("status", "published")
       .or(`start_at.is.null,start_at.lte.${now}`)
       .or(`end_at.is.null,end_at.gte.${now}`);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
 
     if (query.scene) {
       request = request.or(`display_scene.eq.all,display_scene.eq.${query.scene}`);
@@ -261,6 +269,7 @@ class MarketingPageRepository {
     return (data || []) as Pick<
       MarketingPageRecord,
       | "id"
+      | "tenant_id"
       | "title"
       | "slug"
       | "description"
@@ -387,6 +396,39 @@ class MarketingPageRepository {
     const { data, error } = await this.pages()
       .select("*")
       .eq("slug", slug)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 H5 活动页失败", error);
+    }
+
+    return (data || null) as MarketingPageRecord | null;
+  }
+
+  async findTenantBySlug(slug: string) {
+    const { data, error } = await this.tenants()
+      .select("id,slug,name,status")
+      .eq("slug", slug)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询租户失败", error);
+    }
+
+    return (data || null) as {
+      id: string;
+      slug: string;
+      name: string;
+      status: string;
+    } | null;
+  }
+
+  async findPageBySlugAndTenantId(slug: string, tenantId: string) {
+    const { data, error } = await this.pages()
+      .select("*")
+      .eq("slug", slug)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) {

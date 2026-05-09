@@ -197,7 +197,17 @@ class MarketingPageService {
   }
 
   async listPublishedEntries(query: PublicMarketingPageListQuery = {}) {
-    const pages = await marketingPageRepository.listPublishedPageEntries(query);
+    const tenant = query.tenant_slug
+      ? await marketingPageRepository.findTenantBySlug(query.tenant_slug)
+      : null;
+    if (query.tenant_slug && !tenant) {
+      throw Errors.notFound("租户不存在或不可用");
+    }
+
+    const pages = await marketingPageRepository.listPublishedPageEntries(
+      query,
+      tenant?.id ?? null,
+    );
     const h5BaseUrl = getH5BaseUrl();
 
     return {
@@ -209,7 +219,10 @@ class MarketingPageService {
         cover_image: page.cover_image,
         display_scene: page.display_scene,
         sort_order: page.sort_order,
-        url: `${h5BaseUrl}/p/${encodeURIComponent(page.slug)}`,
+        tenant_slug: tenant?.slug ?? null,
+        url: tenant
+          ? `${h5BaseUrl}/t/${encodeURIComponent(tenant.slug)}/p/${encodeURIComponent(page.slug)}`
+          : `${h5BaseUrl}/p/${encodeURIComponent(page.slug)}`,
         start_at: page.start_at,
         end_at: page.end_at,
         published_at: page.published_at,
@@ -468,8 +481,17 @@ class MarketingPageService {
     };
   }
 
-  async getPublishedPageBySlug(slug: string) {
-    const page = await marketingPageRepository.findPageBySlug(slug);
+  async getPublishedPageBySlug(slug: string, tenantSlug?: string | null) {
+    const tenant = tenantSlug
+      ? await marketingPageRepository.findTenantBySlug(tenantSlug)
+      : null;
+    if (tenantSlug && !tenant) {
+      throw Errors.notFound("租户不存在或不可用");
+    }
+
+    const page = tenant
+      ? await marketingPageRepository.findPageBySlugAndTenantId(slug, tenant.id)
+      : await marketingPageRepository.findPageBySlug(slug);
     if (
       !page ||
       page.status !== "published" ||
@@ -489,6 +511,7 @@ class MarketingPageService {
 
     return {
       page,
+      tenant,
       version,
       config: version.config,
     };
@@ -498,9 +521,10 @@ class MarketingPageService {
     authUserId: string;
     openid: string | null;
     slug: string;
+    tenantSlug?: string | null;
     scene?: string | null;
   }) {
-    const publishedPage = await this.getPublishedPageBySlug(input.slug);
+    const publishedPage = await this.getPublishedPageBySlug(input.slug, input.tenantSlug);
 
     const customer = await marketingPageRepository.findCustomerByAuthUserId(
       input.authUserId,
@@ -510,6 +534,7 @@ class MarketingPageService {
     const token = signH5MarketingToken({
       sub: input.authUserId,
       openid: input.openid ?? undefined,
+      tenant_id: publishedPage.page.tenant_id,
       slug: input.slug,
       customer_id: customer?.id ?? null,
       scene: input.scene ?? null,
@@ -518,6 +543,8 @@ class MarketingPageService {
     return {
       token,
       expires_at: expiresAt,
+      tenant_id: publishedPage.page.tenant_id,
+      tenant_slug: publishedPage.tenant?.slug ?? input.tenantSlug ?? null,
       identity_status: customer || input.openid ? "identified" : "anonymous",
       customer_id: customer?.id ?? null,
     };
@@ -525,12 +552,17 @@ class MarketingPageService {
 
   async submitLead(input: SubmitMarketingLeadInput & {
     slug: string;
+    tenantSlug?: string | null;
     requestIp: string | null;
     userAgent: string | null;
   }) {
-    const publishedPage = await this.getPublishedPageBySlug(input.slug);
+    const publishedPage = await this.getPublishedPageBySlug(input.slug, input.tenantSlug);
     const phone = input.phone?.trim() || null;
-    const identity = this.resolveH5MarketingIdentity(input.token, input.slug);
+    const identity = this.resolveH5MarketingIdentity(
+      input.token,
+      input.slug,
+      publishedPage.page.tenant_id,
+    );
 
     if (!phone) {
       throw Errors.badRequest("请输入有效的手机号");
@@ -590,11 +622,16 @@ class MarketingPageService {
 
   async trackEvent(input: TrackMarketingEventInput & {
     slug: string;
+    tenantSlug?: string | null;
     requestIp: string | null;
     userAgent: string | null;
   }) {
-    const publishedPage = await this.getPublishedPageBySlug(input.slug);
-    const identity = this.resolveH5MarketingIdentity(input.token, input.slug);
+    const publishedPage = await this.getPublishedPageBySlug(input.slug, input.tenantSlug);
+    const identity = this.resolveH5MarketingIdentity(
+      input.token,
+      input.slug,
+      publishedPage.page.tenant_id,
+    );
 
     return marketingPageRepository.createEvent({
       ...input,
@@ -651,6 +688,7 @@ class MarketingPageService {
   private resolveH5MarketingIdentity(
     token: string | null | undefined,
     slug: string,
+    tenantId: string | null,
   ): H5MarketingIdentity {
     if (!token) {
       return {
@@ -672,7 +710,8 @@ class MarketingPageService {
     if (
       result.reason !== "valid" ||
       !result.payload ||
-      result.payload.slug !== slug
+      result.payload.slug !== slug ||
+      (result.payload.tenant_id && result.payload.tenant_id !== tenantId)
     ) {
       return {
         status: "anonymous",
