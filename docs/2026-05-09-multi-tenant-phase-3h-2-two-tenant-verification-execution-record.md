@@ -15,6 +15,27 @@
 
 ## 2. 已完成内容
 
+### 2.0 新增模拟数据脚本
+
+新增：
+
+```text
+scripts/seed-phase3-tenant-verification.ts
+```
+
+新增 package script：
+
+```bash
+bun run seed:tenant:phase3
+```
+
+脚本能力：
+
+- 创建/刷新固定的 `tenant_verify_a` 和 `tenant_verify_b` 双租户模拟数据。
+- 写入阶段 3 覆盖模块所需的费用、验收、摄像头、任务中心、短视频和 AI 用量数据。
+- 创建测试 Auth 用户，并输出 A 租户验收 token。
+- 输出 B 租户资源 ID，便于 `verify:tenant:phase3` 做严格反查。
+
 ### 2.1 新增验收脚本
 
 新增：
@@ -103,11 +124,12 @@ scripts/audit-tenant-scope.sh
 
 ## 4. 本地验证
 
-本阶段已做静态和构建验证。
+本阶段已做远端 Supabase 模拟数据验收、静态和构建验证。
 
 已执行：
 
 ```bash
+bun run seed:tenant:phase3
 bun run verify:tenant:phase3
 bash scripts/audit-tenant-scope.sh
 bun run api:typecheck
@@ -115,7 +137,13 @@ bun run api:build
 git diff --check
 ```
 
-由于当前本地没有 A/B 租户 token 和对应 B 租户资源 ID，脚本未进行真实远端双租户数据验收。实际环境准备完成后执行：
+2026-05-09 已使用远端 Supabase 模拟数据完成严格验收：
+
+```text
+Summary: 12 passed, 0 failed, 0 skipped.
+```
+
+完整验收命令示例：
 
 ```bash
 STRICT_TENANT_VERIFY=1 \

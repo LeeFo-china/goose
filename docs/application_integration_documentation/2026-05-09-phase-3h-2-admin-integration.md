@@ -9,6 +9,7 @@
 新增的是后端验收脚本：
 
 ```bash
+bun run seed:tenant:phase3
 bun run verify:tenant:phase3
 ```
 
@@ -16,7 +17,12 @@ bun run verify:tenant:phase3
 
 为了跑完整双租户验收，需要准备：
 
-- A 租户管理员 token。
+- 方式一：用真实 A/B 租户数据，手动准备 A 租户管理员 token 和 B 租户资源 ID。
+- 方式二：执行 `bun run seed:tenant:phase3` 自动生成模拟数据。
+
+模拟脚本会输出：
+
+- A 租户验收 token。
 - B 租户费用申请 ID。
 - B 租户工序验收 ID。
 - B 租户项目 ID。
@@ -51,5 +57,11 @@ bun run verify:tenant:phase3
 - 所有检查 `PASS`。
 - 没有 `FAIL`。
 - 严格模式下没有 `SKIP`。
+
+2026-05-09 已用模拟数据跑通一次严格验收：
+
+```text
+Summary: 12 passed, 0 failed, 0 skipped.
+```
 
 如果有失败项，优先修后端租户过滤，不建议 admin 前端做隐藏兜底。

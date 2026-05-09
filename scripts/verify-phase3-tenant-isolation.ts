@@ -98,7 +98,12 @@ async function expectSuccess(name: string, path: string, validate?: (payload: un
   }
 }
 
-async function expectForbiddenDetail(name: string, path: string, fixtureNames: string | string[]) {
+async function expectForbiddenDetail(
+  name: string,
+  path: string,
+  fixtureNames: string | string[],
+  options?: Pick<RequestOptions, "method" | "body">,
+) {
   if (!tenantAToken) {
     record({ name, status: "skip", detail: "TENANT_A_TOKEN is not configured" });
     return;
@@ -116,7 +121,11 @@ async function expectForbiddenDetail(name: string, path: string, fixtureNames: s
   );
 
   try {
-    const { response, text } = await requestJson(actualPath, { token: tenantAToken });
+    const { response, text } = await requestJson(actualPath, {
+      token: tenantAToken,
+      method: options?.method,
+      body: options?.body,
+    });
     if ([400, 403, 404].includes(response.status)) {
       record({ name, status: "pass", detail: `HTTP ${response.status}` });
       return;
@@ -159,11 +168,12 @@ async function main() {
     "TENANT_B_PROJECT_ACCEPTANCE_ID",
   );
 
-  await expectSuccess("camera project groups are tenant-scoped", "/project-cameras/projects?page=1&pageSize=50");
+  await expectSuccess("camera project groups are tenant-scoped", "/project-cameras/projects?page=1&pageSize=20");
   await expectForbiddenDetail(
     "tenant A cannot use tenant B camera play params",
     "/projects/:TENANT_B_PROJECT_ID/cameras/:TENANT_B_CAMERA_ID/play-params",
     ["TENANT_B_PROJECT_ID", "TENANT_B_CAMERA_ID"],
+    { method: "POST", body: { protocol: "hls" } },
   );
 
   await expectSuccess("task center list is tenant-scoped", "/task-center/todos?page=1&pageSize=100");
