@@ -41,6 +41,7 @@ export type ProjectAcceptanceTemplateItemRow = {
 
 export type ProjectAcceptanceRow = {
   id: string;
+  tenant_id: string | null;
   project_id: string;
   stage_code: string;
   template_id: string | null;
@@ -64,6 +65,7 @@ export type ProjectAcceptanceRow = {
 
 export type ProjectAcceptanceItemRow = {
   id: string;
+  tenant_id: string | null;
   acceptance_id: string;
   template_item_id: string | null;
   category: string | null;
@@ -86,6 +88,7 @@ export type ProjectAcceptanceItemRow = {
 
 export type ProjectAcceptanceActionRow = {
   id: string;
+  tenant_id: string | null;
   acceptance_id: string;
   operator_type: "employee" | "customer" | "system";
   operator_id: string | null;
@@ -98,6 +101,7 @@ export type ProjectAcceptanceActionRow = {
 
 export type ProjectAcceptanceProjectRow = {
   id: string;
+  tenant_id: string | null;
   name: string | null;
   customer_id: string | null;
   supervisor_id: string | null;
@@ -105,12 +109,14 @@ export type ProjectAcceptanceProjectRow = {
 
 export type ProjectAcceptanceEmployeeRow = {
   id: string;
+  tenant_id: string | null;
   name: string | null;
   avatar: string | null;
 };
 
 export type ProjectAcceptanceCustomerRow = {
   id: string;
+  tenant_id: string | null;
   name: string | null;
   phone: string | null;
   user_id: string | null;
@@ -125,6 +131,7 @@ type ListAcceptancesInput = {
   reviewer_id?: string;
   customer_id?: string;
   visibleProjectIds?: string[] | null;
+  tenantId?: string | null;
 };
 
 class ProjectAcceptanceRepository {
@@ -190,12 +197,17 @@ class ProjectAcceptanceRepository {
     return (data || []) as ProjectAcceptanceTemplateItemRow[];
   }
 
-  async getProject(projectId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async getProject(projectId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, name, customer_id, supervisor_id")
-      .eq("id", projectId)
-      .maybeSingle();
+      .select("id, tenant_id, name, customer_id, supervisor_id")
+      .eq("id", projectId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询项目失败", error);
     return (data || null) as ProjectAcceptanceProjectRow | null;
@@ -216,15 +228,24 @@ class ProjectAcceptanceRepository {
     return (data?.employee_id as string | undefined) || null;
   }
 
-  async hasOpenAcceptance(projectId: string, stageCode: ProjectLogStageCode) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async hasOpenAcceptance(
+    projectId: string,
+    stageCode: ProjectLogStageCode,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")
       .select("id, status")
       .eq("project_id", projectId)
       .eq("stage_code", stageCode)
       .in("status", ["draft", "submitted", "leader_approved", "rejected"])
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询进行中验收单失败", error);
     return (data || null) as Pick<ProjectAcceptanceRow, "id" | "status"> | null;
@@ -262,6 +283,10 @@ class ProjectAcceptanceRepository {
       .order("created_at", { ascending: false })
       .range(from, to);
 
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
     if (input.visibleProjectIds) {
       if (input.visibleProjectIds.length === 0) {
         return { list: [] as ProjectAcceptanceRow[], total: 0 };
@@ -284,22 +309,33 @@ class ProjectAcceptanceRepository {
     };
   }
 
-  async getAcceptanceById(id: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async getAcceptanceById(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询项目验收单失败", error);
     return (data || null) as ProjectAcceptanceRow | null;
   }
 
-  async listItems(acceptanceId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listItems(acceptanceId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_items")
       .select("*")
-      .eq("acceptance_id", acceptanceId)
+      .eq("acceptance_id", acceptanceId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -307,35 +343,54 @@ class ProjectAcceptanceRepository {
     return (data || []) as ProjectAcceptanceItemRow[];
   }
 
-  async listActions(acceptanceId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listActions(acceptanceId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_actions")
       .select("*")
-      .eq("acceptance_id", acceptanceId)
-      .order("created_at", { ascending: true });
+      .eq("acceptance_id", acceptanceId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: true });
 
     if (error) throw Errors.dbError("查询项目验收操作记录失败", error);
     return (data || []) as ProjectAcceptanceActionRow[];
   }
 
-  async updateAcceptance(id: string, input: Record<string, unknown>) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async updateAcceptance(
+    id: string,
+    input: Record<string, unknown>,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")
       .update(input)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) throw Errors.dbError("更新项目验收单失败", error);
     if (!data) throw Errors.badRequest("项目验收单不存在");
     return data as ProjectAcceptanceRow;
   }
 
-  async deleteAcceptance(id: string) {
-    const { error } = await SupabaseDB.getAdminClient()
+  async deleteAcceptance(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")
       .delete()
       .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { error } = await query;
 
     if (error) throw Errors.dbError("删除项目验收草稿失败", error);
   }
@@ -344,14 +399,19 @@ class ProjectAcceptanceRepository {
     acceptanceId: string,
     itemId: string,
     input: Record<string, unknown>,
+    tenantId?: string | null,
   ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_items")
       .update(input)
       .eq("acceptance_id", acceptanceId)
-      .eq("id", itemId)
-      .select("*")
-      .maybeSingle();
+      .eq("id", itemId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) throw Errors.dbError("更新项目验收项失败", error);
     if (!data) throw Errors.badRequest("项目验收项不存在");
@@ -359,6 +419,7 @@ class ProjectAcceptanceRepository {
   }
 
   async createAction(input: {
+    tenant_id?: string | null;
     acceptance_id: string;
     operator_type: "employee" | "customer" | "system";
     operator_id: string | null;
@@ -381,7 +442,7 @@ class ProjectAcceptanceRepository {
     if (ids.length === 0) return [] as ProjectAcceptanceEmployeeRow[];
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
-      .select("id, name, avatar")
+      .select("id, tenant_id, name, avatar")
       .in("id", ids);
 
     if (error) throw Errors.dbError("查询员工失败", error);
@@ -392,7 +453,7 @@ class ProjectAcceptanceRepository {
     if (ids.length === 0) return [] as ProjectAcceptanceCustomerRow[];
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, phone, user_id")
+      .select("id, tenant_id, name, phone, user_id")
       .in("id", ids);
 
     if (error) throw Errors.dbError("查询客户失败", error);
@@ -402,7 +463,7 @@ class ProjectAcceptanceRepository {
   async getCustomerByAuthUserId(authUserId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, phone, user_id")
+      .select("id, tenant_id, name, phone, user_id")
       .eq("user_id", authUserId)
       .limit(2);
 

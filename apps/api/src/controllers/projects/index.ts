@@ -388,21 +388,25 @@ class ProjectController extends BaseController<
       SupabaseDB.getAdminClient()
         .from("project_acceptances")
         .select("project_id")
+        .eq("tenant_id", tenantId)
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       SupabaseDB.getAdminClient()
         .from("project_acceptances")
         .select("project_id")
+        .eq("tenant_id", tenantId)
         .gte("submitted_at", startIso)
         .lt("submitted_at", endIso),
       SupabaseDB.getAdminClient()
         .from("project_acceptances")
         .select("project_id")
+        .eq("tenant_id", tenantId)
         .gte("reviewed_at", startIso)
         .lt("reviewed_at", endIso),
       SupabaseDB.getAdminClient()
         .from("project_acceptances")
         .select("project_id")
+        .eq("tenant_id", tenantId)
         .gte("customer_confirmed_at", startIso)
         .lt("customer_confirmed_at", endIso),
     ]);

@@ -169,7 +169,10 @@ class ProjectAcceptanceService {
   }
 
   private async buildDetail(row: ProjectAcceptanceRow): Promise<AcceptanceDetail> {
-    const rawActions = await projectAcceptanceRepository.listActions(row.id);
+    const rawActions = await projectAcceptanceRepository.listActions(
+      row.id,
+      row.tenant_id,
+    );
     const actionEmployeeIds = rawActions
       .filter((item) => item.operator_type === "employee" && item.operator_id)
       .map((item) => item.operator_id as string);
@@ -178,9 +181,9 @@ class ProjectAcceptanceService {
       .map((item) => item.operator_id as string);
 
     const [items, actions, project, employees, customers, latestNotification] = await Promise.all([
-      projectAcceptanceRepository.listItems(row.id),
+      projectAcceptanceRepository.listItems(row.id, row.tenant_id),
       Promise.resolve(rawActions),
-      projectAcceptanceRepository.getProject(row.project_id),
+      projectAcceptanceRepository.getProject(row.project_id, row.tenant_id),
       projectAcceptanceRepository.listEmployees(
         Array.from(new Set([
           row.initiator_id,
@@ -194,7 +197,10 @@ class ProjectAcceptanceService {
           ...actionCustomerIds,
         ].filter((item): item is string => Boolean(item)))),
       ),
-      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(row.id),
+      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(
+        row.id,
+        row.tenant_id,
+      ),
     ]);
 
     const employeeMap = new Map(employees.map((item) => [item.id, item]));
@@ -250,8 +256,8 @@ class ProjectAcceptanceService {
     };
   }
 
-  private async getRequiredAcceptance(id: string) {
-    const row = await projectAcceptanceRepository.getAcceptanceById(id);
+  private async getRequiredAcceptance(id: string, tenantId?: string | null) {
+    const row = await projectAcceptanceRepository.getAcceptanceById(id, tenantId);
     if (!row) {
       throw Errors.badRequest("项目验收单不存在");
     }
@@ -387,6 +393,12 @@ class ProjectAcceptanceService {
     inputReviewerId?: string | null,
   ) {
     if (inputReviewerId) {
+      const [reviewer] = await projectAcceptanceRepository.listEmployees([
+        inputReviewerId,
+      ]);
+      if (!reviewer || reviewer.tenant_id !== project.tenant_id) {
+        throw Errors.badRequest("复核人不存在或不属于当前租户");
+      }
       return inputReviewerId;
     }
 
@@ -403,6 +415,7 @@ class ProjectAcceptanceService {
     comment?: string | null;
   }) {
     await projectAcceptanceRepository.createAction({
+      tenant_id: input.row.tenant_id,
       acceptance_id: input.row.id,
       operator_type: input.operatorType,
       operator_id: input.operatorId,
@@ -490,7 +503,7 @@ class ProjectAcceptanceService {
     const [customer] = await projectAcceptanceRepository.listCustomers([
       row.customer_id,
     ]);
-    if (!customer) {
+    if (!customer || customer.tenant_id !== row.tenant_id) {
       throw Errors.badRequest("验收单关联客户不存在");
     }
     if (!customer.phone?.trim()) {
@@ -541,6 +554,7 @@ class ProjectAcceptanceService {
     const reusable = input.force
       ? null
       : await projectAcceptanceOpenTicketRepository.findReusable({
+        tenant_id: input.row.tenant_id,
         acceptance_id: input.row.id,
         customer_id: customer.id,
         phone: customer.phone!,
@@ -565,6 +579,7 @@ class ProjectAcceptanceService {
       expireAt,
     });
     const openTicket = await projectAcceptanceOpenTicketRepository.create({
+      tenant_id: input.row.tenant_id,
       ticket,
       acceptance_id: input.row.id,
       project_id: input.row.project_id,
@@ -591,6 +606,7 @@ class ProjectAcceptanceService {
           send_error: null,
           sent_at: new Date().toISOString(),
         },
+        input.row.tenant_id,
       );
 
       return {
@@ -601,10 +617,14 @@ class ProjectAcceptanceService {
         expire_at: sent.expire_at,
       };
     } catch (error) {
-      await projectAcceptanceOpenTicketRepository.update(openTicket.id, {
-        send_status: "failed",
-        send_error: error instanceof Error ? error.message : "短信发送失败",
-      });
+      await projectAcceptanceOpenTicketRepository.update(
+        openTicket.id,
+        {
+          send_status: "failed",
+          send_error: error instanceof Error ? error.message : "短信发送失败",
+        },
+        input.row.tenant_id,
+      );
       throw error;
     }
   }
@@ -627,15 +647,18 @@ class ProjectAcceptanceService {
 
     if (ticket.status === "expired" || new Date(ticket.expire_at).getTime() <= Date.now()) {
       if (ticket.status === "active") {
-        await projectAcceptanceOpenTicketRepository.update(ticket.id, {
-          status: "expired",
-        });
+        await projectAcceptanceOpenTicketRepository.update(
+          ticket.id,
+          { status: "expired" },
+          ticket.tenant_id,
+        );
       }
       return { valid: false as const, reason: "expired" as const };
     }
 
     const row = await projectAcceptanceRepository.getAcceptanceById(
       ticket.acceptance_id,
+      ticket.tenant_id,
     );
     if (!row) {
       return { valid: false as const, reason: "not_found" as const };
@@ -650,11 +673,15 @@ class ProjectAcceptanceService {
     }
 
     const now = new Date().toISOString();
-    const verified = await projectAcceptanceOpenTicketRepository.update(ticket.id, {
-      used_at: ticket.used_at || now,
-      last_verified_at: now,
-      verify_count: (ticket.verify_count || 0) + 1,
-    });
+    const verified = await projectAcceptanceOpenTicketRepository.update(
+      ticket.id,
+      {
+        used_at: ticket.used_at || now,
+        last_verified_at: now,
+        verify_count: (ticket.verify_count || 0) + 1,
+      },
+      ticket.tenant_id,
+    );
 
     return { valid: true as const, ticket: verified, row };
   }
@@ -692,6 +719,7 @@ class ProjectAcceptanceService {
     authContext: AuthContext,
     query: ProjectAcceptanceListQuery,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project_acceptance.read",
@@ -699,6 +727,7 @@ class ProjectAcceptanceService {
     const { list, total } = await projectAcceptanceRepository.listAcceptances({
       ...query,
       visibleProjectIds,
+      tenantId,
     });
 
     return {
@@ -713,7 +742,8 @@ class ProjectAcceptanceService {
   }
 
   async getAcceptance(authContext: AuthContext, id: string) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     await this.assertCanRead(authContext, row);
     return this.buildDetail(row);
   }
@@ -733,14 +763,22 @@ class ProjectAcceptanceService {
     );
     if (!customer) throw Errors.forbidden();
 
-    const project = await projectAcceptanceRepository.getProject(query.project_id);
-    if (!project || project.customer_id !== customer.id) {
+    const project = await projectAcceptanceRepository.getProject(
+      query.project_id,
+      customer.tenant_id,
+    );
+    if (
+      !project ||
+      project.customer_id !== customer.id ||
+      project.tenant_id !== customer.tenant_id
+    ) {
       throw Errors.notFound("项目不存在");
     }
 
     const { list, total } = await projectAcceptanceRepository.listAcceptances({
       ...query,
       customer_id: customer.id,
+      tenantId: customer.tenant_id,
     });
 
     return {
@@ -760,8 +798,8 @@ class ProjectAcceptanceService {
     );
     if (!customer) throw Errors.forbidden();
 
-    const row = await this.getRequiredAcceptance(id);
-    if (row.customer_id !== customer.id) {
+    const row = await this.getRequiredAcceptance(id, customer.tenant_id);
+    if (row.customer_id !== customer.id || row.tenant_id !== customer.tenant_id) {
       throw Errors.notFound("项目验收单不存在");
     }
 
@@ -779,7 +817,11 @@ class ProjectAcceptanceService {
       const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
         input.authUserId,
       );
-      if (customer && row.customer_id === customer.id) {
+      if (
+        customer &&
+        row.customer_id === customer.id &&
+        row.tenant_id === customer.tenant_id
+      ) {
         return this.buildDetail(row);
       }
     }
@@ -832,7 +874,11 @@ class ProjectAcceptanceService {
       const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
         input.authUserId,
       );
-      if (customer && input.row.customer_id === customer.id) {
+      if (
+        customer &&
+        input.row.customer_id === customer.id &&
+        input.row.tenant_id === customer.tenant_id
+      ) {
         return customer;
       }
     }
@@ -847,7 +893,7 @@ class ProjectAcceptanceService {
         const [customer] = await projectAcceptanceRepository.listCustomers([
           result.ticket.customer_id,
         ]);
-        if (customer) return customer;
+        if (customer && customer.tenant_id === input.row.tenant_id) return customer;
       }
     }
 
@@ -863,9 +909,13 @@ class ProjectAcceptanceService {
     input: CreateProjectAcceptanceInput,
   ) {
     const employeeId = this.assertCurrentEmployee(authContext);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.assertCanCreate(authContext, input.project_id);
 
-    const project = await projectAcceptanceRepository.getProject(input.project_id);
+    const project = await projectAcceptanceRepository.getProject(
+      input.project_id,
+      tenantId,
+    );
     if (!project) {
       throw Errors.badRequest("项目不存在");
     }
@@ -873,6 +923,7 @@ class ProjectAcceptanceService {
     const open = await projectAcceptanceRepository.hasOpenAcceptance(
       input.project_id,
       input.stage_code,
+      tenantId,
     );
     if (open) {
       throw Errors.badRequest("该工序已有进行中的验收单，请处理完成后再发起");
@@ -883,6 +934,7 @@ class ProjectAcceptanceService {
 
     const title = PROJECT_ACCEPTANCE_STAGE_LABELS[input.stage_code] || template.name;
     const row = await projectAcceptanceRepository.createAcceptance({
+      tenant_id: project.tenant_id,
       project_id: input.project_id,
       stage_code: input.stage_code,
       template_id: template.id,
@@ -898,6 +950,7 @@ class ProjectAcceptanceService {
     await projectAcceptanceRepository.createItems(
       items.map((item) => ({
         acceptance_id: row.id,
+        tenant_id: row.tenant_id,
         template_item_id: item.id,
         category: item.category,
         title: item.title,
@@ -935,10 +988,24 @@ class ProjectAcceptanceService {
     let nextRow = row;
     const patch: Record<string, unknown> = {};
     if (input.summary !== undefined) patch.summary = input.summary;
-    if (input.reviewer_id !== undefined) patch.reviewer_id = input.reviewer_id;
+    if (input.reviewer_id !== undefined) {
+      if (input.reviewer_id) {
+        const [reviewer] = await projectAcceptanceRepository.listEmployees([
+          input.reviewer_id,
+        ]);
+        if (!reviewer || reviewer.tenant_id !== row.tenant_id) {
+          throw Errors.badRequest("复核人不存在或不属于当前租户");
+        }
+      }
+      patch.reviewer_id = input.reviewer_id;
+    }
 
     if (Object.keys(patch).length > 0) {
-      nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, patch);
+      nextRow = await projectAcceptanceRepository.updateAcceptance(
+        row.id,
+        patch,
+        row.tenant_id,
+      );
     }
 
     if (input.items) {
@@ -953,7 +1020,7 @@ class ProjectAcceptanceService {
           ...(item.rectification_images !== undefined
             ? { rectification_images: item.rectification_images }
             : {}),
-        });
+        }, row.tenant_id);
       }
     }
 
@@ -965,7 +1032,8 @@ class ProjectAcceptanceService {
     id: string,
     input: UpdateProjectAcceptanceInput,
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "update",
@@ -986,7 +1054,8 @@ class ProjectAcceptanceService {
   }
 
   async deleteDraftAcceptance(authContext: AuthContext, id: string) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     if (row.status !== "draft") {
       throw Errors.business(
         400,
@@ -997,7 +1066,7 @@ class ProjectAcceptanceService {
     }
 
     this.assertCanUpdateOwn(authContext, row);
-    await projectAcceptanceRepository.deleteAcceptance(row.id);
+    await projectAcceptanceRepository.deleteAcceptance(row.id, row.tenant_id);
 
     return {
       id: row.id,
@@ -1069,16 +1138,23 @@ class ProjectAcceptanceService {
     id: string,
     input: SubmitProjectAcceptanceInput,
   ) {
-    let row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    let row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "submit",
     });
     this.assertCanSubmit(authContext, row);
 
-    const beforeItems = await projectAcceptanceRepository.listItems(row.id);
+    const beforeItems = await projectAcceptanceRepository.listItems(
+      row.id,
+      row.tenant_id,
+    );
     row = await this.applyUpdate(row, input);
-    const afterItems = await projectAcceptanceRepository.listItems(row.id);
+    const afterItems = await projectAcceptanceRepository.listItems(
+      row.id,
+      row.tenant_id,
+    );
 
     const failedItems = this.validateSubmitItems({
       beforeItems,
@@ -1096,7 +1172,7 @@ class ProjectAcceptanceService {
         rejected_at: new Date().toISOString(),
         reject_reason: reason,
         reject_source: null,
-      });
+      }, row.tenant_id);
 
       await this.recordAction({
         row: nextRow,
@@ -1117,7 +1193,7 @@ class ProjectAcceptanceService {
       rejected_at: null,
       reject_reason: null,
       reject_source: null,
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,
@@ -1137,7 +1213,8 @@ class ProjectAcceptanceService {
     id: string,
     input: ApproveProjectAcceptanceInput,
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "leader_approve",
@@ -1147,7 +1224,7 @@ class ProjectAcceptanceService {
     const nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, {
       status: "leader_approved",
       reviewed_at: new Date().toISOString(),
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,
@@ -1177,7 +1254,8 @@ class ProjectAcceptanceService {
     id: string,
     input: NotifyProjectAcceptanceCustomerInput,
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     this.assertCanReview(authContext, row);
 
     return this.notifyCustomerForAcceptanceInternal({
@@ -1192,7 +1270,8 @@ class ProjectAcceptanceService {
     id: string,
     input: RejectProjectAcceptanceInput,
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "leader_reject",
@@ -1204,7 +1283,7 @@ class ProjectAcceptanceService {
       rejected_at: new Date().toISOString(),
       reject_reason: input.comment,
       reject_source: "leader",
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,
@@ -1225,15 +1304,15 @@ class ProjectAcceptanceService {
     input: CustomerConfirmProjectAcceptanceInput,
   ) {
     const row = await this.getRequiredAcceptance(id);
-    projectAcceptanceWorkflowService.assertTransition({
-      currentStatus: row.status,
-      action: "customer_confirm",
-    });
     const customer = await this.resolveCustomerActor({
       authUserId,
       row,
       ticket: input.ticket,
       projectId: input.project_id,
+    });
+    projectAcceptanceWorkflowService.assertTransition({
+      currentStatus: row.status,
+      action: "customer_confirm",
     });
 
     const now = new Date().toISOString();
@@ -1241,7 +1320,7 @@ class ProjectAcceptanceService {
       status: "customer_confirmed",
       customer_confirmed_at: now,
       completed_at: now,
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,
@@ -1262,15 +1341,15 @@ class ProjectAcceptanceService {
     input: CustomerDisputeProjectAcceptanceInput,
   ) {
     const row = await this.getRequiredAcceptance(id);
-    projectAcceptanceWorkflowService.assertTransition({
-      currentStatus: row.status,
-      action: "customer_dispute",
-    });
     const customer = await this.resolveCustomerActor({
       authUserId,
       row,
       ticket: input.ticket,
       projectId: input.project_id,
+    });
+    projectAcceptanceWorkflowService.assertTransition({
+      currentStatus: row.status,
+      action: "customer_dispute",
     });
 
     const comment = input.images?.length
@@ -1281,7 +1360,7 @@ class ProjectAcceptanceService {
       rejected_at: new Date().toISOString(),
       reject_reason: input.comment,
       reject_source: "customer",
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,
@@ -1301,7 +1380,8 @@ class ProjectAcceptanceService {
     id: string,
     input: CancelProjectAcceptanceInput,
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
       action: "cancel",
@@ -1310,7 +1390,7 @@ class ProjectAcceptanceService {
 
     const nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, {
       status: "cancelled",
-    });
+    }, row.tenant_id);
 
     await this.recordAction({
       row: nextRow,

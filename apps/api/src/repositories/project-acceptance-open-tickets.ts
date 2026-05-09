@@ -9,6 +9,7 @@ export type ProjectAcceptanceOpenTicketStatus =
 
 export type ProjectAcceptanceOpenTicketRow = {
   id: string;
+  tenant_id: string | null;
   ticket: string;
   acceptance_id: string;
   project_id: string;
@@ -32,6 +33,7 @@ export type ProjectAcceptanceOpenTicketRow = {
 
 class ProjectAcceptanceOpenTicketRepository {
   async create(input: {
+    tenant_id?: string | null;
     ticket: string;
     acceptance_id: string;
     project_id: string;
@@ -57,11 +59,12 @@ class ProjectAcceptanceOpenTicketRepository {
   }
 
   async findReusable(input: {
+    tenant_id?: string | null;
     acceptance_id: string;
     customer_id: string;
     phone: string;
   }) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_open_tickets")
       .select("*")
       .eq("acceptance_id", input.acceptance_id)
@@ -71,32 +74,47 @@ class ProjectAcceptanceOpenTicketRepository {
       .eq("status", "active")
       .gt("expire_at", new Date().toISOString())
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    if (input.tenant_id) {
+      query = query.eq("tenant_id", input.tenant_id);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询验收短信访问票据失败", error);
     return (data || null) as ProjectAcceptanceOpenTicketRow | null;
   }
 
-  async findByTicket(ticket: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findByTicket(ticket: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_open_tickets")
       .select("*")
-      .eq("ticket", ticket)
-      .maybeSingle();
+      .eq("ticket", ticket);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询验收短信访问票据失败", error);
     return (data || null) as ProjectAcceptanceOpenTicketRow | null;
   }
 
-  async findLatestByAcceptance(acceptanceId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findLatestByAcceptance(acceptanceId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_open_tickets")
       .select("*")
       .eq("acceptance_id", acceptanceId)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询验收短信通知记录失败", error);
     return (data || null) as ProjectAcceptanceOpenTicketRow | null;
@@ -118,13 +136,18 @@ class ProjectAcceptanceOpenTicketRepository {
         | "verify_count"
       >
     >,
+    tenantId?: string | null,
   ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_open_tickets")
       .update(input)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) throw Errors.dbError("更新验收短信访问票据失败", error);
     if (!data) throw Errors.badRequest("验收短信访问票据不存在");
