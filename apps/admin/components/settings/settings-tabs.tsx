@@ -3,7 +3,10 @@
 import { useMemo, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { SettingEditor } from "@/components/settings/settings-actions";
+import {
+  SettingEditor,
+  SocialVideoTranscriptionTester,
+} from "@/components/settings/settings-actions";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,6 +107,9 @@ export function SettingsTabs({ groups }: SettingsTabsProps) {
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
+          {activeGroup.code === "social_video" ? (
+            <SocialVideoTranscriptionTester />
+          ) : null}
           {activeGroup.settings.map((setting) => (
             <SettingEditor key={setting.key} setting={setting} />
           ))}

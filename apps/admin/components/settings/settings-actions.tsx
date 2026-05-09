@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, RotateCcw, Save } from "lucide-react";
+import { Check, Loader2, RotateCcw, Save, TestTube2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,26 @@ async function updateSetting(key: string, value: string | null) {
   if (!response.ok || data.success === false) {
     throw new Error(getPayloadMessage(data, "系统配置保存失败"));
   }
+}
+
+async function testSocialVideoTranscription(url: string) {
+  const response = await fetch("/api/backend/admin/social-video/transcriptions/test", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ platform: "douyin", url }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "短视频识别测试失败"));
+  }
+  return data.data as {
+    actor_id?: string;
+    run_id?: string;
+    title?: string | null;
+    text?: string;
+    text_length?: number;
+    segment_count?: number;
+  };
 }
 
 function sourceBadge(setting: SystemSetting) {
@@ -156,6 +176,68 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
           {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : saved ? <Check data-icon="inline-start" /> : <Save data-icon="inline-start" />}
           保存
         </Button>
+      </div>
+    </div>
+  );
+}
+
+export function SocialVideoTranscriptionTester() {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<Awaited<ReturnType<typeof testSocialVideoTranscription>> | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    setError("");
+    setResult(null);
+    startTransition(async () => {
+      try {
+        const data = await testSocialVideoTranscription(url);
+        setResult(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "短视频识别测试失败");
+      }
+    });
+  }
+
+  return (
+    <div className="border-t bg-muted/20 px-5 py-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
+          <div className="font-medium">Apify 识别测试</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            使用当前 Apify 配置测试一个抖音链接，返回标题、文本和分段数量。测试会消耗 Apify 运行额度。
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="social-video-test-url">抖音视频链接</Label>
+          <Textarea
+            id="social-video-test-url"
+            rows={3}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="粘贴抖音分享链接或完整分享口令"
+          />
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          {result ? (
+            <StatusAlert tone="success">
+              <div className="flex flex-col gap-2">
+                <div>识别成功，文本长度 {result.text_length ?? result.text?.length ?? 0}，分段 {result.segment_count ?? 0}。</div>
+                {result.title ? <div className="line-clamp-2">标题：{result.title}</div> : null}
+                {result.text ? <div className="line-clamp-3">文本：{result.text}</div> : null}
+                {result.run_id ? <div className="break-all font-mono text-xs">Run: {result.run_id}</div> : null}
+              </div>
+            </StatusAlert>
+          ) : null}
+        </div>
+
+        <div className="flex gap-2 lg:items-center lg:justify-end">
+          <Button type="button" onClick={submit} disabled={pending || !url.trim()}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <TestTube2 data-icon="inline-start" />}
+            测试
+          </Button>
+        </div>
       </div>
     </div>
   );

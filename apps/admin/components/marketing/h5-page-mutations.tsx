@@ -61,6 +61,11 @@ type AiFillSettingsResponse = {
   fields: string[];
 };
 
+type AiSettingsSnapshot = Pick<
+  H5PageFormValues,
+  "title" | "slug" | "description" | "display_scene"
+>;
+
 const settingsAiFieldSchema: Record<string, AiFieldDefinition> = {
   title: { type: "string", label: "页面标题", maxLength: 120 },
   slug: { type: "string", label: "页面路径", maxLength: 80 },
@@ -377,7 +382,7 @@ function H5PageSettingsButton({
   const [pending, startTransition] = useTransition();
   const [aiPending, setAiPending] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
-  const [aiPatch, setAiPatch] = useState<AiFillSettingsResponse["patch"] | null>(null);
+  const [aiSnapshot, setAiSnapshot] = useState<AiSettingsSnapshot | null>(null);
   const [error, setError] = useState("");
   const [values, setValues] = useState<H5PageFormValues>({
     title: page.title || "",
@@ -393,7 +398,6 @@ function H5PageSettingsButton({
 
   function updateValue(key: keyof H5PageFormValues, value: string | number) {
     setError("");
-    setAiPatch(null);
     setValues((current) => ({
       ...current,
       [key]: key === "slug" && typeof value === "string" ? normalizeSlug(value) : value,
@@ -402,8 +406,13 @@ function H5PageSettingsButton({
 
   async function generateAiSettings() {
     setError("");
-    setAiPatch(null);
     setAiPending(true);
+    const snapshot: AiSettingsSnapshot = {
+      title: values.title,
+      slug: values.slug,
+      description: values.description || "",
+      display_scene: values.display_scene,
+    };
     try {
       const data = await requestH5Page<AiFillSettingsResponse>({
         path: `/marketing-pages/${page.id}/ai-fill-settings`,
@@ -428,8 +437,17 @@ function H5PageSettingsButton({
           instruction: aiInstruction,
         },
       });
-      setAiPatch(data.patch);
-      toast.success("AI 已生成展示配置建议");
+      setValues((current) => ({
+        ...current,
+        title: typeof data.patch.title === "string" ? data.patch.title : current.title,
+        slug: typeof data.patch.slug === "string" ? normalizeSlug(data.patch.slug) : current.slug,
+        description: typeof data.patch.description === "string" ? data.patch.description : current.description,
+        display_scene: typeof data.patch.display_scene === "string"
+          ? data.patch.display_scene as H5MarketingPageDisplayScene
+          : current.display_scene,
+      }));
+      setAiSnapshot(snapshot);
+      toast.success("AI 已回填，可继续修改或一键撤销");
     } catch (error) {
       setError(error instanceof Error ? error.message : "AI 回填失败");
     } finally {
@@ -437,20 +455,14 @@ function H5PageSettingsButton({
     }
   }
 
-  function applyAiSettings() {
-    if (!aiPatch) return;
-
+  function undoAiSettings() {
+    if (!aiSnapshot) return;
     setValues((current) => ({
       ...current,
-      title: typeof aiPatch.title === "string" ? aiPatch.title : current.title,
-      slug: typeof aiPatch.slug === "string" ? normalizeSlug(aiPatch.slug) : current.slug,
-      description: typeof aiPatch.description === "string" ? aiPatch.description : current.description,
-      display_scene: typeof aiPatch.display_scene === "string"
-        ? aiPatch.display_scene as H5MarketingPageDisplayScene
-        : current.display_scene,
+      ...aiSnapshot,
     }));
-    setAiPatch(null);
-    toast.success("AI 建议已回填，请确认后保存");
+    setAiSnapshot(null);
+    toast.success("已撤销 AI 回填");
   }
 
   function submit() {
@@ -498,20 +510,34 @@ function H5PageSettingsButton({
                   根据当前活动页和列表上下文生成标题、路径、描述和展示场景建议。
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={aiPending}
-                onClick={() => void generateAiSettings()}
-              >
-                {aiPending ? (
-                  <Loader2 className="animate-spin" data-icon="inline-start" />
-                ) : (
-                  <Sparkles data-icon="inline-start" />
-                )}
-                生成建议
-              </Button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {aiSnapshot ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={aiPending}
+                    onClick={undoAiSettings}
+                  >
+                    <RefreshCw data-icon="inline-start" />
+                    撤销 AI 回填
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={aiPending}
+                  onClick={() => void generateAiSettings()}
+                >
+                  {aiPending ? (
+                    <Loader2 className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Sparkles data-icon="inline-start" />
+                  )}
+                  AI 生成
+                </Button>
+              </div>
             </div>
             <Field>
               <FieldLabel htmlFor={`h5-page-ai-instruction-${page.id}`}>补充要求</FieldLabel>
@@ -523,23 +549,9 @@ function H5PageSettingsButton({
                 onChange={(event) => setAiInstruction(event.target.value)}
               />
             </Field>
-            {aiPatch ? (
-              <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
-                <div className="text-sm font-medium">建议内容</div>
-                {Object.entries(aiPatch).map(([key, value]) => {
-                  const field = settingsAiFieldSchema[key];
-                  return (
-                    <div key={key} className="rounded-md bg-muted/40 px-3 py-2">
-                      <div className="text-xs text-muted-foreground">{field?.label || key}</div>
-                      <div className="mt-1 whitespace-pre-wrap text-sm leading-6">{String(value || "")}</div>
-                    </div>
-                  );
-                })}
-                <Button type="button" size="sm" disabled={aiPending} onClick={applyAiSettings}>
-                  应用回填
-                </Button>
-              </div>
-            ) : null}
+            <div className="text-xs text-muted-foreground">
+              AI 生成后会直接填入下方表单；保存前可继续手动修改，也可以一键撤销本次 AI 回填。
+            </div>
           </div>
           <FieldGroup>
             <Field data-invalid={Boolean(firstIssue?.path[0] === "title")}>

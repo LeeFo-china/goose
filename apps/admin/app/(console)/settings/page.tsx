@@ -16,6 +16,7 @@ const groupLabels: Record<string, string> = {
   ezviz: "萤石监控",
   tencent_iot_video: "腾讯云监控",
   ai: "AI 配置",
+  social_video: "短视频识别",
   notify: "通知配置",
   wechat: "微信配置",
 };
@@ -70,7 +71,7 @@ export default async function SettingsPage() {
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "ai", "ezviz", "tencent_iot_video", "wechat", "notify"];
+      const order = ["sms", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
       return order.indexOf(left.code) - order.indexOf(right.code);
     });
 
