@@ -49,8 +49,19 @@ async function getPollIntervalMs() {
   return Math.max(500, Math.min(Math.floor(value), 30000));
 }
 
+async function getStaleTaskTimeoutMs() {
+  const value = await systemSettingsService.getNumber(
+    "SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS",
+    15 * 60 * 1000,
+  );
+  if (!Number.isFinite(value)) return 15 * 60 * 1000;
+  return Math.max(60 * 1000, Math.min(Math.floor(value), 60 * 60 * 1000));
+}
+
 async function processNext(slot: WorkerSlot) {
-  const task = await socialVideoTranscriptionRepository.claimNextPending();
+  const staleTimeoutMs = await getStaleTaskTimeoutMs();
+  const staleBefore = new Date(Date.now() - staleTimeoutMs).toISOString();
+  const task = await socialVideoTranscriptionRepository.claimNextPending(staleBefore);
   if (!task) {
     return false;
   }

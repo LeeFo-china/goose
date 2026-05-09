@@ -362,6 +362,15 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "3000",
   },
   {
+    key: "SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS",
+    groupCode: "social_video",
+    name: "短视频识别任务超时回收",
+    description: "worker 重启或崩溃后，处理中任务超过该时间未更新则允许重新领取，单位毫秒。",
+    valueType: "number",
+    envNames: ["SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS"],
+    defaultValue: "900000",
+  },
+  {
     key: "SOCIAL_VIDEO_MAX_DURATION_SECONDS",
     groupCode: "social_video",
     name: "短视频最大时长",

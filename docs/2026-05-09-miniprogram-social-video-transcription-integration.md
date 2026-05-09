@@ -165,7 +165,7 @@ resolving     后端正在调用 Apify 解析音视频地址
 downloading   后端正在下载音视频
 extracting_audio  后端正在用 ffmpeg 提取音频
 creating_asr_task  后端正在提交腾讯云 ASR 任务
-transcribing  后端正在等待第三方识别结果
+transcribing  腾讯云 ASR 任务已创建，后端正在等待识别结果
 completed     已完成
 failed        失败
 ```
@@ -213,7 +213,7 @@ GET /social-video/transcriptions/:id
 识别仍在处理中，请稍后刷新查看
 ```
 
-后端有独立 worker 和数据库队列。默认 worker 只同时处理 1 个识别任务。多个用户同时提交时，后续任务会先保持 `pending`，小程序端继续轮询即可，不需要额外处理。
+后端有独立 worker 和数据库队列。默认 worker 只同时处理 1 个识别任务。多个用户同时提交时，后续任务会先保持 `pending`，小程序端继续轮询即可，不需要额外处理。若 worker 重启，超过 `SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS` 未更新的处理中任务会被重新领取。
 
 ### 4.3 完成后
 
@@ -279,6 +279,7 @@ TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
    - `SOCIAL_VIDEO_TRANSCRIPTION_ENABLED=true`
    - `SOCIAL_VIDEO_TRANSCRIPTION_PROVIDER=tencent_asr`
    - `SOCIAL_VIDEO_CONCURRENCY_LIMIT=1`
+   - `SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS=900000`
    - `APIFY_API_TOKEN`
    - `APIFY_TRANSCRIPT_ACTOR_ID=apple_yang/douyin-transcripts-scraper`
    - `TENCENTCLOUD_SECRET_ID`

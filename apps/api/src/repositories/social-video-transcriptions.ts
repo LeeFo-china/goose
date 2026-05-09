@@ -141,9 +141,12 @@ class SocialVideoTranscriptionRepository {
     return count || 0;
   }
 
-  async claimNextPending() {
+  async claimNextPending(staleBefore: string) {
     const { data, error } = await this.client.rpc(
       "claim_next_social_video_transcription",
+      {
+        p_stale_before: staleBefore,
+      },
     );
 
     if (error) {

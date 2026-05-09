@@ -394,7 +394,7 @@ MVP 推荐顺序：
 
 ```text
 API 创建任务 -> social_video_transcriptions.status=pending
-goose-social-video-worker -> RPC 领取 pending 任务
+goose-social-video-worker -> RPC 领取 pending 或超时未更新的处理中任务
   -> Apify 解析
   -> 下载媒体
   -> ffmpeg 提取音频
@@ -408,13 +408,14 @@ goose-social-video-worker -> RPC 领取 pending 任务
 claim_next_social_video_transcription()
 ```
 
-该 RPC 内部按 `created_at ASC` 领取 `pending` 任务，并使用 `FOR UPDATE SKIP LOCKED` 避免多个 worker 抢到同一条任务。
+该 RPC 内部按 `created_at ASC` 领取 `pending` 任务，并使用 `FOR UPDATE SKIP LOCKED` 避免多个 worker 抢到同一条任务。若 worker 重启或崩溃，`resolving/downloading/extracting_audio/creating_asr_task/transcribing` 状态超过超时阈值未更新，也会被重新领取并从头处理。
 
 并发控制：
 
 ```text
 SOCIAL_VIDEO_CONCURRENCY_LIMIT=1
 SOCIAL_VIDEO_WORKER_POLL_INTERVAL_MS=3000
+SOCIAL_VIDEO_STALE_TASK_TIMEOUT_MS=900000
 ```
 
 默认单 worker 进程同一时间只处理 1 条任务，后续任务保持 `pending` 等待领取。

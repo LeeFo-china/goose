@@ -259,8 +259,14 @@ class TencentAsrGateway {
     });
   }
 
-  async transcribeAudioFile(audioFilePath: string): Promise<TencentAsrTranscriptionResult> {
+  async transcribeAudioFile(
+    audioFilePath: string,
+    input?: {
+      onTaskCreated?: (taskId: string) => Promise<void> | void;
+    },
+  ): Promise<TencentAsrTranscriptionResult> {
     const taskId = await this.createTask(audioFilePath);
+    await input?.onTaskCreated?.(taskId);
     const pollTimeoutMs = await systemSettingsService.getNumber(
       "TENCENT_ASR_POLL_TIMEOUT_MS",
       DEFAULT_POLL_TIMEOUT_MS,

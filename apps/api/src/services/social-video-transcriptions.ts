@@ -785,7 +785,15 @@ class SocialVideoTranscriptionService {
             audioFileSizeBytes,
           });
 
-          const asrResult = await tencentAsrGateway.transcribeAudioFile(audioFilePath);
+          const asrResult = await tencentAsrGateway.transcribeAudioFile(audioFilePath, {
+            onTaskCreated: async (taskId) => {
+              await socialVideoTranscriptionRepository.update(id, {
+                status: "transcribing",
+                progress: 75,
+                asrTaskId: taskId,
+              });
+            },
+          });
           await socialVideoTranscriptionRepository.update(id, {
             status: "completed",
             progress: 100,
