@@ -10,14 +10,39 @@ import {
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
-import type { Tables } from "@/types/database";
 import type { ProjectLogCommentAuthorType } from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 
-type EmployeeAuthor = Pick<Tables<"employees">, "id" | "name" | "avatar" | "user_id">;
-type CustomerAuthor = Pick<Tables<"customers">, "id" | "name" | "user_id">;
-type ProjectLogCommentRow = Tables<"project_log_comments">;
+type EmployeeAuthor = {
+  id: string;
+  name: string | null;
+  avatar: string | null;
+  user_id: string | null;
+  tenant_id: string | null;
+};
+
+type CustomerAuthor = {
+  id: string;
+  name: string | null;
+  user_id: string | null;
+  tenant_id: string | null;
+};
+
+type ProjectLogCommentRow = {
+  id: string;
+  tenant_id: string | null;
+  log_id: string;
+  parent_id: string | null;
+  author_type: string;
+  author_id: string;
+  content: string;
+  rating: number | null;
+  images: unknown;
+  created_at: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
 
 type CommentAuthor = {
   id: string;
@@ -33,17 +58,20 @@ type ProjectLogCommentResponseItem = ProjectLogCommentRow & {
 type ResolvedCommentAuthor = {
   author_type: ProjectLogCommentAuthorType;
   author_id: string;
+  tenant_id: string | null;
   profile: CommentAuthor;
 };
 
 type ProjectLogAccessInfo = {
   id: string;
   project_id: string;
+  tenant_id: string | null;
 };
 
 type ProjectOwnerInfo = {
   id: string;
   customer_id: string | null;
+  tenant_id: string | null;
 };
 
 class ProjectLogCommentsController extends BaseController {
@@ -67,9 +95,9 @@ class ProjectLogCommentsController extends BaseController {
     const author = await this.resolveCurrentAuthor(request);
     const payload: CreateProjectLogCommentInput = result.data;
 
-    await this.assertProjectLogReadable(request, payload.log_id, author);
+    const log = await this.assertProjectLogReadable(request, payload.log_id, author);
     if (payload.parent_id) {
-      await this.ensureParentComment(payload.log_id, payload.parent_id);
+      await this.ensureParentComment(payload.log_id, payload.parent_id, log.tenant_id);
     }
 
     if (author.author_type === "employee" && payload.rating != null) {
@@ -87,6 +115,7 @@ class ProjectLogCommentsController extends BaseController {
         const hasExistingRating = await this.hasCustomerExistingRating(
           payload.log_id,
           author.author_id,
+          log.tenant_id,
         );
         if (hasExistingRating) {
           resolvedRating = null;
@@ -95,6 +124,7 @@ class ProjectLogCommentsController extends BaseController {
     }
 
     const insertPayload = {
+      tenant_id: log.tenant_id,
       log_id: payload.log_id,
       parent_id: payload.parent_id ?? null,
       author_type: author.author_type,
@@ -125,13 +155,18 @@ class ProjectLogCommentsController extends BaseController {
 
     const { log_id }: ProjectLogCommentsQueryType = result.data;
     const viewer = await this.resolveCurrentAuthor(request);
-    await this.assertProjectLogReadable(request, log_id, viewer);
+    const log = await this.assertProjectLogReadable(request, log_id, viewer);
 
-    const { data, error } = await SupabaseDB.from("project_log_comments")
+    let query = SupabaseDB.from("project_log_comments")
       .select("*")
       .eq("log_id", log_id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true });
+      .is("deleted_at", null);
+
+    if (log.tenant_id) {
+      query = query.eq("tenant_id", log.tenant_id);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: true });
 
     if (error) {
       throw Errors.dbError("查询日志评论失败", error);
@@ -160,13 +195,13 @@ class ProjectLogCommentsController extends BaseController {
     const [{ data: employee }, { data: customer }] = await Promise.all([
       adminClient
         .from("employees")
-        .select("id, name, avatar, user_id")
+        .select("id, name, avatar, user_id, tenant_id")
         .eq("user_id", userId)
         .limit(1)
         .maybeSingle<EmployeeAuthor>(),
       adminClient
         .from("customers")
-        .select("id, name, user_id")
+        .select("id, name, user_id, tenant_id")
         .eq("user_id", userId)
         .limit(1)
         .maybeSingle<CustomerAuthor>(),
@@ -176,6 +211,7 @@ class ProjectLogCommentsController extends BaseController {
       return {
         author_type: "customer" as const,
         author_id: customer.id,
+        tenant_id: customer.tenant_id,
         profile: {
           id: customer.id,
           name: customer.name,
@@ -188,6 +224,7 @@ class ProjectLogCommentsController extends BaseController {
       return {
         author_type: "employee" as const,
         author_id: employee.id,
+        tenant_id: employee.tenant_id,
         profile: {
           id: employee.id,
           name: employee.name,
@@ -200,6 +237,7 @@ class ProjectLogCommentsController extends BaseController {
       return {
         author_type: "employee" as const,
         author_id: employee.id,
+        tenant_id: employee.tenant_id,
         profile: {
           id: employee.id,
           name: employee.name,
@@ -212,6 +250,7 @@ class ProjectLogCommentsController extends BaseController {
       return {
         author_type: "customer" as const,
         author_id: customer.id,
+        tenant_id: customer.tenant_id,
         profile: {
           id: customer.id,
           name: customer.name,
@@ -226,7 +265,7 @@ class ProjectLogCommentsController extends BaseController {
   private async getProjectLogAccessInfo(logId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id")
+      .select("id, project_id, tenant_id")
       .eq("id", logId)
       .maybeSingle<ProjectLogAccessInfo>();
 
@@ -250,15 +289,20 @@ class ProjectLogCommentsController extends BaseController {
     if (author.author_type === "customer") {
       const { data, error } = await SupabaseDB.getAdminClient()
         .from("projects")
-        .select("id, customer_id")
+        .select("id, customer_id, tenant_id")
         .eq("id", log.project_id)
+        .eq("tenant_id", log.tenant_id)
         .maybeSingle<ProjectOwnerInfo>();
 
       if (error) {
         throw Errors.dbError("查询项目归属失败", error);
       }
 
-      if (!data?.id || data.customer_id !== author.author_id) {
+      if (
+        !data?.id ||
+        data.customer_id !== author.author_id ||
+        data.tenant_id !== author.tenant_id
+      ) {
         throw Errors.forbidden();
       }
 
@@ -278,8 +322,12 @@ class ProjectLogCommentsController extends BaseController {
     return log;
   }
 
-  private async hasCustomerExistingRating(logId: string, customerId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async hasCustomerExistingRating(
+    logId: string,
+    customerId: string,
+    tenantId: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_log_comments")
       .select("id")
       .eq("log_id", logId)
@@ -288,8 +336,13 @@ class ProjectLogCommentsController extends BaseController {
       .is("parent_id", null)
       .not("rating", "is", null)
       .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle<{ id: string }>();
+      .limit(1);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle<{ id: string }>();
 
     if (error) {
       throw Errors.dbError("查询客户评分记录失败", error);
@@ -298,12 +351,21 @@ class ProjectLogCommentsController extends BaseController {
     return Boolean(data?.id);
   }
 
-  private async ensureParentComment(logId: string, parentId: string) {
-    const { data, error } = await SupabaseDB.from("project_log_comments")
+  private async ensureParentComment(
+    logId: string,
+    parentId: string,
+    tenantId: string | null,
+  ) {
+    let query = SupabaseDB.from("project_log_comments")
       .select("id, log_id")
       .eq("id", parentId)
-      .is("deleted_at", null)
-      .maybeSingle<{ id: string; log_id: string }>();
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle<{ id: string; log_id: string }>();
 
     if (error) {
       throw Errors.dbError("查询父评论失败", error);
@@ -336,12 +398,16 @@ class ProjectLogCommentsController extends BaseController {
         ? adminClient.from("employees")
           .select("id, name, avatar")
           .in("id", employeeIds)
-        : Promise.resolve({ data: [] as Array<Pick<Tables<"employees">, "id" | "name" | "avatar">> }),
+        : Promise.resolve({
+          data: [] as Array<{ id: string; name: string | null; avatar: string | null }>,
+        }),
       customerIds.length > 0
         ? adminClient.from("customers")
           .select("id, name")
           .in("id", customerIds)
-        : Promise.resolve({ data: [] as Array<Pick<Tables<"customers">, "id" | "name">> }),
+        : Promise.resolve({
+          data: [] as Array<{ id: string; name: string | null }>,
+        }),
     ]);
 
     const employeeMap = new Map(

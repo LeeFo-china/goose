@@ -164,6 +164,7 @@ class TaskCenterService {
       authContext.employeeId,
       projectIds,
       todayStart.toISOString(),
+      tenantId,
     );
     const loggedProjectIds = new Set(logs.map((item) => item.project_id));
     const dueAt = new Date();

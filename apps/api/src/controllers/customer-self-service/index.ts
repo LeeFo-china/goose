@@ -28,10 +28,13 @@ import {
 } from "@gooes/domain";
 import type { Tables } from "@/types/database";
 
-type CustomerContextRow = Pick<
-  Tables<"customers">,
-  "id" | "name" | "phone" | "user_id"
->;
+type CustomerContextRow = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  user_id: string | null;
+  tenant_id: string | null;
+};
 
 type UserProfileRow = {
   auth_user_id: string;
@@ -44,6 +47,7 @@ type UserProfileRow = {
 
 type CustomerProjectListItem = {
   id: string;
+  tenant_id?: string | null;
   name: string | null;
   status: string | null;
   budget: number | null;
@@ -299,7 +303,7 @@ class CustomerSelfServiceController extends BaseController {
   ) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, phone, user_id")
+      .select("id, name, phone, user_id, tenant_id")
       .eq("user_id", authUserId)
       .limit(2);
 
@@ -586,13 +590,22 @@ class CustomerSelfServiceController extends BaseController {
     return recentLogMap;
   }
 
-  private async getOwnedProjectLog(logId: string, projectId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async getOwnedProjectLog(
+    logId: string,
+    projectId: string,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("project_logs")
       .select("id, project_id")
       .eq("id", logId)
-      .eq("project_id", projectId)
-      .maybeSingle<{ id: string; project_id: string }>();
+      .eq("project_id", projectId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle<{ id: string; project_id: string }>();
 
     if (error) {
       throw Errors.dbError("查询客户项目日志失败", error);
@@ -724,6 +737,7 @@ class CustomerSelfServiceController extends BaseController {
       .from("projects")
       .select(`
         id,
+        tenant_id,
         name,
         status,
         budget,
@@ -838,6 +852,7 @@ class CustomerSelfServiceController extends BaseController {
       .from("projects")
       .select(`
         id,
+        tenant_id,
         name,
         status,
         budget,
@@ -860,6 +875,7 @@ class CustomerSelfServiceController extends BaseController {
         )
       `, { count: "exact" })
       .eq("customer_id", customer!.id)
+      .eq("tenant_id", customer!.tenant_id)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -976,7 +992,7 @@ class CustomerSelfServiceController extends BaseController {
     const queryResult = CustomerProjectLogListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    await this.getOwnedProject(idVerify.data.id, customer!.id);
+    const project = await this.getOwnedProject(idVerify.data.id, customer!.id);
     const { page, pageSize } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -987,6 +1003,7 @@ class CustomerSelfServiceController extends BaseController {
         count: "exact",
       })
       .eq("project_id", idVerify.data.id)
+      .eq("tenant_id", project.tenant_id)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -1010,6 +1027,7 @@ class CustomerSelfServiceController extends BaseController {
       )
         .select("id, log_id, parent_id, author_type, author_id, rating, created_at")
         .in("log_id", logIds)
+        .eq("tenant_id", project.tenant_id)
         .is("deleted_at", null);
 
       if (commentsError) {
@@ -1061,8 +1079,12 @@ class CustomerSelfServiceController extends BaseController {
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    await this.getOwnedProject(paramsResult.data.id, customer!.id);
-    await this.getOwnedProjectLog(paramsResult.data.logId, paramsResult.data.id);
+    const project = await this.getOwnedProject(paramsResult.data.id, customer!.id);
+    await this.getOwnedProjectLog(
+      paramsResult.data.logId,
+      paramsResult.data.id,
+      project.tenant_id,
+    );
 
     const { page, pageSize } = queryResult.data;
     const from = (page - 1) * pageSize;
@@ -1075,6 +1097,7 @@ class CustomerSelfServiceController extends BaseController {
         { count: "exact" },
       )
       .eq("log_id", paramsResult.data.logId)
+      .eq("tenant_id", project.tenant_id)
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .range(from, to);

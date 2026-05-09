@@ -68,6 +68,7 @@ import {
 
 type CustomerProjectRow = {
   id: string;
+  tenant_id: string | null;
   customer_id: string | null;
   name: string | null;
   status: string | null;
@@ -89,6 +90,7 @@ type CustomerProjectRow = {
 
 type CustomerProjectLogRow = {
   id: string;
+  tenant_id?: string | null;
   project_id: string;
   stage_code: string | null;
   node_name: string | null;
@@ -1363,6 +1365,7 @@ class CustomerProjectLogShareService {
       .from("projects")
       .select(`
         id,
+        tenant_id,
         customer_id,
         name,
         status,
@@ -1390,9 +1393,10 @@ class CustomerProjectLogShareService {
 
     const { data: logData, error: logError } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("id", logId)
       .eq("project_id", projectId)
+      .eq("tenant_id", (projectData as unknown as CustomerProjectRow).tenant_id)
       .maybeSingle();
 
     if (logError) {
@@ -1496,7 +1500,7 @@ class CustomerProjectLogShareService {
   private async getProjectLogById(logId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("id", logId)
       .maybeSingle();
 
@@ -1512,10 +1516,21 @@ class CustomerProjectLogShareService {
   }
 
   private async getRecentImageProjectLog(projectId: string) {
+    const { data: projectData, error: projectError } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", projectId)
+      .maybeSingle<{ tenant_id: string | null }>();
+
+    if (projectError) {
+      throw Errors.dbError("查询项目租户失败", projectError);
+    }
+
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("project_id", projectId)
+      .eq("tenant_id", projectData?.tenant_id ?? null)
       .order("created_at", { ascending: false })
       .limit(20);
 
@@ -1751,6 +1766,7 @@ class CustomerProjectLogShareService {
       .from("projects")
       .select(`
         id,
+        tenant_id,
         name,
         status,
         style_tags,
@@ -1772,8 +1788,9 @@ class CustomerProjectLogShareService {
 
     const { data: logData, error: logError } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("id", campaign.log_id)
+      .eq("tenant_id", (projectData as unknown as CustomerProjectRow).tenant_id)
       .maybeSingle();
 
     if (logError) {

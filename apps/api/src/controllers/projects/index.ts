@@ -382,6 +382,7 @@ class ProjectController extends BaseController<
       SupabaseDB.getAdminClient()
         .from("project_logs")
         .select("project_id")
+        .eq("tenant_id", tenantId)
         .gte("created_at", startIso)
         .lt("created_at", endIso),
       SupabaseDB.getAdminClient()

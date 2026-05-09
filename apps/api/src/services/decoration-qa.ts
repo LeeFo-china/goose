@@ -235,6 +235,10 @@ type CustomerProjectQaContext = {
   }>;
 };
 
+type ProjectQaProjectRowWithTenant = ProjectQaProjectRow & {
+  tenant_id: string | null;
+};
+
 const PROJECT_STAGE_REMINDER_PROMPTS: Partial<
   Record<ProjectLogStageCode, string[]>
 > = {
@@ -647,6 +651,7 @@ async function buildCustomerProjectQaContext(
     .from("projects")
     .select(`
       id,
+      tenant_id,
       name,
       status,
       address,
@@ -681,6 +686,7 @@ async function buildCustomerProjectQaContext(
     .from("project_logs")
     .select("stage_code, node_name, content, created_at")
     .eq("project_id", projectId)
+    .eq("tenant_id", (projectData as unknown as ProjectQaProjectRowWithTenant).tenant_id)
     .order("created_at", { ascending: false })
     .limit(5);
 

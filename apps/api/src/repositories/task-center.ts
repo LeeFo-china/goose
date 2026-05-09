@@ -139,17 +139,24 @@ class TaskCenterRepository {
     employeeId: string,
     projectIds: string[],
     fromIso: string,
+    tenantId?: string | null,
   ) {
     if (projectIds.length === 0) {
       return [] as Array<{ id: string; project_id: string }>;
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("project_logs")
       .select("id, project_id")
       .eq("employee_id", employeeId)
       .in("project_id", projectIds)
       .gte("created_at", fromIso);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询今日施工日志失败", error);
