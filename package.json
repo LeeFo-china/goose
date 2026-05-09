@@ -32,6 +32,7 @@
     "api:worker:social-video": "cd apps/api && bun src/workers/social-video-transcription-worker.ts",
     "api:build": "cd apps/api && bun build src/app.ts --outdir dist --target node",
     "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
+    "verify:tenant:phase3": "bun scripts/verify-phase3-tenant-isolation.ts",
     "h5:dev": "cd apps/h5 && bun run dev",
     "h5:build": "cd apps/h5 && bun run build",
     "admin:dev": "pnpm --dir apps/admin dev",
