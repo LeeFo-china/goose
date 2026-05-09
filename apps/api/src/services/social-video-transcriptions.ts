@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { Errors } from "@/errors/error-factory";
 import {
   socialVideoTranscriptionRepository,
@@ -9,6 +14,7 @@ import type {
   TestSocialVideoTranscriptionInput,
 } from "@/schema/social-video";
 import { systemSettingsService } from "@/services/system-settings";
+import { tencentAsrGateway } from "@/services/tencent-asr";
 
 type ApifyRunStatus = "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED-OUT" | "ABORTED";
 
@@ -30,6 +36,8 @@ type ApifyTranscriptItem = {
   title?: unknown;
   text?: unknown;
   segments?: unknown;
+  videoUrl?: unknown;
+  audioUrl?: unknown;
   errMsg?: unknown;
   error?: unknown;
   message?: unknown;
@@ -47,8 +55,20 @@ type TranscriptResult = {
   rawPayload: unknown;
 };
 
+type MediaResolveResult = {
+  actorId: string;
+  runId: string;
+  datasetId: string;
+  title: string | null;
+  videoUrl: string | null;
+  audioUrl: string | null;
+  durationSeconds: number | null;
+  rawPayload: unknown;
+};
+
 const DOUYIN_URL_PATTERN = /https?:\/\/(?:v\.|www\.)?douyin\.com\/[^\s，。]+|https?:\/\/(?:www\.)?iesdouyin\.com\/[^\s，。]+/i;
 const APIFY_POLL_INTERVAL_MS = 1500;
+const execFileAsync = promisify(execFile);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -130,9 +150,11 @@ function serializeRecord(record: SocialVideoTranscriptionRecord) {
     progress: record.progress,
     provider: record.provider,
     provider_actor_id: record.provider_actor_id,
+    asr_task_id: record.asr_task_id,
     title: record.title,
     text: record.text,
     segments: Array.isArray(record.segments) ? record.segments : [],
+    audio_duration_seconds: record.audio_duration_seconds,
     error_code: record.error_code,
     error_message: record.error_message,
     created_at: record.created_at,
@@ -158,6 +180,19 @@ function normalizeSegments(input: unknown) {
   return Array.isArray(input) ? input : [];
 }
 
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function normalizeTranscriptText(item: ApifyTranscriptItem) {
   if (typeof item.text === "string" && item.text.trim()) {
     return item.text.trim();
@@ -171,6 +206,135 @@ function normalizeTranscriptText(item: ApifyTranscriptItem) {
   }
 
   throw Errors.business(502, "Apify 未返回可用文本", "APIFY_TRANSCRIPT_EMPTY");
+}
+
+function assertDownloadableMediaUrl(input: string) {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw Errors.business(502, "Apify 返回的媒体地址格式异常", "SOCIAL_VIDEO_MEDIA_URL_INVALID");
+  }
+
+  if (url.protocol !== "https:") {
+    throw Errors.business(502, "媒体地址必须使用 HTTPS", "SOCIAL_VIDEO_MEDIA_URL_UNSAFE");
+  }
+
+  const host = url.hostname.toLowerCase();
+  const allowed = host === "douyin.com" ||
+    host.endsWith(".douyin.com") ||
+    host === "douyinvod.com" ||
+    host.endsWith(".douyinvod.com") ||
+    host.endsWith(".byteoversea.com") ||
+    host.endsWith(".byteimg.com") ||
+    host.endsWith(".snssdk.com");
+  if (!allowed) {
+    throw Errors.business(
+      502,
+      "Apify 返回的媒体地址不在允许的抖音域名范围内",
+      "SOCIAL_VIDEO_MEDIA_HOST_DENIED",
+      { host },
+    );
+  }
+}
+
+async function downloadMediaToFile(input: {
+  url: string;
+  filePath: string;
+  timeoutMs: number;
+  maxBytes: number;
+}) {
+  assertDownloadableMediaUrl(input.url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+
+  try {
+    const response = await fetch(input.url, {
+      headers: {
+        "user-agent": "Mozilla/5.0",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw Errors.business(
+        502,
+        `下载抖音媒体失败：${response.status}`,
+        "SOCIAL_VIDEO_MEDIA_DOWNLOAD_FAILED",
+      );
+    }
+
+    const contentLength = Number(response.headers.get("content-length") || "0");
+    if (contentLength > input.maxBytes) {
+      throw Errors.business(
+        413,
+        "抖音媒体文件超过下载大小限制",
+        "SOCIAL_VIDEO_MEDIA_TOO_LARGE",
+        { contentLength, maxBytes: input.maxBytes },
+      );
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > input.maxBytes) {
+      throw Errors.business(
+        413,
+        "抖音媒体文件超过下载大小限制",
+        "SOCIAL_VIDEO_MEDIA_TOO_LARGE",
+        { bytes: buffer.byteLength, maxBytes: input.maxBytes },
+      );
+    }
+    await writeFile(input.filePath, buffer);
+    return buffer.byteLength;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw Errors.business(504, "下载抖音媒体超时", "SOCIAL_VIDEO_MEDIA_DOWNLOAD_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function extractAudioWithFfmpeg(input: {
+  mediaFilePath: string;
+  audioFilePath: string;
+  timeoutMs: number;
+  bitrate: string;
+}) {
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      input.mediaFilePath,
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-b:a",
+      input.bitrate,
+      input.audioFilePath,
+    ], {
+      timeout: input.timeoutMs,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (error) {
+    throw Errors.business(
+      503,
+      "ffmpeg 提取音频失败，请检查服务器 ffmpeg 和视频格式",
+      "SOCIAL_VIDEO_FFMPEG_FAILED",
+      error instanceof Error ? { message: error.message } : undefined,
+    );
+  }
+
+  const audioStat = await stat(input.audioFilePath).catch(() => null);
+  if (!audioStat || audioStat.size <= 0) {
+    throw Errors.business(503, "ffmpeg 未生成有效音频文件", "SOCIAL_VIDEO_AUDIO_EMPTY");
+  }
+
+  return audioStat.size;
 }
 
 class ApifyTranscriptGateway {
@@ -260,12 +424,12 @@ class ApifyTranscriptGateway {
     });
   }
 
-  async transcribe(input: {
+  private async runAndReadItem(input: {
     token: string;
     actorId: string;
     videoUrl: string;
     timeoutMs: number;
-  }): Promise<TranscriptResult> {
+  }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
 
@@ -312,20 +476,11 @@ class ApifyTranscriptGateway {
         signal: controller.signal,
       });
       const item = extractTranscriptItem(items);
-      const text = normalizeTranscriptText(item);
-      const title = typeof item.title === "string" && item.title.trim()
-        ? item.title.trim()
-        : null;
 
       return {
-        provider: "apify",
-        actorId: input.actorId,
-        runId: run.id,
+        run,
         datasetId,
-        title,
-        text,
-        segments: normalizeSegments(item.segments),
-        rawPayload: item,
+        item,
       };
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -337,10 +492,66 @@ class ApifyTranscriptGateway {
       clearTimeout(timeout);
     }
   }
+
+  async resolveMedia(input: {
+    token: string;
+    actorId: string;
+    videoUrl: string;
+    timeoutMs: number;
+  }): Promise<MediaResolveResult> {
+    const { run, datasetId, item } = await this.runAndReadItem(input);
+    const title = readString(item.title);
+    const videoUrl = readString(item.videoUrl);
+    const audioUrl = readString(item.audioUrl);
+    if (!videoUrl && !audioUrl) {
+      throw Errors.business(502, "Apify 未返回可用音视频地址", "APIFY_MEDIA_URL_MISSING");
+    }
+
+    return {
+      actorId: input.actorId,
+      runId: run.id,
+      datasetId,
+      title,
+      videoUrl,
+      audioUrl,
+      durationSeconds: readNumber(item.duration),
+      rawPayload: item,
+    };
+  }
+
+  async transcribe(input: {
+    token: string;
+    actorId: string;
+    videoUrl: string;
+    timeoutMs: number;
+  }): Promise<TranscriptResult> {
+    const { run, datasetId, item } = await this.runAndReadItem(input);
+    const text = normalizeTranscriptText(item);
+    const title = readString(item.title);
+
+    return {
+      provider: "apify",
+      actorId: input.actorId,
+      runId: run.id,
+      datasetId,
+      title,
+      text,
+      segments: normalizeSegments(item.segments),
+      rawPayload: item,
+    };
+  }
 }
 
 class SocialVideoTranscriptionService {
   private apifyGateway = new ApifyTranscriptGateway();
+
+  private async getTranscriptionProvider() {
+    const provider = await systemSettingsService.getString(
+      "SOCIAL_VIDEO_TRANSCRIPTION_PROVIDER",
+      "tencent_asr",
+    );
+    return provider === "apify" ? "apify" : "tencent_asr";
+  }
 
   private async getApifyConfig() {
     const token = await systemSettingsService.getSecretString("APIFY_API_TOKEN");
@@ -358,6 +569,32 @@ class SocialVideoTranscriptionService {
         "APIFY_TRANSCRIPT_TIMEOUT_MS",
         60000,
       ),
+    };
+  }
+
+  private async getMediaProcessingConfig() {
+    const maxDownloadBytes = await systemSettingsService.getNumber(
+      "SOCIAL_VIDEO_MAX_DOWNLOAD_BYTES",
+      100 * 1024 * 1024,
+    );
+    const downloadTimeoutMs = await systemSettingsService.getNumber(
+      "SOCIAL_VIDEO_DOWNLOAD_TIMEOUT_MS",
+      180000,
+    );
+    const ffmpegTimeoutMs = await systemSettingsService.getNumber(
+      "SOCIAL_VIDEO_FFMPEG_TIMEOUT_MS",
+      120000,
+    );
+    const audioBitrate = await systemSettingsService.getString(
+      "SOCIAL_VIDEO_AUDIO_BITRATE",
+      "32k",
+    );
+
+    return {
+      maxDownloadBytes,
+      downloadTimeoutMs,
+      ffmpegTimeoutMs,
+      audioBitrate,
     };
   }
 
@@ -431,6 +668,12 @@ class SocialVideoTranscriptionService {
         providerActorId: cached.provider_actor_id,
         providerRunId: cached.provider_run_id,
         providerDatasetId: cached.provider_dataset_id,
+        resolvedVideoUrl: cached.resolved_video_url,
+        resolvedAudioUrl: cached.resolved_audio_url,
+        asrTaskId: cached.asr_task_id,
+        mediaFileSizeBytes: cached.media_file_size_bytes,
+        audioFileSizeBytes: cached.audio_file_size_bytes,
+        audioDurationSeconds: cached.audio_duration_seconds,
         title: cached.title,
         text: cached.text,
         segments: cached.segments,
@@ -489,12 +732,86 @@ class SocialVideoTranscriptionService {
       });
 
       const config = await this.getApifyConfig();
+      const provider = await this.getTranscriptionProvider();
       await socialVideoTranscriptionRepository.update(id, {
-        status: "transcribing",
-        progress: 60,
-        provider: "apify",
+        status: provider === "apify" ? "transcribing" : "resolving",
+        progress: provider === "apify" ? 60 : 25,
+        provider,
         providerActorId: config.actorId,
       });
+
+      if (provider === "tencent_asr") {
+        const media = await this.apifyGateway.resolveMedia({
+          token: config.token,
+          actorId: config.actorId,
+          videoUrl: task.source_url,
+          timeoutMs: config.timeoutMs,
+        });
+        await socialVideoTranscriptionRepository.update(id, {
+          status: "downloading",
+          progress: 35,
+          providerRunId: media.runId,
+          providerDatasetId: media.datasetId,
+          resolvedVideoUrl: media.videoUrl,
+          resolvedAudioUrl: media.audioUrl,
+          title: media.title,
+          audioDurationSeconds: media.durationSeconds,
+          rawPayload: media.rawPayload,
+        });
+
+        const mediaConfig = await this.getMediaProcessingConfig();
+        const tempDir = await mkdtemp(join(tmpdir(), "gooes-social-video-"));
+        const mediaFilePath = join(tempDir, "source-media");
+        const audioFilePath = join(tempDir, "audio.mp3");
+
+        try {
+          const mediaFileSizeBytes = await downloadMediaToFile({
+            url: media.audioUrl || media.videoUrl || "",
+            filePath: mediaFilePath,
+            timeoutMs: mediaConfig.downloadTimeoutMs,
+            maxBytes: mediaConfig.maxDownloadBytes,
+          });
+          await socialVideoTranscriptionRepository.update(id, {
+            status: "extracting_audio",
+            progress: 50,
+            mediaFileSizeBytes,
+          });
+
+          const audioFileSizeBytes = await extractAudioWithFfmpeg({
+            mediaFilePath,
+            audioFilePath,
+            timeoutMs: mediaConfig.ffmpegTimeoutMs,
+            bitrate: mediaConfig.audioBitrate,
+          });
+          await socialVideoTranscriptionRepository.update(id, {
+            status: "creating_asr_task",
+            progress: 65,
+            audioFileSizeBytes,
+          });
+
+          const asrResult = await tencentAsrGateway.transcribeAudioFile(audioFilePath);
+          await socialVideoTranscriptionRepository.update(id, {
+            status: "completed",
+            progress: 100,
+            provider: asrResult.provider,
+            asrTaskId: asrResult.taskId,
+            title: media.title,
+            text: asrResult.text,
+            segments: asrResult.segments,
+            rawPayload: {
+              resolver: media.rawPayload,
+              asr: asrResult.rawPayload,
+            },
+            audioDurationSeconds: asrResult.audioDurationSeconds ?? media.durationSeconds,
+            completedAt: new Date().toISOString(),
+            errorCode: null,
+            errorMessage: null,
+          });
+        } finally {
+          await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
+        return;
+      }
 
       const result = await this.apifyGateway.transcribe({
         token: config.token,

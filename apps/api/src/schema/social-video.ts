@@ -7,6 +7,9 @@ export const SocialVideoPlatformSchema = z.enum(["douyin"], {
 export const SocialVideoTranscriptionStatusSchema = z.enum([
   "pending",
   "resolving",
+  "downloading",
+  "extracting_audio",
+  "creating_asr_task",
   "transcribing",
   "completed",
   "failed",

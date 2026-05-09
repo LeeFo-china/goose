@@ -14,6 +14,12 @@ export type SocialVideoTranscriptionRecord = {
   provider_actor_id: string | null;
   provider_run_id: string | null;
   provider_dataset_id: string | null;
+  resolved_video_url: string | null;
+  resolved_audio_url: string | null;
+  asr_task_id: string | null;
+  media_file_size_bytes: number | null;
+  audio_file_size_bytes: number | null;
+  audio_duration_seconds: number | null;
   title: string | null;
   text: string | null;
   segments: unknown;
@@ -41,6 +47,12 @@ type UpdateSocialVideoTranscriptionRecordInput = {
   providerActorId?: string | null;
   providerRunId?: string | null;
   providerDatasetId?: string | null;
+  resolvedVideoUrl?: string | null;
+  resolvedAudioUrl?: string | null;
+  asrTaskId?: string | null;
+  mediaFileSizeBytes?: number | null;
+  audioFileSizeBytes?: number | null;
+  audioDurationSeconds?: number | null;
   title?: string | null;
   text?: string | null;
   segments?: unknown;
@@ -138,6 +150,12 @@ class SocialVideoTranscriptionRepository {
     if (input.providerActorId !== undefined) payload.provider_actor_id = input.providerActorId;
     if (input.providerRunId !== undefined) payload.provider_run_id = input.providerRunId;
     if (input.providerDatasetId !== undefined) payload.provider_dataset_id = input.providerDatasetId;
+    if (input.resolvedVideoUrl !== undefined) payload.resolved_video_url = input.resolvedVideoUrl;
+    if (input.resolvedAudioUrl !== undefined) payload.resolved_audio_url = input.resolvedAudioUrl;
+    if (input.asrTaskId !== undefined) payload.asr_task_id = input.asrTaskId;
+    if (input.mediaFileSizeBytes !== undefined) payload.media_file_size_bytes = input.mediaFileSizeBytes;
+    if (input.audioFileSizeBytes !== undefined) payload.audio_file_size_bytes = input.audioFileSizeBytes;
+    if (input.audioDurationSeconds !== undefined) payload.audio_duration_seconds = input.audioDurationSeconds;
     if (input.title !== undefined) payload.title = input.title;
     if (input.text !== undefined) payload.text = input.text;
     if (input.segments !== undefined) payload.segments = input.segments;
