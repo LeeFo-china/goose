@@ -236,7 +236,7 @@ async function getServiceStatuses(pm2Bin: string) {
         status?: string;
       };
     }>;
-    return ["goose", "goose-admin"].map((name) => {
+    return ["goose", "goose-admin", "goose-social-video-worker"].map((name) => {
       const app = list.find((item) => item.name === name);
       return {
         name,
@@ -248,6 +248,7 @@ async function getServiceStatuses(pm2Bin: string) {
     return [
       { name: "goose", status: "unknown", pid: "-" },
       { name: "goose-admin", status: "unknown", pid: "-" },
+      { name: "goose-social-video-worker", status: "unknown", pid: "-" },
     ];
   }
 }
@@ -282,6 +283,8 @@ async function collectReport(env: EnvMap) {
     || { name: "goose", status: "unknown", pid: "-" };
   const adminService = health.services.find((service) => service.name === "goose-admin")
     || { name: "goose-admin", status: "unknown", pid: "-" };
+  const socialVideoWorkerService = health.services.find((service) => service.name === "goose-social-video-worker")
+    || { name: "goose-social-video-worker", status: "unknown", pid: "-" };
 
   const failureLogs = status === "success"
     ? ""
@@ -297,6 +300,9 @@ async function collectReport(env: EnvMap) {
       "",
       "=== Goose Admin Recent Logs ===",
       await runCommand(pm2Bin, ["logs", "goose-admin", "--lines", "80", "--nostream", "--no-color"]),
+      "",
+      "=== Goose Social Video Worker Recent Logs ===",
+      await runCommand(pm2Bin, ["logs", "goose-social-video-worker", "--lines", "80", "--nostream", "--no-color"]),
     ].join("\n");
 
   const subjectStatus = status === "success" ? "成功" : "失败";
@@ -319,6 +325,7 @@ async function collectReport(env: EnvMap) {
     "服务状态：",
     formatServiceLine(gooseService, health.gooseHttpStatus),
     formatServiceLine(adminService, health.adminHttpStatus),
+    formatServiceLine(socialVideoWorkerService, "worker"),
     "",
     "GitHub Actions：",
     runUrl || `Run ID：${env.GITHUB_RUN_ID || "unknown"}`,

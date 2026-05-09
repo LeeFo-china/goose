@@ -7,7 +7,7 @@ PM2_JSON="$("$PM2_BIN" jlist)"
 PM2_JSON="$PM2_JSON" node <<'NODE'
 try {
   const apps = JSON.parse(process.env.PM2_JSON || "[]");
-  const targetNames = new Set(["goose", "goose-admin"]);
+  const targetNames = new Set(["goose", "goose-admin", "goose-social-video-worker"]);
   const rows = apps
     .filter((app) => targetNames.has(app.name))
     .map((app) => ({

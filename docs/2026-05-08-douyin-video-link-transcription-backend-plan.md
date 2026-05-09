@@ -390,6 +390,37 @@ MVP 推荐顺序：
 
 ## 12. 异步任务执行方式
 
+当前已升级为数据库队列 + 独立 worker：
+
+```text
+API 创建任务 -> social_video_transcriptions.status=pending
+goose-social-video-worker -> RPC 领取 pending 任务
+  -> Apify 解析
+  -> 下载媒体
+  -> ffmpeg 提取音频
+  -> 腾讯云 ASR
+  -> completed / failed
+```
+
+领取任务使用 Postgres RPC：
+
+```text
+claim_next_social_video_transcription()
+```
+
+该 RPC 内部按 `created_at ASC` 领取 `pending` 任务，并使用 `FOR UPDATE SKIP LOCKED` 避免多个 worker 抢到同一条任务。
+
+并发控制：
+
+```text
+SOCIAL_VIDEO_CONCURRENCY_LIMIT=1
+SOCIAL_VIDEO_WORKER_POLL_INTERVAL_MS=3000
+```
+
+默认单 worker 进程同一时间只处理 1 条任务，后续任务保持 `pending` 等待领取。
+
+### 12.1 历史方案说明
+
 MVP 可以先在 API 进程内启动后台 promise：
 
 ```text
@@ -407,7 +438,7 @@ MVP 可以先在 API 进程内启动后台 promise：
 - 定时 worker 扫描 `pending/failed retryable`。
 - 每次只处理有限并发，比如 1-2 个。
 
-推荐 MVP 先做进程内异步，代码结构预留 worker 化。
+这套进程内异步已被 worker 队列替代，不再作为当前主方案。
 
 ## 13. API Schema 建议
 

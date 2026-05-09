@@ -29,6 +29,7 @@
     "build": "bun run api:build",
     "api:dev": "cd apps/api && bun --watch src/app.ts",
     "api:start": "cd apps/api && bun src/app.ts",
+    "api:worker:social-video": "cd apps/api && bun src/workers/social-video-transcription-worker.ts",
     "api:build": "cd apps/api && bun build src/app.ts --outdir dist --target node",
     "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
     "h5:dev": "cd apps/h5 && bun run dev",

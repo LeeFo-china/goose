@@ -160,7 +160,7 @@ Authorization: Bearer <token>
 ## 3. 状态枚举
 
 ```text
-pending       已创建，等待后端处理；如果并发已满，会短暂停留在这里排队
+pending       已创建，等待 worker 领取；如果并发已满，会停留在这里排队
 resolving     后端正在调用 Apify 解析音视频地址
 downloading   后端正在下载音视频
 extracting_audio  后端正在用 ffmpeg 提取音频
@@ -213,7 +213,7 @@ GET /social-video/transcriptions/:id
 识别仍在处理中，请稍后刷新查看
 ```
 
-后端有并发限制，默认同一 API 进程只同时处理 1 个识别任务。多个用户同时提交时，后续任务会先保持 `pending`，小程序端继续轮询即可，不需要额外处理。
+后端有独立 worker 和数据库队列。默认 worker 只同时处理 1 个识别任务。多个用户同时提交时，后续任务会先保持 `pending`，小程序端继续轮询即可，不需要额外处理。
 
 ### 4.3 完成后
 
@@ -286,11 +286,12 @@ TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
    - `TENCENT_ASR_REGION=ap-shanghai`
    - `TENCENT_ASR_ENGINE_MODEL_TYPE=16k_zh`
 2. API 服务器已安装 `ffmpeg`。
-3. admin 后台“短视频识别”配置页测试成功。
-4. 小程序登录态正常，接口带 `Authorization`。
-5. 小程序创建任务成功。
-6. 小程序轮询能拿到 completed 或 failed。
-7. completed 时 `text` 可复制。
+3. PM2 中 `goose-social-video-worker` 状态为 online。
+4. admin 后台“短视频识别”配置页测试成功。
+5. 小程序登录态正常，接口带 `Authorization`。
+6. 小程序创建任务成功。
+7. 小程序轮询能拿到 completed 或 failed。
+8. completed 时 `text` 可复制。
 
 ## 8. 推荐结论
 

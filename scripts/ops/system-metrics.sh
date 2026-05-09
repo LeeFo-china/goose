@@ -114,7 +114,7 @@ function getPm2Processes() {
     apps = [];
   }
 
-  const targetNames = new Set(["goose", "goose-admin"]);
+  const targetNames = new Set(["goose", "goose-admin", "goose-social-video-worker"]);
   return apps
     .filter((app) => targetNames.has(app.name))
     .map((app) => {

@@ -141,6 +141,19 @@ class SocialVideoTranscriptionRepository {
     return count || 0;
   }
 
+  async claimNextPending() {
+    const { data, error } = await this.client.rpc(
+      "claim_next_social_video_transcription",
+    );
+
+    if (error) {
+      throw Errors.dbError("领取短视频识别任务失败", error);
+    }
+
+    const record = Array.isArray(data) ? data[0] : data;
+    return (record || null) as SocialVideoTranscriptionRecord | null;
+  }
+
   async update(id: string, input: UpdateSocialVideoTranscriptionRecordInput) {
     const payload: Record<string, unknown> = {};
 

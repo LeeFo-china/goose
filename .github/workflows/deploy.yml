@@ -130,6 +130,22 @@ jobs:
           "$PM2_BIN" save
           "$PM2_BIN" status goose
 
+          # Deploy short video transcription worker.
+          echo "Deploying goose-social-video-worker..."
+          WORKER_CWD="$GITHUB_WORKSPACE/apps/api"
+          WORKER_ENTRY="$WORKER_CWD/src/workers/social-video-transcription-worker.ts"
+          CURRENT_WORKER_CWD=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose-social-video-worker"); process.stdout.write(app?.pm2_env?.pm_cwd || ""); });')
+          CURRENT_WORKER_ENTRY=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose-social-video-worker"); process.stdout.write(app?.pm2_env?.pm_exec_path || ""); });')
+          if [ "$CURRENT_WORKER_CWD" = "$WORKER_CWD" ] && [ "$CURRENT_WORKER_ENTRY" = "$WORKER_ENTRY" ]; then
+            "$PM2_BIN" restart goose-social-video-worker --update-env || "$PM2_BIN" reload goose-social-video-worker --update-env
+          else
+            echo "Recreating goose-social-video-worker PM2 process because its entry changed."
+            "$PM2_BIN" delete goose-social-video-worker >/dev/null 2>&1 || true
+            "$PM2_BIN" start "$WORKER_ENTRY" --interpreter "$BUN_BIN" --name goose-social-video-worker --cwd "$WORKER_CWD" --update-env
+          fi
+          "$PM2_BIN" save
+          "$PM2_BIN" status goose-social-video-worker
+
           # The shared backend .env currently contains NODE_ENV=development.
           # Next.js production builds must run with NODE_ENV=production.
           touch apps/admin/.env.production
