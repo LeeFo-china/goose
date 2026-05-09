@@ -11,6 +11,7 @@ import { sendSmsCode } from "@/services/sms";
 import { authorizationService } from "@/services/authorization";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
+import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import type {
   AuthTargetRole,
@@ -263,6 +264,7 @@ export class WeChatController extends BaseController {
       request.user.sub,
       phone,
       request.user.openid ?? null,
+      bodyResult.data.share_token ?? null,
     );
 
     await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
@@ -749,7 +751,17 @@ export class WeChatController extends BaseController {
     authUserId: string,
     phone: string,
     openid: string | null,
+    shareToken?: string | null,
   ) {
+    if (shareToken) {
+      return this.resolveCustomerLoginStateByShareToken({
+        authUserId,
+        phone,
+        openid,
+        shareToken,
+      });
+    }
+
     const customers = await this.listCustomerTenantOptionsByPhone(phone);
 
     if (customers.length === 0) {
@@ -802,6 +814,44 @@ export class WeChatController extends BaseController {
       is_new_user: false,
       phone,
       tenants: customers.map((item) => this.serializeCustomerTenantOption(item)),
+    };
+  }
+
+  private async resolveCustomerLoginStateByShareToken(input: {
+    authUserId: string;
+    phone: string;
+    openid: string | null;
+    shareToken: string;
+  }) {
+    const bound = await tenantShareLinkService.bindCustomer({
+      authUserId: input.authUserId,
+      phone: input.phone,
+      shareToken: input.shareToken,
+    });
+
+    const customer = await this.getCustomerTenantOptionById(
+      bound.customer_id,
+      bound.tenant_id,
+    );
+    if (!customer) {
+      throw Errors.dbError("员工分享客户绑定后未找到客户档案", bound);
+    }
+
+    return {
+      ...(await this.signCustomerSession({
+        authUserId: input.authUserId,
+        openid: input.openid,
+        customer: {
+          ...customer,
+          user_id: input.authUserId,
+        },
+      })),
+      share_binding: {
+        share_link_id: bound.share_link_id,
+        share_employee_id: bound.share_employee_id,
+        dedupe_result: bound.dedupe_result,
+        source: bound.source,
+      },
     };
   }
 

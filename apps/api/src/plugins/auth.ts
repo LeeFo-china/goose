@@ -55,6 +55,13 @@ function isPublicRoute(method: string, url: string) {
   }
 
   if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/public/tenant-share-links/")
+  ) {
+    return true;
+  }
+
+  if (
     method === "POST"
     && url.startsWith("/public/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))

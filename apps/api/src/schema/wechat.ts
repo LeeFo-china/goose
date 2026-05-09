@@ -20,6 +20,12 @@ export const VerifyRoleSchema = z.object({
   target_role: z.enum(AUTH_TARGET_ROLE_VALUES, {
     message: "无效的目标角色",
   }),
+  share_token: z.string()
+    .trim()
+    .min(8, "分享 token 过短")
+    .max(80, "分享 token 过长")
+    .regex(/^[A-Za-z0-9_-]+$/, "分享 token 格式不正确")
+    .optional(),
   create_customer_if_missing: z.boolean().optional().default(false),
   customer_origin: z.enum(CUSTOMER_ORIGIN_VALUES, {
     message: "无效的客户创建渠道",

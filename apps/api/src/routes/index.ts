@@ -42,6 +42,7 @@ import ProjectMemberRolePostRulesController from "@/controllers/project-member-r
 import DepartmentPostRulesController from "@/controllers/department-post-rules";
 import SocialVideoController from "@/controllers/social-video";
 import PlatformLeadsController from "@/controllers/platform-leads";
+import TenantShareLinksController from "@/controllers/tenant-share-links";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -55,6 +56,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   SystemSettingsController.registerExtraRoutes(app);
   SocialVideoController.registerExtraRoutes(app);
   PlatformLeadsController.registerExtraRoutes(app);
+  TenantShareLinksController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   ProjectMemberRolePostRulesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);
