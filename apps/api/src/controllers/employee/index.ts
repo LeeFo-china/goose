@@ -202,6 +202,7 @@ class EmployeeController extends BaseController<
     await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
       departmentId: result.data.department_id,
       postId: result.data.post_id,
+      tenantId: authContext.tenantId,
     });
 
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -252,6 +253,7 @@ class EmployeeController extends BaseController<
       postId: result.data.post_id !== undefined
         ? result.data.post_id
         : existing.data.post_id,
+      tenantId: authContext.tenantId,
     });
 
     const { data, error } = await SupabaseDB.getAdminClient()

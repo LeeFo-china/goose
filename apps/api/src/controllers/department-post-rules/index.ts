@@ -25,7 +25,9 @@ class DepartmentPostRulesController extends BaseController {
     const authContext = await this.getRequiredAuthContext(request);
     accessPolicyService.assertPermission(authContext, "employee.read");
 
-    return ResponseHandler.success(await departmentPostRuleService.getConfig());
+    return ResponseHandler.success(
+      await departmentPostRuleService.getConfig(authContext.tenantId),
+    );
   }
 
   @Put("/department-post-rules/:department_code")
@@ -47,6 +49,7 @@ class DepartmentPostRulesController extends BaseController {
       await departmentPostRuleService.updateDepartmentPostCodes(
         paramsResult.data.department_code,
         bodyResult.data.post_codes,
+        authContext.tenantId,
       ),
     );
   }

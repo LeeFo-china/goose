@@ -26,7 +26,7 @@ class ProjectMemberRolePostRulesController extends BaseController {
     accessPolicyService.assertPermission(authContext, "project.read");
 
     return ResponseHandler.success(
-      await projectMemberRolePostRuleService.getConfig(),
+      await projectMemberRolePostRuleService.getConfig(authContext.tenantId),
     );
   }
 
@@ -49,6 +49,7 @@ class ProjectMemberRolePostRulesController extends BaseController {
       await projectMemberRolePostRuleService.updateRolePostCodes(
         paramsResult.data.role_code,
         bodyResult.data.post_codes,
+        authContext.tenantId,
       ),
     );
   }

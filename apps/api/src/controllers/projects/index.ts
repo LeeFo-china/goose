@@ -1475,8 +1475,9 @@ class ProjectController extends BaseController<
     const postCodes =
       await projectMemberRolePostRuleService.listCandidatePostCodesByScene(
         scene,
+        authContext.tenantId,
       );
-    const postIds = await this.getPostIdsByCodes(postCodes);
+    const postIds = await this.getPostIdsByCodes(postCodes, authContext.tenantId);
     const result = await this.queryProjectCreateEmployees({
       from,
       to,
@@ -1558,9 +1559,10 @@ class ProjectController extends BaseController<
     const postCodes = role_code
       ? await projectMemberRolePostRuleService.listCandidatePostCodesByRole(
         role_code,
+        authContext.tenantId,
       )
       : [];
-    const postIds = await this.getPostIdsByCodes(postCodes);
+    const postIds = await this.getPostIdsByCodes(postCodes, authContext.tenantId);
     const result = await this.queryProjectCreateEmployees({
       from,
       to,
@@ -1615,14 +1617,15 @@ class ProjectController extends BaseController<
     });
   }
 
-  private async getPostIdsByCodes(codes: EmployeePostCode[]) {
+  private async getPostIdsByCodes(codes: EmployeePostCode[], tenantId?: string | null) {
     if (codes.length === 0) {
       return [];
     }
 
     const { data, error } = await SupabaseDB.from("posts")
       .select("id")
-      .in("code", codes);
+      .in("code", codes)
+      .eq("tenant_id", tenantId);
 
     if (error) {
       throw Errors.dbError("查询项目创建员工筛选岗位失败", error);

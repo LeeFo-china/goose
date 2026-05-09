@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase/index";
+import { authorizationService } from "@/services/authorization";
 
 const DepartmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
@@ -25,7 +26,16 @@ class DepartmentController extends BaseController<
     super("departments", CreateDepartmentSchema, UpdateDepartmentSchema);
   }
 
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = DepartmentListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -33,7 +43,8 @@ class DepartmentController extends BaseController<
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     let query = SupabaseDB.from("departments")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .eq("tenant_id", authContext.tenantId);
 
     if (keyword) {
       const escaped = keyword.replaceAll(",", "\\,");
@@ -58,6 +69,62 @@ class DepartmentController extends BaseController<
         totalPages: count ? Math.ceil(count / pageSize) : 0,
       },
     });
+  };
+
+  override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("departments")
+      .select("*")
+      .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("部门查询失败", error);
+    if (!data) throw Errors.badRequest("部门不存在");
+    return ResponseHandler.success(data);
+  };
+
+  override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = CreateDepartmentSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("departments")
+      .insert({
+        ...result.data,
+        tenant_id: authContext.tenantId ?? null,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw Errors.dbError("创建部门失败", error);
+    return ResponseHandler.success(data);
+  };
+
+  override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const result = UpdateDepartmentSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("departments")
+      .update(result.data)
+      .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("更新部门失败", error);
+    if (!data) throw Errors.badRequest("部门不存在或更新失败");
+    return ResponseHandler.success(data);
   };
 }
 

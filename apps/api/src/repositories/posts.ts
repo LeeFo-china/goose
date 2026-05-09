@@ -8,6 +8,7 @@ import { SupabaseDB } from "@/utils/supabase";
 export type PostListQuery = {
   page: number;
   pageSize: number;
+  tenantId?: string | null;
   keyword?: string;
   code?: string;
   salary_type?: string;
@@ -25,16 +26,21 @@ export type PostRecord = {
   description: string | null;
   created_at: string | null;
   updated_at: string | null;
+  tenant_id?: string | null;
 };
 
 class PostsRepository {
   async list(params: PostListQuery) {
-    const { page, pageSize, keyword, code, salary_type, status } = params;
+    const { page, pageSize, tenantId, keyword, code, salary_type, status } = params;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     let query = SupabaseDB.getAdminClient()
       .from("posts")
       .select("*", { count: "exact" });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
 
     if (keyword) {
       const escaped = keyword.replaceAll(",", "\\,");
@@ -70,29 +76,39 @@ class PostsRepository {
     };
   }
 
-  async findById(id: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findById(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("posts")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询岗位失败", error);
     return (data as PostRecord | null) ?? null;
   }
 
-  async findByCode(code: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findByCode(code: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("posts")
       .select("*")
-      .eq("code", code)
-      .maybeSingle();
+      .eq("code", code);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw Errors.dbError("查询岗位编码失败", error);
     return (data as PostRecord | null) ?? null;
   }
 
-  async create(input: CreatePostInput) {
+  async create(input: CreatePostInput & { tenant_id?: string | null }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("posts")
       .insert(input)
@@ -104,13 +120,17 @@ class PostsRepository {
     return data as PostRecord;
   }
 
-  async update(id: string, input: UpdatePostInput) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async update(id: string, input: UpdatePostInput, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("posts")
       .update(input)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) throw Errors.dbError("更新岗位失败", error);
     if (!data) throw Errors.badRequest("岗位不存在或更新失败");

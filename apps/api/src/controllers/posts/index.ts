@@ -13,6 +13,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { postsService } from "@/services/posts";
+import { authorizationService } from "@/services/authorization";
 
 const PostListQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
@@ -34,21 +35,48 @@ class PostsController extends BaseController<
     super("posts", CreatePostSchema, UpdatePostSchema);
   }
 
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+    );
+    request.authContext = authContext;
+    return authContext;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = PostListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    return ResponseHandler.success(await postsService.listPosts(queryResult.data));
+    return ResponseHandler.success(
+      await postsService.listPosts(queryResult.data, authContext.tenantId),
+    );
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const result = CreatePostSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    return ResponseHandler.success(await postsService.createPost(result.data));
+    return ResponseHandler.success(
+      await postsService.createPost(result.data, authContext.tenantId),
+    );
+  };
+
+  override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await postsService.getPostById(
+      idVerify.data.id,
+      authContext.tenantId,
+    );
+    return ResponseHandler.success(data);
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -56,7 +84,11 @@ class PostsController extends BaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     return ResponseHandler.success(
-      await postsService.updatePost(idVerify.data.id, result.data),
+      await postsService.updatePost(
+        idVerify.data.id,
+        result.data,
+        authContext.tenantId,
+      ),
     );
   };
 }

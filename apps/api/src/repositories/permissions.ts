@@ -14,6 +14,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type RoleRecord = {
   id: string;
+  tenant_id?: string | null;
   code: string;
   name: string;
   description: string | null;
@@ -158,7 +159,7 @@ class PermissionRepository {
     return lastResult;
   }
 
-  async listRoles(params: RoleListQueryType) {
+  async listRoles(params: RoleListQueryType, tenantId?: string | null) {
     const { page, pageSize, status, keyword } = params;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -167,6 +168,10 @@ class PermissionRepository {
       .from("roles")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       query = query.eq("status", status);
@@ -192,12 +197,17 @@ class PermissionRepository {
     };
   }
 
-  async findRoleById(id: string): Promise<RoleRecord | null> {
-    const { data, error } = await this.adminClient
+  async findRoleById(id: string, tenantId?: string | null): Promise<RoleRecord | null> {
+    let query = this.adminClient
       .from("roles")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询角色失败", error);
@@ -245,7 +255,7 @@ class PermissionRepository {
       }));
   }
 
-  async createRole(input: CreateRoleInput): Promise<RoleRecord> {
+  async createRole(input: CreateRoleInput & { tenant_id?: string | null }): Promise<RoleRecord> {
     const { data, error } = await this.adminClient
       .from("roles")
       .insert(input)
@@ -263,13 +273,21 @@ class PermissionRepository {
     return data as RoleRecord;
   }
 
-  async updateRole(id: string, input: UpdateRoleInput): Promise<RoleRecord> {
-    const { data, error } = await this.adminClient
+  async updateRole(
+    id: string,
+    input: UpdateRoleInput,
+    tenantId?: string | null,
+  ): Promise<RoleRecord> {
+    let query = this.adminClient
       .from("roles")
       .update(input)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新角色失败", error);
@@ -455,6 +473,7 @@ class PermissionRepository {
           name,
           description,
           status,
+          tenant_id,
           created_at,
           updated_at
         )
@@ -487,6 +506,28 @@ class PermissionRepository {
     }
 
     return ((data || []) as Array<{ role_id: string }>).map((item) => item.role_id);
+  }
+
+  async listRolesByIds(roleIds: string[], tenantId?: string | null): Promise<RoleRecord[]> {
+    if (roleIds.length === 0) {
+      return [];
+    }
+
+    let query = this.adminClient
+      .from("roles")
+      .select("*")
+      .in("id", roleIds);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询角色失败", error);
+    }
+
+    return (data as RoleRecord[] | null) || [];
   }
 
   async listEmployeesByRoleId(roleId: string) {

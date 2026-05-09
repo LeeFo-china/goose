@@ -6,11 +6,11 @@ import type {
 } from "@gooes/domain";
 
 class DepartmentPostRuleService {
-  async getConfig() {
+  async getConfig(tenantId?: string | null) {
     const [departments, posts, rules] = await Promise.all([
-      departmentPostRuleRepository.listDepartments(),
-      departmentPostRuleRepository.listPostOptions(),
-      departmentPostRuleRepository.listRules(),
+      departmentPostRuleRepository.listDepartments(tenantId),
+      departmentPostRuleRepository.listPostOptions(tenantId),
+      departmentPostRuleRepository.listRules(tenantId),
     ]);
 
     return {
@@ -34,9 +34,10 @@ class DepartmentPostRuleService {
   async updateDepartmentPostCodes(
     departmentCode: DepartmentCode,
     postCodes: string[],
+    tenantId?: string | null,
   ) {
     const uniquePostCodes = Array.from(new Set(postCodes));
-    const postOptions = await departmentPostRuleRepository.listPostOptions();
+    const postOptions = await departmentPostRuleRepository.listPostOptions(tenantId);
     const postCodeSet = new Set(postOptions.map((item) => item.code));
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !postCodeSet.has(postCode as EmployeePostCode),
@@ -49,14 +50,16 @@ class DepartmentPostRuleService {
     await departmentPostRuleRepository.replaceDepartmentRules({
       departmentCode,
       postCodes: uniquePostCodes as EmployeePostCode[],
+      tenantId,
     });
 
-    return this.getConfig();
+    return this.getConfig(tenantId);
   }
 
   async assertEmployeeDepartmentPostAllowed(input: {
     departmentId: string | null | undefined;
     postId: string | null | undefined;
+    tenantId?: string | null;
   }) {
     if (!input.departmentId || !input.postId) return;
 
@@ -64,6 +67,7 @@ class DepartmentPostRuleService {
       await departmentPostRuleRepository.findDepartmentAndPostByIds({
         departmentId: input.departmentId,
         postId: input.postId,
+        tenantId: input.tenantId,
       });
 
     if (!department?.code) {
@@ -77,6 +81,7 @@ class DepartmentPostRuleService {
     const rule = await departmentPostRuleRepository.findEnabledRule({
       departmentCode: department.code,
       postCode: post.code,
+      tenantId: input.tenantId,
     });
 
     if (!rule) {

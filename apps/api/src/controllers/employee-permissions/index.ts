@@ -44,6 +44,7 @@ class EmployeePermissionsController extends BaseController {
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     const data = await permissionService.getEmployeePermissionContext(
+      authContext,
       idVerify.data.id,
     );
     return ResponseHandler.success(data);
@@ -61,6 +62,7 @@ class EmployeePermissionsController extends BaseController {
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await permissionService.assignEmployeeRoles(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -80,6 +82,7 @@ class EmployeePermissionsController extends BaseController {
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await permissionService.upsertEmployeePermissionOverride(
+      authContext,
       idVerify.data.id,
       result.data,
     );
@@ -98,6 +101,7 @@ class EmployeePermissionsController extends BaseController {
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     const data = await permissionService.deleteEmployeePermissionOverride(
+      authContext,
       idVerify.data.id,
       idVerify.data.permission_id,
     );

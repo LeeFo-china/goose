@@ -80,9 +80,13 @@ class ProjectMemberRolePostRuleService {
     return this.fallbackPostCodes[roleCode];
   }
 
-  async listCandidatePostCodesByRole(roleCode: ProjectMemberRoleCode) {
+  async listCandidatePostCodesByRole(
+    roleCode: ProjectMemberRoleCode,
+    tenantId?: string | null,
+  ) {
     const rules = await projectMemberRolePostRuleRepository.listByRoleCode(
       roleCode,
+      tenantId,
     );
 
     return rules.length > 0
@@ -92,14 +96,20 @@ class ProjectMemberRolePostRuleService {
       : this.getFallbackPostCodes(roleCode);
   }
 
-  async listCandidatePostCodesByScene(scene: ProjectCreateEmployeeScene) {
-    return this.listCandidatePostCodesByRole(this.getRoleCodeByScene(scene));
+  async listCandidatePostCodesByScene(
+    scene: ProjectCreateEmployeeScene,
+    tenantId?: string | null,
+  ) {
+    return this.listCandidatePostCodesByRole(
+      this.getRoleCodeByScene(scene),
+      tenantId,
+    );
   }
 
-  async getConfig() {
+  async getConfig(tenantId?: string | null) {
     const [rules, postOptions] = await Promise.all([
-      projectMemberRolePostRuleRepository.listRules(),
-      projectMemberRolePostRuleRepository.listActivePostOptions(),
+      projectMemberRolePostRuleRepository.listRules(tenantId),
+      projectMemberRolePostRuleRepository.listActivePostOptions(tenantId),
     ]);
 
     return {
@@ -124,6 +134,7 @@ class ProjectMemberRolePostRuleService {
   async updateRolePostCodes(
     roleCode: ProjectMemberRoleCode,
     postCodes: string[],
+    tenantId?: string | null,
   ) {
     const uniquePostCodes = Array.from(new Set(postCodes));
     if (uniquePostCodes.length === 0) {
@@ -131,7 +142,7 @@ class ProjectMemberRolePostRuleService {
     }
 
     const postOptions =
-      await projectMemberRolePostRuleRepository.listActivePostOptions();
+      await projectMemberRolePostRuleRepository.listActivePostOptions(tenantId);
     const activePostCodeSet = new Set(postOptions.map((item) => item.code));
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !isEmployeePostCode(postCode) && !activePostCodeSet.has(postCode as EmployeePostCode),
@@ -150,9 +161,10 @@ class ProjectMemberRolePostRuleService {
     await projectMemberRolePostRuleRepository.replaceRoleRules({
       roleCode,
       postCodes: uniquePostCodes as EmployeePostCode[],
+      tenantId,
     });
 
-    return this.getConfig();
+    return this.getConfig(tenantId);
   }
 }
 

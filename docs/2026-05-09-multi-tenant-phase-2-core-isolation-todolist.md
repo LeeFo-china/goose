@@ -49,18 +49,18 @@
 - [x] 员工列表加 `tenant_id` 过滤。
 - [x] 员工详情加 `tenant_id` 校验。
 - [x] 员工创建自动写入当前 `tenant_id`。
-- [ ] 部门、岗位、角色增加租户过滤。
-- [ ] `roles.code` 调整为租户内唯一。
-- [ ] `departments.code` 调整为租户内唯一。
-- [ ] `posts.code` 调整为租户内唯一。
-- [ ] 员工角色分配只能使用当前租户角色。
+- [x] 部门、岗位、角色增加租户过滤。
+- [x] `roles.code` 调整为租户内唯一。
+- [x] `departments.code` 调整为租户内唯一。
+- [x] `posts.code` 调整为租户内唯一。
+- [x] 员工角色分配只能使用当前租户角色。
 
 ### 5. 权限体系
 
 - [ ] `permissions` 保持全局。
-- [ ] `roles` 租户化。
-- [ ] `role_permissions` 租户化或通过 role 归属租户约束。
-- [ ] `employee_roles` 租户化或通过 employee/role 双向校验。
+- [x] `roles` 租户化。
+- [x] `role_permissions` 租户化或通过 role 归属租户约束。
+- [x] `employee_roles` 租户化或通过 employee/role 双向校验。
 - [ ] 区分平台超管与租户管理员。
 - [ ] 当前 `system_admin` 行为收敛为租户管理员，平台超管另建角色或机制。
 
