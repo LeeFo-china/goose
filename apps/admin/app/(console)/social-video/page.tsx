@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { FileVideo2, Sparkles } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { SocialVideoFilters } from "@/components/social-video/social-video-filters";
 import { SocialVideoPagination } from "@/components/social-video/social-video-pagination";
 import { SocialVideoScriptsTable } from "@/components/social-video/social-video-scripts-table";
 import type { SocialVideoScriptsData } from "@/components/social-video/social-video-types";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -43,7 +42,7 @@ function includesValue<T extends readonly (readonly [string, string])[]>(
   options: T,
   value: string | undefined,
 ) {
-  return options.some((item) => item[0] === value) ? value : "";
+  return value && options.some((item) => item[0] === value) ? value : "";
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -120,7 +119,7 @@ export default async function SocialVideoPage({
 
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
-          <CardContent className="flex items-center gap-3 p-4">
+          <CardContent className="flex items-center gap-3 p-5">
             <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <FileVideo2 className="size-5" />
             </div>
@@ -131,7 +130,7 @@ export default async function SocialVideoPage({
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-3 p-4">
+          <CardContent className="flex items-center gap-3 p-5">
             <div className="flex size-10 items-center justify-center rounded-md bg-success text-success-foreground">
               <Sparkles className="size-5" />
             </div>
@@ -142,7 +141,7 @@ export default async function SocialVideoPage({
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-3 p-4">
+          <CardContent className="flex items-center gap-3 p-5">
             <div className="flex size-10 items-center justify-center rounded-md bg-destructive text-destructive-foreground">
               <FileVideo2 className="size-5" />
             </div>
@@ -155,52 +154,19 @@ export default async function SocialVideoPage({
       </div>
 
       <Card>
-        <CardContent className="p-4">
-          <form className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto_auto] md:items-end">
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted-foreground">目标平台</span>
-              <select
-                name="target_platform"
-                defaultValue={filters.targetPlatform}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-              >
-                <option value="">全部平台</option>
-                {TARGET_PLATFORMS.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted-foreground">脚本风格</span>
-              <select
-                name="style"
-                defaultValue={filters.style}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-              >
-                <option value="">全部风格</option>
-                {STYLES.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted-foreground">状态</span>
-              <select
-                name="status"
-                defaultValue={filters.status}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-              >
-                <option value="">全部状态</option>
-                {STATUSES.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
-            <Button type="submit">筛选</Button>
-            <Button asChild type="button" variant="outline">
-              <Link href="/social-video">重置</Link>
-            </Button>
-          </form>
+        <CardHeader>
+          <CardTitle>筛选脚本</CardTitle>
+          <CardDescription>按目标发布平台、脚本风格和生成状态缩小记录范围。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SocialVideoFilters
+            targetPlatform={filters.targetPlatform}
+            style={filters.style}
+            status={filters.status}
+            targetPlatformOptions={TARGET_PLATFORMS.map(([value, label]) => ({ value, label }))}
+            styleOptions={STYLES.map(([value, label]) => ({ value, label }))}
+            statusOptions={STATUSES.map(([value, label]) => ({ value, label }))}
+          />
         </CardContent>
       </Card>
 
