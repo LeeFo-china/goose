@@ -28,6 +28,7 @@ import type {
 type CameraActor = {
   userId: string;
   userRole: "customer" | "employee";
+  tenantId: string | null;
   authContext?: AuthContext;
 };
 
@@ -273,51 +274,65 @@ class ProjectCameraService {
     }
   }
 
-  private async isCustomerOwnedProject(authUserId: string, projectId: string) {
+  private async getCustomerOwnedProjectTenant(authUserId: string, projectId: string) {
     const { data: customers, error: customerError } = await this.adminClient
       .from("customers")
-      .select("id")
-      .eq("user_id", authUserId)
-      .limit(1);
+      .select("id, tenant_id")
+      .eq("user_id", authUserId);
 
     if (customerError) {
       throw Errors.dbError("查询客户项目权限失败", customerError);
     }
 
-    const customer = (customers || [])[0] as { id?: string } | undefined;
-    if (!customer?.id) {
-      return false;
+    const customerRows = (customers || []) as Array<{
+      id?: string | null;
+      tenant_id?: string | null;
+    }>;
+    const customerIds = customerRows
+      .map((customer) => customer.id)
+      .filter((id): id is string => Boolean(id));
+    if (!customerIds.length) {
+      return null;
     }
 
     const { data: project, error: projectError } = await this.adminClient
       .from("projects")
-      .select("id, status")
+      .select("id, tenant_id, customer_id, status")
       .eq("id", projectId)
-      .eq("customer_id", customer.id)
+      .in("customer_id", customerIds)
       .maybeSingle();
 
     if (projectError) {
       throw Errors.dbError("查询客户项目权限失败", projectError);
     }
 
-    const status = (project as { status?: string } | null)?.status;
-    return Boolean(project && status !== "completed" && status !== "invalid");
+    const projectRow = project as {
+      tenant_id?: string | null;
+      customer_id?: string | null;
+      status?: string | null;
+    } | null;
+    const customer = customerRows.find((item) =>
+      item.id === projectRow?.customer_id && item.tenant_id === projectRow?.tenant_id
+    );
+    if (!projectRow || !customer) {
+      return null;
+    }
+
+    const status = projectRow.status;
+    if (status === "completed" || status === "invalid") {
+      return null;
+    }
+
+    return projectRow.tenant_id || null;
   }
 
-  private async assertProjectExists(projectId: string) {
-    const { data, error } = await this.adminClient
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询项目失败", error);
-    }
-
-    if (!data) {
+  private async assertProjectExists(projectId: string, tenantId?: string | null) {
+    const project = await projectCameraRepository.getProject(projectId, tenantId);
+    if (!project) {
       throw Errors.business(404, "项目不存在", "PROJECT_NOT_FOUND");
     }
+
+    return project;
   }
 
   private async resolveActor(input: {
@@ -330,13 +345,14 @@ class ProjectCameraService {
       throw Errors.unauthorized("缺少登录凭证");
     }
 
-    if (
-      input.allowCustomer &&
-      await this.isCustomerOwnedProject(input.authUserId, input.projectId)
-    ) {
+    const customerTenantId = input.allowCustomer
+      ? await this.getCustomerOwnedProjectTenant(input.authUserId, input.projectId)
+      : null;
+    if (input.allowCustomer && customerTenantId) {
       return {
         userId: input.authUserId,
         userRole: "customer",
+        tenantId: customerTenantId,
       };
     }
 
@@ -369,11 +385,13 @@ class ProjectCameraService {
       );
     }
 
-    await this.assertProjectExists(input.projectId);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    await this.assertProjectExists(input.projectId, tenantId);
 
     return {
       userId: authContext.employeeId || input.authUserId,
       userRole: "employee",
+      tenantId,
       authContext,
     };
   }
@@ -388,6 +406,7 @@ class ProjectCameraService {
     meta?: RequestLogMeta;
   }) {
     await projectCameraRepository.logAccess({
+      tenant_id: input.actor.tenantId,
       project_id: input.projectId,
       camera_id: input.cameraId || null,
       user_id: input.actor.userId,
@@ -412,7 +431,7 @@ class ProjectCameraService {
       allowCustomer: true,
     });
     const cameras = await this.enrichTencentCameraStatuses(
-      await projectCameraRepository.listByProjectId(input.projectId),
+      await projectCameraRepository.listByProjectId(input.projectId, actor.tenantId),
     );
     await this.logAccess({
       actor,
@@ -451,9 +470,11 @@ class ProjectCameraService {
       authContext,
       "project.update",
     );
+    const tenantId = accessPolicyService.assertTenantId(authContext);
 
     return projectCameraRepository.listCameraBindProjectOptions({
       ...input.query,
+      tenantId,
       visibleProjectIds,
     });
   }
@@ -481,8 +502,10 @@ class ProjectCameraService {
       authContext,
       "project.read",
     );
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const result = await projectCameraRepository.listCameraProjectGroups({
       ...input.query,
+      tenantId,
       visibleProjectIds,
     });
     const enrichedCameras = await this.enrichTencentCameraStatuses(
@@ -523,7 +546,7 @@ class ProjectCameraService {
     projectId: string;
     onlyUnbound: boolean;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
@@ -546,8 +569,11 @@ class ProjectCameraService {
         buildDeviceChannelKey(channel.device_serial, channel.channel_no),
       );
       const isBound = Boolean(binding);
+      const isOwnTenantBinding = binding?.tenant_id === actor.tenantId;
       const isBoundToCurrentProject = binding?.project_id === input.projectId;
-      const boundProject = getBindingProject(binding?.project);
+      const boundProject = isOwnTenantBinding
+        ? getBindingProject(binding?.project)
+        : undefined;
 
       return {
         device_name: channel.device_name,
@@ -559,11 +585,11 @@ class ProjectCameraService {
         video_encrypted: channel.video_encrypted,
         cover_url: channel.cover_url,
         is_bound: isBound,
-        is_bound_to_current_project: isBoundToCurrentProject,
-        bound_project_id: binding?.project_id || null,
+        is_bound_to_current_project: isOwnTenantBinding && isBoundToCurrentProject,
+        bound_project_id: isOwnTenantBinding ? binding?.project_id || null : null,
         bound_project_name: boundProject?.name || null,
-        bound_camera_id: binding?.id || null,
-        bound_camera_name: binding?.name || null,
+        bound_camera_id: isOwnTenantBinding ? binding?.id || null : null,
+        bound_camera_name: isOwnTenantBinding ? binding?.name || null : null,
         can_bind: !isBound,
       };
     });
@@ -581,7 +607,7 @@ class ProjectCameraService {
     onlyUnbound: boolean;
     keyword?: string | null;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
@@ -624,8 +650,11 @@ class ProjectCameraService {
         buildTencentDeviceChannelKey(channel.device_id, channel.channel_id),
       );
       const isBound = Boolean(binding);
+      const isOwnTenantBinding = binding?.tenant_id === actor.tenantId;
       const isBoundToCurrentProject = binding?.project_id === input.projectId;
-      const boundProject = getBindingProject(binding?.project);
+      const boundProject = isOwnTenantBinding
+        ? getBindingProject(binding?.project)
+        : undefined;
 
       return {
         device_id: channel.device_id,
@@ -645,11 +674,11 @@ class ProjectCameraService {
         group_id: channel.group_id,
         group_name: channel.group_name,
         is_bound: isBound,
-        is_bound_to_current_project: isBoundToCurrentProject,
-        bound_project_id: binding?.project_id || null,
+        is_bound_to_current_project: isOwnTenantBinding && isBoundToCurrentProject,
+        bound_project_id: isOwnTenantBinding ? binding?.project_id || null : null,
         bound_project_name: boundProject?.name || null,
-        bound_camera_id: binding?.id || null,
-        bound_camera_name: binding?.name || null,
+        bound_camera_id: isOwnTenantBinding ? binding?.id || null : null,
+        bound_camera_name: isOwnTenantBinding ? binding?.name || null : null,
         can_bind: !isBound,
       };
     });
@@ -774,6 +803,7 @@ class ProjectCameraService {
     const camera = await projectCameraRepository.findByProjectCamera(
       input.projectId,
       input.cameraId,
+      actor.tenantId,
     );
 
     if (!camera) {
@@ -967,7 +997,7 @@ class ProjectCameraService {
     projectId: string;
     payload: CreateProjectCameraInput;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
@@ -977,6 +1007,7 @@ class ProjectCameraService {
     const camera = await projectCameraRepository.create(
       input.projectId,
       input.payload,
+      actor.tenantId,
     );
 
     return { id: camera.id };
@@ -988,7 +1019,7 @@ class ProjectCameraService {
     cameraId: string;
     payload: UpdateProjectCameraInput;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
@@ -999,6 +1030,7 @@ class ProjectCameraService {
       input.projectId,
       input.cameraId,
       input.payload,
+      actor.tenantId,
     );
 
     return serializeCamera(camera);
@@ -1009,13 +1041,13 @@ class ProjectCameraService {
     projectId: string;
     cameraId: string;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
       allowCustomer: false,
     });
-    await projectCameraRepository.softDelete(input.projectId, input.cameraId);
+    await projectCameraRepository.softDelete(input.projectId, input.cameraId, actor.tenantId);
     return { success: true };
   }
 }

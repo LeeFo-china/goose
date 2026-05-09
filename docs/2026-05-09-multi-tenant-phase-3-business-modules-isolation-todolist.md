@@ -44,14 +44,14 @@
 
 ### 4. 工地摄像头
 
-- [ ] `project_cameras` 增加或回填 `tenant_id`。
-- [ ] 绑定摄像头时校验项目属于当前租户。
-- [ ] 腾讯云 IoT Video SIP 配置保持平台级配置，不写入租户业务表。
-- [ ] 后端从环境变量或 `system_settings(tenant_id is null)` 读取 SIP 参数。
-- [ ] 摄像头列表按租户过滤。
-- [ ] 播放地址获取校验租户边界。
-- [ ] 租户创建设备时，腾讯云设备编码写入 `project_cameras` 并绑定 `tenant_id`。
-- [ ] `/admin/cameras` 只返回当前租户设备。
+- [x] `project_cameras` 增加或回填 `tenant_id`。
+- [x] 绑定摄像头时校验项目属于当前租户。
+- [x] 腾讯云 IoT Video SIP 配置保持平台级配置，不写入租户业务表。
+- [x] 后端从环境变量或 `system_settings(tenant_id is null)` 读取 SIP 参数。
+- [x] 摄像头列表按租户过滤。
+- [x] 播放地址获取校验租户边界。
+- [x] 租户创建设备时，腾讯云设备编码写入 `project_cameras` 并绑定 `tenant_id`。
+- [x] `/admin/cameras` 只返回当前租户设备。
 - [ ] `/platform/cameras` 预留给平台超管查看全量设备。
 
 ### 5. 任务中心

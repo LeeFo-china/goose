@@ -11,6 +11,7 @@ import type {
 
 export type ProjectCameraRow = {
   id: string;
+  tenant_id: string | null;
   project_id: string;
   vendor: ProjectCameraVendor;
   vendor_device_serial: string;
@@ -50,6 +51,7 @@ export type ProjectCameraBindingRow = Pick<
   | "channel_no"
   | "name"
 > & {
+  tenant_id: string | null;
   project?: {
     id?: string | null;
     name?: string | null;
@@ -61,6 +63,7 @@ export type ProjectCameraBindingRow = Pick<
 
 type ProjectCameraBindProjectRow = {
   id: string;
+  tenant_id: string | null;
   name: string | null;
   status: string | null;
   address: string | null;
@@ -157,12 +160,37 @@ function serializeBindProjectOption(row: ProjectCameraBindProjectRow) {
 class ProjectCameraRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
-  async listByProjectId(projectId: string) {
-    const { data, error } = await this.adminClient
+  async getProject(projectId: string, tenantId?: string | null) {
+    let query = this.adminClient
+      .from("projects")
+      .select("id, tenant_id")
+      .eq("id", projectId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目失败", error);
+    }
+
+    return (data || null) as { id: string; tenant_id: string | null } | null;
+  }
+
+  async listByProjectId(projectId: string, tenantId?: string | null) {
+    let query = this.adminClient
       .from("project_cameras")
       .select("*")
       .eq("project_id", projectId)
-      .is("deleted_at", null)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -173,15 +201,20 @@ class ProjectCameraRepository {
     return (data || []) as ProjectCameraRow[];
   }
 
-  private async findSearchCustomerIds(keyword: string) {
+  private async findSearchCustomerIds(keyword: string, tenantId?: string | null) {
     if (!keyword) return [] as string[];
 
     const likeKeyword = `%${keyword}%`;
-    const { data, error } = await this.adminClient
+    let query = this.adminClient
       .from("customers")
       .select("id")
-      .or(`name.ilike.${likeKeyword},phone.ilike.${likeKeyword}`)
-      .limit(100);
+      .or(`name.ilike.${likeKeyword},phone.ilike.${likeKeyword}`);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.limit(100);
 
     if (error) {
       throw Errors.dbError("查询客户匹配项目失败", error);
@@ -192,15 +225,20 @@ class ProjectCameraRepository {
       .filter((id): id is string => Boolean(id));
   }
 
-  private async findSearchPropertyIds(keyword: string) {
+  private async findSearchPropertyIds(keyword: string, tenantId?: string | null) {
     if (!keyword) return [] as string[];
 
     const likeKeyword = `%${keyword}%`;
-    const { data, error } = await this.adminClient
+    let query = this.adminClient
       .from("properties")
       .select("id")
-      .or(`community.ilike.${likeKeyword},building_info.ilike.${likeKeyword},layout.ilike.${likeKeyword}`)
-      .limit(100);
+      .or(`community.ilike.${likeKeyword},building_info.ilike.${likeKeyword},layout.ilike.${likeKeyword}`);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.limit(100);
 
     if (error) {
       throw Errors.dbError("查询房产匹配项目失败", error);
@@ -213,6 +251,7 @@ class ProjectCameraRepository {
 
   async listCameraBindProjectOptions(
     input: ProjectCameraBindOptionsQueryInput & {
+      tenantId?: string | null;
       visibleProjectIds: string[] | null;
     },
   ) {
@@ -235,8 +274,8 @@ class ProjectCameraRepository {
     }
 
     const [customerIds, propertyIds] = await Promise.all([
-      this.findSearchCustomerIds(keyword),
-      this.findSearchPropertyIds(keyword),
+      this.findSearchCustomerIds(keyword, input.tenantId),
+      this.findSearchPropertyIds(keyword, input.tenantId),
     ]);
 
     let query = this.adminClient
@@ -244,6 +283,7 @@ class ProjectCameraRepository {
       .select(
         `
         id,
+        tenant_id,
         name,
         status,
         address,
@@ -257,6 +297,9 @@ class ProjectCameraRepository {
 
     if (input.visibleProjectIds) {
       query = query.in("id", input.visibleProjectIds);
+    }
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
     }
 
     if (keyword) {
@@ -291,10 +334,11 @@ class ProjectCameraRepository {
       !rows.some((item) => item.id === selectedProjectId) &&
       (!input.visibleProjectIds || input.visibleProjectIds.includes(selectedProjectId))
     ) {
-      const { data: selected, error: selectedError } = await this.adminClient
+      let selectedQuery = this.adminClient
         .from("projects")
         .select(`
           id,
+          tenant_id,
           name,
           status,
           address,
@@ -303,8 +347,13 @@ class ProjectCameraRepository {
           customer:customers!projects_customer_id_fkey(id, name, phone),
           property:properties!projects_property_id_fkey(id, community, building_info, layout, area)
         `)
-        .eq("id", selectedProjectId)
-        .maybeSingle();
+        .eq("id", selectedProjectId);
+
+      if (input.tenantId) {
+        selectedQuery = selectedQuery.eq("tenant_id", input.tenantId);
+      }
+
+      const { data: selected, error: selectedError } = await selectedQuery.maybeSingle();
 
       if (selectedError) {
         throw Errors.dbError("查询当前绑定项目失败", selectedError);
@@ -328,6 +377,7 @@ class ProjectCameraRepository {
 
   async listCameraProjectGroups(
     input: ProjectCameraProjectGroupsQueryInput & {
+      tenantId?: string | null;
       visibleProjectIds: string[] | null;
     },
   ) {
@@ -362,6 +412,7 @@ class ProjectCameraRepository {
         *,
         project:projects!project_cameras_project_id_fkey(
           id,
+          tenant_id,
           name,
           status,
           address,
@@ -376,6 +427,9 @@ class ProjectCameraRepository {
 
     if (input.visibleProjectIds) {
       query = query.in("project_id", input.visibleProjectIds);
+    }
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
     }
 
     const { data, error } = await query;
@@ -439,13 +493,19 @@ class ProjectCameraRepository {
     };
   }
 
-  async findByProjectCamera(projectId: string, cameraId: string) {
-    const { data, error } = await this.adminClient
+  async findByProjectCamera(projectId: string, cameraId: string, tenantId?: string | null) {
+    let query = this.adminClient
       .from("project_cameras")
       .select("*")
       .eq("project_id", projectId)
       .eq("id", cameraId)
-      .is("deleted_at", null)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .maybeSingle();
 
     if (error) {
@@ -488,6 +548,7 @@ class ProjectCameraRepository {
       .from("project_cameras")
       .select(`
         id,
+        tenant_id,
         project_id,
         vendor,
         vendor_device_serial,
@@ -508,7 +569,12 @@ class ProjectCameraRepository {
     return (data || []) as ProjectCameraBindingRow[];
   }
 
-  async create(projectId: string, input: CreateProjectCameraInput) {
+  async create(projectId: string, input: CreateProjectCameraInput, tenantId?: string | null) {
+    const project = await this.getProject(projectId, tenantId);
+    if (!project) {
+      throw Errors.business(404, "项目不存在", "PROJECT_NOT_FOUND");
+    }
+
     const existing = await this.findActiveByDeviceChannel({
       vendor: input.vendor,
       vendor_device_serial: input.vendor_device_serial,
@@ -536,6 +602,7 @@ class ProjectCameraRepository {
       .from("project_cameras")
       .insert({
         project_id: projectId,
+        tenant_id: project.tenant_id,
         ...input,
       })
       .select("*")
@@ -548,8 +615,13 @@ class ProjectCameraRepository {
     return data as ProjectCameraRow;
   }
 
-  async update(projectId: string, cameraId: string, input: UpdateProjectCameraInput) {
-    const { data, error } = await this.adminClient
+  async update(
+    projectId: string,
+    cameraId: string,
+    input: UpdateProjectCameraInput,
+    tenantId?: string | null,
+  ) {
+    let query = this.adminClient
       .from("project_cameras")
       .update({
         ...input,
@@ -557,7 +629,13 @@ class ProjectCameraRepository {
       })
       .eq("project_id", projectId)
       .eq("id", cameraId)
-      .is("deleted_at", null)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .select("*")
       .maybeSingle();
 
@@ -593,9 +671,9 @@ class ProjectCameraRepository {
     }
   }
 
-  async softDelete(projectId: string, cameraId: string) {
+  async softDelete(projectId: string, cameraId: string, tenantId?: string | null) {
     const now = new Date().toISOString();
-    const { data, error } = await this.adminClient
+    let query = this.adminClient
       .from("project_cameras")
       .update({
         deleted_at: now,
@@ -603,7 +681,13 @@ class ProjectCameraRepository {
       })
       .eq("project_id", projectId)
       .eq("id", cameraId)
-      .is("deleted_at", null)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .select("id")
       .maybeSingle();
 
@@ -619,6 +703,7 @@ class ProjectCameraRepository {
   }
 
   async logAccess(input: {
+    tenant_id?: string | null;
     project_id: string;
     camera_id?: string | null;
     user_id?: string | null;
@@ -633,6 +718,7 @@ class ProjectCameraRepository {
     const { error } = await this.adminClient
       .from("camera_access_logs")
       .insert({
+        tenant_id: input.tenant_id || null,
         project_id: input.project_id,
         camera_id: input.camera_id || "00000000-0000-0000-0000-000000000000",
         user_id: input.user_id || null,
