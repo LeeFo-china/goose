@@ -16,19 +16,19 @@
 
 ### 1. 平台超管身份
 
-- [ ] 定义平台超管角色或标记。
-- [ ] 平台超管不归属于普通租户业务权限。
-- [ ] 租户管理员不能访问 `/platform/*`。
-- [ ] `/platform/*` 接口统一校验平台超管。
+- [x] 定义平台超管角色或标记。
+- [x] 平台超管不归属于普通租户业务权限。
+- [x] 租户管理员不能访问 `/platform/*`。
+- [x] `/platform/*` 接口统一校验平台超管。
 
 ### 2. 租户管理 API
 
-- [ ] `GET /platform/tenants` 租户列表。
-- [ ] `POST /platform/tenants` 创建租户。
-- [ ] `GET /platform/tenants/:id` 租户详情。
-- [ ] `PATCH /platform/tenants/:id` 更新租户。
-- [ ] `POST /platform/tenants/:id/suspend` 停用租户。
-- [ ] `POST /platform/tenants/:id/activate` 启用租户。
+- [x] `GET /platform/tenants` 租户列表。
+- [x] `POST /platform/tenants` 创建租户。
+- [x] `GET /platform/tenants/:id` 租户详情。
+- [x] `PATCH /platform/tenants/:id` 更新租户。
+- [x] `POST /platform/tenants/:id/suspend` 停用租户。
+- [x] `POST /platform/tenants/:id/activate` 启用租户。
 
 ### 3. 租户初始化
 
@@ -93,11 +93,11 @@
 
 ## 验收标准
 
-- [ ] 平台超管可创建新租户。
+- [x] 平台超管可创建新租户。
 - [ ] 新租户管理员可登录 admin。
 - [ ] 新租户默认组织和角色初始化成功。
 - [ ] 新租户看不到默认租户数据。
-- [ ] 平台超管可停用和启用租户。
+- [x] 平台超管可停用和启用租户。
 - [ ] 平台超管可查看和分配平台线索。
 
 ## 不做事项
@@ -106,4 +106,3 @@
 - 不做租户自助注册。
 - 不做租户模板自动升级 UI。
 - 不做复杂经营分析。
-
