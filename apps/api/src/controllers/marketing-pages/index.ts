@@ -56,7 +56,7 @@ class MarketingPagesController extends BaseController {
     const queryResult = MarketingPageListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const data = await marketingPageService.listPages(queryResult.data);
+    const data = await marketingPageService.listPages(authContext, queryResult.data);
     return ResponseHandler.success(data);
   }
 
@@ -97,7 +97,7 @@ class MarketingPagesController extends BaseController {
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const data = await marketingPageService.getPage(paramsResult.data.id);
+    const data = await marketingPageService.getPage(authContext, paramsResult.data.id);
     return ResponseHandler.success(data);
   }
 
@@ -143,7 +143,7 @@ class MarketingPagesController extends BaseController {
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const data = await marketingPageService.getDraft(paramsResult.data.id);
+    const data = await marketingPageService.getDraft(authContext, paramsResult.data.id);
     return ResponseHandler.success(data);
   }
 
@@ -196,6 +196,8 @@ class MarketingPagesController extends BaseController {
       throw Errors.badRequest("营销页上下文不匹配");
     }
 
+    await marketingPageService.getPage(authContext, paramsResult.data.id);
+
     const data = await fillMarketingPageBlockWithAi({
       ...bodyResult.data,
       page: {
@@ -220,6 +222,8 @@ class MarketingPagesController extends BaseController {
     if (bodyResult.data.page?.id && bodyResult.data.page.id !== paramsResult.data.id) {
       throw Errors.badRequest("营销页上下文不匹配");
     }
+
+    await marketingPageService.getPage(authContext, paramsResult.data.id);
 
     const data = await fillMarketingPageSettingsWithAi({
       ...bodyResult.data,

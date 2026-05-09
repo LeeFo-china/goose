@@ -1175,13 +1175,15 @@ class CustomerProjectLogShareService {
     projectId: string,
     campaignType: "share_assist" | "appointment_reward" = "share_assist",
   ) {
-    const campaigns = await marketingCampaignRepository.listActiveByType(campaignType);
+    const tenantId = await this.getProjectTenantId(projectId);
+    const campaigns = await marketingCampaignRepository.listActiveByType(campaignType, tenantId);
     if (!campaigns.length) {
       return null;
     }
 
     const scopes = await marketingCampaignRepository.listScopesByCampaignIds(
       campaigns.map((item) => item.id),
+      tenantId,
     );
 
     const matched = campaigns.find((campaign) => {
@@ -2710,6 +2712,63 @@ class CustomerProjectLogShareService {
     );
   }
 
+  private async getProjectTenantId(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("tenant_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目租户失败", error);
+    }
+
+    return (data as { tenant_id?: string | null } | null)?.tenant_id ?? null;
+  }
+
+  private async assertMarketingScopeProjectsAccessible(input: {
+    authContext: AuthContext;
+    projectIds: string[];
+    permissionCode: string;
+  }) {
+    const uniqueProjectIds = Array.from(new Set(input.projectIds.filter(Boolean)));
+    if (!uniqueProjectIds.length) {
+      return;
+    }
+
+    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+      input.authContext,
+      input.permissionCode,
+    );
+
+    if (visibleProjectIds) {
+      const invalid = uniqueProjectIds.some((projectId) => !visibleProjectIds.includes(projectId));
+      if (invalid) {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+
+    const tenantId = input.authContext.tenantId;
+    if (!tenantId) {
+      return;
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .in("id", uniqueProjectIds);
+
+    if (error) {
+      throw Errors.dbError("校验营销活动项目范围失败", error);
+    }
+
+    if ((data || []).length !== uniqueProjectIds.length) {
+      throw Errors.forbidden();
+    }
+  }
+
   private campaignVisibleToEmployee(
     campaign: MarketingCampaignRow,
     scopes: MarketingCampaignProjectScopeRow[],
@@ -2736,8 +2795,8 @@ class CustomerProjectLogShareService {
     return visibleProjectIds.some((item) => !excluded.has(item));
   }
 
-  private async getMarketingCampaignOrThrow(id: string) {
-    const campaign = await marketingCampaignRepository.findById(id);
+  private async getMarketingCampaignOrThrow(id: string, tenantId?: string | null) {
+    const campaign = await marketingCampaignRepository.findById(id, tenantId);
     if (!campaign) {
       throw Errors.business(404, "营销活动不存在", ErrorCodes.SHARE_CAMPAIGN_NOT_FOUND);
     }
@@ -2891,11 +2950,13 @@ class CustomerProjectLogShareService {
     authContext: AuthContext,
     query: MarketingCampaignListQuery,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
     );
     const result = await marketingCampaignRepository.list({
+      tenantId,
       campaignType: query.campaign_type,
       status: query.status,
       keyword: query.keyword,
@@ -2905,6 +2966,7 @@ class CustomerProjectLogShareService {
 
     const scopes = await marketingCampaignRepository.listScopesByCampaignIds(
       result.list.map((item) => item.id),
+      tenantId,
     );
 
     const visible = result.list.filter((campaign) =>
@@ -3064,12 +3126,13 @@ class CustomerProjectLogShareService {
   }
 
   async getMarketingCampaignDetail(authContext: AuthContext, campaignId: string) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
     );
-    const campaign = await this.getMarketingCampaignOrThrow(campaignId);
-    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    const campaign = await this.getMarketingCampaignOrThrow(campaignId, tenantId);
+    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId, tenantId);
 
     if (!this.campaignVisibleToEmployee(campaign, scopes, visibleProjectIds)) {
       throw Errors.forbidden();
@@ -3130,6 +3193,7 @@ class CustomerProjectLogShareService {
     authContext: AuthContext,
     input: CreateMarketingCampaignInput,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const template = input.template_id
       ? await this.getMarketingCampaignTemplateOrThrow(input.template_id)
       : null;
@@ -3153,20 +3217,14 @@ class CustomerProjectLogShareService {
 
     const resolvedInput = await this.resolveMarketingCampaignCreateInput(input, template);
     const scopeRows = this.buildMarketingCampaignScopeRows(resolvedInput);
-    if (scopeRows.length) {
-      const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
-        authContext,
-        "project.update",
-      );
-      const invalid = visibleProjectIds
-        ? scopeRows.some((item) => !visibleProjectIds.includes(item.project_id))
-        : false;
-      if (invalid) {
-        throw Errors.forbidden();
-      }
-    }
+    await this.assertMarketingScopeProjectsAccessible({
+      authContext,
+      projectIds: scopeRows.map((item) => item.project_id),
+      permissionCode: "project.update",
+    });
 
     const campaign = await marketingCampaignRepository.create({
+      tenant_id: tenantId,
       campaign_type: resolvedInput.campaign_type,
       name: resolvedInput.name,
       enabled: resolvedInput.enabled,
@@ -3186,7 +3244,7 @@ class CustomerProjectLogShareService {
       updated_by_employee_id: authContext.employeeId,
     });
 
-    await marketingCampaignRepository.replaceScopes(campaign.id, scopeRows);
+    await marketingCampaignRepository.replaceScopes(campaign.id, tenantId, scopeRows);
     return this.getMarketingCampaignDetail(authContext, campaign.id);
   }
 
@@ -3195,28 +3253,27 @@ class CustomerProjectLogShareService {
     campaignId: string,
     input: UpdateMarketingCampaignInput,
   ) {
-    const existing = await this.getMarketingCampaignOrThrow(campaignId);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await this.getMarketingCampaignOrThrow(campaignId, tenantId);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
-      authContext,
-      "project.update",
-    );
-    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+        authContext,
+        "project.update",
+      );
+    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId, tenantId);
     if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
       throw Errors.forbidden();
     }
 
     const scopeRows = this.buildMarketingCampaignScopeRows(input);
-    if (scopeRows.length) {
-      const invalid = visibleProjectIds
-        ? scopeRows.some((item) => !visibleProjectIds.includes(item.project_id))
-        : false;
-      if (invalid) {
-        throw Errors.forbidden();
-      }
-    }
+    await this.assertMarketingScopeProjectsAccessible({
+      authContext,
+      projectIds: scopeRows.map((item) => item.project_id),
+      permissionCode: "project.update",
+    });
 
     await marketingCampaignRepository.update({
       id: campaignId,
+      tenant_id: tenantId,
       campaign_type: input.campaign_type,
       name: input.name,
       enabled: input.enabled,
@@ -3234,7 +3291,7 @@ class CustomerProjectLogShareService {
       config_payload: this.buildMarketingCampaignTemplateConfigPayload(input),
       updated_by_employee_id: authContext.employeeId,
     });
-    await marketingCampaignRepository.replaceScopes(campaignId, scopeRows);
+    await marketingCampaignRepository.replaceScopes(campaignId, tenantId, scopeRows);
     return this.getMarketingCampaignDetail(authContext, campaignId);
   }
 
@@ -3243,17 +3300,23 @@ class CustomerProjectLogShareService {
     campaignId: string,
     input: MarketingCampaignStatusUpdateInput,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.update",
     );
-    const existing = await this.getMarketingCampaignOrThrow(campaignId);
-    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    const existing = await this.getMarketingCampaignOrThrow(campaignId, tenantId);
+    const existingScopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId, tenantId);
     if (!this.campaignVisibleToEmployee(existing, existingScopes, visibleProjectIds)) {
       throw Errors.forbidden();
     }
 
-    await marketingCampaignRepository.updateStatus(campaignId, input.status, authContext.employeeId);
+    await marketingCampaignRepository.updateStatus(
+      campaignId,
+      input.status,
+      authContext.employeeId,
+      tenantId,
+    );
     return this.getMarketingCampaignDetail(authContext, campaignId);
   }
 
@@ -3262,12 +3325,13 @@ class CustomerProjectLogShareService {
     campaignId: string,
     query: MarketingCampaignInstanceListQuery,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
     );
-    const campaign = await this.getMarketingCampaignOrThrow(campaignId);
-    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId);
+    const campaign = await this.getMarketingCampaignOrThrow(campaignId, tenantId);
+    const scopes = await marketingCampaignRepository.listScopesByCampaignId(campaignId, tenantId);
     if (!this.campaignVisibleToEmployee(campaign, scopes, visibleProjectIds)) {
       throw Errors.forbidden();
     }

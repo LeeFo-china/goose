@@ -15,6 +15,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type MarketingPageRecord = {
   id: string;
+  tenant_id: string | null;
   title: string;
   slug: string;
   status: "draft" | "published" | "offline" | "archived";
@@ -35,6 +36,7 @@ export type MarketingPageRecord = {
 
 export type MarketingPageVersionRecord = {
   id: string;
+  tenant_id: string | null;
   page_id: string;
   version_no: number;
   status: "draft" | "published" | "archived";
@@ -47,6 +49,7 @@ export type MarketingPageVersionRecord = {
 
 export type MarketingLeadRecord = {
   id: string;
+  tenant_id: string | null;
   page_id: string | null;
   page_version_id: string | null;
   name: string | null;
@@ -68,6 +71,7 @@ export type MarketingLeadRecord = {
 
 export type MarketingEventRecord = {
   id: string;
+  tenant_id: string | null;
   page_id: string | null;
   page_version_id: string | null;
   event_name: string;
@@ -191,7 +195,7 @@ class MarketingPageRepository {
     return request.in("id", visibleProjectIds);
   }
 
-  async listPages(query: MarketingPageListQuery) {
+  async listPages(query: MarketingPageListQuery, tenantId?: string | null) {
     const { page, pageSize, status, keyword } = query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -199,6 +203,10 @@ class MarketingPageRepository {
     let request = this.pages()
       .select("*", { count: "exact" })
       .neq("status", "archived");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       request = request.eq("status", status);
@@ -269,6 +277,7 @@ class MarketingPageRepository {
   async listProjectOptions(
     query: MarketingPageProjectOptionQuery,
     visibleProjectIds: string[] | null,
+    tenantId?: string | null,
   ) {
     const { page, pageSize, keyword } = query;
     const from = (page - 1) * pageSize;
@@ -278,6 +287,9 @@ class MarketingPageRepository {
     let countRequest = this.projects()
       .select("id", { count: "exact", head: true });
     countRequest = this.applyProjectIdsFilter(countRequest, visibleProjectIds);
+    if (tenantId) {
+      countRequest = countRequest.eq("tenant_id", tenantId);
+    }
     if (normalizedKeyword) {
       const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
       countRequest = countRequest.or(
@@ -309,6 +321,9 @@ class MarketingPageRepository {
       .select(PROJECT_OPTION_SELECT)
       .order("created_at", { ascending: false });
     request = this.applyProjectIdsFilter(request, visibleProjectIds);
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
     if (normalizedKeyword) {
       const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
       request = request.or(
@@ -327,15 +342,21 @@ class MarketingPageRepository {
     };
   }
 
-  async listLatestProjectLogCoverImages(projectIds: string[]) {
+  async listLatestProjectLogCoverImages(projectIds: string[], tenantId?: string | null) {
     if (projectIds.length === 0) {
       return [] as MarketingPageProjectOptionRow[];
     }
 
-    const { data, error } = await this.projectLogs()
+    let request = this.projectLogs()
       .select("project_id, images, created_at")
       .in("project_id", projectIds)
       .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request;
 
     if (error) {
       throw Errors.dbError("查询项目案例封面失败", error);
@@ -344,11 +365,16 @@ class MarketingPageRepository {
     return (data || []) as MarketingPageProjectOptionRow[];
   }
 
-  async findPageById(id: string) {
-    const { data, error } = await this.pages()
+  async findPageById(id: string, tenantId?: string | null) {
+    let request = this.pages()
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询 H5 活动页失败", error);
@@ -371,6 +397,7 @@ class MarketingPageRepository {
   }
 
   async createPage(input: {
+    tenantId: string | null;
     title: string;
     slug: string;
     description?: string | null;
@@ -383,6 +410,7 @@ class MarketingPageRepository {
   }) {
     const { data, error } = await this.pages()
       .insert({
+        tenant_id: input.tenantId,
         title: input.title,
         slug: input.slug,
         description: input.description ?? null,
@@ -406,16 +434,23 @@ class MarketingPageRepository {
   }
 
   async updatePage(id: string, input: UpdateMarketingPageInput & {
+    tenantId?: string | null;
     employeeId: string | null;
   }) {
-    const { employeeId, ...updates } = input;
-    const { data, error } = await this.pages()
+    const { employeeId, tenantId, ...updates } = input;
+    let request = this.pages()
       .update({
         ...updates,
         updated_by: employeeId,
       })
       .eq("id", id)
-      .neq("status", "archived")
+      .neq("status", "archived");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -430,14 +465,20 @@ class MarketingPageRepository {
     return data as MarketingPageRecord;
   }
 
-  async archivePage(id: string, employeeId: string | null) {
-    const { data, error } = await this.pages()
+  async archivePage(id: string, employeeId: string | null, tenantId?: string | null) {
+    let request = this.pages()
       .update({
         status: "archived",
         updated_by: employeeId,
       })
       .eq("id", id)
-      .neq("status", "archived")
+      .neq("status", "archived");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -452,14 +493,20 @@ class MarketingPageRepository {
     return data as MarketingPageRecord;
   }
 
-  async setPageOffline(id: string, employeeId: string | null) {
-    const { data, error } = await this.pages()
+  async setPageOffline(id: string, employeeId: string | null, tenantId?: string | null) {
+    let request = this.pages()
       .update({
         status: "offline",
         updated_by: employeeId,
       })
       .eq("id", id)
-      .neq("status", "archived")
+      .neq("status", "archived");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -489,12 +536,17 @@ class MarketingPageRepository {
     return Number((data as { version_no?: number } | null)?.version_no || 0);
   }
 
-  async findDraftVersion(pageId: string) {
-    const { data, error } = await this.versions()
+  async findDraftVersion(pageId: string, tenantId?: string | null) {
+    let request = this.versions()
       .select("*")
       .eq("page_id", pageId)
-      .eq("status", "draft")
-      .maybeSingle();
+      .eq("status", "draft");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询 H5 活动页草稿失败", error);
@@ -503,11 +555,16 @@ class MarketingPageRepository {
     return (data || null) as MarketingPageVersionRecord | null;
   }
 
-  async findVersionById(id: string) {
-    const { data, error } = await this.versions()
+  async findVersionById(id: string, tenantId?: string | null) {
+    let request = this.versions()
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询 H5 活动页版本失败", error);
@@ -517,6 +574,7 @@ class MarketingPageRepository {
   }
 
   async createVersion(input: {
+    tenantId: string | null;
     pageId: string;
     versionNo: number;
     status: "draft" | "published" | "archived";
@@ -526,6 +584,7 @@ class MarketingPageRepository {
   }) {
     const { data, error } = await this.versions()
       .insert({
+        tenant_id: input.tenantId,
         page_id: input.pageId,
         version_no: input.versionNo,
         status: input.status,
@@ -546,15 +605,22 @@ class MarketingPageRepository {
 
   async updateDraftVersion(input: {
     versionId: string;
+    tenantId?: string | null;
     config: MarketingPageConfigInput;
   }) {
-    const { data, error } = await this.versions()
+    let request = this.versions()
       .update({
         config: input.config,
         schema_version: input.config.schemaVersion,
       })
       .eq("id", input.versionId)
-      .eq("status", "draft")
+      .eq("status", "draft");
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -569,11 +635,17 @@ class MarketingPageRepository {
     return data as MarketingPageVersionRecord;
   }
 
-  async archivePublishedVersions(pageId: string) {
-    const { error } = await this.versions()
+  async archivePublishedVersions(pageId: string, tenantId?: string | null) {
+    let request = this.versions()
       .update({ status: "archived" })
       .eq("page_id", pageId)
       .eq("status", "published");
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { error } = await request;
 
     if (error) {
       throw Errors.dbError("归档 H5 活动页旧发布版本失败", error);
@@ -582,11 +654,12 @@ class MarketingPageRepository {
 
   async markPagePublished(input: {
     pageId: string;
+    tenantId?: string | null;
     versionId: string;
     employeeId: string | null;
     publishedAt: string;
   }) {
-    const { data, error } = await this.pages()
+    let request = this.pages()
       .update({
         status: "published",
         published_version_id: input.versionId,
@@ -594,7 +667,13 @@ class MarketingPageRepository {
         published_at: input.publishedAt,
         updated_by: input.employeeId,
       })
-      .eq("id", input.pageId)
+      .eq("id", input.pageId);
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -610,6 +689,7 @@ class MarketingPageRepository {
   }
 
   async createLead(input: SubmitMarketingLeadInput & {
+    tenantId: string | null;
     pageId: string;
     pageVersionId: string;
     requestIp: string | null;
@@ -617,9 +697,13 @@ class MarketingPageRepository {
     customerId?: string | null;
     wxOpenid?: string | null;
   }) {
-    const customerId = input.customerId ?? await this.findCustomerIdByPhone(input.phone);
+    const customerId = input.customerId ?? await this.findCustomerIdByPhone(
+      input.phone,
+      input.tenantId,
+    );
     const { data, error } = await this.leads()
       .insert({
+        tenant_id: input.tenantId,
         page_id: input.pageId,
         page_version_id: input.pageVersionId,
         name: input.name ?? null,
@@ -644,12 +728,14 @@ class MarketingPageRepository {
   }
 
   async findRecentLeadByPageAndPhone(input: {
+    tenantId: string | null;
     pageId: string;
     phone: string;
     since: string;
   }) {
     const { data, error } = await this.leads()
       .select("*")
+      .eq("tenant_id", input.tenantId)
       .eq("page_id", input.pageId)
       .eq("phone", input.phone)
       .neq("lead_status", "invalid")
@@ -666,6 +752,7 @@ class MarketingPageRepository {
   }
 
   async updateRecentLeadSubmission(id: string, input: SubmitMarketingLeadInput & {
+    tenantId: string | null;
     pageVersionId: string;
     requestIp: string | null;
     userAgent: string | null;
@@ -683,7 +770,10 @@ class MarketingPageRepository {
       user_agent: input.userAgent,
     };
 
-    const customerId = input.customerId ?? await this.findCustomerIdByPhone(input.phone);
+    const customerId = input.customerId ?? await this.findCustomerIdByPhone(
+      input.phone,
+      input.tenantId,
+    );
     if (customerId) {
       updatePayload.customer_id = customerId;
     }
@@ -692,9 +782,15 @@ class MarketingPageRepository {
       updatePayload.wx_openid = input.wxOpenid;
     }
 
-    const { data, error } = await this.leads()
+    let request = this.leads()
       .update(updatePayload)
-      .eq("id", id)
+      .eq("id", id);
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request
       .select("*")
       .maybeSingle();
 
@@ -709,11 +805,16 @@ class MarketingPageRepository {
     return data as MarketingLeadRecord;
   }
 
-  async findCustomerByAuthUserId(authUserId: string) {
-    const { data, error } = await this.customers()
+  async findCustomerByAuthUserId(authUserId: string, tenantId?: string | null) {
+    let request = this.customers()
       .select("id,name,phone,status,owner_id")
-      .eq("user_id", authUserId)
-      .maybeSingle();
+      .eq("user_id", authUserId);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询 H5 营销页客户身份失败", error);
@@ -728,7 +829,7 @@ class MarketingPageRepository {
     } | null;
   }
 
-  async listLeads(query: MarketingLeadListQuery) {
+  async listLeads(query: MarketingLeadListQuery, tenantId?: string | null) {
     const { page, pageSize, status, page_id, keyword, created_from, created_to } = query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -739,6 +840,10 @@ class MarketingPageRepository {
         page:marketing_pages(id,title,slug),
         customer:customers(id,name,phone,status,owner_id)
       `, { count: "exact" });
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       request = request.eq("lead_status", status);
@@ -785,16 +890,23 @@ class MarketingPageRepository {
   }
 
   async updateLead(id: string, input: UpdateMarketingLeadInput & {
+    tenantId?: string | null;
     employeeId: string | null;
   }) {
-    const { data, error } = await this.leads()
+    let request = this.leads()
       .update({
         lead_status: input.lead_status,
         follow_remark: input.follow_remark ?? null,
         followed_by: input.employeeId,
         followed_at: new Date().toISOString(),
       })
-      .eq("id", id)
+      .eq("id", id);
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request
       .select(`
         *,
         page:marketing_pages(id,title,slug),
@@ -814,9 +926,10 @@ class MarketingPageRepository {
   }
 
   async convertLeadToCustomer(id: string, input: ConvertMarketingLeadInput & {
+    tenantId?: string | null;
     employeeId: string | null;
   }) {
-    const lead = await this.findLeadById(id);
+    const lead = await this.findLeadById(id, input.tenantId);
     if (!lead) {
       throw Errors.notFound("H5 营销线索不存在");
     }
@@ -826,10 +939,13 @@ class MarketingPageRepository {
       throw Errors.badRequest("线索未填写手机号，不能转为客户");
     }
 
-    const existingCustomer = await this.findCustomerByPhone(phone);
-    const customer = existingCustomer ?? await this.createCustomerFromLead(lead, input.employeeId);
+    const existingCustomer = await this.findCustomerByPhone(phone, lead.tenant_id);
+    const customer = existingCustomer ?? await this.createCustomerFromLead(
+      lead,
+      input.employeeId,
+    );
     const followRemark = input.follow_remark ?? lead.follow_remark;
-    const { data, error } = await this.leads()
+    let request = this.leads()
       .update({
         customer_id: customer.id,
         lead_status: "converted",
@@ -837,7 +953,13 @@ class MarketingPageRepository {
         followed_by: input.employeeId,
         followed_at: new Date().toISOString(),
       })
-      .eq("id", id)
+      .eq("id", id);
+
+    if (input.tenantId) {
+      request = request.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await request
       .select(`
         *,
         page:marketing_pages(id,title,slug),
@@ -861,6 +983,7 @@ class MarketingPageRepository {
   }
 
   async createEvent(input: TrackMarketingEventInput & {
+    tenantId: string | null;
     pageId: string;
     pageVersionId: string;
     requestIp: string | null;
@@ -870,6 +993,7 @@ class MarketingPageRepository {
   }) {
     const { data, error } = await this.events()
       .insert({
+        tenant_id: input.tenantId,
         page_id: input.pageId,
         page_version_id: input.pageVersionId,
         event_name: input.event_name,
@@ -896,18 +1020,23 @@ class MarketingPageRepository {
     }
   }
 
-  private async findCustomerIdByPhone(phone: string | null | undefined) {
+  private async findCustomerIdByPhone(phone: string | null | undefined, tenantId?: string | null) {
     if (!phone) return null;
 
-    const customer = await this.findCustomerByPhone(phone);
+    const customer = await this.findCustomerByPhone(phone, tenantId);
     return customer?.id ?? null;
   }
 
-  private async findLeadById(id: string) {
-    const { data, error } = await this.leads()
+  private async findLeadById(id: string, tenantId?: string | null) {
+    let request = this.leads()
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询 H5 营销线索失败", error);
@@ -916,11 +1045,16 @@ class MarketingPageRepository {
     return (data || null) as MarketingLeadRecord | null;
   }
 
-  private async findCustomerByPhone(phone: string) {
-    const { data, error } = await this.customers()
+  private async findCustomerByPhone(phone: string, tenantId?: string | null) {
+    let request = this.customers()
       .select("id,name,phone,status,owner_id")
-      .eq("phone", phone)
-      .maybeSingle();
+      .eq("phone", phone);
+
+    if (tenantId) {
+      request = request.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await request.maybeSingle();
 
     if (error) {
       throw Errors.dbError("匹配 H5 营销线索客户失败", error);
@@ -946,6 +1080,7 @@ class MarketingPageRepository {
 
     const { data, error } = await this.customers()
       .insert({
+        tenant_id: lead.tenant_id,
         name: lead.name?.trim() || "H5营销线索",
         phone,
         source: "platform",
@@ -957,7 +1092,7 @@ class MarketingPageRepository {
 
     if (error) {
       if (getErrorMessage(error).includes("duplicate key")) {
-        const customer = await this.findCustomerByPhone(phone);
+        const customer = await this.findCustomerByPhone(phone, lead.tenant_id);
         if (customer) return customer;
       }
 

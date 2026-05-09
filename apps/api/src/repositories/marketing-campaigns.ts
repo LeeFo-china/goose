@@ -8,6 +8,7 @@ export type MarketingCampaignType = "share_assist" | "appointment_reward";
 
 export type MarketingCampaignRow = {
   id: string;
+  tenant_id: string | null;
   campaign_type: MarketingCampaignType;
   name: string;
   status: MarketingCampaignStatus;
@@ -31,6 +32,7 @@ export type MarketingCampaignRow = {
 
 export type MarketingCampaignProjectScopeRow = {
   id: string;
+  tenant_id: string | null;
   campaign_id: string;
   scope_mode: MarketingCampaignProjectScopeMode;
   project_id: string;
@@ -39,6 +41,7 @@ export type MarketingCampaignProjectScopeRow = {
 
 class MarketingCampaignRepository {
   async list(input: {
+    tenantId?: string | null;
     campaignType?: MarketingCampaignType;
     status?: MarketingCampaignStatus;
     keyword?: string;
@@ -50,6 +53,9 @@ class MarketingCampaignRepository {
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
 
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
     if (input.campaignType) {
       query = query.eq("campaign_type", input.campaignType);
     }
@@ -73,12 +79,17 @@ class MarketingCampaignRepository {
     };
   }
 
-  async findById(id: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findById(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaigns")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询营销活动失败", error);
@@ -87,14 +98,19 @@ class MarketingCampaignRepository {
     return (data || null) as MarketingCampaignRow | null;
   }
 
-  async listActiveByType(campaignType: MarketingCampaignType) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listActiveByType(campaignType: MarketingCampaignType, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaigns")
       .select("*")
       .eq("campaign_type", campaignType)
       .eq("enabled", true)
-      .eq("status", "active")
-      .order("updated_at", { ascending: false });
+      .eq("status", "active");
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("updated_at", { ascending: false });
 
     if (error) {
       throw Errors.dbError("查询生效营销活动失败", error);
@@ -104,6 +120,7 @@ class MarketingCampaignRepository {
   }
 
   async create(input: {
+    tenant_id: string | null;
     campaign_type: MarketingCampaignType;
     name: string;
     enabled: boolean;
@@ -135,6 +152,7 @@ class MarketingCampaignRepository {
 
   async update(input: {
     id: string;
+    tenant_id?: string | null;
     campaign_type: MarketingCampaignType;
     name: string;
     enabled: boolean;
@@ -152,7 +170,7 @@ class MarketingCampaignRepository {
     config_payload: Record<string, unknown>;
     updated_by_employee_id: string | null;
   }) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaigns")
       .update({
         campaign_type: input.campaign_type,
@@ -172,7 +190,11 @@ class MarketingCampaignRepository {
         config_payload: input.config_payload,
         updated_by_employee_id: input.updated_by_employee_id,
       })
-      .eq("id", input.id)
+      .eq("id", input.id);
+    if (input.tenant_id) {
+      query = query.eq("tenant_id", input.tenant_id);
+    }
+    const { data, error } = await query
       .select("*")
       .single();
     if (error || !data) {
@@ -181,14 +203,23 @@ class MarketingCampaignRepository {
     return data as MarketingCampaignRow;
   }
 
-  async updateStatus(id: string, status: MarketingCampaignStatus, updatedByEmployeeId: string | null) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async updateStatus(
+    id: string,
+    status: MarketingCampaignStatus,
+    updatedByEmployeeId: string | null,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaigns")
       .update({
         status,
         updated_by_employee_id: updatedByEmployeeId,
       })
-      .eq("id", id)
+      .eq("id", id);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+    const { data, error } = await query
       .select("*")
       .single();
     if (error || !data) {
@@ -199,14 +230,19 @@ class MarketingCampaignRepository {
 
   async replaceScopes(
     campaignId: string,
+    tenantId: string | null,
     scopes: Array<{ scope_mode: MarketingCampaignProjectScopeMode; project_id: string }>,
   ) {
     const admin = SupabaseDB.getAdminClient();
-    const { error: deleteError } = await admin
+    let deleteRequest = admin
       .from("marketing_campaign_project_scopes")
       .delete()
       .eq("campaign_id", campaignId);
+    if (tenantId) {
+      deleteRequest = deleteRequest.eq("tenant_id", tenantId);
+    }
 
+    const { error: deleteError } = await deleteRequest;
     if (deleteError) {
       throw Errors.dbError("清空营销活动范围失败", deleteError);
     }
@@ -219,6 +255,7 @@ class MarketingCampaignRepository {
       .from("marketing_campaign_project_scopes")
       .insert(
         scopes.map((item) => ({
+          tenant_id: tenantId,
           campaign_id: campaignId,
           scope_mode: item.scope_mode,
           project_id: item.project_id,
@@ -233,26 +270,34 @@ class MarketingCampaignRepository {
     return (data || []) as MarketingCampaignProjectScopeRow[];
   }
 
-  async listScopesByCampaignIds(campaignIds: string[]) {
+  async listScopesByCampaignIds(campaignIds: string[], tenantId?: string | null) {
     if (!campaignIds.length) {
       return [] as MarketingCampaignProjectScopeRow[];
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaign_project_scopes")
       .select("*")
       .in("campaign_id", campaignIds);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+    const { data, error } = await query;
     if (error) {
       throw Errors.dbError("查询营销活动范围失败", error);
     }
     return (data || []) as MarketingCampaignProjectScopeRow[];
   }
 
-  async listScopesByCampaignId(campaignId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listScopesByCampaignId(campaignId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("marketing_campaign_project_scopes")
       .select("*")
       .eq("campaign_id", campaignId);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+    const { data, error } = await query;
     if (error) {
       throw Errors.dbError("查询营销活动范围失败", error);
     }
