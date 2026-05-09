@@ -11,6 +11,7 @@ import type {
 } from "@/schema/tenant-share-links";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { notificationService } from "@/services/notifications";
 
 class TenantShareLinkService {
   async create(input: TenantShareLinkCreateInput, authContext: AuthContext) {
@@ -56,7 +57,15 @@ class TenantShareLinkService {
     shareToken: string;
   }) {
     try {
-      return await tenantShareLinkRepository.bindCustomer(input);
+      const result = await tenantShareLinkRepository.bindCustomer(input);
+      await notificationService.tryNotifyEmployeeShareCustomerBound({
+        tenantId: result.tenant_id,
+        customerId: result.customer_id,
+        shareEmployeeId: result.share_employee_id,
+        dedupeResult: result.dedupe_result,
+        source: result.source,
+      });
+      return result;
     } catch (error) {
       this.handleBindError(error);
     }

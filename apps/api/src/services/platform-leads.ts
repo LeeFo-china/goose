@@ -9,6 +9,7 @@ import type {
   PlatformLeadSubmitInput,
 } from "@/schema/platform-leads";
 import type { AuthContext } from "@/services/authorization";
+import { notificationService } from "@/services/notifications";
 
 type VisitorLeadContext = {
   authUserId: string | null | undefined;
@@ -76,6 +77,16 @@ class PlatformLeadService {
     }
 
     const detail = await platformLeadRepository.getDetail(id);
+    await notificationService.tryNotifyPlatformLeadAssigned({
+      tenantId: assignResult!.assigned_tenant_id,
+      platformLeadId: assignResult!.platform_lead_id,
+      customerId: assignResult!.assigned_customer_id,
+      dedupeResult: assignResult!.dedupe_result,
+      leadName: detail?.name ?? null,
+      leadPhone: detail?.phone ?? null,
+      city: detail?.city ?? null,
+    });
+
     return {
       result: assignResult!,
       detail,
