@@ -160,7 +160,7 @@ Authorization: Bearer <token>
 ## 3. 状态枚举
 
 ```text
-pending       已创建，等待后端处理
+pending       已创建，等待后端处理；如果并发已满，会短暂停留在这里排队
 resolving     后端正在调用 Apify 解析音视频地址
 downloading   后端正在下载音视频
 extracting_audio  后端正在用 ffmpeg 提取音频
@@ -212,6 +212,8 @@ GET /social-video/transcriptions/:id
 ```text
 识别仍在处理中，请稍后刷新查看
 ```
+
+后端有并发限制，默认同一 API 进程只同时处理 1 个识别任务。多个用户同时提交时，后续任务会先保持 `pending`，小程序端继续轮询即可，不需要额外处理。
 
 ### 4.3 完成后
 
@@ -276,6 +278,7 @@ TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
 1. admin 后台已配置：
    - `SOCIAL_VIDEO_TRANSCRIPTION_ENABLED=true`
    - `SOCIAL_VIDEO_TRANSCRIPTION_PROVIDER=tencent_asr`
+   - `SOCIAL_VIDEO_CONCURRENCY_LIMIT=1`
    - `APIFY_API_TOKEN`
    - `APIFY_TRANSCRIPT_ACTOR_ID=apple_yang/douyin-transcripts-scraper`
    - `TENCENTCLOUD_SECRET_ID`

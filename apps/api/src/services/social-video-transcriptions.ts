@@ -544,6 +544,10 @@ class ApifyTranscriptGateway {
 
 class SocialVideoTranscriptionService {
   private apifyGateway = new ApifyTranscriptGateway();
+  private activeTaskCount = 0;
+  private queuedTaskIds: string[] = [];
+  private queuedTaskIdSet = new Set<string>();
+  private isDrainingQueue = false;
 
   private async getTranscriptionProvider() {
     const provider = await systemSettingsService.getString(
@@ -596,6 +600,50 @@ class SocialVideoTranscriptionService {
       ffmpegTimeoutMs,
       audioBitrate,
     };
+  }
+
+  private async getConcurrencyLimit() {
+    const limit = await systemSettingsService.getNumber(
+      "SOCIAL_VIDEO_CONCURRENCY_LIMIT",
+      1,
+    );
+
+    if (!Number.isFinite(limit)) return 1;
+    return Math.max(1, Math.min(Math.floor(limit), 4));
+  }
+
+  private enqueueTask(id: string) {
+    if (this.queuedTaskIdSet.has(id)) {
+      return;
+    }
+
+    this.queuedTaskIds.push(id);
+    this.queuedTaskIdSet.add(id);
+    void this.drainQueue().catch(() => {});
+  }
+
+  private async drainQueue() {
+    if (this.isDrainingQueue) {
+      return;
+    }
+
+    this.isDrainingQueue = true;
+    try {
+      const limit = await this.getConcurrencyLimit();
+      while (this.activeTaskCount < limit && this.queuedTaskIds.length > 0) {
+        const id = this.queuedTaskIds.shift();
+        if (!id) break;
+
+        this.queuedTaskIdSet.delete(id);
+        this.activeTaskCount += 1;
+        void this.processTaskNow(id).finally(() => {
+          this.activeTaskCount = Math.max(0, this.activeTaskCount - 1);
+          void this.drainQueue().catch(() => {});
+        });
+      }
+    } finally {
+      this.isDrainingQueue = false;
+    }
   }
 
   private async assertEnabled() {
@@ -694,9 +742,7 @@ class SocialVideoTranscriptionService {
       createdByAuthUserId: authUserId,
     });
 
-    void this.processTask(task.id).catch(() => {
-      // processTask already records failure state.
-    });
+    this.enqueueTask(task.id);
 
     return {
       ...serializeRecord(task),
@@ -718,6 +764,10 @@ class SocialVideoTranscriptionService {
   }
 
   async processTask(id: string) {
+    this.enqueueTask(id);
+  }
+
+  private async processTaskNow(id: string) {
     const task = await socialVideoTranscriptionRepository.findById(id);
     if (!task || task.status === "completed") {
       return;

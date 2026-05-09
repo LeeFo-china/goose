@@ -344,6 +344,15 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "20",
   },
   {
+    key: "SOCIAL_VIDEO_CONCURRENCY_LIMIT",
+    groupCode: "social_video",
+    name: "短视频识别并发数",
+    description: "同一 API 进程内同时执行下载、ffmpeg 和 ASR 的最大任务数，建议 1-2。",
+    valueType: "number",
+    envNames: ["SOCIAL_VIDEO_CONCURRENCY_LIMIT"],
+    defaultValue: "1",
+  },
+  {
     key: "SOCIAL_VIDEO_MAX_DURATION_SECONDS",
     groupCode: "social_video",
     name: "短视频最大时长",
