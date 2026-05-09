@@ -37,6 +37,7 @@ export function AdminShell({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Badge variant="outline">{session.tenant?.name || "未绑定租户"}</Badge>
             <Badge variant="success">权限 {session.permissions.length}</Badge>
             <LogoutButton />
           </div>

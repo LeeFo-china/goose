@@ -146,3 +146,6 @@ export type {
   ExternalReferrerStatus,
   ProjectReferralStatus,
 } from './referral';
+
+export { TENANT_STATUS_VALUES, isTenantStatus } from './tenant';
+export type { TenantBasicInfo, TenantStatus } from './tenant';

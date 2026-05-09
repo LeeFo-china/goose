@@ -43,6 +43,19 @@ function serializeEmployeeFromAuthContext(authContext: AuthContext) {
   };
 }
 
+function serializeTenantFromAuthContext(authContext: AuthContext) {
+  if (!authContext.tenantId) {
+    return null;
+  }
+
+  return {
+    id: authContext.tenantId,
+    name: authContext.tenantName,
+    slug: authContext.tenantSlug,
+    status: authContext.tenantStatus,
+  };
+}
+
 function serializeEmployeeRecord(employee: AdminAuthEmployeeRecord) {
   return {
     id: employee.id,
@@ -176,6 +189,8 @@ class AdminAuthService {
     const authContext = await authorizationService.getAuthContextByAuthUserId(
       authUserId,
     );
+    authorizationService.assertTenantAvailable(authContext);
+
     const token = signToken({
       sub: authUserId,
       login_channel: "admin_web",
@@ -187,6 +202,7 @@ class AdminAuthService {
       user_id: authUserId,
       login_channel: "admin_web",
       employee: serializeEmployeeRecord(employee),
+      tenant: serializeTenantFromAuthContext(authContext),
       roles: authContext.roleCodes,
       permissions: authContext.permissions,
       expires_at: getJwtExpiresAt(),
@@ -201,6 +217,7 @@ class AdminAuthService {
     const authContext = await authorizationService.getAuthContextByAuthUserId(
       authUserId,
     );
+    authorizationService.assertTenantAvailable(authContext);
 
     if (
       !authContext.employeeId ||
@@ -217,6 +234,7 @@ class AdminAuthService {
       user_id: authUserId,
       login_channel: "admin_web",
       employee: serializeEmployeeFromAuthContext(authContext),
+      tenant: serializeTenantFromAuthContext(authContext),
       roles: authContext.roleCodes,
       permissions: authContext.permissions,
     };

@@ -13,3 +13,4 @@ export * from './project-acceptance';
 export * from './project-log';
 export * from './project';
 export * from './referral';
+export * from './tenant';

@@ -25,10 +25,18 @@ export type AdminPermission = {
   scope: "self" | "assigned" | "department" | "all";
 };
 
+export type AdminTenant = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  status: string | null;
+};
+
 export type AdminSession = {
   user_id: string;
   login_channel: "admin_web";
   employee: AdminEmployee;
+  tenant: AdminTenant | null;
   roles: string[];
   permissions: AdminPermission[];
   token?: string;

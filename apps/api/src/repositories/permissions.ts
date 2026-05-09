@@ -43,6 +43,7 @@ export type EmployeePermissionContextRecord = {
   employee: {
     id: string;
     user_id: string | null;
+    tenant_id: string | null;
     status: string | null;
     department_id: string | null;
     post_id: string | null;
@@ -56,6 +57,20 @@ export type EmployeePermissionContextRecord = {
     post:
       | { name: string | null }
       | Array<{ name: string | null }>
+      | null;
+    tenant:
+      | {
+        id: string | null;
+        name: string | null;
+        slug: string | null;
+        status: string | null;
+      }
+      | Array<{
+        id: string | null;
+        name: string | null;
+        slug: string | null;
+        status: string | null;
+      }>
       | null;
   } | null;
   roles: RoleRecord[];
@@ -382,12 +397,14 @@ class PermissionRepository {
       .select(`
         id,
         user_id,
+        tenant_id,
         status,
         department_id,
         post_id,
         name,
         phone,
         avatar,
+        tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)
@@ -407,12 +424,14 @@ class PermissionRepository {
       .select(`
         id,
         user_id,
+        tenant_id,
         status,
         department_id,
         post_id,
         name,
         phone,
         avatar,
+        tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)

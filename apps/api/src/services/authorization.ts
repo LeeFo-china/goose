@@ -1,5 +1,9 @@
 import { Errors } from "@/errors/error-factory";
-import { permissionRepository } from "@/repositories/permissions";
+import {
+  permissionRepository,
+  type EmployeePermissionContextRecord,
+} from "@/repositories/permissions";
+import { ErrorCodes } from "@/errors/error-codes";
 import { isEmployeeOperableStatus, PERMISSION_CODE_VALUES } from "@gooes/domain";
 
 export type EffectivePermission = {
@@ -18,6 +22,11 @@ export type AuthContextRole = {
 export type AuthContext = {
   authUserId: string;
   employeeId: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  tenantSlug: string | null;
+  tenantStatus: string | null;
+  isPlatformAdmin: boolean;
   employeeName: string | null;
   employeeStatus: string | null;
   departmentId: string | null;
@@ -109,6 +118,27 @@ class AuthorizationService {
     return value?.name ?? null;
   }
 
+  private getRelationValue<T extends Record<string, unknown>, K extends keyof T>(
+    value: T | T[] | null | undefined,
+    key: K,
+  ): T[K] | null {
+    const record = Array.isArray(value) ? value[0] : value;
+    return record?.[key] ?? null;
+  }
+
+  private buildTenantContext(
+    employee: NonNullable<EmployeePermissionContextRecord["employee"]> | null,
+    roleCodes: string[],
+  ) {
+    return {
+      tenantId: employee?.tenant_id ?? null,
+      tenantName: this.getRelationValue(employee?.tenant, "name") as string | null,
+      tenantSlug: this.getRelationValue(employee?.tenant, "slug") as string | null,
+      tenantStatus: this.getRelationValue(employee?.tenant, "status") as string | null,
+      isPlatformAdmin: roleCodes.includes("platform_admin"),
+    };
+  }
+
   private buildAuthContext(input: Awaited<
     ReturnType<typeof permissionRepository.getEmployeePermissionContextByAuthUserId>
   >, authUserId: string): AuthContext {
@@ -123,9 +153,11 @@ class AuthorizationService {
     const roleCodes = input.roles.map((item) => item.code);
 
     if (!employee) {
+      const tenantContext = this.buildTenantContext(null, roleCodes);
       return {
         authUserId,
         employeeId: null,
+        ...tenantContext,
         employeeName: null,
         employeeStatus: null,
         departmentId: null,
@@ -141,11 +173,13 @@ class AuthorizationService {
 
     const departmentName = this.getRelationName(employee.department);
     const postName = this.getRelationName(employee.post);
+    const tenantContext = this.buildTenantContext(employee, roleCodes);
 
     if (!isEmployeeOperableStatus(employee.status)) {
       return {
         authUserId,
         employeeId: employee.id,
+        ...tenantContext,
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
@@ -163,6 +197,7 @@ class AuthorizationService {
       return {
         authUserId,
         employeeId: employee.id,
+        ...tenantContext,
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
@@ -205,6 +240,7 @@ class AuthorizationService {
     return {
       authUserId,
       employeeId: employee.id,
+      ...tenantContext,
       employeeName: employee.name ?? null,
       employeeStatus: employee.status,
       departmentId: employee.department_id,
@@ -278,12 +314,34 @@ class AuthorizationService {
     }
   }
 
+  assertTenantAvailable(authContext: AuthContext) {
+    if (
+      authContext.employeeId &&
+      !authContext.isPlatformAdmin &&
+      !authContext.tenantId
+    ) {
+      throw Errors.business(403, "员工未绑定租户", ErrorCodes.FORBIDDEN);
+    }
+
+    if (
+      authContext.employeeId &&
+      !authContext.isPlatformAdmin &&
+      authContext.tenantStatus &&
+      authContext.tenantStatus !== "active"
+    ) {
+      throw Errors.business(403, "租户状态不可用", ErrorCodes.FORBIDDEN);
+    }
+  }
+
   async getRequiredAuthContext(authUserId?: string | null) {
     if (!authUserId) {
       throw Errors.unauthorized();
     }
 
-    return this.getAuthContextByAuthUserId(authUserId);
+    const authContext = await this.getAuthContextByAuthUserId(authUserId);
+
+    this.assertTenantAvailable(authContext);
+    return authContext;
   }
 }
 
