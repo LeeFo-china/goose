@@ -1,12 +1,14 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  CreateSocialVideoScriptSchema,
   CreateSocialVideoTranscriptionSchema,
   SocialVideoTranscriptionIdParamsSchema,
   TestSocialVideoTranscriptionSchema,
 } from "@/schema/social-video";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
+import { socialVideoScriptService } from "@/services/social-video-scripts";
 import { socialVideoTranscriptionService } from "@/services/social-video-transcriptions";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -50,6 +52,24 @@ class SocialVideoController extends BaseController {
     const data = await socialVideoTranscriptionService.getTask(
       paramsResult.data.id,
       authUserId,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/social-video/transcriptions/:id/script")
+  async generateScript(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+
+    const paramsResult = SocialVideoTranscriptionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = CreateSocialVideoScriptSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await socialVideoScriptService.generateScript(
+      paramsResult.data.id,
+      bodyResult.data,
+      authContext,
     );
     return ResponseHandler.success(data);
   }

@@ -263,17 +263,91 @@ TENCENT_ASR_CONFIG_MISSING         后台缺少腾讯云 ASR 配置
 TENCENT_ASR_API_ERROR              腾讯云 ASR 接口调用失败
 TENCENT_ASR_TASK_FAILED            腾讯云 ASR 任务失败
 TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
+SOCIAL_VIDEO_TRANSCRIPTION_NOT_FOUND       转写任务不存在
+SOCIAL_VIDEO_TRANSCRIPTION_FORBIDDEN       当前用户无权访问该转写任务
+SOCIAL_VIDEO_TRANSCRIPTION_NOT_COMPLETED   转写任务尚未完成
+SOCIAL_VIDEO_TRANSCRIPTION_TEXT_EMPTY      转写文本为空
+SOCIAL_VIDEO_SCRIPT_DAILY_LIMIT_EXCEEDED   今日脚本生成次数达到上限
+SOCIAL_VIDEO_SCRIPT_AI_TIMEOUT             AI 生成超时
+SOCIAL_VIDEO_SCRIPT_AI_FAILED              AI 生成失败
+SOCIAL_VIDEO_SCRIPT_PARSE_FAILED           AI 返回结构解析失败
 ```
 
-## 6. 安全要求
+## 6. AI 拍摄脚本接口
+
+转写任务 `completed` 后，小程序可以调用同步脚本生成接口：
+
+```http
+POST /social-video/transcriptions/:id/script
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "style": "douyin_practical",
+  "duration_seconds": 60,
+  "goal": "lead_generation"
+}
+```
+
+可选枚举：
+
+```text
+style: professional | down_to_earth | douyin_practical | xiaohongshu
+goal: lead_generation | education | case_seeding | brand_trust
+duration_seconds: 30 | 60 | 90
+```
+
+响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "script-id",
+    "transcription_id": "transcription-id",
+    "status": "completed",
+    "style": "douyin_practical",
+    "duration_seconds": 60,
+    "goal": "lead_generation",
+    "title": "装修避坑短视频脚本",
+    "hook": "装修前不注意这3点，后期很容易返工。",
+    "rewritten_copy": "完整口播文案...",
+    "shooting_script": [
+      {
+        "scene": 1,
+        "duration": "0-5s",
+        "shot": "镜头对准施工现场，人物面对镜头",
+        "voiceover": "装修前这3个坑一定要避开。",
+        "caption": "装修前必看"
+      }
+    ],
+    "cover_text_options": ["装修前必避的3个坑"],
+    "caption_options": ["准备装修的朋友，先把这几个点记下来。"],
+    "tips": ["开头3秒直接讲痛点。"],
+    "source_text_length": 512,
+    "cached": false,
+    "created_at": "2026-05-09T10:30:00.000Z"
+  }
+}
+```
+
+同一个 `transcription_id + style + duration_seconds + goal` 在缓存时间内会直接返回最近成功结果，`cached=true`。小程序不需要直接调用 AI，也不需要传转写长文本。
+
+## 7. 安全要求
 
 - 小程序端不要保存 Apify Token。
 - 小程序端不要直接调用 Apify。
 - 小程序端不要直接调用腾讯云 ASR。
+- 小程序端不要直接调用 AI 模型。
 - 所有识别请求必须走 goose 后端。
 - 识别结果只能通过任务创建者自己的登录态读取。
+- 脚本生成只能基于当前用户有权访问的转写任务。
 
-## 7. 联调检查
+## 8. 联调检查
 
 1. admin 后台已配置：
    - `SOCIAL_VIDEO_TRANSCRIPTION_ENABLED=true`
@@ -286,6 +360,10 @@ TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
    - `TENCENTCLOUD_SECRET_KEY`
    - `TENCENT_ASR_REGION=ap-shanghai`
    - `TENCENT_ASR_ENGINE_MODEL_TYPE=16k_zh`
+   - `AI_CHAT_COMPLETIONS_URL`
+   - `AI_API_KEY` 或 `DEEPSEEK_API_KEY`
+   - `AI_MODEL`
+   - `SOCIAL_VIDEO_SCRIPT_DAILY_LIMIT_PER_USER=20`
 2. API 服务器已安装 `ffmpeg`。
 3. PM2 中 `goose-social-video-worker` 状态为 online。
 4. admin 后台“短视频识别”配置页测试成功。
@@ -293,14 +371,21 @@ TENCENT_ASR_TIMEOUT                腾讯云 ASR 轮询超时
 6. 小程序创建任务成功。
 7. 小程序轮询能拿到 completed 或 failed。
 8. completed 时 `text` 可复制。
+9. completed 后调用 `POST /social-video/transcriptions/:id/script` 能返回结构化脚本。
 
-## 8. 推荐结论
+## 9. 推荐结论
 
-小程序第一版只需要两个接口：
+小程序第一版转写需要两个接口：
 
 ```text
 POST /social-video/transcriptions
 GET /social-video/transcriptions/:id
+```
+
+脚本生成增加一个接口：
+
+```text
+POST /social-video/transcriptions/:id/script
 ```
 
 不要接 Apify，不要上传密钥，不要处理 Actor 细节。后端会统一完成转写、缓存、限流和错误兜底。
