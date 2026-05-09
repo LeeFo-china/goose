@@ -95,28 +95,29 @@
 
 ### 8. 多 AI Provider 与场景路由
 
-- [ ] 保留当前 DeepSeek 配置兼容。
-- [ ] 抽象统一 `aiGateway`。
-- [ ] 业务代码不再直接调用具体供应商。
-- [ ] 新增或设计 `ai_providers`。
-- [ ] 新增或设计 `ai_models`。
-- [ ] 新增或设计 `ai_scene_routes`。
-- [ ] 支持按 `scene_code` 选择 primary model。
-- [ ] 支持 fallback model。
-- [ ] 支持场景级参数：
+- [x] 保留当前 DeepSeek 配置兼容。
+- [x] 抽象统一 `aiGateway`。
+- [x] 非流式业务调用统一走 `aiGateway`。
+- [ ] 装修问答流式接口迁移到支持流式响应的 `aiGateway`。
+- [x] 新增或设计 `ai_providers`。
+- [x] 新增或设计 `ai_models`。
+- [x] 新增或设计 `ai_scene_routes`。
+- [x] 支持按 `scene_code` 选择 primary model。
+- [x] 支持 fallback model。
+- [x] 支持场景级参数：
   - temperature
   - response_format
   - timeout_ms
-- [ ] 新增或设计 `ai_call_logs`。
-- [ ] `ai_call_logs` 可记录 `tenant_id` 做用量归因。
-- [ ] `ai_call_logs` 标准化记录：
+- [x] 新增或设计 `ai_call_logs`。
+- [x] `ai_call_logs` 可记录 `tenant_id` 做用量归因。
+- [x] `ai_call_logs` 标准化记录：
   - prompt_tokens
   - completion_tokens
   - total_tokens
-- [ ] 不同供应商 token 字段在 `aiGateway` 层归一化。
-- [ ] 供应商未返回 token 时字段允许为空，不作为真实计费依据。
+- [x] 不同供应商 token 字段在 `aiGateway` 层归一化。
+- [x] 供应商未返回 token 时字段允许为空，不作为真实计费依据。
 - [ ] admin 系统配置页支持平台切换 provider/model。
-- [ ] MVP 不支持租户自带 AI Key。
+- [x] MVP 不支持租户自带 AI Key。
 
 ### 9. 集成测试
 

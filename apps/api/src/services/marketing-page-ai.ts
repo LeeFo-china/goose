@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { aiGateway } from "@/services/ai-gateway";
 import type {
   MarketingPageBlockAiFillInput,
   MarketingPageSettingsAiFillInput,
@@ -437,22 +438,19 @@ export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFi
     throw Errors.badRequest("当前模块暂无可由 AI 填写的字段");
   }
 
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(input, fieldDefinitions) },
   ];
 
-  let result: OpenAiChatResponse;
+  let result: Awaited<ReturnType<typeof aiGateway.chat>>;
 
   try {
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_block_fill",
       temperature: 0.4,
       messages,
-      response_format: { type: "json_object" },
+      responseFormat: "json_object",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -461,14 +459,14 @@ export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFi
       throw error;
     }
 
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_block_fill",
       temperature: 0.4,
       messages,
     });
   }
 
-  const content = extractContent(result.choices);
+  const content = result.content;
   if (!content) {
     throw Errors.dbError("大模型未返回有效内容");
   }
@@ -490,22 +488,19 @@ export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettin
     throw Errors.badRequest("当前配置暂无可由 AI 填写的字段");
   }
 
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: SETTINGS_SYSTEM_PROMPT },
     { role: "user", content: buildSettingsUserPrompt(input, fieldDefinitions) },
   ];
 
-  let result: OpenAiChatResponse;
+  let result: Awaited<ReturnType<typeof aiGateway.chat>>;
 
   try {
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_settings_fill",
       temperature: 0.35,
       messages,
-      response_format: { type: "json_object" },
+      responseFormat: "json_object",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -514,14 +509,14 @@ export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettin
       throw error;
     }
 
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_settings_fill",
       temperature: 0.35,
       messages,
     });
   }
 
-  const content = extractContent(result.choices);
+  const content = result.content;
   if (!content) {
     throw Errors.dbError("大模型未返回有效内容");
   }

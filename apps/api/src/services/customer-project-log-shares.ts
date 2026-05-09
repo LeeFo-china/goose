@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
+import { aiGateway } from "@/services/ai-gateway";
 import type { AuthContext } from "@/services/authorization";
 import { systemSettingsService } from "@/services/system-settings";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
@@ -106,6 +107,7 @@ type CustomerRow = {
 };
 
 type CustomerProjectLogShareContext = {
+  tenant_id: string | null;
   customer_id: string;
   customer_name: string | null;
   project_id: string;
@@ -1420,6 +1422,7 @@ class CustomerProjectLogShareService {
     const stageCode = isProjectLogStageCode(log.stage_code) ? log.stage_code : null;
 
     return {
+      tenant_id: project.tenant_id,
       customer_id: customer.id,
       customer_name: customer.name,
       project_id: project.id,
@@ -1546,56 +1549,27 @@ class CustomerProjectLogShareService {
     context: CustomerProjectLogShareContext,
     input: GenerateCustomerProjectLogShareCopyInput,
   ) {
-    const endpoint = await getAiEndpoint();
-    const apiKey = await getAiApiKey(endpoint);
-    const model = await getAiModel(endpoint);
-
-    if (!endpoint || !apiKey || !model) {
-      return fallbackCopies(context);
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.8,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: "你是装修项目分享文案助手。",
-            },
-            {
-              role: "user",
-              content: buildCopyPrompt(context, input),
-            },
-          ],
-        }),
-        signal: controller.signal,
+      const result = await aiGateway.chat({
+        sceneCode: "customer_log_share_copy",
+        tenantId: context.tenant_id,
+        temperature: 0.8,
+        responseFormat: "json_object",
+        timeoutMs: 30000,
+        messages: [
+          {
+            role: "system",
+            content: "你是装修项目分享文案助手。",
+          },
+          {
+            role: "user",
+            content: buildCopyPrompt(context, input),
+          },
+        ],
       });
-
-      const result = await response.json() as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-
-      if (!response.ok) {
-        return fallbackCopies(context);
-      }
-
-      const rawContent = result.choices?.[0]?.message?.content || "";
-      return parseCopiesResult(rawContent, context);
+      return parseCopiesResult(result.content, context);
     } catch {
       return fallbackCopies(context);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 

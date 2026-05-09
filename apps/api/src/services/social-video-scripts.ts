@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { aiGateway } from "@/services/ai-gateway";
 import {
   socialVideoScriptRepository,
   type SocialVideoScriptRecord,
@@ -398,6 +399,7 @@ function buildUserPrompt(input: {
 }
 
 async function callAi(input: {
+  tenantId?: string | null;
   targetPlatform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   durationSeconds: number;
@@ -405,47 +407,47 @@ async function callAi(input: {
   title: string | null;
   text: string;
 }) {
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(input) },
   ];
 
-  let result: OpenAiChatResponse;
+  let result: Awaited<ReturnType<typeof aiGateway.chat>>;
   try {
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "social_video_script",
+      tenantId: input.tenantId,
       temperature: 0.45,
       messages,
-      response_format: { type: "json_object" },
+      responseFormat: "json_object",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI 生成拍摄脚本失败";
     if (!message.includes("response_format")) {
       throw error;
     }
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "social_video_script",
+      tenantId: input.tenantId,
       temperature: 0.45,
       messages,
     });
   }
 
-  const content = extractContent(result.choices);
+  const content = result.content;
   let payload = parseJsonObject(content);
 
   try {
     return {
       payload: normalizeAiPayload(payload),
-      rawPayload: result,
-      model,
-      provider: getModelProvider(endpoint),
+      rawPayload: result.raw,
+      model: result.modelName,
+      provider: result.provider,
     };
   } catch (error) {
-    result = await requestAiResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "social_video_script",
+      tenantId: input.tenantId,
       temperature: 0.25,
       messages: [
         ...messages,
@@ -458,15 +460,15 @@ async function callAi(input: {
           content: "上一次输出结构不合规。请只返回合法 JSON，必须包含完整字段，shooting_script 至少 3 条。",
         },
       ],
-      response_format: { type: "json_object" },
+      responseFormat: "json_object",
     });
-    payload = parseJsonObject(extractContent(result.choices));
+    payload = parseJsonObject(result.content);
 
     return {
       payload: normalizeAiPayload(payload),
-      rawPayload: result,
-      model,
-      provider: getModelProvider(endpoint),
+      rawPayload: result.raw,
+      model: result.modelName,
+      provider: result.provider,
     };
   }
 }
@@ -644,6 +646,7 @@ class SocialVideoScriptService {
       4000,
     );
     const aiResult = await callAi({
+      tenantId: transcription.tenant_id,
       targetPlatform: normalizedInput.targetPlatform,
       style: normalizedInput.style,
       durationSeconds: normalizedInput.durationSeconds,

@@ -8,6 +8,7 @@ import type {
 } from "@/schema/ai";
 import type { Tables } from "@/types/database";
 import { authorizationService } from "@/services/authorization";
+import { aiGateway } from "@/services/ai-gateway";
 import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
 import { systemSettingsService } from "@/services/system-settings";
 import {
@@ -910,18 +911,15 @@ async function buildSuggestionScenePrompt(input: {
 }
 
 async function generateSuggestionQuestionsByAi(scenePrompt: string) {
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
-  const result = await requestQaResult(endpoint, apiKey, {
-    model,
+  const result = await aiGateway.chat({
+    sceneCode: "decoration_qa_title",
     temperature: 0.8,
     messages: [
       { role: "system", content: SUGGESTION_SYSTEM_PROMPT },
       { role: "user", content: scenePrompt },
     ],
   });
-  const content = extractContent(result.choices);
+  const content = result.content;
 
   if (!content) {
     throw Errors.dbError("大模型未返回有效推荐问题");
@@ -1160,20 +1158,16 @@ function parseSseEvent(line: string) {
 export async function askDecorationQa(
   input: DecorationQaRequestInput,
 ): Promise<DecorationQaResult> {
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
-
   const messages = buildMessages(input.question, input.history, await getSystemPrompt());
 
-  let result: OpenAiChatResponse;
+  let result: Awaited<ReturnType<typeof aiGateway.chat>>;
 
   try {
-    result = await requestQaResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "decoration_qa",
       temperature: 0.7,
       messages,
-      response_format: { type: "json_object" },
+      responseFormat: "json_object",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -1182,14 +1176,14 @@ export async function askDecorationQa(
       throw error;
     }
 
-    result = await requestQaResult(endpoint, apiKey, {
-      model,
+    result = await aiGateway.chat({
+      sceneCode: "decoration_qa",
       temperature: 0.7,
       messages,
     });
   }
 
-  const content = extractContent(result.choices);
+  const content = result.content;
 
   if (!content) {
     throw Errors.dbError("大模型未返回有效内容");
