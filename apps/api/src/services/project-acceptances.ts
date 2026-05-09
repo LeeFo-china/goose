@@ -760,9 +760,14 @@ class ProjectAcceptanceService {
       status?: ProjectAcceptanceStatus;
       stage_code?: ProjectLogStageCode;
     },
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
   ) {
     const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
       authUserId,
+      scope,
     );
     if (!customer) throw Errors.forbidden();
 
@@ -795,9 +800,17 @@ class ProjectAcceptanceService {
     };
   }
 
-  async getCustomerAcceptance(authUserId: string, id: string) {
+  async getCustomerAcceptance(
+    authUserId: string,
+    id: string,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
     const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
       authUserId,
+      scope,
     );
     if (!customer) throw Errors.forbidden();
 
@@ -811,6 +824,8 @@ class ProjectAcceptanceService {
 
   async getCustomerAcceptanceByAuthOrTicket(input: {
     authUserId?: string | null;
+    tenantId?: string | null;
+    customerId?: string | null;
     id: string;
     ticketQuery?: CustomerProjectAcceptanceOpenTicketQuery;
   }) {
@@ -819,6 +834,10 @@ class ProjectAcceptanceService {
     if (input.authUserId) {
       const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
         input.authUserId,
+        {
+          tenantId: input.tenantId,
+          customerId: input.customerId,
+        },
       );
       if (
         customer &&
@@ -869,6 +888,8 @@ class ProjectAcceptanceService {
 
   private async resolveCustomerActor(input: {
     authUserId?: string | null;
+    tenantId?: string | null;
+    customerId?: string | null;
     row: ProjectAcceptanceRow;
     ticket?: string;
     projectId?: string;
@@ -876,6 +897,10 @@ class ProjectAcceptanceService {
     if (input.authUserId) {
       const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
         input.authUserId,
+        {
+          tenantId: input.tenantId,
+          customerId: input.customerId,
+        },
       );
       if (
         customer &&
@@ -1305,10 +1330,16 @@ class ProjectAcceptanceService {
     authUserId: string | null | undefined,
     id: string,
     input: CustomerConfirmProjectAcceptanceInput,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
   ) {
     const row = await this.getRequiredAcceptance(id);
     const customer = await this.resolveCustomerActor({
       authUserId,
+      tenantId: scope?.tenantId,
+      customerId: scope?.customerId,
       row,
       ticket: input.ticket,
       projectId: input.project_id,
@@ -1342,10 +1373,16 @@ class ProjectAcceptanceService {
     authUserId: string | null | undefined,
     id: string,
     input: CustomerDisputeProjectAcceptanceInput,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
   ) {
     const row = await this.getRequiredAcceptance(id);
     const customer = await this.resolveCustomerActor({
       authUserId,
+      tenantId: scope?.tenantId,
+      customerId: scope?.customerId,
       row,
       ticket: input.ticket,
       projectId: input.project_id,

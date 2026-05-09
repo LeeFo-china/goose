@@ -204,6 +204,10 @@ class ProjectAcceptancesController extends BaseController<
       request.user?.sub,
       idVerify.data.id,
       result.data,
+      {
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+      },
     );
     return ResponseHandler.success(data);
   }
@@ -221,6 +225,10 @@ class ProjectAcceptancesController extends BaseController<
       request.user?.sub,
       idVerify.data.id,
       result.data,
+      {
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+      },
     );
     return ResponseHandler.success(data);
   }

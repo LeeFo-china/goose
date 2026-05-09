@@ -53,14 +53,37 @@ type SmsVerificationCodeRow = {
 
 type CustomerIdentityRow = {
   id: string;
+  name: string | null;
   phone: string | null;
   user_id: string | null;
+  tenant_id: string | null;
   customer_origin?: string | null;
   claimed_at?: string | null;
 };
 
+type CustomerTenantOption = CustomerIdentityRow & {
+  tenant: {
+    id: string | null;
+    name: string | null;
+    slug: string | null;
+    status: string | null;
+  } | Array<{
+    id: string | null;
+    name: string | null;
+    slug: string | null;
+    status: string | null;
+  }> | null;
+  project_count?: number;
+  latest_project_name?: string | null;
+};
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
+});
+
+const CustomerTenantSelectBodySchema = z.object({
+  tenant_id: z.uuid("无效的租户 ID"),
+  customer_id: z.uuid("无效的客户 ID"),
 });
 
 const H5MarketingSessionBodySchema = z.object({
@@ -210,45 +233,63 @@ export class WeChatController extends BaseController {
       throw Errors.badRequest("验证码错误或已过期");
     }
 
-    if (target_role === "customer") {
-      await this.bindCustomerRole(request.user.sub, phone, {
-        createIfMissing: bodyResult.data.create_customer_if_missing,
-        customerOrigin: bodyResult.data.customer_origin,
-      });
-    } else {
+    if (target_role === "employee") {
       await this.bindEmployeeRole(request.user.sub, phone);
+
+      authorizationService.invalidateAuthContext({
+        authUserId: request.user.sub,
+      });
+
+      await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+
+      const openid = await this.getOpenIdByAuthUserId(request.user.sub);
+      const roles = await this.getUserRoles(request.user.sub);
+      const token = signToken({
+        sub: request.user.sub,
+        openid,
+        roles,
+      });
+
+      return ResponseHandler.success({
+        mode: "employee",
+        token,
+        user_id: request.user.sub,
+        roles,
+        is_new_user: false,
+      }, "身份验证成功");
     }
 
-    authorizationService.invalidateAuthContext({
+    const customerLogin = await this.resolveCustomerLoginState(
+      request.user.sub,
+      phone,
+      request.user.openid ?? null,
+    );
+
+    await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+
+    return ResponseHandler.success(customerLogin, "身份验证成功");
+  }
+
+  @Post("/customer/auth/select-tenant")
+  async selectCustomerTenant(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) {
+      throw Errors.unauthorized();
+    }
+
+    const bodyResult = CustomerTenantSelectBodySchema.safeParse(request.body || {});
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await this.selectCustomerTenantForAuthUser({
       authUserId: request.user.sub,
+      openid: request.user.openid ?? null,
+      verifiedPhone: request.user.verified_phone ?? null,
+      tenantId: bodyResult.data.tenant_id,
+      customerId: bodyResult.data.customer_id,
     });
 
-    const { error: verifyError } = await adminClient
-      .from("sms_verification_codes")
-      .update({
-        status: "verified",
-        verified_at: new Date().toISOString(),
-      })
-      .eq("id", verificationRecord.id);
-
-    if (verifyError) {
-      throw Errors.dbError("更新验证码状态失败", verifyError);
-    }
-
-    const openid = await this.getOpenIdByAuthUserId(request.user.sub);
-    const roles = await this.getUserRoles(request.user.sub);
-    const token = signToken({
-      sub: request.user.sub,
-      openid,
-      roles,
-    });
-
-    return ResponseHandler.success({
-      token,
-      user_id: request.user.sub,
-      roles,
-      is_new_user: false,
-    }, "身份验证成功");
+    return ResponseHandler.success(data, "客户租户已选择");
   }
 
   @Post("/wechat/h5-session")
@@ -449,6 +490,361 @@ export class WeChatController extends BaseController {
     }
 
     return data;
+  }
+
+  private async markVerificationCodeVerified(
+    adminClient: ReturnType<typeof SupabaseDB.getAdminClient>,
+    verificationCodeId: string,
+  ) {
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { error } = await adminClient
+        .from("sms_verification_codes")
+        .update({
+          status: "verified",
+          verified_at: new Date().toISOString(),
+        })
+        .eq("id", verificationCodeId);
+
+      if (!error) {
+        return;
+      }
+
+      lastError = error;
+      if (!this.isRetryableSupabaseError(error) || attempt === 2) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+
+    throw Errors.dbError("更新验证码状态失败", lastError);
+  }
+
+  private isRetryableSupabaseError(error: unknown) {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+
+    const message = "message" in error && typeof error.message === "string"
+      ? error.message
+      : "";
+
+    return (
+      message.includes("TimeoutError") ||
+      message.includes("timed out") ||
+      message.includes("fetch failed") ||
+      message.includes("network")
+    );
+  }
+
+  private normalizeTenantRelation(value: CustomerTenantOption["tenant"]) {
+    if (Array.isArray(value)) {
+      return value[0] ?? null;
+    }
+
+    return value ?? null;
+  }
+
+  private async enrichCustomerTenantOptions(customers: CustomerTenantOption[]) {
+    if (customers.length === 0) {
+      return [] as CustomerTenantOption[];
+    }
+
+    const customerIds = customers.map((item) => item.id);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, name, customer_id, created_at")
+      .in("customer_id", customerIds)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户项目概览失败", error);
+    }
+
+    const projectMap = new Map<string, {
+      count: number;
+      latestName: string | null;
+    }>();
+
+    for (const project of (data || []) as Array<{
+      id: string;
+      name: string | null;
+      customer_id: string | null;
+      created_at: string | null;
+    }>) {
+      if (!project.customer_id) continue;
+      const current = projectMap.get(project.customer_id) ?? {
+        count: 0,
+        latestName: null,
+      };
+      current.count += 1;
+      if (!current.latestName) {
+        current.latestName = project.name ?? null;
+      }
+      projectMap.set(project.customer_id, current);
+    }
+
+    return customers.map((customer) => {
+      const summary = projectMap.get(customer.id);
+      return {
+        ...customer,
+        project_count: summary?.count ?? 0,
+        latest_project_name: summary?.latestName ?? null,
+      };
+    });
+  }
+
+  private async listCustomerTenantOptionsByPhone(phone: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        customer_origin,
+        claimed_at,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
+      .eq("phone", phone);
+
+    if (error) {
+      throw Errors.dbError("查询客户身份失败", error);
+    }
+
+    const customers = ((data || []) as unknown as CustomerTenantOption[])
+      .filter((item) => {
+        const tenant = this.normalizeTenantRelation(item.tenant);
+        return item.tenant_id && tenant?.status === "active";
+      });
+
+    return this.enrichCustomerTenantOptions(customers);
+  }
+
+  private async getCustomerTenantOptionById(customerId: string, tenantId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        customer_origin,
+        claimed_at,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
+      .eq("id", customerId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户身份失败", error);
+    }
+
+    return (data || null) as unknown as CustomerTenantOption | null;
+  }
+
+  private serializeCustomerTenantOption(customer: CustomerTenantOption) {
+    const tenant = this.normalizeTenantRelation(customer.tenant);
+    return {
+      tenant_id: customer.tenant_id,
+      tenant_name: tenant?.name ?? null,
+      tenant_slug: tenant?.slug ?? null,
+      customer_id: customer.id,
+      customer_name: customer.name ?? null,
+      phone: customer.phone ?? null,
+      project_count: customer.project_count ?? 0,
+      latest_project_name: customer.latest_project_name ?? null,
+    };
+  }
+
+  private async signCustomerSession(input: {
+    authUserId: string;
+    openid: string | null;
+    customer: CustomerTenantOption;
+  }) {
+    const tenant = this.normalizeTenantRelation(input.customer.tenant);
+    const roles = await this.getUserRoles(input.authUserId);
+    const normalizedRoles = roles.includes("customer") ? roles : [...roles, "customer"];
+    const token = signToken({
+      sub: input.authUserId,
+      openid: input.openid ?? undefined,
+      roles: normalizedRoles,
+      tenant_id: input.customer.tenant_id,
+      tenant_slug: tenant?.slug ?? null,
+      customer_id: input.customer.id,
+    });
+
+    return {
+      mode: "customer",
+      token,
+      user_id: input.authUserId,
+      roles: normalizedRoles,
+      is_new_user: false,
+      tenant: {
+        id: input.customer.tenant_id,
+        name: tenant?.name ?? null,
+        slug: tenant?.slug ?? null,
+      },
+      customer: {
+        id: input.customer.id,
+        name: input.customer.name ?? null,
+        phone: input.customer.phone ?? null,
+      },
+    };
+  }
+
+  private async bindCustomerToAuthUser(
+    authUserId: string,
+    customer: CustomerTenantOption,
+  ) {
+    if (customer.user_id && customer.user_id !== authUserId) {
+      throw Errors.badRequest("该客户档案已绑定其他账号");
+    }
+
+    if (customer.user_id === authUserId) {
+      return;
+    }
+
+    const updatePayload: {
+      user_id: string;
+      claimed_at?: string;
+    } = {
+      user_id: authUserId,
+    };
+    if (!customer.claimed_at) {
+      updatePayload.claimed_at = new Date().toISOString();
+    }
+
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .update(updatePayload)
+      .eq("id", customer.id)
+      .eq("tenant_id", customer.tenant_id);
+
+    if (error) {
+      throw Errors.dbError("绑定客户身份失败", error);
+    }
+
+    authorizationService.invalidateAuthContext({
+      authUserId,
+    });
+  }
+
+  private async resolveCustomerLoginState(
+    authUserId: string,
+    phone: string,
+    openid: string | null,
+  ) {
+    const customers = await this.listCustomerTenantOptionsByPhone(phone);
+
+    if (customers.length === 0) {
+      const roles = await this.getUserRoles(authUserId);
+      const token = signToken({
+        sub: authUserId,
+        openid: openid ?? undefined,
+        roles,
+        verified_phone: phone,
+      });
+
+      return {
+        mode: "platform_visitor",
+        token,
+        user_id: authUserId,
+        roles,
+        is_new_user: false,
+        phone,
+        has_customer_profile: false,
+        message: "暂未匹配到装修公司，可先提交装修需求，平台顾问会协助分配。",
+      };
+    }
+
+    if (customers.length === 1) {
+      const customer = customers[0]!;
+      await this.bindCustomerToAuthUser(authUserId, customer);
+      return this.signCustomerSession({
+        authUserId,
+        openid,
+        customer: {
+          ...customer,
+          user_id: authUserId,
+        },
+      });
+    }
+
+    const roles = await this.getUserRoles(authUserId);
+    const token = signToken({
+      sub: authUserId,
+      openid: openid ?? undefined,
+      roles,
+      verified_phone: phone,
+    });
+
+    return {
+      mode: "select_tenant",
+      token,
+      user_id: authUserId,
+      roles,
+      is_new_user: false,
+      phone,
+      tenants: customers.map((item) => this.serializeCustomerTenantOption(item)),
+    };
+  }
+
+  private async selectCustomerTenantForAuthUser(input: {
+    authUserId: string;
+    openid: string | null;
+    verifiedPhone: string | null;
+    tenantId: string;
+    customerId: string;
+  }) {
+    const customer = await this.getCustomerTenantOptionById(
+      input.customerId,
+      input.tenantId,
+    );
+    if (!customer) {
+      throw Errors.notFound("客户租户关系不存在");
+    }
+
+    const tenant = this.normalizeTenantRelation(customer.tenant);
+    if (tenant?.status !== "active") {
+      throw Errors.business(403, "租户状态不可用", "FORBIDDEN");
+    }
+
+    const canSelectByCurrentBinding = customer.user_id === input.authUserId;
+    const canSelectByVerifiedPhone = Boolean(
+      input.verifiedPhone &&
+        customer.phone &&
+        input.verifiedPhone === customer.phone,
+    );
+    if (!canSelectByCurrentBinding && !canSelectByVerifiedPhone) {
+      throw Errors.business(403, "当前账号不能选择该装修公司", "FORBIDDEN");
+    }
+
+    await this.bindCustomerToAuthUser(input.authUserId, customer);
+
+    return this.signCustomerSession({
+      authUserId: input.authUserId,
+      openid: input.openid,
+      customer: {
+        ...customer,
+        user_id: input.authUserId,
+      },
+    });
   }
 
   private async bindCustomerRole(

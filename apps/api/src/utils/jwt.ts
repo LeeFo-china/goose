@@ -8,6 +8,10 @@ export type JwtPayload = {
   openid?: string;
   login_channel?: "wechat" | "admin_web";
   roles?: string[];
+  tenant_id?: string | null;
+  tenant_slug?: string | null;
+  customer_id?: string | null;
+  verified_phone?: string | null;
   iat?: number;
   exp?: number;
 };

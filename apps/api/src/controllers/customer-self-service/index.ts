@@ -299,13 +299,26 @@ class CustomerSelfServiceController extends BaseController {
 
   private async getCustomerProfileByAuthUserId(
     authUserId: string,
-    options?: { required?: boolean },
+    options?: {
+      required?: boolean;
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
   ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("customers")
       .select("id, name, phone, user_id, tenant_id")
-      .eq("user_id", authUserId)
-      .limit(2);
+      .eq("user_id", authUserId);
+
+    if (options?.tenantId) {
+      query = query.eq("tenant_id", options.tenantId);
+    }
+
+    if (options?.customerId) {
+      query = query.eq("id", options.customerId);
+    }
+
+    const { data, error } = await query.limit(2);
 
     if (error) {
       throw Errors.dbError("查询客户身份失败", error);
@@ -313,7 +326,7 @@ class CustomerSelfServiceController extends BaseController {
 
     const list = (data || []) as CustomerContextRow[];
     if (list.length > 1) {
-      throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
+      throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
     }
 
     const customer = list[0] || null;
@@ -322,6 +335,18 @@ class CustomerSelfServiceController extends BaseController {
     }
 
     return customer;
+  }
+
+  private async getCustomerProfileFromRequest(
+    request: FastifyRequest,
+    options?: { required?: boolean },
+  ) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    return this.getCustomerProfileByAuthUserId(authUserId, {
+      required: options?.required,
+      tenantId: request.user?.tenant_id ?? null,
+      customerId: request.user?.customer_id ?? null,
+    });
   }
 
   private async getUserProfileByAuthUserId(authUserId: string) {
@@ -777,12 +802,17 @@ class CustomerSelfServiceController extends BaseController {
   @Get("/auth/me/customer-context")
   async getCustomerContext(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId);
+    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+      tenantId: request.user?.tenant_id ?? null,
+      customerId: request.user?.customer_id ?? null,
+    });
     const userProfile = await this.getUserProfileByAuthUserId(authUserId);
 
     return ResponseHandler.success({
+      mode: customer ? "customer" : "platform_visitor",
       auth_user_id: authUserId,
       customer_id: customer?.id ?? null,
+      tenant_id: customer?.tenant_id ?? request.user?.tenant_id ?? null,
       customer_name: customer?.name ?? null,
       has_customer_profile: Boolean(customer),
       nickname: userProfile?.nickname ?? null,
@@ -825,7 +855,7 @@ class CustomerSelfServiceController extends BaseController {
   @Get("/customer/profile")
   async getCustomerProfile(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
     const userProfile = await this.getUserProfileByAuthUserId(authUserId);
@@ -837,8 +867,7 @@ class CustomerSelfServiceController extends BaseController {
 
   @Get("/customer/projects")
   async listCustomerProjects(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
     const queryResult = CustomerProjectListQuerySchema.safeParse(request.query);
@@ -912,8 +941,7 @@ class CustomerSelfServiceController extends BaseController {
 
   @Get("/customer/projects/:id")
   async getCustomerProjectById(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
     const idVerify = this.idParamSchema.safeParse(request.params);
@@ -941,6 +969,10 @@ class CustomerSelfServiceController extends BaseController {
       await projectAcceptanceService.listCustomerAcceptances(
         authUserId,
         queryResult.data,
+        {
+          tenantId: request.user?.tenant_id ?? null,
+          customerId: request.user?.customer_id ?? null,
+        },
       ),
     );
   }
@@ -975,6 +1007,8 @@ class CustomerSelfServiceController extends BaseController {
     return ResponseHandler.success(
       await projectAcceptanceService.getCustomerAcceptanceByAuthOrTicket({
         authUserId: request.user?.sub,
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
         id: idVerify.data.id,
         ticketQuery: queryResult.data,
       }),
@@ -983,8 +1017,7 @@ class CustomerSelfServiceController extends BaseController {
 
   @Get("/customer/projects/:id/logs")
   async getCustomerProjectLogs(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
     const idVerify = this.idParamSchema.safeParse(request.params);
@@ -1066,8 +1099,7 @@ class CustomerSelfServiceController extends BaseController {
 
   @Get("/customer/projects/:id/logs/:logId/comments")
   async getCustomerProjectLogComments(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = await this.getRequiredAuthUserId(request);
-    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
     const paramsResult = CustomerProjectLogCommentParamSchema.safeParse(
