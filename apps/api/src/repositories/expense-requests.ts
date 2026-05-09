@@ -18,6 +18,7 @@ type ExpenseRequestItemMutationInput = {
 
 export type ExpenseRequestRecord = {
   id: string;
+  tenant_id: string | null;
   request_no: string | null;
   employee_id: string;
   project_id: string | null;
@@ -45,6 +46,7 @@ export type ExpenseRequestRecord = {
 };
 
 export type ExpenseRequestMutationPayload = {
+  tenant_id?: string | null;
   employee_id?: string;
   project_id?: string | null;
   mode?: string;
@@ -67,6 +69,7 @@ export type ExpenseRequestMutationPayload = {
 };
 
 type ExpenseRequestApprovalPayload = {
+  tenant_id?: string | null;
   expense_request_id: string;
   step: string;
   action: string;
@@ -75,6 +78,7 @@ type ExpenseRequestApprovalPayload = {
 };
 
 type ExpenseRequestSettlementPayload = {
+  tenant_id?: string | null;
   expense_request_id: string;
   payee_name: string;
   payee_bank?: string | null;
@@ -88,6 +92,7 @@ type ExpenseRequestSettlementPayload = {
 };
 
 export type ExpenseApprovalChainPayload = {
+  tenant_id?: string | null;
   expense_request_id: string;
   step: string;
   step_name: string;
@@ -252,12 +257,20 @@ class ExpenseRequestRepository {
     )
   `;
 
-  async findById(id: string): Promise<ExpenseRequestRecord | null> {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findById(
+    id: string,
+    tenantId?: string | null,
+  ): Promise<ExpenseRequestRecord | null> {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_requests")
       .select(this.detailSelect)
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询费用申请失败", error);
@@ -285,10 +298,10 @@ class ExpenseRequestRepository {
     }
 
     if (items.length > 0) {
-      await this.replaceItems(data.id, items);
+      await this.replaceItems(data.id, items, payload.tenant_id ?? null);
     }
 
-    const record = await this.findById(data.id);
+    const record = await this.findById(data.id, payload.tenant_id ?? null);
     if (!record) {
       throw Errors.badRequest("费用申请创建成功但读取失败");
     }
@@ -300,13 +313,18 @@ class ExpenseRequestRepository {
     id: string,
     payload: ExpenseRequestMutationPayload,
     items?: ExpenseRequestItemMutationInput[],
+    tenantId?: string | null,
   ): Promise<ExpenseRequestRecord> {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("expense_requests")
       .update(payload)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("id").maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新费用申请失败", error);
@@ -317,10 +335,10 @@ class ExpenseRequestRepository {
     }
 
     if (items) {
-      await this.replaceItems(id, items);
+      await this.replaceItems(id, items, tenantId ?? payload.tenant_id ?? null);
     }
 
-    const record = await this.findById(id);
+    const record = await this.findById(id, tenantId ?? payload.tenant_id ?? null);
     if (!record) {
       throw Errors.badRequest("费用申请更新成功但读取失败");
     }
@@ -328,11 +346,21 @@ class ExpenseRequestRepository {
     return record;
   }
 
-  async replaceItems(id: string, items: ExpenseRequestItemMutationInput[]) {
-    const { error: deleteError } = await SupabaseDB.getAdminClient()
+  async replaceItems(
+    id: string,
+    items: ExpenseRequestItemMutationInput[],
+    tenantId?: string | null,
+  ) {
+    let deleteQuery = SupabaseDB.getAdminClient()
       .from("expense_request_items")
       .delete()
       .eq("expense_request_id", id);
+
+    if (tenantId) {
+      deleteQuery = deleteQuery.eq("tenant_id", tenantId);
+    }
+
+    const { error: deleteError } = await deleteQuery;
 
     if (deleteError) {
       throw Errors.dbError("清理费用明细失败", deleteError);
@@ -343,6 +371,7 @@ class ExpenseRequestRepository {
     }
 
     const payload = items.map((item) => ({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       occurred_at: item.occurred_at ?? null,
       category_code: item.category_code ?? null,
@@ -367,6 +396,7 @@ class ExpenseRequestRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("expense_request_approvals")
       .insert({
+        tenant_id: payload.tenant_id ?? null,
         expense_request_id: payload.expense_request_id,
         step: payload.step,
         action: payload.action,
@@ -382,11 +412,18 @@ class ExpenseRequestRepository {
   async replaceApprovalChain(
     expenseRequestId: string,
     items: ExpenseApprovalChainPayload[],
+    tenantId?: string | null,
   ) {
-    const { error: deleteError } = await SupabaseDB.getAdminClient()
+    let deleteQuery = SupabaseDB.getAdminClient()
       .from("expense_request_approval_chains")
       .delete()
       .eq("expense_request_id", expenseRequestId);
+
+    if (tenantId) {
+      deleteQuery = deleteQuery.eq("tenant_id", tenantId);
+    }
+
+    const { error: deleteError } = await deleteQuery;
 
     if (deleteError) {
       throw Errors.dbError("清理费用审批链失败", deleteError);
@@ -405,8 +442,8 @@ class ExpenseRequestRepository {
     }
   }
 
-  async listApprovalChain(expenseRequestId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listApprovalChain(expenseRequestId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_approval_chains")
       .select(`
         id,
@@ -433,8 +470,13 @@ class ExpenseRequestRepository {
           post:posts!employees_post_id_fkey(name)
         )
       `)
-      .eq("expense_request_id", expenseRequestId)
-      .order("sort_order", { ascending: true });
+      .eq("expense_request_id", expenseRequestId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("sort_order", { ascending: true });
 
     if (error) {
       throw Errors.dbError("查询费用审批链失败", error);
@@ -451,8 +493,9 @@ class ExpenseRequestRepository {
       acted_at?: string | null;
       comment?: string | null;
     },
+    tenantId?: string | null,
   ) {
-    const { error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_approval_chains")
       .update({
         ...payload,
@@ -460,13 +503,19 @@ class ExpenseRequestRepository {
       })
       .eq("id", id);
 
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { error } = await query;
+
     if (error) {
       throw Errors.dbError("更新费用审批链失败", error);
     }
   }
 
-  async findEmployeeForApproval(id: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findEmployeeForApproval(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("employees")
       .select(`
         id,
@@ -479,8 +528,13 @@ class ExpenseRequestRepository {
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询审批人失败", error);
@@ -491,6 +545,7 @@ class ExpenseRequestRepository {
 
   async listEmployeesForApprovalCandidates(input: {
     keyword?: string;
+    tenantId?: string | null;
   }) {
     let query = SupabaseDB.getAdminClient()
       .from("employees")
@@ -507,6 +562,10 @@ class ExpenseRequestRepository {
       `)
       .eq("status", "active")
       .order("created_at", { ascending: false });
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
 
     const keyword = input.keyword?.trim();
     if (keyword) {
@@ -623,6 +682,7 @@ class ExpenseRequestRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("expense_request_settlements")
       .insert({
+        tenant_id: payload.tenant_id ?? null,
         expense_request_id: payload.expense_request_id,
         payee_name: payload.payee_name,
         payee_bank: payload.payee_bank ?? null,
@@ -640,12 +700,17 @@ class ExpenseRequestRepository {
     }
   }
 
-  async hasSettlement(expenseRequestId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async hasSettlement(expenseRequestId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_settlements")
       .select("id")
-      .eq("expense_request_id", expenseRequestId)
-      .maybeSingle();
+      .eq("expense_request_id", expenseRequestId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询费用打款记录失败", error);
@@ -657,6 +722,7 @@ class ExpenseRequestRepository {
   async list(
     params: ExpenseRequestListQueryType,
     visibility?: ExpenseRequestVisibilityFilter,
+    tenantId?: string | null,
   ) {
     const {
       page,
@@ -675,6 +741,10 @@ class ExpenseRequestRepository {
       .from("expense_requests")
       .select(this.summarySelect, { count: "exact" })
       .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
 
     if (employee_id) {
       query = query.eq("employee_id", employee_id);

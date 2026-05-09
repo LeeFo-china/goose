@@ -9,6 +9,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type ExpenseRequestCategoryRecord = {
   id: string;
+  tenant_id: string | null;
   code: string;
   name: string;
   status: ExpenseRequestCategoryStatus;
@@ -20,7 +21,7 @@ export type ExpenseRequestCategoryRecord = {
 };
 
 class ExpenseRequestCategoryRepository {
-  async list(params: ExpenseRequestCategoryListQuery) {
+  async list(params: ExpenseRequestCategoryListQuery, tenantId?: string | null) {
     const { page, pageSize, status, keyword } = params;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -30,6 +31,10 @@ class ExpenseRequestCategoryRepository {
       .select("*", { count: "exact" })
       .order("sort", { ascending: true })
       .order("created_at", { ascending: true });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
 
     if (status) {
       query = query.eq("status", status);
@@ -55,12 +60,17 @@ class ExpenseRequestCategoryRepository {
     };
   }
 
-  async findById(id: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findById(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询费用分类失败", error);
@@ -69,12 +79,17 @@ class ExpenseRequestCategoryRepository {
     return (data as ExpenseRequestCategoryRecord | null) ?? null;
   }
 
-  async findByCode(code: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findByCode(code: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .select("*")
-      .eq("code", code)
-      .maybeSingle();
+      .eq("code", code);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询费用分类失败", error);
@@ -83,12 +98,17 @@ class ExpenseRequestCategoryRepository {
     return (data as ExpenseRequestCategoryRecord | null) ?? null;
   }
 
-  async findByName(name: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async findByName(name: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .select("*")
-      .eq("name", name)
-      .maybeSingle();
+      .eq("name", name);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询费用分类失败", error);
@@ -97,10 +117,13 @@ class ExpenseRequestCategoryRepository {
     return (data as ExpenseRequestCategoryRecord | null) ?? null;
   }
 
-  async create(input: CreateExpenseRequestCategoryInput) {
+  async create(
+    input: CreateExpenseRequestCategoryInput & { tenant_id?: string | null },
+  ) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .insert({
+        tenant_id: input.tenant_id ?? null,
         code: input.code,
         name: input.name,
         status: input.status,
@@ -122,8 +145,12 @@ class ExpenseRequestCategoryRepository {
     return data as ExpenseRequestCategoryRecord;
   }
 
-  async update(id: string, input: UpdateExpenseRequestCategoryInput) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async update(
+    id: string,
+    input: UpdateExpenseRequestCategoryInput,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .update({
         ...(input.code !== undefined ? { code: input.code } : {}),
@@ -133,9 +160,13 @@ class ExpenseRequestCategoryRepository {
         ...(input.is_builtin !== undefined ? { is_builtin: input.is_builtin } : {}),
         ...(input.remark !== undefined ? { remark: input.remark ?? null } : {}),
       })
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新费用分类失败", error);
@@ -148,13 +179,21 @@ class ExpenseRequestCategoryRepository {
     return data as ExpenseRequestCategoryRecord;
   }
 
-  async updateStatus(id: string, status: ExpenseRequestCategoryStatus) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async updateStatus(
+    id: string,
+    status: ExpenseRequestCategoryStatus,
+    tenantId?: string | null,
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
       .update({ status })
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
 
     if (error) {
       throw Errors.dbError("更新费用分类状态失败", error);

@@ -142,6 +142,7 @@ function normalizeScope(value: string | null | undefined): ExpenseRequestAccessS
 class ExpenseRequestService {
   private async resolveItems(
     items: ExpenseRequestItemInput[],
+    tenantId?: string | null,
   ): Promise<ResolvedExpenseRequestItemInput[]> {
     return Promise.all(
       items.map(async (item) => {
@@ -150,6 +151,7 @@ class ExpenseRequestService {
           const category =
             await expenseRequestCategoryService.resolveActiveCategoryByCode(
               categoryCode,
+              tenantId,
             );
 
           return {
@@ -368,8 +370,11 @@ class ExpenseRequestService {
     return approvalChainStepConfigs.find((item) => item.step === step) ?? null;
   }
 
-  private async getApplicantEmployee(id: string) {
-    const employee = await expenseRequestRepository.findEmployeeForApproval(id);
+  private async getApplicantEmployee(id: string, tenantId?: string | null) {
+    const employee = await expenseRequestRepository.findEmployeeForApproval(
+      id,
+      tenantId,
+    );
     if (!employee || employee.status !== "active") {
       throw Errors.badRequest("申请人不存在或不可用");
     }
@@ -381,10 +386,14 @@ class ExpenseRequestService {
     candidateId: string;
     applicantId: string;
     step: ApprovalChainStep;
+    tenantId?: string | null;
   }) {
     const [candidate, applicant] = await Promise.all([
-      expenseRequestRepository.findEmployeeForApproval(input.candidateId),
-      this.getApplicantEmployee(input.applicantId),
+      expenseRequestRepository.findEmployeeForApproval(
+        input.candidateId,
+        input.tenantId,
+      ),
+      this.getApplicantEmployee(input.applicantId, input.tenantId),
     ]);
 
     if (!candidate || candidate.status !== "active") {
@@ -458,6 +467,7 @@ class ExpenseRequestService {
     applicantId: string,
     input: ExpenseApprovalChainItemInput[],
     firstStatus: "pending" | "current",
+    tenantId?: string | null,
   ): Promise<ExpenseApprovalChainPayload[]> {
     const normalized = this.normalizeApprovalChainInput(input);
     const payload: ExpenseApprovalChainPayload[] = [];
@@ -467,9 +477,11 @@ class ExpenseRequestService {
         candidateId: item.assignee_id,
         applicantId,
         step: item.step,
+        tenantId,
       });
 
       payload.push({
+        tenant_id: tenantId ?? null,
         expense_request_id: expenseRequestId,
         step: config.step,
         step_name: config.step_name,
@@ -504,12 +516,21 @@ class ExpenseRequestService {
       null;
   }
 
-  private async assertEmployeeExists(id: string, message = "员工不存在") {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async assertEmployeeExists(
+    id: string,
+    tenantId?: string | null,
+    message = "员工不存在",
+  ) {
+    let query = SupabaseDB.getAdminClient()
       .from("employees")
       .select("id")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询员工失败", error);
@@ -520,16 +541,24 @@ class ExpenseRequestService {
     }
   }
 
-  private async assertProjectExists(id: string | null | undefined) {
+  private async assertProjectExists(
+    id: string | null | undefined,
+    tenantId?: string | null,
+  ) {
     if (!id) {
       return;
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from("projects")
       .select("id")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询项目失败", error);
@@ -567,9 +596,11 @@ class ExpenseRequestService {
       throw Errors.badRequest("缺少申请人");
     }
 
-    const applicant = await this.getApplicantEmployee(applicantId);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const applicant = await this.getApplicantEmployee(applicantId, tenantId);
     const candidates = await expenseRequestRepository.listEmployeesForApprovalCandidates({
       keyword: params.keyword,
+      tenantId,
     });
     const permissionRows = await expenseRequestRepository.listEmployeePermissionContexts(
       candidates.map((item) => item.id),
@@ -617,16 +648,18 @@ class ExpenseRequestService {
   }
 
   async createExpenseRequest(authContext: AuthContext, input: CreateExpenseRequestInput) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     this.ensureCurrentEmployee(authContext, input.employee_id, "expense_request.create");
-    await this.assertEmployeeExists(input.employee_id);
-    await this.assertProjectExists(input.project_id);
+    await this.assertEmployeeExists(input.employee_id, tenantId);
+    await this.assertProjectExists(input.project_id, tenantId);
 
-    const items = await this.resolveItems(input.items || []);
+    const items = await this.resolveItems(input.items || [], tenantId);
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() || null;
 
     const created = await expenseRequestRepository.create(
       {
+        tenant_id: tenantId ?? null,
         employee_id: input.employee_id,
         project_id: input.project_id ?? null,
         mode: input.mode,
@@ -650,9 +683,11 @@ class ExpenseRequestService {
           input.employee_id,
           input.approval_chain,
           "pending",
+          tenantId,
         ),
+        tenantId,
       );
-      return expenseRequestRepository.findById(created.id);
+      return expenseRequestRepository.findById(created.id, tenantId);
     }
 
     return created;
@@ -663,7 +698,8 @@ class ExpenseRequestService {
     id: string,
     input: UpdateExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -683,10 +719,10 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前状态不允许修改审批流程");
     }
 
-    await this.assertProjectExists(input.project_id);
+    await this.assertProjectExists(input.project_id, tenantId);
 
     const items = input.items
-      ? await this.resolveItems(input.items)
+      ? await this.resolveItems(input.items, tenantId)
       : (((existing.items as ResolvedExpenseRequestItemInput[] | undefined) || []));
     const totalAmount = calculateTotalAmount(items);
     const title = input.title?.trim() ?? existing.title ?? null;
@@ -704,6 +740,7 @@ class ExpenseRequestService {
         ...buildLegacyFields(title, items, totalAmount),
       },
       input.items ? items : undefined,
+      tenantId,
     );
 
     if (input.approval_chain) {
@@ -714,9 +751,11 @@ class ExpenseRequestService {
           existing.employee_id,
           input.approval_chain,
           "pending",
+          tenantId,
         ),
+        tenantId,
       );
-      return expenseRequestRepository.findById(id);
+      return expenseRequestRepository.findById(id, tenantId);
     }
 
     return updated;
@@ -727,7 +766,8 @@ class ExpenseRequestService {
     id: string,
     input: SubmitExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -747,7 +787,7 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前状态不允许提交费用申请");
     }
 
-    await this.assertEmployeeExists(operatorId, "提交人不存在");
+    await this.assertEmployeeExists(operatorId, tenantId, "提交人不存在");
 
     const items = (existing.items as ResolvedExpenseRequestItemInput[] | undefined) || [];
     if (items.length === 0) {
@@ -777,6 +817,7 @@ class ExpenseRequestService {
       existing.employee_id,
       requestedApprovalChain,
       "current",
+      tenantId,
     );
 
     const updated = await expenseRequestRepository.update(id, {
@@ -787,11 +828,16 @@ class ExpenseRequestService {
       rejected_reason: null,
       assignee_id: approvalChainPayload[0]?.assignee_id ?? null,
       ...buildLegacyFields(existing.title, items, totalAmount),
-    });
+    }, undefined, tenantId);
 
-    await expenseRequestRepository.replaceApprovalChain(id, approvalChainPayload);
+    await expenseRequestRepository.replaceApprovalChain(
+      id,
+      approvalChainPayload,
+      tenantId,
+    );
 
     await expenseRequestRepository.appendApproval({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       step: "draft",
       action,
@@ -799,7 +845,7 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id);
+    return expenseRequestRepository.findById(updated.id, tenantId);
   }
 
   async approveExpenseRequest(
@@ -807,7 +853,8 @@ class ExpenseRequestService {
     id: string,
     input: ApproveExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -866,7 +913,7 @@ class ExpenseRequestService {
       );
     }
 
-    await this.assertEmployeeExists(approverId, "审批人不存在");
+    await this.assertEmployeeExists(approverId, tenantId, "审批人不存在");
 
     const now = new Date().toISOString();
     const nextStatus = existing.current_step === "finance_review"
@@ -883,7 +930,7 @@ class ExpenseRequestService {
       current_step: nextStep,
       approved_at: existing.current_step === "finance_review" ? now : null,
       assignee_id: nextNode?.assignee_id ?? null,
-    });
+    }, undefined, tenantId);
 
     if (currentNode) {
       await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
@@ -891,16 +938,17 @@ class ExpenseRequestService {
         acted_by: approverId,
         acted_at: now,
         comment: input.comment ?? null,
-      });
+      }, tenantId);
     }
 
     if (nextNode && existing.current_step === "manager_review") {
       await expenseRequestRepository.updateApprovalChainNode(nextNode.id, {
         status: "current",
-      });
+      }, tenantId);
     }
 
     await expenseRequestRepository.appendApproval({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       step: existing.current_step,
       action: "approve",
@@ -908,7 +956,7 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id);
+    return expenseRequestRepository.findById(updated.id, tenantId);
   }
 
   async rejectExpenseRequest(
@@ -916,7 +964,8 @@ class ExpenseRequestService {
     id: string,
     input: RejectExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -977,7 +1026,7 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前审批节点不允许驳回");
     }
 
-    await this.assertEmployeeExists(approverId, "审批人不存在");
+    await this.assertEmployeeExists(approverId, tenantId, "审批人不存在");
 
     const now = new Date().toISOString();
     const updated = await expenseRequestRepository.update(id, {
@@ -986,7 +1035,7 @@ class ExpenseRequestService {
       rejected_at: now,
       rejected_reason: rejectedReason,
       assignee_id: existing.employee_id,
-    });
+    }, undefined, tenantId);
 
     if (currentNode) {
       await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
@@ -994,18 +1043,19 @@ class ExpenseRequestService {
         acted_by: approverId,
         acted_at: now,
         comment: input.comment ?? rejectedReason,
-      });
+      }, tenantId);
 
       for (const node of this.getApprovalChain(existing)) {
         if (node.id !== currentNode.id && node.status === "pending") {
           await expenseRequestRepository.updateApprovalChainNode(node.id, {
             status: "cancelled",
-          });
+          }, tenantId);
         }
       }
     }
 
     await expenseRequestRepository.appendApproval({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       step: existing.current_step,
       action: "reject",
@@ -1013,7 +1063,7 @@ class ExpenseRequestService {
       comment: input.comment ?? rejectedReason,
     });
 
-    return expenseRequestRepository.findById(updated.id);
+    return expenseRequestRepository.findById(updated.id, tenantId);
   }
 
   async cancelExpenseRequest(
@@ -1021,7 +1071,8 @@ class ExpenseRequestService {
     id: string,
     input: CancelExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -1037,7 +1088,7 @@ class ExpenseRequestService {
       throw Errors.badRequest("当前状态不允许撤回费用申请");
     }
 
-    await this.assertEmployeeExists(input.operator_id, "操作员工不存在");
+    await this.assertEmployeeExists(input.operator_id, tenantId, "操作员工不存在");
 
     const now = new Date().toISOString();
     const updated = await expenseRequestRepository.update(id, {
@@ -1045,7 +1096,7 @@ class ExpenseRequestService {
       current_step: "cancelled",
       cancelled_at: now,
       assignee_id: null,
-    });
+    }, undefined, tenantId);
 
     for (const node of this.getApprovalChain(existing)) {
       if (!["approved", "rejected", "cancelled"].includes(node.status)) {
@@ -1054,11 +1105,12 @@ class ExpenseRequestService {
           acted_by: input.operator_id,
           acted_at: now,
           comment: input.comment ?? null,
-        });
+        }, tenantId);
       }
     }
 
     await expenseRequestRepository.appendApproval({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       step: existing.current_step,
       action: "cancel",
@@ -1066,7 +1118,7 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id);
+    return expenseRequestRepository.findById(updated.id, tenantId);
   }
 
   async payExpenseRequest(
@@ -1074,7 +1126,8 @@ class ExpenseRequestService {
     id: string,
     input: PayExpenseRequestInput,
   ) {
-    const existing = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -1092,11 +1145,11 @@ class ExpenseRequestService {
       throw Errors.badRequest("只有待打款的费用申请才能登记支付");
     }
 
-    if (await expenseRequestRepository.hasSettlement(id)) {
+    if (await expenseRequestRepository.hasSettlement(id, tenantId)) {
       throw Errors.badRequest("该费用申请已登记过打款");
     }
 
-    await this.assertEmployeeExists(input.paid_by, "打款登记员工不存在");
+    await this.assertEmployeeExists(input.paid_by, tenantId, "打款登记员工不存在");
 
     if (Number(input.paid_amount.toFixed(2)) !== Number(existing.total_amount)) {
       throw Errors.badRequest("打款金额必须等于费用申请总金额");
@@ -1105,6 +1158,7 @@ class ExpenseRequestService {
     const paidAt = input.paid_at || new Date().toISOString();
 
     await expenseRequestRepository.createSettlement({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       payee_name: input.payee_name,
       payee_bank: input.payee_bank ?? null,
@@ -1118,6 +1172,7 @@ class ExpenseRequestService {
     });
 
     await expenseRequestRepository.appendApproval({
+      tenant_id: tenantId ?? null,
       expense_request_id: id,
       step: "payment",
       action: "pay",
@@ -1130,13 +1185,14 @@ class ExpenseRequestService {
       current_step: "done",
       completed_at: paidAt,
       assignee_id: null,
-    });
+    }, undefined, tenantId);
 
-    return expenseRequestRepository.findById(id);
+    return expenseRequestRepository.findById(id, tenantId);
   }
 
   async getExpenseRequestById(authContext: AuthContext, id: string) {
-    const data = await expenseRequestRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const data = await expenseRequestRepository.findById(id, tenantId);
     if (!data) {
       throw Errors.badRequest("费用申请不存在");
     }
@@ -1150,6 +1206,7 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestListQueryType,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const processPermission = this.getProcessPermissionForQuery(params);
     const visibility = processPermission
       ? await this.getVisibilityForPermission(authContext, processPermission)
@@ -1166,6 +1223,7 @@ class ExpenseRequestService {
         }
         : params,
       visibility,
+      tenantId,
     );
 
     if (!processPermission) {
@@ -1198,6 +1256,7 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestTodoQueryType,
   ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const todoDefinitions = [
       {
         status: "pending",
@@ -1240,6 +1299,7 @@ class ExpenseRequestService {
             definition.current_step as ExpenseRequestListQueryType["current_step"],
         },
         visibility,
+        tenantId,
       );
 
       for (const item of result.list) {

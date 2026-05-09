@@ -45,10 +45,14 @@ class ExpenseRequestCategoryService {
 
   private async ensureCodeAndNameUnique(
     input: { code?: string; name?: string },
+    tenantId?: string | null,
     currentId?: string,
   ) {
     if (input.code) {
-      const existingByCode = await expenseRequestCategoryRepository.findByCode(input.code);
+      const existingByCode = await expenseRequestCategoryRepository.findByCode(
+        input.code,
+        tenantId,
+      );
       if (existingByCode && existingByCode.id !== currentId) {
         throw Errors.business(
           400,
@@ -61,6 +65,7 @@ class ExpenseRequestCategoryService {
     if (input.name) {
       const existingByName = await expenseRequestCategoryRepository.findByName(
         input.name,
+        tenantId,
       );
       if (existingByName && existingByName.id !== currentId) {
         throw Errors.business(
@@ -77,12 +82,14 @@ class ExpenseRequestCategoryService {
     query: ExpenseRequestCategoryListQuery,
   ) {
     this.assertCanRead(authContext);
-    return expenseRequestCategoryRepository.list(query);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    return expenseRequestCategoryRepository.list(query, tenantId);
   }
 
   async getCategoryById(authContext: AuthContext, id: string) {
     this.assertCanManage(authContext);
-    const record = await expenseRequestCategoryRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const record = await expenseRequestCategoryRepository.findById(id, tenantId);
     if (!record) {
       throw Errors.business(
         404,
@@ -99,13 +106,17 @@ class ExpenseRequestCategoryService {
     input: CreateExpenseRequestCategoryInput,
   ) {
     this.assertCanManage(authContext);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const normalized = {
       ...input,
       code: this.normalizeCode(input.code),
       name: this.normalizeName(input.name),
     };
-    await this.ensureCodeAndNameUnique(normalized);
-    return expenseRequestCategoryRepository.create(normalized);
+    await this.ensureCodeAndNameUnique(normalized, tenantId);
+    return expenseRequestCategoryRepository.create({
+      ...normalized,
+      tenant_id: tenantId,
+    });
   }
 
   async updateCategory(
@@ -114,7 +125,8 @@ class ExpenseRequestCategoryService {
     input: UpdateExpenseRequestCategoryInput,
   ) {
     this.assertCanManage(authContext);
-    const existing = await expenseRequestCategoryRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestCategoryRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.business(
         404,
@@ -130,10 +142,11 @@ class ExpenseRequestCategoryService {
     };
     await this.ensureCodeAndNameUnique(
       { code: normalized.code, name: normalized.name },
+      tenantId,
       existing.id,
     );
 
-    return expenseRequestCategoryRepository.update(id, normalized);
+    return expenseRequestCategoryRepository.update(id, normalized, tenantId);
   }
 
   async updateCategoryStatus(
@@ -142,7 +155,8 @@ class ExpenseRequestCategoryService {
     input: ExpenseRequestCategoryStatusUpdateInput,
   ) {
     this.assertCanManage(authContext);
-    const existing = await expenseRequestCategoryRepository.findById(id);
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const existing = await expenseRequestCategoryRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.business(
         404,
@@ -151,15 +165,17 @@ class ExpenseRequestCategoryService {
       );
     }
 
-    return expenseRequestCategoryRepository.updateStatus(id, input.status);
+    return expenseRequestCategoryRepository.updateStatus(id, input.status, tenantId);
   }
 
   async resolveActiveCategoryByCode(
     code: string,
+    tenantId?: string | null,
   ): Promise<ExpenseRequestCategoryRecord> {
     const normalizedCode = this.normalizeCode(code);
     const category = await expenseRequestCategoryRepository.findByCode(
       normalizedCode,
+      tenantId,
     );
 
     if (!category) {

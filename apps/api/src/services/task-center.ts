@@ -103,8 +103,10 @@ class TaskCenterService {
       return [] as TaskCenterTodoItem[];
     }
 
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const customerIds = await taskCenterRepository.listOwnedCustomerIds(
       authContext.employeeId,
+      tenantId,
     );
     const followUps = await taskCenterRepository.listCustomerFollowUpsByCustomerIds(
       customerIds,
@@ -149,8 +151,10 @@ class TaskCenterService {
       return [] as TaskCenterTodoItem[];
     }
 
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const projects = await taskCenterRepository.listOwnedActiveProjects(
       authContext.employeeId,
+      tenantId,
     );
     const projectIds = projects.map((item) => item.id);
     const todayStart = new Date();
@@ -201,11 +205,12 @@ class TaskCenterService {
       return [] as TaskCenterTodoItem[];
     }
 
+    const tenantId = accessPolicyService.assertTenantId(authContext);
     const visibility = await accessPolicyService.getVisibleExpenseFilters(
       authContext,
       "expense_request.read",
     );
-    const rows = await taskCenterRepository.listExpenseRequestTodos();
+    const rows = await taskCenterRepository.listExpenseRequestTodos(tenantId);
     const canSubmit = accessPolicyService.hasPermission(
       authContext,
       "expense_request.submit",

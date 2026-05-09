@@ -53,11 +53,17 @@ export type ExpenseRequestTodoSource = {
 };
 
 class TaskCenterRepository {
-  async listOwnedCustomerIds(employeeId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listOwnedCustomerIds(employeeId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("customers")
       .select("id")
       .eq("owner_id", employeeId);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询客户待处理范围失败", error);
@@ -97,8 +103,8 @@ class TaskCenterRepository {
     return (data || []) as unknown as CustomerFollowUpTodoSource[];
   }
 
-  async listOwnedActiveProjects(employeeId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listOwnedActiveProjects(employeeId: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("projects")
       .select(`
         id,
@@ -114,8 +120,13 @@ class TaskCenterRepository {
         )
       `)
       .eq("status", "constructing")
-      .or(`designer_id.eq.${employeeId},supervisor_id.eq.${employeeId}`)
-      .order("created_at", { ascending: false });
+      .or(`designer_id.eq.${employeeId},supervisor_id.eq.${employeeId}`);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     if (error) {
       throw Errors.dbError("查询项目日志待处理范围失败", error);
@@ -124,7 +135,11 @@ class TaskCenterRepository {
     return (data || []) as unknown as ProjectLogTodoSource[];
   }
 
-  async listTodayProjectLogs(employeeId: string, projectIds: string[], fromIso: string) {
+  async listTodayProjectLogs(
+    employeeId: string,
+    projectIds: string[],
+    fromIso: string,
+  ) {
     if (projectIds.length === 0) {
       return [] as Array<{ id: string; project_id: string }>;
     }
@@ -143,8 +158,8 @@ class TaskCenterRepository {
     return (data || []) as Array<{ id: string; project_id: string }>;
   }
 
-  async listExpenseRequestTodos() {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  async listExpenseRequestTodos(tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
       .from("expense_requests")
       .select(`
         id,
@@ -167,8 +182,13 @@ class TaskCenterRepository {
           name
         )
       `)
-      .in("status", ["draft", "rejected", "pending", "approved"])
-      .order("created_at", { ascending: false });
+      .in("status", ["draft", "rejected", "pending", "approved"]);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     if (error) {
       throw Errors.dbError("查询费用申请待处理失败", error);
