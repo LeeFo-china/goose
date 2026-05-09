@@ -30,11 +30,20 @@ export const TestSocialVideoTranscriptionSchema = z.object({
 });
 
 export const SocialVideoScriptStyleSchema = z.enum([
+  "practical",
+  "seeding",
   "professional",
   "down_to_earth",
   "douyin_practical",
   "xiaohongshu",
-]).default("douyin_practical");
+]).default("practical");
+
+export const SocialVideoScriptTargetPlatformSchema = z.enum([
+  "douyin",
+  "xiaohongshu",
+  "shipinhao",
+  "kuaishou",
+]).default("douyin");
 
 export const SocialVideoScriptGoalSchema = z.enum([
   "lead_generation",
@@ -44,7 +53,8 @@ export const SocialVideoScriptGoalSchema = z.enum([
 ]).default("lead_generation");
 
 export const CreateSocialVideoScriptSchema = z.object({
-  style: SocialVideoScriptStyleSchema.optional().default("douyin_practical"),
+  target_platform: SocialVideoScriptTargetPlatformSchema.optional(),
+  style: SocialVideoScriptStyleSchema.optional(),
   duration_seconds: z.coerce.number()
     .int("目标时长必须是整数")
     .refine((value) => [30, 60, 90].includes(value), "目标时长只支持 30/60/90 秒")
@@ -64,6 +74,9 @@ export type CreateSocialVideoScriptInput = z.infer<
 >;
 export type SocialVideoScriptStyle = z.infer<typeof SocialVideoScriptStyleSchema>;
 export type SocialVideoScriptGoal = z.infer<typeof SocialVideoScriptGoalSchema>;
+export type SocialVideoScriptTargetPlatform = z.infer<
+  typeof SocialVideoScriptTargetPlatformSchema
+>;
 export type SocialVideoTranscriptionStatus = z.infer<
   typeof SocialVideoTranscriptionStatusSchema
 >;

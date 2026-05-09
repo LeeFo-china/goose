@@ -287,7 +287,8 @@ Content-Type: application/json
 
 ```json
 {
-  "style": "douyin_practical",
+  "target_platform": "douyin",
+  "style": "practical",
   "duration_seconds": 60,
   "goal": "lead_generation"
 }
@@ -296,9 +297,17 @@ Content-Type: application/json
 可选枚举：
 
 ```text
-style: professional | down_to_earth | douyin_practical | xiaohongshu
+target_platform: douyin | xiaohongshu | shipinhao | kuaishou
+style: practical | seeding | professional | down_to_earth
 goal: lead_generation | education | case_seeding | brand_trust
 duration_seconds: 30 | 60 | 90
+```
+
+兼容旧请求：
+
+```text
+style=douyin_practical -> target_platform=douyin, style=practical
+style=xiaohongshu      -> target_platform=xiaohongshu, style=seeding
 ```
 
 响应：
@@ -310,7 +319,8 @@ duration_seconds: 30 | 60 | 90
     "id": "script-id",
     "transcription_id": "transcription-id",
     "status": "completed",
-    "style": "douyin_practical",
+    "target_platform": "douyin",
+    "style": "practical",
     "duration_seconds": 60,
     "goal": "lead_generation",
     "title": "装修避坑短视频脚本",
@@ -335,7 +345,7 @@ duration_seconds: 30 | 60 | 90
 }
 ```
 
-同一个 `transcription_id + style + duration_seconds + goal` 在缓存时间内会直接返回最近成功结果，`cached=true`。小程序不需要直接调用 AI，也不需要传转写长文本。
+同一个 `transcription_id + target_platform + style + duration_seconds + goal` 在缓存时间内会直接返回最近成功结果，`cached=true`。小程序不需要直接调用 AI，也不需要传转写长文本。
 
 ## 7. 安全要求
 

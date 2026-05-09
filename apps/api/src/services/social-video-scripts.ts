@@ -8,6 +8,7 @@ import type {
   CreateSocialVideoScriptInput,
   SocialVideoScriptGoal,
   SocialVideoScriptStyle,
+  SocialVideoScriptTargetPlatform,
 } from "@/schema/social-video";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -51,13 +52,29 @@ type NormalizedScriptPayload = {
   tips: string[];
 };
 
-const PROMPT_VERSION = "social-video-script-v1";
+const PROMPT_VERSION = "social-video-script-v2";
 
 const STYLE_LABELS: Record<SocialVideoScriptStyle, string> = {
+  practical: "实用口播",
+  seeding: "种草分享",
   professional: "专业可信",
   down_to_earth: "接地气",
   douyin_practical: "抖音实用口播",
   xiaohongshu: "小红书种草",
+};
+
+const TARGET_PLATFORM_LABELS: Record<SocialVideoScriptTargetPlatform, string> = {
+  douyin: "抖音",
+  xiaohongshu: "小红书",
+  shipinhao: "视频号",
+  kuaishou: "快手",
+};
+
+const TARGET_PLATFORM_PROMPTS: Record<SocialVideoScriptTargetPlatform, string> = {
+  douyin: "抖音内容更重开头 3 秒、强痛点、口播节奏和明确互动引导。",
+  xiaohongshu: "小红书内容更重真实体验、生活化表达、封面标题和轻种草，不要像硬广。",
+  shipinhao: "视频号内容更重可信度、专业感和稳重表达，适合业主和熟人社交传播。",
+  kuaishou: "快手内容更重直接、真实、接地气和强互动，表达要口语化。",
 };
 
 const GOAL_LABELS: Record<SocialVideoScriptGoal, string> = {
@@ -339,6 +356,7 @@ function serializeScript(record: SocialVideoScriptRecord, cached = false) {
     id: record.id,
     transcription_id: record.transcription_id,
     status: record.status,
+    target_platform: record.target_platform,
     style: record.style,
     duration_seconds: record.duration_seconds,
     goal: record.goal,
@@ -356,6 +374,7 @@ function serializeScript(record: SocialVideoScriptRecord, cached = false) {
 }
 
 function buildUserPrompt(input: {
+  targetPlatform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   durationSeconds: number;
   goal: SocialVideoScriptGoal;
@@ -363,6 +382,8 @@ function buildUserPrompt(input: {
   text: string;
 }) {
   return [
+    `目标发布平台：${TARGET_PLATFORM_LABELS[input.targetPlatform]} (${input.targetPlatform})`,
+    `平台内容要求：${TARGET_PLATFORM_PROMPTS[input.targetPlatform]}`,
     `目标风格：${STYLE_LABELS[input.style]} (${input.style})`,
     `目标时长：${input.durationSeconds} 秒`,
     `内容目标：${GOAL_LABELS[input.goal]} (${input.goal})`,
@@ -376,6 +397,7 @@ function buildUserPrompt(input: {
 }
 
 async function callAi(input: {
+  targetPlatform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   durationSeconds: number;
   goal: SocialVideoScriptGoal;
@@ -493,6 +515,7 @@ class SocialVideoScriptService {
 
   private async findCached(input: {
     transcriptionId: string;
+    targetPlatform: SocialVideoScriptTargetPlatform;
     style: SocialVideoScriptStyle;
     durationSeconds: number;
     goal: SocialVideoScriptGoal;
@@ -507,6 +530,37 @@ class SocialVideoScriptService {
       ...input,
       since: getSinceByHours(ttlHours),
     });
+  }
+
+  private normalizeScriptInput(input: CreateSocialVideoScriptInput) {
+    if (input.style === "douyin_practical") {
+      return {
+        targetPlatform: "douyin" as const,
+        style: "practical" as const,
+        durationSeconds: input.duration_seconds,
+        goal: input.goal,
+      };
+    }
+
+    if (input.style === "xiaohongshu") {
+      return {
+        targetPlatform: "xiaohongshu" as const,
+        style: "seeding" as const,
+        durationSeconds: input.duration_seconds,
+        goal: input.goal,
+      };
+    }
+
+    const targetPlatform = input.target_platform ?? "douyin";
+    const style = input.style
+      ?? (targetPlatform === "xiaohongshu" ? "seeding" : "practical");
+
+    return {
+      targetPlatform,
+      style,
+      durationSeconds: input.duration_seconds,
+      goal: input.goal,
+    };
   }
 
   async generateScript(
@@ -541,11 +595,13 @@ class SocialVideoScriptService {
       );
     }
 
+    const normalizedInput = this.normalizeScriptInput(input);
     const cached = await this.findCached({
       transcriptionId,
-      style: input.style,
-      durationSeconds: input.duration_seconds,
-      goal: input.goal,
+      targetPlatform: normalizedInput.targetPlatform,
+      style: normalizedInput.style,
+      durationSeconds: normalizedInput.durationSeconds,
+      goal: normalizedInput.goal,
     });
     if (cached) {
       return serializeScript(cached, true);
@@ -558,9 +614,10 @@ class SocialVideoScriptService {
       4000,
     );
     const aiResult = await callAi({
-      style: input.style,
-      durationSeconds: input.duration_seconds,
-      goal: input.goal,
+      targetPlatform: normalizedInput.targetPlatform,
+      style: normalizedInput.style,
+      durationSeconds: normalizedInput.durationSeconds,
+      goal: normalizedInput.goal,
       title: transcription.title,
       text: truncateByChars(text, Math.max(1000, Math.min(maxSourceChars, 8000))),
     });
@@ -569,9 +626,10 @@ class SocialVideoScriptService {
       transcriptionId,
       userId: authContext.authUserId,
       platform: transcription.platform,
-      style: input.style,
-      durationSeconds: input.duration_seconds,
-      goal: input.goal,
+      targetPlatform: normalizedInput.targetPlatform,
+      style: normalizedInput.style,
+      durationSeconds: normalizedInput.durationSeconds,
+      goal: normalizedInput.goal,
       title: aiResult.payload.title,
       rewrittenCopy: aiResult.payload.rewritten_copy,
       hook: aiResult.payload.hook,

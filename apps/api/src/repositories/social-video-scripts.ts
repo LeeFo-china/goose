@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type {
   SocialVideoScriptGoal,
   SocialVideoScriptStyle,
+  SocialVideoScriptTargetPlatform,
 } from "@/schema/social-video";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -10,6 +11,7 @@ export type SocialVideoScriptRecord = {
   transcription_id: string;
   user_id: string | null;
   platform: "douyin";
+  target_platform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   duration_seconds: number;
   goal: SocialVideoScriptGoal;
@@ -36,6 +38,7 @@ type CreateSocialVideoScriptRecordInput = {
   transcriptionId: string;
   userId: string | null;
   platform: "douyin";
+  targetPlatform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   durationSeconds: number;
   goal: SocialVideoScriptGoal;
@@ -71,6 +74,7 @@ class SocialVideoScriptRepository {
         transcription_id: input.transcriptionId,
         user_id: input.userId,
         platform: input.platform,
+        target_platform: input.targetPlatform,
         style: input.style,
         duration_seconds: input.durationSeconds,
         goal: input.goal,
@@ -102,6 +106,7 @@ class SocialVideoScriptRepository {
 
   async findRecentCompleted(input: {
     transcriptionId: string;
+    targetPlatform: SocialVideoScriptTargetPlatform;
     style: SocialVideoScriptStyle;
     durationSeconds: number;
     goal: SocialVideoScriptGoal;
@@ -110,6 +115,7 @@ class SocialVideoScriptRepository {
     const { data, error } = await this.table()
       .select("*")
       .eq("transcription_id", input.transcriptionId)
+      .eq("target_platform", input.targetPlatform)
       .eq("style", input.style)
       .eq("duration_seconds", input.durationSeconds)
       .eq("goal", input.goal)

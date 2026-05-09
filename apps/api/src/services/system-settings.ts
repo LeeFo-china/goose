@@ -383,7 +383,7 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     key: "SOCIAL_VIDEO_SCRIPT_CACHE_TTL_HOURS",
     groupCode: "social_video",
     name: "短视频脚本缓存时间",
-    description: "同一转写任务、风格、时长和目标生成成功后复用结果的小时数。",
+    description: "同一转写任务、目标平台、风格、时长和目标生成成功后复用结果的小时数。",
     valueType: "number",
     envNames: ["SOCIAL_VIDEO_SCRIPT_CACHE_TTL_HOURS"],
     defaultValue: "24",
