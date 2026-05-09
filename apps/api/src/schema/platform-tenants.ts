@@ -1,4 +1,5 @@
 import { PaginationQuerySchema } from "@/schema/request";
+import { DEPARTMENT_CODE_VALUES, EMPLOYEE_POST_CODE_VALUES } from "@gooes/domain";
 import { z } from "zod";
 
 export const PlatformTenantStatusSchema = z.enum(["active", "suspended", "archived"]);
@@ -38,6 +39,13 @@ export const CreatePlatformTenantSchema = z.object({
   status: z.enum(["active", "suspended"]).optional().default("active"),
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
+  admin: z.object({
+    name: z.string().trim().min(1, "请输入管理员姓名").max(50, "管理员姓名不能超过 50 个字符"),
+    phone: z.string().trim().regex(/^1[3-9]\d{9}$/, "管理员手机号格式不正确"),
+    auth_user_id: z.uuid("无效的管理员用户 ID").optional(),
+    department_code: z.enum(DEPARTMENT_CODE_VALUES).optional().default("ADMIN"),
+    post_code: z.enum(EMPLOYEE_POST_CODE_VALUES).optional().default("SYSTEM_ADMIN"),
+  }).optional(),
 });
 
 export const UpdatePlatformTenantSchema = z.object({

@@ -6,6 +6,12 @@ import type {
   UpdatePlatformTenantInput,
 } from "@/schema/platform-tenants";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  DepartmentConfig,
+  DEPARTMENT_CODE_VALUES,
+  EmployeePostConfig,
+  EMPLOYEE_POST_CODE_VALUES,
+} from "@gooes/domain";
 
 export type PlatformTenantRecord = {
   id: string;
@@ -24,6 +30,16 @@ export type PlatformTenantUsageStats = {
   project_count: number;
   h5_page_count: number;
   camera_count: number;
+};
+
+export type PlatformTenantInitializationResult = {
+  template_code: string;
+  template_version: string;
+  departments_count: number;
+  posts_count: number;
+  roles_count: number;
+  admin_employee_id: string | null;
+  admin_role_id: string | null;
 };
 
 const EMPTY_USAGE: PlatformTenantUsageStats = {
@@ -140,6 +156,84 @@ class PlatformTenantRepository {
     return data as PlatformTenantRecord;
   }
 
+  async findEmployeesByPhone(phone: string) {
+    const { data, error } = await this.from("employees")
+      .select("id,tenant_id,name,phone,status")
+      .eq("phone", phone);
+
+    if (error) {
+      throw Errors.dbError("查询管理员手机号占用失败", error);
+    }
+
+    return (data || []) as Array<{
+      id: string;
+      tenant_id: string | null;
+      name: string | null;
+      phone: string | null;
+      status: string | null;
+    }>;
+  }
+
+  async initializeDefaultData(input: {
+    tenantId: string;
+    operatorEmployeeId?: string | null;
+    admin?: NonNullable<CreatePlatformTenantInput["admin"]>;
+  }): Promise<PlatformTenantInitializationResult> {
+    const departments = await this.upsertDefaultDepartments(input.tenantId);
+    const posts = await this.upsertDefaultPosts(input.tenantId);
+    const roles = await this.upsertDefaultRoles(input.tenantId);
+    const systemAdminRole = roles.find((item) => item.code === "system_admin") ?? null;
+
+    if (systemAdminRole) {
+      await this.grantAllPermissionsToRole(systemAdminRole.id);
+    }
+
+    let adminEmployeeId: string | null = null;
+    if (input.admin) {
+      const department = departments.find((item) => item.code === input.admin?.department_code)
+        ?? departments.find((item) => item.code === "ADMIN")
+        ?? null;
+      const post = posts.find((item) => item.code === input.admin?.post_code)
+        ?? posts.find((item) => item.code === "SYSTEM_ADMIN")
+        ?? null;
+      const adminEmployee = await this.createTenantAdminEmployee({
+        tenantId: input.tenantId,
+        name: input.admin.name,
+        phone: input.admin.phone,
+        authUserId: input.admin.auth_user_id ?? null,
+        departmentId: department?.id ?? null,
+        postId: post?.id ?? null,
+      });
+      adminEmployeeId = adminEmployee.id;
+
+      if (systemAdminRole) {
+        await this.assignEmployeeRole(adminEmployee.id, systemAdminRole.id);
+      }
+    }
+
+    await this.recordTemplateApplication({
+      tenantId: input.tenantId,
+      operatorEmployeeId: input.operatorEmployeeId ?? null,
+      result: {
+        departments_count: departments.length,
+        posts_count: posts.length,
+        roles_count: roles.length,
+        admin_employee_id: adminEmployeeId,
+        admin_role_id: systemAdminRole?.id ?? null,
+      },
+    });
+
+    return {
+      template_code: "default_decoration_company",
+      template_version: "2026.05.10",
+      departments_count: departments.length,
+      posts_count: posts.length,
+      roles_count: roles.length,
+      admin_employee_id: adminEmployeeId,
+      admin_role_id: systemAdminRole?.id ?? null,
+    };
+  }
+
   async update(id: string, input: UpdatePlatformTenantInput) {
     const { data, error } = await this.from("tenants")
       .update({
@@ -204,6 +298,187 @@ class PlatformTenantRepository {
     );
 
     return result;
+  }
+
+  private async upsertDefaultDepartments(tenantId: string) {
+    const rows = DEPARTMENT_CODE_VALUES.map((code) => ({
+      tenant_id: tenantId,
+      code,
+      name: DepartmentConfig[code].label,
+    }));
+
+    const { data, error } = await this.from("departments")
+      .upsert(rows, { onConflict: "tenant_id,code" })
+      .select("*");
+
+    if (error) {
+      throw Errors.dbError("初始化租户部门失败", error);
+    }
+
+    return (data || []) as Array<{ id: string; code: string; name: string }>;
+  }
+
+  private async upsertDefaultPosts(tenantId: string) {
+    const rows = EMPLOYEE_POST_CODE_VALUES.map((code, index) => ({
+      tenant_id: tenantId,
+      code,
+      name: EmployeePostConfig[code].label,
+      salary_type: "fixed",
+      status: 1,
+      sort: index + 1,
+    }));
+
+    const { data, error } = await this.from("posts")
+      .upsert(rows, { onConflict: "tenant_id,code" })
+      .select("*");
+
+    if (error) {
+      throw Errors.dbError("初始化租户岗位失败", error);
+    }
+
+    return (data || []) as Array<{ id: string; code: string; name: string }>;
+  }
+
+  private async upsertDefaultRoles(tenantId: string) {
+    const rows = [
+      {
+        tenant_id: tenantId,
+        code: "system_admin",
+        name: "系统管理员",
+        description: "租户管理员，拥有当前租户全部后台管理权限",
+        status: "active",
+      },
+      {
+        tenant_id: tenantId,
+        code: "employee_base",
+        name: "员工基础角色",
+        description: "普通员工的默认基础权限模板",
+        status: "active",
+      },
+      {
+        tenant_id: tenantId,
+        code: "finance_base",
+        name: "财务基础角色",
+        description: "财务人员的默认基础权限模板",
+        status: "active",
+      },
+      {
+        tenant_id: tenantId,
+        code: "design_manage",
+        name: "设计主管",
+        description: "设计主管的部门级客户查看与负责人分配权限模板",
+        status: "active",
+      },
+    ];
+
+    const { data, error } = await this.from("roles")
+      .upsert(rows, { onConflict: "tenant_id,code" })
+      .select("*");
+
+    if (error) {
+      throw Errors.dbError("初始化租户角色失败", error);
+    }
+
+    return (data || []) as Array<{ id: string; code: string; name: string }>;
+  }
+
+  private async grantAllPermissionsToRole(roleId: string) {
+    const { data: permissions, error: permissionError } = await this.from("permissions")
+      .select("id")
+      .eq("status", "active");
+
+    if (permissionError) {
+      throw Errors.dbError("查询默认角色权限失败", permissionError);
+    }
+
+    const rows = ((permissions || []) as Array<{ id: string }>).map((item) => ({
+      role_id: roleId,
+      permission_id: item.id,
+      access_scope: "all",
+    }));
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const { error } = await this.from("role_permissions")
+      .upsert(rows, { onConflict: "role_id,permission_id" });
+
+    if (error) {
+      throw Errors.dbError("初始化租户管理员权限失败", error);
+    }
+  }
+
+  private async createTenantAdminEmployee(input: {
+    tenantId: string;
+    name: string;
+    phone: string;
+    authUserId: string | null;
+    departmentId: string | null;
+    postId: string | null;
+  }) {
+    const { data, error } = await this.from("employees")
+      .insert({
+        tenant_id: input.tenantId,
+        name: input.name,
+        phone: input.phone,
+        user_id: input.authUserId,
+        department_id: input.departmentId,
+        post_id: input.postId,
+        role: "admin",
+        status: "active",
+        avatar: null,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("创建租户管理员失败", error);
+    }
+
+    return data as { id: string };
+  }
+
+  private async assignEmployeeRole(employeeId: string, roleId: string) {
+    const { error } = await this.from("employee_roles")
+      .upsert({
+        employee_id: employeeId,
+        role_id: roleId,
+      }, { onConflict: "employee_id,role_id" });
+
+    if (error) {
+      throw Errors.dbError("绑定租户管理员角色失败", error);
+    }
+  }
+
+  private async recordTemplateApplication(input: {
+    tenantId: string;
+    operatorEmployeeId: string | null;
+    result: Record<string, unknown>;
+  }) {
+    const { data: template, error: templateError } = await this.from("tenant_templates")
+      .select("id,code,version")
+      .eq("code", "default_decoration_company")
+      .eq("version", "2026.05.10")
+      .maybeSingle();
+
+    if (templateError) {
+      throw Errors.dbError("查询租户模板失败", templateError);
+    }
+
+    const { error } = await this.from("tenant_template_applications")
+      .upsert({
+        tenant_id: input.tenantId,
+        template_id: template?.id ?? null,
+        template_code: "default_decoration_company",
+        template_version: "2026.05.10",
+        applied_by_employee_id: input.operatorEmployeeId,
+        result: input.result,
+      }, { onConflict: "tenant_id,template_code,template_version" });
+
+    if (error) {
+      throw Errors.dbError("记录租户模板初始化结果失败", error);
+    }
   }
 }
 

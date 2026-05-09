@@ -23,12 +23,22 @@ class PlatformTenantService {
       });
     }
 
+    if (input.admin) {
+      await this.assertAdminPhoneAvailable(input.admin.phone);
+    }
+
     const record = await platformTenantRepository.create(input);
+    const initialization = await platformTenantRepository.initializeDefaultData({
+      tenantId: record.id,
+      operatorEmployeeId: authContext.employeeId,
+      admin: input.admin,
+    });
     const usage = await platformTenantRepository.getUsageStats([record.id]);
 
     return {
       ...record,
       usage: usage.get(record.id) ?? null,
+      initialization,
     };
   }
 
@@ -108,6 +118,16 @@ class PlatformTenantService {
     }
 
     return tenant;
+  }
+
+  private async assertAdminPhoneAvailable(phone: string) {
+    const employees = await platformTenantRepository.findEmployeesByPhone(phone);
+    if (employees.length > 0) {
+      throw Errors.business(409, "管理员手机号已绑定员工身份", "TENANT_ADMIN_PHONE_EXISTS", {
+        phone,
+        employee_count: employees.length,
+      });
+    }
   }
 }
 
