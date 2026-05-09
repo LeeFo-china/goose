@@ -20,39 +20,30 @@ class SocialVideoController extends BaseController {
     super("social_video_transcriptions");
   }
 
-  private getRequiredAuthUserId(request: FastifyRequest) {
-    const authUserId = request.user?.sub;
-    if (!authUserId) {
-      throw Errors.unauthorized();
-    }
-
-    return authUserId;
-  }
-
   @Post("/social-video/transcriptions")
   async createTranscription(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = this.getRequiredAuthUserId(request);
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
 
     const bodyResult = CreateSocialVideoTranscriptionSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await socialVideoTranscriptionService.createTask(
       bodyResult.data,
-      authUserId,
+      authContext,
     );
     return ResponseHandler.success(data);
   }
 
   @Get("/social-video/transcriptions/:id")
   async getTranscription(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = this.getRequiredAuthUserId(request);
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
 
     const paramsResult = SocialVideoTranscriptionIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
     const data = await socialVideoTranscriptionService.getTask(
       paramsResult.data.id,
-      authUserId,
+      authContext,
     );
     return ResponseHandler.success(data);
   }

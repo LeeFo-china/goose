@@ -5,10 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Errors } from "@/errors/error-factory";
+import { accessPolicyService } from "@/services/access-policy";
+import type { AuthContext } from "@/services/authorization";
 import {
   socialVideoTranscriptionRepository,
   type SocialVideoTranscriptionRecord,
 } from "@/repositories/social-video-transcriptions";
+import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateSocialVideoTranscriptionInput,
   TestSocialVideoTranscriptionInput,
@@ -545,6 +548,48 @@ class ApifyTranscriptGateway {
 class SocialVideoTranscriptionService {
   private apifyGateway = new ApifyTranscriptGateway();
 
+  private async resolveTenantId(authContext: AuthContext) {
+    if (authContext.tenantId) {
+      return authContext.tenantId;
+    }
+
+    if (authContext.employeeId) {
+      const tenantId = accessPolicyService.assertTenantId(authContext);
+      if (tenantId) return tenantId;
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("tenant_id")
+      .eq("user_id", authContext.authUserId)
+      .not("tenant_id", "is", null)
+      .limit(2);
+
+    if (error) {
+      throw Errors.dbError("查询客户租户失败", error);
+    }
+
+    const tenantIds = Array.from(new Set(
+      ((data || []) as Array<{ tenant_id?: string | null }>)
+        .map((item) => item.tenant_id)
+        .filter((tenantId): tenantId is string => Boolean(tenantId)),
+    ));
+
+    if (tenantIds.length > 1) {
+      throw Errors.business(
+        400,
+        "当前账号绑定了多个客户档案，请先选择所属装修公司",
+        "SOCIAL_VIDEO_TENANT_AMBIGUOUS",
+      );
+    }
+
+    if (!tenantIds[0]) {
+      throw Errors.business(403, "缺少租户上下文", "FORBIDDEN");
+    }
+
+    return tenantIds[0];
+  }
+
   private async getTranscriptionProvider() {
     const provider = await systemSettingsService.getString(
       "SOCIAL_VIDEO_TRANSCRIPTION_PROVIDER",
@@ -608,7 +653,7 @@ class SocialVideoTranscriptionService {
     }
   }
 
-  private async assertDailyLimit(authUserId: string) {
+  private async assertDailyLimit(authUserId: string, tenantId: string | null) {
     const limit = await systemSettingsService.getNumber(
       "SOCIAL_VIDEO_DAILY_LIMIT_PER_USER",
       20,
@@ -618,6 +663,7 @@ class SocialVideoTranscriptionService {
     }
 
     const count = await socialVideoTranscriptionRepository.countCreatedByUserSince({
+      tenantId,
       authUserId,
       since: getTodayStartIso(),
     });
@@ -630,7 +676,7 @@ class SocialVideoTranscriptionService {
     }
   }
 
-  private async findCached(inputHash: string) {
+  private async findCached(inputHash: string, tenantId: string | null) {
     const ttlHours = await systemSettingsService.getNumber(
       "SOCIAL_VIDEO_CACHE_TTL_HOURS",
       24,
@@ -640,26 +686,29 @@ class SocialVideoTranscriptionService {
     }
 
     return socialVideoTranscriptionRepository.findRecentCompletedByHash({
+      tenantId,
       inputHash,
       since: getSinceByHours(ttlHours),
     });
   }
 
-  async createTask(input: CreateSocialVideoTranscriptionInput, authUserId: string) {
+  async createTask(input: CreateSocialVideoTranscriptionInput, authContext: AuthContext) {
     await this.assertEnabled();
-    await this.assertDailyLimit(authUserId);
+    const tenantId = await this.resolveTenantId(authContext);
+    await this.assertDailyLimit(authContext.authUserId, tenantId);
 
     const sourceUrl = extractDouyinUrl(input.url);
     const normalizedUrl = normalizeUrlForHash(sourceUrl);
     const inputHash = createInputHash(input.platform, normalizedUrl);
-    const cached = await this.findCached(inputHash);
+    const cached = await this.findCached(inputHash, tenantId);
     if (cached) {
       const copied = await socialVideoTranscriptionRepository.create({
+        tenantId,
         platform: input.platform,
         sourceUrl,
         normalizedUrl,
         inputHash,
-        createdByAuthUserId: authUserId,
+        createdByAuthUserId: authContext.authUserId,
       });
       const completed = await socialVideoTranscriptionRepository.update(copied.id, {
         status: "completed",
@@ -687,11 +736,12 @@ class SocialVideoTranscriptionService {
     }
 
     const task = await socialVideoTranscriptionRepository.create({
+      tenantId,
       platform: input.platform,
       sourceUrl,
       normalizedUrl,
       inputHash,
-      createdByAuthUserId: authUserId,
+      createdByAuthUserId: authContext.authUserId,
     });
 
     return {
@@ -700,13 +750,17 @@ class SocialVideoTranscriptionService {
     };
   }
 
-  async getTask(id: string, authUserId: string) {
-    const task = await socialVideoTranscriptionRepository.findById(id);
+  async getTask(id: string, authContext: AuthContext) {
+    const tenantId = await this.resolveTenantId(authContext);
+    const task = await socialVideoTranscriptionRepository.findById(id, tenantId);
     if (!task) {
       throw Errors.notFound("短视频识别任务不存在");
     }
 
-    if (task.created_by_auth_user_id && task.created_by_auth_user_id !== authUserId) {
+    if (
+      task.created_by_auth_user_id &&
+      task.created_by_auth_user_id !== authContext.authUserId
+    ) {
       throw Errors.forbidden();
     }
 

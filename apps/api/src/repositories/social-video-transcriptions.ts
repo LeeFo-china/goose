@@ -4,6 +4,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type SocialVideoTranscriptionRecord = {
   id: string;
+  tenant_id: string | null;
   platform: "douyin";
   source_url: string;
   normalized_url: string;
@@ -33,6 +34,7 @@ export type SocialVideoTranscriptionRecord = {
 };
 
 type CreateSocialVideoTranscriptionRecordInput = {
+  tenantId: string | null;
   platform: "douyin";
   sourceUrl: string;
   normalizedUrl: string;
@@ -74,6 +76,7 @@ class SocialVideoTranscriptionRepository {
   async create(input: CreateSocialVideoTranscriptionRecordInput) {
     const { data, error } = await this.table()
       .insert({
+        tenant_id: input.tenantId,
         platform: input.platform,
         source_url: input.sourceUrl,
         normalized_url: input.normalizedUrl,
@@ -92,10 +95,16 @@ class SocialVideoTranscriptionRepository {
     return data as SocialVideoTranscriptionRecord;
   }
 
-  async findById(id: string) {
-    const { data, error } = await this.table()
+  async findById(id: string, tenantId?: string | null) {
+    let query = this.table()
       .select("*")
-      .eq("id", id)
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
       .maybeSingle();
 
     if (error) {
@@ -106,14 +115,21 @@ class SocialVideoTranscriptionRepository {
   }
 
   async findRecentCompletedByHash(input: {
+    tenantId: string | null;
     inputHash: string;
     since: string;
   }) {
-    const { data, error } = await this.table()
+    let query = this.table()
       .select("*")
       .eq("input_hash", input.inputHash)
       .eq("status", "completed")
-      .gte("completed_at", input.since)
+      .gte("completed_at", input.since);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query
       .order("completed_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -126,13 +142,20 @@ class SocialVideoTranscriptionRepository {
   }
 
   async countCreatedByUserSince(input: {
+    tenantId: string | null;
     authUserId: string;
     since: string;
   }) {
-    const { count, error } = await this.table()
+    let query = this.table()
       .select("id", { count: "exact", head: true })
       .eq("created_by_auth_user_id", input.authUserId)
       .gte("created_at", input.since);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { count, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询短视频识别次数失败", error);

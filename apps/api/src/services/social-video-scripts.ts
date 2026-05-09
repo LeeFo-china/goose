@@ -485,8 +485,21 @@ class SocialVideoScriptService {
 
   private assertCanUseTranscription(
     authContext: AuthContext,
-    transcription: { created_by_auth_user_id: string | null },
+    transcription: { created_by_auth_user_id: string | null; tenant_id?: string | null },
   ) {
+    if (
+      authContext.tenantId &&
+      transcription.tenant_id &&
+      transcription.tenant_id !== authContext.tenantId &&
+      !authContext.isPlatformAdmin
+    ) {
+      throw Errors.business(
+        403,
+        "当前用户无权访问该转写任务",
+        "SOCIAL_VIDEO_TRANSCRIPTION_FORBIDDEN",
+      );
+    }
+
     if (
       transcription.created_by_auth_user_id &&
       transcription.created_by_auth_user_id !== authContext.authUserId &&
@@ -500,7 +513,12 @@ class SocialVideoScriptService {
     }
   }
 
-  private async assertDailyLimit(authUserId: string) {
+  private getTenantIdForAdmin(authContext: AuthContext) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    return tenantId || null;
+  }
+
+  private async assertDailyLimit(authUserId: string, tenantId: string | null) {
     const limit = await systemSettingsService.getNumber(
       "SOCIAL_VIDEO_SCRIPT_DAILY_LIMIT_PER_USER",
       20,
@@ -508,6 +526,7 @@ class SocialVideoScriptService {
     if (limit <= 0) return;
 
     const count = await socialVideoScriptRepository.countCreatedByUserSince({
+      tenantId,
       userId: authUserId,
       since: getTodayStartIso(),
     });
@@ -521,6 +540,7 @@ class SocialVideoScriptService {
   }
 
   private async findCached(input: {
+    tenantId: string | null;
     transcriptionId: string;
     targetPlatform: SocialVideoScriptTargetPlatform;
     style: SocialVideoScriptStyle;
@@ -605,6 +625,7 @@ class SocialVideoScriptService {
     const normalizedInput = this.normalizeScriptInput(input);
     if (!input.regenerate) {
       const cached = await this.findCached({
+        tenantId: transcription.tenant_id,
         transcriptionId,
         targetPlatform: normalizedInput.targetPlatform,
         style: normalizedInput.style,
@@ -616,7 +637,7 @@ class SocialVideoScriptService {
       }
     }
 
-    await this.assertDailyLimit(authContext.authUserId);
+    await this.assertDailyLimit(authContext.authUserId, transcription.tenant_id);
 
     const maxSourceChars = await systemSettingsService.getNumber(
       "SOCIAL_VIDEO_SCRIPT_SOURCE_MAX_CHARS",
@@ -632,6 +653,7 @@ class SocialVideoScriptService {
     });
 
     const record = await socialVideoScriptRepository.create({
+      tenantId: transcription.tenant_id,
       transcriptionId,
       userId: authContext.authUserId,
       platform: transcription.platform,
@@ -674,6 +696,7 @@ class SocialVideoScriptService {
     this.assertCanUseTranscription(authContext, transcription);
 
     const result = await socialVideoScriptRepository.listByTranscription({
+      tenantId: transcription.tenant_id,
       transcriptionId,
       page: query.page,
       pageSize: query.pageSize,
@@ -695,8 +718,10 @@ class SocialVideoScriptService {
     authContext: AuthContext,
   ) {
     this.assertCanManage(authContext);
+    const tenantId = this.getTenantIdForAdmin(authContext);
 
     const result = await socialVideoScriptRepository.listAll({
+      tenantId,
       page: query.page,
       pageSize: query.pageSize,
       targetPlatform: query.target_platform,

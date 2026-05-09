@@ -67,13 +67,14 @@ async function processNext(slot: WorkerSlot) {
   }
 
   slot.running = true;
-  log("info", "claimed task", { id: task.id });
+  log("info", "claimed task", { id: task.id, tenant_id: task.tenant_id });
   try {
     await socialVideoTranscriptionService.processTask(task.id);
-    log("info", "task processed", { id: task.id });
+    log("info", "task processed", { id: task.id, tenant_id: task.tenant_id });
   } catch (error) {
     log("error", "task process crashed", {
       id: task.id,
+      tenant_id: task.tenant_id,
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {

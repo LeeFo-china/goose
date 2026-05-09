@@ -8,6 +8,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type SocialVideoScriptRecord = {
   id: string;
+  tenant_id: string | null;
   transcription_id: string;
   user_id: string | null;
   platform: "douyin";
@@ -35,6 +36,7 @@ export type SocialVideoScriptRecord = {
 };
 
 type CreateSocialVideoScriptRecordInput = {
+  tenantId: string | null;
   transcriptionId: string;
   userId: string | null;
   platform: "douyin";
@@ -71,6 +73,7 @@ class SocialVideoScriptRepository {
   async create(input: CreateSocialVideoScriptRecordInput) {
     const { data, error } = await this.table()
       .insert({
+        tenant_id: input.tenantId,
         transcription_id: input.transcriptionId,
         user_id: input.userId,
         platform: input.platform,
@@ -105,6 +108,7 @@ class SocialVideoScriptRepository {
   }
 
   async findRecentCompleted(input: {
+    tenantId: string | null;
     transcriptionId: string;
     targetPlatform: SocialVideoScriptTargetPlatform;
     style: SocialVideoScriptStyle;
@@ -112,7 +116,7 @@ class SocialVideoScriptRepository {
     goal: SocialVideoScriptGoal;
     since: string;
   }) {
-    const { data, error } = await this.table()
+    let query = this.table()
       .select("*")
       .eq("transcription_id", input.transcriptionId)
       .eq("target_platform", input.targetPlatform)
@@ -120,7 +124,13 @@ class SocialVideoScriptRepository {
       .eq("duration_seconds", input.durationSeconds)
       .eq("goal", input.goal)
       .eq("status", "completed")
-      .gte("created_at", input.since)
+      .gte("created_at", input.since);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -133,6 +143,7 @@ class SocialVideoScriptRepository {
   }
 
   async listByTranscription(input: {
+    tenantId: string | null;
     transcriptionId: string;
     page: number;
     pageSize: number;
@@ -148,6 +159,10 @@ class SocialVideoScriptRepository {
       .eq("transcription_id", input.transcriptionId)
       .order("created_at", { ascending: false })
       .range(from, to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
 
     if (input.targetPlatform) {
       query = query.eq("target_platform", input.targetPlatform);
@@ -173,6 +188,7 @@ class SocialVideoScriptRepository {
   }
 
   async listAll(input: {
+    tenantId: string | null;
     page: number;
     pageSize: number;
     targetPlatform?: SocialVideoScriptTargetPlatform;
@@ -186,6 +202,10 @@ class SocialVideoScriptRepository {
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
 
     if (input.targetPlatform) {
       query = query.eq("target_platform", input.targetPlatform);
@@ -211,13 +231,20 @@ class SocialVideoScriptRepository {
   }
 
   async countCreatedByUserSince(input: {
+    tenantId: string | null;
     userId: string;
     since: string;
   }) {
-    const { count, error } = await this.table()
+    let query = this.table()
       .select("id", { count: "exact", head: true })
       .eq("user_id", input.userId)
       .gte("created_at", input.since);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { count, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询短视频脚本生成次数失败", error);

@@ -64,14 +64,14 @@
 
 ### 6. 自媒体脚本
 
-- [ ] `social_video_transcriptions` 增加或回填 `tenant_id`。
-- [ ] `social_video_scripts` 增加或回填 `tenant_id`。
-- [ ] 创建转写任务时写入当前租户。
-- [ ] worker 领取任务时保留租户上下文。
-- [ ] 脚本生成、历史列表、admin 列表按租户过滤。
-- [ ] 保留并校验 `audio_duration_seconds`，用于统计识别时长。
-- [ ] 确认腾讯云 ASR 和 Apify 解析结果都能尽量写入音视频时长。
-- [ ] `audio_duration_seconds` 允许为空；无法获取时长时不阻塞转写完成。
+- [x] `social_video_transcriptions` 增加或回填 `tenant_id`。
+- [x] `social_video_scripts` 增加或回填 `tenant_id`。
+- [x] 创建转写任务时写入当前租户。
+- [x] worker 领取任务时保留租户上下文。
+- [x] 脚本生成、历史列表、admin 列表按租户过滤。
+- [x] 保留并校验 `audio_duration_seconds`，用于统计识别时长。
+- [x] 确认腾讯云 ASR 和 Apify 解析结果都能尽量写入音视频时长。
+- [x] `audio_duration_seconds` 允许为空；无法获取时长时不阻塞转写完成。
 - [ ] 统计识别时长时只聚合有值记录，并记录无时长任务数。
 - [ ] 按租户统计：
   - 转写任务数
