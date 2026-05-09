@@ -9,6 +9,10 @@ import {
   CustomerListQuerySchema,
   UpdateCustomerSchema,
 } from "@/schema/customer";
+import {
+  CustomerSourceListQuerySchema,
+  CustomerSourceParamsSchema,
+} from "@/schema/customer-sources";
 import { BaseController } from "@/controllers/BaseController";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -33,6 +37,10 @@ import {
   type CustomerPhoneAction,
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
+import {
+  customerSourceService,
+  type CustomerSourceSummary,
+} from "@/services/customer-sources";
 import { ErrorCodes } from "@/errors/error-codes";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 
@@ -475,6 +483,30 @@ class CustomerController extends BaseController<
     };
   }
 
+  private attachSourceSummary<T extends { id: string }>(
+    customer: T,
+    sourceSummaryMap: Map<string, CustomerSourceSummary>,
+  ) {
+    const summary = sourceSummaryMap.get(customer.id) || {
+      total: 0,
+      latest_source: null,
+      source_tags: [],
+      has_old_customer_new_lead: false,
+      has_platform_new_lead: false,
+      has_employee_share: false,
+    };
+
+    return {
+      ...customer,
+      source_summary: summary,
+      latest_source: summary.latest_source,
+      source_tags: summary.source_tags,
+      has_old_customer_new_lead: summary.has_old_customer_new_lead,
+      has_platform_new_lead: summary.has_platform_new_lead,
+      has_employee_share: summary.has_employee_share,
+    };
+  }
+
   private async getRequiredCustomerRecord(
     authContext: Awaited<ReturnType<CustomerController["getRequiredAuthContext"]>>,
     customerId: string,
@@ -704,10 +736,19 @@ class CustomerController extends BaseController<
       ? await this.getCustomerPropertySummaries(customer.id, options?.tenantId)
       : undefined;
     const followUpMap = await this.getLatestFollowUpMap([customer.id]);
+    const sourceSummaryMap = options?.phonePrivacyContext
+      ? await customerSourceService.getCustomerSourceSummaryMap({
+        authContext: options.phonePrivacyContext.authContext,
+        customerIds: [customer.id],
+      })
+      : new Map<string, CustomerSourceSummary>();
 
     return {
       ...this.serializeCustomer(
-        this.attachFollowUpSummary(customer, followUpMap),
+        this.attachSourceSummary(
+          this.attachFollowUpSummary(customer, followUpMap),
+          sourceSummaryMap,
+        ),
         options?.phonePrivacyContext,
       ),
       property_id: primaryProperty?.id ?? null,
@@ -1167,13 +1208,20 @@ class CustomerController extends BaseController<
         rows.map((item) => item.id),
         authContext.tenantId,
       );
+      const sourceSummaryMap = await customerSourceService.getCustomerSourceSummaryMap({
+        authContext,
+        customerIds: rows.map((item) => item.id),
+      });
 
       return ResponseHandler.success({
         list: rows.map((item) =>
           this.serializeCustomer(
-            this.attachPropertySummary(
-              this.attachFollowUpSummary(item, followUpMap),
-              propertyMap,
+            this.attachSourceSummary(
+              this.attachPropertySummary(
+                this.attachFollowUpSummary(item, followUpMap),
+                propertyMap,
+              ),
+              sourceSummaryMap,
             ),
             phonePrivacyContext,
           )
@@ -1233,12 +1281,19 @@ class CustomerController extends BaseController<
       rows.map((item) => item.id),
       authContext.tenantId,
     );
+    const sourceSummaryMap = await customerSourceService.getCustomerSourceSummaryMap({
+      authContext,
+      customerIds: rows.map((item) => item.id),
+    });
     return ResponseHandler.success({
       list: rows.map((item) =>
         this.serializeCustomer(
-          this.attachPropertySummary(
-            this.attachFollowUpSummary(item, followUpMap),
-            propertyMap,
+          this.attachSourceSummary(
+            this.attachPropertySummary(
+              this.attachFollowUpSummary(item, followUpMap),
+              propertyMap,
+            ),
+            sourceSummaryMap,
           ),
           phonePrivacyContext,
         )
@@ -1276,9 +1331,14 @@ class CustomerController extends BaseController<
     }
 
     return ResponseHandler.success(
-      this.serializeCustomer(
+      await this.buildCustomerDetailResponse(
         (data as unknown) as CustomerRowForResponse,
-        await customerPhonePrivacyService.createPrivacyContext(authContext),
+        {
+          phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+            authContext,
+          ),
+          tenantId: authContext.tenantId,
+        },
       ),
     );
   };
@@ -1749,6 +1809,26 @@ class CustomerController extends BaseController<
     request: FastifyRequest<{ Params: { id: string } }>,
   ) {
     return this.handleCustomerPhoneAction(request, "copy");
+  }
+
+  @Get("/customers/:id/sources")
+  async listCustomerSources(
+    request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>,
+  ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const paramsResult = CustomerSourceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = CustomerSourceListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerSourceService.listCustomerSources({
+      authContext,
+      customerId: paramsResult.data.id,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success(data);
   }
 
   @Get("/customers/:id/follow_ups")

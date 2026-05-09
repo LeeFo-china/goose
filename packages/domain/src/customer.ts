@@ -16,6 +16,12 @@ export const CUSTOMER_SOURCE_VALUES = [
   'walk_in',
   'telemarketing',
   'platform',
+  'platform_lead',
+  'platform_assigned',
+  'employee_share',
+  'h5_campaign',
+  'quote_form',
+  'miniprogram_qrcode',
 ] as const;
 
 export type CustomerSource = (typeof CUSTOMER_SOURCE_VALUES)[number];
@@ -54,6 +60,12 @@ export const CustomerSourceConfig: Record<CustomerSource, { label: string }> = {
   walk_in: { label: '自然进店' },
   telemarketing: { label: '电销开发' },
   platform: { label: '装修平台' },
+  platform_lead: { label: '平台分配线索' },
+  platform_assigned: { label: '平台分配客户' },
+  employee_share: { label: '员工拓客分享' },
+  h5_campaign: { label: '员工H5活动' },
+  quote_form: { label: '员工报价表单' },
+  miniprogram_qrcode: { label: '员工小程序码' },
 };
 
 export const CustomerOriginConfig: Record<CustomerOrigin, { label: string }> = {
