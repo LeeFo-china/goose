@@ -99,6 +99,19 @@ class ExpenseRequestsController extends BaseController<
     return ResponseHandler.success(data);
   }
 
+  @Get("/expense-requests/stats/summary")
+  async statsSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const result = ExpenseRequestListQuerySchema.safeParse(request.query);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await expenseRequestService.getStatsSummary(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     if (!this.createSchema) {

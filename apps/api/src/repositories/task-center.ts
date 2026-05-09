@@ -52,6 +52,34 @@ export type ExpenseRequestTodoSource = {
   } | null;
 };
 
+export type ProjectAcceptanceTodoSource = {
+  id: string;
+  project_id: string;
+  stage_code: string;
+  title: string;
+  status: string;
+  initiator_id: string;
+  reviewer_id: string | null;
+  reject_source: string | null;
+  submitted_at: string | null;
+  rejected_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  project: {
+    id: string;
+    name: string | null;
+    status: string | null;
+  } | null;
+  initiator: {
+    id: string;
+    name: string | null;
+  } | null;
+  reviewer: {
+    id: string;
+    name: string | null;
+  } | null;
+};
+
 class TaskCenterRepository {
   async listOwnedCustomerIds(employeeId: string, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
@@ -202,6 +230,51 @@ class TaskCenterRepository {
     }
 
     return (data || []) as unknown as ExpenseRequestTodoSource[];
+  }
+
+  async listProjectAcceptanceTodos(tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
+      .from("project_acceptances")
+      .select(`
+        id,
+        project_id,
+        stage_code,
+        title,
+        status,
+        initiator_id,
+        reviewer_id,
+        reject_source,
+        submitted_at,
+        rejected_at,
+        created_at,
+        updated_at,
+        project:projects(
+          id,
+          name,
+          status
+        ),
+        initiator:employees!project_acceptances_initiator_id_fkey(
+          id,
+          name
+        ),
+        reviewer:employees!project_acceptances_reviewer_id_fkey(
+          id,
+          name
+        )
+      `)
+      .in("status", ["draft", "submitted", "rejected"]);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("updated_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询项目验收待处理失败", error);
+    }
+
+    return (data || []) as unknown as ProjectAcceptanceTodoSource[];
   }
 }
 

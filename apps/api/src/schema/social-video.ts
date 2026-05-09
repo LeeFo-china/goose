@@ -72,6 +72,25 @@ export const ListSocialVideoScriptsQuerySchema = z.object({
   status: z.enum(["completed", "failed"]).optional(),
 });
 
+function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (value == null) return undefined;
+    if (typeof value !== "string") return value;
+
+    const normalized = value.trim();
+    if (!normalized || normalized === "undefined" || normalized === "null") {
+      return undefined;
+    }
+
+    return normalized;
+  }, schema.optional());
+}
+
+export const SocialVideoUsageSummaryQuerySchema = z.object({
+  created_from: optionalQueryValue(z.iso.datetime("无效的开始时间")),
+  created_to: optionalQueryValue(z.iso.datetime("无效的结束时间")),
+});
+
 export type CreateSocialVideoTranscriptionInput = z.infer<
   typeof CreateSocialVideoTranscriptionSchema
 >;
@@ -83,6 +102,9 @@ export type CreateSocialVideoScriptInput = z.infer<
 >;
 export type ListSocialVideoScriptsQuery = z.infer<
   typeof ListSocialVideoScriptsQuerySchema
+>;
+export type SocialVideoUsageSummaryQuery = z.infer<
+  typeof SocialVideoUsageSummaryQuerySchema
 >;
 export type SocialVideoScriptStyle = z.infer<typeof SocialVideoScriptStyleSchema>;
 export type SocialVideoScriptGoal = z.infer<typeof SocialVideoScriptGoalSchema>;

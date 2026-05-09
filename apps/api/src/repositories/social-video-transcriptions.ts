@@ -215,6 +215,49 @@ class SocialVideoTranscriptionRepository {
 
     return data as SocialVideoTranscriptionRecord;
   }
+
+  async listUsageStatsRows(input: {
+    tenantId: string | null;
+    createdFrom?: string;
+    createdTo?: string;
+  }) {
+    let query = this.table()
+      .select(`
+        id,
+        tenant_id,
+        status,
+        provider,
+        audio_duration_seconds,
+        created_at
+      `);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.createdFrom) {
+      query = query.gte("created_at", input.createdFrom);
+    }
+
+    if (input.createdTo) {
+      query = query.lte("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询短视频识别用量失败", error);
+    }
+
+    return (data || []) as Array<{
+      id: string;
+      tenant_id: string | null;
+      status: SocialVideoTranscriptionStatus;
+      provider: string | null;
+      audio_duration_seconds: number | null;
+      created_at: string | null;
+    }>;
+  }
 }
 
 export const socialVideoTranscriptionRepository =

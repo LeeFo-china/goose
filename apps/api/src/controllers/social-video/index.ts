@@ -4,6 +4,7 @@ import {
   CreateSocialVideoScriptSchema,
   CreateSocialVideoTranscriptionSchema,
   ListSocialVideoScriptsQuerySchema,
+  SocialVideoUsageSummaryQuerySchema,
   SocialVideoTranscriptionIdParamsSchema,
   TestSocialVideoTranscriptionSchema,
 } from "@/schema/social-video";
@@ -104,6 +105,20 @@ class SocialVideoController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await socialVideoScriptService.listAdminScripts(
+      queryResult.data,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/social-video/usage-summary")
+  async getUsageSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+
+    const queryResult = SocialVideoUsageSummaryQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await socialVideoScriptService.getUsageSummary(
       queryResult.data,
       authContext,
     );

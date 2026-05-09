@@ -1252,6 +1252,63 @@ class ExpenseRequestService {
     };
   }
 
+  async getStatsSummary(
+    authContext: AuthContext,
+    params: ExpenseRequestListQueryType,
+  ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const visibility = await accessPolicyService.getVisibleExpenseFilters(
+      authContext,
+      "expense_request.read",
+    );
+    const rows = await expenseRequestRepository.listStatsRows(params, tenantId);
+    const visibleRows = rows.filter((item) => this.canAccessByVisibility(
+      visibility,
+      item,
+    ));
+    const initialStatuses = [
+      "draft",
+      "pending",
+      "approved",
+      "rejected",
+      "paid",
+      "cancelled",
+    ];
+    const statusCounts = Object.fromEntries(
+      initialStatuses.map((status) => [status, 0]),
+    ) as Record<string, number>;
+    const statusAmounts = Object.fromEntries(
+      initialStatuses.map((status) => [status, 0]),
+    ) as Record<string, number>;
+    const modeCounts: Record<string, number> = {};
+    let totalAmount = 0;
+
+    for (const item of visibleRows) {
+      const amount = Number(item.total_amount || 0);
+      const normalizedAmount = Number.isFinite(amount) ? amount : 0;
+      totalAmount += normalizedAmount;
+      statusCounts[item.status] = (statusCounts[item.status] || 0) + 1;
+      statusAmounts[item.status] = Number(
+        ((statusAmounts[item.status] || 0) + normalizedAmount).toFixed(2),
+      );
+      modeCounts[item.mode] = (modeCounts[item.mode] || 0) + 1;
+    }
+
+    return {
+      total_count: visibleRows.length,
+      total_amount: Number(totalAmount.toFixed(2)),
+      status_counts: statusCounts,
+      status_amounts: statusAmounts,
+      mode_counts: modeCounts,
+      pending_count: statusCounts.pending || 0,
+      approved_count: statusCounts.approved || 0,
+      paid_count: statusCounts.paid || 0,
+      rejected_count: statusCounts.rejected || 0,
+      draft_count: statusCounts.draft || 0,
+      cancelled_count: statusCounts.cancelled || 0,
+    };
+  }
+
   async listTodoExpenseRequests(
     authContext: AuthContext,
     params: ExpenseRequestTodoQueryType,

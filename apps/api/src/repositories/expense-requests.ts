@@ -824,6 +824,72 @@ class ExpenseRequestRepository {
       },
     };
   }
+
+  async listStatsRows(
+    params: Omit<ExpenseRequestListQueryType, "page" | "pageSize">,
+    tenantId?: string | null,
+  ) {
+    const {
+      employee_id,
+      assignee_id,
+      project_id,
+      status,
+      mode,
+      current_step,
+      keyword,
+      created_from,
+      created_to,
+    } = params;
+    let query = SupabaseDB.getAdminClient()
+      .from("expense_requests")
+      .select(`
+        id,
+        tenant_id,
+        employee_id,
+        assignee_id,
+        project_id,
+        mode,
+        status,
+        current_step,
+        total_amount,
+        created_at
+      `);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    if (employee_id) query = query.eq("employee_id", employee_id);
+    if (assignee_id) query = query.eq("assignee_id", assignee_id);
+    if (project_id) query = query.eq("project_id", project_id);
+    if (status) query = query.eq("status", status);
+    if (mode) query = query.eq("mode", mode);
+    if (current_step) query = query.eq("current_step", current_step);
+    if (created_from) query = query.gte("created_at", created_from);
+    if (created_to) query = query.lte("created_at", created_to);
+    if (keyword) {
+      query = query.or(`request_no.ilike.%${keyword}%,title.ilike.%${keyword}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询费用申请统计失败", error);
+    }
+
+    return (data || []) as Array<{
+      id: string;
+      tenant_id: string | null;
+      employee_id: string;
+      assignee_id: string | null;
+      project_id: string | null;
+      mode: string;
+      status: string;
+      current_step: string;
+      total_amount: number | string | null;
+      created_at: string | null;
+    }>;
+  }
 }
 
 export const expenseRequestRepository = new ExpenseRequestRepository();

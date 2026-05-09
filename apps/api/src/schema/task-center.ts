@@ -28,6 +28,7 @@ export const TaskCenterTodoTypeSchema = z.enum([
   "customer_followup",
   "project_log",
   "expense_request",
+  "project_acceptance",
 ], {
   message: "无效的待处理类型",
 });

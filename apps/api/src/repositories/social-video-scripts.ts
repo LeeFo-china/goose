@@ -252,6 +252,49 @@ class SocialVideoScriptRepository {
 
     return count || 0;
   }
+
+  async listUsageStatsRows(input: {
+    tenantId: string | null;
+    createdFrom?: string;
+    createdTo?: string;
+  }) {
+    let query = this.table()
+      .select(`
+        id,
+        tenant_id,
+        status,
+        model_provider,
+        model_name,
+        created_at
+      `);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.createdFrom) {
+      query = query.gte("created_at", input.createdFrom);
+    }
+
+    if (input.createdTo) {
+      query = query.lte("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询短视频脚本用量失败", error);
+    }
+
+    return (data || []) as Array<{
+      id: string;
+      tenant_id: string | null;
+      status: "completed" | "failed";
+      model_provider: string | null;
+      model_name: string | null;
+      created_at: string | null;
+    }>;
+  }
 }
 
 export const socialVideoScriptRepository = new SocialVideoScriptRepository();
