@@ -72,10 +72,17 @@ type AiFillSettingsResponse = {
   fields: string[];
 };
 
+type AiFillCreateResponse = {
+  title: string;
+  description: string;
+};
+
 type AiSettingsSnapshot = Pick<
   H5PageFormValues,
   "title" | "slug" | "description" | "display_scene"
 >;
+
+type AiCreateSnapshot = Pick<H5PageFormValues, "title" | "description">;
 
 const settingsAiFieldSchema: Record<string, AiFieldDefinition> = {
   title: { type: "string", label: "页面标题", maxLength: 120 },
@@ -252,6 +259,10 @@ export function CreateH5MarketingPageButton({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [values, setValues] = useState<H5PageFormValues>(() => createDefaultH5PageValues());
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiPending, setAiPending] = useState(false);
+  const [aiSnapshot, setAiSnapshot] = useState<AiCreateSnapshot | null>(null);
+  const [aiError, setAiError] = useState("");
   const [error, setError] = useState("");
   const validation = useMemo(() => H5PageFormSchema.safeParse(values), [values]);
 
@@ -266,6 +277,7 @@ export function CreateH5MarketingPageButton({
     }
 
     setAdvancedOpen(false);
+    setAiError("");
     setError("");
   }
 
@@ -283,6 +295,52 @@ export function CreateH5MarketingPageButton({
       ...current,
       slug: buildRandomSlug(),
     }));
+  }
+
+  async function generateAiCreateCopy() {
+    const instruction = aiInstruction.trim();
+    if (instruction.length < 4) {
+      setAiError("请输入更具体的活动要求");
+      return;
+    }
+
+    setAiError("");
+    setAiPending(true);
+    const snapshot: AiCreateSnapshot = {
+      title: values.title,
+      description: values.description || "",
+    };
+
+    try {
+      const data = await requestH5Page<AiFillCreateResponse>({
+        path: `${apiBasePath}/ai-fill-create`,
+        method: "POST",
+        payload: { instruction },
+      });
+
+      setValues((current) => ({
+        ...current,
+        title: typeof data.title === "string" ? data.title : current.title,
+        description: typeof data.description === "string" ? data.description : current.description,
+      }));
+      setAiSnapshot(snapshot);
+      toast.success("AI 已回填标题和描述，可继续修改");
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "AI 生成失败");
+    } finally {
+      setAiPending(false);
+    }
+  }
+
+  function undoAiCreateCopy() {
+    if (!aiSnapshot) return;
+    setValues((current) => ({
+      ...current,
+      ...aiSnapshot,
+    }));
+    setAiSnapshot(null);
+    setAiError("");
+    toast.success("已撤销 AI 回填");
   }
 
   function submit() {
@@ -308,6 +366,9 @@ export function CreateH5MarketingPageButton({
         toast.success("H5 活动页已创建");
         setOpen(false);
         setAdvancedOpen(false);
+        setAiInstruction("");
+        setAiSnapshot(null);
+        setAiError("");
         setValues(createDefaultH5PageValues());
         router.refresh();
       } catch (error) {
@@ -333,6 +394,61 @@ export function CreateH5MarketingPageButton({
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
+            <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="text-sm font-medium">AI 辅助生成</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    输入活动要求，AI 会直接回填页面标题和页面描述，路径不会被修改。
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {aiSnapshot ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={aiPending}
+                      onClick={undoAiCreateCopy}
+                    >
+                      <RefreshCw data-icon="inline-start" />
+                      撤销 AI 回填
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={aiPending}
+                    onClick={() => void generateAiCreateCopy()}
+                  >
+                    {aiPending ? (
+                      <Loader2 className="animate-spin" data-icon="inline-start" />
+                    ) : aiSnapshot ? (
+                      <RefreshCw data-icon="inline-start" />
+                    ) : (
+                      <Sparkles data-icon="inline-start" />
+                    )}
+                    {aiSnapshot ? "重新生成" : "AI 生成"}
+                  </Button>
+                </div>
+              </div>
+              <Field data-invalid={Boolean(aiError)}>
+                <FieldLabel htmlFor="h5-page-create-ai-instruction">活动要求</FieldLabel>
+                <Textarea
+                  id="h5-page-create-ai-instruction"
+                  value={aiInstruction}
+                  rows={3}
+                  aria-invalid={Boolean(aiError)}
+                  placeholder="例如：面向郑州老房翻新客户，突出免费量房、限时优惠、预约咨询"
+                  onChange={(event) => {
+                    setAiError("");
+                    setAiInstruction(event.target.value);
+                  }}
+                />
+                {aiError ? <FieldError>{aiError}</FieldError> : null}
+              </Field>
+            </div>
             <Field data-invalid={Boolean(firstIssue?.path[0] === "title")}>
               <FieldLabel htmlFor="h5-page-title">页面标题</FieldLabel>
               <Input

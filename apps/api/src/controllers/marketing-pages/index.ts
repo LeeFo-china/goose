@@ -8,6 +8,7 @@ import {
   MarketingLeadIdParamsSchema,
   MarketingLeadListQuerySchema,
   MarketingPageBlockAiFillSchema,
+  MarketingPageCreateAiFillSchema,
   MarketingPageListQuerySchema,
   MarketingPageProjectOptionQuerySchema,
   MarketingPageSettingsAiFillSchema,
@@ -24,6 +25,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
 import {
   fillMarketingPageBlockWithAi,
+  fillMarketingPageCreateWithAi,
   fillMarketingPageSettingsWithAi,
 } from "@/services/marketing-page-ai";
 import { marketingPageService } from "@/services/marketing-pages";
@@ -38,6 +40,22 @@ function getRequestMetadata(request: FastifyRequest) {
     requestIp: request.ip || null,
     userAgent: typeof userAgent === "string" ? userAgent : null,
   };
+}
+
+function createAiPageContext(
+  pages: Array<{
+    title: string;
+    slug: string;
+    status: string;
+    description: string | null;
+  }>,
+) {
+  return pages.slice(0, 20).map((page) => ({
+    title: page.title,
+    slug: page.slug,
+    status: page.status,
+    description: page.description,
+  }));
 }
 
 class MarketingPagesController extends BaseController {
@@ -71,6 +89,27 @@ class MarketingPagesController extends BaseController {
       authContext,
       bodyResult.data,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/ai-fill-create")
+  async fillPlatformCreateWithAi(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const bodyResult = MarketingPageCreateAiFillSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const pages = await marketingPageService.listPlatformPages(authContext, {
+      page: 1,
+      pageSize: 20,
+    });
+    const data = await fillMarketingPageCreateWithAi({
+      ...bodyResult.data,
+      scope: "platform",
+      tenantId: null,
+      tenantName: null,
+      pages: createAiPageContext(pages.list),
+    });
     return ResponseHandler.success(data);
   }
 
@@ -268,6 +307,28 @@ class MarketingPagesController extends BaseController {
       authContext,
       bodyResult.data,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/marketing-pages/ai-fill-create")
+  async fillCreateWithAi(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_page.create");
+
+    const bodyResult = MarketingPageCreateAiFillSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const pages = await marketingPageService.listPages(authContext, {
+      page: 1,
+      pageSize: 20,
+    });
+    const data = await fillMarketingPageCreateWithAi({
+      ...bodyResult.data,
+      scope: "tenant",
+      tenantId: authContext.tenantId,
+      tenantName: authContext.tenantName,
+      pages: createAiPageContext(pages.list),
+    });
     return ResponseHandler.success(data);
   }
 

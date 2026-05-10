@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { aiGateway } from "@/services/ai-gateway";
 import type {
   MarketingPageBlockAiFillInput,
+  MarketingPageCreateAiFillInput,
   MarketingPageSettingsAiFillInput,
 } from "@/schema/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
@@ -112,6 +113,26 @@ const SETTINGS_SYSTEM_PROMPT = `你是家装公司 H5 营销活动页配置助�
 5. slug 必须是小写英文、数字、中划线组合，不能以中划线开头或结尾。
 6. display_scene 只能从 field_schema.options 中选择。
 7. 文案要简洁、适合小程序活动列表展示，避免夸大承诺和绝对化表达。`;
+
+const CREATE_SYSTEM_PROMPT = `你正在为装修公司后台生成 H5 营销活动页的新建表单内容。
+
+业务场景：
+- 装修公司获客活动。
+- 用户会在微信小程序 web-view 或 H5 页面中看到。
+- 目标是让客户愿意留下联系方式。
+
+生成字段：
+- title：页面标题，不超过 30 个中文字符。
+- description：页面描述，不超过 80 个中文字符。
+
+写作要求：
+1. 只返回 JSON，禁止输出解释、markdown 或代码块。
+2. 返回格式必须是 {"title": "string", "description": "string"}。
+3. 清晰、可信、偏转化。
+4. 不夸大承诺，不使用“百分百”“保证”等绝对化表达。
+5. 不生成价格虚假承诺。
+6. 不生成链接、手机号、二维码。
+7. 不生成 slug、页面模块配置或其他字段。`;
 
 function firstNonEmptyEnv(names: string[]) {
   for (const name of names) {
@@ -345,6 +366,28 @@ function buildSettingsUserPrompt(
   });
 }
 
+function buildCreateUserPrompt(input: MarketingPageCreateAiFillInput & {
+  scope: "tenant" | "platform";
+  tenantName?: string | null;
+  pages?: Array<{
+    title: string;
+    slug: string;
+    status: string;
+    description: string | null;
+  }>;
+}) {
+  return JSON.stringify({
+    scope: input.scope,
+    tenant_name: input.tenantName || null,
+    user_instruction: input.instruction,
+    nearby_pages: (input.pages || []).slice(0, 20),
+    output_schema: {
+      title: "页面标题，不超过 30 个中文字符",
+      description: "页面描述，不超过 80 个中文字符",
+    },
+  });
+}
+
 async function requestAiResult(
   endpoint: string,
   apiKey: string,
@@ -430,6 +473,31 @@ function normalizePatch(
   }
 
   return patch;
+}
+
+function normalizeCreateResult(raw: unknown) {
+  const source = raw && typeof raw === "object" && "patch" in raw
+    ? (raw as { patch?: unknown }).patch
+    : raw;
+
+  const definitions: Record<string, FieldDefinition> = {
+    title: { type: "string", label: "页面标题", maxLength: 30 },
+    description: { type: "text", label: "页面描述", maxLength: 80 },
+  };
+  const patch = normalizePatch(source, definitions);
+
+  if (!patch.title || !patch.description) {
+    throw Errors.business(
+      502,
+      "AI 生成结果格式异常，请重新生成",
+      "MARKETING_PAGE_CREATE_AI_PARSE_FAILED",
+    );
+  }
+
+  return {
+    title: patch.title,
+    description: patch.description,
+  };
 }
 
 export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFillInput) {
@@ -532,4 +600,57 @@ export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettin
     patch,
     fields: Object.keys(patch),
   };
+}
+
+export async function fillMarketingPageCreateWithAi(input: MarketingPageCreateAiFillInput & {
+  scope: "tenant" | "platform";
+  tenantId?: string | null;
+  tenantName?: string | null;
+  pages?: Array<{
+    title: string;
+    slug: string;
+    status: string;
+    description: string | null;
+  }>;
+}) {
+  const messages: OpenAiRequestBody["messages"] = [
+    { role: "system", content: CREATE_SYSTEM_PROMPT },
+    { role: "user", content: buildCreateUserPrompt(input) },
+  ];
+
+  let result: Awaited<ReturnType<typeof aiGateway.chat>>;
+
+  try {
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_create_fill",
+      tenantId: input.tenantId ?? null,
+      temperature: 0.45,
+      messages,
+      responseFormat: "json_object",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "大模型接口调用失败";
+
+    if (!message.includes("response_format")) {
+      throw error;
+    }
+
+    result = await aiGateway.chat({
+      sceneCode: "marketing_page_create_fill",
+      tenantId: input.tenantId ?? null,
+      temperature: 0.45,
+      messages,
+    });
+  }
+
+  const content = result.content;
+  if (!content) {
+    throw Errors.business(
+      502,
+      "AI 生成失败，请稍后重试",
+      "MARKETING_PAGE_CREATE_AI_EMPTY",
+    );
+  }
+
+  return normalizeCreateResult(parseJsonObject(content));
 }

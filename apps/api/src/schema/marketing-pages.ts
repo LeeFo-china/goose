@@ -230,6 +230,14 @@ export const MarketingPageSettingsAiFillSchema = z.object({
   instruction: z.string().trim().max(500, "AI 补充要求不能超过 500 个字符").optional(),
 });
 
+export const MarketingPageCreateAiFillSchema = z.object({
+  instruction: z
+    .string("请输入活动要求")
+    .trim()
+    .min(4, "请输入更具体的活动要求")
+    .max(1000, "活动要求不能超过 1000 字"),
+});
+
 export const DuplicateMarketingPageSchema = z.object({
   title: z.string().trim().min(1, "页面标题不能为空").max(120, "页面标题不能超过 120 个字符").optional(),
   slug: MarketingPageSlugSchema.optional(),
@@ -292,6 +300,7 @@ export type PublicMarketingPageListQuery = z.infer<typeof PublicMarketingPageLis
 export type MarketingPageConfigInput = z.infer<typeof MarketingPageConfigSchema>;
 export type MarketingPageBlockAiFillInput = z.infer<typeof MarketingPageBlockAiFillSchema>;
 export type MarketingPageSettingsAiFillInput = z.infer<typeof MarketingPageSettingsAiFillSchema>;
+export type MarketingPageCreateAiFillInput = z.infer<typeof MarketingPageCreateAiFillSchema>;
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;
 export type MarketingLeadListQuery = z.infer<typeof MarketingLeadListQuerySchema>;
 export type UpdateMarketingLeadInput = z.infer<typeof UpdateMarketingLeadSchema>;
