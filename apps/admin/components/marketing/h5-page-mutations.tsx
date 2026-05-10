@@ -11,6 +11,11 @@ import { h5PageDisplaySceneOptions } from "@/components/marketing/marketing-cons
 import type { H5MarketingPageDisplayScene, H5MarketingPageRecord } from "@/components/marketing/marketing-types";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,6 +30,12 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -210,23 +221,53 @@ function normalizeSlug(value: string) {
     .slice(0, 80);
 }
 
-export function CreateH5MarketingPageButton({
-  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
-}: H5MarketingPageRouteOptions = {}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [values, setValues] = useState<H5PageFormValues>({
+function buildRandomSlug() {
+  const date = new Date();
+  const datePart = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("");
+  const randomPart = Math.random().toString(36).slice(2, 8);
+  return `h5-${datePart}-${randomPart}`;
+}
+
+function createDefaultH5PageValues(slug = ""): H5PageFormValues {
+  return {
     title: "",
-    slug: "",
+    slug,
     description: "",
     display_scene: "all",
     sort_order: 100,
     start_at: "",
     end_at: "",
-  });
+  };
+}
+
+export function CreateH5MarketingPageButton({
+  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+}: H5MarketingPageRouteOptions = {}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [values, setValues] = useState<H5PageFormValues>(() => createDefaultH5PageValues());
   const [error, setError] = useState("");
   const validation = useMemo(() => H5PageFormSchema.safeParse(values), [values]);
+
+  function updateOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (nextOpen) {
+      setValues((current) => current.slug ? current : {
+        ...current,
+        slug: buildRandomSlug(),
+      });
+      return;
+    }
+
+    setAdvancedOpen(false);
+    setError("");
+  }
 
   function updateValue(key: keyof H5PageFormValues, value: string | number) {
     setError("");
@@ -236,9 +277,20 @@ export function CreateH5MarketingPageButton({
     }));
   }
 
+  function regenerateSlug() {
+    setError("");
+    setValues((current) => ({
+      ...current,
+      slug: buildRandomSlug(),
+    }));
+  }
+
   function submit() {
     const result = H5PageFormSchema.safeParse(values);
     if (!result.success) {
+      if (result.error.issues.some((issue) => issue.path[0] === "slug")) {
+        setAdvancedOpen(true);
+      }
       setError(result.error.issues[0]?.message || "请检查表单内容");
       return;
     }
@@ -255,15 +307,8 @@ export function CreateH5MarketingPageButton({
         });
         toast.success("H5 活动页已创建");
         setOpen(false);
-        setValues({
-          title: "",
-          slug: "",
-          description: "",
-          display_scene: "all",
-          sort_order: 100,
-          start_at: "",
-          end_at: "",
-        });
+        setAdvancedOpen(false);
+        setValues(createDefaultH5PageValues());
         router.refresh();
       } catch (error) {
         setError(error instanceof Error ? error.message : "创建失败");
@@ -279,7 +324,7 @@ export function CreateH5MarketingPageButton({
         <Plus data-icon="inline-start" />
         新建 H5 页面
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={updateOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建 H5 活动页</DialogTitle>
@@ -298,19 +343,6 @@ export function CreateH5MarketingPageButton({
                 placeholder="例如：春季装修预约活动"
               />
             </Field>
-            <Field data-invalid={Boolean(firstIssue?.path[0] === "slug")}>
-              <FieldLabel htmlFor="h5-page-slug">页面路径</FieldLabel>
-              <Input
-                id="h5-page-slug"
-                value={values.slug}
-                aria-invalid={Boolean(firstIssue?.path[0] === "slug")}
-                onChange={(event) => updateValue("slug", event.target.value)}
-                placeholder="spring-sale"
-              />
-              <FieldDescription>
-                发布后访问地址为 {buildPageUrl(values.slug || "spring-sale")}
-              </FieldDescription>
-            </Field>
             <Field>
               <FieldLabel htmlFor="h5-page-description">页面描述</FieldLabel>
               <Textarea
@@ -320,6 +352,47 @@ export function CreateH5MarketingPageButton({
                 placeholder="一句话描述活动权益"
               />
             </Field>
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">高级设置</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    活动路径已自动生成：/p/{values.slug || "auto"}
+                  </div>
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="outline" size="sm">
+                    {advancedOpen ? "收起" : "展开"}
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="mt-3">
+                <Field data-invalid={Boolean(firstIssue?.path[0] === "slug")}>
+                  <FieldLabel htmlFor="h5-page-slug">活动路径</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="h5-page-slug"
+                      value={values.slug}
+                      aria-invalid={Boolean(firstIssue?.path[0] === "slug")}
+                      onChange={(event) => updateValue("slug", event.target.value)}
+                      placeholder="h5-20260510-a1b2c3"
+                    />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton onClick={regenerateSlug}>
+                        <RefreshCw data-icon="inline-start" />
+                        重新生成
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  </InputGroup>
+                  <FieldDescription>
+                    发布后访问地址为 {buildPageUrl(values.slug || "auto")}
+                  </FieldDescription>
+                  {firstIssue?.path[0] === "slug" ? (
+                    <FieldError>{firstIssue.message}</FieldError>
+                  ) : null}
+                </Field>
+              </CollapsibleContent>
+            </Collapsible>
             <div className="grid gap-3 md:grid-cols-2">
               <Field data-invalid={Boolean(firstIssue?.path[0] === "display_scene")}>
                 <FieldLabel htmlFor="h5-page-display-scene">展示场景</FieldLabel>
