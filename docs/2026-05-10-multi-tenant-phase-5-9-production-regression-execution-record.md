@@ -74,6 +74,58 @@ bun run verify:tenant:phase5h
 - 小程序客户命中单租户、多租户、无租户三种登录链路。
 - H5 多租户公开页在小程序 web-view 内打开。
 
+## 测试数据预检查
+
+本轮做了生产库只读预检查，结果如下：
+
+### 租户
+
+当前存在可用于隔离验证的租户：
+
+- `gooes_default`：默认租户，状态 `active`。
+- `phase5h_verify_a`：5H 验收租户 A，状态 `active`。
+- `phase5h_verify_b`：5H 验收租户 B，状态 `active`。
+- `tenant_verify_a`：阶段 3 验收租户 A，状态 `active`。
+- `tenant_verify_b`：阶段 3 验收租户 B，状态 `active`。
+
+### H5 活动页
+
+当前可用于 H5 公开页回归的已发布页面：
+
+- `spring-dollar`
+- `springsale`
+
+可测试地址：
+
+```text
+https://h5.goodcms.cn/p/spring-dollar
+https://h5.goodcms.cn/p/springsale
+```
+
+### 平台线索
+
+当前 `platform_leads` 统计：
+
+- `new`: 0
+- `assigned`: 0
+- `invalid`: 0
+
+因此“平台线索手动分配”回归需要先通过小程序访客态或后端接口创建一条测试平台线索。
+
+### 平台超管
+
+当前预检查结果：
+
+- `platform_admin` 角色存在。
+- 未发现任何员工通过 `employee_roles` 绑定 `platform_admin`。
+
+影响：
+
+- 真实平台超管登录回归暂时缺少可用账号。
+- 租户内 `system_admin` 不能访问 `/platform/*`，这是预期权限边界。
+
+下一步需要业务方指定一个生产员工账号绑定 `platform_admin`，或新增一个专用平台超管测试员工，再继续执行平台租户创建、停用启用、平台线索分配等人工回归。
+
 ## 结论
 
 生产环境自动化回归通过，阶段 5 后端和公网入口具备继续联调条件。
