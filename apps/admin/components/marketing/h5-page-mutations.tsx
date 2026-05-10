@@ -139,6 +139,11 @@ function toDateTimeLocalValue(value?: string | null) {
   return local.toISOString().slice(0, 16);
 }
 
+function toDateTimeLocalInputValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 function buildPagePayload(values: H5PageFormValues) {
   return {
     title: values.title,
@@ -240,14 +245,17 @@ function buildRandomSlug() {
 }
 
 function createDefaultH5PageValues(slug = ""): H5PageFormValues {
+  const startAt = new Date();
+  const endAt = new Date(startAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+
   return {
     title: "",
     slug,
     description: "",
     display_scene: "all",
     sort_order: 100,
-    start_at: "",
-    end_at: "",
+    start_at: toDateTimeLocalInputValue(startAt),
+    end_at: toDateTimeLocalInputValue(endAt),
   };
 }
 
