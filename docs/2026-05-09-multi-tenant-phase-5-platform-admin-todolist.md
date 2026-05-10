@@ -109,6 +109,7 @@
 - [x] 已完成 `https://api.goodcms.cn` DNS/nginx/证书配置，公网 API 5H 严格模式验收通过：`27 passed, 0 failed, 0 skipped`。
 - [x] 已补齐 `https://h5.goodcms.cn/public/tenants/*` 到后端 `3000` 的同源公开接口代理。
 - [x] 阶段 5.9 自动化生产 smoke test 通过。
+- [x] 已为员工“固始”绑定 `platform_admin` 并验证平台接口可访问。
 - [ ] 阶段 5.9 admin / 小程序真实账号人工回归完成。
 
 ## 不做事项

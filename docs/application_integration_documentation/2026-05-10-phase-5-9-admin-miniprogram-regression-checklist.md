@@ -15,9 +15,9 @@
 
 ### 前置条件
 
-- 需要一个已绑定 `platform_admin` 角色的平台超管员工账号。
-- 当前生产库已存在 `platform_admin` 角色，但预检查未发现员工绑定该角色。
-- 如需继续平台超管回归，需先指定一个员工账号绑定 `platform_admin`，或创建专用平台超管测试员工。
+- 已将员工“固始”（手机号 `186****5353`）绑定 `platform_admin` 角色。
+- `/admin/auth/me` 已确认返回 `system_admin`、`platform_admin`。
+- `/platform/tenants` 和 `/platform/leads` 已确认可访问。
 
 ### 平台超管
 

@@ -117,14 +117,18 @@ https://h5.goodcms.cn/p/springsale
 当前预检查结果：
 
 - `platform_admin` 角色存在。
-- 未发现任何员工通过 `employee_roles` 绑定 `platform_admin`。
+- 已将员工“固始”（手机号 `186****5353`）绑定 `platform_admin`。
+
+验证结果：
+
+- `/admin/auth/me` 返回角色包含 `system_admin`、`platform_admin`。
+- `GET https://api.goodcms.cn/platform/tenants?page=1&pageSize=5` 返回 200。
+- `GET https://api.goodcms.cn/platform/leads?page=1&pageSize=5` 返回 200。
 
 影响：
 
-- 真实平台超管登录回归暂时缺少可用账号。
-- 租户内 `system_admin` 不能访问 `/platform/*`，这是预期权限边界。
-
-下一步需要业务方指定一个生产员工账号绑定 `platform_admin`，或新增一个专用平台超管测试员工，再继续执行平台租户创建、停用启用、平台线索分配等人工回归。
+- 平台超管账号前置条件已满足。
+- 后续可继续执行真实 admin 页面回归：租户列表、创建测试租户、停用启用、平台线索分配。
 
 ## 结论
 
