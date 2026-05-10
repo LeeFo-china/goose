@@ -5,7 +5,7 @@ import type {
   PlatformTenantListQuery,
   UpdatePlatformTenantInput,
 } from "@/schema/platform-tenants";
-import type { AuthContext } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
 
 class PlatformTenantService {
   async list(query: PlatformTenantListQuery, authContext: AuthContext) {
@@ -81,6 +81,7 @@ class PlatformTenantService {
       throw Errors.notFound("租户不存在");
     }
 
+    authorizationService.invalidateTenantContext(id);
     return {
       ...record,
       suspended: true,
@@ -99,6 +100,7 @@ class PlatformTenantService {
       throw Errors.notFound("租户不存在");
     }
 
+    authorizationService.invalidateTenantContext(id);
     return {
       ...record,
       activated: true,

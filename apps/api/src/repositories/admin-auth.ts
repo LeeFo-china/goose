@@ -12,6 +12,10 @@ export type AdminAuthEmployeeRecord = {
   name: string | null;
   phone: string | null;
   avatar: string | null;
+  tenant:
+    | { id: string | null; name: string | null; slug: string | null; status: string | null }
+    | Array<{ id: string | null; name: string | null; slug: string | null; status: string | null }>
+    | null;
   department:
     | { name: string | null }
     | Array<{ name: string | null }>
@@ -54,6 +58,7 @@ class AdminAuthRepository {
         name,
         phone,
         avatar,
+        tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)

@@ -103,6 +103,9 @@ class AdminAuthService {
       );
     }
 
+    const authContext = await authorizationService.getAuthContextByEmployeeId(employee.id);
+    authorizationService.assertTenantAvailable(authContext);
+
     return employee;
   }
 

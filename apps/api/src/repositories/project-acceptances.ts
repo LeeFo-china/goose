@@ -120,6 +120,13 @@ export type ProjectAcceptanceCustomerRow = {
   name: string | null;
   phone: string | null;
   user_id: string | null;
+  tenant?: {
+    id: string | null;
+    status: string | null;
+  } | Array<{
+    id: string | null;
+    status: string | null;
+  }> | null;
 };
 
 type ListAcceptancesInput = {
@@ -469,7 +476,17 @@ class ProjectAcceptanceRepository {
   ) {
     let query = SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, tenant_id, name, phone, user_id")
+      .select(`
+        id,
+        tenant_id,
+        name,
+        phone,
+        user_id,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          status
+        )
+      `)
       .eq("user_id", authUserId);
 
     if (scope?.tenantId) {
@@ -488,6 +505,17 @@ class ProjectAcceptanceRepository {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
     }
     return list[0] || null;
+  }
+
+  async getTenantById(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenants")
+      .select("id,status")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询租户状态失败", error);
+    return (data || null) as { id: string; status: string | null } | null;
   }
 }
 

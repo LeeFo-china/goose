@@ -314,6 +314,22 @@ class AuthorizationService {
     }
   }
 
+  invalidateTenantContext(tenantId: string | null | undefined) {
+    if (!tenantId) return;
+
+    for (const [key, item] of this.authUserCache.entries()) {
+      if (item.value.tenantId === tenantId) {
+        this.authUserCache.delete(key);
+      }
+    }
+
+    for (const [key, item] of this.employeeCache.entries()) {
+      if (item.value.tenantId === tenantId) {
+        this.employeeCache.delete(key);
+      }
+    }
+  }
+
   assertTenantAvailable(authContext: AuthContext) {
     if (
       authContext.employeeId &&
@@ -329,7 +345,10 @@ class AuthorizationService {
       authContext.tenantStatus &&
       authContext.tenantStatus !== "active"
     ) {
-      throw Errors.business(403, "租户状态不可用", ErrorCodes.FORBIDDEN);
+      throw Errors.business(403, "租户状态不可用", ErrorCodes.TENANT_NOT_AVAILABLE, {
+        tenant_id: authContext.tenantId,
+        tenant_status: authContext.tenantStatus,
+      });
     }
   }
 

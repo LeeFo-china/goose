@@ -1,4 +1,5 @@
 import { BaseController } from "@/controllers/BaseController";
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { projectMemberService } from "@/services/project-members";
 import { projectAcceptanceService } from "@/services/project-acceptances";
@@ -34,6 +35,20 @@ type CustomerContextRow = {
   phone: string | null;
   user_id: string | null;
   tenant_id: string | null;
+  tenant:
+    | {
+      id: string | null;
+      name: string | null;
+      slug: string | null;
+      status: string | null;
+    }
+    | Array<{
+      id: string | null;
+      name: string | null;
+      slug: string | null;
+      status: string | null;
+    }>
+    | null;
 };
 
 type UserProfileRow = {
@@ -307,7 +322,19 @@ class CustomerSelfServiceController extends BaseController {
   ) {
     let query = SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, phone, user_id, tenant_id")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
       .eq("user_id", authUserId);
 
     if (options?.tenantId) {
@@ -337,16 +364,43 @@ class CustomerSelfServiceController extends BaseController {
     return customer;
   }
 
+  private normalizeTenantRelation(value: CustomerContextRow["tenant"]) {
+    if (Array.isArray(value)) {
+      return value[0] ?? null;
+    }
+
+    return value ?? null;
+  }
+
+  private assertCustomerTenantAvailable(customer: CustomerContextRow | null) {
+    if (!customer) return;
+
+    const tenant = this.normalizeTenantRelation(customer.tenant);
+    if (!customer.tenant_id || tenant?.status !== "active") {
+      throw Errors.business(
+        403,
+        "装修公司服务已暂停，请联系装修公司",
+        ErrorCodes.TENANT_NOT_AVAILABLE,
+        {
+          tenant_id: customer.tenant_id,
+          tenant_status: tenant?.status ?? null,
+        },
+      );
+    }
+  }
+
   private async getCustomerProfileFromRequest(
     request: FastifyRequest,
     options?: { required?: boolean },
   ) {
     const authUserId = await this.getRequiredAuthUserId(request);
-    return this.getCustomerProfileByAuthUserId(authUserId, {
+    const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
       required: options?.required,
       tenantId: request.user?.tenant_id ?? null,
       customerId: request.user?.customer_id ?? null,
     });
+    this.assertCustomerTenantAvailable(customer);
+    return customer;
   }
 
   private async getUserProfileByAuthUserId(authUserId: string) {
@@ -806,13 +860,16 @@ class CustomerSelfServiceController extends BaseController {
       tenantId: request.user?.tenant_id ?? null,
       customerId: request.user?.customer_id ?? null,
     });
+    this.assertCustomerTenantAvailable(customer);
     const userProfile = await this.getUserProfileByAuthUserId(authUserId);
+    const tenant = customer ? this.normalizeTenantRelation(customer.tenant) : null;
 
     return ResponseHandler.success({
       mode: customer ? "customer" : "platform_visitor",
       auth_user_id: authUserId,
       customer_id: customer?.id ?? null,
       tenant_id: customer?.tenant_id ?? request.user?.tenant_id ?? null,
+      tenant_status: tenant?.status ?? null,
       customer_name: customer?.name ?? null,
       has_customer_profile: Boolean(customer),
       nickname: userProfile?.nickname ?? null,

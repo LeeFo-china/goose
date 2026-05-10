@@ -75,6 +75,7 @@ export const ErrorCodes = {
   ADMIN_AUTH_USER_CREATE_FAILED: "ADMIN_AUTH_USER_CREATE_FAILED",
   OPS_SCRIPT_NOT_FOUND: "OPS_SCRIPT_NOT_FOUND",
   OPS_SCRIPT_RUN_FAILED: "OPS_SCRIPT_RUN_FAILED",
+  TENANT_NOT_AVAILABLE: "TENANT_NOT_AVAILABLE",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

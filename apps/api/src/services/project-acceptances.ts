@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import type {
   ApproveProjectAcceptanceInput,
   CancelProjectAcceptanceInput,
@@ -770,6 +771,7 @@ class ProjectAcceptanceService {
       scope,
     );
     if (!customer) throw Errors.forbidden();
+    this.assertCustomerTenantAvailable(customer);
 
     const project = await projectAcceptanceRepository.getProject(
       query.project_id,
@@ -813,6 +815,7 @@ class ProjectAcceptanceService {
       scope,
     );
     if (!customer) throw Errors.forbidden();
+    this.assertCustomerTenantAvailable(customer);
 
     const row = await this.getRequiredAcceptance(id, customer.tenant_id);
     if (row.customer_id !== customer.id || row.tenant_id !== customer.tenant_id) {
@@ -844,11 +847,13 @@ class ProjectAcceptanceService {
         row.customer_id === customer.id &&
         row.tenant_id === customer.tenant_id
       ) {
+        this.assertCustomerTenantAvailable(customer);
         return this.buildDetail(row);
       }
     }
 
     if (input.ticketQuery?.ticket && input.ticketQuery.project_id) {
+      await this.assertTenantAvailableById(row.tenant_id);
       const result = await this.verifyOpenTicketRow({
         ticket: input.ticketQuery.ticket,
         acceptance_id: row.id,
@@ -875,6 +880,7 @@ class ProjectAcceptanceService {
     if (!result.valid) {
       return result;
     }
+    await this.assertTenantAvailableById(result.row.tenant_id);
 
     return {
       valid: true,
@@ -907,11 +913,13 @@ class ProjectAcceptanceService {
         input.row.customer_id === customer.id &&
         input.row.tenant_id === customer.tenant_id
       ) {
+        this.assertCustomerTenantAvailable(customer);
         return customer;
       }
     }
 
     if (input.ticket && input.projectId) {
+      await this.assertTenantAvailableById(input.row.tenant_id);
       const result = await this.verifyOpenTicketRow({
         ticket: input.ticket,
         acceptance_id: input.row.id,
@@ -921,7 +929,9 @@ class ProjectAcceptanceService {
         const [customer] = await projectAcceptanceRepository.listCustomers([
           result.ticket.customer_id,
         ]);
-        if (customer && customer.tenant_id === input.row.tenant_id) return customer;
+        if (customer && customer.tenant_id === input.row.tenant_id) {
+          return customer;
+        }
       }
     }
 
@@ -930,6 +940,45 @@ class ProjectAcceptanceService {
     }
 
     throw Errors.unauthorized("请先登录或提供有效访问票据");
+  }
+
+  private normalizeCustomerTenant(customer: ProjectAcceptanceCustomerRow) {
+    const tenant = customer.tenant;
+    return Array.isArray(tenant) ? tenant[0] ?? null : tenant ?? null;
+  }
+
+  private assertCustomerTenantAvailable(customer: ProjectAcceptanceCustomerRow) {
+    const tenant = this.normalizeCustomerTenant(customer);
+    if (!customer.tenant_id || tenant?.status !== "active") {
+      throw Errors.business(
+        403,
+        "装修公司服务已暂停，请联系装修公司",
+        ErrorCodes.TENANT_NOT_AVAILABLE,
+        {
+          tenant_id: customer.tenant_id,
+          tenant_status: tenant?.status ?? null,
+        },
+      );
+    }
+  }
+
+  private async assertTenantAvailableById(tenantId: string | null | undefined) {
+    if (!tenantId) {
+      throw Errors.business(403, "装修公司服务已暂停，请联系装修公司", ErrorCodes.TENANT_NOT_AVAILABLE);
+    }
+
+    const tenant = await projectAcceptanceRepository.getTenantById(tenantId);
+    if (tenant?.status !== "active") {
+      throw Errors.business(
+        403,
+        "装修公司服务已暂停，请联系装修公司",
+        ErrorCodes.TENANT_NOT_AVAILABLE,
+        {
+          tenant_id: tenantId,
+          tenant_status: tenant?.status ?? null,
+        },
+      );
+    }
   }
 
   async createAcceptance(

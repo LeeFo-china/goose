@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { SupabaseDB } from "@/utils/supabase";
 import { BaseController } from "@/controllers/BaseController";
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -549,6 +550,21 @@ export class WeChatController extends BaseController {
     return value ?? null;
   }
 
+  private assertCustomerTenantAvailable(customer: CustomerTenantOption) {
+    const tenant = this.normalizeTenantRelation(customer.tenant);
+    if (!customer.tenant_id || tenant?.status !== "active") {
+      throw Errors.business(
+        403,
+        "装修公司服务已暂停，请联系装修公司",
+        ErrorCodes.TENANT_NOT_AVAILABLE,
+        {
+          tenant_id: customer.tenant_id,
+          tenant_status: tenant?.status ?? null,
+        },
+      );
+    }
+  }
+
   private async enrichCustomerTenantOptions(customers: CustomerTenantOption[]) {
     if (customers.length === 0) {
       return [] as CustomerTenantOption[];
@@ -680,6 +696,7 @@ export class WeChatController extends BaseController {
     customer: CustomerTenantOption;
   }) {
     const tenant = this.normalizeTenantRelation(input.customer.tenant);
+    this.assertCustomerTenantAvailable(input.customer);
     const roles = await this.getUserRoles(input.authUserId);
     const normalizedRoles = roles.includes("customer") ? roles : [...roles, "customer"];
     const token = signToken({
