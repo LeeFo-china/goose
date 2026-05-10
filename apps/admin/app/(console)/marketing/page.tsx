@@ -32,6 +32,7 @@ import type {
 } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -328,18 +329,18 @@ export default async function MarketingPage({
         ) : null}
       </div>
 
-      <MarketingTabsNav
-        activeTab={activeTab}
-        hrefs={tabHrefs}
-        counts={{
-          campaigns: pagination.total,
-          h5: h5Pages.pagination.total,
-          leads: h5Leads.pagination.total,
-        }}
-      />
+      <Tabs value={activeTab} className="flex flex-col gap-5">
+        <MarketingTabsNav
+          activeTab={activeTab}
+          hrefs={tabHrefs}
+          counts={{
+            campaigns: pagination.total,
+            h5: h5Pages.pagination.total,
+            leads: h5Leads.pagination.total,
+          }}
+        />
 
-      {activeTab === "campaigns" ? (
-        <>
+        <TabsContent value="campaigns" className="m-0 flex flex-col gap-5">
           <div className="grid gap-3 md:grid-cols-4">
             <Card>
               <CardContent className="flex items-center gap-3 p-4">
@@ -424,9 +425,9 @@ export default async function MarketingPage({
               keyword={keyword}
             />
           </div>
-        </>
-      ) : activeTab === "h5" ? (
-        <>
+        </TabsContent>
+
+        <TabsContent value="h5" className="m-0 flex flex-col gap-5">
           <div className="grid gap-3 md:grid-cols-4">
             <Card>
               <CardContent className="flex items-center gap-3 p-4">
@@ -493,9 +494,9 @@ export default async function MarketingPage({
               )}
             </CardContent>
           </Card>
-        </>
-      ) : (
-        <>
+        </TabsContent>
+
+        <TabsContent value="leads" className="m-0 flex flex-col gap-5">
           <div className="grid gap-3 md:grid-cols-4">
             <Card>
               <CardContent className="flex items-center gap-3 p-4">
@@ -554,8 +555,8 @@ export default async function MarketingPage({
             }}
             pages={h5Pages.list}
           />
-        </>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
