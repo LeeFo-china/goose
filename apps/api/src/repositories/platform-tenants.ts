@@ -66,6 +66,8 @@ export type PlatformTenantEmployeeLite = {
   created_at: string | null;
 };
 
+type PlatformTenantEmployeeRow = Omit<PlatformTenantEmployeeLite, "role">;
+
 export type PlatformTenantRoleLite = {
   id: string;
   tenant_id: string | null;
@@ -356,7 +358,7 @@ class PlatformTenantRepository {
     }
 
     const { data, error } = await this.from("employees")
-      .select("id,tenant_id,name,phone,status,department_id,post_id,role,created_at")
+      .select("id,tenant_id,name,phone,status,department_id,post_id,created_at")
       .in("id", uniqueIds);
 
     if (error) {
@@ -364,22 +366,59 @@ class PlatformTenantRepository {
     }
 
     return new Map(
-      ((data || []) as PlatformTenantEmployeeLite[]).map((item) => [item.id, item]),
+      ((data || []) as PlatformTenantEmployeeRow[]).map((item) => [item.id, { ...item, role: null }]),
     );
   }
 
   async findTenantAdminEmployees(tenantId: string) {
-    const { data, error } = await this.from("employees")
-      .select("id,tenant_id,name,phone,status,department_id,post_id,role,created_at")
+    const { data: roles, error: roleError } = await this.from("roles")
+      .select("id,code")
       .eq("tenant_id", tenantId)
-      .eq("role", "admin")
+      .eq("code", "system_admin")
+      .eq("status", "active");
+
+    if (roleError) {
+      throw Errors.dbError("查询租户管理员角色失败", roleError);
+    }
+
+    const roleIds = ((roles || []) as Array<{ id: string; code: string | null }>).map((item) => item.id);
+    if (roleIds.length === 0) {
+      return [];
+    }
+
+    const { data: employeeRoles, error: employeeRoleError } = await this.from("employee_roles")
+      .select("employee_id")
+      .in("role_id", roleIds);
+
+    if (employeeRoleError) {
+      throw Errors.dbError("查询租户管理员绑定失败", employeeRoleError);
+    }
+
+    const employeeIds = Array.from(
+      new Set(
+        ((employeeRoles || []) as Array<{ employee_id: string | null }>)
+          .map((item) => item.employee_id)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    if (employeeIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.from("employees")
+      .select("id,tenant_id,name,phone,status,department_id,post_id,created_at")
+      .eq("tenant_id", tenantId)
+      .in("id", employeeIds)
       .order("created_at", { ascending: true });
 
     if (error) {
       throw Errors.dbError("查询租户管理员失败", error);
     }
 
-    return (data || []) as PlatformTenantEmployeeLite[];
+    return ((data || []) as PlatformTenantEmployeeRow[]).map((item) => ({
+      ...item,
+      role: "system_admin",
+    }));
   }
 
   async findRolesByIds(ids: string[]) {
@@ -539,7 +578,6 @@ class PlatformTenantRepository {
         user_id: input.authUserId,
         department_id: input.departmentId,
         post_id: input.postId,
-        role: "admin",
         status: "active",
         avatar: null,
       })
