@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
+import { NotificationMenu } from "@/components/layout/notification-menu";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 
 export function AdminShell({
@@ -42,6 +43,7 @@ export function AdminShell({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationMenu />
             {isPlatformMode ? (
               <>
                 <Badge variant="outline">平台账号</Badge>

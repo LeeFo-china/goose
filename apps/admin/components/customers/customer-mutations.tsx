@@ -13,7 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
-import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, Plus, Share2, Tags, Trash2 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,51 @@ type PropertySummary = {
   layout: string | null;
   area: number | null;
   is_primary?: boolean;
+};
+
+type CustomerSourceEmployee = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+};
+
+type CustomerSourceRecord = {
+  id: string;
+  source: string;
+  display_label: string;
+  dedupe_result: string | null;
+  is_old_customer_new_lead: boolean;
+  is_platform_new_lead: boolean;
+  is_employee_share: boolean;
+  source_employee?: CustomerSourceEmployee | null;
+  assigned_by?: CustomerSourceEmployee | null;
+  platform_lead?: {
+    id: string;
+    phone: string | null;
+    name: string | null;
+    city: string | null;
+    community: string | null;
+    status: string | null;
+    source: string | null;
+  } | null;
+  share_link?: {
+    id: string;
+    token: string;
+    source: string;
+    target_type: string;
+    target_id: string | null;
+  } | null;
+  metadata?: unknown;
+  created_at: string;
+};
+
+type CustomerSourceSummary = {
+  total: number;
+  latest_source: CustomerSourceRecord | null;
+  source_tags: string[];
+  has_old_customer_new_lead: boolean;
+  has_platform_new_lead: boolean;
+  has_employee_share: boolean;
 };
 
 export type CustomerFollowUpRecord = {
@@ -98,6 +143,12 @@ export type CustomerRecord = {
   last_follow_at?: string | null;
   next_follow_at?: string | null;
   follow_up_state?: "none" | "upcoming" | "due" | "overdue" | string;
+  source_summary?: CustomerSourceSummary;
+  latest_source?: CustomerSourceRecord | null;
+  source_tags?: string[];
+  has_old_customer_new_lead?: boolean;
+  has_platform_new_lead?: boolean;
+  has_employee_share?: boolean;
 };
 
 type EmployeeOption = {
@@ -210,6 +261,41 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getSourceBadges(customer: Pick<CustomerRecord, "has_old_customer_new_lead" | "has_platform_new_lead" | "has_employee_share">) {
+  return [
+    customer.has_old_customer_new_lead
+      ? { key: "old_customer_new_lead", label: "老客户新线索", variant: "warning" as const }
+      : null,
+    customer.has_platform_new_lead
+      ? { key: "platform_new_lead", label: "平台新线索", variant: "default" as const }
+      : null,
+    customer.has_employee_share
+      ? { key: "employee_share", label: "员工分享", variant: "secondary" as const }
+      : null,
+  ].filter((item): item is { key: string; label: string; variant: "warning" | "default" | "secondary" } => Boolean(item));
+}
+
+function SourceTags({ customer }: { customer: CustomerRecord }) {
+  const badges = getSourceBadges(customer);
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {badges.map((badge) => (
+        <Badge key={badge.key} variant={badge.variant}>{badge.label}</Badge>
+      ))}
+    </div>
+  );
+}
+
+function sourceActorName(source: CustomerSourceRecord) {
+  return source.source_employee?.name
+    || source.assigned_by?.name
+    || source.source_employee?.phone
+    || source.assigned_by?.phone
+    || "-";
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -604,13 +690,18 @@ function CustomerDetailDialog({
   onClose: () => void;
 }) {
   const [followUps, setFollowUps] = useState<CustomerFollowUpRecord[]>([]);
+  const [sources, setSources] = useState<CustomerSourceRecord[]>([]);
   const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
   const [followUpsError, setFollowUpsError] = useState("");
+  const [sourcesError, setSourcesError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setFollowUpsLoading(true);
+    setSourcesLoading(true);
     setFollowUpsError("");
+    setSourcesError("");
     requestCustomer({ path: `/customers/${customer.id}/follow_ups?page=1&pageSize=10` })
       .then((data) => {
         if (!cancelled) setFollowUps(data?.list || []);
@@ -622,6 +713,18 @@ function CustomerDetailDialog({
       })
       .finally(() => {
         if (!cancelled) setFollowUpsLoading(false);
+      });
+    requestCustomer({ path: `/customers/${customer.id}/sources?page=1&pageSize=20` })
+      .then((data) => {
+        if (!cancelled) setSources(data?.list || []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSourcesError(err instanceof Error ? err.message : "来源时间线加载失败");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSourcesLoading(false);
       });
 
     return () => {
@@ -652,6 +755,75 @@ function CustomerDetailDialog({
             <InfoItem label="面积" value={customer.area != null ? `${customer.area}㎡` : "-"} />
             <InfoItem label="户型" value={customer.layout || "-"} />
           </div>
+          {customer.latest_source || getSourceBadges(customer).length > 0 ? (
+            <section className="rounded-md border bg-muted/20 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Tags />
+                  线索来源
+                </div>
+                <SourceTags customer={customer} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <InfoItem
+                  label="最近来源"
+                  value={customer.latest_source?.display_label || customer.source_summary?.latest_source?.display_label || "-"}
+                />
+                <InfoItem
+                  label="来源时间"
+                  value={formatDateTime(customer.latest_source?.created_at || customer.source_summary?.latest_source?.created_at)}
+                />
+                <InfoItem
+                  label="来源总数"
+                  value={String(customer.source_summary?.total ?? sources.length ?? 0)}
+                />
+              </div>
+            </section>
+          ) : null}
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">来源时间线</h3>
+              <Badge variant="outline">最近 20 条</Badge>
+            </div>
+            {sourcesError ? <StatusAlert>{sourcesError}</StatusAlert> : null}
+            {sourcesLoading ? (
+              <div className="flex h-24 items-center justify-center rounded-md border text-sm text-muted-foreground">
+                <Loader2 className="mr-2 animate-spin" />
+                正在加载来源记录
+              </div>
+            ) : sources.length > 0 ? (
+              <div className="relative ml-3 flex flex-col gap-4 border-l pl-5">
+                {sources.map((item) => (
+                  <div key={item.id} className="relative rounded-md border bg-background p-3">
+                    <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-secondary" />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Share2 />
+                        {item.display_label || item.source}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTime(item.created_at)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.is_old_customer_new_lead ? <Badge variant="warning">老客户新线索</Badge> : null}
+                      {item.is_platform_new_lead ? <Badge variant="default">平台新线索</Badge> : null}
+                      {item.is_employee_share ? <Badge variant="secondary">员工分享</Badge> : null}
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                      <div>操作人：{sourceActorName(item)}</div>
+                      <div>去重：{item.dedupe_result || "-"}</div>
+                      <div>平台线索：{item.platform_lead?.name || item.platform_lead?.phone || "-"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                暂无来源记录。
+              </div>
+            )}
+          </section>
           <section>
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold">跟进记录</h3>

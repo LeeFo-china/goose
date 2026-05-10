@@ -100,6 +100,20 @@ function followUpBadge(state: string | null | undefined) {
   return <Badge className="whitespace-nowrap" variant="secondary">无计划</Badge>;
 }
 
+function sourceBadges(customer: CustomerRecord) {
+  return [
+    customer.has_old_customer_new_lead
+      ? { key: "old_customer_new_lead", label: "老客户新线索", variant: "warning" as const }
+      : null,
+    customer.has_platform_new_lead
+      ? { key: "platform_new_lead", label: "平台新线索", variant: "default" as const }
+      : null,
+    customer.has_employee_share
+      ? { key: "employee_share", label: "员工分享", variant: "secondary" as const }
+      : null,
+  ].filter((item): item is { key: string; label: string; variant: "warning" | "default" | "secondary" } => Boolean(item));
+}
+
 function CustomerIdentityCell({
   id,
   name,
@@ -164,9 +178,26 @@ const columns: ColumnDef<CustomerRecord>[] = [
   {
     accessorKey: "source",
     header: "来源",
-    cell: ({ row }) => sourceMeta[row.original.source || ""] || row.original.source || "-",
+    cell: ({ row }) => {
+      const badges = sourceBadges(row.original);
+
+      return (
+        <div className="flex min-w-[150px] flex-col gap-1">
+          <span className="text-sm text-muted-foreground">
+            {sourceMeta[row.original.source || ""] || row.original.source || "-"}
+          </span>
+          {badges.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {badges.map((badge) => (
+                <Badge key={badge.key} variant={badge.variant}>{badge.label}</Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      );
+    },
     meta: {
-      cellClassName: "whitespace-nowrap text-muted-foreground",
+      cellClassName: "whitespace-nowrap",
     },
   },
   {
