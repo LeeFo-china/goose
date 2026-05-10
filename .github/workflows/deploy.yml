@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, feature/customer]
+    branches: [main, feature/customer, feature/multi-tenant]
 
 concurrency:
   group: goose-prod-deploy-${{ github.ref }}
