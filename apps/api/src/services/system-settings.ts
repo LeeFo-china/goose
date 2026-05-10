@@ -871,8 +871,12 @@ class SystemSettingsService {
 
   async listSettings(authContext?: AuthContext) {
     const records = await this.listRecords();
+    const isTenantContext = Boolean(authContext && !authContext.isPlatformAdmin);
     const tenantId = authContext?.isPlatformAdmin ? null : authContext?.tenantId || null;
-    const platformRecords = records.filter((record) => !record.tenant_id);
+    const platformRecords = records.filter((record) => {
+      if (record.tenant_id) return false;
+      return !isTenantContext || this.isTenantOverridable(record.key);
+    });
     const list = platformRecords.map((platformRecord) => {
       const resolved = this.resolveEffectiveRecord({
         key: platformRecord.key,

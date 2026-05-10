@@ -3,8 +3,9 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Card, CardContent } from "@/components/ui/card";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { isPlatformOnlySession } from "@/lib/session-mode";
 
 type SettingsData = {
   list: SystemSetting[];
@@ -57,11 +58,18 @@ async function getSettingsData() {
 }
 
 export default async function SettingsPage() {
-  const { list, groups, error } = await getSettingsData();
+  const [session, settingsResult] = await Promise.all([
+    getAdminSession(),
+    getSettingsData(),
+  ]);
+  const { list, groups, error } = settingsResult;
+  const isPlatformMode = isPlatformOnlySession(session);
   const databaseCount = list.filter((item) => item.source === "database").length;
   const envCount = list.filter((item) => item.source === "env").length;
   const emptyCount = list.filter((item) => item.source === "empty").length;
   const secretCount = list.filter((item) => item.is_secret).length;
+  const tenantOverrideCount = list.filter((item) => item.effective_scope === "tenant").length;
+  const tenantInheritedCount = list.filter((item) => item.effective_scope === "platform").length;
   const groupEntries = Object.entries(groups)
     .map(([groupCode, settings]) => ({
       code: groupCode,
@@ -78,9 +86,13 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-semibold tracking-normal">系统配置</h1>
+        <h1 className="text-2xl font-semibold tracking-normal">
+          {isPlatformMode ? "平台系统配置" : "租户短信配置"}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          非敏感配置明文存储；密钥类配置加密存储并保留环境变量回退。JWT、Supabase、端口和加密主密钥仍保留在服务器环境变量中。
+          {isPlatformMode
+            ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
+            : "租户端仅开放短信签名配置；短信网关、模板、监控、AI、微信和短视频识别由平台统一维护，避免租户误改基础能力。"}
         </p>
       </div>
 
@@ -91,21 +103,31 @@ export default async function SettingsPage() {
               <SlidersHorizontal className="size-5" />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">配置项</div>
+              <div className="text-sm text-muted-foreground">
+                {isPlatformMode ? "平台配置项" : "可配置项"}
+              </div>
               <div className="text-xl font-semibold">{list.length}</div>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">数据库覆盖</div>
-            <div className="text-xl font-semibold">{databaseCount}</div>
+            <div className="text-sm text-muted-foreground">
+              {isPlatformMode ? "数据库覆盖" : "租户覆盖"}
+            </div>
+            <div className="text-xl font-semibold">
+              {isPlatformMode ? databaseCount : tenantOverrideCount}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">环境变量回退</div>
-            <div className="text-xl font-semibold">{envCount}</div>
+            <div className="text-sm text-muted-foreground">
+              {isPlatformMode ? "环境变量回退" : "继承平台"}
+            </div>
+            <div className="text-xl font-semibold">
+              {isPlatformMode ? envCount : tenantInheritedCount}
+            </div>
           </CardContent>
         </Card>
         <Card>

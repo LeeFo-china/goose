@@ -5,7 +5,7 @@ import {
   UpdateSystemSettingSchema,
 } from "@/schema/system-settings";
 import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
 import { systemSettingsService } from "@/services/system-settings";
 import { Get, Patch } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -16,10 +16,18 @@ class SystemSettingsController extends BaseController {
     super("system_settings");
   }
 
+  private assertSettingsPermission(
+    authContext: AuthContext,
+    permissionCode: "system.settings.read" | "system.settings.update",
+  ) {
+    if (authContext.isPlatformAdmin) return;
+    accessPolicyService.assertPermission(authContext, permissionCode);
+  }
+
   @Get("/admin/system-settings")
   async listSettings(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.settings.read");
+    this.assertSettingsPermission(authContext, "system.settings.read");
 
     const data = await systemSettingsService.listSettings(authContext);
     return ResponseHandler.success(data);
@@ -28,7 +36,7 @@ class SystemSettingsController extends BaseController {
   @Patch("/admin/system-settings/:key")
   async updateSetting(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.settings.update");
+    this.assertSettingsPermission(authContext, "system.settings.update");
 
     const paramsResult = SystemSettingKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
