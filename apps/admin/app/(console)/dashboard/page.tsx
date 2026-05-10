@@ -3,10 +3,13 @@ import {
   ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
+  Building2,
   Camera,
   CircleDollarSign,
   ClipboardList,
+  Inbox,
   KeyRound,
+  ScrollText,
   Shield,
   Users,
 } from "lucide-react";
@@ -96,6 +99,33 @@ const workflowRows = [
   },
 ];
 
+const platformCards = [
+  {
+    title: "平台租户",
+    description: "查看装修公司租户、初始化状态、管理员和业务用量。",
+    href: "/platform/tenants",
+    icon: Building2,
+  },
+  {
+    title: "平台线索",
+    description: "处理平台公海线索，分配到目标装修公司并保留分配审计。",
+    href: "/platform/leads",
+    icon: Inbox,
+  },
+  {
+    title: "平台审计",
+    description: "追踪租户创建、停用、线索分配等平台级操作记录。",
+    href: "/platform/audit-logs",
+    icon: ScrollText,
+  },
+  {
+    title: "系统配置",
+    description: "维护短信、AI、物联网视频等平台级和租户级配置。",
+    href: "/settings",
+    icon: Shield,
+  },
+];
+
 const scopeLabel: Record<AdminPermission["scope"], string> = {
   self: "本人",
   assigned: "负责范围",
@@ -176,11 +206,145 @@ function getPermissionDescription(permission: AdminPermission, meta: PermissionM
   return null;
 }
 
+function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<ReturnType<typeof getAdminSession>>> }) {
+  const employee = session.employee;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-5 shadow-[0_12px_30px_rgba(17,17,17,0.08)]">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div className="flex items-start gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#141414] bg-[#ffd449]">
+              <Building2 className="size-7 text-[#141414]" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-[#4d3b00]">平台管理模式</div>
+              <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-[#141414] [text-shadow:0_3px_0_rgba(243,180,0,0.26)]">
+                平台运营工作台
+              </h1>
+              <p className="mt-2 text-sm text-[#4d3b00]">
+                当前首页展示平台级能力，不进入任何装修公司的业务数据视角。
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="success">platform_admin</Badge>
+            <Badge variant="outline" className="border-black/10 bg-white text-[#4d3b00]">
+              {employee?.name || "平台管理员"}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {platformCards.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <Card key={item.href} className="border-black/10 bg-white shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <span className="flex size-8 items-center justify-center rounded-md bg-[#ffd449] text-[#141414]">
+                    <Icon className="size-4" />
+                  </span>
+                  {item.title}
+                </CardTitle>
+                <CardDescription className="leading-6">{item.description}</CardDescription>
+              </CardHeader>
+              <CardFooter>
+                <Button asChild variant="outline" className="w-full border-black/10 bg-white text-[#4d3b00] hover:bg-[#141414] hover:text-[#ffd449]">
+                  <Link href={item.href}>
+                    进入
+                    <ArrowRight data-icon="inline-end" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <Card className="border-black/10 bg-white shadow-none">
+          <CardHeader>
+            <CardTitle>平台操作边界</CardTitle>
+            <CardDescription>平台超管默认处理租户、线索、审计和全局配置，不默认代表某个装修公司。</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-[#fffbec]">
+                <TableRow>
+                  <TableHead>场景</TableHead>
+                  <TableHead>当前处理方式</TableHead>
+                  <TableHead>入口</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">租户管理</TableCell>
+                  <TableCell className="text-muted-foreground">平台级列表和详情，不使用当前员工租户过滤。</TableCell>
+                  <TableCell>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href="/platform/tenants">打开</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">平台线索</TableCell>
+                  <TableCell className="text-muted-foreground">先进入平台公海，再明确分配到目标租户。</TableCell>
+                  <TableCell>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href="/platform/leads">打开</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">租户业务数据</TableCell>
+                  <TableCell className="text-muted-foreground">需要后续通过明确的租户选择或代入机制进入，不在首页自动使用默认装修公司。</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">待租户选择</Badge>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="border-black/10 bg-white shadow-none">
+          <CardHeader>
+            <CardTitle>登录承载身份</CardTitle>
+            <CardDescription>该员工档案只用于后台登录和审计归因。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
+              <div className="text-xs text-muted-foreground">员工</div>
+              <div className="mt-1 truncate text-sm font-medium">{employee?.name || "-"}</div>
+            </div>
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
+              <div className="text-xs text-muted-foreground">角色</div>
+              <div className="mt-1 truncate text-sm font-medium">{session.roles.join(" / ") || "-"}</div>
+            </div>
+            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
+              <div className="text-xs text-muted-foreground">用户 ID</div>
+              <div className="mt-1 truncate text-sm font-medium">{session.user_id || "-"}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
   const [session, permissionMetaMap] = await Promise.all([
     getAdminSession(),
     getPermissionMetaMap(),
   ]);
+
+  if (session?.roles.includes("platform_admin")) {
+    return <PlatformAdminDashboard session={session} />;
+  }
+
   const permissions = session?.permissions || [];
   const employee = session?.employee;
   const allScopeCount = permissions.filter((item) => item.scope === "all").length;
