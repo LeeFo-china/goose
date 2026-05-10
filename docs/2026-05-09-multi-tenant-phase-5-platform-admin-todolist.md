@@ -100,6 +100,14 @@
 - [x] 平台超管可停用和启用租户。
 - [x] 平台超管可查看和分配平台线索。
 
+## 部署与生产验收记录
+
+- [x] `feature/multi-tenant` 已加入生产部署分支。
+- [x] 提交 `b2990f8` 已完成生产部署。
+- [x] 生产进程 5H 严格模式验收通过：`27 passed, 0 failed, 0 skipped`。
+- [x] 已确认 `https://admin.goodcms.cn/api/backend` 是 cookie 型 admin BFF 代理，不作为脚本直接 Bearer token 验证入口。
+- [x] 已确认 `https://api.goodcms.cn` 当前缺少 DNS/nginx/证书配置，不作为本轮验收阻塞项。
+
 ## 不做事项
 
 - 不做套餐计费。

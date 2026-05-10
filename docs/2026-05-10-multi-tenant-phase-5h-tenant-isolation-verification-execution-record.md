@@ -155,6 +155,73 @@ bun run verify:tenant:phase5h
 
 线上发布后，建议再用生产 API 地址执行一次同样的严格模式验收。
 
+## 生产验证结果
+
+`feature/multi-tenant` 已加入生产部署分支，并在提交 `b2990f8` 后完成部署。
+
+服务器状态：
+
+- 服务器工作区 commit：`b2990f8`
+- `goose`：online
+- `goose-admin`：online
+- `goose-social-video-worker`：online
+
+通过 SSH tunnel 连接服务器本机 API 执行严格模式：
+
+```bash
+API_BASE_URL=http://127.0.0.1:3001 \
+STRICT_TENANT_VERIFY=1 \
+bun run verify:tenant:phase5h
+```
+
+生产进程验收结果：
+
+- `27 passed`
+- `0 failed`
+- `0 skipped`
+
+## 公开入口排查
+
+### `https://api.goodcms.cn`
+
+当前不能作为 5H 脚本验证入口。
+
+排查结果：
+
+- 公网访问表现为 TLS 握手阶段连接断开。
+- 服务器侧 `getent hosts api.goodcms.cn` 无解析结果。
+- nginx 配置中没有 `api.goodcms.cn` 的 `server_name`。
+- 服务器本机 `http://127.0.0.1:3000/` 正常返回。
+
+结论：
+
+这是公开域名/DNS/nginx 配置问题，不是后端业务进程或租户隔离问题。
+
+后续如需 `api.goodcms.cn` 作为通用 API 域名，需要补齐：
+
+1. DNS：为 `api.goodcms.cn` 增加指向服务器的 A/CNAME 记录。
+2. 证书：为 `api.goodcms.cn` 签发 HTTPS 证书。
+3. nginx：增加 `api.goodcms.cn` 反向代理到 `127.0.0.1:3000` 的 server block。
+
+### `https://admin.goodcms.cn/api/backend`
+
+当前不适合作为 5H 脚本的直接 Bearer token 验证入口。
+
+原因：
+
+- admin 的 `/api/backend/[...path]` 是 Next.js BFF 代理。
+- 该代理从 admin 登录 cookie 中读取后台 token，再转发到后端。
+- 脚本直接请求该代理时没有 admin cookie，因此返回 `TOKEN_MISSING`。
+
+结论：
+
+这是 admin BFF 的预期鉴权行为，不是后端租户隔离失败。
+
+生产 5H 严格验收应优先使用：
+
+- 服务器本机 API：`127.0.0.1:3000`
+- 或后续补齐后的独立 API 域名：`api.goodcms.cn`
+
 ## 不包含
 
 - 不自动创建生产验收数据，seed 脚本需人工显式执行。
