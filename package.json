@@ -34,6 +34,8 @@
     "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
     "seed:tenant:phase3": "bun scripts/seed-phase3-tenant-verification.ts",
     "verify:tenant:phase3": "bun scripts/verify-phase3-tenant-isolation.ts",
+    "seed:tenant:phase5h": "bun scripts/seed-phase5h-tenant-verification.ts",
+    "verify:tenant:phase5h": "bun scripts/verify-phase5h-tenant-isolation.ts",
     "h5:dev": "cd apps/h5 && bun run dev",
     "h5:build": "cd apps/h5 && bun run build",
     "admin:dev": "pnpm --dir apps/admin dev",

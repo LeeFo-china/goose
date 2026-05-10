@@ -1738,10 +1738,13 @@ class CustomerController extends BaseController<
     const { data, error } = await SupabaseDB.getAdminClient().from("customers").select(this.customerSelect).eq(
       "id",
       id,
-    ).eq("tenant_id", authContext.tenantId).single();
+    ).eq("tenant_id", authContext.tenantId).maybeSingle();
 
     if (error) {
       throw Errors.dbError("get customers data by id error", error);
+    }
+    if (!data) {
+      throw Errors.notFound("客户不存在");
     }
 
     const canAccess = await accessPolicyService.canAccessCustomer(
