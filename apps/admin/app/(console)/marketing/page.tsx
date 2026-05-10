@@ -6,9 +6,7 @@ import {
   PauseCircle,
   PlayCircle,
   Users,
-  type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { H5LeadsPanel } from "@/components/marketing/h5-leads-panel";
@@ -21,6 +19,10 @@ import {
 } from "@/components/marketing/marketing-list-actions";
 import { CreateMarketingCampaignButton } from "@/components/marketing/marketing-mutations";
 import { MarketingCampaignsTable } from "@/components/marketing/marketing-table";
+import {
+  MarketingTabsNav,
+  type MarketingTabValue,
+} from "@/components/marketing/marketing-tabs-nav";
 import type {
   H5MarketingLeadRecord,
   H5MarketingPageRecord,
@@ -32,7 +34,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
-import { cn } from "@/lib/utils";
 
 type MarketingPageSearchParams = {
   tab?: string;
@@ -48,7 +49,7 @@ type MarketingPageSearchParams = {
   lead_created_to?: string;
 };
 
-type MarketingTab = "campaigns" | "h5";
+type MarketingTab = MarketingTabValue;
 
 type CampaignListData = {
   list: MarketingCampaignRecord[];
@@ -83,7 +84,11 @@ function normalizePage(value: string | undefined) {
 }
 
 function normalizeTab(value: string | undefined): MarketingTab {
-  return value === "h5" ? "h5" : "campaigns";
+  if (value === "h5" || value === "leads") {
+    return value;
+  }
+
+  return "campaigns";
 }
 
 function dateStartToIso(value: string) {
@@ -109,7 +114,7 @@ function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
     if (params.campaign_type) query.set("campaign_type", params.campaign_type);
     if (params.status) query.set("status", params.status);
     if (params.keyword) query.set("keyword", params.keyword);
-  } else {
+  } else if (tab === "leads") {
     if (params.lead_page) query.set("lead_page", params.lead_page);
     if (params.lead_status) query.set("lead_status", params.lead_status);
     if (params.lead_keyword) query.set("lead_keyword", params.lead_keyword);
@@ -119,66 +124,6 @@ function buildTabHref(tab: MarketingTab, params: MarketingPageSearchParams) {
   }
 
   return `/marketing?${query.toString()}`;
-}
-
-function MarketingTabLink({
-  active,
-  count,
-  description,
-  href,
-  icon: Icon,
-  label,
-}: {
-  active: boolean;
-  count: number;
-  description: string;
-  href: string;
-  icon: LucideIcon;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "group flex min-w-[240px] items-center justify-between gap-4 rounded-lg border p-3 transition-colors",
-        active
-          ? "border-[#141414] bg-[#141414] text-[#ffd449] shadow-[0_12px_30px_rgba(17,17,17,0.14)]"
-          : "border-black/10 bg-white text-[#141414] hover:bg-[#fff5cf]",
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-3">
-        <span
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-md",
-            active ? "bg-[#ffd449] text-[#141414]" : "bg-[#fff5cf] text-[#4d3b00]",
-          )}
-        >
-          <Icon className="size-5" />
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-extrabold">{label}</span>
-          <span
-            className={cn(
-              "mt-0.5 block truncate text-xs",
-              active ? "text-[#fff5cf]" : "text-[#4d3b00]",
-            )}
-          >
-            {description}
-          </span>
-        </span>
-      </span>
-      <span
-        className={cn(
-          "flex min-w-14 shrink-0 flex-col items-center rounded-md px-3 py-2 text-center",
-          active ? "bg-[#ffd449] text-[#141414]" : "bg-[#fffbec] text-[#4d3b00]",
-        )}
-      >
-        <span className="text-lg font-extrabold leading-none tabular-nums">{count}</span>
-        <span className="mt-1 text-[10px] font-semibold leading-none">总数</span>
-      </span>
-    </Link>
-  );
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -356,8 +301,16 @@ export default async function MarketingPage({
   const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
   const shareAssistCount = list.filter((item) => item.campaign_type === "share_assist").length;
   const publishedH5Count = h5Pages.list.filter((item) => item.status === "published").length;
+  const draftH5Count = h5Pages.list.filter((item) => item.status === "draft").length;
+  const offlineH5Count = h5Pages.list.filter((item) => item.status === "offline").length;
   const newLeadCount = h5Leads.list.filter((item) => item.lead_status === "new").length;
   const convertedLeadCount = h5Leads.list.filter((item) => item.lead_status === "converted").length;
+  const invalidLeadCount = h5Leads.list.filter((item) => item.lead_status === "invalid").length;
+  const tabHrefs: Record<MarketingTabValue, string> = {
+    campaigns: buildTabHref("campaigns", params),
+    h5: buildTabHref("h5", params),
+    leads: buildTabHref("leads", params),
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -370,29 +323,20 @@ export default async function MarketingPage({
         </div>
         {activeTab === "campaigns" ? (
           <CreateMarketingCampaignButton projects={projects} />
-        ) : (
+        ) : activeTab === "h5" ? (
           <CreateH5MarketingPageButton />
-        )}
+        ) : null}
       </div>
 
-      <div className="grid gap-3 rounded-lg border border-black/10 bg-[#fffdf6] p-2 md:grid-cols-2">
-        <MarketingTabLink
-          active={activeTab === "campaigns"}
-          count={pagination.total}
-          description="规则、奖励、启停"
-          href={buildTabHref("campaigns", params)}
-          icon={Megaphone}
-          label="活动管理"
-        />
-        <MarketingTabLink
-          active={activeTab === "h5"}
-          count={h5Pages.pagination.total}
-          description="页面、发布、线索"
-          href={buildTabHref("h5", params)}
-          icon={MonitorSmartphone}
-          label="H5 活动页"
-        />
-      </div>
+      <MarketingTabsNav
+        activeTab={activeTab}
+        hrefs={tabHrefs}
+        counts={{
+          campaigns: pagination.total,
+          h5: h5Pages.pagination.total,
+          leads: h5Leads.pagination.total,
+        }}
+      />
 
       {activeTab === "campaigns" ? (
         <>
@@ -481,7 +425,7 @@ export default async function MarketingPage({
             />
           </div>
         </>
-      ) : (
+      ) : activeTab === "h5" ? (
         <>
           <div className="grid gap-3 md:grid-cols-4">
             <Card>
@@ -509,22 +453,22 @@ export default async function MarketingPage({
             <Card>
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                  <Users className="size-5" />
+                  <ClipboardList className="size-5" />
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground">H5 线索</div>
-                  <div className="text-xl font-semibold">{h5Leads.pagination.total}</div>
+                  <div className="text-sm text-muted-foreground">草稿页面</div>
+                  <div className="text-xl font-semibold">{draftH5Count}</div>
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                  <ClipboardList className="size-5" />
+                  <PauseCircle className="size-5" />
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground">新线索 / 已转化</div>
-                  <div className="text-xl font-semibold">{newLeadCount} / {convertedLeadCount}</div>
+                  <div className="text-sm text-muted-foreground">已下线</div>
+                  <div className="text-xl font-semibold">{offlineH5Count}</div>
                 </div>
               </CardContent>
             </Card>
@@ -538,7 +482,6 @@ export default async function MarketingPage({
                   用于小程序 web-view 加载的活动页，发布后访问 https://h5.goodcms.cn/p/页面路径。
                 </p>
               </div>
-              <CreateH5MarketingPageButton />
             </CardHeader>
             <CardContent className="p-0">
               {h5Pages.error ? (
@@ -550,6 +493,55 @@ export default async function MarketingPage({
               )}
             </CardContent>
           </Card>
+        </>
+      ) : (
+        <>
+          <div className="grid gap-3 md:grid-cols-4">
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                  <Users className="size-5" />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">筛选线索</div>
+                  <div className="text-xl font-semibold">{h5Leads.pagination.total}</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <ClipboardList className="size-5" />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">新线索</div>
+                  <div className="text-xl font-semibold">{newLeadCount}</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                  <PlayCircle className="size-5" />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">已转化</div>
+                  <div className="text-xl font-semibold">{convertedLeadCount}</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
+                  <PauseCircle className="size-5" />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">已作废</div>
+                  <div className="text-xl font-semibold">{invalidLeadCount}</div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           <H5LeadsPanel
             initialData={h5Leads}
