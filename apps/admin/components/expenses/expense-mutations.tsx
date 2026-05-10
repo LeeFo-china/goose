@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Eye,
   Loader2,
+  MoreHorizontal,
   RotateCcw,
   SendHorizontal,
   WalletCards,
@@ -31,6 +32,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldError,
@@ -885,35 +893,51 @@ export function ExpenseRowActions({
   }
 
   return (
-    <div className="flex min-w-[236px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : <Eye />}
-        详情
-      </Button>
-      {canApprove ? (
-        <>
-          <Button type="button" variant="outline" size="sm" onClick={approve} disabled={pending}>
-            <CheckCircle2 />
-            通过
+    <div className="relative flex min-w-24 justify-end whitespace-nowrap">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <MoreHorizontal data-icon="inline-start" />
+            )}
+            操作
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={reject} disabled={pending}>
-            <XCircle />
-            驳回
-          </Button>
-        </>
-      ) : null}
-      {canCancel ? (
-        <Button type="button" variant="outline" size="sm" onClick={cancel} disabled={pending}>
-          <RotateCcw />
-          撤回
-        </Button>
-      ) : null}
-      {canPay ? (
-        <Button type="button" variant="outline" size="sm" onClick={openPay} disabled={pending}>
-          <SendHorizontal />
-          打款
-        </Button>
-      ) : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-36">
+          <DropdownMenuGroup>
+            <DropdownMenuItem disabled={pending} onSelect={openDetail}>
+              <Eye />
+              详情
+            </DropdownMenuItem>
+            {canApprove ? (
+              <>
+                <DropdownMenuItem disabled={pending} onSelect={approve}>
+                  <CheckCircle2 />
+                  通过
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={pending} onSelect={reject}>
+                  <XCircle />
+                  驳回
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            {canCancel ? (
+              <DropdownMenuItem disabled={pending} onSelect={cancel}>
+                <RotateCcw />
+                撤回
+              </DropdownMenuItem>
+            ) : null}
+            {canPay ? (
+              <DropdownMenuItem disabled={pending} onSelect={openPay}>
+                <SendHorizontal />
+                打款
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {detail ? <DetailDialog expense={detail} onClose={() => setDetail(null)} /> : null}
       {payExpense && currentEmployeeId ? (
         <PayDialog
