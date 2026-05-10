@@ -10,6 +10,7 @@ import type {
 } from "@/schema/platform-leads";
 import type { AuthContext } from "@/services/authorization";
 import { notificationService } from "@/services/notifications";
+import { platformAuditLogService } from "@/services/platform-audit-logs";
 
 type VisitorLeadContext = {
   authUserId: string | null | undefined;
@@ -85,6 +86,23 @@ class PlatformLeadService {
       leadName: detail?.name ?? null,
       leadPhone: detail?.phone ?? null,
       city: detail?.city ?? null,
+    });
+    await platformAuditLogService.recordBestEffort({
+      action: "platform_lead_assign",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: assignResult!.assigned_tenant_id,
+      resourceType: "platform_lead",
+      resourceId: assignResult!.platform_lead_id,
+      resourceLabel: detail?.name || detail?.phone || assignResult!.platform_lead_id,
+      summary: `分配平台线索「${detail?.name || detail?.phone || assignResult!.platform_lead_id}」`,
+      metadata: {
+        assigned_customer_id: assignResult!.assigned_customer_id,
+        dedupe_result: assignResult!.dedupe_result,
+        assigned_note: input.assigned_note ?? null,
+        lead_phone: detail?.phone ?? null,
+        lead_city: detail?.city ?? null,
+      },
     });
 
     return {

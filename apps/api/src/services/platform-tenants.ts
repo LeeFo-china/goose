@@ -6,6 +6,7 @@ import type {
   UpdatePlatformTenantInput,
 } from "@/schema/platform-tenants";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import { platformAuditLogService } from "@/services/platform-audit-logs";
 
 class PlatformTenantService {
   async list(query: PlatformTenantListQuery, authContext: AuthContext) {
@@ -34,6 +35,41 @@ class PlatformTenantService {
       admin: input.admin,
     });
     const usage = await platformTenantRepository.getUsageStats([record.id]);
+    await platformAuditLogService.recordBestEffort({
+      action: "tenant_create",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: record.id,
+      resourceType: "tenant",
+      resourceId: record.id,
+      resourceLabel: record.name,
+      summary: `创建租户「${record.name}」`,
+      metadata: {
+        slug: record.slug,
+        status: record.status,
+        contact_name: record.contact_name,
+        contact_phone: record.contact_phone,
+        initialization,
+      },
+    });
+
+    if (input.admin && initialization.admin_employee_id) {
+      await platformAuditLogService.recordBestEffort({
+        action: "tenant_admin_create",
+        actorEmployeeId: authContext.employeeId,
+        actorUserId: authContext.authUserId,
+        targetTenantId: record.id,
+        resourceType: "employee",
+        resourceId: initialization.admin_employee_id,
+        resourceLabel: input.admin.name,
+        summary: `为租户「${record.name}」创建管理员「${input.admin.name}」`,
+        metadata: {
+          admin_phone: input.admin.phone,
+          admin_role_id: initialization.admin_role_id,
+          tenant_slug: record.slug,
+        },
+      });
+    }
 
     return {
       ...record,
@@ -107,6 +143,20 @@ class PlatformTenantService {
     }
 
     const usage = await platformTenantRepository.getUsageStats([id]);
+    await platformAuditLogService.recordBestEffort({
+      action: "tenant_update",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: record.id,
+      resourceType: "tenant",
+      resourceId: record.id,
+      resourceLabel: record.name,
+      summary: `更新租户「${record.name}」基础信息`,
+      metadata: {
+        input,
+      },
+    });
+
     return {
       ...record,
       usage: usage.get(id) ?? null,
@@ -126,6 +176,22 @@ class PlatformTenantService {
     }
 
     authorizationService.invalidateTenantContext(id);
+    await platformAuditLogService.recordBestEffort({
+      action: "tenant_suspend",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: record.id,
+      resourceType: "tenant",
+      resourceId: record.id,
+      resourceLabel: record.name,
+      summary: `停用租户「${record.name}」`,
+      metadata: {
+        previous_status: tenant.status,
+        current_status: record.status,
+        slug: record.slug,
+      },
+    });
+
     return {
       ...record,
       suspended: true,
@@ -145,6 +211,22 @@ class PlatformTenantService {
     }
 
     authorizationService.invalidateTenantContext(id);
+    await platformAuditLogService.recordBestEffort({
+      action: "tenant_activate",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: record.id,
+      resourceType: "tenant",
+      resourceId: record.id,
+      resourceLabel: record.name,
+      summary: `启用租户「${record.name}」`,
+      metadata: {
+        previous_status: tenant.status,
+        current_status: record.status,
+        slug: record.slug,
+      },
+    });
+
     return {
       ...record,
       activated: true,

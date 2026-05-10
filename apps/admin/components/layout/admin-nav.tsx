@@ -13,6 +13,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Megaphone,
+  ScrollText,
   Shield,
   SlidersHorizontal,
   TerminalSquare,
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { href: "/cameras", label: "工地监控", icon: Camera },
   { href: "/platform/tenants", label: "平台租户", icon: Building2, platformOnly: true },
   { href: "/platform/leads", label: "平台线索", icon: Inbox, platformOnly: true },
+  { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText, platformOnly: true },
   { href: "/ops", label: "运维脚本", icon: TerminalSquare },
   { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
 ];
