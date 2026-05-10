@@ -381,7 +381,7 @@ export function CreateH5MarketingPageButton({
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => updateOpen(true)}>
         <Plus data-icon="inline-start" />
         新建 H5 页面
       </Button>
@@ -561,7 +561,7 @@ export function CreateH5MarketingPageButton({
             ) : null}
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => updateOpen(false)}>
               取消
             </Button>
             <Button type="button" disabled={pending} onClick={submit}>
