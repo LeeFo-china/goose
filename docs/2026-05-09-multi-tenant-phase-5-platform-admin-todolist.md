@@ -106,7 +106,8 @@
 - [x] 提交 `b2990f8` 已完成生产部署。
 - [x] 生产进程 5H 严格模式验收通过：`27 passed, 0 failed, 0 skipped`。
 - [x] 已确认 `https://admin.goodcms.cn/api/backend` 是 cookie 型 admin BFF 代理，不作为脚本直接 Bearer token 验证入口。
-- [x] 已确认 `https://api.goodcms.cn` 当前缺少 DNS/nginx/证书配置，不作为本轮验收阻塞项。
+- [x] 已完成 `https://api.goodcms.cn` DNS/nginx/证书配置，公网 API 5H 严格模式验收通过：`27 passed, 0 failed, 0 skipped`。
+- [x] 已补齐 `https://h5.goodcms.cn/public/tenants/*` 到后端 `3000` 的同源公开接口代理。
 
 ## 不做事项
 

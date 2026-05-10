@@ -66,11 +66,12 @@ bun run seed:tenant:phase5h --format=shell > /tmp/gooes-phase5h.env
 
 生产部署后，通过服务器本机 API 严格模式验收结果：`27 passed, 0 failed, 0 skipped`。
 
+`api.goodcms.cn` 已完成 DNS、nginx 反代和 HTTPS 证书配置。公网 API 严格模式验收结果：`27 passed, 0 failed, 0 skipped`。
+
 注意：
 
 - `https://admin.goodcms.cn/api/backend` 是 admin BFF 代理，依赖 admin 登录 cookie，不适合作为脚本直接 Bearer token 验证入口。
-- `https://api.goodcms.cn` 当前尚未完成 DNS/nginx/证书配置，不能作为脚本验证入口。
-- 在独立 API 域名补齐前，生产 5H 验收以服务器本机 `127.0.0.1:3000` 或 SSH tunnel 为准。
+- `https://api.goodcms.cn` 是后端公网 API 入口，反代到 `127.0.0.1:3000`，可用于脚本验证和小程序/外部联调。
 
 如果有其它租户详情 ID，建议一起传入：
 

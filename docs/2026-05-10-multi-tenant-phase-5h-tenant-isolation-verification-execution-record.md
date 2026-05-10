@@ -180,28 +180,60 @@ bun run verify:tenant:phase5h
 - `0 failed`
 - `0 skipped`
 
-## 公开入口排查
+## 公开入口排查与修复
 
 ### `https://api.goodcms.cn`
 
-当前不能作为 5H 脚本验证入口。
+已完成公网 API 入口配置，可以作为 5H 脚本验证入口。
 
-排查结果：
+修复前排查结果：
 
 - 公网访问表现为 TLS 握手阶段连接断开。
 - 服务器侧 `getent hosts api.goodcms.cn` 无解析结果。
 - nginx 配置中没有 `api.goodcms.cn` 的 `server_name`。
 - 服务器本机 `http://127.0.0.1:3000/` 正常返回。
 
-结论：
+已完成修复：
 
-这是公开域名/DNS/nginx 配置问题，不是后端业务进程或租户隔离问题。
+- DNS 已解析到服务器。
+- 新增 `api.goodcms.cn` nginx server block。
+- 反向代理到 `127.0.0.1:3000`。
+- 已通过 certbot 签发并绑定 HTTPS 证书。
+- `https://api.goodcms.cn/` 正常返回 `{"hello":"world"}`。
+- 未登录访问 `https://api.goodcms.cn/customers` 正常返回 `TOKEN_MISSING`。
 
-后续如需 `api.goodcms.cn` 作为通用 API 域名，需要补齐：
+公网 API 严格模式验收：
 
-1. DNS：为 `api.goodcms.cn` 增加指向服务器的 A/CNAME 记录。
-2. 证书：为 `api.goodcms.cn` 签发 HTTPS 证书。
-3. nginx：增加 `api.goodcms.cn` 反向代理到 `127.0.0.1:3000` 的 server block。
+```bash
+API_BASE_URL=https://api.goodcms.cn \
+STRICT_TENANT_VERIFY=1 \
+bun run verify:tenant:phase5h
+```
+
+结果：
+
+- `27 passed`
+- `0 failed`
+- `0 skipped`
+
+### `https://h5.goodcms.cn`
+
+H5 页面仍保持静态部署：
+
+- 静态文件目录：`/var/www/h5.goodcms.cn`
+- 静态资源：`https://h5.goodcms.cn/assets/main.js`
+
+同时保留 H5 同源公开接口代理：
+
+- `/public/marketing-pages` -> `127.0.0.1:3000`
+- `/public/marketing-pages/*` -> `127.0.0.1:3000`
+- `/public/tenants/*` -> `127.0.0.1:3000`
+
+原因：
+
+- H5 当前 `config.js` 使用 `apiBaseUrl: ""`，即默认同源请求。
+- 微信小程序 web-view 已配置 `h5.goodcms.cn`，同源公开接口可减少跨域和小程序 request 域名配置成本。
+- 新增 `/public/tenants/*` 是为了支持多租户 H5 地址的公开接口。
 
 ### `https://admin.goodcms.cn/api/backend`
 
@@ -219,8 +251,8 @@ bun run verify:tenant:phase5h
 
 生产 5H 严格验收应优先使用：
 
-- 服务器本机 API：`127.0.0.1:3000`
-- 或后续补齐后的独立 API 域名：`api.goodcms.cn`
+- 独立 API 域名：`https://api.goodcms.cn`
+- 或服务器本机 API：`127.0.0.1:3000`
 
 ## 不包含
 
