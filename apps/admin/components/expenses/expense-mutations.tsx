@@ -905,7 +905,7 @@ export function ExpenseRowActions({
             操作
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-36">
+        <DropdownMenuContent align="start" side="left" sideOffset={8} className="w-36">
           <DropdownMenuGroup>
             <DropdownMenuItem disabled={pending} onSelect={openDetail}>
               <Eye />
