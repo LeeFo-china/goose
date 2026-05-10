@@ -252,6 +252,8 @@ class MarketingPageRepository {
 
     if (tenantId) {
       request = request.eq("tenant_id", tenantId);
+    } else {
+      request = request.is("tenant_id", null);
     }
 
     if (query.scene) {
