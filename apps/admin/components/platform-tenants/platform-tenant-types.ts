@@ -1,0 +1,63 @@
+export type PlatformTenantStatus = "active" | "suspended" | "archived";
+
+export type PlatformTenantUsage = {
+  employee_count: number;
+  customer_count: number;
+  project_count: number;
+  h5_page_count: number;
+  camera_count: number;
+};
+
+export type PlatformTenantInitialization = {
+  template_code: string;
+  template_version: string;
+  departments_count: number;
+  posts_count: number;
+  roles_count: number;
+  admin_employee_id: string | null;
+  admin_role_id: string | null;
+};
+
+export type PlatformTenantRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  status: PlatformTenantStatus | string;
+  contact_name: string | null;
+  contact_phone: string | null;
+  created_at: string;
+  updated_at: string;
+  usage?: PlatformTenantUsage | null;
+  initialization?: PlatformTenantInitialization | null;
+};
+
+export type Pagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export type PlatformTenantListData = {
+  list: PlatformTenantRecord[];
+  pagination: Pagination;
+};
+
+export const platformTenantStatusOptions = [
+  { value: "active", label: "正常" },
+  { value: "suspended", label: "停用" },
+  { value: "archived", label: "归档" },
+] as const;
+
+export function getPlatformTenantStatusMeta(status: string | null | undefined) {
+  if (status === "active") {
+    return { label: "正常", variant: "success" as const };
+  }
+  if (status === "suspended") {
+    return { label: "停用", variant: "secondary" as const };
+  }
+  if (status === "archived") {
+    return { label: "归档", variant: "outline" as const };
+  }
+  return { label: status || "未知", variant: "outline" as const };
+}

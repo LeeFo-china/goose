@@ -24,6 +24,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  platformOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { href: "/marketing", label: "营销活动", icon: Megaphone },
   { href: "/social-video", label: "自媒体脚本", icon: Clapperboard },
   { href: "/cameras", label: "工地监控", icon: Camera },
+  { href: "/platform/tenants", label: "平台租户", icon: Building2, platformOnly: true },
   { href: "/ops", label: "运维脚本", icon: TerminalSquare },
   { href: "/settings", label: "系统配置", icon: SlidersHorizontal },
 ];
@@ -46,12 +48,13 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminNav() {
+export function AdminNav({ roles }: { roles?: string[] }) {
   const pathname = usePathname();
+  const visibleItems = navItems.filter((item) => !item.platformOnly || roles?.includes("platform_admin"));
 
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {navItems.map((item) => {
+      {visibleItems.map((item) => {
         const active = isActivePath(pathname, item.href);
         const Icon = item.icon;
 

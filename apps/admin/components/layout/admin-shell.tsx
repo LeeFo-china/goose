@@ -24,7 +24,7 @@ export function AdminShell({
           </div>
         </div>
         <Separator />
-        <AdminNav />
+        <AdminNav roles={session.roles} />
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-black/10 bg-white px-4 shadow-[0_8px_24px_rgba(17,17,17,0.06)] md:px-6">
