@@ -108,6 +108,8 @@
 - [x] 已确认 `https://admin.goodcms.cn/api/backend` 是 cookie 型 admin BFF 代理，不作为脚本直接 Bearer token 验证入口。
 - [x] 已完成 `https://api.goodcms.cn` DNS/nginx/证书配置，公网 API 5H 严格模式验收通过：`27 passed, 0 failed, 0 skipped`。
 - [x] 已补齐 `https://h5.goodcms.cn/public/tenants/*` 到后端 `3000` 的同源公开接口代理。
+- [x] 阶段 5.9 自动化生产 smoke test 通过。
+- [ ] 阶段 5.9 admin / 小程序真实账号人工回归完成。
 
 ## 不做事项
 
