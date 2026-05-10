@@ -6,7 +6,7 @@ import {
   RunOpsScriptSchema,
 } from "@/schema/ops-scripts";
 import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
 import { opsScriptService } from "@/services/ops-scripts";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -17,10 +17,18 @@ class AdminOpsController extends BaseController {
     super("ops_script_runs");
   }
 
+  private assertOpsPermission(authContext: AuthContext, permissionCode: "system.ops.read" | "system.ops.run") {
+    if (authContext.isPlatformAdmin) {
+      return;
+    }
+
+    accessPolicyService.assertPermission(authContext, permissionCode);
+  }
+
   @Get("/admin/ops/scripts")
   async listScripts(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.ops.read");
+    this.assertOpsPermission(authContext, "system.ops.read");
 
     return ResponseHandler.success(opsScriptService.listScripts());
   }
@@ -28,7 +36,7 @@ class AdminOpsController extends BaseController {
   @Get("/admin/ops/script-runs")
   async listScriptRuns(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.ops.read");
+    this.assertOpsPermission(authContext, "system.ops.read");
 
     const queryResult = OpsScriptRunListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -40,7 +48,7 @@ class AdminOpsController extends BaseController {
   @Get("/admin/ops/system-metrics")
   async getSystemMetrics(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.ops.read");
+    this.assertOpsPermission(authContext, "system.ops.read");
 
     const data = await opsScriptService.getSystemMetrics();
     return ResponseHandler.success(data);
@@ -49,7 +57,7 @@ class AdminOpsController extends BaseController {
   @Post("/admin/ops/scripts/:scriptKey/run")
   async runScript(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
-    accessPolicyService.assertPermission(authContext, "system.ops.run");
+    this.assertOpsPermission(authContext, "system.ops.run");
 
     const paramsResult = OpsScriptKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
