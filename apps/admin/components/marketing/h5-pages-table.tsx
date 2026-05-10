@@ -154,7 +154,7 @@ function createColumns({
       ),
       meta: {
         headerClassName: "text-right",
-        cellClassName: "relative min-w-[500px] whitespace-nowrap text-right",
+        cellClassName: "relative min-w-[96px] whitespace-nowrap text-right",
       },
     },
   ];
@@ -173,7 +173,7 @@ export function H5MarketingPagesTable({
       columns={columns}
       data={pages}
       emptyText="还没有 H5 活动页"
-      minWidth="min-w-[1360px]"
+      minWidth="min-w-[960px]"
     />
   );
 }

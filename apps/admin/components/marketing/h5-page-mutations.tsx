@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, Copy, ExternalLink, Loader2, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { Archive, Copy, ExternalLink, Loader2, MoreHorizontal, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { FormSelect } from "@/components/admin/form-select";
@@ -23,6 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldDescription,
@@ -587,10 +595,12 @@ function H5PageSettingsButton({
   page,
   pages = [],
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+  variant = "button",
 }: {
   page: H5MarketingPageRecord;
   pages?: H5MarketingPageRecord[];
   apiBasePath?: string;
+  variant?: "button" | "menu";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -705,10 +715,17 @@ function H5PageSettingsButton({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Settings data-icon="inline-start" />
-        配置
-      </Button>
+      {variant === "menu" ? (
+        <button type="button" className="flex w-full items-center gap-2" onClick={() => setOpen(true)}>
+          <Settings />
+          配置
+        </button>
+      ) : (
+        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Settings data-icon="inline-start" />
+          配置
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -901,82 +918,87 @@ export function H5PageRowActions({
 
   return (
     <>
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" asChild>
-          <Link href={buildH5PageEditHref(page.id, editBasePath, returnTo)}>
-            <Pencil data-icon="inline-start" />
-            编辑
-          </Link>
-        </Button>
-        <H5PageSettingsButton page={page} pages={pages} apiBasePath={apiBasePath} />
-        <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
-          <Copy data-icon="inline-start" />
-          复制链接
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => window.open(pageUrl, "_blank")}>
-          <ExternalLink data-icon="inline-start" />
-          预览
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => runAction("已复制为新页面", () =>
-            requestH5Page({
-              path: `${apiBasePath}/${page.id}/duplicate`,
-              method: "POST",
-              payload: {},
-            })
-          )}
-        >
-          <RefreshCw data-icon="inline-start" />
-          复制
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => setArchiveOpen(true)}
-        >
-          <Archive data-icon="inline-start" />
-          结束
-        </Button>
-        {page.status === "published" ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => runAction("H5 活动页已下线", () =>
-              requestH5Page({
-                path: `${apiBasePath}/${page.id}/offline`,
-                method: "POST",
-              })
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <MoreHorizontal data-icon="inline-start" />
             )}
-          >
-            <PauseCircle data-icon="inline-start" />
-            停止
+            操作
           </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => runAction("H5 活动页已发布", () =>
-              requestH5Page({
-                path: `${apiBasePath}/${page.id}/publish`,
-                method: "POST",
-              })
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuGroup>
+            <DropdownMenuItem asChild>
+              <Link href={buildH5PageEditHref(page.id, editBasePath, returnTo)}>
+                <Pencil />
+                编辑
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <H5PageSettingsButton page={page} pages={pages} apiBasePath={apiBasePath} variant="menu" />
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={copyUrl}>
+              <Copy />
+              复制链接
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => window.open(pageUrl, "_blank")}>
+              <ExternalLink />
+              预览
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onSelect={() => runAction("已复制为新页面", () =>
+                requestH5Page({
+                  path: `${apiBasePath}/${page.id}/duplicate`,
+                  method: "POST",
+                  payload: {},
+                })
+              )}
+            >
+              <RefreshCw />
+              复制页面
+            </DropdownMenuItem>
+            {page.status === "published" ? (
+              <DropdownMenuItem
+                onSelect={() => runAction("H5 活动页已下线", () =>
+                  requestH5Page({
+                    path: `${apiBasePath}/${page.id}/offline`,
+                    method: "POST",
+                  })
+                )}
+              >
+                <PauseCircle />
+                停止
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                onSelect={() => runAction("H5 活动页已发布", () =>
+                  requestH5Page({
+                    path: `${apiBasePath}/${page.id}/publish`,
+                    method: "POST",
+                  })
+                )}
+              >
+                <PlayCircle />
+                发布
+              </DropdownMenuItem>
             )}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => setArchiveOpen(true)}
           >
-            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <PlayCircle data-icon="inline-start" />}
-            发布
-          </Button>
-        )}
-      </div>
+            <Archive />
+            结束
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <DialogContent>
           <DialogHeader>
