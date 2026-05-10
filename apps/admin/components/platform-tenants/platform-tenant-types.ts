@@ -9,13 +9,43 @@ export type PlatformTenantUsage = {
 };
 
 export type PlatformTenantInitialization = {
+  id?: string;
+  template_id?: string | null;
   template_code: string;
   template_version: string;
+  applied_by_employee_id?: string | null;
+  applied_by?: PlatformTenantEmployeeLite | null;
+  applied_at?: string | null;
+  result?: Record<string, unknown>;
   departments_count: number;
   posts_count: number;
   roles_count: number;
   admin_employee_id: string | null;
   admin_role_id: string | null;
+  admin_employee?: PlatformTenantEmployeeLite | null;
+  admin_role?: PlatformTenantRoleLite | null;
+};
+
+export type PlatformTenantEmployeeLite = {
+  id: string;
+  tenant_id: string | null;
+  name: string | null;
+  phone: string | null;
+  status: string | null;
+  department_id: string | null;
+  post_id: string | null;
+  role: string | null;
+  created_at: string | null;
+};
+
+export type PlatformTenantRoleLite = {
+  id: string;
+  tenant_id: string | null;
+  code: string | null;
+  name: string | null;
+  description: string | null;
+  status: string | null;
+  created_at: string | null;
 };
 
 export type PlatformTenantRecord = {
@@ -29,6 +59,8 @@ export type PlatformTenantRecord = {
   updated_at: string;
   usage?: PlatformTenantUsage | null;
   initialization?: PlatformTenantInitialization | null;
+  admin_employees?: PlatformTenantEmployeeLite[];
+  roles?: PlatformTenantRoleLite[];
 };
 
 export type Pagination = {

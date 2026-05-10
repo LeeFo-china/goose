@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
+import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
 import {
   EditPlatformTenantButton,
@@ -97,6 +100,12 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
     header: "操作",
     cell: ({ row }) => (
       <div className="flex justify-end gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/platform/tenants/${row.original.id}`}>
+            <Eye data-icon="inline-start" />
+            查看
+          </Link>
+        </Button>
         <EditPlatformTenantButton tenant={row.original} />
         <PlatformTenantStatusButton tenant={row.original} />
       </div>

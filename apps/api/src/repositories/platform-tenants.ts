@@ -42,6 +42,40 @@ export type PlatformTenantInitializationResult = {
   admin_role_id: string | null;
 };
 
+export type PlatformTenantTemplateApplication = {
+  id: string;
+  tenant_id: string;
+  template_id: string | null;
+  template_code: string;
+  template_version: string;
+  applied_by_employee_id: string | null;
+  applied_at: string;
+  result: Record<string, unknown>;
+  created_at: string;
+};
+
+export type PlatformTenantEmployeeLite = {
+  id: string;
+  tenant_id: string | null;
+  name: string | null;
+  phone: string | null;
+  status: string | null;
+  department_id: string | null;
+  post_id: string | null;
+  role: string | null;
+  created_at: string | null;
+};
+
+export type PlatformTenantRoleLite = {
+  id: string;
+  tenant_id: string | null;
+  code: string | null;
+  name: string | null;
+  description: string | null;
+  status: string | null;
+  created_at: string | null;
+};
+
 const EMPTY_USAGE: PlatformTenantUsageStats = {
   employee_count: 0,
   customer_count: 0,
@@ -298,6 +332,86 @@ class PlatformTenantRepository {
     );
 
     return result;
+  }
+
+  async getLatestTemplateApplication(tenantId: string) {
+    const { data, error } = await this.from("tenant_template_applications")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("applied_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询租户模板初始化记录失败", error);
+    }
+
+    return (data || null) as PlatformTenantTemplateApplication | null;
+  }
+
+  async findEmployeesByIds(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      return new Map<string, PlatformTenantEmployeeLite>();
+    }
+
+    const { data, error } = await this.from("employees")
+      .select("id,tenant_id,name,phone,status,department_id,post_id,role,created_at")
+      .in("id", uniqueIds);
+
+    if (error) {
+      throw Errors.dbError("查询租户员工信息失败", error);
+    }
+
+    return new Map(
+      ((data || []) as PlatformTenantEmployeeLite[]).map((item) => [item.id, item]),
+    );
+  }
+
+  async findTenantAdminEmployees(tenantId: string) {
+    const { data, error } = await this.from("employees")
+      .select("id,tenant_id,name,phone,status,department_id,post_id,role,created_at")
+      .eq("tenant_id", tenantId)
+      .eq("role", "admin")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询租户管理员失败", error);
+    }
+
+    return (data || []) as PlatformTenantEmployeeLite[];
+  }
+
+  async findRolesByIds(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      return new Map<string, PlatformTenantRoleLite>();
+    }
+
+    const { data, error } = await this.from("roles")
+      .select("id,tenant_id,code,name,description,status,created_at")
+      .in("id", uniqueIds);
+
+    if (error) {
+      throw Errors.dbError("查询租户角色信息失败", error);
+    }
+
+    return new Map(
+      ((data || []) as PlatformTenantRoleLite[]).map((item) => [item.id, item]),
+    );
+  }
+
+  async listTenantRoles(tenantId: string) {
+    const { data, error } = await this.from("roles")
+      .select("id,tenant_id,code,name,description,status,created_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询租户角色列表失败", error);
+    }
+
+    return (data || []) as PlatformTenantRoleLite[];
   }
 
   private async upsertDefaultDepartments(tenantId: string) {

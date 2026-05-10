@@ -45,11 +45,55 @@ class PlatformTenantService {
   async getDetail(id: string, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
     const record = await this.getRequiredTenant(id);
-    const usage = await platformTenantRepository.getUsageStats([id]);
+    const [usage, templateApplication, adminEmployees, roles] = await Promise.all([
+      platformTenantRepository.getUsageStats([id]),
+      platformTenantRepository.getLatestTemplateApplication(id),
+      platformTenantRepository.findTenantAdminEmployees(id),
+      platformTenantRepository.listTenantRoles(id),
+    ]);
+    const result = templateApplication?.result || {};
+    const adminEmployeeId = typeof result.admin_employee_id === "string"
+      ? result.admin_employee_id
+      : adminEmployees[0]?.id ?? null;
+    const adminRoleId = typeof result.admin_role_id === "string"
+      ? result.admin_role_id
+      : null;
+    const employeeIds = [
+      adminEmployeeId,
+      templateApplication?.applied_by_employee_id ?? null,
+    ].filter((value): value is string => Boolean(value));
+    const roleIds = [adminRoleId].filter((value): value is string => Boolean(value));
+    const [employeeMap, roleMap] = await Promise.all([
+      platformTenantRepository.findEmployeesByIds(employeeIds),
+      platformTenantRepository.findRolesByIds(roleIds),
+    ]);
 
     return {
       ...record,
       usage: usage.get(id) ?? null,
+      initialization: templateApplication
+        ? {
+          id: templateApplication.id,
+          template_id: templateApplication.template_id,
+          template_code: templateApplication.template_code,
+          template_version: templateApplication.template_version,
+          applied_by_employee_id: templateApplication.applied_by_employee_id,
+          applied_by: templateApplication.applied_by_employee_id
+            ? employeeMap.get(templateApplication.applied_by_employee_id) ?? null
+            : null,
+          applied_at: templateApplication.applied_at,
+          result,
+          departments_count: this.readNumber(result.departments_count),
+          posts_count: this.readNumber(result.posts_count),
+          roles_count: this.readNumber(result.roles_count),
+          admin_employee_id: adminEmployeeId,
+          admin_role_id: adminRoleId,
+          admin_employee: adminEmployeeId ? employeeMap.get(adminEmployeeId) ?? null : null,
+          admin_role: adminRoleId ? roleMap.get(adminRoleId) ?? null : null,
+        }
+        : null,
+      admin_employees: adminEmployees,
+      roles,
     };
   }
 
@@ -130,6 +174,10 @@ class PlatformTenantService {
         employee_count: employees.length,
       });
     }
+  }
+
+  private readNumber(value: unknown) {
+    return typeof value === "number" && Number.isFinite(value) ? value : 0;
   }
 }
 
