@@ -40,7 +40,19 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function createColumns(pages: H5MarketingPageRecord[]): ColumnDef<H5MarketingPageRecord>[] {
+type H5MarketingPagesTableProps = {
+  pages: H5MarketingPageRecord[];
+  apiBasePath?: string;
+  editBasePath?: string;
+  returnTo?: string;
+};
+
+function createColumns({
+  pages,
+  apiBasePath,
+  editBasePath,
+  returnTo,
+}: H5MarketingPagesTableProps): ColumnDef<H5MarketingPageRecord>[] {
   return [
     {
       accessorKey: "title",
@@ -131,7 +143,15 @@ function createColumns(pages: H5MarketingPageRecord[]): ColumnDef<H5MarketingPag
     {
       id: "actions",
       header: "操作",
-      cell: ({ row }) => <H5PageRowActions page={row.original} pages={pages} />,
+      cell: ({ row }) => (
+        <H5PageRowActions
+          page={row.original}
+          pages={pages}
+          apiBasePath={apiBasePath}
+          editBasePath={editBasePath}
+          returnTo={returnTo}
+        />
+      ),
       meta: {
         headerClassName: "text-right",
         cellClassName: "relative min-w-[500px] whitespace-nowrap text-right",
@@ -142,10 +162,11 @@ function createColumns(pages: H5MarketingPageRecord[]): ColumnDef<H5MarketingPag
 
 export function H5MarketingPagesTable({
   pages,
-}: {
-  pages: H5MarketingPageRecord[];
-}) {
-  const columns = createColumns(pages);
+  apiBasePath,
+  editBasePath,
+  returnTo,
+}: H5MarketingPagesTableProps) {
+  const columns = createColumns({ pages, apiBasePath, editBasePath, returnTo });
 
   return (
     <DataTable

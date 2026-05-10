@@ -36,6 +36,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
       { href: "/dashboard", label: "平台概览", icon: LayoutDashboard },
       { href: "/platform/tenants", label: "平台租户", icon: Building2 },
       { href: "/platform/leads", label: "平台线索", icon: Inbox },
+      { href: "/platform/marketing-pages", label: "H5 活动页", icon: Megaphone },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
     ],
   },
@@ -83,4 +84,3 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     ],
   },
 ];
-

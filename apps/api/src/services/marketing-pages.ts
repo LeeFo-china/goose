@@ -191,9 +191,20 @@ type H5MarketingIdentity = {
 };
 
 class MarketingPageService {
+  private assertPlatformAdmin(authContext: AuthContext) {
+    if (!authContext.isPlatformAdmin) {
+      throw Errors.forbidden();
+    }
+  }
+
   async listPages(authContext: AuthContext, query: MarketingPageListQuery) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     return marketingPageRepository.listPages(query, tenantId);
+  }
+
+  async listPlatformPages(authContext: AuthContext, query: MarketingPageListQuery) {
+    this.assertPlatformAdmin(authContext);
+    return marketingPageRepository.listPages(query, null, true);
   }
 
   async listPublishedEntries(query: PublicMarketingPageListQuery = {}) {
@@ -277,6 +288,23 @@ class MarketingPageService {
     };
   }
 
+  async getPlatformPage(authContext: AuthContext, id: string) {
+    this.assertPlatformAdmin(authContext);
+    const page = await this.getExistingPage(id, null, true);
+    const [draftVersion, publishedVersion] = await Promise.all([
+      marketingPageRepository.findDraftVersion(id, null, true),
+      page.published_version_id
+        ? marketingPageRepository.findVersionById(page.published_version_id, null, true)
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      ...page,
+      draft_version: draftVersion,
+      published_version: publishedVersion,
+    };
+  }
+
   async createPage(authContext: AuthContext, input: CreateMarketingPageInput) {
     await this.assertSlugAvailable(input.slug);
     const tenantId = accessPolicyService.assertTenantId(authContext);
@@ -297,6 +325,40 @@ class MarketingPageService {
     const config = input.config ?? createDefaultConfig(input.title);
     const draftVersion = await marketingPageRepository.createVersion({
       tenantId,
+      pageId: page.id,
+      versionNo: 1,
+      status: "draft",
+      config,
+      employeeId: authContext.employeeId,
+    });
+
+    return {
+      ...page,
+      draft_version: draftVersion,
+      published_version: null,
+    };
+  }
+
+  async createPlatformPage(authContext: AuthContext, input: CreateMarketingPageInput) {
+    this.assertPlatformAdmin(authContext);
+    await this.assertSlugAvailable(input.slug);
+
+    const page = await marketingPageRepository.createPage({
+      tenantId: null,
+      title: input.title,
+      slug: input.slug,
+      description: input.description ?? null,
+      cover_image: input.cover_image ?? null,
+      display_scene: input.display_scene ?? "all",
+      sort_order: input.sort_order ?? 100,
+      start_at: input.start_at ?? null,
+      end_at: input.end_at ?? null,
+      employeeId: authContext.employeeId,
+    });
+
+    const config = input.config ?? createDefaultConfig(input.title);
+    const draftVersion = await marketingPageRepository.createVersion({
+      tenantId: null,
       pageId: page.id,
       versionNo: 1,
       status: "draft",
@@ -332,10 +394,38 @@ class MarketingPageService {
     return this.getPage(authContext, page.id);
   }
 
+  async updatePlatformPage(
+    authContext: AuthContext,
+    id: string,
+    input: UpdateMarketingPageInput,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    const existing = await this.getExistingPage(id, null, true);
+
+    if (input.slug && input.slug !== existing.slug) {
+      await this.assertSlugAvailable(input.slug, id);
+    }
+
+    const page = await marketingPageRepository.updatePage(id, {
+      ...input,
+      tenantId: null,
+      platformScope: true,
+      employeeId: authContext.employeeId,
+    });
+
+    return this.getPlatformPage(authContext, page.id);
+  }
+
   async archivePage(authContext: AuthContext, id: string) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.getExistingPage(id, tenantId);
     return marketingPageRepository.archivePage(id, authContext.employeeId, tenantId);
+  }
+
+  async archivePlatformPage(authContext: AuthContext, id: string) {
+    this.assertPlatformAdmin(authContext);
+    await this.getExistingPage(id, null, true);
+    return marketingPageRepository.archivePage(id, authContext.employeeId, null, true);
   }
 
   async getDraft(authContext: AuthContext, id: string) {
@@ -346,6 +436,23 @@ class MarketingPageService {
       page.tenant_id,
       createDefaultConfig(page.title),
       page.created_by,
+    );
+
+    return {
+      page,
+      draft_version: draftVersion,
+    };
+  }
+
+  async getPlatformDraft(authContext: AuthContext, id: string) {
+    this.assertPlatformAdmin(authContext);
+    const page = await this.getExistingPage(id, null, true);
+    const draftVersion = await this.getOrCreateDraftVersion(
+      page.id,
+      null,
+      createDefaultConfig(page.title),
+      page.created_by,
+      true,
     );
 
     return {
@@ -382,6 +489,41 @@ class MarketingPageService {
 
     return {
       page: await marketingPageRepository.findPageById(page.id, tenantId),
+      draft_version: savedVersion,
+    };
+  }
+
+  async savePlatformDraft(
+    authContext: AuthContext,
+    id: string,
+    config: MarketingPageConfigInput,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    const page = await this.getExistingPage(id, null, true);
+    const draftVersion = await this.getOrCreateDraftVersion(
+      page.id,
+      null,
+      config,
+      authContext.employeeId,
+      true,
+    );
+
+    const savedVersion = await marketingPageRepository.updateDraftVersion({
+      versionId: draftVersion.id,
+      tenantId: null,
+      platformScope: true,
+      config,
+    });
+
+    await marketingPageRepository.updatePage(page.id, {
+      title: config.title || page.title,
+      tenantId: null,
+      platformScope: true,
+      employeeId: authContext.employeeId,
+    });
+
+    return {
+      page: await marketingPageRepository.findPageById(page.id, null, true),
       draft_version: savedVersion,
     };
   }
@@ -424,10 +566,55 @@ class MarketingPageService {
     };
   }
 
+  async publishPlatformPage(authContext: AuthContext, id: string) {
+    this.assertPlatformAdmin(authContext);
+    const page = await this.getExistingPage(id, null, true);
+    const draftVersion = await marketingPageRepository.findDraftVersion(page.id, null, true);
+    if (!draftVersion) {
+      throw Errors.badRequest("请先保存草稿后再发布");
+    }
+
+    const publishedAt = new Date().toISOString();
+    const nextVersionNo = await this.getNextVersionNo(page.id);
+
+    await marketingPageRepository.archivePublishedVersions(page.id, null, true);
+
+    const publishedVersion = await marketingPageRepository.createVersion({
+      tenantId: null,
+      pageId: page.id,
+      versionNo: nextVersionNo,
+      status: "published",
+      config: draftVersion.config,
+      employeeId: authContext.employeeId,
+      publishedAt,
+    });
+
+    const publishedPage = await marketingPageRepository.markPagePublished({
+      pageId: page.id,
+      tenantId: null,
+      platformScope: true,
+      versionId: publishedVersion.id,
+      employeeId: authContext.employeeId,
+      publishedAt,
+    });
+
+    return {
+      ...publishedPage,
+      draft_version: draftVersion,
+      published_version: publishedVersion,
+    };
+  }
+
   async offlinePage(authContext: AuthContext, id: string) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.getExistingPage(id, tenantId);
     return marketingPageRepository.setPageOffline(id, authContext.employeeId, tenantId);
+  }
+
+  async offlinePlatformPage(authContext: AuthContext, id: string) {
+    this.assertPlatformAdmin(authContext);
+    await this.getExistingPage(id, null, true);
+    return marketingPageRepository.setPageOffline(id, authContext.employeeId, null, true);
   }
 
   async duplicatePage(
@@ -481,6 +668,57 @@ class MarketingPageService {
     };
   }
 
+  async duplicatePlatformPage(
+    authContext: AuthContext,
+    id: string,
+    input: DuplicateMarketingPageInput,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    const sourcePage = await this.getExistingPage(id, null, true);
+    const sourceDraft = await marketingPageRepository.findDraftVersion(id, null, true);
+    const sourcePublished = sourcePage.published_version_id
+      ? await marketingPageRepository.findVersionById(sourcePage.published_version_id, null, true)
+      : null;
+    const sourceConfig = sourceDraft?.config ??
+      sourcePublished?.config ??
+      createDefaultConfig(sourcePage.title);
+    const title = input.title ?? buildCopiedTitle(sourcePage.title);
+    const slug = input.slug ?? await this.generateCopySlug(sourcePage.slug);
+
+    await this.assertSlugAvailable(slug);
+
+    const page = await marketingPageRepository.createPage({
+      tenantId: null,
+      title,
+      slug,
+      description: sourcePage.description,
+      cover_image: sourcePage.cover_image,
+      display_scene: sourcePage.display_scene,
+      sort_order: sourcePage.sort_order,
+      start_at: sourcePage.start_at,
+      end_at: sourcePage.end_at,
+      employeeId: authContext.employeeId,
+    });
+
+    const draftVersion = await marketingPageRepository.createVersion({
+      tenantId: null,
+      pageId: page.id,
+      versionNo: 1,
+      status: "draft",
+      config: {
+        ...sourceConfig,
+        title,
+      },
+      employeeId: authContext.employeeId,
+    });
+
+    return {
+      ...page,
+      draft_version: draftVersion,
+      published_version: null,
+    };
+  }
+
   async getPublishedPageBySlug(slug: string, tenantSlug?: string | null) {
     const tenant = tenantSlug
       ? await marketingPageRepository.findTenantBySlug(tenantSlug)
@@ -491,7 +729,7 @@ class MarketingPageService {
 
     const page = tenant
       ? await marketingPageRepository.findPageBySlugAndTenantId(slug, tenant.id)
-      : await marketingPageRepository.findPageBySlug(slug);
+      : await marketingPageRepository.findPageBySlugAndPlatform(slug);
     if (
       !page ||
       page.status !== "published" ||
@@ -504,6 +742,7 @@ class MarketingPageService {
     const version = await marketingPageRepository.findVersionById(
       page.published_version_id,
       page.tenant_id,
+      !page.tenant_id,
     );
     if (!version || version.status !== "published") {
       throw Errors.notFound("H5 活动页不存在或未发布");
@@ -676,8 +915,12 @@ class MarketingPageService {
     });
   }
 
-  private async getExistingPage(id: string, tenantId?: string | null) {
-    const page = await marketingPageRepository.findPageById(id, tenantId);
+  private async getExistingPage(
+    id: string,
+    tenantId?: string | null,
+    platformScope = false,
+  ) {
+    const page = await marketingPageRepository.findPageById(id, tenantId, platformScope);
     if (!page || page.status === "archived") {
       throw Errors.notFound("H5 活动页不存在");
     }
@@ -743,8 +986,9 @@ class MarketingPageService {
     tenantId: string | null,
     config: MarketingPageConfigInput,
     employeeId: string | null,
+    platformScope = false,
   ) {
-    const existing = await marketingPageRepository.findDraftVersion(pageId, tenantId);
+    const existing = await marketingPageRepository.findDraftVersion(pageId, tenantId, platformScope);
     if (existing) {
       return existing;
     }

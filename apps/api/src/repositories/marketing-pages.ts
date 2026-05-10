@@ -199,7 +199,26 @@ class MarketingPageRepository {
     return request.in("id", visibleProjectIds);
   }
 
-  async listPages(query: MarketingPageListQuery, tenantId?: string | null) {
+  private applyTenantScope(
+    request: UntypedTable,
+    input: { tenantId?: string | null; platformScope?: boolean },
+  ) {
+    if (input.tenantId) {
+      return request.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.platformScope) {
+      return request.is("tenant_id", null);
+    }
+
+    return request;
+  }
+
+  async listPages(
+    query: MarketingPageListQuery,
+    tenantId?: string | null,
+    platformScope = false,
+  ) {
     const { page, pageSize, status, keyword } = query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -208,9 +227,7 @@ class MarketingPageRepository {
       .select("*", { count: "exact" })
       .neq("status", "archived");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     if (status) {
       request = request.eq("status", status);
@@ -376,14 +393,12 @@ class MarketingPageRepository {
     return (data || []) as MarketingPageProjectOptionRow[];
   }
 
-  async findPageById(id: string, tenantId?: string | null) {
+  async findPageById(id: string, tenantId?: string | null, platformScope = false) {
     let request = this.pages()
       .select("*")
       .eq("id", id);
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request.maybeSingle();
 
@@ -398,6 +413,20 @@ class MarketingPageRepository {
     const { data, error } = await this.pages()
       .select("*")
       .eq("slug", slug)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 H5 活动页失败", error);
+    }
+
+    return (data || null) as MarketingPageRecord | null;
+  }
+
+  async findPageBySlugAndPlatform(slug: string) {
+    const { data, error } = await this.pages()
+      .select("*")
+      .eq("slug", slug)
+      .is("tenant_id", null)
       .maybeSingle();
 
     if (error) {
@@ -479,9 +508,10 @@ class MarketingPageRepository {
 
   async updatePage(id: string, input: UpdateMarketingPageInput & {
     tenantId?: string | null;
+    platformScope?: boolean;
     employeeId: string | null;
   }) {
-    const { employeeId, tenantId, ...updates } = input;
+    const { employeeId, tenantId, platformScope, ...updates } = input;
     let request = this.pages()
       .update({
         ...updates,
@@ -490,9 +520,7 @@ class MarketingPageRepository {
       .eq("id", id)
       .neq("status", "archived");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request
       .select("*")
@@ -509,7 +537,12 @@ class MarketingPageRepository {
     return data as MarketingPageRecord;
   }
 
-  async archivePage(id: string, employeeId: string | null, tenantId?: string | null) {
+  async archivePage(
+    id: string,
+    employeeId: string | null,
+    tenantId?: string | null,
+    platformScope = false,
+  ) {
     let request = this.pages()
       .update({
         status: "archived",
@@ -518,9 +551,7 @@ class MarketingPageRepository {
       .eq("id", id)
       .neq("status", "archived");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request
       .select("*")
@@ -537,7 +568,12 @@ class MarketingPageRepository {
     return data as MarketingPageRecord;
   }
 
-  async setPageOffline(id: string, employeeId: string | null, tenantId?: string | null) {
+  async setPageOffline(
+    id: string,
+    employeeId: string | null,
+    tenantId?: string | null,
+    platformScope = false,
+  ) {
     let request = this.pages()
       .update({
         status: "offline",
@@ -546,9 +582,7 @@ class MarketingPageRepository {
       .eq("id", id)
       .neq("status", "archived");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request
       .select("*")
@@ -580,15 +614,13 @@ class MarketingPageRepository {
     return Number((data as { version_no?: number } | null)?.version_no || 0);
   }
 
-  async findDraftVersion(pageId: string, tenantId?: string | null) {
+  async findDraftVersion(pageId: string, tenantId?: string | null, platformScope = false) {
     let request = this.versions()
       .select("*")
       .eq("page_id", pageId)
       .eq("status", "draft");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request.maybeSingle();
 
@@ -599,14 +631,12 @@ class MarketingPageRepository {
     return (data || null) as MarketingPageVersionRecord | null;
   }
 
-  async findVersionById(id: string, tenantId?: string | null) {
+  async findVersionById(id: string, tenantId?: string | null, platformScope = false) {
     let request = this.versions()
       .select("*")
       .eq("id", id);
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { data, error } = await request.maybeSingle();
 
@@ -650,6 +680,7 @@ class MarketingPageRepository {
   async updateDraftVersion(input: {
     versionId: string;
     tenantId?: string | null;
+    platformScope?: boolean;
     config: MarketingPageConfigInput;
   }) {
     let request = this.versions()
@@ -660,9 +691,7 @@ class MarketingPageRepository {
       .eq("id", input.versionId)
       .eq("status", "draft");
 
-    if (input.tenantId) {
-      request = request.eq("tenant_id", input.tenantId);
-    }
+    request = this.applyTenantScope(request, input);
 
     const { data, error } = await request
       .select("*")
@@ -679,15 +708,17 @@ class MarketingPageRepository {
     return data as MarketingPageVersionRecord;
   }
 
-  async archivePublishedVersions(pageId: string, tenantId?: string | null) {
+  async archivePublishedVersions(
+    pageId: string,
+    tenantId?: string | null,
+    platformScope = false,
+  ) {
     let request = this.versions()
       .update({ status: "archived" })
       .eq("page_id", pageId)
       .eq("status", "published");
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, { tenantId, platformScope });
 
     const { error } = await request;
 
@@ -699,6 +730,7 @@ class MarketingPageRepository {
   async markPagePublished(input: {
     pageId: string;
     tenantId?: string | null;
+    platformScope?: boolean;
     versionId: string;
     employeeId: string | null;
     publishedAt: string;
@@ -713,9 +745,7 @@ class MarketingPageRepository {
       })
       .eq("id", input.pageId);
 
-    if (input.tenantId) {
-      request = request.eq("tenant_id", input.tenantId);
-    }
+    request = this.applyTenantScope(request, input);
 
     const { data, error } = await request
       .select("*")
@@ -777,13 +807,18 @@ class MarketingPageRepository {
     phone: string;
     since: string;
   }) {
-    const { data, error } = await this.leads()
+    let request = this.leads()
       .select("*")
-      .eq("tenant_id", input.tenantId)
       .eq("page_id", input.pageId)
       .eq("phone", input.phone)
       .neq("lead_status", "invalid")
-      .gte("created_at", input.since)
+      .gte("created_at", input.since);
+    request = this.applyTenantScope(request, {
+      tenantId: input.tenantId,
+      platformScope: input.tenantId === null,
+    });
+
+    const { data, error } = await request
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -830,9 +865,10 @@ class MarketingPageRepository {
       .update(updatePayload)
       .eq("id", id);
 
-    if (input.tenantId) {
-      request = request.eq("tenant_id", input.tenantId);
-    }
+    request = this.applyTenantScope(request, {
+      tenantId: input.tenantId,
+      platformScope: input.tenantId === null,
+    });
 
     const { data, error } = await request
       .select("*")
@@ -854,9 +890,10 @@ class MarketingPageRepository {
       .select("id,name,phone,status,owner_id")
       .eq("user_id", authUserId);
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, {
+      tenantId,
+      platformScope: tenantId === null,
+    });
 
     const { data, error } = await request.maybeSingle();
 
@@ -1094,9 +1131,10 @@ class MarketingPageRepository {
       .select("id,name,phone,status,owner_id")
       .eq("phone", phone);
 
-    if (tenantId) {
-      request = request.eq("tenant_id", tenantId);
-    }
+    request = this.applyTenantScope(request, {
+      tenantId,
+      platformScope: tenantId === null,
+    });
 
     const { data, error } = await request.maybeSingle();
 

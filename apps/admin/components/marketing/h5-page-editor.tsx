@@ -1980,10 +1980,12 @@ export function H5PageEditor({
   page,
   draftVersion,
   returnHref = H5_MARKETING_RETURN_HREF,
+  apiBasePath = "/marketing-pages",
 }: {
   page: H5PageEditorPage;
   draftVersion: H5PageEditorVersion;
   returnHref?: string;
+  apiBasePath?: string;
 }) {
   const router = useRouter();
   const [config, setConfig] = useState(() => normalizeConfig(draftVersion.config, page));
@@ -2101,7 +2103,7 @@ export function H5PageEditor({
     setAiPatch(null);
     try {
       const data = await requestEditor<AiFillBlockResponse>({
-        path: `/marketing-pages/${page.id}/ai-fill-block`,
+        path: `${apiBasePath}/${page.id}/ai-fill-block`,
         method: "POST",
         payload: {
           page: {
@@ -2144,7 +2146,7 @@ export function H5PageEditor({
         const normalizedConfig = normalizeConfig(config, page);
         setConfig(normalizedConfig);
         await requestEditor({
-          path: `/marketing-pages/${page.id}/draft`,
+          path: `${apiBasePath}/${page.id}/draft`,
           method: "PUT",
           payload: { config: normalizedConfig },
         });
@@ -2162,12 +2164,12 @@ export function H5PageEditor({
         const normalizedConfig = normalizeConfig(config, page);
         setConfig(normalizedConfig);
         await requestEditor({
-          path: `/marketing-pages/${page.id}/draft`,
+          path: `${apiBasePath}/${page.id}/draft`,
           method: "PUT",
           payload: { config: normalizedConfig },
         });
         await requestEditor({
-          path: `/marketing-pages/${page.id}/publish`,
+          path: `${apiBasePath}/${page.id}/publish`,
           method: "POST",
         });
         toast.success("H5 活动页已发布");

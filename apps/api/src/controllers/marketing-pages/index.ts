@@ -49,6 +49,201 @@ class MarketingPagesController extends BaseController {
     return authorizationService.getRequiredAuthContext(request.user?.sub);
   }
 
+  @Get("/platform/marketing-pages")
+  async listPlatformPages(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const queryResult = MarketingPageListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await marketingPageService.listPlatformPages(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages")
+  async createPlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const bodyResult = CreateMarketingPageSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.createPlatformPage(
+      authContext,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/marketing-pages/:id")
+  async getPlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await marketingPageService.getPlatformPage(authContext, paramsResult.data.id);
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/platform/marketing-pages/:id")
+  async updatePlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = UpdateMarketingPageSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.updatePlatformPage(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Delete("/platform/marketing-pages/:id")
+  async archivePlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await marketingPageService.archivePlatformPage(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/marketing-pages/:id/draft")
+  async getPlatformDraft(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await marketingPageService.getPlatformDraft(authContext, paramsResult.data.id);
+    return ResponseHandler.success(data);
+  }
+
+  @Put("/platform/marketing-pages/:id/draft")
+  async savePlatformDraft(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = SaveMarketingPageDraftSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.savePlatformDraft(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data.config,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/:id/publish")
+  async publishPlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await marketingPageService.publishPlatformPage(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/:id/ai-fill-block")
+  async fillPlatformBlockWithAi(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = MarketingPageBlockAiFillSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    if (bodyResult.data.page?.id && bodyResult.data.page.id !== paramsResult.data.id) {
+      throw Errors.badRequest("营销页上下文不匹配");
+    }
+
+    await marketingPageService.getPlatformPage(authContext, paramsResult.data.id);
+
+    const data = await fillMarketingPageBlockWithAi({
+      ...bodyResult.data,
+      page: {
+        ...bodyResult.data.page,
+        id: paramsResult.data.id,
+      },
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/:id/ai-fill-settings")
+  async fillPlatformSettingsWithAi(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = MarketingPageSettingsAiFillSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    if (bodyResult.data.page?.id && bodyResult.data.page.id !== paramsResult.data.id) {
+      throw Errors.badRequest("营销页上下文不匹配");
+    }
+
+    await marketingPageService.getPlatformPage(authContext, paramsResult.data.id);
+
+    const data = await fillMarketingPageSettingsWithAi({
+      ...bodyResult.data,
+      page: {
+        ...bodyResult.data.page,
+        id: paramsResult.data.id,
+      },
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/:id/offline")
+  async offlinePlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await marketingPageService.offlinePlatformPage(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/marketing-pages/:id/duplicate")
+  async duplicatePlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = DuplicateMarketingPageSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.duplicatePlatformPage(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/marketing-pages")
   async listPages(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);

@@ -82,11 +82,25 @@ function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
 }
 
-function buildH5PageEditHref(pageId: string) {
+type H5MarketingPageRouteOptions = {
+  apiBasePath?: string;
+  editBasePath?: string;
+  returnTo?: string;
+};
+
+const DEFAULT_H5_PAGE_API_BASE_PATH = "/marketing-pages";
+const DEFAULT_H5_PAGE_EDIT_BASE_PATH = "/marketing/h5-pages";
+const DEFAULT_H5_PAGE_RETURN_TO = "/marketing?tab=h5";
+
+function buildH5PageEditHref(
+  pageId: string,
+  editBasePath = DEFAULT_H5_PAGE_EDIT_BASE_PATH,
+  returnTo = DEFAULT_H5_PAGE_RETURN_TO,
+) {
   const query = new URLSearchParams({
-    returnTo: "/marketing?tab=h5",
+    returnTo,
   });
-  return `/marketing/h5-pages/${pageId}/edit?${query}`;
+  return `${editBasePath}/${pageId}/edit?${query}`;
 }
 
 function buildPageUrl(slug: string) {
@@ -196,7 +210,9 @@ function normalizeSlug(value: string) {
     .slice(0, 80);
 }
 
-export function CreateH5MarketingPageButton() {
+export function CreateH5MarketingPageButton({
+  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+}: H5MarketingPageRouteOptions = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -230,7 +246,7 @@ export function CreateH5MarketingPageButton() {
     startTransition(async () => {
       try {
         await requestH5Page({
-          path: "/marketing-pages",
+          path: apiBasePath,
           method: "POST",
           payload: {
             ...buildPagePayload(result.data),
@@ -373,9 +389,11 @@ export function CreateH5MarketingPageButton() {
 function H5PageSettingsButton({
   page,
   pages = [],
+  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
 }: {
   page: H5MarketingPageRecord;
   pages?: H5MarketingPageRecord[];
+  apiBasePath?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -415,7 +433,7 @@ function H5PageSettingsButton({
     };
     try {
       const data = await requestH5Page<AiFillSettingsResponse>({
-        path: `/marketing-pages/${page.id}/ai-fill-settings`,
+        path: `${apiBasePath}/${page.id}/ai-fill-settings`,
         method: "POST",
         payload: {
           page: {
@@ -475,7 +493,7 @@ function H5PageSettingsButton({
     startTransition(async () => {
       try {
         await requestH5Page({
-          path: `/marketing-pages/${page.id}`,
+          path: `${apiBasePath}/${page.id}`,
           method: "PATCH",
           payload: buildPagePayload(result.data),
         });
@@ -651,9 +669,15 @@ function H5PageSettingsButton({
 export function H5PageRowActions({
   page,
   pages = [],
+  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+  editBasePath = DEFAULT_H5_PAGE_EDIT_BASE_PATH,
+  returnTo = DEFAULT_H5_PAGE_RETURN_TO,
 }: {
   page: H5MarketingPageRecord;
   pages?: H5MarketingPageRecord[];
+  apiBasePath?: string;
+  editBasePath?: string;
+  returnTo?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -682,12 +706,12 @@ export function H5PageRowActions({
     <>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" asChild>
-          <Link href={buildH5PageEditHref(page.id)}>
+          <Link href={buildH5PageEditHref(page.id, editBasePath, returnTo)}>
             <Pencil data-icon="inline-start" />
             编辑
           </Link>
         </Button>
-        <H5PageSettingsButton page={page} pages={pages} />
+        <H5PageSettingsButton page={page} pages={pages} apiBasePath={apiBasePath} />
         <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
           <Copy data-icon="inline-start" />
           复制链接
@@ -703,7 +727,7 @@ export function H5PageRowActions({
           disabled={pending}
           onClick={() => runAction("已复制为新页面", () =>
             requestH5Page({
-              path: `/marketing-pages/${page.id}/duplicate`,
+              path: `${apiBasePath}/${page.id}/duplicate`,
               method: "POST",
               payload: {},
             })
@@ -730,7 +754,7 @@ export function H5PageRowActions({
             disabled={pending}
             onClick={() => runAction("H5 活动页已下线", () =>
               requestH5Page({
-                path: `/marketing-pages/${page.id}/offline`,
+                path: `${apiBasePath}/${page.id}/offline`,
                 method: "POST",
               })
             )}
@@ -746,7 +770,7 @@ export function H5PageRowActions({
             disabled={pending}
             onClick={() => runAction("H5 活动页已发布", () =>
               requestH5Page({
-                path: `/marketing-pages/${page.id}/publish`,
+                path: `${apiBasePath}/${page.id}/publish`,
                 method: "POST",
               })
             )}
@@ -776,7 +800,7 @@ export function H5PageRowActions({
                 setArchiveOpen(false);
                 runAction("H5 活动页已结束", () =>
                   requestH5Page({
-                    path: `/marketing-pages/${page.id}`,
+                    path: `${apiBasePath}/${page.id}`,
                     method: "DELETE",
                   })
                 );
