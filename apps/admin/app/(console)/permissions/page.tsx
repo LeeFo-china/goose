@@ -2,6 +2,7 @@ import {
   CreatePermissionButton,
   type PermissionRecord,
 } from "@/components/permissions/permission-mutations";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { PermissionsClientShell } from "@/components/permissions/permissions-client-shell";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -81,6 +82,9 @@ export default async function PermissionsPage({
 }: {
   searchParams: Promise<PermissionPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const module = params.module?.trim() || "";

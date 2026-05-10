@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { H5LeadsPanel } from "@/components/marketing/h5-leads-panel";
 import { CreateH5MarketingPageButton } from "@/components/marketing/h5-page-mutations";
 import { H5MarketingPagesTable } from "@/components/marketing/h5-pages-table";
@@ -330,6 +331,9 @@ export default async function MarketingPage({
 }: {
   searchParams: Promise<MarketingPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
   const token = await getAdminToken();

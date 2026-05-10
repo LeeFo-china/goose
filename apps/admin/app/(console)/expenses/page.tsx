@@ -1,5 +1,6 @@
 import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -101,6 +102,9 @@ export default async function ExpensesPage({
 }: {
   searchParams: Promise<ExpensePageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const mode = params.mode?.trim() || "";

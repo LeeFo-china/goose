@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
+import { isPlatformOnlySession } from "@/lib/session-mode";
 
 export function AdminShell({
   session,
@@ -11,6 +12,8 @@ export function AdminShell({
   session: AdminSession;
   children: React.ReactNode;
 }) {
+  const isPlatformMode = isPlatformOnlySession(session);
+
   return (
     <div className="goose-workbench-bg min-h-screen">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-black/10 bg-white lg:block">
@@ -24,7 +27,7 @@ export function AdminShell({
           </div>
         </div>
         <Separator />
-        <AdminNav roles={session.roles} />
+        <AdminNav session={session} />
       </aside>
       <div className="lg:pl-64">
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-black/10 bg-white px-4 shadow-[0_8px_24px_rgba(17,17,17,0.06)] md:px-6">
@@ -33,12 +36,23 @@ export function AdminShell({
               {session.employee.name || "未命名员工"}
             </div>
             <div className="truncate text-xs text-[#4d3b00]">
-              {session.employee.department_name || "未分配部门"} · {session.employee.post_name || "未分配岗位"}
+              {isPlatformMode
+                ? "平台超管 · 平台管理模式"
+                : `${session.employee.department_name || "未分配部门"} · ${session.employee.post_name || "未分配岗位"}`}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{session.tenant?.name || "未绑定租户"}</Badge>
-            <Badge variant="success">权限 {session.permissions.length}</Badge>
+            {isPlatformMode ? (
+              <>
+                <Badge variant="outline">平台账号</Badge>
+                <Badge variant="success">platform_admin</Badge>
+              </>
+            ) : (
+              <>
+                <Badge variant="outline">{session.tenant?.name || "未绑定租户"}</Badge>
+                <Badge variant="success">权限 {session.permissions.length}</Badge>
+              </>
+            )}
             <LogoutButton />
           </div>
         </header>

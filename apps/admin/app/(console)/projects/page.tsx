@@ -3,6 +3,7 @@ import {
   CreateProjectButton,
   type ProjectRecord,
 } from "@/components/projects/project-mutations";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectsClientShell } from "@/components/projects/projects-client-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
@@ -91,6 +92,9 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<ProjectPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const ownership = params.ownership?.trim() || "";

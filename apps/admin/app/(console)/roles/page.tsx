@@ -1,4 +1,5 @@
 import { StatusAlert } from "@/components/admin/status-alert";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import {
   CreateRoleButton,
   type RoleRecord,
@@ -56,6 +57,9 @@ async function getRoles() {
 }
 
 export default async function RolesPage() {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const { list, pagination, error } = await getRoles();
 
   return (

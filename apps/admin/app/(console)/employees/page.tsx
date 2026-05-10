@@ -7,6 +7,7 @@ import {
   CreateEmployeeButton,
 } from "@/components/employees/employee-mutations";
 import { EmployeesClientShell } from "@/components/employees/employees-client-shell";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -107,6 +108,9 @@ export default async function EmployeesPage({
 }: {
   searchParams: Promise<EmployeePageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";

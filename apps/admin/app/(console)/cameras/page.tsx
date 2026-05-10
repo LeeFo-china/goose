@@ -10,6 +10,7 @@ import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
 import { TencentDeviceChannelTree } from "@/components/cameras/tencent-device-channel-tree";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import {
   CreateTencentDeviceButton,
   TencentSipAccessButton,
@@ -290,6 +291,9 @@ export default async function CamerasPage({
 }: {
   searchParams: Promise<CamerasPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const token = await getAdminToken();
   const { list: projects, error: projectError } = await getProjects(token);

@@ -1,4 +1,5 @@
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import type {
   DepartmentRecord,
   DepartmentPostRuleConfig,
@@ -188,6 +189,9 @@ export default async function OrganizationPage({
 }: {
   searchParams: Promise<OrganizationSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
   const token = await getAdminToken();

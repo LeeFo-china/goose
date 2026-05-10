@@ -4,6 +4,7 @@ import {
   CreateCustomerButton,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -89,6 +90,9 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<CustomerPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const source = params.source?.trim() || "";
