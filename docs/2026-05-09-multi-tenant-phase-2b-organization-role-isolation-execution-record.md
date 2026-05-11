@@ -64,6 +64,32 @@ supabase/migrations/20260509150000_tenant_scope_organization_roles.sql
 - 项目成员候选岗位规则按当前租户读取。
 - 项目创建员工候选岗位 ID 查询按当前租户过滤。
 
+### 2026-05-11 补充：角色接口租户上下文硬保护
+
+`/roles` 是租户后台的角色管理接口，不再承载平台级角色管理。
+
+已补充 service 层硬校验：
+
+- `GET /roles`
+- `GET /roles/:id`
+- `POST /roles`
+- `PATCH /roles/:id`
+- `PUT /roles/:id/permissions`
+- `POST /employees/:id/roles`
+
+上述接口必须存在明确的 `authContext.tenantId`。如果平台超管处于 `tenant_id = null` 的平台管理模式，即使绕过 admin 前端直接调用接口，也会返回：
+
+```json
+{
+  "code": "TENANT_CONTEXT_REQUIRED",
+  "message": "角色管理必须在租户上下文中操作"
+}
+```
+
+这样可以避免平台超管空租户上下文落到 repository 层，触发无 `tenant_id` 过滤的角色查询或写入。
+
+平台级角色管理如后续需要，应单独设计 `/platform/roles`，不能复用 `/roles`。
+
 ## 兼容说明
 
 规则表仍保留 `department_code`、`post_code`、`role_code` 字段，以兼容当前 admin 组织配置页面和 domain 枚举。区别是这些 code 不再是平台全局唯一语义，而是租户内语义。

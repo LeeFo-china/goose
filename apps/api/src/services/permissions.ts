@@ -16,12 +16,26 @@ import type { AuthContext } from "@/services/authorization";
 import { PermissionCodeConfig } from "@gooes/domain";
 
 class PermissionService {
+  private requireTenantRoleContext(authContext: AuthContext) {
+    if (!authContext.tenantId) {
+      throw Errors.business(
+        403,
+        "角色管理必须在租户上下文中操作",
+        "TENANT_CONTEXT_REQUIRED",
+      );
+    }
+
+    return authContext.tenantId;
+  }
+
   async listRoles(params: RoleListQueryType, authContext: AuthContext) {
-    return permissionRepository.listRoles(params, authContext.tenantId);
+    const tenantId = this.requireTenantRoleContext(authContext);
+    return permissionRepository.listRoles(params, tenantId);
   }
 
   async getRoleById(id: string, authContext: AuthContext) {
-    const data = await permissionRepository.findRoleById(id, authContext.tenantId);
+    const tenantId = this.requireTenantRoleContext(authContext);
+    const data = await permissionRepository.findRoleById(id, tenantId);
     if (!data) {
       throw Errors.badRequest("角色不存在");
     }
@@ -36,14 +50,16 @@ class PermissionService {
   }
 
   async createRole(input: CreateRoleInput, authContext: AuthContext) {
+    const tenantId = this.requireTenantRoleContext(authContext);
     return permissionRepository.createRole({
       ...input,
-      tenant_id: authContext.tenantId ?? null,
+      tenant_id: tenantId,
     });
   }
 
   async updateRole(id: string, input: UpdateRoleInput, authContext: AuthContext) {
-    return permissionRepository.updateRole(id, input, authContext.tenantId);
+    const tenantId = this.requireTenantRoleContext(authContext);
+    return permissionRepository.updateRole(id, input, tenantId);
   }
 
   async listPermissions(params: PermissionListQueryType) {
@@ -105,10 +121,8 @@ class PermissionService {
       throw Errors.forbidden();
     }
 
-    const roles = await permissionRepository.listRolesByIds(
-      input.role_ids,
-      authContext.tenantId,
-    );
+    const tenantId = this.requireTenantRoleContext(authContext);
+    const roles = await permissionRepository.listRolesByIds(input.role_ids, tenantId);
     if (roles.length !== Array.from(new Set(input.role_ids)).length) {
       throw Errors.badRequest("存在无效的角色 ID");
     }
@@ -131,10 +145,8 @@ class PermissionService {
     roleId: string,
     input: RolePermissionAssignInput,
   ) {
-    const role = await permissionRepository.findRoleById(
-      roleId,
-      authContext.tenantId,
-    );
+    const tenantId = this.requireTenantRoleContext(authContext);
+    const role = await permissionRepository.findRoleById(roleId, tenantId);
     if (!role) {
       throw Errors.badRequest("角色不存在");
     }
