@@ -21,8 +21,8 @@ async function getSmsProvider(): Promise<SmsProvider> {
   return "mock";
 }
 
-async function requireSmsConfig(name: string) {
-  const value = await systemSettingsService.getSecretString(name);
+async function requireSmsConfig(name: string, options?: { tenantId?: string | null }) {
+  const value = await systemSettingsService.getSecretString(name, "", options);
 
   if (!value) {
     throw new Error(`缺少短信配置: ${name}`);
@@ -31,20 +31,37 @@ async function requireSmsConfig(name: string) {
   return value;
 }
 
-async function getAliyunTemplateCode(scene: SmsScene) {
+async function getAliyunTemplateCode(
+  scene: SmsScene,
+  tenantId?: string | null,
+) {
+  const options = tenantId ? { tenantId } : undefined;
+
   if (scene === "bind_customer") {
-    const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
-    return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER");
+    const value = await systemSettingsService.getString(
+      "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
+      "",
+      options,
+    );
+    return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER", options);
   }
 
   if (scene === "admin_login") {
-    const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN");
+    const value = await systemSettingsService.getString(
+      "ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN",
+      "",
+      options,
+    );
     return value ||
-      await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+      await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE", options);
   }
 
-  const value = await systemSettingsService.getString("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
-  return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE");
+  const value = await systemSettingsService.getString(
+    "ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE",
+    "",
+    options,
+  );
+  return value || await requireSmsConfig("ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE", options);
 }
 
 async function getAliyunSmsClient() {
@@ -81,7 +98,7 @@ async function sendAliyunSmsCode(
   const options = tenantId ? { tenantId } : undefined;
   const signName = await systemSettingsService.getString("ALIYUN_SMS_SIGN_NAME", "", options) ||
     await requireSmsConfig("ALIYUN_SMS_SIGN_NAME");
-  const templateCode = await getAliyunTemplateCode(scene);
+  const templateCode = await getAliyunTemplateCode(scene, tenantId);
 
   const request = new SendSmsRequest({
     phoneNumbers: phone,

@@ -645,6 +645,11 @@ const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, ite
 
 const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
   "ALIYUN_SMS_SIGN_NAME",
+  "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
+  "ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE",
+  "ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN",
+  "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
+  "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
 ]);
 
 function normalizeStoredValue(value: string | null | undefined) {
@@ -813,11 +818,14 @@ class SystemSettingsService {
   }) {
     const tenantRecord = this.getTenantRecord(input.records, input.key, input.tenantId);
     if (tenantRecord) {
-      const tenantEffective = resolveEffectiveValue(tenantRecord);
-      if (tenantEffective.value) {
+      const tenantStoredValue = normalizeStoredValue(tenantRecord.value_text);
+      if (tenantRecord.status === "active" && tenantStoredValue) {
         return {
           record: tenantRecord,
-          effective: tenantEffective,
+          effective: {
+            value: tenantStoredValue,
+            source: "database" as const,
+          },
           effectiveScope: "tenant" as const,
         };
       }

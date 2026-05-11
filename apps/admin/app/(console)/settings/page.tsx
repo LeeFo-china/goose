@@ -92,7 +92,7 @@ export default async function SettingsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           {isPlatformMode
             ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
-            : "租户端仅开放短信签名配置；短信网关、模板、监控、AI、微信和短视频识别由平台统一维护，避免租户误改基础能力。"}
+            : "租户端仅开放短信签名、短信模板和验收短信有效期配置；未配置时自动继承平台配置。短信网关、密钥、监控、AI、微信和短视频识别由平台统一维护。"}
         </p>
       </div>
 

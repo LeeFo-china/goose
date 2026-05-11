@@ -440,10 +440,11 @@ class ProjectAcceptanceService {
     return randomBytes(32).toString("hex");
   }
 
-  private async getAcceptanceSmsExpireHours() {
+  private async getAcceptanceSmsExpireHours(tenantId?: string | null) {
     const value = await systemSettingsService.getNumber(
       "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
       72,
+      { tenantId },
     );
     if (!Number.isFinite(value) || value <= 0) {
       return 72;
@@ -526,6 +527,8 @@ class ProjectAcceptanceService {
       .toLowerCase();
     const templateCode = await systemSettingsService.getString(
       "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
+      "",
+      { tenantId: input.tenantId },
     );
 
     if (provider === "aliyun" && !templateCode) {
@@ -573,7 +576,7 @@ class ProjectAcceptanceService {
       };
     }
 
-    const expireHours = await this.getAcceptanceSmsExpireHours();
+    const expireHours = await this.getAcceptanceSmsExpireHours(input.row.tenant_id);
     const expireAt = new Date(Date.now() + expireHours * 60 * 60 * 1000);
     const ticket = this.createTicketValue();
     const { link, linkType } = await this.getAcceptanceSmsLink({
