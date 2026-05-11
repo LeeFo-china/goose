@@ -35,6 +35,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 type RelationPerson = {
   id?: string | null;
@@ -626,7 +627,14 @@ function ProjectDetailDialog({
               <TabsTrigger value="acceptances">工序验收</TabsTrigger>
             </TabsList>
           </div>
-          <div className="max-h-[calc(88vh-138px)] overflow-y-auto p-5">
+          <div
+            className={cn(
+              "p-5",
+              activeTab === "acceptances"
+                ? "h-[calc(88vh-138px)] overflow-hidden"
+                : "max-h-[calc(88vh-138px)] overflow-y-auto",
+            )}
+          >
             <TabsContent value="overview" className="flex flex-col gap-5">
               <div className="grid gap-3 md:grid-cols-4">
                 <InfoItem label="客户" value={customerName(project.customer)} />
@@ -672,7 +680,7 @@ function ProjectDetailDialog({
             <TabsContent value="logs">
               <ProjectLogsPanel project={project} active={activeTab === "logs"} />
             </TabsContent>
-            <TabsContent value="acceptances">
+            <TabsContent value="acceptances" className="h-full min-h-0">
               <ProjectAcceptancesPanel
                 project={project}
                 active={activeTab === "acceptances"}

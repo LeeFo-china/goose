@@ -737,18 +737,18 @@ export function ProjectAcceptancesPanel({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-[260px_1fr]">
+        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[260px_1fr]">
           <Skeleton className="h-72" />
           <Skeleton className="h-72" />
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside>
-            <div className="flex flex-col rounded-md border bg-card">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="min-h-0">
+            <div className="flex h-full min-h-0 flex-col rounded-md border bg-card">
               <div className="border-b p-3">
                 <div className="flex items-center justify-between gap-3">
                   <Label>发起工序验收</Label>
@@ -853,8 +853,8 @@ export function ProjectAcceptancesPanel({
           </aside>
 
           {selected ? (
-            <section className="rounded-md border bg-card">
-              <div className="border-b bg-card px-4 py-3">
+            <section className="flex min-h-0 flex-col rounded-md border bg-card">
+              <div className="shrink-0 border-b bg-card px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <h3 className="min-w-0 truncate text-base font-semibold">
@@ -973,7 +973,7 @@ export function ProjectAcceptancesPanel({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 p-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
                 {selected.status === "leader_approved" || selected.latest_customer_notification ? (
                   <CustomerNotificationPanel
                     notification={selected.latest_customer_notification || null}
@@ -1118,7 +1118,7 @@ export function ProjectAcceptancesPanel({
               </div>
             </section>
           ) : (
-            <section className="flex min-h-72 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+            <section className="flex min-h-0 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
               从左侧发起一个工序验收后，在这里填写验收内容。
             </section>
           )}
