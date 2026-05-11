@@ -1310,11 +1310,7 @@ function AcceptanceTimeline({
                     images={referencedImages}
                     showItemTitle
                   />
-                  <ActionImageGallery
-                    title="客户补充上传图片"
-                    emptyText="未上传补充图片"
-                    images={imageItems}
-                  />
+                  <CustomerSupplementImages images={imageItems} />
                 </div>
               ) : null}
 
@@ -1373,7 +1369,7 @@ function RectificationReplyPanel({
             <div className="min-w-0">
               <div className="text-sm font-medium">回复{replyTarget}</div>
               <div className="truncate text-xs text-muted-foreground">
-                像回复评论一样，在这里提交整改说明和整改后照片
+                在这里提交整改说明和整改后照片
               </div>
             </div>
           </div>
@@ -1534,6 +1530,51 @@ function ActionImageGallery({
           {emptyText}
         </div>
       )}
+    </div>
+  );
+}
+
+function CustomerSupplementImages({ images }: { images: AcceptanceImageItem[] }) {
+  if (images.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border bg-muted/20 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <ImageIcon data-icon="inline-start" />
+          <span>客户补充了 {images.length} 张现场图片</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {images.map((image, index) => {
+            const src = getImageItemSrc(image);
+            const href = getImageItemHref(image);
+            return (
+              <a
+                key={image.id || image.path || image.url || index}
+                href={href || undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="block size-12 overflow-hidden rounded-md border bg-card"
+                aria-label={`查看客户补充图片 ${index + 1}`}
+              >
+                {src ? (
+                  <img
+                    src={src}
+                    alt="客户补充图片"
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                    无图
+                  </div>
+                )}
+              </a>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
