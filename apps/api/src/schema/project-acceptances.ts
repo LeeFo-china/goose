@@ -10,6 +10,12 @@ const ImageListSchema = z.array(z.string().trim().min(1, "图片路径不能为�
   .max(9, "最多上传9张图片")
   .default([]);
 
+const ReferencedImageListSchema = z.array(
+  z.string().trim().min(1, "引用图片不能为空"),
+)
+  .max(9, "最多引用9张图片")
+  .default([]);
+
 export const ProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("无效的项目ID").optional(),
   status: z.enum(PROJECT_ACCEPTANCE_STATUS_VALUES, {
@@ -93,6 +99,8 @@ export const CustomerDisputeProjectAcceptanceSchema = z.object({
     "疑问说明不能超过1000个字符",
   ),
   images: ImageListSchema.optional(),
+  referenced_image_ids: ReferencedImageListSchema.optional(),
+  referenced_image_paths: ReferencedImageListSchema.optional(),
   ticket: z.string().trim().min(16, "访问票据无效").optional(),
   project_id: z.uuid("无效的项目 ID").optional(),
 });

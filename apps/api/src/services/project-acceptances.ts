@@ -15,7 +15,7 @@ import type {
   UpdateProjectAcceptanceInput,
   VerifyProjectAcceptanceOpenTicketInput,
 } from "@/schema/project-acceptances";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
@@ -50,6 +50,28 @@ const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "rejected",
 ];
 
+type AcceptanceImageSource = "acceptance_item" | "rectification_item";
+
+type AcceptanceImageItem = {
+  id?: string;
+  acceptance_id?: string;
+  item_id?: string;
+  item_title?: string | null;
+  path: string;
+  url: string;
+  thumb_url: string;
+  source?: AcceptanceImageSource;
+  created_at?: string | null;
+};
+
+type ActionMetadata = {
+  images: string[];
+  image_items: AcceptanceImageItem[];
+  referenced_image_ids: string[];
+  referenced_image_paths: string[];
+  referenced_images: AcceptanceImageItem[];
+};
+
 type AcceptanceDetail = ProjectAcceptanceRow & {
   stage_label: string | null;
   status_label: string;
@@ -57,20 +79,15 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
   has_customer_dispute: boolean;
   items: Array<ProjectAcceptanceItemRow & {
     images: string[];
-    image_items: Array<{
-      path: string;
-      url: string;
-      thumb_url: string;
-    }>;
+    image_items: AcceptanceImageItem[];
     rectification_images: string[];
-    rectification_image_items: Array<{
-      path: string;
-      url: string;
-      thumb_url: string;
-    }>;
+    rectification_image_items: AcceptanceImageItem[];
   }>;
   actions: Array<ProjectAcceptanceActionRow & {
     operator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceCustomerRow | null;
+    images: string[];
+    image_items: AcceptanceImageItem[];
+    referenced_images: AcceptanceImageItem[];
   }>;
   project: ProjectAcceptanceProjectRow | null;
   initiator: ProjectAcceptanceEmployeeRow | null;
@@ -131,7 +148,7 @@ class ProjectAcceptanceService {
 
   private normalizeImageItems(value: unknown) {
     if (!Array.isArray(value)) {
-      return [] as Array<{ path: string; url: string; thumb_url: string }>;
+      return [] as AcceptanceImageItem[];
     }
 
     return value
@@ -146,6 +163,189 @@ class ProjectAcceptanceService {
           thumb_url: url,
         };
       });
+  }
+
+  private buildAcceptanceImageId(input: {
+    acceptanceId: string;
+    itemId: string;
+    source: AcceptanceImageSource;
+    path: string;
+    index: number;
+  }) {
+    const raw = [
+      input.acceptanceId,
+      input.itemId,
+      input.source,
+      input.path,
+      String(input.index),
+    ].join(":");
+
+    return createHash("sha1").update(raw).digest("hex").slice(0, 24);
+  }
+
+  private normalizeAcceptanceImageItems(input: {
+    acceptanceId: string;
+    itemId: string;
+    itemTitle?: string | null;
+    source: AcceptanceImageSource;
+    value: unknown;
+  }) {
+    return this.normalizeImageItems(input.value).map((item, index) => ({
+      ...item,
+      id: this.buildAcceptanceImageId({
+        acceptanceId: input.acceptanceId,
+        itemId: input.itemId,
+        source: input.source,
+        path: item.path || item.url,
+        index,
+      }),
+      acceptance_id: input.acceptanceId,
+      item_id: input.itemId,
+      item_title: input.itemTitle ?? null,
+      source: input.source,
+      created_at: null,
+    }));
+  }
+
+  private normalizeActionMetadata(value: unknown): ActionMetadata {
+    const raw = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+
+    const images = Array.isArray(raw.images)
+      ? raw.images.filter((item): item is string => typeof item === "string")
+      : [];
+    const referencedImageIds = Array.isArray(raw.referenced_image_ids)
+      ? raw.referenced_image_ids.filter((item): item is string =>
+        typeof item === "string"
+      )
+      : [];
+    const referencedImagePaths = Array.isArray(raw.referenced_image_paths)
+      ? raw.referenced_image_paths.filter((item): item is string =>
+        typeof item === "string"
+      )
+      : [];
+    const referencedImages = Array.isArray(raw.referenced_images)
+      ? raw.referenced_images
+        .filter((item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object" && !Array.isArray(item)
+        )
+        .map((item) => this.normalizeImageReferenceSnapshot(item))
+        .filter((item): item is AcceptanceImageItem => Boolean(item))
+      : [];
+
+    return {
+      images,
+      image_items: this.normalizeImageItems(images),
+      referenced_image_ids: referencedImageIds,
+      referenced_image_paths: referencedImagePaths,
+      referenced_images: referencedImages,
+    };
+  }
+
+  private normalizeImageReferenceSnapshot(
+    value: Record<string, unknown>,
+  ): AcceptanceImageItem | null {
+    const path = typeof value.path === "string" ? value.path : "";
+    const url = typeof value.url === "string"
+      ? value.url
+      : path
+      ? this.getImagePublicUrl(path)
+      : "";
+    if (!path && !url) return null;
+
+    const source = value.source === "acceptance_item" ||
+        value.source === "rectification_item"
+      ? value.source
+      : undefined;
+
+    return {
+      id: typeof value.id === "string" ? value.id : undefined,
+      acceptance_id: typeof value.acceptance_id === "string"
+        ? value.acceptance_id
+        : undefined,
+      item_id: typeof value.item_id === "string" ? value.item_id : undefined,
+      item_title: typeof value.item_title === "string"
+        ? value.item_title
+        : null,
+      path,
+      url,
+      thumb_url: typeof value.thumb_url === "string" ? value.thumb_url : url,
+      source,
+      created_at: typeof value.created_at === "string"
+        ? value.created_at
+        : null,
+    };
+  }
+
+  private buildImageReferenceCatalog(
+    acceptanceId: string,
+    items: ProjectAcceptanceItemRow[],
+  ) {
+    const byId = new Map<string, AcceptanceImageItem>();
+    const byPath = new Map<string, AcceptanceImageItem>();
+    const byUrl = new Map<string, AcceptanceImageItem>();
+
+    for (const item of items) {
+      const imageGroups = [
+        this.normalizeAcceptanceImageItems({
+          acceptanceId,
+          itemId: item.id,
+          itemTitle: item.title,
+          source: "acceptance_item",
+          value: item.images,
+        }),
+        this.normalizeAcceptanceImageItems({
+          acceptanceId,
+          itemId: item.id,
+          itemTitle: item.title,
+          source: "rectification_item",
+          value: item.rectification_images,
+        }),
+      ];
+
+      for (const image of imageGroups.flat()) {
+        if (image.id) byId.set(image.id, image);
+        if (image.path) byPath.set(image.path, image);
+        if (image.url) byUrl.set(image.url, image);
+      }
+    }
+
+    return { byId, byPath, byUrl };
+  }
+
+  private resolveReferencedImages(input: {
+    ids?: string[] | null;
+    paths?: string[] | null;
+    catalog: ReturnType<ProjectAcceptanceService["buildImageReferenceCatalog"]>;
+  }) {
+    const ids = Array.from(new Set(input.ids || []));
+    const paths = Array.from(new Set(input.paths || []));
+    const useIds = ids.length > 0;
+    const values = useIds ? ids : paths;
+    if (values.length > 9) {
+      throw Errors.business(400, "最多引用9张验收图片", "ACCEPTANCE_IMAGE_REFERENCE_LIMIT");
+    }
+
+    const resolved: AcceptanceImageItem[] = [];
+    for (const value of values) {
+      const image = useIds
+        ? input.catalog.byId.get(value)
+        : input.catalog.byPath.get(value) || input.catalog.byUrl.get(value);
+
+      if (!image) {
+        throw Errors.business(
+          400,
+          "引用图片不属于当前验收单",
+          "ACCEPTANCE_IMAGE_REFERENCE_INVALID",
+          { reference: value },
+        );
+      }
+
+      resolved.push(image);
+    }
+
+    return resolved;
   }
 
   private getImagePublicUrl(path: string) {
@@ -212,6 +412,25 @@ class ProjectAcceptanceService {
     const customerStatusLabel = row.status === "leader_approved" && hasCustomerDispute
       ? "整改完成，待你确认"
       : this.getStatusLabel(row.status);
+    const detailItems = items.map((item) => ({
+      ...item,
+      images: this.normalizeImageArray(item.images),
+      image_items: this.normalizeAcceptanceImageItems({
+        acceptanceId: row.id,
+        itemId: item.id,
+        itemTitle: item.title,
+        source: "acceptance_item",
+        value: item.images,
+      }),
+      rectification_images: this.normalizeImageArray(item.rectification_images),
+      rectification_image_items: this.normalizeAcceptanceImageItems({
+        acceptanceId: row.id,
+        itemId: item.id,
+        itemTitle: item.title,
+        source: "rectification_item",
+        value: item.rectification_images,
+      }),
+    }));
 
     return {
       ...row,
@@ -219,23 +438,21 @@ class ProjectAcceptanceService {
       status_label: this.getStatusLabel(row.status),
       customer_status_label: customerStatusLabel,
       has_customer_dispute: hasCustomerDispute,
-      items: items.map((item) => ({
-        ...item,
-        images: this.normalizeImageArray(item.images),
-        image_items: this.normalizeImageItems(item.images),
-        rectification_images: this.normalizeImageArray(item.rectification_images),
-        rectification_image_items: this.normalizeImageItems(
-          item.rectification_images,
-        ),
-      })),
-      actions: actions.map((item) => ({
-        ...item,
-        operator: item.operator_type === "employee" && item.operator_id
-          ? employeeMap.get(item.operator_id) || null
-          : item.operator_type === "customer" && item.operator_id
-          ? customerMap.get(item.operator_id) || null
-          : null,
-      })),
+      items: detailItems,
+      actions: actions.map((item) => {
+        const metadata = this.normalizeActionMetadata(item.metadata);
+        return {
+          ...item,
+          operator: item.operator_type === "employee" && item.operator_id
+            ? employeeMap.get(item.operator_id) || null
+            : item.operator_type === "customer" && item.operator_id
+            ? customerMap.get(item.operator_id) || null
+            : null,
+          images: metadata.images,
+          image_items: metadata.image_items,
+          referenced_images: metadata.referenced_images,
+        };
+      }),
       project,
       initiator: employeeMap.get(row.initiator_id) || null,
       reviewer: row.reviewer_id ? employeeMap.get(row.reviewer_id) || null : null,
@@ -414,6 +631,7 @@ class ProjectAcceptanceService {
     operatorType: "employee" | "customer" | "system";
     operatorId: string | null;
     comment?: string | null;
+    metadata?: Record<string, unknown> | null;
   }) {
     await projectAcceptanceRepository.createAction({
       tenant_id: input.row.tenant_id,
@@ -424,6 +642,7 @@ class ProjectAcceptanceService {
       from_status: input.fromStatus,
       to_status: input.toStatus,
       comment: input.comment ?? null,
+      metadata: input.metadata ?? {},
     });
   }
 
@@ -1441,9 +1660,14 @@ class ProjectAcceptanceService {
       action: "customer_dispute",
     });
 
-    const comment = input.images?.length
-      ? `${input.comment}\n图片：${input.images.join(",")}`
-      : input.comment;
+    const items = await projectAcceptanceRepository.listItems(row.id, row.tenant_id);
+    const imageReferenceCatalog = this.buildImageReferenceCatalog(row.id, items);
+    const referencedImages = this.resolveReferencedImages({
+      ids: input.referenced_image_ids,
+      paths: input.referenced_image_paths,
+      catalog: imageReferenceCatalog,
+    });
+    const supplementalImages = input.images || [];
     const nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, {
       status: "rejected",
       rejected_at: new Date().toISOString(),
@@ -1458,7 +1682,18 @@ class ProjectAcceptanceService {
       toStatus: "rejected",
       operatorType: "customer",
       operatorId: customer.id,
-      comment,
+      comment: input.comment,
+      metadata: {
+        images: supplementalImages,
+        image_items: this.normalizeImageItems(supplementalImages),
+        referenced_image_ids: referencedImages
+          .map((item) => item.id)
+          .filter((item): item is string => Boolean(item)),
+        referenced_image_paths: referencedImages.map((item) =>
+          item.path || item.url
+        ),
+        referenced_images: referencedImages,
+      },
     });
 
     return this.buildDetail(nextRow);

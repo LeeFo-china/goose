@@ -96,6 +96,7 @@ export type ProjectAcceptanceActionRow = {
   from_status: ProjectAcceptanceStatus | null;
   to_status: ProjectAcceptanceStatus;
   comment: string | null;
+  metadata: unknown;
   created_at: string;
 };
 
@@ -434,6 +435,7 @@ class ProjectAcceptanceRepository {
     from_status: ProjectAcceptanceStatus | null;
     to_status: ProjectAcceptanceStatus;
     comment?: string | null;
+    metadata?: Record<string, unknown> | null;
   }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_acceptance_actions")
