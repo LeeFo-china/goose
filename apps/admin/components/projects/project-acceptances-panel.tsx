@@ -24,7 +24,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -981,26 +980,6 @@ export function ProjectAcceptancesPanel({
                     onResend={() => notifyCustomer(true)}
                     disabled={actionLoading || selected.status !== "leader_approved"}
                   />
-                ) : null}
-
-                {latestCustomerDispute ? (
-                  <Alert>
-                    <MessageSquareText />
-                    <AlertTitle>业主有疑问，待整改</AlertTitle>
-                    <AlertDescription>
-                      <div className="flex flex-col gap-3">
-                        <div>
-                          {formatDateTime(latestCustomerDispute.created_at)} ·{" "}
-                          {getActionOperator(latestCustomerDispute)}
-                        </div>
-                        {latestCustomerDispute.comment ? (
-                          <div className="text-foreground">
-                            {latestCustomerDispute.comment}
-                          </div>
-                        ) : null}
-                      </div>
-                    </AlertDescription>
-                  </Alert>
                 ) : null}
 
                 <AcceptanceTimeline
