@@ -141,7 +141,7 @@ export default async function SettingsPage() {
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <SettingsTabs groups={groupEntries} />
+      <SettingsTabs groups={groupEntries} isPlatformMode={isPlatformMode} />
     </div>
   );
 }

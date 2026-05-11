@@ -1080,13 +1080,8 @@ class SystemSettingsService {
     const channelMode = normalizeTenantSmsChannelMode(tenantModeRecord?.value_text);
     const visibleKeys = new Set<string>(TENANT_SMS_BASE_SETTING_KEYS);
 
-    if (channelMode === TENANT_SMS_ALIYUN_MODE) {
-      for (const key of TENANT_ALIYUN_SMS_SETTING_KEYS) visibleKeys.add(key);
-    }
-
-    if (channelMode === TENANT_SMS_TENCENT_MODE) {
-      for (const key of TENANT_TENCENT_SMS_SETTING_KEYS) visibleKeys.add(key);
-    }
+    for (const key of TENANT_ALIYUN_SMS_SETTING_KEYS) visibleKeys.add(key);
+    for (const key of TENANT_TENCENT_SMS_SETTING_KEYS) visibleKeys.add(key);
 
     return platformRecords
       .filter((platformRecord) => visibleKeys.has(platformRecord.key))

@@ -26,7 +26,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-async function updateSetting(key: string, value: string | null) {
+export async function updateSetting(key: string, value: string | null) {
   const response = await fetch(`/api/backend/admin/system-settings/${encodeURIComponent(key)}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
