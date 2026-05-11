@@ -709,113 +709,123 @@ export function ProjectAcceptancesPanel({
   };
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       {error ? <StatusAlert>{error}</StatusAlert> : null}
-
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-md border bg-card px-4 py-3">
-        <div className="min-w-60 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <Label>发起工序验收</Label>
-            <span className="text-xs text-muted-foreground">
-              {acceptances.length} 个记录
-            </span>
-          </div>
-          <Select
-            value={stageCode}
-            onValueChange={(value) => setStageCode(value as ProjectLogStageCode)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {selectableStageOptions.map((item) => (
-                <SelectItem
-                  key={item.value}
-                  value={item.value}
-                  disabled={Boolean(item.acceptance)}
-                >
-                  {item.acceptance
-                    ? `${item.label}（${item.acceptance.status_label}）`
-                    : item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {!firstAvailableStage ? (
-            <p className="text-xs text-muted-foreground">
-              当前无可发起的工序验收
-            </p>
-          ) : selectedStageBlocked ? (
-            <p className="text-xs text-muted-foreground">
-              该工序已有进行中的验收单
-            </p>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={loadAcceptances}
-            disabled={loading}
-          >
-            <RefreshCw className={loading ? "animate-spin" : ""} />
-            刷新
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={createAcceptance}
-            disabled={actionLoading || !canCreateAcceptance}
-          >
-            {actionLoading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus />}
-            发起验收
-          </Button>
-        </div>
-      </div>
 
       {loading ? (
         <div className="grid gap-3 md:grid-cols-[260px_1fr]">
           <Skeleton className="h-72" />
           <Skeleton className="h-72" />
         </div>
-      ) : acceptances.length === 0 ? (
-        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
-          暂无工序验收
-        </div>
       ) : (
         <div className="grid min-h-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="min-h-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7.5rem)]">
-            <div className="flex max-h-[360px] min-h-0 flex-col gap-1 overflow-y-auto rounded-md border bg-card p-1 lg:max-h-[calc(100vh-7.5rem)]">
-              {acceptances.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={cn(
-                    "rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                    item.id === selectedId ? "bg-accent" : "bg-transparent",
-                  )}
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 truncate text-sm font-medium">
-                      {item.stage_label || item.title}
-                    </div>
-                    <Badge variant={statusVariant(item.status)}>
-                      {item.status_label}
-                    </Badge>
+          <aside className="min-h-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5rem)]">
+            <div className="flex max-h-[480px] min-h-0 flex-col overflow-hidden rounded-md border bg-card lg:max-h-[calc(100vh-5rem)]">
+              <div className="border-b p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label>发起工序验收</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={loadAcceptances}
+                    disabled={loading}
+                    aria-label="刷新验收列表"
+                  >
+                    <RefreshCw className={loading ? "animate-spin" : ""} />
+                  </Button>
+                </div>
+                <div className="mt-2 space-y-2">
+                  <Select
+                    value={stageCode}
+                    onValueChange={(value) => setStageCode(value as ProjectLogStageCode)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectableStageOptions.map((item) => (
+                        <SelectItem
+                          key={item.value}
+                          value={item.value}
+                          disabled={Boolean(item.acceptance)}
+                        >
+                          {item.acceptance
+                            ? `${item.label}（${item.acceptance.status_label}）`
+                            : item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    onClick={createAcceptance}
+                    disabled={actionLoading || !canCreateAcceptance}
+                  >
+                    {actionLoading
+                      ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                      : <Plus />}
+                    发起验收
+                  </Button>
+                </div>
+                {!firstAvailableStage ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    当前无可发起的工序验收
+                  </p>
+                ) : selectedStageBlocked ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    该工序已有进行中的验收单
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
+                <span>验收项目</span>
+                <span>{acceptances.length} 个记录</span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-1">
+                {acceptances.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                    暂无工序验收
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{formatDateTime(item.updated_at || item.created_at)}</span>
-                    <span>{item.items.length} 项</span>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {acceptances.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={cn(
+                          "rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                          item.id === selectedId ? "bg-accent" : "bg-transparent",
+                        )}
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 truncate text-sm font-medium">
+                            {item.stage_label || item.title}
+                          </div>
+                          <Badge variant={statusVariant(item.status)}>
+                            {item.status_label}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                          <span>{formatDateTime(item.updated_at || item.created_at)}</span>
+                          <span>{item.items.length} 项</span>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                </button>
-              ))}
+                )}
+              </div>
             </div>
           </aside>
 
           {selected ? (
-            <section className="min-h-0 rounded-md border bg-card lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto">
+            <section className="min-h-0 rounded-md border bg-card lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
               <div className="sticky top-0 z-10 border-b bg-card/95 p-4 backdrop-blur">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1087,7 +1097,11 @@ export function ProjectAcceptancesPanel({
                 </div>
               </div>
             </section>
-          ) : null}
+          ) : (
+            <section className="flex min-h-72 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+              从左侧发起一个工序验收后，在这里填写验收内容。
+            </section>
+          )}
         </div>
       )}
 
