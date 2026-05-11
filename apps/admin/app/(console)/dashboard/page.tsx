@@ -133,6 +133,12 @@ const scopeLabel: Record<AdminPermission["scope"], string> = {
   all: "全部",
 };
 
+const roleLabel: Record<string, string> = {
+  platform_admin: "平台超管",
+  system_admin: "系统管理员",
+  tenant_admin: "租户管理员",
+};
+
 type PermissionMeta = {
   code: string;
   name: string | null;
@@ -162,6 +168,10 @@ function employeeStatusLabel(status: string | null | undefined) {
   if (status === "suspended") return "已封禁";
   if (status === "leaved") return "已离职";
   return status || "未知";
+}
+
+function getRoleLabel(role: string) {
+  return roleLabel[role] || role;
 }
 
 async function getPermissionMetaMap() {
@@ -210,69 +220,56 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
   const employee = session.employee;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-5 shadow-[0_12px_30px_rgba(17,17,17,0.08)]">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div className="flex items-start gap-4">
-            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#141414] bg-[#ffd449]">
-              <Building2 className="size-7 text-[#141414]" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-[#4d3b00]">平台管理模式</div>
-              <h1 className="mt-1 text-3xl font-extrabold tracking-normal text-[#141414] [text-shadow:0_3px_0_rgba(243,180,0,0.26)]">
-                平台运营工作台
-              </h1>
-              <p className="mt-2 text-sm text-[#4d3b00]">
-                当前首页展示平台级能力，不进入任何装修公司的业务数据视角。
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="success">platform_admin</Badge>
-            <Badge variant="outline" className="border-black/10 bg-white text-[#4d3b00]">
-              {employee?.name || "平台管理员"}
-            </Badge>
-          </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col justify-between gap-3 border-b pb-5 md:flex-row md:items-end">
+        <div>
+          <div className="text-sm font-medium text-muted-foreground">平台管理模式</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">平台概览</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            处理租户、线索、审计和全局配置，不进入任何装修公司的业务数据视角。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{getRoleLabel("platform_admin")}</Badge>
+          <Badge variant="secondary">{employee?.name || "平台管理员"}</Badge>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-0 overflow-hidden rounded-md border md:grid-cols-2 xl:grid-cols-4">
         {platformCards.map((item) => {
           const Icon = item.icon;
 
           return (
-            <Card key={item.href} className="border-black/10 bg-white shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <span className="flex size-8 items-center justify-center rounded-md bg-[#ffd449] text-[#141414]">
-                    <Icon className="size-4" />
+            <div key={item.href} className="flex min-h-[180px] flex-col justify-between border-b p-4 md:border-r xl:border-b-0">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <span className="flex size-8 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                    <Icon />
                   </span>
                   {item.title}
-                </CardTitle>
-                <CardDescription className="leading-6">{item.description}</CardDescription>
-              </CardHeader>
-              <CardFooter>
-                <Button asChild variant="outline" className="w-full border-black/10 bg-white text-[#4d3b00] hover:bg-[#141414] hover:text-[#ffd449]">
-                  <Link href={item.href}>
-                    进入
-                    <ArrowRight data-icon="inline-end" />
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+              </div>
+              <Button asChild variant="ghost" className="mt-4 justify-start px-0">
+                <Link href={item.href}>
+                  进入
+                  <ArrowRight data-icon="inline-end" />
+                </Link>
+              </Button>
+            </div>
           );
         })}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <Card className="border-black/10 bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>平台操作边界</CardTitle>
-            <CardDescription>平台超管默认处理租户、线索、审计和全局配置，不默认代表某个装修公司。</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+        <section className="rounded-md border">
+          <div className="flex flex-col gap-1 border-b p-4">
+            <h2 className="text-base font-semibold">平台操作边界</h2>
+            <p className="text-sm text-muted-foreground">平台超管默认处理租户、线索、审计和全局配置，不默认代表某个装修公司。</p>
+          </div>
+          <div>
             <Table>
-              <TableHeader className="bg-[#fffbec]">
+              <TableHeader>
                 <TableRow>
                   <TableHead>场景</TableHead>
                   <TableHead>当前处理方式</TableHead>
@@ -307,29 +304,31 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
                 </TableRow>
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card className="border-black/10 bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>登录承载身份</CardTitle>
-            <CardDescription>该员工档案只用于后台登录和审计归因。</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
+        <section className="rounded-md border">
+          <div className="flex flex-col gap-1 border-b p-4">
+            <h2 className="text-base font-semibold">登录承载身份</h2>
+            <p className="text-sm text-muted-foreground">该员工档案只用于后台登录和审计归因。</p>
+          </div>
+          <div className="flex flex-col">
+            <div className="border-b p-4">
               <div className="text-xs text-muted-foreground">员工</div>
               <div className="mt-1 truncate text-sm font-medium">{employee?.name || "-"}</div>
             </div>
-            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
+            <div className="border-b p-4">
               <div className="text-xs text-muted-foreground">角色</div>
-              <div className="mt-1 truncate text-sm font-medium">{session.roles.join(" / ") || "-"}</div>
+              <div className="mt-1 truncate text-sm font-medium">
+                {session.roles.map(getRoleLabel).join(" / ") || "-"}
+              </div>
             </div>
-            <div className="rounded-lg border border-black/10 bg-[#fffdf6] p-3">
-              <div className="text-xs text-muted-foreground">用户 ID</div>
+            <div className="p-4">
+              <div className="text-xs text-muted-foreground">用户编号</div>
               <div className="mt-1 truncate text-sm font-medium">{session.user_id || "-"}</div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     </div>
   );
