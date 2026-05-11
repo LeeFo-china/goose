@@ -23,6 +23,14 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -115,6 +123,15 @@ type EditableState = {
   summary: string;
   items: Record<string, EditableItem>;
 };
+
+type AcceptanceDialogState =
+  | {
+    type: "approve" | "reject" | "delete";
+    acceptanceId: string;
+    title: string;
+    comment: string;
+  }
+  | null;
 
 const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES.map((value) => ({
   value,
@@ -234,6 +251,8 @@ export function ProjectAcceptancesPanel({
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
+  const [actionDialog, setActionDialog] = useState<AcceptanceDialogState>(null);
+  const [actionDialogError, setActionDialogError] = useState("");
   const [editable, setEditable] = useState<EditableState>(() =>
     buildEditable(null),
   );
@@ -312,6 +331,23 @@ export function ProjectAcceptancesPanel({
     }
   };
 
+  const openActionDialog = (type: "approve" | "reject" | "delete") => {
+    if (!selected) return;
+    setActionDialogError("");
+    setActionDialog({
+      type,
+      acceptanceId: selected.id,
+      title: selected.title,
+      comment: type === "approve" ? "复核通过" : "",
+    });
+  };
+
+  const closeActionDialog = () => {
+    if (actionLoading) return;
+    setActionDialog(null);
+    setActionDialogError("");
+  };
+
   const createAcceptance = () =>
     runAction(async () => {
       if (!canCreateAcceptance) {
@@ -354,26 +390,30 @@ export function ProjectAcceptancesPanel({
       }
     });
 
-  const approveAcceptance = () =>
+  const approveAcceptance = (acceptanceId: string, comment: string) =>
     runAction(async () => {
-      if (!selected) return;
-      const comment = window.prompt("复核说明", "复核通过");
-      await requestBackend(`/project-acceptances/${selected.id}/approve`, {
+      await requestBackend(`/project-acceptances/${acceptanceId}/approve`, {
         method: "POST",
-        payload: { comment },
+        payload: { comment: comment.trim() || "复核通过" },
       });
+      setActionDialog(null);
     });
 
-  const rejectAcceptance = () =>
-    runAction(async () => {
-      if (!selected) return;
-      const comment = window.prompt("驳回原因");
-      if (!comment?.trim()) return;
-      await requestBackend(`/project-acceptances/${selected.id}/reject`, {
+  const rejectAcceptance = (acceptanceId: string, comment: string) => {
+    const normalizedComment = comment.trim();
+    if (!normalizedComment) {
+      setActionDialogError("请填写驳回原因");
+      return;
+    }
+
+    return runAction(async () => {
+      await requestBackend(`/project-acceptances/${acceptanceId}/reject`, {
         method: "POST",
-        payload: { comment },
+        payload: { comment: normalizedComment },
       });
+      setActionDialog(null);
     });
+  };
 
   const notifyCustomer = (force = false) =>
     runAction(async () => {
@@ -390,15 +430,12 @@ export function ProjectAcceptancesPanel({
       });
     });
 
-  const deleteDraftAcceptance = () =>
+  const deleteDraftAcceptance = (acceptanceId: string) =>
     runAction(async () => {
-      if (!selected) return;
-      if (!window.confirm(`确认删除「${selected.title}」草稿？删除后可重新发起该工序验收。`)) {
-        return;
-      }
-      await requestBackend(`/project-acceptances/${selected.id}`, {
+      await requestBackend(`/project-acceptances/${acceptanceId}`, {
         method: "DELETE",
       });
+      setActionDialog(null);
     });
 
   const updateEditableItem = (
@@ -571,7 +608,7 @@ export function ProjectAcceptancesPanel({
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={deleteDraftAcceptance}
+                          onClick={() => openActionDialog("delete")}
                           disabled={actionLoading}
                         >
                           <Trash2 />
@@ -601,7 +638,7 @@ export function ProjectAcceptancesPanel({
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={rejectAcceptance}
+                        onClick={() => openActionDialog("reject")}
                         disabled={actionLoading}
                       >
                         <XCircle />
@@ -609,7 +646,7 @@ export function ProjectAcceptancesPanel({
                       </Button>
                       <Button
                         type="button"
-                        onClick={approveAcceptance}
+                        onClick={() => openActionDialog("approve")}
                         disabled={actionLoading}
                       >
                         <CheckCircle2 />
@@ -765,7 +802,107 @@ export function ProjectAcceptancesPanel({
           ) : null}
         </div>
       )}
+
+      <AcceptanceActionDialog
+        state={actionDialog}
+        error={actionDialogError}
+        loading={actionLoading}
+        onOpenChange={(open) => {
+          if (!open) closeActionDialog();
+        }}
+        onCommentChange={(comment) => {
+          setActionDialog((current) => current ? { ...current, comment } : current);
+          setActionDialogError("");
+        }}
+        onConfirm={() => {
+          if (!actionDialog) return;
+          if (actionDialog.type === "approve") {
+            void approveAcceptance(actionDialog.acceptanceId, actionDialog.comment);
+            return;
+          }
+          if (actionDialog.type === "reject") {
+            void rejectAcceptance(actionDialog.acceptanceId, actionDialog.comment);
+            return;
+          }
+          void deleteDraftAcceptance(actionDialog.acceptanceId);
+        }}
+      />
     </div>
+  );
+}
+
+function AcceptanceActionDialog({
+  state,
+  error,
+  loading,
+  onOpenChange,
+  onCommentChange,
+  onConfirm,
+}: {
+  state: AcceptanceDialogState;
+  error: string;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCommentChange: (comment: string) => void;
+  onConfirm: () => void;
+}) {
+  const isOpen = Boolean(state);
+  const isApprove = state?.type === "approve";
+  const isReject = state?.type === "reject";
+  const isDelete = state?.type === "delete";
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {isApprove ? "复核通过" : isReject ? "驳回验收" : "删除草稿"}
+          </DialogTitle>
+          <DialogDescription>
+            {isDelete
+              ? `确认删除「${state?.title || "当前验收单"}」草稿？删除后可重新发起该工序验收。`
+              : `当前验收单：${state?.title || "-"}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isApprove || isReject ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="acceptance-action-comment">
+              {isApprove ? "复核说明" : "驳回原因"}
+            </Label>
+            <Textarea
+              id="acceptance-action-comment"
+              value={state?.comment || ""}
+              placeholder={isApprove ? "填写复核说明" : "请填写驳回原因"}
+              disabled={loading}
+              aria-invalid={Boolean(error)}
+              onChange={(event) => onCommentChange(event.target.value)}
+            />
+            {error ? <div className="text-sm text-destructive">{error}</div> : null}
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => onOpenChange(false)}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant={isDelete || isReject ? "destructive" : "default"}
+            disabled={loading}
+            onClick={onConfirm}
+          >
+            {loading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            {isApprove ? "确认通过" : isReject ? "确认驳回" : "确认删除"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
