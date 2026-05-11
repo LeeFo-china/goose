@@ -618,33 +618,35 @@ export function ProjectAcceptancesPanel({
           暂无工序验收
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <div className="flex flex-col gap-2">
-            {acceptances.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`rounded-md border p-3 text-left transition-colors hover:bg-accent ${
-                  item.id === selectedId ? "border-primary bg-accent" : "bg-card"
-                }`}
-                onClick={() => setSelectedId(item.id)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">{item.stage_label || item.title}</div>
-                  <Badge variant={statusVariant(item.status)}>
-                    {item.status_label}
-                  </Badge>
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  {formatDateTime(item.updated_at || item.created_at)}
-                </div>
-              </button>
-            ))}
-          </div>
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="min-h-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7.5rem)]">
+            <div className="flex max-h-[360px] min-h-0 flex-col gap-2 overflow-y-auto pr-1 lg:max-h-[calc(100vh-7.5rem)]">
+              {acceptances.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`rounded-md border p-3 text-left transition-colors hover:bg-accent ${
+                    item.id === selectedId ? "border-primary bg-accent" : "bg-card"
+                  }`}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium">{item.stage_label || item.title}</div>
+                    <Badge variant={statusVariant(item.status)}>
+                      {item.status_label}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {formatDateTime(item.updated_at || item.created_at)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
 
           {selected ? (
-            <section className="rounded-md border bg-card">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4">
+            <section className="min-h-0 rounded-md border bg-card lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto">
+              <div className="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-3 border-b bg-card/95 p-4 backdrop-blur">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold">{selected.title}</h3>
@@ -732,16 +734,16 @@ export function ProjectAcceptancesPanel({
                 </div>
               </div>
 
-              {selected.status === "leader_approved" || selected.latest_customer_notification ? (
-                <CustomerNotificationPanel
-                  notification={selected.latest_customer_notification || null}
-                  onSend={() => notifyCustomer(false)}
-                  onResend={() => notifyCustomer(true)}
-                  disabled={actionLoading || selected.status !== "leader_approved"}
-                />
-              ) : null}
+              <div className="flex flex-col gap-4 p-4">
+                {selected.status === "leader_approved" || selected.latest_customer_notification ? (
+                  <CustomerNotificationPanel
+                    notification={selected.latest_customer_notification || null}
+                    onSend={() => notifyCustomer(false)}
+                    onResend={() => notifyCustomer(true)}
+                    disabled={actionLoading || selected.status !== "leader_approved"}
+                  />
+                ) : null}
 
-              <div className="space-y-4 p-4">
                 <div className="space-y-2">
                   <Label>整体验收说明</Label>
                   <Textarea
