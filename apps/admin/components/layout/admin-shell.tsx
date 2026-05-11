@@ -14,11 +14,10 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const isPlatformMode = isPlatformOnlySession(session);
-  const sidebarIdentityRows = [
-    ["身份", isPlatformMode ? "平台超管" : session.tenant?.name || "未绑定租户"],
-    ["员工", session.employee.name || "未命名员工"],
-    ["用户编号", session.user_id || "-"],
-  ];
+  const sidebarIdentityTitle = `${isPlatformMode ? "平台超管" : session.tenant?.name || "未绑定租户"} · ${session.employee.name || "未命名员工"}`;
+  const sidebarIdentityMeta = isPlatformMode
+    ? `平台账号 · ${session.user_id || "-"}`
+    : `${session.employee.department_name || "未分配部门"} · ${session.user_id || "-"}`;
 
   return (
     <div className="goose-workbench-bg min-h-screen">
@@ -36,24 +35,12 @@ export function AdminShell({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <AdminNav session={session} />
         </div>
-        <div className="border-t border-black/10 p-3">
-          <div className="rounded-md border border-black/10 bg-white p-3">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-[#4d3b00]/70">登录身份</div>
-              <Badge variant={isPlatformMode ? "success" : "outline"}>
-                {isPlatformMode ? "平台账号" : "租户账号"}
-              </Badge>
-            </div>
-            <div className="flex flex-col gap-2">
-              {sidebarIdentityRows.map(([label, value]) => (
-                <div key={label} className="min-w-0">
-                  <div className="text-[11px] text-muted-foreground">{label}</div>
-                  <div className="mt-0.5 truncate text-xs font-medium text-foreground">
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="border-t border-black/10 px-5 py-3">
+          <div className="truncate text-xs font-semibold text-[#141414]">
+            {sidebarIdentityTitle}
+          </div>
+          <div className="mt-1 truncate text-[11px] text-[#4d3b00]/70">
+            {sidebarIdentityMeta}
           </div>
         </div>
       </aside>
