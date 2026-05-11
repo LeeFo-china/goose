@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
-import { Post } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { SupabaseDB } from "@/utils/supabase";
 import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
@@ -38,6 +38,15 @@ const UploadImageFieldSchema = z.object({
     message: "无效的上传场景",
   }).optional(),
   project_id: z.string().uuid("无效的项目ID").optional(),
+});
+
+const UploadPublicUrlQuerySchema = z.object({
+  path: z.string()
+    .trim()
+    .min(1, "缺少图片路径")
+    .max(500, "图片路径过长")
+    .refine((value) => !value.includes(".."), "图片路径不合法")
+    .refine((value) => !value.startsWith("/"), "图片路径不合法"),
 });
 
 type UploadImageItem = {
@@ -119,6 +128,25 @@ class UploadController extends BaseController {
     return ResponseHandler.success({
       list: uploadedFiles,
     });
+  }
+
+  @Get("/uploads/public-url")
+  async getPublicUrl(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) {
+      throw Errors.unauthorized("未登录或登录状态无效");
+    }
+
+    const queryResult = UploadPublicUrlQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const { data } = SupabaseDB.getAdminClient()
+      .storage
+      .from(PROJECT_LOGS_BUCKET)
+      .getPublicUrl(queryResult.data.path);
+
+    return reply.redirect(data.publicUrl);
   }
 
   private async uploadSingleFile(

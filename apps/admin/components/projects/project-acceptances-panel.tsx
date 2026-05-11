@@ -58,8 +58,16 @@ type AcceptanceItem = {
   result: AcceptanceItemResult | null;
   remark: string | null;
   images: string[];
+  image_items?: AcceptanceImageItem[];
   rectification_remark: string | null;
   rectification_images: string[];
+  rectification_image_items?: AcceptanceImageItem[];
+};
+
+type AcceptanceImageItem = {
+  path?: string | null;
+  url?: string | null;
+  thumb_url?: string | null;
 };
 
 type ProjectAcceptance = {
@@ -115,8 +123,10 @@ type EditableItem = {
   result: AcceptanceItemResult | null;
   remark: string;
   images: string[];
+  imagePreviews: string[];
   rectification_remark: string;
   rectification_images: string[];
+  rectificationImagePreviews: string[];
 };
 
 type EditableState = {
@@ -183,20 +193,47 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function buildEditable(acceptance: ProjectAcceptance | null): EditableState {
+  const normalizeStoredImages = (
+    values: string[],
+    imageItems: AcceptanceImageItem[] | undefined,
+  ) => {
+    if (imageItems?.length) {
+      return {
+        paths: imageItems.map((item) => item.path || item.url || "").filter(Boolean),
+        previews: imageItems.map((item) => item.thumb_url || item.url || item.path || "").filter(Boolean),
+      };
+    }
+
+    return {
+      paths: values || [],
+      previews: values || [],
+    };
+  };
+
   return {
     summary: acceptance?.summary || "",
     items: Object.fromEntries(
-      (acceptance?.items || []).map((item) => [
-        item.id,
-        {
+      (acceptance?.items || []).map((item) => {
+        const images = normalizeStoredImages(item.images || [], item.image_items);
+        const rectificationImages = normalizeStoredImages(
+          item.rectification_images || [],
+          item.rectification_image_items,
+        );
+
+        return [
+          item.id,
+          {
           id: item.id,
           result: item.result,
           remark: item.remark || "",
-          images: item.images || [],
+          images: images.paths,
+          imagePreviews: images.previews,
           rectification_remark: item.rectification_remark || "",
-          rectification_images: item.rectification_images || [],
+          rectification_images: rectificationImages.paths,
+          rectificationImagePreviews: rectificationImages.previews,
         },
-      ]),
+        ];
+      }),
     ),
   };
 }
@@ -233,6 +270,14 @@ function notificationLabel(notification: AcceptanceNotification | null | undefin
   if (new Date(notification.expire_at).getTime() <= Date.now()) return "已过期";
   if (notification.send_status === "sent") return "已发送";
   return "待发送";
+}
+
+function getPreviewImageSrc(image: string) {
+  if (!image) return "";
+  if (/^https?:\/\//i.test(image) || image.startsWith("data:") || image.startsWith("blob:")) {
+    return image;
+  }
+  return `/api/backend/uploads/public-url?path=${encodeURIComponent(image)}`;
 }
 
 export function ProjectAcceptancesPanel({
@@ -478,12 +523,29 @@ export function ProjectAcceptancesPanel({
       if (!response.ok || payload.success === false) {
         throw new Error(getPayloadMessage(payload, "图片上传失败"));
       }
-      const paths = ((payload.data?.list || []) as Array<{ path?: string }>)
-        .map((item) => item.path)
-        .filter((item): item is string => Boolean(item));
+      const uploaded = ((payload.data?.list || []) as Array<{
+        path?: string;
+        url?: string;
+      }>)
+        .map((item) => ({
+          path: item.path,
+          preview: item.url || item.path,
+        }))
+        .filter((item): item is { path: string; preview: string } =>
+          Boolean(item.path && item.preview)
+        );
       const currentItem = editable.items[itemId];
       updateEditableItem(itemId, {
-        [target]: [...(currentItem?.[target] || []), ...paths],
+        [target]: [
+          ...(currentItem?.[target] || []),
+          ...uploaded.map((item) => item.path),
+        ],
+        [target === "images" ? "imagePreviews" : "rectificationImagePreviews"]: [
+          ...(target === "images"
+            ? currentItem?.imagePreviews || []
+            : currentItem?.rectificationImagePreviews || []),
+          ...uploaded.map((item) => item.preview),
+        ],
       } as Partial<EditableItem>);
     } catch (err) {
       setError(err instanceof Error ? err.message : "图片上传失败");
@@ -772,23 +834,26 @@ export function ProjectAcceptancesPanel({
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <ImageUploadBlock
                             label="现场照片"
-                            images={draft?.images || []}
+                            images={draft?.imagePreviews || draft?.images || []}
                             disabled={!editableNow}
                             uploading={uploadingItemId === `${item.id}:images`}
                             onUpload={(event) => uploadImages(item.id, event, "images")}
                             onRemove={(index) => updateEditableItem(item.id, {
                               images: (draft?.images || []).filter((_, i) => i !== index),
+                              imagePreviews: (draft?.imagePreviews || []).filter((_, i) => i !== index),
                             })}
                           />
                           <ImageUploadBlock
                             label="整改后照片"
-                            images={draft?.rectification_images || []}
+                            images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
                             disabled={!editableNow}
                             uploading={uploadingItemId === `${item.id}:rectification_images`}
                             onUpload={(event) =>
                               uploadImages(item.id, event, "rectification_images")}
                             onRemove={(index) => updateEditableItem(item.id, {
                               rectification_images: (draft?.rectification_images || [])
+                                .filter((_, i) => i !== index),
+                              rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
                                 .filter((_, i) => i !== index),
                             })}
                           />
@@ -1024,7 +1089,7 @@ function ImageUploadBlock({
               key={`${image}-${index}`}
               className="group relative size-16 overflow-hidden rounded-md border bg-muted"
             >
-              <img src={image} alt={label} className="size-full object-cover" />
+              <img src={getPreviewImageSrc(image)} alt={label} className="size-full object-cover" />
               {!disabled ? (
                 <Button
                   type="button"
