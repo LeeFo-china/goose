@@ -426,6 +426,16 @@ function getRectificationItemsForAction(
   return [] as AcceptanceItem[];
 }
 
+function hasRectificationContent(items: AcceptanceItem[]) {
+  return items.some((item) =>
+    Boolean(
+      item.rectification_remark?.trim() ||
+        item.rectification_images?.length ||
+        item.rectification_image_items?.length,
+    )
+  );
+}
+
 export function ProjectAcceptancesPanel({
   project,
   active = true,
@@ -1270,12 +1280,15 @@ function AcceptanceTimeline({
               path: image,
               url: image,
               thumb_url: image,
-            }));
+          }));
           const showRectificationReply = acceptance.status === "rejected" &&
             action.id === latestRejectActionId;
-          const rectificationItems = showRectificationReply
+          const rectificationItems = action.id === latestRejectActionId
             ? getRectificationItemsForAction(acceptance, action)
             : [];
+          const showRectificationSummary = !showRectificationReply &&
+            isRejectAction(action) &&
+            hasRectificationContent(rectificationItems);
 
           return (
             <div
@@ -1330,6 +1343,9 @@ function AcceptanceTimeline({
                   onUpdateItem={onUpdateItem}
                   onUploadImages={onUploadImages}
                 />
+              ) : null}
+              {showRectificationSummary ? (
+                <RectificationSummaryPanel items={rectificationItems} />
               ) : null}
             </div>
           );
@@ -1434,6 +1450,59 @@ function RectificationReplyPanel({
               提交整改
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RectificationSummaryPanel({ items }: { items: AcceptanceItem[] }) {
+  const contentItems = items.filter((item) =>
+    item.rectification_remark?.trim() ||
+    item.rectification_images?.length ||
+    item.rectification_image_items?.length
+  );
+
+  if (contentItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 border-l-2 border-success pl-3">
+      <div className="rounded-md border bg-background p-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <CornerDownRight data-icon="inline-start" />
+          员工整改回复
+        </div>
+        <div className="mt-3 flex flex-col gap-3">
+          {contentItems.map((item) => {
+            const imageItems = item.rectification_image_items?.length
+              ? item.rectification_image_items
+              : (item.rectification_images || []).map((image) => ({
+                path: image,
+                url: image,
+                thumb_url: image,
+                source: "rectification_item",
+                item_title: item.title,
+              }));
+
+            return (
+              <div key={item.id} className="flex flex-col gap-2">
+                {item.rectification_remark?.trim() ? (
+                  <div className="rounded-md bg-muted/40 p-3 text-sm">
+                    {item.rectification_remark}
+                  </div>
+                ) : null}
+                {imageItems.length ? (
+                  <ActionImageGallery
+                    title="整改图片"
+                    emptyText="暂无整改图片"
+                    images={imageItems}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
