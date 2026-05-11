@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
+  BarChart3,
   BriefcaseBusiness,
   Building2,
   Camera,
@@ -9,6 +10,7 @@ import {
   ClipboardList,
   Inbox,
   KeyRound,
+  Megaphone,
   ScrollText,
   Shield,
   Users,
@@ -102,27 +104,57 @@ const workflowRows = [
 const platformCards = [
   {
     title: "平台租户",
-    description: "查看装修公司租户、初始化状态、管理员和业务用量。",
+    description: "租户、管理员、初始化状态",
     href: "/platform/tenants",
     icon: Building2,
   },
   {
     title: "平台线索",
-    description: "处理平台公海线索，分配到目标装修公司并保留分配审计。",
+    description: "公海线索、租户分配、审计",
     href: "/platform/leads",
     icon: Inbox,
   },
   {
+    title: "H5 活动页",
+    description: "活动配置、页面发布、线索承接",
+    href: "/platform/marketing-pages",
+    icon: Megaphone,
+  },
+  {
+    title: "用量统计",
+    description: "平台、租户、AI 和短视频用量",
+    href: "/platform/usage",
+    icon: BarChart3,
+  },
+  {
     title: "平台审计",
-    description: "追踪租户创建、停用、线索分配等平台级操作记录。",
+    description: "租户、线索、配置操作记录",
     href: "/platform/audit-logs",
     icon: ScrollText,
   },
   {
     title: "系统配置",
-    description: "维护短信、AI、物联网视频等平台级和租户级配置。",
+    description: "短信、AI、视频和平台参数",
     href: "/settings",
     icon: Shield,
+  },
+];
+
+const platformBoundaryRows = [
+  {
+    name: "租户管理",
+    mode: "平台级列表和详情，不使用当前员工租户过滤。",
+    href: "/platform/tenants",
+  },
+  {
+    name: "平台线索",
+    mode: "先进入平台公海，再明确分配到目标租户。",
+    href: "/platform/leads",
+  },
+  {
+    name: "用量统计",
+    mode: "从平台维度查看租户消耗、AI 计费和短视频分钟数。",
+    href: "/platform/usage",
   },
 ];
 
@@ -220,13 +252,12 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
   const employee = session.employee;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col justify-between gap-3 border-b pb-5 md:flex-row md:items-end">
-        <div>
-          <div className="text-sm font-medium text-muted-foreground">平台管理模式</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">平台概览</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            处理租户、线索、审计和全局配置，不进入任何装修公司的业务数据视角。
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col justify-between gap-3 border-b pb-4 md:flex-row md:items-center">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-normal text-foreground">平台概览</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            平台级处理租户、线索、用量、审计和全局配置。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -235,98 +266,96 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
         </div>
       </div>
 
-      <div className="grid gap-0 overflow-hidden rounded-md border md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid overflow-hidden rounded-md border md:grid-cols-2 xl:grid-cols-3">
         {platformCards.map((item) => {
           const Icon = item.icon;
 
           return (
-            <div key={item.href} className="flex min-h-[180px] flex-col justify-between border-b p-4 md:border-r xl:border-b-0">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <span className="flex size-8 items-center justify-center rounded-md border bg-background text-muted-foreground">
-                    <Icon />
+            <Button
+              key={item.href}
+              asChild
+              variant="ghost"
+              className="h-auto justify-between rounded-none border-b p-4 text-left md:border-r xl:[&:nth-child(3n)]:border-r-0 xl:[&:nth-last-child(-n+3)]:border-b-0"
+            >
+              <Link href={item.href} className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                  <Icon />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-foreground">{item.title}</span>
+                  <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                    {item.description}
                   </span>
-                  {item.title}
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
-              </div>
-              <Button asChild variant="ghost" className="mt-4 justify-start px-0">
-                <Link href={item.href}>
-                  进入
-                  <ArrowRight data-icon="inline-end" />
-                </Link>
-              </Button>
-            </div>
+                </span>
+                <ArrowRight data-icon="inline-end" className="shrink-0 text-muted-foreground" />
+              </Link>
+            </Button>
           );
         })}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
         <section className="rounded-md border">
-          <div className="flex flex-col gap-1 border-b p-4">
-            <h2 className="text-base font-semibold">平台操作边界</h2>
-            <p className="text-sm text-muted-foreground">平台超管默认处理租户、线索、审计和全局配置，不默认代表某个装修公司。</p>
+          <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <div>
+              <h2 className="text-base font-semibold">平台操作边界</h2>
+              <p className="mt-1 text-sm text-muted-foreground">默认不代入任何装修公司业务视角。</p>
+            </div>
+            <Badge variant="outline">平台级</Badge>
           </div>
-          <div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>场景</TableHead>
-                  <TableHead>当前处理方式</TableHead>
-                  <TableHead>入口</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="font-medium">租户管理</TableCell>
-                  <TableCell className="text-muted-foreground">平台级列表和详情，不使用当前员工租户过滤。</TableCell>
-                  <TableCell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>场景</TableHead>
+                <TableHead>当前处理方式</TableHead>
+                <TableHead className="text-right">入口</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {platformBoundaryRows.map((row) => (
+                <TableRow key={row.name}>
+                  <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{row.mode}</TableCell>
+                  <TableCell className="text-right">
                     <Button asChild variant="ghost" size="sm">
-                      <Link href="/platform/tenants">打开</Link>
+                      <Link href={row.href}>
+                        打开
+                        <ArrowRight data-icon="inline-end" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">平台线索</TableCell>
-                  <TableCell className="text-muted-foreground">先进入平台公海，再明确分配到目标租户。</TableCell>
-                  <TableCell>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href="/platform/leads">打开</Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">租户业务数据</TableCell>
-                  <TableCell className="text-muted-foreground">需要后续通过明确的租户选择或代入机制进入，不在首页自动使用默认装修公司。</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">待租户选择</Badge>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
+              ))}
+              <TableRow>
+                <TableCell className="font-medium">租户业务数据</TableCell>
+                <TableCell className="text-muted-foreground">需要明确选择租户后进入，不在首页自动使用默认装修公司。</TableCell>
+                <TableCell className="text-right">
+                  <Badge variant="secondary">待租户选择</Badge>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </section>
 
         <section className="rounded-md border">
-          <div className="flex flex-col gap-1 border-b p-4">
-            <h2 className="text-base font-semibold">登录承载身份</h2>
-            <p className="text-sm text-muted-foreground">该员工档案只用于后台登录和审计归因。</p>
+          <div className="border-b px-4 py-3">
+            <h2 className="text-base font-semibold">登录身份</h2>
+            <p className="mt-1 text-sm text-muted-foreground">用于后台登录和审计归因。</p>
           </div>
           <div className="flex flex-col">
-            <div className="border-b p-4">
-              <div className="text-xs text-muted-foreground">员工</div>
-              <div className="mt-1 truncate text-sm font-medium">{employee?.name || "-"}</div>
-            </div>
-            <div className="border-b p-4">
-              <div className="text-xs text-muted-foreground">角色</div>
-              <div className="mt-1 truncate text-sm font-medium">
-                {session.roles.map(getRoleLabel).join(" / ") || "-"}
+            {[
+              ["员工", employee?.name || "-"],
+              ["角色", session.roles.map(getRoleLabel).join(" / ") || "-"],
+              ["用户编号", session.user_id || "-"],
+            ].map(([label, value], index) => (
+              <div
+                key={label}
+                className={index < 2 ? "border-b px-4 py-3" : "px-4 py-3"}
+              >
+                <div className="text-xs text-muted-foreground">{label}</div>
+                <div className="mt-1 truncate text-sm font-medium">{value}</div>
               </div>
-            </div>
-            <div className="p-4">
-              <div className="text-xs text-muted-foreground">用户编号</div>
-              <div className="mt-1 truncate text-sm font-medium">{session.user_id || "-"}</div>
-            </div>
+            ))}
           </div>
         </section>
       </div>

@@ -47,7 +47,7 @@ export function AdminShell({
             {isPlatformMode ? (
               <>
                 <Badge variant="outline">平台账号</Badge>
-                <Badge variant="success">platform_admin</Badge>
+                <Badge variant="success">平台超管</Badge>
               </>
             ) : (
               <>
