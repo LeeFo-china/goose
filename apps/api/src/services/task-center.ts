@@ -479,6 +479,11 @@ class TaskCenterService {
     return {
       total: list.length,
       high_priority: list.filter((item) => item.priority === "high").length,
+      scope: {
+        type: "current_employee",
+        tenant_id: authContext.tenantId,
+        employee_id: authContext.employeeId,
+      },
     };
   }
 }

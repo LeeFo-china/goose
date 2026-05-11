@@ -10,6 +10,8 @@ export type ApiResponse<T> = {
 export interface HomeDashboardSummary {
     month_revenue: number; // 本月营收
     active_projects: number; // 活跃项目数
+    total_customers: number; // 客户总数
+    pending_tasks: number; // 待处理数（兼容字段）
 }
 
 /**
@@ -46,4 +48,10 @@ export interface HomeStatsResponse {
     stats: HomeDashboardSummary;
     latest_customers: LatestCustomer[];
     latest_projects: LatestProject[];
+    scope?: {
+        type: "tenant";
+        tenant_id: string;
+        tenant_name: string | null;
+    };
+    generated_at?: string;
 }

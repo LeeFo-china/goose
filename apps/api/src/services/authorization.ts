@@ -336,7 +336,7 @@ class AuthorizationService {
       !authContext.isPlatformAdmin &&
       !authContext.tenantId
     ) {
-      throw Errors.business(403, "员工未绑定租户", ErrorCodes.FORBIDDEN);
+      throw Errors.business(403, "员工未绑定装修公司", "EMPLOYEE_TENANT_MISSING");
     }
 
     if (
