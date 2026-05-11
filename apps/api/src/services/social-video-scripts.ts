@@ -402,6 +402,9 @@ function buildUserPrompt(input: {
 
 async function callAi(input: {
   tenantId?: string | null;
+  source?: string | null;
+  authUserId?: string | null;
+  transcriptionId?: string;
   targetPlatform: SocialVideoScriptTargetPlatform;
   style: SocialVideoScriptStyle;
   durationSeconds: number;
@@ -419,9 +422,18 @@ async function callAi(input: {
     result = await aiGateway.chat({
       sceneCode: "social_video_script",
       tenantId: input.tenantId,
+      source: input.source,
       temperature: 0.45,
       messages,
       responseFormat: "json_object",
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        transcription_id: input.transcriptionId ?? null,
+        target_platform: input.targetPlatform,
+        style: input.style,
+        duration_seconds: input.durationSeconds,
+        goal: input.goal,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI 生成拍摄脚本失败";
@@ -431,8 +443,17 @@ async function callAi(input: {
     result = await aiGateway.chat({
       sceneCode: "social_video_script",
       tenantId: input.tenantId,
+      source: input.source,
       temperature: 0.45,
       messages,
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        transcription_id: input.transcriptionId ?? null,
+        target_platform: input.targetPlatform,
+        style: input.style,
+        duration_seconds: input.durationSeconds,
+        goal: input.goal,
+      },
     });
   }
 
@@ -450,6 +471,7 @@ async function callAi(input: {
     result = await aiGateway.chat({
       sceneCode: "social_video_script",
       tenantId: input.tenantId,
+      source: input.source,
       temperature: 0.25,
       messages: [
         ...messages,
@@ -463,6 +485,15 @@ async function callAi(input: {
         },
       ],
       responseFormat: "json_object",
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        transcription_id: input.transcriptionId ?? null,
+        target_platform: input.targetPlatform,
+        style: input.style,
+        duration_seconds: input.durationSeconds,
+        goal: input.goal,
+        repair_attempt: true,
+      },
     });
     payload = parseJsonObject(result.content);
 
@@ -654,6 +685,9 @@ class SocialVideoScriptService {
     );
     const aiResult = await callAi({
       tenantId: transcription.tenant_id,
+      source: "customer_miniprogram",
+      authUserId: authContext.authUserId,
+      transcriptionId,
       targetPlatform: normalizedInput.targetPlatform,
       style: normalizedInput.style,
       durationSeconds: normalizedInput.durationSeconds,
