@@ -9,18 +9,18 @@ import { z } from "zod";
 import { signToken } from "@/utils/jwt";
 import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
-import { authorizationService } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
-import type {
-  AuthTargetRole,
-  SmsScene,
-  SmsVerificationStatus,
+import {
+  isEmployeeOperableStatus,
+  type AuthTargetRole,
+  type SmsScene,
+  type SmsVerificationStatus,
 } from "@gooes/domain";
-import { isEmployeeOperableStatus } from "@gooes/domain";
 
 type WeChatSessionResponse = {
   openid?: string;
@@ -103,6 +103,64 @@ export class WeChatController extends BaseController {
     super("wechat");
   }
 
+  private serializeTenantFromAuthContext(authContext: AuthContext) {
+    if (!authContext.tenantId) {
+      return null;
+    }
+
+    return {
+      id: authContext.tenantId,
+      name: authContext.tenantName,
+      slug: authContext.tenantSlug,
+      status: authContext.tenantStatus,
+    };
+  }
+
+  private serializeEmployeeFromAuthContext(authContext: AuthContext) {
+    if (!authContext.employeeId) {
+      return null;
+    }
+
+    return {
+      id: authContext.employeeId,
+      name: authContext.employeeName,
+      status: authContext.employeeStatus,
+      department_id: authContext.departmentId,
+      department_name: authContext.departmentName,
+      post_id: authContext.postId,
+      post_name: authContext.postName,
+      avatar: authContext.avatar,
+    };
+  }
+
+  private async buildEmployeeLoginContext(
+    authUserId: string,
+    openid?: string | null,
+    roles: string[] = ["employee"],
+  ) {
+    const authContext = await authorizationService.getAuthContextByAuthUserId(authUserId);
+    if (!authContext.employeeId) {
+      return null;
+    }
+
+    authorizationService.assertTenantAvailable(authContext);
+
+    return {
+      authContext,
+      token: signToken({
+        sub: authUserId,
+        openid: openid ?? undefined,
+        login_channel: "wechat",
+        roles,
+        tenant_id: authContext.tenantId,
+        tenant_slug: authContext.tenantSlug,
+        employee_id: authContext.employeeId,
+      }),
+      tenant: this.serializeTenantFromAuthContext(authContext),
+      employee: this.serializeEmployeeFromAuthContext(authContext),
+    };
+  }
+
   @Post("/auth")
   async getOpenId(request: FastifyRequest, reply: FastifyReply) {
     const bodyResult = WeChatAuthBodySchema.safeParse(request.body);
@@ -131,9 +189,13 @@ export class WeChatController extends BaseController {
     const roles = await this.getUserRoles(userId);
 
     request.log.info({ requestId: request.id, userId, roles }, "[auth] sign jwt start");
-    const token = signToken({
+    const employeeLogin = roles.includes("employee")
+      ? await this.buildEmployeeLoginContext(userId, wxData.openid, roles)
+      : null;
+    const token = employeeLogin?.token ?? signToken({
       sub: userId,
       openid: wxData.openid,
+      login_channel: "wechat",
       roles,
     });
     request.log.info({ requestId: request.id, userId }, "[auth] sign jwt result");
@@ -143,6 +205,8 @@ export class WeChatController extends BaseController {
       user_id: userId,
       roles,
       is_new_user: isNewUser,
+      tenant: employeeLogin?.tenant ?? null,
+      employee: employeeLogin?.employee ?? null,
     }, "登录成功");
   }
 
@@ -260,18 +324,23 @@ export class WeChatController extends BaseController {
 
       const openid = await this.getOpenIdByAuthUserId(request.user.sub);
       const roles = await this.getUserRoles(request.user.sub);
-      const token = signToken({
-        sub: request.user.sub,
+      const employeeLogin = await this.buildEmployeeLoginContext(
+        request.user.sub,
         openid,
         roles,
-      });
+      );
+      if (!employeeLogin) {
+        throw Errors.badRequest("该手机号未绑定员工身份");
+      }
 
       return ResponseHandler.success({
         mode: "employee",
-        token,
+        token: employeeLogin.token,
         user_id: request.user.sub,
         roles,
         is_new_user: false,
+        tenant: employeeLogin.tenant,
+        employee: employeeLogin.employee,
       }, "身份验证成功");
     }
 

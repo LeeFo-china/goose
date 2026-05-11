@@ -10,6 +10,7 @@ export type JwtPayload = {
   roles?: string[];
   tenant_id?: string | null;
   tenant_slug?: string | null;
+  employee_id?: string | null;
   customer_id?: string | null;
   verified_phone?: string | null;
   iat?: number;
