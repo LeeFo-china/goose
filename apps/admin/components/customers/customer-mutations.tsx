@@ -13,7 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
-import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, Plus, Share2, Tags, Trash2 } from "lucide-react";
+import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, MoreHorizontal, Plus, Share2, Tags, Trash2 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldError,
@@ -981,19 +988,35 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
   }
 
   return (
-    <div className="flex min-w-[228px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button type="button" variant="outline" size="sm" onClick={openDetail} disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : <Eye />}
-        详情
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} disabled={disabled}>
-        <Edit3 />
-        编辑
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={deleteCustomer} disabled={disabled}>
-        <Trash2 />
-        作废
-      </Button>
+    <div className="relative flex min-w-24 justify-end whitespace-nowrap">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <MoreHorizontal data-icon="inline-start" />
+            )}
+            操作
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="left" sideOffset={8} className="w-36">
+          <DropdownMenuGroup>
+            <DropdownMenuItem disabled={pending} onSelect={openDetail}>
+              <Eye />
+              详情
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={disabled} onSelect={() => setEditOpen(true)}>
+              <Edit3 />
+              编辑
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={disabled} onSelect={deleteCustomer}>
+              <Trash2 />
+              作废
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <CustomerDialog
         mode="edit"
         customer={customer}
