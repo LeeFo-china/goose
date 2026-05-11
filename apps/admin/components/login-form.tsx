@@ -124,10 +124,9 @@ export function LoginForm() {
                   id="code"
                   inputMode="numeric"
                   maxLength={6}
-                  placeholder="6 位验证码"
+                  placeholder="测试环境可不填"
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
-                  required
                 />
                 <Button
                   type="button"

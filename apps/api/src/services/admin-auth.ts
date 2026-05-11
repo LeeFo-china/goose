@@ -7,6 +7,7 @@ import {
 } from "@/repositories/admin-auth";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { sendSmsCode } from "@/services/sms";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { getJwtExpiresAt, signToken } from "@/utils/jwt";
 import { isEmployeeOperableStatus } from "@gooes/domain";
 
@@ -154,22 +155,36 @@ class AdminAuthService {
 
   async login(input: {
     phone: string;
-    code: string;
+    code?: string;
   }) {
     const employee = await this.getSingleActiveEmployeeByPhone(input.phone);
-    const verificationCode = await adminAuthRepository.findValidVerificationCode({
-      phone: input.phone,
-      scene: ADMIN_LOGIN_SCENE,
-      code: input.code,
-      now: new Date().toISOString(),
-    });
+    const skipCodeVerification = isPhoneLoginWithoutCodeEnabled();
+    const code = input.code?.trim() || "";
+    let verificationCode: { id: string } | null = null;
 
-    if (!verificationCode) {
-      throw Errors.business(
-        400,
-        "验证码错误或已过期",
-        ErrorCodes.ADMIN_AUTH_CODE_INVALID,
-      );
+    if (!skipCodeVerification) {
+      if (!code) {
+        throw Errors.business(
+          400,
+          "请输入验证码",
+          ErrorCodes.ADMIN_AUTH_CODE_INVALID,
+        );
+      }
+
+      verificationCode = await adminAuthRepository.findValidVerificationCode({
+        phone: input.phone,
+        scene: ADMIN_LOGIN_SCENE,
+        code,
+        now: new Date().toISOString(),
+      });
+
+      if (!verificationCode) {
+        throw Errors.business(
+          400,
+          "验证码错误或已过期",
+          ErrorCodes.ADMIN_AUTH_CODE_INVALID,
+        );
+      }
     }
 
     let authUserId = employee.user_id;
@@ -189,7 +204,9 @@ class AdminAuthService {
       });
     }
 
-    await adminAuthRepository.markVerificationCodeVerified(verificationCode.id);
+    if (verificationCode) {
+      await adminAuthRepository.markVerificationCodeVerified(verificationCode.id);
+    }
 
     const authContext = await authorizationService.getAuthContextByAuthUserId(
       authUserId,

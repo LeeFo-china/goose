@@ -5,7 +5,11 @@ export const AdminAuthPhoneSchema = z.object({
 });
 
 export const AdminAuthLoginSchema = AdminAuthPhoneSchema.extend({
-  code: z.string().trim().regex(/^\d{4,6}$/, "验证码格式不正确"),
+  code: z.string()
+    .trim()
+    .regex(/^\d{4,6}$/, "验证码格式不正确")
+    .optional()
+    .or(z.literal("")),
 });
 
 export type AdminAuthPhoneInput = z.infer<typeof AdminAuthPhoneSchema>;

@@ -14,6 +14,7 @@ import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import type {
   AuthTargetRole,
   SmsScene,
@@ -230,9 +231,19 @@ export class WeChatController extends BaseController {
       ? "bind_customer"
       : "bind_employee";
 
-    const verificationRecord = await this.getValidVerificationCode(phone, scene, code);
-    if (!verificationRecord) {
-      throw Errors.badRequest("验证码错误或已过期");
+    const skipCodeVerification = isPhoneLoginWithoutCodeEnabled();
+    const normalizedCode = code?.trim() || "";
+    let verificationRecord: SmsVerificationCodeRow | null = null;
+
+    if (!skipCodeVerification) {
+      if (!normalizedCode) {
+        throw Errors.badRequest("请输入验证码");
+      }
+
+      verificationRecord = await this.getValidVerificationCode(phone, scene, normalizedCode);
+      if (!verificationRecord) {
+        throw Errors.badRequest("验证码错误或已过期");
+      }
     }
 
     if (target_role === "employee") {
@@ -242,7 +253,9 @@ export class WeChatController extends BaseController {
         authUserId: request.user.sub,
       });
 
-      await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+      if (verificationRecord) {
+        await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+      }
 
       const openid = await this.getOpenIdByAuthUserId(request.user.sub);
       const roles = await this.getUserRoles(request.user.sub);
@@ -268,7 +281,9 @@ export class WeChatController extends BaseController {
       bodyResult.data.share_token ?? null,
     );
 
-    await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+    if (verificationRecord) {
+      await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+    }
 
     return ResponseHandler.success(customerLogin, "身份验证成功");
   }

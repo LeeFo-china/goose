@@ -16,7 +16,11 @@ export const SendCodeSchema = z.object({
 
 export const VerifyRoleSchema = z.object({
   phone: z.string().trim().regex(/^1[3-9]\d{9}$/, "手机号格式不正确"),
-  code: z.string().trim().regex(/^\d{4,6}$/, "验证码格式不正确"),
+  code: z.string()
+    .trim()
+    .regex(/^\d{4,6}$/, "验证码格式不正确")
+    .optional()
+    .or(z.literal("")),
   target_role: z.enum(AUTH_TARGET_ROLE_VALUES, {
     message: "无效的目标角色",
   }),
