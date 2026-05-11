@@ -26,7 +26,7 @@ function statusVariant(status?: string | null) {
 
 function usageLink(input: {
   tenantId: string;
-  tab: "ai" | "sms";
+  tab: "ai" | "sms" | "social_video";
   dateFrom: string;
   dateTo: string;
 }) {
@@ -93,6 +93,21 @@ export function PlatformUsageTable({
       },
     },
     {
+      id: "social_video",
+      header: "短视频转写",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="font-medium">{formatNumber(row.original.social_video.billable_minutes)} 分钟</div>
+          <div className="text-xs text-muted-foreground">
+            任务 {formatNumber(row.original.social_video.transcription_count)} / 缺时长 {formatNumber(row.original.social_video.missing_duration_count)}
+          </div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[180px]",
+      },
+    },
+    {
       id: "sms",
       header: "短信用量",
       cell: ({ row }) => (
@@ -146,6 +161,17 @@ export function PlatformUsageTable({
               短信明细
             </Link>
           </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={usageLink({
+              tenantId: row.original.tenant.id,
+              tab: "social_video",
+              dateFrom,
+              dateTo,
+            })}
+            >
+              短视频
+            </Link>
+          </Button>
         </div>
       ),
       meta: {
@@ -160,7 +186,7 @@ export function PlatformUsageTable({
       columns={columns}
       data={list}
       emptyText="暂无租户用量"
-      minWidth="min-w-[1060px]"
+      minWidth="min-w-[1260px]"
     />
   );
 }

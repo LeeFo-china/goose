@@ -7,7 +7,11 @@ import {
   UsageTabsNav,
   type UsageTab,
 } from "@/components/usage/usage-list-actions";
-import { UsageAiLogsTable, UsageSmsLogsTable } from "@/components/usage/usage-logs-tables";
+import {
+  UsageAiLogsTable,
+  UsageSmsLogsTable,
+  UsageSocialVideoLogsTable,
+} from "@/components/usage/usage-logs-tables";
 import { UsageSummaryCards } from "@/components/usage/usage-summary-cards";
 import type {
   PlatformTenantUsageData,
@@ -15,6 +19,7 @@ import type {
   UsageAiLogRecord,
   UsageLogListData,
   UsageSmsLogRecord,
+  UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,10 +31,13 @@ type SearchParams = Promise<{
   page?: string;
   aiPage?: string;
   smsPage?: string;
+  socialVideoPage?: string;
   keyword?: string;
   tenant_id?: string;
   ai_status?: string;
   sms_status?: string;
+  social_video_status?: string;
+  social_video_billable?: string;
   date_from?: string;
   date_to?: string;
 }>;
@@ -40,7 +48,7 @@ function readPositiveInteger(value: string | undefined, fallback: number) {
 }
 
 function readTab(value: string | undefined): UsageTab {
-  return value === "ai" || value === "sms" ? value : "summary";
+  return value === "ai" || value === "sms" || value === "social_video" ? value : "summary";
 }
 
 function readStatus(value: string | undefined, allowed: string[]) {
@@ -140,6 +148,23 @@ function summarizePage(data: PlatformTenantUsageData): TenantUsageSummaryData {
       mock_count: 0,
       disabled_count: 0,
     }),
+    social_video: data.list.reduce((summary, item) => ({
+      transcription_count: summary.transcription_count + item.social_video.transcription_count,
+      billable_transcription_count: summary.billable_transcription_count + item.social_video.billable_transcription_count,
+      success_count: summary.success_count + item.social_video.success_count,
+      failure_count: summary.failure_count + item.social_video.failure_count,
+      duration_seconds: summary.duration_seconds + item.social_video.duration_seconds,
+      billable_minutes: summary.billable_minutes + item.social_video.billable_minutes,
+      missing_duration_count: summary.missing_duration_count + item.social_video.missing_duration_count,
+    }), {
+      transcription_count: 0,
+      billable_transcription_count: 0,
+      success_count: 0,
+      failure_count: 0,
+      duration_seconds: 0,
+      billable_minutes: 0,
+      missing_duration_count: 0,
+    }),
   };
 }
 
@@ -159,12 +184,24 @@ export default async function PlatformUsagePage({
   const page = readPositiveInteger(params.page, 1);
   const aiPage = readPositiveInteger(params.aiPage, 1);
   const smsPage = readPositiveInteger(params.smsPage, 1);
+  const socialVideoPage = readPositiveInteger(params.socialVideoPage, 1);
   const dateFrom = (params.date_from || defaultDateFrom()).slice(0, 10);
   const dateTo = (params.date_to || defaultDateTo()).slice(0, 10);
   const keyword = (params.keyword || "").trim().slice(0, 80);
   const tenantId = (params.tenant_id || "").trim();
   const aiStatus = readStatus(params.ai_status, ["success", "failure"]);
   const smsStatus = readStatus(params.sms_status, ["success", "failure", "mock", "disabled"]);
+  const socialVideoStatus = readStatus(params.social_video_status, [
+    "pending",
+    "resolving",
+    "downloading",
+    "extracting_audio",
+    "creating_asr_task",
+    "transcribing",
+    "completed",
+    "failed",
+  ]);
+  const socialVideoBillable = readStatus(params.social_video_billable, ["true", "false"]);
 
   const usageQuery = buildQuery({
     page,
@@ -200,6 +237,15 @@ export default async function PlatformUsagePage({
     date_from: dateFrom,
     date_to: dateTo,
   });
+  const socialVideoQuery = buildQuery({
+    page: socialVideoPage,
+    pageSize: 20,
+    tenant_id: tenantId,
+    status: socialVideoStatus === "__all" ? undefined : socialVideoStatus,
+    billable: socialVideoBillable === "__all" ? undefined : socialVideoBillable,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
   const aiResult = tab === "ai" && hasPlatformAccess
     ? await fetchBackend<UsageLogListData<UsageAiLogRecord>>(
       `/platform/usage/ai-logs?${aiQuery}`,
@@ -212,6 +258,12 @@ export default async function PlatformUsagePage({
       emptyLogList<UsageSmsLogRecord>(smsPage),
     )
     : { data: emptyLogList<UsageSmsLogRecord>(smsPage), error: null };
+  const socialVideoResult = tab === "social_video" && hasPlatformAccess
+    ? await fetchBackend<UsageLogListData<UsageSocialVideoLogRecord>>(
+      `/platform/usage/social-video-logs?${socialVideoQuery}`,
+      emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage),
+    )
+    : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage), error: null };
 
   return (
     <div className="flex flex-col gap-5">
@@ -219,7 +271,7 @@ export default async function PlatformUsagePage({
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">用量统计</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            查看租户 AI token、短信发送量和失败明细，用于成本核算和异常排查。
+            查看租户 AI token、短信发送量、短视频转写分钟和失败明细，用于成本核算和异常排查。
           </p>
         </div>
         <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
@@ -228,6 +280,7 @@ export default async function PlatformUsagePage({
       {usageResult.error ? <StatusAlert>{usageResult.error}</StatusAlert> : null}
       {aiResult.error ? <StatusAlert>{aiResult.error}</StatusAlert> : null}
       {smsResult.error ? <StatusAlert>{smsResult.error}</StatusAlert> : null}
+      {socialVideoResult.error ? <StatusAlert>{socialVideoResult.error}</StatusAlert> : null}
 
       <UsageSummaryCards data={summary} />
 
@@ -249,6 +302,8 @@ export default async function PlatformUsagePage({
               tenantId={tenantId}
               aiStatus={aiStatus}
               smsStatus={smsStatus}
+              socialVideoStatus={socialVideoStatus}
+              socialVideoBillable={socialVideoBillable}
             />
           </div>
           <UsageFilters
@@ -260,6 +315,8 @@ export default async function PlatformUsagePage({
             tenantId={tenantId}
             aiStatus={aiStatus}
             smsStatus={smsStatus}
+            socialVideoStatus={socialVideoStatus}
+            socialVideoBillable={socialVideoBillable}
             showKeyword={tab === "summary"}
             showTenantId={tab !== "summary"}
           />
@@ -284,6 +341,8 @@ export default async function PlatformUsagePage({
                   tenantId={tenantId}
                   aiStatus={aiStatus}
                   smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
                   unit="个租户"
                 />
               </div>
@@ -302,11 +361,13 @@ export default async function PlatformUsagePage({
                   tenantId={tenantId}
                   aiStatus={aiStatus}
                   smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
                   unit="条 AI 明细"
                 />
               </div>
             </>
-          ) : (
+          ) : tab === "sms" ? (
             <>
               <UsageSmsLogsTable logs={smsResult.data.list} />
               <div className="px-4 pb-4">
@@ -320,7 +381,29 @@ export default async function PlatformUsagePage({
                   tenantId={tenantId}
                   aiStatus={aiStatus}
                   smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
                   unit="条短信明细"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
+              <div className="px-4 pb-4">
+                <UsagePagination
+                  basePath="/platform/usage"
+                  pagination={socialVideoResult.data.pagination}
+                  pageKey="socialVideoPage"
+                  tab={tab}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  tenantId={tenantId}
+                  aiStatus={aiStatus}
+                  smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
+                  unit="条短视频明细"
                 />
               </div>
             </>

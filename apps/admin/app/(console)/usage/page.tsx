@@ -6,13 +6,18 @@ import {
   UsageTabsNav,
   type UsageTab,
 } from "@/components/usage/usage-list-actions";
-import { UsageAiLogsTable, UsageSmsLogsTable } from "@/components/usage/usage-logs-tables";
+import {
+  UsageAiLogsTable,
+  UsageSmsLogsTable,
+  UsageSocialVideoLogsTable,
+} from "@/components/usage/usage-logs-tables";
 import { UsageSummaryCards } from "@/components/usage/usage-summary-cards";
 import type {
   TenantUsageSummaryData,
   UsageAiLogRecord,
   UsageLogListData,
   UsageSmsLogRecord,
+  UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +29,11 @@ type SearchParams = Promise<{
   tab?: string;
   aiPage?: string;
   smsPage?: string;
+  socialVideoPage?: string;
   ai_status?: string;
   sms_status?: string;
+  social_video_status?: string;
+  social_video_billable?: string;
   date_from?: string;
   date_to?: string;
 }>;
@@ -36,7 +44,7 @@ function readPositiveInteger(value: string | undefined, fallback: number) {
 }
 
 function readTab(value: string | undefined): UsageTab {
-  return value === "ai" || value === "sms" ? value : "summary";
+  return value === "ai" || value === "sms" || value === "social_video" ? value : "summary";
 }
 
 function readStatus(value: string | undefined, allowed: string[]) {
@@ -107,6 +115,15 @@ function emptySummary(dateFrom: string, dateTo: string): TenantUsageSummaryData 
       mock_count: 0,
       disabled_count: 0,
     },
+    social_video: {
+      transcription_count: 0,
+      billable_transcription_count: 0,
+      success_count: 0,
+      failure_count: 0,
+      duration_seconds: 0,
+      billable_minutes: 0,
+      missing_duration_count: 0,
+    },
   };
 }
 
@@ -135,10 +152,22 @@ export default async function TenantUsagePage({
   const tab = readTab(params.tab);
   const aiPage = readPositiveInteger(params.aiPage, 1);
   const smsPage = readPositiveInteger(params.smsPage, 1);
+  const socialVideoPage = readPositiveInteger(params.socialVideoPage, 1);
   const dateFrom = (params.date_from || defaultDateFrom()).slice(0, 10);
   const dateTo = (params.date_to || defaultDateTo()).slice(0, 10);
   const aiStatus = readStatus(params.ai_status, ["success", "failure"]);
   const smsStatus = readStatus(params.sms_status, ["success", "failure", "mock", "disabled"]);
+  const socialVideoStatus = readStatus(params.social_video_status, [
+    "pending",
+    "resolving",
+    "downloading",
+    "extracting_audio",
+    "creating_asr_task",
+    "transcribing",
+    "completed",
+    "failed",
+  ]);
+  const socialVideoBillable = readStatus(params.social_video_billable, ["true", "false"]);
 
   const summaryQuery = buildQuery({
     date_from: dateFrom,
@@ -162,6 +191,14 @@ export default async function TenantUsagePage({
     date_from: dateFrom,
     date_to: dateTo,
   });
+  const socialVideoQuery = buildQuery({
+    page: socialVideoPage,
+    pageSize: 20,
+    status: socialVideoStatus === "__all" ? undefined : socialVideoStatus,
+    billable: socialVideoBillable === "__all" ? undefined : socialVideoBillable,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
   const aiResult = tab === "ai"
     ? await fetchBackend<UsageLogListData<UsageAiLogRecord>>(
       `/usage/ai-logs?${aiQuery}`,
@@ -174,6 +211,12 @@ export default async function TenantUsagePage({
       emptyLogList<UsageSmsLogRecord>(smsPage),
     )
     : { data: emptyLogList<UsageSmsLogRecord>(smsPage), error: null };
+  const socialVideoResult = tab === "social_video"
+    ? await fetchBackend<UsageLogListData<UsageSocialVideoLogRecord>>(
+      `/usage/social-video-logs?${socialVideoQuery}`,
+      emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage),
+    )
+    : { data: emptyLogList<UsageSocialVideoLogRecord>(socialVideoPage), error: null };
 
   return (
     <div className="flex flex-col gap-5">
@@ -181,7 +224,7 @@ export default async function TenantUsagePage({
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">用量统计</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            查看本公司 AI token、短信发送量和失败明细。
+            查看本公司 AI token、短信发送量、短视频转写分钟和失败明细。
           </p>
         </div>
         <Badge variant="outline">{dateFrom} 至 {dateTo}</Badge>
@@ -190,6 +233,7 @@ export default async function TenantUsagePage({
       {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
       {aiResult.error ? <StatusAlert>{aiResult.error}</StatusAlert> : null}
       {smsResult.error ? <StatusAlert>{smsResult.error}</StatusAlert> : null}
+      {socialVideoResult.error ? <StatusAlert>{socialVideoResult.error}</StatusAlert> : null}
 
       <UsageSummaryCards data={summaryResult.data} />
 
@@ -199,7 +243,7 @@ export default async function TenantUsagePage({
             <div>
               <CardTitle>本租户用量</CardTitle>
               <CardDescription>
-                租户只能查看本公司的 AI 和短信用量，手机号仅展示脱敏值。
+                租户只能查看本公司的 AI、短信和短视频转写用量，手机号仅展示脱敏值。
               </CardDescription>
             </div>
             <UsageTabsNav
@@ -209,6 +253,8 @@ export default async function TenantUsagePage({
               dateTo={dateTo}
               aiStatus={aiStatus}
               smsStatus={smsStatus}
+              socialVideoStatus={socialVideoStatus}
+              socialVideoBillable={socialVideoBillable}
               summaryLabel="用量概览"
             />
           </div>
@@ -219,6 +265,8 @@ export default async function TenantUsagePage({
             dateTo={dateTo}
             aiStatus={aiStatus}
             smsStatus={smsStatus}
+            socialVideoStatus={socialVideoStatus}
+            socialVideoBillable={socialVideoBillable}
           />
         </CardHeader>
         <CardContent className="flex flex-col gap-4 p-0">
@@ -250,6 +298,18 @@ export default async function TenantUsagePage({
                   <CardTitle>{summaryResult.data.ai.missing_token_count}</CardTitle>
                 </CardHeader>
               </Card>
+              <Card>
+                <CardHeader>
+                  <CardDescription>短视频计费分钟</CardDescription>
+                  <CardTitle>{summaryResult.data.social_video.billable_minutes}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardDescription>短视频时长缺失</CardDescription>
+                  <CardTitle>{summaryResult.data.social_video.missing_duration_count}</CardTitle>
+                </CardHeader>
+              </Card>
             </div>
           ) : tab === "ai" ? (
             <>
@@ -264,11 +324,13 @@ export default async function TenantUsagePage({
                   dateTo={dateTo}
                   aiStatus={aiStatus}
                   smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
                   unit="条 AI 明细"
                 />
               </div>
             </>
-          ) : (
+          ) : tab === "sms" ? (
             <>
               <UsageSmsLogsTable logs={smsResult.data.list} />
               <div className="px-4 pb-4">
@@ -281,7 +343,28 @@ export default async function TenantUsagePage({
                   dateTo={dateTo}
                   aiStatus={aiStatus}
                   smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
                   unit="条短信明细"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <UsageSocialVideoLogsTable logs={socialVideoResult.data.list} />
+              <div className="px-4 pb-4">
+                <UsagePagination
+                  basePath="/usage"
+                  pagination={socialVideoResult.data.pagination}
+                  pageKey="socialVideoPage"
+                  tab={tab}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  aiStatus={aiStatus}
+                  smsStatus={smsStatus}
+                  socialVideoStatus={socialVideoStatus}
+                  socialVideoBillable={socialVideoBillable}
+                  unit="条短视频明细"
                 />
               </div>
             </>

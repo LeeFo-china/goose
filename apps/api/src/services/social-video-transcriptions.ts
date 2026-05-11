@@ -55,6 +55,7 @@ type TranscriptResult = {
   title: string | null;
   text: string;
   segments: unknown[];
+  durationSeconds: number | null;
   rawPayload: unknown;
 };
 
@@ -143,7 +144,9 @@ function getTodayStartIso() {
   return date.toISOString();
 }
 
-function serializeRecord(record: SocialVideoTranscriptionRecord) {
+function serializeRecord(record: SocialVideoTranscriptionRecord, cached = false) {
+  const durationSeconds = record.billing_duration_seconds ?? record.audio_duration_seconds;
+  const reusedCachedResult = cached || record.billing_source === "cache";
   return {
     id: record.id,
     platform: record.platform,
@@ -158,6 +161,14 @@ function serializeRecord(record: SocialVideoTranscriptionRecord) {
     text: record.text,
     segments: Array.isArray(record.segments) ? record.segments : [],
     audio_duration_seconds: record.audio_duration_seconds,
+    billing: {
+      billable: record.billable,
+      duration_seconds: durationSeconds,
+      minutes: record.billing_minutes,
+      source: record.billing_source,
+      cached: reusedCachedResult,
+      billed_at: record.billed_at,
+    },
     error_code: record.error_code,
     error_message: record.error_message,
     created_at: record.created_at,
@@ -194,6 +205,27 @@ function readNumber(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function calculateBilling(input: {
+  durationSeconds: number | null;
+  source: string | null;
+}) {
+  if (typeof input.durationSeconds !== "number" || !Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) {
+    return {
+      billingDurationSeconds: null,
+      billingMinutes: null,
+      billingSource: input.source,
+      billedAt: null,
+    };
+  }
+
+  return {
+    billingDurationSeconds: Number(input.durationSeconds.toFixed(2)),
+    billingMinutes: Math.max(1, Math.ceil(input.durationSeconds / 60)),
+    billingSource: input.source,
+    billedAt: new Date().toISOString(),
+  };
 }
 
 function normalizeTranscriptText(item: ApifyTranscriptItem) {
@@ -540,6 +572,7 @@ class ApifyTranscriptGateway {
       title,
       text,
       segments: normalizeSegments(item.segments),
+      durationSeconds: readNumber(item.duration),
       rawPayload: item,
     };
   }
@@ -709,6 +742,8 @@ class SocialVideoTranscriptionService {
         normalizedUrl,
         inputHash,
         createdByAuthUserId: authContext.authUserId,
+        billable: false,
+        billingSource: "cache",
       });
       const completed = await socialVideoTranscriptionRepository.update(copied.id, {
         status: "completed",
@@ -723,6 +758,11 @@ class SocialVideoTranscriptionService {
         mediaFileSizeBytes: cached.media_file_size_bytes,
         audioFileSizeBytes: cached.audio_file_size_bytes,
         audioDurationSeconds: cached.audio_duration_seconds,
+        billable: false,
+        billingDurationSeconds: null,
+        billingMinutes: null,
+        billingSource: "cache",
+        billedAt: null,
         title: cached.title,
         text: cached.text,
         segments: cached.segments,
@@ -730,7 +770,7 @@ class SocialVideoTranscriptionService {
         completedAt: new Date().toISOString(),
       });
       return {
-        ...serializeRecord(completed),
+        ...serializeRecord(completed, true),
         cached: true,
       };
     }
@@ -848,6 +888,11 @@ class SocialVideoTranscriptionService {
               });
             },
           });
+          const durationSeconds = asrResult.audioDurationSeconds ?? media.durationSeconds;
+          const billing = calculateBilling({
+            durationSeconds,
+            source: asrResult.provider,
+          });
           await socialVideoTranscriptionRepository.update(id, {
             status: "completed",
             progress: 100,
@@ -860,7 +905,11 @@ class SocialVideoTranscriptionService {
               resolver: media.rawPayload,
               asr: asrResult.rawPayload,
             },
-            audioDurationSeconds: asrResult.audioDurationSeconds ?? media.durationSeconds,
+            audioDurationSeconds: durationSeconds,
+            billingDurationSeconds: billing.billingDurationSeconds,
+            billingMinutes: billing.billingMinutes,
+            billingSource: billing.billingSource,
+            billedAt: billing.billedAt,
             completedAt: new Date().toISOString(),
             errorCode: null,
             errorMessage: null,
@@ -877,6 +926,10 @@ class SocialVideoTranscriptionService {
         videoUrl: task.source_url,
         timeoutMs: config.timeoutMs,
       });
+      const billing = calculateBilling({
+        durationSeconds: result.durationSeconds,
+        source: result.provider,
+      });
 
       await socialVideoTranscriptionRepository.update(id, {
         status: "completed",
@@ -889,6 +942,11 @@ class SocialVideoTranscriptionService {
         text: result.text,
         segments: result.segments,
         rawPayload: result.rawPayload,
+        audioDurationSeconds: result.durationSeconds,
+        billingDurationSeconds: billing.billingDurationSeconds,
+        billingMinutes: billing.billingMinutes,
+        billingSource: billing.billingSource,
+        billedAt: billing.billedAt,
         completedAt: new Date().toISOString(),
         errorCode: null,
         errorMessage: null,

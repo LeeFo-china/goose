@@ -1,12 +1,14 @@
 import { Errors } from "@/errors/error-factory";
 import { aiCallLogRepository } from "@/repositories/ai-call-logs";
 import { smsSendLogRepository } from "@/repositories/sms-send-logs";
+import { socialVideoTranscriptionRepository } from "@/repositories/social-video-transcriptions";
 import { usageRepository } from "@/repositories/usage";
 import type {
   PlatformTenantUsageQuery,
   UsageAiLogsQuery,
   UsageDateRangeQuery,
   UsageSmsLogsQuery,
+  UsageSocialVideoLogsQuery,
 } from "@/schema/usage";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -137,16 +139,63 @@ class UsageService {
     };
   }
 
+  private summarizeSocialVideo(rows: Awaited<ReturnType<typeof socialVideoTranscriptionRepository.listUsageStatsRows>>) {
+    const statusCounts: Record<string, number> = {};
+    const providerCounts: Record<string, number> = {};
+    let billableTranscriptionCount = 0;
+    let durationSeconds = 0;
+    let billableMinutes = 0;
+    let missingDurationCount = 0;
+
+    for (const row of rows) {
+      incrementCounter(statusCounts, row.status);
+      incrementCounter(providerCounts, row.provider);
+
+      const isCompleted = row.status === "completed";
+      const isBillable = row.billable !== false;
+      if (isCompleted && isBillable) {
+        billableTranscriptionCount += 1;
+        const rowDuration = row.billing_duration_seconds ?? row.audio_duration_seconds;
+        const rowMinutes = row.billing_minutes;
+        if (typeof rowDuration === "number" && Number.isFinite(rowDuration) && rowDuration > 0) {
+          durationSeconds += rowDuration;
+          billableMinutes += typeof rowMinutes === "number" && Number.isFinite(rowMinutes)
+            ? rowMinutes
+            : Math.max(1, Math.ceil(rowDuration / 60));
+        } else {
+          missingDurationCount += 1;
+        }
+      }
+    }
+
+    return {
+      transcription_count: rows.length,
+      billable_transcription_count: billableTranscriptionCount,
+      success_count: statusCounts.completed || 0,
+      failure_count: statusCounts.failed || 0,
+      duration_seconds: Number(durationSeconds.toFixed(2)),
+      billable_minutes: billableMinutes,
+      missing_duration_count: missingDurationCount,
+      status_counts: statusCounts,
+      provider_counts: providerCounts,
+    };
+  }
+
   async getTenantSummary(query: UsageDateRangeQuery, authContext: AuthContext) {
     const tenantId = accessPolicyService.assertTenantContext(authContext);
     const range = normalizeDateRange(query);
-    const [aiRows, smsRows] = await Promise.all([
+    const [aiRows, smsRows, socialVideoRows] = await Promise.all([
       aiCallLogRepository.listUsageStatsRows({
         tenantId,
         createdFrom: range.createdFrom,
         createdTo: range.createdTo,
       }),
       smsSendLogRepository.listUsageRows({
+        tenantId,
+        createdFrom: range.createdFrom,
+        createdTo: range.createdTo,
+      }),
+      socialVideoTranscriptionRepository.listUsageStatsRows({
         tenantId,
         createdFrom: range.createdFrom,
         createdTo: range.createdTo,
@@ -165,6 +214,7 @@ class UsageService {
       },
       ai: this.summarizeAi(aiRows),
       sms: this.summarizeSms(smsRows),
+      social_video: this.summarizeSocialVideo(socialVideoRows),
     };
   }
 
@@ -178,7 +228,7 @@ class UsageService {
       keyword: query.keyword,
     });
     const tenantIds = tenants.list.map((tenant) => tenant.id);
-    const [aiRows, smsRows] = tenantIds.length > 0
+    const [aiRows, smsRows, socialVideoRows] = tenantIds.length > 0
       ? await Promise.all([
         aiCallLogRepository.listUsageStatsRows({
           tenantId: null,
@@ -191,8 +241,14 @@ class UsageService {
           createdFrom: range.createdFrom,
           createdTo: range.createdTo,
         }),
+        socialVideoTranscriptionRepository.listUsageStatsRows({
+          tenantId: null,
+          tenantIds,
+          createdFrom: range.createdFrom,
+          createdTo: range.createdTo,
+        }),
       ])
-      : [[], []] as const;
+      : [[], [], []] as const;
 
     return {
       range: {
@@ -203,6 +259,9 @@ class UsageService {
         tenant,
         ai: this.summarizeAi(aiRows.filter((row) => row.tenant_id === tenant.id)),
         sms: this.summarizeSms(smsRows.filter((row) => row.tenant_id === tenant.id)),
+        social_video: this.summarizeSocialVideo(
+          socialVideoRows.filter((row) => row.tenant_id === tenant.id),
+        ),
       })),
       pagination: tenants.pagination,
     };
@@ -239,6 +298,21 @@ class UsageService {
     });
   }
 
+  async listTenantSocialVideoLogs(query: UsageSocialVideoLogsQuery, authContext: AuthContext) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const range = normalizeDateRange(query);
+    return socialVideoTranscriptionRepository.listUsageLogs({
+      tenantId,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      provider: query.provider,
+      billable: query.billable,
+      createdFrom: range.createdFrom,
+      createdTo: range.createdTo,
+    });
+  }
+
   async listPlatformAiLogs(query: UsageAiLogsQuery, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
     const range = normalizeDateRange(query);
@@ -265,6 +339,21 @@ class UsageService {
       status: query.status,
       provider: query.provider,
       purpose: query.purpose,
+      createdFrom: range.createdFrom,
+      createdTo: range.createdTo,
+    });
+  }
+
+  async listPlatformSocialVideoLogs(query: UsageSocialVideoLogsQuery, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const range = normalizeDateRange(query);
+    return socialVideoTranscriptionRepository.listUsageLogs({
+      tenantId: query.tenant_id,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      provider: query.provider,
+      billable: query.billable,
       createdFrom: range.createdFrom,
       createdTo: range.createdTo,
     });

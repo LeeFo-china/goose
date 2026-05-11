@@ -6,6 +6,7 @@ import { DataTable } from "@/components/admin/data-table";
 import type {
   UsageAiLogRecord,
   UsageSmsLogRecord,
+  UsageSocialVideoLogRecord,
 } from "@/components/usage/usage-types";
 
 function formatDate(value?: string | null) {
@@ -16,6 +17,13 @@ function formatDate(value?: string | null) {
 
 function formatNumber(value?: number | null) {
   return new Intl.NumberFormat("zh-CN").format(value || 0);
+}
+
+function formatDurationSeconds(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "-";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return minutes > 0 ? `${minutes}分${String(seconds).padStart(2, "0")}秒` : `${seconds}秒`;
 }
 
 function aiStatusBadge(status: UsageAiLogRecord["status"]) {
@@ -43,6 +51,19 @@ function smsStatusBadge(status: UsageSmsLogRecord["status"]) {
   if (status === "failure") return <Badge variant="danger">失败</Badge>;
   if (status === "mock") return <Badge variant="secondary">模拟</Badge>;
   return <Badge variant="warning">禁用</Badge>;
+}
+
+function socialVideoStatusBadge(status: UsageSocialVideoLogRecord["status"]) {
+  if (status === "completed") return <Badge variant="success">完成</Badge>;
+  if (status === "failed") return <Badge variant="danger">失败</Badge>;
+  if (status === "pending") return <Badge variant="secondary">排队</Badge>;
+  return <Badge variant="warning">处理中</Badge>;
+}
+
+function socialVideoBillableBadge(billable?: boolean | null) {
+  if (billable === false) return <Badge variant="outline">不计费</Badge>;
+  if (billable === true) return <Badge variant="secondary">计费</Badge>;
+  return <Badge variant="outline">未标记</Badge>;
 }
 
 export function UsageAiLogsTable({ logs }: { logs: UsageAiLogRecord[] }) {
@@ -240,6 +261,109 @@ export function UsageSmsLogsTable({ logs }: { logs: UsageSmsLogRecord[] }) {
       data={logs}
       emptyText="暂无短信发送明细"
       minWidth="min-w-[1160px]"
+    />
+  );
+}
+
+export function UsageSocialVideoLogsTable({ logs }: { logs: UsageSocialVideoLogRecord[] }) {
+  const columns: ColumnDef<UsageSocialVideoLogRecord>[] = [
+    {
+      id: "source",
+      header: "视频链接",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{row.original.platform === "douyin" ? "抖音" : row.original.platform}</div>
+          <div className="max-w-[300px] truncate text-xs text-muted-foreground">
+            {row.original.source_url || row.original.id}
+          </div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[260px]",
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "状态",
+      cell: ({ row }) => socialVideoStatusBadge(row.original.status),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "provider",
+      header: "服务商",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate">{row.original.provider || "unknown"}</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {row.original.billing_source || "计费来源待补"}
+          </div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[160px]",
+      },
+    },
+    {
+      id: "duration",
+      header: "时长",
+      cell: ({ row }) => (
+        <div className="whitespace-nowrap text-sm">
+          <div>{formatDurationSeconds(row.original.billing_duration_seconds ?? row.original.audio_duration_seconds)}</div>
+          <div className="text-xs text-muted-foreground">
+            {row.original.billing_minutes == null
+              ? "分钟待确认"
+              : `${formatNumber(row.original.billing_minutes)} 计费分钟`}
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "billable",
+      header: "计费",
+      cell: ({ row }) => socialVideoBillableBadge(row.original.billable),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "error",
+      header: "错误",
+      cell: ({ row }) => (
+        <div className="max-w-[260px] truncate text-sm text-muted-foreground">
+          {row.original.error_message || row.original.error_code || "-"}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "created_at",
+      header: "创建时间",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.created_at)}</span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      accessorKey: "completed_at",
+      header: "完成时间",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.completed_at)}</span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      data={logs}
+      emptyText="暂无短视频转写明细"
+      minWidth="min-w-[1260px]"
     />
   );
 }

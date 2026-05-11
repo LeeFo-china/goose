@@ -4285,6 +4285,11 @@ export type Database = {
           asr_task_id: string | null
           audio_duration_seconds: number | null
           audio_file_size_bytes: number | null
+          billable: boolean
+          billed_at: string | null
+          billing_duration_seconds: number | null
+          billing_minutes: number | null
+          billing_source: string | null
           completed_at: string | null
           created_at: string
           created_by_auth_user_id: string | null
@@ -4315,6 +4320,11 @@ export type Database = {
           asr_task_id?: string | null
           audio_duration_seconds?: number | null
           audio_file_size_bytes?: number | null
+          billable?: boolean
+          billed_at?: string | null
+          billing_duration_seconds?: number | null
+          billing_minutes?: number | null
+          billing_source?: string | null
           completed_at?: string | null
           created_at?: string
           created_by_auth_user_id?: string | null
@@ -4345,6 +4355,11 @@ export type Database = {
           asr_task_id?: string | null
           audio_duration_seconds?: number | null
           audio_file_size_bytes?: number | null
+          billable?: boolean
+          billed_at?: string | null
+          billing_duration_seconds?: number | null
+          billing_minutes?: number | null
+          billing_source?: string | null
           completed_at?: string | null
           created_at?: string
           created_by_auth_user_id?: string | null

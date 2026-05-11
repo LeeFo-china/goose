@@ -36,6 +36,18 @@ export type UsageSmsSummary = {
   purpose_counts?: Record<string, number>;
 };
 
+export type UsageSocialVideoSummary = {
+  transcription_count: number;
+  billable_transcription_count: number;
+  success_count: number;
+  failure_count: number;
+  duration_seconds: number;
+  billable_minutes: number;
+  missing_duration_count: number;
+  status_counts?: Record<string, number>;
+  provider_counts?: Record<string, number>;
+};
+
 export type UsageTenant = {
   id: string;
   name: string | null;
@@ -47,6 +59,7 @@ export type PlatformTenantUsageItem = {
   tenant: UsageTenant;
   ai: UsageAiSummary;
   sms: UsageSmsSummary;
+  social_video: UsageSocialVideoSummary;
 };
 
 export type PlatformTenantUsageData = {
@@ -60,6 +73,7 @@ export type TenantUsageSummaryData = {
   tenant: UsageTenant;
   ai: UsageAiSummary;
   sms: UsageSmsSummary;
+  social_video: UsageSocialVideoSummary;
 };
 
 export type UsageAiLogRecord = {
@@ -99,6 +113,32 @@ export type UsageSmsLogRecord = {
   sms_count: number;
   duration_ms: number | null;
   created_at: string | null;
+};
+
+export type UsageSocialVideoLogRecord = {
+  id: string;
+  tenant_id: string | null;
+  platform: "douyin";
+  source_url: string;
+  status:
+    | "pending"
+    | "resolving"
+    | "downloading"
+    | "extracting_audio"
+    | "creating_asr_task"
+    | "transcribing"
+    | "completed"
+    | "failed";
+  provider: string | null;
+  audio_duration_seconds: number | null;
+  billable: boolean | null;
+  billing_duration_seconds: number | null;
+  billing_minutes: number | null;
+  billing_source: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  completed_at: string | null;
 };
 
 export type UsageLogListData<T> = {

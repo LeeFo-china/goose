@@ -1,5 +1,6 @@
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
+import { SocialVideoTranscriptionStatusSchema } from "@/schema/social-video";
 
 const optionalText = (max = 120) =>
   z.preprocess((value) => {
@@ -47,7 +48,26 @@ export const UsageSmsLogsQuerySchema = PaginationQuerySchema.extend({
   date_to: optionalText().pipe(DateStringSchema.optional()),
 });
 
+export const UsageSocialVideoLogsQuerySchema = PaginationQuerySchema.extend({
+  tenant_id: optionalText().pipe(z.uuid("无效的租户 ID").optional()),
+  status: SocialVideoTranscriptionStatusSchema.optional(),
+  provider: optionalText(80),
+  billable: z.preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === "boolean") return value;
+    if (typeof value !== "string") return value;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || normalized === "undefined" || normalized === "null") return undefined;
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+    return value;
+  }, z.boolean().optional()),
+  date_from: optionalText().pipe(DateStringSchema.optional()),
+  date_to: optionalText().pipe(DateStringSchema.optional()),
+});
+
 export type UsageDateRangeQuery = z.infer<typeof UsageDateRangeQuerySchema>;
 export type PlatformTenantUsageQuery = z.infer<typeof PlatformTenantUsageQuerySchema>;
 export type UsageAiLogsQuery = z.infer<typeof UsageAiLogsQuerySchema>;
 export type UsageSmsLogsQuery = z.infer<typeof UsageSmsLogsQuerySchema>;
+export type UsageSocialVideoLogsQuery = z.infer<typeof UsageSocialVideoLogsQuerySchema>;

@@ -14,7 +14,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Pagination } from "@/components/usage/usage-types";
 
-export type UsageTab = "summary" | "ai" | "sms";
+export type UsageTab = "summary" | "ai" | "sms" | "social_video";
 
 const statusOptions = [
   { value: "__all", label: "全部状态" },
@@ -28,30 +28,58 @@ const smsStatusOptions = [
   { value: "disabled", label: "服务禁用" },
 ] as const;
 
+const socialVideoStatusOptions = [
+  { value: "__all", label: "全部状态" },
+  { value: "completed", label: "完成" },
+  { value: "failed", label: "失败" },
+  { value: "pending", label: "排队" },
+  { value: "resolving", label: "解析中" },
+  { value: "downloading", label: "下载中" },
+  { value: "extracting_audio", label: "提取音频" },
+  { value: "creating_asr_task", label: "创建识别" },
+  { value: "transcribing", label: "识别中" },
+] as const;
+
+const socialVideoBillableOptions = [
+  { value: "__all", label: "全部计费" },
+  { value: "true", label: "计费" },
+  { value: "false", label: "不计费" },
+] as const;
+
 function buildUsageHref(input: {
   basePath: string;
   tab?: UsageTab;
   page?: number;
   aiPage?: number;
   smsPage?: number;
+  socialVideoPage?: number;
   dateFrom?: string;
   dateTo?: string;
   keyword?: string;
   tenantId?: string;
   aiStatus?: string;
   smsStatus?: string;
+  socialVideoStatus?: string;
+  socialVideoBillable?: string;
 }) {
   const params = new URLSearchParams();
   if (input.tab && input.tab !== "summary") params.set("tab", input.tab);
   if (input.page && input.page > 1) params.set("page", String(input.page));
   if (input.aiPage && input.aiPage > 1) params.set("aiPage", String(input.aiPage));
   if (input.smsPage && input.smsPage > 1) params.set("smsPage", String(input.smsPage));
+  if (input.socialVideoPage && input.socialVideoPage > 1) params.set("socialVideoPage", String(input.socialVideoPage));
   if (input.dateFrom) params.set("date_from", input.dateFrom);
   if (input.dateTo) params.set("date_to", input.dateTo);
   if (input.keyword) params.set("keyword", input.keyword);
   if (input.tenantId) params.set("tenant_id", input.tenantId);
   if (input.aiStatus && input.aiStatus !== "__all") params.set("ai_status", input.aiStatus);
   if (input.smsStatus && input.smsStatus !== "__all") params.set("sms_status", input.smsStatus);
+  if (input.socialVideoStatus && input.socialVideoStatus !== "__all") {
+    params.set("social_video_status", input.socialVideoStatus);
+  }
+  if (input.socialVideoBillable && input.socialVideoBillable !== "__all") {
+    params.set("social_video_billable", input.socialVideoBillable);
+  }
   const query = params.toString();
   return query ? `${input.basePath}?${query}` : input.basePath;
 }
@@ -65,6 +93,8 @@ export function UsageTabsNav({
   tenantId,
   aiStatus,
   smsStatus,
+  socialVideoStatus,
+  socialVideoBillable,
   summaryLabel = "租户汇总",
 }: {
   basePath: string;
@@ -75,6 +105,8 @@ export function UsageTabsNav({
   tenantId?: string;
   aiStatus?: string;
   smsStatus?: string;
+  socialVideoStatus?: string;
+  socialVideoBillable?: string;
   summaryLabel?: string;
 }) {
   const router = useRouter();
@@ -92,6 +124,8 @@ export function UsageTabsNav({
         tenantId,
         aiStatus,
         smsStatus,
+        socialVideoStatus,
+        socialVideoBillable,
       }));
       router.refresh();
     });
@@ -103,6 +137,7 @@ export function UsageTabsNav({
         <TabsTrigger value="summary" disabled={pending}>{summaryLabel}</TabsTrigger>
         <TabsTrigger value="ai" disabled={pending}>AI 明细</TabsTrigger>
         <TabsTrigger value="sms" disabled={pending}>短信明细</TabsTrigger>
+        <TabsTrigger value="social_video" disabled={pending}>短视频明细</TabsTrigger>
       </TabsList>
     </Tabs>
   );
@@ -117,6 +152,8 @@ export function UsageFilters({
   tenantId = "",
   aiStatus = "__all",
   smsStatus = "__all",
+  socialVideoStatus = "__all",
+  socialVideoBillable = "__all",
   showKeyword = false,
   showTenantId = false,
 }: {
@@ -128,6 +165,8 @@ export function UsageFilters({
   tenantId?: string;
   aiStatus?: string;
   smsStatus?: string;
+  socialVideoStatus?: string;
+  socialVideoBillable?: string;
   showKeyword?: boolean;
   showTenantId?: boolean;
 }) {
@@ -139,6 +178,8 @@ export function UsageFilters({
   const [nextTenantId, setNextTenantId] = useState(tenantId);
   const [nextAiStatus, setNextAiStatus] = useState(aiStatus || "__all");
   const [nextSmsStatus, setNextSmsStatus] = useState(smsStatus || "__all");
+  const [nextSocialVideoStatus, setNextSocialVideoStatus] = useState(socialVideoStatus || "__all");
+  const [nextSocialVideoBillable, setNextSocialVideoBillable] = useState(socialVideoBillable || "__all");
 
   useEffect(() => {
     setNextDateFrom(dateFrom);
@@ -147,7 +188,9 @@ export function UsageFilters({
     setNextTenantId(tenantId);
     setNextAiStatus(aiStatus || "__all");
     setNextSmsStatus(smsStatus || "__all");
-  }, [aiStatus, dateFrom, dateTo, keyword, smsStatus, tenantId]);
+    setNextSocialVideoStatus(socialVideoStatus || "__all");
+    setNextSocialVideoBillable(socialVideoBillable || "__all");
+  }, [aiStatus, dateFrom, dateTo, keyword, smsStatus, socialVideoBillable, socialVideoStatus, tenantId]);
 
   function navigate(input?: Partial<{
     dateFrom: string;
@@ -156,6 +199,8 @@ export function UsageFilters({
     tenantId: string;
     aiStatus: string;
     smsStatus: string;
+    socialVideoStatus: string;
+    socialVideoBillable: string;
   }>) {
     startTransition(() => {
       router.push(buildUsageHref({
@@ -167,6 +212,8 @@ export function UsageFilters({
         tenantId: showTenantId ? (input?.tenantId ?? nextTenantId).trim() : "",
         aiStatus: input?.aiStatus ?? nextAiStatus,
         smsStatus: input?.smsStatus ?? nextSmsStatus,
+        socialVideoStatus: input?.socialVideoStatus ?? nextSocialVideoStatus,
+        socialVideoBillable: input?.socialVideoBillable ?? nextSocialVideoBillable,
       }));
       router.refresh();
     });
@@ -178,7 +225,7 @@ export function UsageFilters({
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[160px_160px_1fr_160px_80px]" onSubmit={submit}>
+    <form className="grid gap-3 lg:grid-cols-[160px_160px_1fr_180px_160px_80px]" onSubmit={submit}>
       <InputGroup>
         <InputGroupInput
           type="date"
@@ -281,6 +328,31 @@ export function UsageFilters({
             navigate({ smsStatus: value });
           }}
         />
+      ) : tab === "social_video" ? (
+        <FormSelect
+          id="usage-social-video-status-filter"
+          value={nextSocialVideoStatus}
+          options={socialVideoStatusOptions}
+          disabled={pending}
+          onChange={(value) => {
+            setNextSocialVideoStatus(value);
+            navigate({ socialVideoStatus: value });
+          }}
+        />
+      ) : (
+        <div />
+      )}
+      {tab === "social_video" ? (
+        <FormSelect
+          id="usage-social-video-billable-filter"
+          value={nextSocialVideoBillable}
+          options={socialVideoBillableOptions}
+          disabled={pending}
+          onChange={(value) => {
+            setNextSocialVideoBillable(value);
+            navigate({ socialVideoBillable: value });
+          }}
+        />
       ) : (
         <div />
       )}
@@ -303,11 +375,13 @@ export function UsagePagination({
   tenantId,
   aiStatus,
   smsStatus,
+  socialVideoStatus,
+  socialVideoBillable,
   unit,
 }: {
   basePath: string;
   pagination: Pagination;
-  pageKey: "page" | "aiPage" | "smsPage";
+  pageKey: "page" | "aiPage" | "smsPage" | "socialVideoPage";
   tab: UsageTab;
   dateFrom: string;
   dateTo: string;
@@ -315,6 +389,8 @@ export function UsagePagination({
   tenantId?: string;
   aiStatus?: string;
   smsStatus?: string;
+  socialVideoStatus?: string;
+  socialVideoBillable?: string;
   unit: string;
 }) {
   const router = useRouter();
@@ -331,12 +407,15 @@ export function UsagePagination({
         page: pageKey === "page" ? page : undefined,
         aiPage: pageKey === "aiPage" ? page : undefined,
         smsPage: pageKey === "smsPage" ? page : undefined,
+        socialVideoPage: pageKey === "socialVideoPage" ? page : undefined,
         dateFrom,
         dateTo,
         keyword,
         tenantId,
         aiStatus,
         smsStatus,
+        socialVideoStatus,
+        socialVideoBillable,
       }));
       router.refresh();
     });

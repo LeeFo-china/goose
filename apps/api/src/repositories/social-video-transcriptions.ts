@@ -21,6 +21,11 @@ export type SocialVideoTranscriptionRecord = {
   media_file_size_bytes: number | null;
   audio_file_size_bytes: number | null;
   audio_duration_seconds: number | null;
+  billable: boolean;
+  billing_duration_seconds: number | null;
+  billing_minutes: number | null;
+  billing_source: string | null;
+  billed_at: string | null;
   title: string | null;
   text: string | null;
   segments: unknown;
@@ -40,6 +45,8 @@ type CreateSocialVideoTranscriptionRecordInput = {
   normalizedUrl: string;
   inputHash: string;
   createdByAuthUserId: string | null;
+  billable?: boolean;
+  billingSource?: string | null;
 };
 
 type UpdateSocialVideoTranscriptionRecordInput = {
@@ -55,6 +62,11 @@ type UpdateSocialVideoTranscriptionRecordInput = {
   mediaFileSizeBytes?: number | null;
   audioFileSizeBytes?: number | null;
   audioDurationSeconds?: number | null;
+  billable?: boolean;
+  billingDurationSeconds?: number | null;
+  billingMinutes?: number | null;
+  billingSource?: string | null;
+  billedAt?: string | null;
   title?: string | null;
   text?: string | null;
   segments?: unknown;
@@ -84,6 +96,8 @@ class SocialVideoTranscriptionRepository {
         status: "pending",
         progress: 0,
         created_by_auth_user_id: input.createdByAuthUserId,
+        billable: input.billable ?? true,
+        billing_source: input.billingSource ?? null,
       })
       .select("*")
       .single();
@@ -195,6 +209,11 @@ class SocialVideoTranscriptionRepository {
     if (input.mediaFileSizeBytes !== undefined) payload.media_file_size_bytes = input.mediaFileSizeBytes;
     if (input.audioFileSizeBytes !== undefined) payload.audio_file_size_bytes = input.audioFileSizeBytes;
     if (input.audioDurationSeconds !== undefined) payload.audio_duration_seconds = input.audioDurationSeconds;
+    if (input.billable !== undefined) payload.billable = input.billable;
+    if (input.billingDurationSeconds !== undefined) payload.billing_duration_seconds = input.billingDurationSeconds;
+    if (input.billingMinutes !== undefined) payload.billing_minutes = input.billingMinutes;
+    if (input.billingSource !== undefined) payload.billing_source = input.billingSource;
+    if (input.billedAt !== undefined) payload.billed_at = input.billedAt;
     if (input.title !== undefined) payload.title = input.title;
     if (input.text !== undefined) payload.text = input.text;
     if (input.segments !== undefined) payload.segments = input.segments;
@@ -218,6 +237,7 @@ class SocialVideoTranscriptionRepository {
 
   async listUsageStatsRows(input: {
     tenantId: string | null;
+    tenantIds?: string[];
     createdFrom?: string;
     createdTo?: string;
   }) {
@@ -228,11 +248,19 @@ class SocialVideoTranscriptionRepository {
         status,
         provider,
         audio_duration_seconds,
+        billable,
+        billing_duration_seconds,
+        billing_minutes,
+        billing_source,
         created_at
       `);
 
     if (input.tenantId) {
       query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.tenantIds && input.tenantIds.length > 0) {
+      query = query.in("tenant_id", input.tenantIds);
     }
 
     if (input.createdFrom) {
@@ -255,8 +283,103 @@ class SocialVideoTranscriptionRepository {
       status: SocialVideoTranscriptionStatus;
       provider: string | null;
       audio_duration_seconds: number | null;
+      billable: boolean | null;
+      billing_duration_seconds: number | null;
+      billing_minutes: number | null;
+      billing_source: string | null;
       created_at: string | null;
     }>;
+  }
+
+  async listUsageLogs(input: {
+    tenantId?: string | null;
+    page: number;
+    pageSize: number;
+    status?: SocialVideoTranscriptionStatus;
+    provider?: string;
+    billable?: boolean;
+    createdFrom?: string;
+    createdTo?: string;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    let query = this.table()
+      .select(`
+        id,
+        tenant_id,
+        platform,
+        source_url,
+        status,
+        provider,
+        audio_duration_seconds,
+        billable,
+        billing_duration_seconds,
+        billing_minutes,
+        billing_source,
+        error_code,
+        error_message,
+        created_at,
+        completed_at
+      `, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.status) {
+      query = query.eq("status", input.status);
+    }
+
+    if (input.provider) {
+      query = query.eq("provider", input.provider);
+    }
+
+    if (input.billable !== undefined) {
+      query = query.eq("billable", input.billable);
+    }
+
+    if (input.createdFrom) {
+      query = query.gte("created_at", input.createdFrom);
+    }
+
+    if (input.createdTo) {
+      query = query.lt("created_at", input.createdTo);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询短视频识别用量明细失败", error);
+    }
+
+    return {
+      list: (data || []) as Array<{
+        id: string;
+        tenant_id: string | null;
+        platform: "douyin";
+        source_url: string;
+        status: SocialVideoTranscriptionStatus;
+        provider: string | null;
+        audio_duration_seconds: number | null;
+        billable: boolean | null;
+        billing_duration_seconds: number | null;
+        billing_minutes: number | null;
+        billing_source: string | null;
+        error_code: string | null;
+        error_message: string | null;
+        created_at: string | null;
+        completed_at: string | null;
+      }>,
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / input.pageSize) : 0,
+      },
+    };
   }
 }
 
