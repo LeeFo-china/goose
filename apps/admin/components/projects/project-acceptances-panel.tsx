@@ -508,8 +508,22 @@ export function ProjectAcceptancesPanel({
   }, [active, project.id]);
 
   useEffect(() => {
-    setEditable(buildEditable(selected));
-  }, [selected?.id]);
+    const nextEditable = buildEditable(selected);
+    if (selected?.status === "rejected") {
+      nextEditable.items = Object.fromEntries(
+        Object.entries(nextEditable.items).map(([itemId, item]) => [
+          itemId,
+          {
+            ...item,
+            rectification_remark: "",
+            rectification_images: [],
+            rectificationImagePreviews: [],
+          },
+        ]),
+      );
+    }
+    setEditable(nextEditable);
+  }, [selected?.id, selected?.status]);
 
   useEffect(() => {
     if (!firstAvailableStage) return;
