@@ -606,7 +606,7 @@ function ProjectDetailDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[88vh] max-w-[920px] overflow-hidden p-0">
+      <DialogContent className="flex h-[88vh] max-w-[920px] flex-col overflow-hidden p-0">
         <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
             <DialogTitle>{project.name}</DialogTitle>
@@ -617,9 +617,9 @@ function ProjectDetailDialog({
         <Tabs
           value={activeTab}
           onValueChange={updateActiveTab}
-          className="max-h-[calc(88vh-82px)] overflow-hidden"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="border-b px-5 pt-4">
+          <div className="shrink-0 border-b px-5 pt-4">
             <TabsList>
               <TabsTrigger value="overview">概览</TabsTrigger>
               <TabsTrigger value="members">成员</TabsTrigger>
@@ -629,10 +629,10 @@ function ProjectDetailDialog({
           </div>
           <div
             className={cn(
-              "p-5",
+              "min-h-0 flex-1 p-5",
               activeTab === "acceptances"
-                ? "h-[calc(88vh-138px)] overflow-hidden"
-                : "max-h-[calc(88vh-138px)] overflow-y-auto",
+                ? "overflow-hidden"
+                : "overflow-y-auto [scrollbar-gutter:stable]",
             )}
           >
             <TabsContent value="overview" className="flex flex-col gap-5">

@@ -853,16 +853,16 @@ export function ProjectAcceptancesPanel({
 
           {selected ? (
             <section className="flex min-h-0 flex-col rounded-md border bg-card">
-              <div className="shrink-0 border-b bg-card px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="h-[86px] shrink-0 overflow-hidden border-b bg-card px-4 py-3">
+                <div className="flex h-8 items-center justify-between gap-3 overflow-hidden">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                     <h3 className="min-w-0 truncate text-base font-semibold">
                       {selected.title}
                     </h3>
-                    <Badge variant={statusVariant(selected.status)}>
+                    <Badge variant={statusVariant(selected.status)} className="shrink-0">
                       {selected.status_label}
                     </Badge>
-                    <div className="ml-0 flex overflow-hidden rounded-md border bg-background text-xs lg:ml-2">
+                    <div className="ml-0 hidden shrink-0 overflow-hidden rounded-md border bg-background text-xs md:flex lg:ml-2">
                       <span className="px-2 py-1 text-muted-foreground">
                         全部 <b className="font-semibold text-foreground">{selectedStats.total}</b>
                       </span>
@@ -877,7 +877,7 @@ export function ProjectAcceptancesPanel({
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap justify-end gap-2">
+                  <div className="flex shrink-0 justify-end gap-2">
                   {canEdit(selected.status) ? (
                     <>
                       {selected.status === "draft" ? (
@@ -952,10 +952,10 @@ export function ProjectAcceptancesPanel({
                   </div>
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span>发起：{selected.initiator?.name || "-"}</span>
-                  <span>复核：{selected.reviewer?.name || "-"}</span>
-                  <span>更新：{formatDateTime(selected.updated_at || selected.created_at)}</span>
+                <div className="mt-2 flex h-5 min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
+                  <span className="shrink-0">发起：{selected.initiator?.name || "-"}</span>
+                  <span className="shrink-0">复核：{selected.reviewer?.name || "-"}</span>
+                  <span className="shrink-0">更新：{formatDateTime(selected.updated_at || selected.created_at)}</span>
                   {selected.reject_reason ? (
                     <span className="min-w-0 flex-1 truncate text-destructive">
                       {selected.reject_source === "customer" ? "业主疑问" : "驳回原因"}：
@@ -963,16 +963,18 @@ export function ProjectAcceptancesPanel({
                     </span>
                   ) : null}
                   {selected.reject_source === "customer" && latestCustomerDispute ? (
-                    <span className="flex min-w-0 items-center gap-1">
+                    <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
                       <Clock3 data-icon="inline-start" />
-                      最近疑问：{formatDateTime(latestCustomerDispute.created_at)}
-                      {latestCustomerDispute.comment ? ` · ${latestCustomerDispute.comment}` : ""}
+                      <span className="truncate">
+                        最近疑问：{formatDateTime(latestCustomerDispute.created_at)}
+                        {latestCustomerDispute.comment ? ` · ${latestCustomerDispute.comment}` : ""}
+                      </span>
                     </span>
                   ) : null}
                 </div>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 [scrollbar-gutter:stable]">
                 {selected.status === "leader_approved" || selected.latest_customer_notification ? (
                   <CustomerNotificationPanel
                     notification={selected.latest_customer_notification || null}
