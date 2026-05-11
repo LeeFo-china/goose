@@ -410,7 +410,10 @@ function getRectificationItemsForAction(
   if (action.action === "customer_dispute") {
     const disputedItemIds = getCustomerDisputeItemIds(action);
     if (disputedItemIds.size > 0) {
-      return acceptance.items.filter((item) => disputedItemIds.has(item.id));
+      const matchedItems = acceptance.items.filter((item) =>
+        disputedItemIds.has(item.id)
+      );
+      return matchedItems.length ? matchedItems : acceptance.items;
     }
     return acceptance.items;
   }
