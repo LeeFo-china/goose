@@ -24,9 +24,13 @@ class DepartmentPostRulesController extends BaseController {
   async getConfig(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
     accessPolicyService.assertPermission(authContext, "employee.read");
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
 
     return ResponseHandler.success(
-      await departmentPostRuleService.getConfig(authContext.tenantId),
+      await departmentPostRuleService.getConfig(tenantId),
     );
   }
 
@@ -34,6 +38,10 @@ class DepartmentPostRulesController extends BaseController {
   async updateDepartmentRules(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
     accessPolicyService.assertPermission(authContext, "employee.update");
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
 
     const paramsResult = DepartmentPostRuleDepartmentParamsSchema.safeParse(
       request.params,
@@ -49,7 +57,7 @@ class DepartmentPostRulesController extends BaseController {
       await departmentPostRuleService.updateDepartmentPostCodes(
         paramsResult.data.department_code,
         bodyResult.data.post_codes,
-        authContext.tenantId,
+        tenantId,
       ),
     );
   }

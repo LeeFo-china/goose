@@ -12,6 +12,18 @@ import {
 } from "@gooes/domain";
 
 class ProjectMemberRolePostRuleService {
+  private requireTenantId(tenantId?: string | null) {
+    if (!tenantId) {
+      throw Errors.business(
+        403,
+        "项目成员岗位规则必须在租户上下文中操作",
+        "TENANT_CONTEXT_REQUIRED",
+      );
+    }
+
+    return tenantId;
+  }
+
   private readonly fallbackPostCodes: Record<
     ProjectMemberRoleCode,
     EmployeePostCode[]
@@ -84,9 +96,10 @@ class ProjectMemberRolePostRuleService {
     roleCode: ProjectMemberRoleCode,
     tenantId?: string | null,
   ) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const rules = await projectMemberRolePostRuleRepository.listByRoleCode(
       roleCode,
-      tenantId,
+      scopedTenantId,
     );
 
     return rules.length > 0
@@ -107,9 +120,10 @@ class ProjectMemberRolePostRuleService {
   }
 
   async getConfig(tenantId?: string | null) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const [rules, postOptions] = await Promise.all([
-      projectMemberRolePostRuleRepository.listRules(tenantId),
-      projectMemberRolePostRuleRepository.listActivePostOptions(tenantId),
+      projectMemberRolePostRuleRepository.listRules(scopedTenantId),
+      projectMemberRolePostRuleRepository.listActivePostOptions(scopedTenantId),
     ]);
 
     return {
@@ -136,13 +150,14 @@ class ProjectMemberRolePostRuleService {
     postCodes: string[],
     tenantId?: string | null,
   ) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const uniquePostCodes = Array.from(new Set(postCodes));
     if (uniquePostCodes.length === 0) {
       throw Errors.badRequest("至少选择一个岗位");
     }
 
     const postOptions =
-      await projectMemberRolePostRuleRepository.listActivePostOptions(tenantId);
+      await projectMemberRolePostRuleRepository.listActivePostOptions(scopedTenantId);
     const activePostCodeSet = new Set(postOptions.map((item) => item.code));
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !isEmployeePostCode(postCode) && !activePostCodeSet.has(postCode as EmployeePostCode),
@@ -161,10 +176,10 @@ class ProjectMemberRolePostRuleService {
     await projectMemberRolePostRuleRepository.replaceRoleRules({
       roleCode,
       postCodes: uniquePostCodes as EmployeePostCode[],
-      tenantId,
+      tenantId: scopedTenantId,
     });
 
-    return this.getConfig(tenantId);
+    return this.getConfig(scopedTenantId);
   }
 }
 

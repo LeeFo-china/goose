@@ -90,6 +90,47 @@ supabase/migrations/20260509150000_tenant_scope_organization_roles.sql
 
 平台级角色管理如后续需要，应单独设计 `/platform/roles`，不能复用 `/roles`。
 
+### 2026-05-11 补充：组织架构接口租户上下文硬保护
+
+组织架构相关接口同样是租户业务接口，不承载平台级组织模板管理。
+
+已补充 controller / service 层硬校验：
+
+- `GET /departments`
+- `GET /departments/:id`
+- `POST /departments`
+- `PATCH /departments/:id`
+- `GET /posts`
+- `GET /posts/:id`
+- `POST /posts`
+- `PATCH /posts/:id`
+- `GET /department-post-rules`
+- `PUT /department-post-rules/:department_code`
+- `GET /project-member-role-post-rules`
+- `PUT /project-member-role-post-rules/:role_code`
+
+上述接口必须存在明确的 `authContext.tenantId`。如果平台超管处于 `tenant_id = null` 的平台管理模式，即使绕过 admin 前端直接调用接口，也会返回：
+
+```json
+{
+  "code": "TENANT_CONTEXT_REQUIRED",
+  "message": "组织架构必须在租户上下文中操作"
+}
+```
+
+或项目成员岗位规则场景返回：
+
+```json
+{
+  "code": "TENANT_CONTEXT_REQUIRED",
+  "message": "项目成员岗位规则必须在租户上下文中操作"
+}
+```
+
+这样可以避免空租户上下文落到 repository 层，触发无 `tenant_id` 过滤的岗位查询、空租户写入，或按 `department_code` / `role_code` 批量影响多个租户的规则。
+
+平台级组织模板、默认部门岗位字典、租户初始化模板升级等能力，后续必须单独设计 `/platform/*` 接口，不能复用租户组织架构接口。
+
 ## 兼容说明
 
 规则表仍保留 `department_code`、`post_code`、`role_code` 字段，以兼容当前 admin 组织配置页面和 domain 枚举。区别是这些 code 不再是平台全局唯一语义，而是租户内语义。

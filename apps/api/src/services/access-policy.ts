@@ -12,6 +12,17 @@ class AccessPolicyService {
     return authContext.tenantId;
   }
 
+  assertTenantContext(
+    authContext: AuthContext,
+    message = "当前操作必须在租户上下文中执行",
+  ) {
+    if (!authContext.tenantId) {
+      throw Errors.business(403, message, "TENANT_CONTEXT_REQUIRED");
+    }
+
+    return authContext.tenantId;
+  }
+
   matchesTenant(
     authContext: AuthContext,
     target: { tenant_id?: string | null },

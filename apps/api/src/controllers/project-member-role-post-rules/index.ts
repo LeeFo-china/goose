@@ -24,9 +24,13 @@ class ProjectMemberRolePostRulesController extends BaseController {
   async getConfig(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "项目成员岗位规则必须在租户上下文中操作",
+    );
 
     return ResponseHandler.success(
-      await projectMemberRolePostRuleService.getConfig(authContext.tenantId),
+      await projectMemberRolePostRuleService.getConfig(tenantId),
     );
   }
 
@@ -34,6 +38,10 @@ class ProjectMemberRolePostRulesController extends BaseController {
   async updateRoleRules(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "项目成员岗位规则必须在租户上下文中操作",
+    );
 
     const paramsResult = ProjectMemberRolePostRuleParamsSchema.safeParse(
       request.params,
@@ -49,7 +57,7 @@ class ProjectMemberRolePostRulesController extends BaseController {
       await projectMemberRolePostRuleService.updateRolePostCodes(
         paramsResult.data.role_code,
         bodyResult.data.post_codes,
-        authContext.tenantId,
+        tenantId,
       ),
     );
   }

@@ -6,11 +6,24 @@ import type {
 } from "@gooes/domain";
 
 class DepartmentPostRuleService {
+  private requireTenantId(tenantId?: string | null) {
+    if (!tenantId) {
+      throw Errors.business(
+        403,
+        "组织架构必须在租户上下文中操作",
+        "TENANT_CONTEXT_REQUIRED",
+      );
+    }
+
+    return tenantId;
+  }
+
   async getConfig(tenantId?: string | null) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const [departments, posts, rules] = await Promise.all([
-      departmentPostRuleRepository.listDepartments(tenantId),
-      departmentPostRuleRepository.listPostOptions(tenantId),
-      departmentPostRuleRepository.listRules(tenantId),
+      departmentPostRuleRepository.listDepartments(scopedTenantId),
+      departmentPostRuleRepository.listPostOptions(scopedTenantId),
+      departmentPostRuleRepository.listRules(scopedTenantId),
     ]);
 
     return {
@@ -36,8 +49,9 @@ class DepartmentPostRuleService {
     postCodes: string[],
     tenantId?: string | null,
   ) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const uniquePostCodes = Array.from(new Set(postCodes));
-    const postOptions = await departmentPostRuleRepository.listPostOptions(tenantId);
+    const postOptions = await departmentPostRuleRepository.listPostOptions(scopedTenantId);
     const postCodeSet = new Set(postOptions.map((item) => item.code));
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !postCodeSet.has(postCode as EmployeePostCode),
@@ -50,10 +64,10 @@ class DepartmentPostRuleService {
     await departmentPostRuleRepository.replaceDepartmentRules({
       departmentCode,
       postCodes: uniquePostCodes as EmployeePostCode[],
-      tenantId,
+      tenantId: scopedTenantId,
     });
 
-    return this.getConfig(tenantId);
+    return this.getConfig(scopedTenantId);
   }
 
   async assertEmployeeDepartmentPostAllowed(input: {
@@ -62,12 +76,13 @@ class DepartmentPostRuleService {
     tenantId?: string | null;
   }) {
     if (!input.departmentId || !input.postId) return;
+    const tenantId = this.requireTenantId(input.tenantId);
 
     const { department, post } =
       await departmentPostRuleRepository.findDepartmentAndPostByIds({
         departmentId: input.departmentId,
         postId: input.postId,
-        tenantId: input.tenantId,
+        tenantId,
       });
 
     if (!department?.code) {
@@ -81,7 +96,7 @@ class DepartmentPostRuleService {
     const rule = await departmentPostRuleRepository.findEnabledRule({
       departmentCode: department.code,
       postCode: post.code,
-      tenantId: input.tenantId,
+      tenantId,
     });
 
     if (!rule) {

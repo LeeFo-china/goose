@@ -10,6 +10,18 @@ import type {
 } from "@/schema/post";
 
 class PostsService {
+  private requireTenantId(tenantId?: string | null) {
+    if (!tenantId) {
+      throw Errors.business(
+        403,
+        "岗位管理必须在租户上下文中操作",
+        "TENANT_CONTEXT_REQUIRED",
+      );
+    }
+
+    return tenantId;
+  }
+
   private normalizeCode(code: string | null | undefined) {
     if (code === undefined) return undefined;
     const normalized = code?.trim().toUpperCase() || "";
@@ -38,16 +50,18 @@ class PostsService {
   }
 
   async listPosts(query: PostListQuery, tenantId?: string | null) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     return postsRepository.list({
       ...query,
-      tenantId,
+      tenantId: scopedTenantId,
       code: this.normalizeCode(query.code) || undefined,
       keyword: query.keyword?.trim(),
     });
   }
 
   async getPostById(id: string, tenantId?: string | null) {
-    const existing = await postsRepository.findById(id, tenantId);
+    const scopedTenantId = this.requireTenantId(tenantId);
+    const existing = await postsRepository.findById(id, scopedTenantId);
     if (!existing) {
       throw Errors.business(404, "岗位不存在", ErrorCodes.POST_NOT_FOUND);
     }
@@ -56,6 +70,7 @@ class PostsService {
   }
 
   async createPost(input: CreatePostInput, tenantId?: string | null) {
+    const scopedTenantId = this.requireTenantId(tenantId);
     const code = this.normalizeCode(input.code);
     if (!code) {
       throw Errors.badRequest("岗位编码不能为空");
@@ -66,15 +81,16 @@ class PostsService {
       code,
       name: this.normalizeName(input.name) || input.name,
     };
-    await this.ensureCodeUnique(normalized.code, tenantId);
+    await this.ensureCodeUnique(normalized.code, scopedTenantId);
     return postsRepository.create({
       ...normalized,
-      tenant_id: tenantId ?? null,
+      tenant_id: scopedTenantId,
     });
   }
 
   async updatePost(id: string, input: UpdatePostInput, tenantId?: string | null) {
-    const existing = await postsRepository.findById(id, tenantId);
+    const scopedTenantId = this.requireTenantId(tenantId);
+    const existing = await postsRepository.findById(id, scopedTenantId);
     if (!existing) {
       throw Errors.business(404, "岗位不存在", ErrorCodes.POST_NOT_FOUND);
     }
@@ -91,8 +107,8 @@ class PostsService {
       normalized.code = code;
     }
 
-    await this.ensureCodeUnique(normalized.code, tenantId, existing.id);
-    return postsRepository.update(id, normalized, tenantId);
+    await this.ensureCodeUnique(normalized.code, scopedTenantId, existing.id);
+    return postsRepository.update(id, normalized, scopedTenantId);
   }
 }
 

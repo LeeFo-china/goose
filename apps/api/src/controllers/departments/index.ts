@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase/index";
+import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
 
 const DepartmentListQuerySchema = z.object({
@@ -36,6 +37,10 @@ class DepartmentController extends BaseController<
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
     const queryResult = DepartmentListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -44,7 +49,7 @@ class DepartmentController extends BaseController<
     const to = from + pageSize - 1;
     let query = SupabaseDB.from("departments")
       .select("*", { count: "exact" })
-      .eq("tenant_id", authContext.tenantId);
+      .eq("tenant_id", tenantId);
 
     if (keyword) {
       const escaped = keyword.replaceAll(",", "\\,");
@@ -73,6 +78,10 @@ class DepartmentController extends BaseController<
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -80,7 +89,7 @@ class DepartmentController extends BaseController<
       .from("departments")
       .select("*")
       .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw Errors.dbError("部门查询失败", error);
@@ -90,6 +99,10 @@ class DepartmentController extends BaseController<
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
     const result = CreateDepartmentSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -97,7 +110,7 @@ class DepartmentController extends BaseController<
       .from("departments")
       .insert({
         ...result.data,
-        tenant_id: authContext.tenantId ?? null,
+        tenant_id: tenantId,
       })
       .select("*")
       .single();
@@ -108,6 +121,10 @@ class DepartmentController extends BaseController<
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -118,7 +135,7 @@ class DepartmentController extends BaseController<
       .from("departments")
       .update(result.data)
       .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
+      .eq("tenant_id", tenantId)
       .select("*")
       .maybeSingle();
 
