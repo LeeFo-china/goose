@@ -3,6 +3,7 @@ import Dysmsapi20170525, { SendSmsRequest } from "@alicloud/dysmsapi20170525";
 import { Config } from "@alicloud/openapi-client";
 import Credential, { Config as CredentialConfig } from "@alicloud/credentials";
 import { RuntimeOptions } from "@alicloud/tea-util";
+import { smsSendLogRepository } from "@/repositories/sms-send-logs";
 import { systemSettingsService } from "@/services/system-settings";
 import type { SmsScene } from "@gooes/domain";
 
@@ -12,6 +13,12 @@ type SmsChannel = {
   provider: SmsProvider;
   tenantId?: string | null;
   strictTenantConfig: boolean;
+  channelMode: "platform" | "tenant_aliyun" | "tenant_tencent";
+};
+type SmsProviderResult = {
+  requestId?: string | null;
+  providerCode?: string | null;
+  providerMessage?: string | null;
 };
 
 const TENCENT_SMS_API_VERSION = "2021-01-11";
@@ -70,18 +77,33 @@ async function getSmsChannel(tenantId?: string | null): Promise<SmsChannel> {
     )).trim();
 
     if (mode === "tenant_aliyun") {
-      return { provider: "aliyun", tenantId, strictTenantConfig: true };
+      return {
+        provider: "aliyun",
+        tenantId,
+        strictTenantConfig: true,
+        channelMode: "tenant_aliyun",
+      };
     }
 
     if (mode === "tenant_tencent") {
-      return { provider: "tencent", tenantId, strictTenantConfig: true };
+      return {
+        provider: "tencent",
+        tenantId,
+        strictTenantConfig: true,
+        channelMode: "tenant_tencent",
+      };
     }
   }
 
   const provider = normalizeProvider(
     await systemSettingsService.getString("SMS_PROVIDER", "mock"),
   );
-  return { provider, strictTenantConfig: false };
+  return {
+    provider,
+    tenantId: tenantId || null,
+    strictTenantConfig: false,
+    channelMode: "platform",
+  };
 }
 
 async function readSmsConfig(
@@ -155,7 +177,7 @@ async function sendAliyunSms(input: {
   phone: string;
   templateCode: string;
   templateParam: Record<string, string | number>;
-}) {
+}): Promise<SmsProviderResult> {
   const client = await getAliyunSmsClient(input.channel);
   const signName = await requireSmsConfig(input.channel, "ALIYUN_SMS_SIGN_NAME");
 
@@ -181,6 +203,12 @@ async function sendAliyunSms(input: {
         `阿里云短信发送失败: ${responseCode || "UNKNOWN"} ${response.body?.message || "未知错误"}`,
       );
     }
+
+    return {
+      requestId: response.body?.requestId || null,
+      providerCode: responseCode || null,
+      providerMessage: response.body?.message || null,
+    };
   } catch (error) {
     const err = error as {
       message?: string;
@@ -212,6 +240,64 @@ function formatUtcDate(timestamp: number) {
   return new Date(timestamp * 1000).toISOString().slice(0, 10);
 }
 
+function maskPhone(phone: string) {
+  const normalized = phone.trim();
+  if (normalized.length < 7) return "***";
+  return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
+}
+
+function hashPhone(phone: string) {
+  const salt = process.env.SMS_LOG_HASH_SALT || process.env.JWT_SECRET || "gooes_sms_log";
+  return createHash("sha256")
+    .update(`${phone.trim()}:${salt}`, "utf8")
+    .digest("hex");
+}
+
+function getErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "code" in error) {
+    return String((error as { code?: unknown }).code || "SMS_SEND_FAILED");
+  }
+
+  return "SMS_SEND_FAILED";
+}
+
+async function logSmsSend(input: {
+  channel: SmsChannel;
+  phone: string;
+  purpose: SmsTemplatePurpose;
+  templateCode?: string | null;
+  status: "success" | "failure" | "mock" | "disabled";
+  providerResult?: SmsProviderResult | null;
+  error?: unknown;
+  durationMs?: number | null;
+  smsCount?: number;
+}) {
+  try {
+    await smsSendLogRepository.create({
+      tenantId: input.channel.tenantId || null,
+      provider: input.channel.provider,
+      channelMode: input.channel.channelMode,
+      purpose: input.purpose,
+      templateCode: input.templateCode || null,
+      phoneMasked: maskPhone(input.phone),
+      phoneHash: hashPhone(input.phone),
+      status: input.status,
+      requestId: input.providerResult?.requestId || null,
+      providerCode: input.providerResult?.providerCode || null,
+      providerMessage: input.providerResult?.providerMessage || null,
+      errorCode: input.error ? getErrorCode(input.error) : null,
+      errorMessage: input.error instanceof Error ? input.error.message : null,
+      smsCount: input.smsCount ?? (input.status === "mock" || input.status === "disabled" ? 0 : 1),
+      durationMs: input.durationMs ?? null,
+      metadata: {
+        strict_tenant_config: input.channel.strictTenantConfig,
+      },
+    });
+  } catch {
+    // 短信日志不能影响主业务链路。
+  }
+}
+
 async function getTencentTemplateId(
   channel: SmsChannel,
   purpose: SmsTemplatePurpose,
@@ -240,7 +326,7 @@ async function sendTencentSms(input: {
   phone: string;
   templateId: string;
   templateParam: Record<string, string | number>;
-}) {
+}): Promise<SmsProviderResult> {
   const [secretId, secretKey, region, endpoint, sdkAppId, signName] =
     await Promise.all([
       requireSmsConfig(input.channel, "TENCENT_SMS_SECRET_ID"),
@@ -308,6 +394,7 @@ async function sendTencentSms(input: {
         Code?: string;
         Message?: string;
       };
+      RequestId?: string;
       SendStatusSet?: Array<{
         Code?: string;
         Message?: string;
@@ -321,6 +408,12 @@ async function sendTencentSms(input: {
     const message = apiError?.Message || sendStatus?.Message || "未知错误";
     throw new Error(`腾讯云短信发送失败: ${code} ${message}`);
   }
+
+  return {
+    requestId: result.Response?.RequestId || null,
+    providerCode: sendStatus?.Code || null,
+    providerMessage: sendStatus?.Message || null,
+  };
 }
 
 async function sendByChannel(input: {
@@ -330,32 +423,96 @@ async function sendByChannel(input: {
   templateCode?: string;
   templateParam: Record<string, string | number>;
 }) {
-  if (input.channel.provider === "disabled") {
-    throw new Error("短信服务未启用");
-  }
+  const startedAt = Date.now();
+  let templateCode = input.templateCode || null;
+  let logged = false;
 
-  if (input.channel.provider === "mock") {
-    return;
-  }
+  const durationMs = () => Date.now() - startedAt;
 
-  if (input.channel.provider === "aliyun") {
-    await sendAliyunSms({
-      channel: input.channel,
-      phone: input.phone,
-      templateCode: input.templateCode ||
-        await getAliyunTemplateCode(input.channel, input.purpose),
-      templateParam: input.templateParam,
-    });
-    return;
-  }
+  try {
+    if (input.channel.provider === "disabled") {
+      await logSmsSend({
+        channel: input.channel,
+        phone: input.phone,
+        purpose: input.purpose,
+        templateCode,
+        status: "disabled",
+        durationMs: durationMs(),
+        smsCount: 0,
+      });
+      logged = true;
+      throw new Error("短信服务未启用");
+    }
 
-  if (input.channel.provider === "tencent") {
-    await sendTencentSms({
-      channel: input.channel,
-      phone: input.phone,
-      templateId: await getTencentTemplateId(input.channel, input.purpose),
-      templateParam: input.templateParam,
-    });
+    if (input.channel.provider === "mock") {
+      await logSmsSend({
+        channel: input.channel,
+        phone: input.phone,
+        purpose: input.purpose,
+        templateCode,
+        status: "mock",
+        durationMs: durationMs(),
+        smsCount: 0,
+      });
+      logged = true;
+      return;
+    }
+
+    if (input.channel.provider === "aliyun") {
+      templateCode = input.templateCode ||
+        await getAliyunTemplateCode(input.channel, input.purpose);
+      const providerResult = await sendAliyunSms({
+        channel: input.channel,
+        phone: input.phone,
+        templateCode,
+        templateParam: input.templateParam,
+      });
+      await logSmsSend({
+        channel: input.channel,
+        phone: input.phone,
+        purpose: input.purpose,
+        templateCode,
+        status: "success",
+        providerResult,
+        durationMs: durationMs(),
+      });
+      logged = true;
+      return;
+    }
+
+    if (input.channel.provider === "tencent") {
+      templateCode = await getTencentTemplateId(input.channel, input.purpose);
+      const providerResult = await sendTencentSms({
+        channel: input.channel,
+        phone: input.phone,
+        templateId: templateCode,
+        templateParam: input.templateParam,
+      });
+      await logSmsSend({
+        channel: input.channel,
+        phone: input.phone,
+        purpose: input.purpose,
+        templateCode,
+        status: "success",
+        providerResult,
+        durationMs: durationMs(),
+      });
+      logged = true;
+    }
+  } catch (error) {
+    if (!logged) {
+      await logSmsSend({
+        channel: input.channel,
+        phone: input.phone,
+        purpose: input.purpose,
+        templateCode,
+        status: "failure",
+        error,
+        durationMs: durationMs(),
+        smsCount: 0,
+      });
+    }
+    throw error;
   }
 }
 
