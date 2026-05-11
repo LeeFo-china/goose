@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
 
 type AcceptanceItemResult = "pass" | "fail" | "not_applicable";
@@ -282,6 +283,30 @@ function statusVariant(status: ProjectAcceptanceStatus) {
     : "secondary";
 }
 
+function resultLabel(result: AcceptanceItemResult | null | undefined) {
+  if (result === "pass") return "通过";
+  if (result === "fail") return "不通过";
+  if (result === "not_applicable") return "不适用";
+  return "未填写";
+}
+
+function resultVariant(result: AcceptanceItemResult | null | undefined) {
+  if (result === "pass") return "success";
+  if (result === "fail") return "danger";
+  if (result === "not_applicable") return "secondary";
+  return "outline";
+}
+
+function getAcceptanceItemStats(acceptance: ProjectAcceptance | null) {
+  const items = acceptance?.items || [];
+  return {
+    total: items.length,
+    pass: items.filter((item) => item.result === "pass").length,
+    fail: items.filter((item) => item.result === "fail").length,
+    pending: items.filter((item) => !item.result).length,
+  };
+}
+
 function notificationVariant(notification: AcceptanceNotification | null | undefined) {
   if (!notification) return "secondary";
   if (notification.send_status === "failed") return "danger";
@@ -429,6 +454,10 @@ export function ProjectAcceptancesPanel({
   );
   const latestRejectAction = useMemo(
     () => getLatestRejectAction(selected),
+    [selected],
+  );
+  const selectedStats = useMemo(
+    () => getAcceptanceItemStats(selected),
     [selected],
   );
   const occupiedStages = useMemo(() => {
@@ -683,9 +712,14 @@ export function ProjectAcceptancesPanel({
     <div className="flex flex-col gap-5">
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-md border bg-card p-4">
-        <div className="min-w-56 space-y-2">
-          <Label>发起工序验收</Label>
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-md border bg-card px-4 py-3">
+        <div className="min-w-60 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <Label>发起工序验收</Label>
+            <span className="text-xs text-muted-foreground">
+              {acceptances.length} 个记录
+            </span>
+          </div>
           <Select
             value={stageCode}
             onValueChange={(value) => setStageCode(value as ProjectLogStageCode)}
@@ -718,12 +752,19 @@ export function ProjectAcceptancesPanel({
           ) : null}
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={loadAcceptances} disabled={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={loadAcceptances}
+            disabled={loading}
+          >
             <RefreshCw className={loading ? "animate-spin" : ""} />
             刷新
           </Button>
           <Button
             type="button"
+            size="sm"
             onClick={createAcceptance}
             disabled={actionLoading || !canCreateAcceptance}
           >
@@ -743,26 +784,30 @@ export function ProjectAcceptancesPanel({
           暂无工序验收
         </div>
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="min-h-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7.5rem)]">
-            <div className="flex max-h-[360px] min-h-0 flex-col gap-2 overflow-y-auto pr-1 lg:max-h-[calc(100vh-7.5rem)]">
+            <div className="flex max-h-[360px] min-h-0 flex-col gap-1 overflow-y-auto rounded-md border bg-card p-1 lg:max-h-[calc(100vh-7.5rem)]">
               {acceptances.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  className={`rounded-md border p-3 text-left transition-colors hover:bg-accent ${
-                    item.id === selectedId ? "border-primary bg-accent" : "bg-card"
-                  }`}
+                  className={cn(
+                    "rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                    item.id === selectedId ? "bg-accent" : "bg-transparent",
+                  )}
                   onClick={() => setSelectedId(item.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{item.stage_label || item.title}</div>
+                    <div className="min-w-0 truncate text-sm font-medium">
+                      {item.stage_label || item.title}
+                    </div>
                     <Badge variant={statusVariant(item.status)}>
                       {item.status_label}
                     </Badge>
                   </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {formatDateTime(item.updated_at || item.created_at)}
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{formatDateTime(item.updated_at || item.created_at)}</span>
+                    <span>{item.items.length} 项</span>
                   </div>
                 </button>
               ))}
@@ -771,20 +816,45 @@ export function ProjectAcceptancesPanel({
 
           {selected ? (
             <section className="min-h-0 rounded-md border bg-card lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto">
-              <div className="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-3 border-b bg-card/95 p-4 backdrop-blur">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold">{selected.title}</h3>
-                    <Badge variant={statusVariant(selected.status)}>
-                      {selected.status_label}
-                    </Badge>
+              <div className="sticky top-0 z-10 border-b bg-card/95 p-4 backdrop-blur">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-base font-semibold">{selected.title}</h3>
+                      <Badge variant={statusVariant(selected.status)}>
+                        {selected.status_label}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span>发起：{selected.initiator?.name || "-"}</span>
+                      <span>复核：{selected.reviewer?.name || "-"}</span>
+                      <span>更新：{formatDateTime(selected.updated_at || selected.created_at)}</span>
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    发起人：{selected.initiator?.name || "-"} · 复核人：
-                    {selected.reviewer?.name || "-"}
+                  <div className="grid grid-cols-4 overflow-hidden rounded-md border bg-background text-center text-xs">
+                    <div className="px-3 py-2">
+                      <div className="font-semibold text-foreground">{selectedStats.total}</div>
+                      <div className="text-muted-foreground">全部</div>
+                    </div>
+                    <div className="border-l px-3 py-2">
+                      <div className="font-semibold text-success">{selectedStats.pass}</div>
+                      <div className="text-muted-foreground">通过</div>
+                    </div>
+                    <div className="border-l px-3 py-2">
+                      <div className="font-semibold text-destructive">{selectedStats.fail}</div>
+                      <div className="text-muted-foreground">问题</div>
+                    </div>
+                    <div className="border-l px-3 py-2">
+                      <div className="font-semibold text-foreground">{selectedStats.pending}</div>
+                      <div className="text-muted-foreground">待填</div>
+                    </div>
                   </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
                   {selected.reject_reason ? (
-                    <div className="mt-2 text-sm text-destructive">
+                    <div className="text-sm text-destructive">
                       {selected.reject_source === "customer" ? "业主疑问" : "驳回原因"}：
                       {selected.reject_reason}
                     </div>
@@ -796,14 +866,15 @@ export function ProjectAcceptancesPanel({
                       {latestCustomerDispute.comment ? ` · ${latestCustomerDispute.comment}` : ""}
                     </div>
                   ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
                   {canEdit(selected.status) ? (
                     <>
                       {selected.status === "draft" ? (
                         <Button
                           type="button"
                           variant="outline"
+                          size="sm"
                           onClick={() => openActionDialog("delete")}
                           disabled={actionLoading}
                         >
@@ -814,6 +885,7 @@ export function ProjectAcceptancesPanel({
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => saveAcceptance(false)}
                         disabled={actionLoading}
                       >
@@ -821,6 +893,7 @@ export function ProjectAcceptancesPanel({
                       </Button>
                       <Button
                         type="button"
+                        size="sm"
                         onClick={() => saveAcceptance(true)}
                         disabled={actionLoading}
                       >
@@ -834,6 +907,7 @@ export function ProjectAcceptancesPanel({
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => openActionDialog("reject")}
                         disabled={actionLoading}
                       >
@@ -842,6 +916,7 @@ export function ProjectAcceptancesPanel({
                       </Button>
                       <Button
                         type="button"
+                        size="sm"
                         onClick={() => openActionDialog("approve")}
                         disabled={actionLoading}
                       >
@@ -853,6 +928,7 @@ export function ProjectAcceptancesPanel({
                   {selected.status === "leader_approved" ? (
                     <Button
                       type="button"
+                      size="sm"
                       variant={selected.latest_customer_notification ? "outline" : "default"}
                       onClick={() => notifyCustomer(Boolean(selected.latest_customer_notification))}
                       disabled={actionLoading}
@@ -864,6 +940,7 @@ export function ProjectAcceptancesPanel({
                     </Button>
                   ) : null}
                 </div>
+              </div>
               </div>
 
               <div className="flex flex-col gap-4 p-4">
@@ -927,24 +1004,31 @@ export function ProjectAcceptancesPanel({
                     const draft = editable.items[item.id];
                     const editableNow = canEdit(selected.status);
                     return (
-                      <article key={item.id} className="rounded-md border p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
+                      <article key={item.id} className="rounded-md border bg-background">
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+                          <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-medium">{item.title}</h4>
+                              <Badge variant={resultVariant(draft?.result)}>
+                                {resultLabel(draft?.result)}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
                               {item.category ? (
                                 <Badge variant="secondary">{item.category}</Badge>
                               ) : null}
                               {item.required ? <Badge variant="outline">必检</Badge> : null}
                               {item.photo_required ? (
-                                <Badge variant="outline">需照片</Badge>
+                                <Badge variant="outline">
+                                  需 {Math.max(item.photo_min_count || 1, 1)} 张照片
+                                </Badge>
                               ) : null}
                             </div>
-                            <h4 className="mt-2 font-medium">{item.title}</h4>
-                            <p className="mt-1 text-sm text-muted-foreground">
+                            <p className="mt-2 text-sm leading-6 text-muted-foreground">
                               {item.standard}
                             </p>
                           </div>
-                          <div className="w-40">
+                          <div className="w-full sm:w-40">
                             <Select
                               value={draft?.result || "unset"}
                               disabled={!editableNow}
@@ -970,10 +1054,11 @@ export function ProjectAcceptancesPanel({
                           </div>
                         </div>
 
-                        <div className="mt-3 grid gap-3">
+                        <div className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_240px]">
                           <div className="space-y-2">
                             <Label>备注</Label>
                             <Textarea
+                              className="min-h-24"
                               value={draft?.remark || ""}
                               disabled={!editableNow}
                               onChange={(event) =>
@@ -983,9 +1068,7 @@ export function ProjectAcceptancesPanel({
                               placeholder="填写验收备注"
                             />
                           </div>
-                        </div>
 
-                        <div className="mt-3 grid gap-3">
                           <ImageUploadBlock
                             label="现场照片"
                             images={draft?.imagePreviews || draft?.images || []}
