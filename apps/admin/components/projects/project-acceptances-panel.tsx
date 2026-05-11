@@ -11,6 +11,8 @@ import {
 } from "@gooes/domain";
 import {
   CheckCircle2,
+  Clock3,
+  Image as ImageIcon,
   Loader2,
   MessageSquareText,
   Plus,
@@ -21,6 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,9 +68,33 @@ type AcceptanceItem = {
 };
 
 type AcceptanceImageItem = {
+  id?: string | null;
+  acceptance_id?: string | null;
+  item_id?: string | null;
+  item_title?: string | null;
   path?: string | null;
   url?: string | null;
   thumb_url?: string | null;
+  source?: "acceptance_item" | "rectification_item" | string | null;
+  created_at?: string | null;
+};
+
+type AcceptanceAction = {
+  id: string;
+  action: string;
+  operator_type: "employee" | "customer" | "system" | string;
+  operator_id: string | null;
+  operator?: {
+    name?: string | null;
+    phone?: string | null;
+  } | null;
+  from_status?: ProjectAcceptanceStatus | null;
+  to_status?: ProjectAcceptanceStatus | null;
+  comment: string | null;
+  created_at: string | null;
+  images?: string[];
+  image_items?: AcceptanceImageItem[];
+  referenced_images?: AcceptanceImageItem[];
 };
 
 type ProjectAcceptance = {
@@ -85,6 +112,7 @@ type ProjectAcceptance = {
   updated_at: string | null;
   submitted_at: string | null;
   items: AcceptanceItem[];
+  actions?: AcceptanceAction[];
   initiator?: { name?: string | null } | null;
   reviewer?: { name?: string | null } | null;
   latest_customer_notification?: AcceptanceNotification | null;
@@ -280,6 +308,53 @@ function getPreviewImageSrc(image: string) {
   return `/api/backend/uploads/public-url?path=${encodeURIComponent(image)}`;
 }
 
+function getImageItemSrc(image: AcceptanceImageItem) {
+  return getPreviewImageSrc(image.thumb_url || image.url || image.path || "");
+}
+
+function getImageItemHref(image: AcceptanceImageItem) {
+  return getPreviewImageSrc(image.url || image.path || image.thumb_url || "");
+}
+
+function getActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    create: "创建验收",
+    update: "保存草稿",
+    submit: "提交验收",
+    leader_approve: "领导复核通过",
+    leader_reject: "领导驳回",
+    customer_confirm: "业主确认通过",
+    customer_dispute: "业主提出疑问",
+    cancel: "作废验收",
+  };
+  return labels[action] || action;
+}
+
+function getActionVariant(action: string) {
+  if (action === "customer_dispute" || action === "leader_reject") return "warning";
+  if (action === "leader_approve" || action === "customer_confirm") return "success";
+  if (action === "submit") return "default";
+  return "secondary";
+}
+
+function getActionOperator(action: AcceptanceAction) {
+  if (action.operator?.name) return action.operator.name;
+  if (action.operator?.phone) return action.operator.phone;
+  if (action.operator_type === "customer") return "业主";
+  if (action.operator_type === "employee") return "员工";
+  return "系统";
+}
+
+function getLatestCustomerDispute(acceptance: ProjectAcceptance | null) {
+  return (acceptance?.actions || [])
+    .filter((item) => item.action === "customer_dispute")
+    .slice()
+    .sort((left, right) =>
+      new Date(right.created_at || 0).getTime() -
+      new Date(left.created_at || 0).getTime()
+    )[0] || null;
+}
+
 export function ProjectAcceptancesPanel({
   project,
   active = true,
@@ -305,6 +380,10 @@ export function ProjectAcceptancesPanel({
   const selected = useMemo(
     () => acceptances.find((item) => item.id === selectedId) || null,
     [acceptances, selectedId],
+  );
+  const latestCustomerDispute = useMemo(
+    () => getLatestCustomerDispute(selected),
+    [selected],
   );
   const occupiedStages = useMemo(() => {
     return new Map(
@@ -664,6 +743,13 @@ export function ProjectAcceptancesPanel({
                       {selected.reject_reason}
                     </div>
                   ) : null}
+                  {selected.reject_source === "customer" && latestCustomerDispute ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <Clock3 data-icon="inline-start" />
+                      最近疑问：{formatDateTime(latestCustomerDispute.created_at)}
+                      {latestCustomerDispute.comment ? ` · ${latestCustomerDispute.comment}` : ""}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {canEdit(selected.status) ? (
@@ -743,6 +829,28 @@ export function ProjectAcceptancesPanel({
                     disabled={actionLoading || selected.status !== "leader_approved"}
                   />
                 ) : null}
+
+                {latestCustomerDispute ? (
+                  <Alert>
+                    <MessageSquareText />
+                    <AlertTitle>业主有疑问，待整改</AlertTitle>
+                    <AlertDescription>
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          {formatDateTime(latestCustomerDispute.created_at)} ·{" "}
+                          {getActionOperator(latestCustomerDispute)}
+                        </div>
+                        {latestCustomerDispute.comment ? (
+                          <div className="text-foreground">
+                            {latestCustomerDispute.comment}
+                          </div>
+                        ) : null}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <AcceptanceTimeline actions={selected.actions || []} />
 
                 <div className="space-y-2">
                   <Label>整体验收说明</Label>
@@ -970,6 +1078,156 @@ function AcceptanceActionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AcceptanceTimeline({ actions }: { actions: AcceptanceAction[] }) {
+  if (!actions.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border bg-background p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium">流程记录</div>
+        <Badge variant="secondary">{actions.length} 条</Badge>
+      </div>
+      <div className="mt-4 flex flex-col gap-3">
+        {actions.map((action, index) => {
+          const isLatest = index === actions.length - 1;
+          const referencedImages = action.referenced_images || [];
+          const imageItems = action.image_items?.length
+            ? action.image_items
+            : (action.images || []).map((image) => ({
+              path: image,
+              url: image,
+              thumb_url: image,
+            }));
+
+          return (
+            <div
+              key={action.id}
+              className={`rounded-md border p-3 ${
+                isLatest ? "bg-muted/40" : "bg-card"
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={getActionVariant(action.action)}>
+                      {getActionLabel(action.action)}
+                    </Badge>
+                    {isLatest ? <Badge variant="outline">最新</Badge> : null}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {getActionOperator(action)} · {formatDateTime(action.created_at)}
+                  </div>
+                </div>
+                {action.action === "customer_confirm" ? (
+                  <Badge variant="success">已确认</Badge>
+                ) : null}
+              </div>
+
+              {action.comment ? (
+                <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
+                  {action.comment}
+                </div>
+              ) : null}
+
+              {action.action === "customer_dispute" ? (
+                <div className="mt-3 flex flex-col gap-3">
+                  <ActionImageGallery
+                    title="客户引用的验收图片"
+                    emptyText="未引用验收图片"
+                    images={referencedImages}
+                    showItemTitle
+                  />
+                  <ActionImageGallery
+                    title="客户补充上传图片"
+                    emptyText="未上传补充图片"
+                    images={imageItems}
+                  />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ActionImageGallery({
+  title,
+  emptyText,
+  images,
+  showItemTitle = false,
+}: {
+  title: string;
+  emptyText: string;
+  images: AcceptanceImageItem[];
+  showItemTitle?: boolean;
+}) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <ImageIcon data-icon="inline-start" />
+          {title}
+        </div>
+        <Badge variant="secondary">{images.length}</Badge>
+      </div>
+      {images.length ? (
+        <div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-3">
+          {images.map((image, index) => {
+            const src = getImageItemSrc(image);
+            const href = getImageItemHref(image);
+            const sourceLabel = image.source === "rectification_item"
+              ? "整改图"
+              : image.source === "acceptance_item"
+              ? "验收图"
+              : "图片";
+            return (
+              <a
+                key={image.id || image.path || image.url || index}
+                href={href || undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="group min-w-0 rounded-md border bg-card p-2 transition-colors hover:bg-accent"
+              >
+                <div className="aspect-square overflow-hidden rounded-md bg-muted">
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={title}
+                      className="size-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
+                      无图片
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 flex min-w-0 flex-col gap-1">
+                  {showItemTitle ? (
+                    <div className="truncate text-xs font-medium">
+                      {image.item_title || "未关联验收项"}
+                    </div>
+                  ) : null}
+                  <div className="text-xs text-muted-foreground">
+                    {sourceLabel}
+                  </div>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
+          {emptyText}
+        </div>
+      )}
+    </div>
   );
 }
 
