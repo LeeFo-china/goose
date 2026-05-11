@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { H5PageEditor, type H5PageConfig } from "@/components/marketing/h5-page-editor";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type RouteParams = {
@@ -54,7 +54,10 @@ export default async function H5PageEditorPage({
   const accessDenied = await getTenantBusinessAccessDenied();
   if (accessDenied) return accessDenied;
 
-  const token = await getAdminToken();
+  const [token, session] = await Promise.all([
+    getAdminToken(),
+    getAdminSession(),
+  ]);
   if (!token) {
     notFound();
   }
@@ -71,6 +74,7 @@ export default async function H5PageEditorPage({
       page={data.page}
       draftVersion={data.draft_version}
       returnHref={normalizeReturnHref(query.returnTo)}
+      tenantSlug={session?.tenant?.slug || null}
     />
   );
 }

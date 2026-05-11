@@ -1981,11 +1981,13 @@ export function H5PageEditor({
   draftVersion,
   returnHref = H5_MARKETING_RETURN_HREF,
   apiBasePath = "/marketing-pages",
+  tenantSlug,
 }: {
   page: H5PageEditorPage;
   draftVersion: H5PageEditorVersion;
   returnHref?: string;
   apiBasePath?: string;
+  tenantSlug?: string | null;
 }) {
   const router = useRouter();
   const [config, setConfig] = useState(() => normalizeConfig(draftVersion.config, page));
@@ -2006,7 +2008,9 @@ export function H5PageEditor({
     () => config.blocks.find((block) => block.id === aiTargetBlockId) || null,
     [config.blocks, aiTargetBlockId],
   );
-  const pageUrl = `${getH5BaseUrl()}/p/${page.slug}`;
+  const pageUrl = tenantSlug
+    ? `${getH5BaseUrl()}/t/${encodeURIComponent(tenantSlug)}/p/${encodeURIComponent(page.slug)}`
+    : `${getH5BaseUrl()}/p/${encodeURIComponent(page.slug)}`;
   const normalBlocks = config.blocks.filter((block) => block.type !== "floating_phone_cta");
   const floatingBlocks = config.blocks.filter((block) => block.type === "floating_phone_cta");
 

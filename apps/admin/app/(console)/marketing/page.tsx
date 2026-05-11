@@ -33,7 +33,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type MarketingPageSearchParams = {
@@ -282,7 +282,11 @@ export default async function MarketingPage({
 
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
-  const token = await getAdminToken();
+  const [token, session] = await Promise.all([
+    getAdminToken(),
+    getAdminSession(),
+  ]);
+  const tenantSlug = session?.tenant?.slug || null;
   const [{ list, pagination, error }, projects, h5Pages, h5Leads] = await Promise.all([
     getCampaigns(token, params),
     getProjects(token),
@@ -325,7 +329,7 @@ export default async function MarketingPage({
         {activeTab === "campaigns" ? (
           <CreateMarketingCampaignButton projects={projects} />
         ) : activeTab === "h5" ? (
-          <CreateH5MarketingPageButton />
+          <CreateH5MarketingPageButton tenantSlug={tenantSlug} />
         ) : null}
       </div>
 
@@ -492,9 +496,9 @@ export default async function MarketingPage({
                   <div className="p-4">
                     <StatusAlert>{h5Pages.error}</StatusAlert>
                   </div>
-                ) : (
-                  <H5MarketingPagesTable pages={h5Pages.list} />
-                )}
+              ) : (
+                <H5MarketingPagesTable pages={h5Pages.list} tenantSlug={tenantSlug} />
+              )}
               </CardContent>
             </Card>
           </div>

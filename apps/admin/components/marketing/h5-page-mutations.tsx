@@ -112,6 +112,7 @@ type H5MarketingPageRouteOptions = {
   apiBasePath?: string;
   editBasePath?: string;
   returnTo?: string;
+  tenantSlug?: string | null;
 };
 
 const DEFAULT_H5_PAGE_API_BASE_PATH = "/marketing-pages";
@@ -129,8 +130,11 @@ function buildH5PageEditHref(
   return `${editBasePath}/${pageId}/edit?${query}`;
 }
 
-function buildPageUrl(slug: string) {
-  return `${getH5BaseUrl()}/p/${slug}`;
+function buildPageUrl(slug: string, tenantSlug?: string | null) {
+  const encodedSlug = encodeURIComponent(slug);
+  return tenantSlug
+    ? `${getH5BaseUrl()}/t/${encodeURIComponent(tenantSlug)}/p/${encodedSlug}`
+    : `${getH5BaseUrl()}/p/${encodedSlug}`;
 }
 
 function toApiDateTime(value?: string | null) {
@@ -269,6 +273,7 @@ function createDefaultH5PageValues(slug = ""): H5PageFormValues {
 
 export function CreateH5MarketingPageButton({
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+  tenantSlug,
 }: H5MarketingPageRouteOptions = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -489,7 +494,10 @@ export function CreateH5MarketingPageButton({
                 <div className="min-w-0">
                   <div className="text-sm font-medium">高级设置</div>
                   <div className="mt-1 truncate text-xs text-muted-foreground">
-                    活动路径已自动生成：/p/{values.slug || "auto"}
+                    活动路径已自动生成：
+                    {tenantSlug
+                      ? `/t/${tenantSlug}/p/${values.slug || "auto"}`
+                      : `/p/${values.slug || "auto"}`}
                   </div>
                 </div>
                 <CollapsibleTrigger asChild>
@@ -517,7 +525,7 @@ export function CreateH5MarketingPageButton({
                     </InputGroupAddon>
                   </InputGroup>
                   <FieldDescription>
-                    发布后访问地址为 {buildPageUrl(values.slug || "auto")}
+                    发布后访问地址为 {buildPageUrl(values.slug || "auto", tenantSlug)}
                   </FieldDescription>
                   {firstIssue?.path[0] === "slug" ? (
                     <FieldError>{firstIssue.message}</FieldError>
@@ -596,11 +604,13 @@ function H5PageSettingsButton({
   pages = [],
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
   variant = "button",
+  tenantSlug,
 }: {
   page: H5MarketingPageRecord;
   pages?: H5MarketingPageRecord[];
   apiBasePath?: string;
   variant?: "button" | "menu";
+  tenantSlug?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -804,7 +814,7 @@ function H5PageSettingsButton({
                 onChange={(event) => updateValue("slug", event.target.value)}
               />
               <FieldDescription>
-                发布后访问地址为 {buildPageUrl(values.slug || "spring-sale")}
+                发布后访问地址为 {buildPageUrl(values.slug || "spring-sale", tenantSlug)}
               </FieldDescription>
             </Field>
             <Field>
@@ -886,17 +896,19 @@ export function H5PageRowActions({
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
   editBasePath = DEFAULT_H5_PAGE_EDIT_BASE_PATH,
   returnTo = DEFAULT_H5_PAGE_RETURN_TO,
+  tenantSlug,
 }: {
   page: H5MarketingPageRecord;
   pages?: H5MarketingPageRecord[];
   apiBasePath?: string;
   editBasePath?: string;
   returnTo?: string;
+  tenantSlug?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const pageUrl = buildPageUrl(page.slug);
+  const pageUrl = buildPageUrl(page.slug, tenantSlug);
 
   function runAction(label: string, action: () => Promise<unknown>) {
     startTransition(async () => {
@@ -938,7 +950,13 @@ export function H5PageRowActions({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <H5PageSettingsButton page={page} pages={pages} apiBasePath={apiBasePath} variant="menu" />
+              <H5PageSettingsButton
+                page={page}
+                pages={pages}
+                apiBasePath={apiBasePath}
+                variant="menu"
+                tenantSlug={tenantSlug}
+              />
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={copyUrl}>
               <Copy />

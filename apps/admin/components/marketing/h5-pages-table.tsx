@@ -23,8 +23,11 @@ function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
 }
 
-function buildPageUrl(slug: string) {
-  return `${getH5BaseUrl()}/p/${slug}`;
+function buildPageUrl(slug: string, tenantSlug?: string | null) {
+  const encodedSlug = encodeURIComponent(slug);
+  return tenantSlug
+    ? `${getH5BaseUrl()}/t/${encodeURIComponent(tenantSlug)}/p/${encodedSlug}`
+    : `${getH5BaseUrl()}/p/${encodedSlug}`;
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -45,6 +48,7 @@ type H5MarketingPagesTableProps = {
   apiBasePath?: string;
   editBasePath?: string;
   returnTo?: string;
+  tenantSlug?: string | null;
 };
 
 function createColumns({
@@ -52,6 +56,7 @@ function createColumns({
   apiBasePath,
   editBasePath,
   returnTo,
+  tenantSlug,
 }: H5MarketingPagesTableProps): ColumnDef<H5MarketingPageRecord>[] {
   return [
     {
@@ -63,7 +68,7 @@ function createColumns({
             {row.original.title || "未命名 H5 页面"}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            /p/{row.original.slug}
+            {tenantSlug ? `/t/${tenantSlug}/p/${row.original.slug}` : `/p/${row.original.slug}`}
           </div>
         </div>
       ),
@@ -84,7 +89,7 @@ function createColumns({
       id: "public_url",
       header: "访问地址",
       cell: ({ row }) => {
-        const url = buildPageUrl(row.original.slug);
+        const url = buildPageUrl(row.original.slug, tenantSlug);
         return (
           <Button
             type="button"
@@ -150,6 +155,7 @@ function createColumns({
           apiBasePath={apiBasePath}
           editBasePath={editBasePath}
           returnTo={returnTo}
+          tenantSlug={tenantSlug}
         />
       ),
       meta: {
@@ -165,8 +171,9 @@ export function H5MarketingPagesTable({
   apiBasePath,
   editBasePath,
   returnTo,
+  tenantSlug,
 }: H5MarketingPagesTableProps) {
-  const columns = createColumns({ pages, apiBasePath, editBasePath, returnTo });
+  const columns = createColumns({ pages, apiBasePath, editBasePath, returnTo, tenantSlug });
 
   return (
     <DataTable
