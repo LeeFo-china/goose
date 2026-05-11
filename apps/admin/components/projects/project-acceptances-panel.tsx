@@ -35,18 +35,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupText,
-  InputGroupTextarea,
-} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -1358,80 +1346,55 @@ function RectificationReplyPanel({
   ) => void;
 }) {
   const replyTarget = action.action === "customer_dispute" ? "业主疑问" : "领导驳回";
-  const hasMultipleItems = items.length > 1;
+  const targetItem = items[0];
+  const targetDraft = targetItem ? editable.items[targetItem.id] : null;
+
+  if (!targetItem) {
+    return null;
+  }
 
   return (
     <div className="mt-3 border-l-2 border-warning pl-3">
       <div className="rounded-md border bg-background">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
+        <div className="border-b px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <CornerDownRight data-icon="inline-start" />
             <div className="min-w-0">
               <div className="text-sm font-medium">回复{replyTarget}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                在这里提交整改说明和整改后照片
-              </div>
             </div>
           </div>
-          <Badge variant="warning">{items.length} 个整改项</Badge>
         </div>
 
-        <FieldGroup className="gap-3 p-3">
-          {items.map((item) => {
-            const draft = editable.items[item.id];
-            const remarkId = `rectification-${item.id}`;
-            return (
-              <Field key={item.id} className="rounded-md border bg-card p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {hasMultipleItems ? <Badge variant="outline">整改项</Badge> : null}
-                  <FieldLabel htmlFor={remarkId} className="text-sm font-medium">
-                    {item.title}
-                  </FieldLabel>
-                </div>
-                {item.standard ? (
-                  <FieldDescription>{item.standard}</FieldDescription>
-                ) : null}
-                <InputGroup className="min-h-24">
-                  <InputGroupTextarea
-                    id={remarkId}
-                    value={draft?.rectification_remark || ""}
-                    disabled={actionLoading}
-                    aria-label={`${item.title}整改说明`}
-                    onChange={(event) =>
-                      onUpdateItem(item.id, {
-                        rectification_remark: event.target.value,
-                      })}
-                    placeholder="回复整改说明，例如：已重新处理并补拍现场照片"
-                  />
-                  <InputGroupAddon align="block-end">
-                    <InputGroupText>
-                      {replyTarget}
-                    </InputGroupText>
-                  </InputGroupAddon>
-                </InputGroup>
-                <ImageUploadBlock
-                  label="整改后照片"
-                  images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
-                  disabled={actionLoading}
-                  uploading={uploadingItemId === `${item.id}:rectification_images`}
-                  onUpload={(event) =>
-                    onUploadImages(item.id, event, "rectification_images")}
-                  onRemove={(index) => onUpdateItem(item.id, {
-                    rectification_images: (draft?.rectification_images || [])
-                      .filter((_, i) => i !== index),
-                    rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
-                      .filter((_, i) => i !== index),
-                  })}
-                />
-              </Field>
-            );
-          })}
-        </FieldGroup>
+        <div className="flex flex-col gap-3 p-3">
+          <Textarea
+            className="min-h-24 bg-card"
+            value={targetDraft?.rectification_remark || ""}
+            disabled={actionLoading}
+            aria-label="整改说明"
+            onChange={(event) =>
+              onUpdateItem(targetItem.id, {
+                rectification_remark: event.target.value,
+              })}
+            placeholder="填写整改说明"
+          />
+          <ImageUploadBlock
+            label="上传整改图片"
+            images={targetDraft?.rectificationImagePreviews || targetDraft?.rectification_images || []}
+            disabled={actionLoading}
+            uploading={uploadingItemId === `${targetItem.id}:rectification_images`}
+            onUpload={(event) =>
+              onUploadImages(targetItem.id, event, "rectification_images")}
+            onRemove={(index) => onUpdateItem(targetItem.id, {
+              rectification_images: (targetDraft?.rectification_images || [])
+                .filter((_, i) => i !== index),
+              rectificationImagePreviews: (targetDraft?.rectificationImagePreviews || [])
+                .filter((_, i) => i !== index),
+            })}
+          />
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2">
-          <div className="text-xs text-muted-foreground">
-            提交后会进入复核流程，保存只保留当前整改草稿。
-          </div>
+          <div className="text-xs text-muted-foreground">保存草稿或提交整改复核</div>
           <div className="flex gap-2">
             <Button
               type="button"
