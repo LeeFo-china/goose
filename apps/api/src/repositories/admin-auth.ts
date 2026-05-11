@@ -6,6 +6,7 @@ import type { SmsScene, SmsVerificationStatus } from "@gooes/domain";
 export type AdminAuthEmployeeRecord = {
   id: string;
   user_id: string | null;
+  tenant_id: string | null;
   status: string | null;
   department_id: string | null;
   post_id: string | null;
@@ -52,6 +53,7 @@ class AdminAuthRepository {
       .select(`
         id,
         user_id,
+        tenant_id,
         status,
         department_id,
         post_id,

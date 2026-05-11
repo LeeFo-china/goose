@@ -113,7 +113,7 @@ class AdminAuthService {
     phone: string;
     requestIp?: string | null;
   }) {
-    await this.getSingleActiveEmployeeByPhone(input.phone);
+    const employee = await this.getSingleActiveEmployeeByPhone(input.phone);
 
     const recentBoundary = new Date(Date.now() - 60 * 1000).toISOString();
     const recentCode = await adminAuthRepository.findRecentVerificationCode({
@@ -137,7 +137,9 @@ class AdminAuthService {
     });
 
     try {
-      await sendSmsCode(input.phone, code, ADMIN_LOGIN_SCENE);
+      await sendSmsCode(input.phone, code, ADMIN_LOGIN_SCENE, {
+        tenantId: employee.tenant_id,
+      });
     } catch (error) {
       await adminAuthRepository.deletePendingVerificationCode({
         phone: input.phone,

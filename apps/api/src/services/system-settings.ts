@@ -35,10 +35,19 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     key: "SMS_PROVIDER",
     groupCode: "sms",
     name: "短信服务商",
-    description: "mock 为模拟发送，disabled 为禁用，aliyun 为阿里云短信。",
+    description: "平台短信服务商。mock 为模拟发送，disabled 为禁用，aliyun 为阿里云短信，tencent 为腾讯云短信。",
     valueType: "string",
     envNames: ["SMS_PROVIDER"],
     defaultValue: "mock",
+  },
+  {
+    key: "SMS_CHANNEL_MODE",
+    groupCode: "sms",
+    name: "租户短信通道模式",
+    description: "租户短信通道模式：platform 继承平台，tenant_aliyun 使用租户自有阿里云，tenant_tencent 使用租户自有腾讯云。",
+    valueType: "string",
+    envNames: ["SMS_CHANNEL_MODE"],
+    defaultValue: "platform",
   },
   {
     key: "ALIYUN_SMS_SIGN_NAME",
@@ -115,6 +124,90 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     valueType: "string",
     envNames: ["PROJECT_ACCEPTANCE_SMS_LINK_TYPE"],
     defaultValue: "scheme",
+  },
+  {
+    key: "TENCENT_SMS_SECRET_ID",
+    groupCode: "sms",
+    name: "腾讯云短信 SecretId",
+    description: "腾讯云短信 SecretId，加密存储。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_SECRET_ID"],
+    isSecret: true,
+  },
+  {
+    key: "TENCENT_SMS_SECRET_KEY",
+    groupCode: "sms",
+    name: "腾讯云短信 SecretKey",
+    description: "腾讯云短信 SecretKey，加密存储。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_SECRET_KEY"],
+    isSecret: true,
+  },
+  {
+    key: "TENCENT_SMS_REGION",
+    groupCode: "sms",
+    name: "腾讯云短信区域",
+    description: "腾讯云短信 API 区域。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_REGION"],
+    defaultValue: "ap-guangzhou",
+  },
+  {
+    key: "TENCENT_SMS_ENDPOINT",
+    groupCode: "sms",
+    name: "腾讯云短信 Endpoint",
+    description: "腾讯云短信 API 域名。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_ENDPOINT"],
+    defaultValue: "sms.tencentcloudapi.com",
+  },
+  {
+    key: "TENCENT_SMS_SDK_APP_ID",
+    groupCode: "sms",
+    name: "腾讯云短信 SdkAppId",
+    description: "腾讯云短信应用 SdkAppId。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_SDK_APP_ID"],
+  },
+  {
+    key: "TENCENT_SMS_SIGN_NAME",
+    groupCode: "sms",
+    name: "腾讯云短信签名",
+    description: "腾讯云短信签名名称。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_SIGN_NAME"],
+  },
+  {
+    key: "TENCENT_SMS_TEMPLATE_ID_BIND_CUSTOMER",
+    groupCode: "sms",
+    name: "腾讯云客户绑定模板",
+    description: "客户绑定手机号验证码模板 ID。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_TEMPLATE_ID_BIND_CUSTOMER"],
+  },
+  {
+    key: "TENCENT_SMS_TEMPLATE_ID_BIND_EMPLOYEE",
+    groupCode: "sms",
+    name: "腾讯云员工绑定模板",
+    description: "员工绑定手机号验证码模板 ID。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_TEMPLATE_ID_BIND_EMPLOYEE"],
+  },
+  {
+    key: "TENCENT_SMS_TEMPLATE_ID_ADMIN_LOGIN",
+    groupCode: "sms",
+    name: "腾讯云后台登录模板",
+    description: "后台管理员登录验证码模板 ID；为空时回退员工绑定模板。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_TEMPLATE_ID_ADMIN_LOGIN"],
+  },
+  {
+    key: "TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE",
+    groupCode: "sms",
+    name: "腾讯云项目验收通知模板",
+    description: "领导复核通过后发送给客户的项目验收通知模板 ID。",
+    valueType: "string",
+    envNames: ["TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE"],
   },
   {
     key: "EZVIZ_API_BASE_URL",
@@ -643,12 +736,69 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
 
 const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
 
-const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
+const TENANT_SMS_CHANNEL_MODE_KEY = "SMS_CHANNEL_MODE";
+const TENANT_SMS_PLATFORM_MODE = "platform";
+const TENANT_SMS_ALIYUN_MODE = "tenant_aliyun";
+const TENANT_SMS_TENCENT_MODE = "tenant_tencent";
+
+const TENANT_SMS_BASE_SETTING_KEYS = new Set([
+  TENANT_SMS_CHANNEL_MODE_KEY,
+]);
+
+const TENANT_ALIYUN_SMS_SETTING_KEYS = new Set([
+  "ALIBABA_CLOUD_ACCESS_KEY_ID",
+  "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
   "ALIYUN_SMS_SIGN_NAME",
   "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
   "ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE",
   "ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN",
   "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
+  "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
+]);
+
+const TENANT_TENCENT_SMS_SETTING_KEYS = new Set([
+  "TENCENT_SMS_SECRET_ID",
+  "TENCENT_SMS_SECRET_KEY",
+  "TENCENT_SMS_REGION",
+  "TENCENT_SMS_ENDPOINT",
+  "TENCENT_SMS_SDK_APP_ID",
+  "TENCENT_SMS_SIGN_NAME",
+  "TENCENT_SMS_TEMPLATE_ID_BIND_CUSTOMER",
+  "TENCENT_SMS_TEMPLATE_ID_BIND_EMPLOYEE",
+  "TENCENT_SMS_TEMPLATE_ID_ADMIN_LOGIN",
+  "TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE",
+  "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
+]);
+
+const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
+  ...TENANT_SMS_BASE_SETTING_KEYS,
+  ...TENANT_ALIYUN_SMS_SETTING_KEYS,
+  ...TENANT_TENCENT_SMS_SETTING_KEYS,
+]);
+
+const TENANT_SETTING_KEYS_HIDE_PLATFORM_VALUE = new Set([
+  ...TENANT_ALIYUN_SMS_SETTING_KEYS,
+  ...TENANT_TENCENT_SMS_SETTING_KEYS,
+]);
+
+const LEGACY_PARTIAL_TENANT_SMS_SETTING_KEYS = new Set([
+  "ALIBABA_CLOUD_ACCESS_KEY_ID",
+  "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+  "ALIYUN_SMS_SIGN_NAME",
+  "ALIYUN_SMS_TEMPLATE_CODE_BIND_CUSTOMER",
+  "ALIYUN_SMS_TEMPLATE_CODE_BIND_EMPLOYEE",
+  "ALIYUN_SMS_TEMPLATE_CODE_ADMIN_LOGIN",
+  "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
+  "TENCENT_SMS_SECRET_ID",
+  "TENCENT_SMS_SECRET_KEY",
+  "TENCENT_SMS_REGION",
+  "TENCENT_SMS_ENDPOINT",
+  "TENCENT_SMS_SDK_APP_ID",
+  "TENCENT_SMS_SIGN_NAME",
+  "TENCENT_SMS_TEMPLATE_ID_BIND_CUSTOMER",
+  "TENCENT_SMS_TEMPLATE_ID_BIND_EMPLOYEE",
+  "TENCENT_SMS_TEMPLATE_ID_ADMIN_LOGIN",
+  "TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE",
   "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
 ]);
 
@@ -752,6 +902,10 @@ function resolveEffectiveValue(record: SystemSettingRecord): {
 function validateSettingValue(record: SystemSettingRecord, value: string | null) {
   if (!value) return null;
 
+  if (record.key === TENANT_SMS_CHANNEL_MODE_KEY) {
+    return normalizeTenantSmsChannelMode(value);
+  }
+
   if (record.value_type === "number" && !Number.isFinite(Number(value))) {
     throw Errors.badRequest("配置值必须是数字");
   }
@@ -769,6 +923,19 @@ function validateSettingValue(record: SystemSettingRecord, value: string | null)
   }
 
   return value;
+}
+
+function normalizeTenantSmsChannelMode(value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (
+    normalized === TENANT_SMS_ALIYUN_MODE ||
+    normalized === TENANT_SMS_TENCENT_MODE ||
+    normalized === TENANT_SMS_PLATFORM_MODE
+  ) {
+    return normalized;
+  }
+
+  return TENANT_SMS_PLATFORM_MODE;
 }
 
 class SystemSettingsService {
@@ -877,34 +1044,161 @@ class SystemSettingsService {
     };
   }
 
+  private toTenantEditableEffective(input: {
+    platformRecord: SystemSettingRecord;
+    tenantRecord: SystemSettingRecord | null;
+    tenantId: string;
+    effective: ReturnType<typeof resolveEffectiveValue>;
+    effectiveScope: SettingScope;
+  }) {
+    const record: SystemSettingRecord = {
+      ...input.platformRecord,
+      id: input.tenantRecord?.id ?? input.platformRecord.id,
+      tenant_id: input.tenantId,
+      value_text: input.tenantRecord?.value_text ?? null,
+      updated_by_employee_id: input.tenantRecord?.updated_by_employee_id ?? null,
+      created_at: input.tenantRecord?.created_at ?? input.platformRecord.created_at,
+      updated_at: input.tenantRecord?.updated_at ?? input.platformRecord.updated_at,
+    };
+
+    return this.toEffective(record, {
+      effective: input.effective,
+      effectiveScope: input.effectiveScope,
+    });
+  }
+
+  private listTenantSmsSettings(input: {
+    tenantId: string;
+    records: SystemSettingRecord[];
+  }) {
+    const platformRecords = input.records.filter((record) => !record.tenant_id);
+    const tenantModeRecord = this.getTenantRecord(
+      input.records,
+      TENANT_SMS_CHANNEL_MODE_KEY,
+      input.tenantId,
+    );
+    const channelMode = normalizeTenantSmsChannelMode(tenantModeRecord?.value_text);
+    const visibleKeys = new Set<string>(TENANT_SMS_BASE_SETTING_KEYS);
+
+    if (channelMode === TENANT_SMS_ALIYUN_MODE) {
+      for (const key of TENANT_ALIYUN_SMS_SETTING_KEYS) visibleKeys.add(key);
+    }
+
+    if (channelMode === TENANT_SMS_TENCENT_MODE) {
+      for (const key of TENANT_TENCENT_SMS_SETTING_KEYS) visibleKeys.add(key);
+    }
+
+    return platformRecords
+      .filter((platformRecord) => visibleKeys.has(platformRecord.key))
+      .map((platformRecord) => {
+        const tenantRecord = this.getTenantRecord(
+          input.records,
+          platformRecord.key,
+          input.tenantId,
+        );
+        const tenantStoredValue = normalizeStoredValue(tenantRecord?.value_text);
+
+        if (platformRecord.key === TENANT_SMS_CHANNEL_MODE_KEY) {
+          return this.toTenantEditableEffective({
+            platformRecord,
+            tenantRecord,
+            tenantId: input.tenantId,
+            effective: {
+              value: channelMode,
+              source: tenantStoredValue ? "database" as const : "default" as const,
+            },
+            effectiveScope: tenantStoredValue ? "tenant" : "platform",
+          });
+        }
+
+        return this.toTenantEditableEffective({
+          platformRecord,
+          tenantRecord,
+          tenantId: input.tenantId,
+          effective: tenantStoredValue
+            ? {
+              value: tenantStoredValue,
+              source: "database" as const,
+            }
+            : {
+              value: null,
+              source: "empty" as const,
+            },
+          effectiveScope: tenantStoredValue ? "tenant" : "platform",
+        });
+      });
+  }
+
   async listSettings(authContext?: AuthContext) {
     const records = await this.listRecords();
     const isTenantContext = Boolean(authContext && !authContext.isPlatformAdmin);
     const tenantId = authContext?.isPlatformAdmin ? null : authContext?.tenantId || null;
-    const platformRecords = records.filter((record) => {
-      if (record.tenant_id) return false;
-      return !isTenantContext || this.isTenantOverridable(record.key);
-    });
-    const list = platformRecords.map((platformRecord) => {
-      const resolved = this.resolveEffectiveRecord({
-        key: platformRecord.key,
+    const list = isTenantContext && tenantId
+      ? this.listTenantSmsSettings({
         tenantId,
         records,
-      });
-      return this.toEffective(resolved.record || platformRecord, {
-        effective: resolved.effective,
-        effectiveScope: resolved.effectiveScope,
-      });
-    });
+      })
+      : records
+        .filter((record) => !record.tenant_id)
+        .map((platformRecord) => {
+          const resolved = this.resolveEffectiveRecord({
+            key: platformRecord.key,
+            tenantId,
+            records,
+          });
+          return this.toEffective(resolved.record || platformRecord, {
+            effective: resolved.effective,
+            effectiveScope: resolved.effectiveScope,
+          });
+        });
 
-    const groups = list.reduce<Record<string, EffectiveSetting[]>>((result, item) => {
+    const filteredList = isTenantContext
+      ? list.filter((setting) => (
+        setting.key === TENANT_SMS_CHANNEL_MODE_KEY ||
+        !TENANT_SETTING_KEYS_HIDE_PLATFORM_VALUE.has(setting.key) ||
+        setting.effective_scope === "tenant" ||
+        setting.source === "empty"
+      ))
+      : list;
+
+    const groups = filteredList.reduce<Record<string, EffectiveSetting[]>>((result, item) => {
       const group = result[item.group_code] || [];
       group.push(item);
       result[item.group_code] = group;
       return result;
     }, {});
 
-    return { list, groups };
+    return { list: filteredList, groups };
+  }
+
+  private shouldClearLegacyTenantSmsOverrides(input: {
+    tenantId: string | null;
+    key: string;
+    value: string | null;
+  }) {
+    return Boolean(
+      input.tenantId &&
+        input.key === TENANT_SMS_CHANNEL_MODE_KEY &&
+        normalizeTenantSmsChannelMode(input.value) === TENANT_SMS_PLATFORM_MODE,
+    );
+  }
+
+  private async clearLegacyTenantSmsOverrides(input: {
+    tenantId: string;
+    employeeId: string | null;
+  }) {
+    await Promise.all(
+      Array.from(LEGACY_PARTIAL_TENANT_SMS_SETTING_KEYS).map(async (key) => {
+        const existing = await systemSettingRepository.findByKey(key, input.tenantId);
+        if (!existing) return;
+        await systemSettingRepository.updateValue({
+          key,
+          tenantId: input.tenantId,
+          valueText: null,
+          employeeId: input.employeeId,
+        });
+      }),
+    );
   }
 
   async updateSetting(authContext: AuthContext, key: string, value: string | null) {
@@ -951,6 +1245,20 @@ class SystemSettingsService {
         status: record.status,
         employeeId: authContext.employeeId,
       });
+
+    if (
+      this.shouldClearLegacyTenantSmsOverrides({
+        tenantId,
+        key,
+        value: validatedValue,
+      }) &&
+      tenantId
+    ) {
+      await this.clearLegacyTenantSmsOverrides({
+        tenantId,
+        employeeId: authContext.employeeId,
+      });
+    }
     this.clearCache();
 
     return this.toEffective(updated);
@@ -987,6 +1295,29 @@ class SystemSettingsService {
     options?: { tenantId?: string | null },
   ) {
     return this.getString(key, fallbackValue, options);
+  }
+
+  async getTenantOverrideString(
+    key: string,
+    tenantId: string | null | undefined,
+    fallbackValue = "",
+  ) {
+    if (!tenantId || !this.isTenantOverridable(key)) {
+      return fallbackValue;
+    }
+
+    const records = await this.listRecords();
+    const record = this.getTenantRecord(records, key, tenantId);
+    const value = normalizeStoredValue(record?.value_text);
+    if (!record || record.status !== "active" || !value) {
+      return fallbackValue;
+    }
+
+    if (record.is_secret) {
+      return decryptSecretValue(value) || fallbackValue;
+    }
+
+    return value;
   }
 
   async getNumber(

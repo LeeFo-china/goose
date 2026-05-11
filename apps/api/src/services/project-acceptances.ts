@@ -441,10 +441,20 @@ class ProjectAcceptanceService {
   }
 
   private async getAcceptanceSmsExpireHours(tenantId?: string | null) {
+    const channelMode = tenantId
+      ? await systemSettingsService.getTenantOverrideString(
+        "SMS_CHANNEL_MODE",
+        tenantId,
+        "platform",
+      )
+      : "platform";
+    const effectiveTenantId = channelMode === "tenant_aliyun" || channelMode === "tenant_tencent"
+      ? tenantId
+      : null;
     const value = await systemSettingsService.getNumber(
       "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
       72,
-      { tenantId },
+      { tenantId: effectiveTenantId },
     );
     if (!Number.isFinite(value) || value <= 0) {
       return 72;
@@ -522,28 +532,15 @@ class ProjectAcceptanceService {
     link: string;
     expireHours: number;
   }) {
-    const provider = (await systemSettingsService.getString("SMS_PROVIDER", "mock"))
-      .trim()
-      .toLowerCase();
-    const templateCode = await systemSettingsService.getString(
-      "ALIYUN_SMS_TEMPLATE_CODE_PROJECT_ACCEPTANCE",
-      "",
-      { tenantId: input.tenantId },
-    );
-
-    if (provider === "aliyun" && !templateCode) {
-      throw Errors.badRequest("缺少项目验收通知短信模板 Code");
-    }
-
     await sendSmsTemplate({
       phone: input.phone,
-      templateCode,
       templateParam: {
         stageName: input.stageName,
         link: input.link,
         expireHours: input.expireHours,
       },
       tenantId: input.tenantId,
+      templatePurpose: "project_acceptance",
     });
   }
 

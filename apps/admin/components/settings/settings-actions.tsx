@@ -75,6 +75,12 @@ function formatValue(value: string | null) {
   return value && value.trim() ? value : "-";
 }
 
+const smsChannelModeLabels: Record<string, string> = {
+  platform: "继承平台短信通道",
+  tenant_aliyun: "自有阿里云短信通道",
+  tenant_tencent: "自有腾讯云短信通道",
+};
+
 export function SettingEditor({ setting }: { setting: SystemSetting }) {
   const router = useRouter();
   const [value, setValue] = useState(setting.is_secret ? "" : setting.stored_value || "");
@@ -126,13 +132,24 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
 
       <div className="space-y-2">
         <Label htmlFor={`setting-${setting.key}`}>数据库配置值</Label>
-        {setting.is_secret ? (
+        {setting.key === "SMS_CHANNEL_MODE" ? (
+          <Select value={value || "platform"} onValueChange={setValue}>
+            <SelectTrigger id={`setting-${setting.key}`}>
+              <SelectValue placeholder="选择短信通道模式" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="platform">{smsChannelModeLabels.platform}</SelectItem>
+              <SelectItem value="tenant_aliyun">{smsChannelModeLabels.tenant_aliyun}</SelectItem>
+              <SelectItem value="tenant_tencent">{smsChannelModeLabels.tenant_tencent}</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : setting.is_secret ? (
           <Input
             id={`setting-${setting.key}`}
             type="password"
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={setting.source === "database" ? "输入新密钥，留空保存可清空数据库值" : "输入新密钥，留空则继承环境变量"}
+            placeholder={setting.effective_scope === "tenant" ? "输入新密钥，留空保存可清空租户值" : "输入新密钥"}
             autoComplete="new-password"
           />
         ) : setting.value_type === "boolean" ? (
@@ -152,7 +169,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
             rows={setting.key.includes("PROMPT") ? 5 : 3}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="留空则继承环境变量或默认值"
+            placeholder={setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值"}
           />
         ) : (
           <Input
@@ -160,7 +177,7 @@ export function SettingEditor({ setting }: { setting: SystemSetting }) {
             type={setting.value_type === "number" ? "number" : "text"}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="留空则继承环境变量或默认值"
+            placeholder={setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值"}
           />
         )}
         {error ? <StatusAlert>{error}</StatusAlert> : null}
