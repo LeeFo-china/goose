@@ -11,6 +11,7 @@ import {
 } from "@gooes/domain";
 import {
   CheckCircle2,
+  CornerDownRight,
   Clock3,
   Image as ImageIcon,
   Loader2,
@@ -34,6 +35,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupText,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -1307,6 +1320,7 @@ function AcceptanceTimeline({
 
               {showRectificationReply ? (
                 <RectificationReplyPanel
+                  action={action}
                   items={rectificationItems}
                   editable={editable}
                   actionLoading={actionLoading}
@@ -1325,6 +1339,7 @@ function AcceptanceTimeline({
 }
 
 function RectificationReplyPanel({
+  action,
   items,
   editable,
   actionLoading,
@@ -1333,6 +1348,7 @@ function RectificationReplyPanel({
   onUpdateItem,
   onUploadImages,
 }: {
+  action: AcceptanceAction;
   items: AcceptanceItem[];
   editable: EditableState;
   actionLoading: boolean;
@@ -1345,59 +1361,58 @@ function RectificationReplyPanel({
     target: "images" | "rectification_images",
   ) => void;
 }) {
-  return (
-    <div className="mt-3 rounded-md border bg-background p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="text-sm font-medium">整改回复</div>
-          <div className="text-xs text-muted-foreground">
-            针对上方打回原因补充整改说明和整改后照片
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={actionLoading}
-            onClick={() => void onSave(false)}
-          >
-            保存整改
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={actionLoading}
-            onClick={() => void onSave(true)}
-          >
-            <Send data-icon="inline-start" />
-            提交复验
-          </Button>
-        </div>
-      </div>
+  const replyTarget = action.action === "customer_dispute" ? "业主疑问" : "领导驳回";
+  const hasMultipleItems = items.length > 1;
 
-      <div className="mt-3 flex flex-col gap-3">
-        {items.map((item) => {
-          const draft = editable.items[item.id];
-          return (
-            <div key={item.id} className="rounded-md border bg-card p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">整改项</Badge>
-                <div className="text-sm font-medium">{item.title}</div>
+  return (
+    <div className="mt-3 border-l-2 border-warning pl-3">
+      <div className="rounded-md border bg-background">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <CornerDownRight data-icon="inline-start" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium">回复{replyTarget}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                像回复评论一样，在这里提交整改说明和整改后照片
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <Label>整改说明</Label>
-                  <Textarea
+            </div>
+          </div>
+          <Badge variant="warning">{items.length} 个整改项</Badge>
+        </div>
+
+        <FieldGroup className="gap-3 p-3">
+          {items.map((item) => {
+            const draft = editable.items[item.id];
+            const remarkId = `rectification-${item.id}`;
+            return (
+              <Field key={item.id} className="rounded-md border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {hasMultipleItems ? <Badge variant="outline">整改项</Badge> : null}
+                  <FieldLabel htmlFor={remarkId} className="text-sm font-medium">
+                    {item.title}
+                  </FieldLabel>
+                </div>
+                {item.standard ? (
+                  <FieldDescription>{item.standard}</FieldDescription>
+                ) : null}
+                <InputGroup className="min-h-24">
+                  <InputGroupTextarea
+                    id={remarkId}
                     value={draft?.rectification_remark || ""}
                     disabled={actionLoading}
+                    aria-label={`${item.title}整改说明`}
                     onChange={(event) =>
                       onUpdateItem(item.id, {
                         rectification_remark: event.target.value,
                       })}
-                    placeholder="说明已如何整改"
+                    placeholder="回复整改说明，例如：已重新处理并补拍现场照片"
                   />
-                </div>
+                  <InputGroupAddon align="block-end">
+                    <InputGroupText>
+                      {replyTarget}
+                    </InputGroupText>
+                  </InputGroupAddon>
+                </InputGroup>
                 <ImageUploadBlock
                   label="整改后照片"
                   images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
@@ -1412,10 +1427,38 @@ function RectificationReplyPanel({
                       .filter((_, i) => i !== index),
                   })}
                 />
-              </div>
-            </div>
-          );
-        })}
+              </Field>
+            );
+          })}
+        </FieldGroup>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2">
+          <div className="text-xs text-muted-foreground">
+            提交后会进入复核流程，保存只保留当前整改草稿。
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => void onSave(false)}
+            >
+              保存草稿
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => void onSave(true)}
+            >
+              {actionLoading
+                ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                : <Send data-icon="inline-start" />}
+              提交整改
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
