@@ -363,37 +363,38 @@ function getCustomerDisputeItemIds(action: AcceptanceAction | null) {
   );
 }
 
-function shouldShowRectificationSection(input: {
-  acceptance: ProjectAcceptance;
-  item: AcceptanceItem;
-  latestCustomerDispute: AcceptanceAction | null;
-}) {
-  const hasExistingRectification = Boolean(
-    input.item.rectification_remark ||
-      input.item.rectification_images?.length ||
-      input.item.rectification_image_items?.length,
-  );
-
-  if (hasExistingRectification) return true;
-  if (input.acceptance.status !== "rejected") return false;
-
-  if (input.acceptance.reject_source === "customer") {
-    const disputedItemIds = getCustomerDisputeItemIds(input.latestCustomerDispute);
-    if (disputedItemIds.size > 0) {
-      return disputedItemIds.has(input.item.id);
-    }
-    return true;
-  }
-
-  if (input.acceptance.reject_source === "leader") {
-    return input.item.result === "fail";
-  }
-
-  return false;
+function isRejectAction(action: AcceptanceAction) {
+  return action.action === "customer_dispute" || action.action === "leader_reject";
 }
 
-function canEditRectification(acceptance: ProjectAcceptance) {
-  return acceptance.status === "rejected";
+function getLatestRejectAction(acceptance: ProjectAcceptance | null) {
+  return (acceptance?.actions || [])
+    .filter(isRejectAction)
+    .slice()
+    .sort((left, right) =>
+      new Date(right.created_at || 0).getTime() -
+      new Date(left.created_at || 0).getTime()
+    )[0] || null;
+}
+
+function getRectificationItemsForAction(
+  acceptance: ProjectAcceptance,
+  action: AcceptanceAction,
+) {
+  if (action.action === "customer_dispute") {
+    const disputedItemIds = getCustomerDisputeItemIds(action);
+    if (disputedItemIds.size > 0) {
+      return acceptance.items.filter((item) => disputedItemIds.has(item.id));
+    }
+    return acceptance.items;
+  }
+
+  if (action.action === "leader_reject") {
+    const failedItems = acceptance.items.filter((item) => item.result === "fail");
+    return failedItems.length ? failedItems : acceptance.items;
+  }
+
+  return [] as AcceptanceItem[];
 }
 
 export function ProjectAcceptancesPanel({
@@ -424,6 +425,10 @@ export function ProjectAcceptancesPanel({
   );
   const latestCustomerDispute = useMemo(
     () => getLatestCustomerDispute(selected),
+    [selected],
+  );
+  const latestRejectAction = useMemo(
+    () => getLatestRejectAction(selected),
     [selected],
   );
   const occupiedStages = useMemo(() => {
@@ -891,7 +896,17 @@ export function ProjectAcceptancesPanel({
                   </Alert>
                 ) : null}
 
-                <AcceptanceTimeline actions={selected.actions || []} />
+                <AcceptanceTimeline
+                  acceptance={selected}
+                  actions={selected.actions || []}
+                  editable={editable}
+                  latestRejectActionId={latestRejectAction?.id || null}
+                  actionLoading={actionLoading}
+                  uploadingItemId={uploadingItemId}
+                  onSave={saveAcceptance}
+                  onUpdateItem={updateEditableItem}
+                  onUploadImages={uploadImages}
+                />
 
                 <div className="space-y-2">
                   <Label>整体验收说明</Label>
@@ -911,13 +926,6 @@ export function ProjectAcceptancesPanel({
                   {selected.items.map((item) => {
                     const draft = editable.items[item.id];
                     const editableNow = canEdit(selected.status);
-                    const showRectification = shouldShowRectificationSection({
-                      acceptance: selected,
-                      item,
-                      latestCustomerDispute,
-                    });
-                    const rectificationEditableNow = editableNow &&
-                      canEditRectification(selected);
                     return (
                       <article key={item.id} className="rounded-md border p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -962,9 +970,7 @@ export function ProjectAcceptancesPanel({
                           </div>
                         </div>
 
-                        <div className={`mt-3 grid gap-3 ${
-                          showRectification ? "md:grid-cols-2" : ""
-                        }`}>
+                        <div className="mt-3 grid gap-3">
                           <div className="space-y-2">
                             <Label>备注</Label>
                             <Textarea
@@ -977,25 +983,9 @@ export function ProjectAcceptancesPanel({
                               placeholder="填写验收备注"
                             />
                           </div>
-                          {showRectification ? (
-                            <div className="space-y-2">
-                              <Label>整改说明</Label>
-                              <Textarea
-                                value={draft?.rectification_remark || ""}
-                                disabled={!rectificationEditableNow}
-                                onChange={(event) =>
-                                  updateEditableItem(item.id, {
-                                    rectification_remark: event.target.value,
-                                  })}
-                                placeholder="针对疑问或驳回要求填写整改说明"
-                              />
-                            </div>
-                          ) : null}
                         </div>
 
-                        <div className={`mt-3 grid gap-3 ${
-                          showRectification ? "md:grid-cols-2" : ""
-                        }`}>
+                        <div className="mt-3 grid gap-3">
                           <ImageUploadBlock
                             label="现场照片"
                             images={draft?.imagePreviews || draft?.images || []}
@@ -1007,22 +997,6 @@ export function ProjectAcceptancesPanel({
                               imagePreviews: (draft?.imagePreviews || []).filter((_, i) => i !== index),
                             })}
                           />
-                          {showRectification ? (
-                            <ImageUploadBlock
-                              label="整改后照片"
-                              images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
-                              disabled={!rectificationEditableNow}
-                              uploading={uploadingItemId === `${item.id}:rectification_images`}
-                              onUpload={(event) =>
-                                uploadImages(item.id, event, "rectification_images")}
-                              onRemove={(index) => updateEditableItem(item.id, {
-                                rectification_images: (draft?.rectification_images || [])
-                                  .filter((_, i) => i !== index),
-                                rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
-                                  .filter((_, i) => i !== index),
-                              })}
-                            />
-                          ) : null}
                         </div>
                       </article>
                     );
@@ -1137,7 +1111,31 @@ function AcceptanceActionDialog({
   );
 }
 
-function AcceptanceTimeline({ actions }: { actions: AcceptanceAction[] }) {
+function AcceptanceTimeline({
+  acceptance,
+  actions,
+  editable,
+  latestRejectActionId,
+  actionLoading,
+  uploadingItemId,
+  onSave,
+  onUpdateItem,
+  onUploadImages,
+}: {
+  acceptance: ProjectAcceptance;
+  actions: AcceptanceAction[];
+  editable: EditableState;
+  latestRejectActionId: string | null;
+  actionLoading: boolean;
+  uploadingItemId: string;
+  onSave: (submit?: boolean) => Promise<void>;
+  onUpdateItem: (itemId: string, patch: Partial<EditableItem>) => void;
+  onUploadImages: (
+    itemId: string,
+    event: ChangeEvent<HTMLInputElement>,
+    target: "images" | "rectification_images",
+  ) => void;
+}) {
   if (!actions.length) {
     return null;
   }
@@ -1159,6 +1157,11 @@ function AcceptanceTimeline({ actions }: { actions: AcceptanceAction[] }) {
               url: image,
               thumb_url: image,
             }));
+          const showRectificationReply = acceptance.status === "rejected" &&
+            action.id === latestRejectActionId;
+          const rectificationItems = showRectificationReply
+            ? getRectificationItemsForAction(acceptance, action)
+            : [];
 
           return (
             <div
@@ -1205,6 +1208,115 @@ function AcceptanceTimeline({ actions }: { actions: AcceptanceAction[] }) {
                   />
                 </div>
               ) : null}
+
+              {showRectificationReply ? (
+                <RectificationReplyPanel
+                  items={rectificationItems}
+                  editable={editable}
+                  actionLoading={actionLoading}
+                  uploadingItemId={uploadingItemId}
+                  onSave={onSave}
+                  onUpdateItem={onUpdateItem}
+                  onUploadImages={onUploadImages}
+                />
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RectificationReplyPanel({
+  items,
+  editable,
+  actionLoading,
+  uploadingItemId,
+  onSave,
+  onUpdateItem,
+  onUploadImages,
+}: {
+  items: AcceptanceItem[];
+  editable: EditableState;
+  actionLoading: boolean;
+  uploadingItemId: string;
+  onSave: (submit?: boolean) => Promise<void>;
+  onUpdateItem: (itemId: string, patch: Partial<EditableItem>) => void;
+  onUploadImages: (
+    itemId: string,
+    event: ChangeEvent<HTMLInputElement>,
+    target: "images" | "rectification_images",
+  ) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="text-sm font-medium">整改回复</div>
+          <div className="text-xs text-muted-foreground">
+            针对上方打回原因补充整改说明和整改后照片
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={actionLoading}
+            onClick={() => void onSave(false)}
+          >
+            保存整改
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actionLoading}
+            onClick={() => void onSave(true)}
+          >
+            <Send data-icon="inline-start" />
+            提交复验
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3">
+        {items.map((item) => {
+          const draft = editable.items[item.id];
+          return (
+            <div key={item.id} className="rounded-md border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">整改项</Badge>
+                <div className="text-sm font-medium">{item.title}</div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label>整改说明</Label>
+                  <Textarea
+                    value={draft?.rectification_remark || ""}
+                    disabled={actionLoading}
+                    onChange={(event) =>
+                      onUpdateItem(item.id, {
+                        rectification_remark: event.target.value,
+                      })}
+                    placeholder="说明已如何整改"
+                  />
+                </div>
+                <ImageUploadBlock
+                  label="整改后照片"
+                  images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
+                  disabled={actionLoading}
+                  uploading={uploadingItemId === `${item.id}:rectification_images`}
+                  onUpload={(event) =>
+                    onUploadImages(item.id, event, "rectification_images")}
+                  onRemove={(index) => onUpdateItem(item.id, {
+                    rectification_images: (draft?.rectification_images || [])
+                      .filter((_, i) => i !== index),
+                    rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
+                      .filter((_, i) => i !== index),
+                  })}
+                />
+              </div>
             </div>
           );
         })}
