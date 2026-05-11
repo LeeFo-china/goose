@@ -355,6 +355,47 @@ function getLatestCustomerDispute(acceptance: ProjectAcceptance | null) {
     )[0] || null;
 }
 
+function getCustomerDisputeItemIds(action: AcceptanceAction | null) {
+  return new Set(
+    (action?.referenced_images || [])
+      .map((image) => image.item_id)
+      .filter((item): item is string => Boolean(item)),
+  );
+}
+
+function shouldShowRectificationSection(input: {
+  acceptance: ProjectAcceptance;
+  item: AcceptanceItem;
+  latestCustomerDispute: AcceptanceAction | null;
+}) {
+  const hasExistingRectification = Boolean(
+    input.item.rectification_remark ||
+      input.item.rectification_images?.length ||
+      input.item.rectification_image_items?.length,
+  );
+
+  if (hasExistingRectification) return true;
+  if (input.acceptance.status !== "rejected") return false;
+
+  if (input.acceptance.reject_source === "customer") {
+    const disputedItemIds = getCustomerDisputeItemIds(input.latestCustomerDispute);
+    if (disputedItemIds.size > 0) {
+      return disputedItemIds.has(input.item.id);
+    }
+    return true;
+  }
+
+  if (input.acceptance.reject_source === "leader") {
+    return input.item.result === "fail";
+  }
+
+  return false;
+}
+
+function canEditRectification(acceptance: ProjectAcceptance) {
+  return acceptance.status === "rejected";
+}
+
 export function ProjectAcceptancesPanel({
   project,
   active = true,
@@ -870,6 +911,13 @@ export function ProjectAcceptancesPanel({
                   {selected.items.map((item) => {
                     const draft = editable.items[item.id];
                     const editableNow = canEdit(selected.status);
+                    const showRectification = shouldShowRectificationSection({
+                      acceptance: selected,
+                      item,
+                      latestCustomerDispute,
+                    });
+                    const rectificationEditableNow = editableNow &&
+                      canEditRectification(selected);
                     return (
                       <article key={item.id} className="rounded-md border p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -914,7 +962,9 @@ export function ProjectAcceptancesPanel({
                           </div>
                         </div>
 
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className={`mt-3 grid gap-3 ${
+                          showRectification ? "md:grid-cols-2" : ""
+                        }`}>
                           <div className="space-y-2">
                             <Label>备注</Label>
                             <Textarea
@@ -927,21 +977,25 @@ export function ProjectAcceptancesPanel({
                               placeholder="填写验收备注"
                             />
                           </div>
-                          <div className="space-y-2">
-                            <Label>整改说明</Label>
-                            <Textarea
-                              value={draft?.rectification_remark || ""}
-                              disabled={!editableNow}
-                              onChange={(event) =>
-                                updateEditableItem(item.id, {
-                                  rectification_remark: event.target.value,
-                                })}
-                              placeholder="被驳回后填写整改说明"
-                            />
-                          </div>
+                          {showRectification ? (
+                            <div className="space-y-2">
+                              <Label>整改说明</Label>
+                              <Textarea
+                                value={draft?.rectification_remark || ""}
+                                disabled={!rectificationEditableNow}
+                                onChange={(event) =>
+                                  updateEditableItem(item.id, {
+                                    rectification_remark: event.target.value,
+                                  })}
+                                placeholder="针对疑问或驳回要求填写整改说明"
+                              />
+                            </div>
+                          ) : null}
                         </div>
 
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className={`mt-3 grid gap-3 ${
+                          showRectification ? "md:grid-cols-2" : ""
+                        }`}>
                           <ImageUploadBlock
                             label="现场照片"
                             images={draft?.imagePreviews || draft?.images || []}
@@ -953,20 +1007,22 @@ export function ProjectAcceptancesPanel({
                               imagePreviews: (draft?.imagePreviews || []).filter((_, i) => i !== index),
                             })}
                           />
-                          <ImageUploadBlock
-                            label="整改后照片"
-                            images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
-                            disabled={!editableNow}
-                            uploading={uploadingItemId === `${item.id}:rectification_images`}
-                            onUpload={(event) =>
-                              uploadImages(item.id, event, "rectification_images")}
-                            onRemove={(index) => updateEditableItem(item.id, {
-                              rectification_images: (draft?.rectification_images || [])
-                                .filter((_, i) => i !== index),
-                              rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
-                                .filter((_, i) => i !== index),
-                            })}
-                          />
+                          {showRectification ? (
+                            <ImageUploadBlock
+                              label="整改后照片"
+                              images={draft?.rectificationImagePreviews || draft?.rectification_images || []}
+                              disabled={!rectificationEditableNow}
+                              uploading={uploadingItemId === `${item.id}:rectification_images`}
+                              onUpload={(event) =>
+                                uploadImages(item.id, event, "rectification_images")}
+                              onRemove={(index) => updateEditableItem(item.id, {
+                                rectification_images: (draft?.rectification_images || [])
+                                  .filter((_, i) => i !== index),
+                                rectificationImagePreviews: (draft?.rectificationImagePreviews || [])
+                                  .filter((_, i) => i !== index),
+                              })}
+                            />
+                          ) : null}
                         </div>
                       </article>
                     );
