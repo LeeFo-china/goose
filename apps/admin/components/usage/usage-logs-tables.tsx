@@ -1,0 +1,218 @@
+"use client";
+
+import { type ColumnDef } from "@tanstack/react-table";
+import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/admin/data-table";
+import type {
+  UsageAiLogRecord,
+  UsageSmsLogRecord,
+} from "@/components/usage/usage-types";
+
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("zh-CN");
+}
+
+function formatNumber(value?: number | null) {
+  return new Intl.NumberFormat("zh-CN").format(value || 0);
+}
+
+function aiStatusBadge(status: UsageAiLogRecord["status"]) {
+  return status === "success"
+    ? <Badge variant="success">成功</Badge>
+    : <Badge variant="danger">失败</Badge>;
+}
+
+function smsStatusBadge(status: UsageSmsLogRecord["status"]) {
+  if (status === "success") return <Badge variant="success">成功</Badge>;
+  if (status === "failure") return <Badge variant="danger">失败</Badge>;
+  if (status === "mock") return <Badge variant="secondary">模拟</Badge>;
+  return <Badge variant="warning">禁用</Badge>;
+}
+
+export function UsageAiLogsTable({ logs }: { logs: UsageAiLogRecord[] }) {
+  const columns: ColumnDef<UsageAiLogRecord>[] = [
+    {
+      accessorKey: "scene_code",
+      header: "场景",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{row.original.scene_code || "-"}</div>
+          <div className="truncate text-xs text-muted-foreground">{row.original.request_id || row.original.id}</div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[220px]",
+      },
+    },
+    {
+      id: "model",
+      header: "模型",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate">{row.original.provider_code || "unknown"}</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {row.original.model_name || row.original.model_code || "模型待补"}
+          </div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[180px]",
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "状态",
+      cell: ({ row }) => aiStatusBadge(row.original.status),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "tokens",
+      header: "Token",
+      cell: ({ row }) => (
+        <div className="whitespace-nowrap text-sm">
+          <div>{formatNumber(row.original.total_tokens)} total</div>
+          <div className="text-xs text-muted-foreground">
+            {formatNumber(row.original.prompt_tokens)} / {formatNumber(row.original.completion_tokens)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "duration_ms",
+      header: "耗时",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {typeof row.original.duration_ms === "number" ? `${row.original.duration_ms}ms` : "-"}
+        </span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "error",
+      header: "错误",
+      cell: ({ row }) => (
+        <div className="max-w-[260px] truncate text-sm text-muted-foreground">
+          {row.original.error_message || row.original.error_code || "-"}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "created_at",
+      header: "时间",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.created_at)}</span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      data={logs}
+      emptyText="暂无 AI 调用明细"
+      minWidth="min-w-[1080px]"
+    />
+  );
+}
+
+export function UsageSmsLogsTable({ logs }: { logs: UsageSmsLogRecord[] }) {
+  const columns: ColumnDef<UsageSmsLogRecord>[] = [
+    {
+      accessorKey: "purpose",
+      header: "场景",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{row.original.purpose || "-"}</div>
+          <div className="truncate text-xs text-muted-foreground">{row.original.template_code || "模板待补"}</div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[220px]",
+      },
+    },
+    {
+      id: "phone",
+      header: "手机号",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap font-medium">{row.original.phone_masked}</span>
+      ),
+    },
+    {
+      id: "channel",
+      header: "通道",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate">{row.original.provider}</div>
+          <div className="truncate text-xs text-muted-foreground">{row.original.channel_mode || "platform"}</div>
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[160px]",
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "状态",
+      cell: ({ row }) => smsStatusBadge(row.original.status),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      accessorKey: "sms_count",
+      header: "条数",
+      cell: ({ row }) => (
+        <span className="text-sm">{formatNumber(row.original.sms_count)}</span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "provider_result",
+      header: "服务商返回",
+      cell: ({ row }) => (
+        <div className="max-w-[260px] truncate text-sm text-muted-foreground">
+          {row.original.provider_message || row.original.provider_code || row.original.request_id || "-"}
+        </div>
+      ),
+    },
+    {
+      id: "error",
+      header: "错误",
+      cell: ({ row }) => (
+        <div className="max-w-[260px] truncate text-sm text-muted-foreground">
+          {row.original.error_message || row.original.error_code || "-"}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "created_at",
+      header: "时间",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.created_at)}</span>
+      ),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      data={logs}
+      emptyText="暂无短信发送明细"
+      minWidth="min-w-[1160px]"
+    />
+  );
+}

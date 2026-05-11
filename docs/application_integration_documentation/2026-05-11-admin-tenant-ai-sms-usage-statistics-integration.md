@@ -254,9 +254,28 @@ Query 与平台短信明细基本一致，但不支持跨租户查看。
 - 短信发送日志采集。
 - 平台和租户用量查询接口。
 
+## 8. Admin 落地状态
+
+已落地：
+
+- 平台超管页面：
+  - 路由：`/platform/usage`
+  - 菜单：`平台运营 -> 用量统计`
+  - 能查看租户汇总、AI 明细、短信明细。
+  - 支持时间范围、租户搜索、租户 ID、状态过滤。
+- 租户后台页面：
+  - 路由：`/usage`
+  - 菜单：`业务 -> 用量统计`
+  - 能查看本租户汇总、AI 明细、短信明细。
+  - 平台纯超管访问 `/usage` 会自动跳转到 `/platform/usage`。
+- 页面组件：
+  - `apps/admin/components/usage/usage-summary-cards.tsx`
+  - `apps/admin/components/usage/platform-usage-table.tsx`
+  - `apps/admin/components/usage/usage-logs-tables.tsx`
+  - `apps/admin/components/usage/usage-list-actions.tsx`
+
 待后续增强：
 
-- Admin 页面实现。
 - 日汇总定时任务。
 - 用量告警和套餐限额。
 - 装修问答流式 AI 调用 token 归因复核。
