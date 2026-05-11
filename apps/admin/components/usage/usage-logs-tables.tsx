@@ -26,6 +26,10 @@ function formatDurationSeconds(value?: number | null) {
   return minutes > 0 ? `${minutes}分${String(seconds).padStart(2, "0")}秒` : `${seconds}秒`;
 }
 
+function socialVideoDisplayUrl(record: UsageSocialVideoLogRecord) {
+  return record.resolved_video_url || record.normalized_url || record.source_url || record.id;
+}
+
 function aiStatusBadge(status: UsageAiLogRecord["status"]) {
   return status === "success"
     ? <Badge variant="success">成功</Badge>
@@ -270,16 +274,33 @@ export function UsageSocialVideoLogsTable({ logs }: { logs: UsageSocialVideoLogR
     {
       id: "source",
       header: "视频链接",
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">{row.original.platform === "douyin" ? "抖音" : row.original.platform}</div>
-          <div className="max-w-[300px] truncate text-xs text-muted-foreground">
-            {row.original.source_url || row.original.id}
+      cell: ({ row }) => {
+        const displayUrl = socialVideoDisplayUrl(row.original);
+        const originalUrl = row.original.source_url;
+        return (
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {row.original.platform === "douyin" ? "抖音视频地址" : row.original.platform}
+            </div>
+            <a
+              className="block max-w-[340px] truncate text-xs text-muted-foreground underline-offset-4 hover:underline"
+              href={displayUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={displayUrl}
+            >
+              {displayUrl}
+            </a>
+            {originalUrl && originalUrl !== displayUrl ? (
+              <div className="max-w-[340px] truncate text-xs text-muted-foreground" title={originalUrl}>
+                原始提交：{originalUrl}
+              </div>
+            ) : null}
           </div>
-        </div>
-      ),
+        );
+      },
       meta: {
-        cellClassName: "min-w-[260px]",
+        cellClassName: "min-w-[320px]",
       },
     },
     {

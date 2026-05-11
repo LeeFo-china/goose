@@ -120,6 +120,8 @@ export type UsageSocialVideoLogRecord = {
   tenant_id: string | null;
   platform: "douyin";
   source_url: string;
+  normalized_url: string;
+  resolved_video_url: string | null;
   status:
     | "pending"
     | "resolving"

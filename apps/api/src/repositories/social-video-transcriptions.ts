@@ -310,6 +310,8 @@ class SocialVideoTranscriptionRepository {
         tenant_id,
         platform,
         source_url,
+        normalized_url,
+        resolved_video_url,
         status,
         provider,
         audio_duration_seconds,
@@ -361,6 +363,8 @@ class SocialVideoTranscriptionRepository {
         tenant_id: string | null;
         platform: "douyin";
         source_url: string;
+        normalized_url: string;
+        resolved_video_url: string | null;
         status: SocialVideoTranscriptionStatus;
         provider: string | null;
         audio_duration_seconds: number | null;
