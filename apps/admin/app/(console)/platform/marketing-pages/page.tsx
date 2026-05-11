@@ -132,6 +132,7 @@ export default async function PlatformMarketingPagesPage() {
         apiBasePath={PLATFORM_H5_API_BASE_PATH}
         editBasePath={PLATFORM_H5_EDIT_BASE_PATH}
         returnTo={PLATFORM_H5_RETURN_TO}
+        stickyActionColumn
       />
     </div>
   );

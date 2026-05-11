@@ -49,6 +49,7 @@ type H5MarketingPagesTableProps = {
   editBasePath?: string;
   returnTo?: string;
   tenantSlug?: string | null;
+  stickyActionColumn?: boolean;
 };
 
 function createColumns({
@@ -57,6 +58,7 @@ function createColumns({
   editBasePath,
   returnTo,
   tenantSlug,
+  stickyActionColumn,
 }: H5MarketingPagesTableProps): ColumnDef<H5MarketingPageRecord>[] {
   return [
     {
@@ -159,8 +161,12 @@ function createColumns({
         />
       ),
       meta: {
-        headerClassName: "text-right",
-        cellClassName: "relative min-w-[96px] whitespace-nowrap text-right",
+        headerClassName: stickyActionColumn
+          ? "sticky right-0 bg-muted text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]"
+          : "text-right",
+        cellClassName: stickyActionColumn
+          ? "sticky right-0 min-w-[96px] whitespace-nowrap bg-background text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]"
+          : "relative min-w-[96px] whitespace-nowrap text-right",
       },
     },
   ];
@@ -172,8 +178,16 @@ export function H5MarketingPagesTable({
   editBasePath,
   returnTo,
   tenantSlug,
+  stickyActionColumn,
 }: H5MarketingPagesTableProps) {
-  const columns = createColumns({ pages, apiBasePath, editBasePath, returnTo, tenantSlug });
+  const columns = createColumns({
+    pages,
+    apiBasePath,
+    editBasePath,
+    returnTo,
+    tenantSlug,
+    stickyActionColumn,
+  });
 
   return (
     <DataTable
