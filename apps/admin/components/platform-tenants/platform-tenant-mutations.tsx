@@ -1,8 +1,8 @@
 "use client";
 
-import { type FormEvent, useMemo, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Loader2, Pencil, Play, Plus, PowerOff } from "lucide-react";
+import { Building2, Loader2, Pencil, Play, Plus, PowerOff, RefreshCcw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +43,17 @@ async function requestJson<T>(path: string, init?: RequestInit) {
   return payload.data as T;
 }
 
+function generateTenantSlug() {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let suffix = "";
+
+  for (let index = 0; index < 8; index += 1) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  return `tenant-${suffix}`;
+}
+
 function TenantDialog({
   mode,
   tenant,
@@ -63,6 +74,16 @@ function TenantDialog({
     contact_name: tenant?.contact_name || "",
     contact_phone: tenant?.contact_phone || "",
   }), [tenant]);
+  const [slugValue, setSlugValue] = useState(defaults.slug);
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setError("");
+    setSlugManuallyEdited(false);
+    setSlugValue(mode === "create" ? generateTenantSlug() : defaults.slug);
+  }, [defaults.slug, mode, open]);
 
   function close() {
     if (pending) return;
@@ -147,21 +168,46 @@ function TenantDialog({
                     maxLength={100}
                     required
                     disabled={pending}
+                    onChange={() => {
+                      if (mode === "create" && !slugManuallyEdited && !slugValue) {
+                        setSlugValue(generateTenantSlug());
+                      }
+                    }}
                   />
                 </Field>
                 <Field data-disabled={mode === "edit" ? true : undefined}>
                   <FieldLabel htmlFor={`${mode}-tenant-slug`}>slug</FieldLabel>
-                  <Input
-                    id={`${mode}-tenant-slug`}
-                    name="slug"
-                    defaultValue={defaults.slug}
-                    placeholder="demo_tenant"
-                    pattern="[a-z0-9][a-z0-9_-]*[a-z0-9]"
-                    minLength={2}
-                    maxLength={64}
-                    required={mode === "create"}
-                    disabled={pending || mode === "edit"}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id={`${mode}-tenant-slug`}
+                      name="slug"
+                      value={slugValue}
+                      onChange={(event) => {
+                        setSlugManuallyEdited(true);
+                        setSlugValue(event.target.value);
+                      }}
+                      placeholder="tenant-k8f3x2q9"
+                      pattern="[a-z0-9][a-z0-9_-]*[a-z0-9]"
+                      minLength={2}
+                      maxLength={64}
+                      required={mode === "create"}
+                      disabled={pending || mode === "edit"}
+                    />
+                    {mode === "create" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={pending}
+                        onClick={() => {
+                          setSlugManuallyEdited(false);
+                          setSlugValue(generateTenantSlug());
+                        }}
+                      >
+                        <RefreshCcw data-icon="inline-start" />
+                        重新生成
+                      </Button>
+                    ) : null}
+                  </div>
                   <FieldDescription>创建后不建议修改，用于 H5、小程序和分享链路识别租户。</FieldDescription>
                 </Field>
                 <div className="grid gap-3 md:grid-cols-2">
