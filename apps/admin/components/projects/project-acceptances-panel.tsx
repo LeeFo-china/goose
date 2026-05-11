@@ -1301,12 +1301,14 @@ function AcceptanceTimeline({
 
               {action.action === "customer_dispute" ? (
                 <div className="mt-3 flex flex-col gap-3">
-                  <ActionImageGallery
-                    title="客户引用的验收图片"
-                    emptyText="未引用验收图片"
-                    images={referencedImages}
-                    showItemTitle
-                  />
+                  {referencedImages.length ? (
+                    <ActionImageGallery
+                      title="客户引用的验收图片"
+                      emptyText="未引用验收图片"
+                      images={referencedImages}
+                      showItemTitle
+                    />
+                  ) : null}
                   <CustomerSupplementImages images={imageItems} />
                 </div>
               ) : null}
