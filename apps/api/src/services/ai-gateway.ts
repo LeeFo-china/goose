@@ -15,6 +15,8 @@ export type AiGatewayChatInput = {
   responseFormat?: "json_object" | "text" | null;
   timeoutMs?: number;
   metadata?: Record<string, unknown>;
+  source?: string | null;
+  billable?: boolean;
 };
 
 export type AiGatewayChatResult = {
@@ -284,7 +286,7 @@ class AiGateway {
     }
   }
 
-  private async logCall(input: {
+  async logCall(input: {
     tenantId?: string | null;
     sceneCode: string;
     providerCode?: string | null;
@@ -299,6 +301,8 @@ class AiGateway {
     errorCode?: string | null;
     errorMessage?: string | null;
     metadata?: Record<string, unknown>;
+    source?: string | null;
+    billable?: boolean;
   }) {
     const { error } = await this.client
       .from("ai_call_logs")
@@ -317,6 +321,8 @@ class AiGateway {
         error_code: input.errorCode || null,
         error_message: input.errorMessage || null,
         metadata: input.metadata || null,
+        source: input.source || null,
+        billable: input.billable ?? true,
       });
 
     // AI 日志不能影响主业务链路。
@@ -373,6 +379,8 @@ class AiGateway {
           ...(input.metadata || {}),
           ai_attempt: useFallback ? "fallback" : "primary",
         },
+        source: input.source,
+        billable: input.billable,
       });
       return result;
     };
@@ -400,6 +408,8 @@ class AiGateway {
           ...(input.metadata || {}),
           ai_attempt: useFallback ? "fallback" : "primary",
         },
+        source: input.source,
+        billable: input.billable,
       });
     };
 

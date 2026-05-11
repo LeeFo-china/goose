@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { Get, Post } from "@/utils/decorators/route";
 import {
@@ -29,7 +30,13 @@ class AiController extends BaseController {
     }
 
     try {
-      const qaResult = await askDecorationQa(result.data);
+      const qaResult = await askDecorationQa(result.data, {
+        authUserId: request.user?.sub,
+        tenantId: request.user?.tenant_id,
+        customerId: request.user?.customer_id,
+        employeeId: request.user?.employee_id,
+        roles: request.user?.roles,
+      });
 
       return reply.status(200).send({
         data: qaResult,
@@ -38,6 +45,9 @@ class AiController extends BaseController {
       });
     } catch (error) {
       request.log.error({ err: error, requestId: request.id }, "[ai] decoration qa failed");
+      if (error instanceof AppError) {
+        throw error;
+      }
 
       return reply.status(500).send({
         error: "Internal Server Error",
@@ -58,6 +68,10 @@ class AiController extends BaseController {
     const suggestions = await getDecorationQaSuggestions({
       query: result.data,
       authUserId: request.user?.sub,
+      tenantId: request.user?.tenant_id,
+      customerId: request.user?.customer_id,
+      employeeId: request.user?.employee_id,
+      roles: request.user?.roles,
     });
 
     return reply.status(200).send({
@@ -103,6 +117,10 @@ class AiController extends BaseController {
         },
         {
           authUserId: request.user?.sub,
+          tenantId: request.user?.tenant_id,
+          customerId: request.user?.customer_id,
+          employeeId: request.user?.employee_id,
+          roles: request.user?.roles,
           extraSystemMessages,
           signal: abortController.signal,
         },

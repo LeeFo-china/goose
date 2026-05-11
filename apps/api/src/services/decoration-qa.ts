@@ -56,6 +56,7 @@ type DecorationQaStreamEvent =
   };
 
 type OpenAiChatResponse = {
+  id?: string;
   choices?: Array<{
     message?: {
       content?: string | Array<{ type?: string; text?: string }>;
@@ -64,6 +65,7 @@ type OpenAiChatResponse = {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    total_tokens?: number;
   };
   error?: {
     message?: string;
@@ -71,6 +73,7 @@ type OpenAiChatResponse = {
 };
 
 type OpenAiChatStreamChunk = {
+  id?: string;
   choices?: Array<{
     delta?: {
       content?: string | Array<{ type?: string; text?: string }>;
@@ -80,6 +83,7 @@ type OpenAiChatStreamChunk = {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    total_tokens?: number;
   };
   error?: {
     message?: string;
@@ -169,7 +173,7 @@ const FALLBACK_EMPLOYEE = [
 
 type CustomerContextRow = Pick<
   Tables<"customers">,
-  "id" | "name" | "user_id"
+  "id" | "name" | "user_id" | "tenant_id"
 >;
 
 type ProjectQaProjectRow = {
@@ -212,6 +216,7 @@ type ProjectQaLogRow = {
 type CustomerProjectQaContext = {
   customer_id: string;
   customer_name: string | null;
+  tenant_id: string | null;
   project_id: string;
   project_name: string | null;
   status: string | null;
@@ -238,6 +243,30 @@ type CustomerProjectQaContext = {
 
 type ProjectQaProjectRowWithTenant = ProjectQaProjectRow & {
   tenant_id: string | null;
+};
+
+type DecorationQaUsageSource =
+  | "customer_miniprogram"
+  | "employee_miniprogram"
+  | "visitor"
+  | "admin";
+
+type DecorationQaUsageContext = {
+  authUserId?: string | null;
+  tenantId?: string | null;
+  customerId?: string | null;
+  employeeId?: string | null;
+  projectId?: string | null;
+  source: DecorationQaUsageSource;
+  billable: boolean;
+};
+
+type DecorationQaAuthInput = {
+  authUserId?: string | null;
+  tenantId?: string | null;
+  customerId?: string | null;
+  employeeId?: string | null;
+  roles?: string[];
 };
 
 const PROJECT_STAGE_REMINDER_PROMPTS: Partial<
@@ -345,6 +374,22 @@ async function getAiModel(endpoint: string) {
   }
 
   throw Errors.dbError("缺少 AI 环境变量: AI_MODEL / DEEPSEEK_MODEL");
+}
+
+function getAiProviderCode(endpoint: string) {
+  if (endpoint.includes("api.deepseek.com")) {
+    return "deepseek";
+  }
+
+  if (endpoint.includes("api.openai.com")) {
+    return "openai";
+  }
+
+  if (endpoint.includes("openrouter.ai")) {
+    return "openrouter";
+  }
+
+  return "custom";
 }
 
 async function getAiRequestTimeoutMs() {
@@ -589,6 +634,30 @@ function buildMessages(
   ];
 }
 
+function normalizeTotalTokens(input: {
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+}) {
+  if (typeof input.totalTokens === "number" && Number.isFinite(input.totalTokens)) {
+    return Math.max(0, Math.floor(input.totalTokens));
+  }
+
+  const promptTokens = typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)
+    ? Math.max(0, Math.floor(input.promptTokens))
+    : null;
+  const completionTokens = typeof input.completionTokens === "number" &&
+      Number.isFinite(input.completionTokens)
+    ? Math.max(0, Math.floor(input.completionTokens))
+    : null;
+
+  if (promptTokens == null && completionTokens == null) {
+    return null;
+  }
+
+  return (promptTokens || 0) + (completionTokens || 0);
+}
+
 function normalizeRelation<T extends Record<string, unknown>>(
   value: unknown,
   fallback: T,
@@ -623,7 +692,7 @@ function normalizeStringArray(value: unknown) {
 async function getCustomerContextByAuthUserId(authUserId: string) {
   const { data, error } = await SupabaseDB.getAdminClient()
     .from("customers")
-    .select("id, name, user_id")
+    .select("id, name, user_id, tenant_id")
     .eq("user_id", authUserId)
     .limit(2);
 
@@ -641,6 +710,105 @@ async function getCustomerContextByAuthUserId(authUserId: string) {
   }
 
   return list[0];
+}
+
+function getSourceFromAuth(input: DecorationQaAuthInput): DecorationQaUsageSource {
+  if (input.roles?.includes("customer") || input.customerId) {
+    return "customer_miniprogram";
+  }
+
+  if (input.roles?.includes("employee") || input.employeeId) {
+    return "employee_miniprogram";
+  }
+
+  return "visitor";
+}
+
+async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
+  role?: "visitor" | "customer" | "employee";
+  projectId?: string | null;
+}): Promise<DecorationQaUsageContext> {
+  const source = input.role === "customer"
+    ? "customer_miniprogram"
+    : input.role === "employee"
+    ? "employee_miniprogram"
+    : getSourceFromAuth(input);
+
+  if (source === "visitor") {
+    return {
+      authUserId: input.authUserId,
+      tenantId: null,
+      customerId: null,
+      employeeId: null,
+      projectId: input.projectId ?? null,
+      source,
+      billable: false,
+    };
+  }
+
+  if (source === "customer_miniprogram") {
+    if (!input.authUserId) {
+      throw Errors.unauthorized("缺少登录凭证");
+    }
+
+    if (input.projectId) {
+      const context = await buildCustomerProjectQaContext(input.authUserId, input.projectId);
+      if (!context.tenant_id) {
+        throw Errors.business(403, "当前项目缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+      }
+
+      return {
+        authUserId: input.authUserId,
+        tenantId: context.tenant_id,
+        customerId: context.customer_id,
+        employeeId: null,
+        projectId: context.project_id,
+        source,
+        billable: true,
+      };
+    }
+
+    if (input.tenantId) {
+      return {
+        authUserId: input.authUserId,
+        tenantId: input.tenantId,
+        customerId: input.customerId ?? null,
+        employeeId: null,
+        projectId: null,
+        source,
+        billable: true,
+      };
+    }
+
+    const customer = await getCustomerContextByAuthUserId(input.authUserId);
+    if (!customer.tenant_id) {
+      throw Errors.business(403, "当前客户缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+    }
+
+    return {
+      authUserId: input.authUserId,
+      tenantId: customer.tenant_id,
+      customerId: customer.id,
+      employeeId: null,
+      projectId: null,
+      source,
+      billable: true,
+    };
+  }
+
+  if (!input.tenantId) {
+    throw Errors.business(403, "当前员工缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+  }
+
+  return {
+    authUserId: input.authUserId,
+    tenantId: input.tenantId,
+    customerId: null,
+    employeeId: input.employeeId ?? null,
+    projectId: input.projectId ?? null,
+    source,
+    billable: true,
+  };
 }
 
 async function buildCustomerProjectQaContext(
@@ -695,7 +863,7 @@ async function buildCustomerProjectQaContext(
     throw Errors.dbError("查询客户项目日志上下文失败", logsError);
   }
 
-  const project = projectData as unknown as ProjectQaProjectRow;
+  const project = projectData as unknown as ProjectQaProjectRowWithTenant;
   const property = normalizeRelation(project.property, {
     community: null,
     building_info: null,
@@ -713,6 +881,7 @@ async function buildCustomerProjectQaContext(
   return {
     customer_id: customer.id,
     customer_name: customer.name,
+    tenant_id: project.tenant_id,
     project_id: project.id,
     project_name: project.name,
     status,
@@ -910,9 +1079,22 @@ async function buildSuggestionScenePrompt(input: {
   return "用户是装修客户，但当前没有指定项目。请生成客户视角的通用装修问题，重点覆盖流程、验收、费用确认和工期沟通。";
 }
 
-async function generateSuggestionQuestionsByAi(scenePrompt: string) {
+async function generateSuggestionQuestionsByAi(
+  scenePrompt: string,
+  usageContext: DecorationQaUsageContext,
+) {
   const result = await aiGateway.chat({
     sceneCode: "decoration_qa_title",
+    tenantId: usageContext.tenantId,
+    source: usageContext.source,
+    billable: usageContext.billable,
+    metadata: {
+      source: usageContext.source,
+      auth_user_id: usageContext.authUserId ?? null,
+      customer_id: usageContext.customerId ?? null,
+      employee_id: usageContext.employeeId ?? null,
+      project_id: usageContext.projectId ?? null,
+    },
     temperature: 0.8,
     messages: [
       { role: "system", content: SUGGESTION_SYSTEM_PROMPT },
@@ -961,6 +1143,10 @@ async function trySaveSuggestionCache(input: {
 export async function getDecorationQaSuggestions(input: {
   query: DecorationQaSuggestionQueryInput;
   authUserId?: string;
+  tenantId?: string | null;
+  customerId?: string | null;
+  employeeId?: string | null;
+  roles?: string[];
 }): Promise<DecorationQaSuggestionResult> {
   const now = new Date();
   const scene = input.query.scene;
@@ -985,9 +1171,19 @@ export async function getDecorationQaSuggestions(input: {
     }
   }
 
+  const usageContext = await resolveDecorationQaUsageContext({
+    authUserId: input.authUserId,
+    tenantId: input.tenantId,
+    customerId: input.customerId,
+    employeeId: input.employeeId,
+    roles: input.roles,
+    role: scene,
+    projectId,
+  });
+
   try {
     const aiQuestions = normalizeSuggestionQuestions(
-      await generateSuggestionQuestionsByAi(scenePrompt),
+      await generateSuggestionQuestionsByAi(scenePrompt, usageContext),
       scene,
     );
     await trySaveSuggestionCache({
@@ -1157,14 +1353,32 @@ function parseSseEvent(line: string) {
 
 export async function askDecorationQa(
   input: DecorationQaRequestInput,
+  options?: DecorationQaAuthInput,
 ): Promise<DecorationQaResult> {
   const messages = buildMessages(input.question, input.history, await getSystemPrompt());
+  const usageContext = await resolveDecorationQaUsageContext({
+    authUserId: options?.authUserId,
+    tenantId: options?.tenantId,
+    customerId: options?.customerId,
+    employeeId: options?.employeeId,
+    roles: options?.roles,
+  });
 
   let result: Awaited<ReturnType<typeof aiGateway.chat>>;
 
   try {
     result = await aiGateway.chat({
       sceneCode: "decoration_qa",
+      tenantId: usageContext.tenantId,
+      source: usageContext.source,
+      billable: usageContext.billable,
+      metadata: {
+        source: usageContext.source,
+        auth_user_id: usageContext.authUserId ?? null,
+        customer_id: usageContext.customerId ?? null,
+        employee_id: usageContext.employeeId ?? null,
+        project_id: usageContext.projectId ?? null,
+      },
       temperature: 0.7,
       messages,
       responseFormat: "json_object",
@@ -1178,6 +1392,16 @@ export async function askDecorationQa(
 
     result = await aiGateway.chat({
       sceneCode: "decoration_qa",
+      tenantId: usageContext.tenantId,
+      source: usageContext.source,
+      billable: usageContext.billable,
+      metadata: {
+        source: usageContext.source,
+        auth_user_id: usageContext.authUserId ?? null,
+        customer_id: usageContext.customerId ?? null,
+        employee_id: usageContext.employeeId ?? null,
+        project_id: usageContext.projectId ?? null,
+      },
       temperature: 0.7,
       messages,
     });
@@ -1197,6 +1421,10 @@ export async function streamDecorationQa(
   onEvent: (event: DecorationQaStreamEvent) => Promise<void> | void,
   options?: {
     authUserId?: string;
+    tenantId?: string | null;
+    customerId?: string | null;
+    employeeId?: string | null;
+    roles?: string[];
     extraSystemMessages?: string[];
     signal?: AbortSignal;
   },
@@ -1204,30 +1432,52 @@ export async function streamDecorationQa(
   const endpoint = await getAiEndpoint();
   const apiKey = await getAiApiKey(endpoint);
   const model = await getAiModel(endpoint);
+  const providerCode = getAiProviderCode(endpoint);
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
+  const projectId = input.context?.project_id?.trim() || null;
+  const usageContext = await resolveDecorationQaUsageContext({
+    authUserId: options?.authUserId,
+    tenantId: options?.tenantId,
+    customerId: options?.customerId,
+    employeeId: options?.employeeId,
+    roles: options?.roles,
+    role: input.context?.role,
+    projectId,
+  });
   const extraSystemMessages = options?.extraSystemMessages
     || await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
+  const startedAt = Date.now();
 
-  const streamRequest = await requestQaStream(
-    endpoint,
-    apiKey,
-    await createStreamRequestBody(input, model, extraSystemMessages),
-    options?.signal,
-  );
-
-  const reader = streamRequest.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let totalTokens: number | undefined;
+  let requestId: string | null = null;
+  let streamRequest: Awaited<ReturnType<typeof requestQaStream>> | null = null;
+  let reader: {
+    read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+    releaseLock: () => void;
+  } | null = null;
 
   try {
+    streamRequest = await requestQaStream(
+      endpoint,
+      apiKey,
+      await createStreamRequestBody(input, model, extraSystemMessages),
+      options?.signal,
+    );
+    reader = streamRequest.body.getReader();
+
     await onEvent({
       type: "start",
       conversation_id: conversationId,
     });
 
     while (true) {
+      if (!reader) {
+        throw Errors.dbError("大模型流读取器未初始化");
+      }
       const { done, value } = await reader.read();
       if (done) {
         break;
@@ -1258,9 +1508,11 @@ export async function streamDecorationQa(
           throw Errors.dbError(chunk.error.message);
         }
 
+        requestId = chunk.id || requestId;
         if (chunk.usage) {
           inputTokens = chunk.usage.prompt_tokens;
           outputTokens = chunk.usage.completion_tokens;
+          totalTokens = chunk.usage.total_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1277,9 +1529,11 @@ export async function streamDecorationQa(
     if (trailingData && trailingData !== "[DONE]") {
       try {
         const chunk = JSON.parse(trailingData) as OpenAiChatStreamChunk;
+        requestId = chunk.id || requestId;
         if (chunk.usage) {
           inputTokens = chunk.usage.prompt_tokens;
           outputTokens = chunk.usage.completion_tokens;
+          totalTokens = chunk.usage.total_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1301,9 +1555,71 @@ export async function streamDecorationQa(
         output_tokens: outputTokens,
       },
     });
+    await aiGateway.logCall({
+      tenantId: usageContext.tenantId,
+      sceneCode: "decoration_qa",
+      providerCode,
+      modelCode: model,
+      modelName: model,
+      status: "success",
+      requestId,
+      durationMs: Date.now() - startedAt,
+      promptTokens: inputTokens ?? null,
+      completionTokens: outputTokens ?? null,
+      totalTokens: normalizeTotalTokens({
+        promptTokens: inputTokens,
+        completionTokens: outputTokens,
+        totalTokens,
+      }),
+      source: usageContext.source,
+      billable: usageContext.billable,
+      metadata: {
+        source: usageContext.source,
+        auth_user_id: usageContext.authUserId ?? null,
+        customer_id: usageContext.customerId ?? null,
+        employee_id: usageContext.employeeId ?? null,
+        project_id: usageContext.projectId ?? null,
+        conversation_id: conversationId,
+        stream: true,
+      },
+    });
+  } catch (error) {
+    await aiGateway.logCall({
+      tenantId: usageContext.tenantId,
+      sceneCode: "decoration_qa",
+      providerCode,
+      modelCode: model,
+      modelName: model,
+      status: "failure",
+      requestId,
+      durationMs: Date.now() - startedAt,
+      promptTokens: inputTokens ?? null,
+      completionTokens: outputTokens ?? null,
+      totalTokens: normalizeTotalTokens({
+        promptTokens: inputTokens,
+        completionTokens: outputTokens,
+        totalTokens,
+      }),
+      errorCode: error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code || "AI_STREAM_FAILED")
+        : "AI_STREAM_FAILED",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      source: usageContext.source,
+      billable: usageContext.billable,
+      metadata: {
+        source: usageContext.source,
+        auth_user_id: usageContext.authUserId ?? null,
+        customer_id: usageContext.customerId ?? null,
+        employee_id: usageContext.employeeId ?? null,
+        project_id: usageContext.projectId ?? null,
+        conversation_id: conversationId,
+        stream: true,
+      },
+    });
+    throw error;
   } finally {
-    streamRequest.clearTimeout();
-    reader.releaseLock();
+    streamRequest?.clearTimeout();
+    reader?.releaseLock();
   }
 }
 
