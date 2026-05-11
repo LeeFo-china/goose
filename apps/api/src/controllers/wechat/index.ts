@@ -20,6 +20,7 @@ import type {
   SmsScene,
   SmsVerificationStatus,
 } from "@gooes/domain";
+import { isEmployeeOperableStatus } from "@gooes/domain";
 
 type WeChatSessionResponse = {
   openid?: string;
@@ -1038,7 +1039,12 @@ export class WeChatController extends BaseController {
     const adminClient = SupabaseDB.getAdminClient();
     const { data, error } = await adminClient
       .from("employees")
-      .select("id, user_id")
+      .select(`
+        id,
+        user_id,
+        status,
+        tenant:tenants!employees_tenant_id_fkey(id, status)
+      `)
       .eq("phone", phone);
 
     if (error) {
@@ -1059,7 +1065,21 @@ export class WeChatController extends BaseController {
     }
 
     if (employee.user_id && employee.user_id !== authUserId) {
-      throw Errors.badRequest("该员工档案已绑定其他账号");
+      authorizationService.invalidateAuthContext({
+        authUserId: employee.user_id,
+        employeeId: employee.id,
+      });
+    }
+
+    if (!isEmployeeOperableStatus(employee.status)) {
+      throw Errors.badRequest("该员工账号已停用，无法登录");
+    }
+
+    const tenant = Array.isArray(employee.tenant)
+      ? employee.tenant[0]
+      : employee.tenant;
+    if (!tenant?.id || tenant.status !== "active") {
+      throw Errors.badRequest("该员工未绑定可用装修公司，无法登录");
     }
 
     const { error: cleanupError } = await adminClient
