@@ -152,27 +152,6 @@ const platformCards = [
   },
 ];
 
-const platformBoundaryRows = [
-  {
-    name: "租户管理",
-    mode: "平台级列表和详情，不使用当前员工租户过滤。",
-    href: "/platform/tenants",
-    status: "已开放",
-  },
-  {
-    name: "平台线索",
-    mode: "先进入平台公海，再明确分配到目标租户。",
-    href: "/platform/leads",
-    status: "已开放",
-  },
-  {
-    name: "用量统计",
-    mode: "从平台维度查看租户消耗、AI 计费和短视频分钟数。",
-    href: "/platform/usage",
-    status: "已开放",
-  },
-];
-
 const platformSummaryCards = [
   {
     label: "平台入口",
@@ -287,8 +266,6 @@ function getPermissionDescription(permission: AdminPermission, meta: PermissionM
 }
 
 function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<ReturnType<typeof getAdminSession>>> }) {
-  const employee = session.employee;
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
@@ -334,7 +311,6 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{employee?.name || "平台管理员"}</Badge>
               <Badge variant="secondary">平台级</Badge>
             </div>
           </div>
@@ -391,75 +367,6 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
           </Table>
         </CardContent>
       </Card>
-
-      <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>平台操作边界</CardTitle>
-            <CardDescription>平台超管默认处理平台数据，不默认代表某个装修公司。</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table className="border-t">
-              <TableHeader className="bg-muted/60">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>场景</TableHead>
-                  <TableHead>当前处理方式</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead className="text-right">入口</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {platformBoundaryRows.map((row) => (
-                  <TableRow key={row.name}>
-                    <TableCell className="font-medium">{row.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{row.mode}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <Badge variant="success">{row.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="sm">
-                        <Link href={row.href}>
-                          打开
-                          <ArrowRight data-icon="inline-end" />
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow>
-                  <TableCell className="font-medium">租户业务数据</TableCell>
-                  <TableCell className="text-muted-foreground">需要明确选择租户后进入，不在首页自动使用默认装修公司。</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge variant="secondary">待租户选择</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline">无默认入口</Badge>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>登录身份</CardTitle>
-            <CardDescription>用于后台登录和审计归因。</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {[
-              ["员工", employee?.name || "-"],
-              ["角色", session.roles.map(getRoleLabel).join(" / ") || "-"],
-              ["用户编号", session.user_id || "-"],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">{label}</div>
-                <div className="mt-1 truncate text-sm font-medium">{value}</div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
