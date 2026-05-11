@@ -99,6 +99,8 @@ class AiCallLogRepository {
         total_tokens: number | null;
         error_code: string | null;
         error_message: string | null;
+        source: string | null;
+        billable: boolean | null;
         metadata: unknown;
         created_at: string | null;
       }>,

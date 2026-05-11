@@ -24,6 +24,20 @@ function aiStatusBadge(status: UsageAiLogRecord["status"]) {
     : <Badge variant="danger">失败</Badge>;
 }
 
+function aiSourceLabel(source?: string | null) {
+  if (source === "customer_miniprogram") return "客户小程序";
+  if (source === "employee_miniprogram") return "员工小程序";
+  if (source === "visitor") return "访客";
+  if (source === "admin") return "Admin";
+  return source || "未标记";
+}
+
+function aiBillableBadge(billable?: boolean | null) {
+  if (billable === false) return <Badge variant="outline">不计费</Badge>;
+  if (billable === true) return <Badge variant="secondary">计费</Badge>;
+  return <Badge variant="outline">未标记</Badge>;
+}
+
 function smsStatusBadge(status: UsageSmsLogRecord["status"]) {
   if (status === "success") return <Badge variant="success">成功</Badge>;
   if (status === "failure") return <Badge variant="danger">失败</Badge>;
@@ -59,6 +73,19 @@ export function UsageAiLogsTable({ logs }: { logs: UsageAiLogRecord[] }) {
       ),
       meta: {
         cellClassName: "min-w-[180px]",
+      },
+    },
+    {
+      id: "source",
+      header: "来源/计费",
+      cell: ({ row }) => (
+        <div className="flex flex-col items-start gap-1">
+          <Badge variant="outline">{aiSourceLabel(row.original.source)}</Badge>
+          {aiBillableBadge(row.original.billable)}
+        </div>
+      ),
+      meta: {
+        cellClassName: "min-w-[130px]",
       },
     },
     {
@@ -119,7 +146,7 @@ export function UsageAiLogsTable({ logs }: { logs: UsageAiLogRecord[] }) {
       columns={columns}
       data={logs}
       emptyText="暂无 AI 调用明细"
-      minWidth="min-w-[1080px]"
+      minWidth="min-w-[1210px]"
     />
   );
 }
