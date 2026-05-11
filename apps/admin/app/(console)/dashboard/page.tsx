@@ -105,36 +105,48 @@ const platformCards = [
   {
     title: "平台租户",
     description: "租户、管理员、初始化状态",
+    summary: "租户管理",
+    status: "核心",
     href: "/platform/tenants",
     icon: Building2,
   },
   {
     title: "平台线索",
     description: "公海线索、租户分配、审计",
+    summary: "线索分配",
+    status: "核心",
     href: "/platform/leads",
     icon: Inbox,
   },
   {
     title: "H5 活动页",
     description: "活动配置、页面发布、线索承接",
+    summary: "营销承接",
+    status: "运营",
     href: "/platform/marketing-pages",
     icon: Megaphone,
   },
   {
     title: "用量统计",
     description: "平台、租户、AI 和短视频用量",
+    summary: "成本核算",
+    status: "财务",
     href: "/platform/usage",
     icon: BarChart3,
   },
   {
     title: "平台审计",
     description: "租户、线索、配置操作记录",
+    summary: "操作追踪",
+    status: "审计",
     href: "/platform/audit-logs",
     icon: ScrollText,
   },
   {
     title: "系统配置",
     description: "短信、AI、视频和平台参数",
+    summary: "全局配置",
+    status: "配置",
     href: "/settings",
     icon: Shield,
   },
@@ -145,16 +157,42 @@ const platformBoundaryRows = [
     name: "租户管理",
     mode: "平台级列表和详情，不使用当前员工租户过滤。",
     href: "/platform/tenants",
+    status: "已开放",
   },
   {
     name: "平台线索",
     mode: "先进入平台公海，再明确分配到目标租户。",
     href: "/platform/leads",
+    status: "已开放",
   },
   {
     name: "用量统计",
     mode: "从平台维度查看租户消耗、AI 计费和短视频分钟数。",
     href: "/platform/usage",
+    status: "已开放",
+  },
+];
+
+const platformSummaryCards = [
+  {
+    label: "平台入口",
+    value: `${platformCards.length} 个`,
+    icon: Building2,
+  },
+  {
+    label: "核心操作",
+    value: "租户 / 线索",
+    icon: Inbox,
+  },
+  {
+    label: "用量核算",
+    value: "AI / 短视频",
+    icon: BarChart3,
+  },
+  {
+    label: "审计配置",
+    value: "审计 / 系统",
+    icon: Shield,
   },
 ];
 
@@ -253,111 +291,174 @@ function PlatformAdminDashboard({ session }: { session: NonNullable<Awaited<Retu
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 border-b pb-4 md:flex-row md:items-center">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-normal text-foreground">平台概览</h1>
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">平台概览</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            平台级处理租户、线索、用量、审计和全局配置。
+            管理平台租户、线索分配、用量成本、审计记录和全局配置，不自动进入装修公司业务视角。
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{getRoleLabel("platform_admin")}</Badge>
-          <Badge variant="secondary">{employee?.name || "平台管理员"}</Badge>
-        </div>
+        <Badge variant="outline">{getRoleLabel("platform_admin")}</Badge>
       </div>
 
-      <div className="grid overflow-hidden rounded-md border md:grid-cols-2 xl:grid-cols-3">
-        {platformCards.map((item) => {
+      <div className="grid gap-3 md:grid-cols-4">
+        {platformSummaryCards.map((item, index) => {
           const Icon = item.icon;
 
           return (
-            <Button
-              key={item.href}
-              asChild
-              variant="ghost"
-              className="h-auto justify-between rounded-none border-b p-4 text-left md:border-r xl:[&:nth-child(3n)]:border-r-0 xl:[&:nth-last-child(-n+3)]:border-b-0"
-            >
-              <Link href={item.href} className="flex items-center gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+            <Card key={item.label}>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className={index === 0
+                  ? "flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground"
+                  : "flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground"}
+                >
                   <Icon />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-foreground">{item.title}</span>
-                  <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
-                    {item.description}
-                  </span>
-                </span>
-                <ArrowRight data-icon="inline-end" className="shrink-0 text-muted-foreground" />
-              </Link>
-            </Button>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm text-muted-foreground">{item.label}</div>
+                  <div className="truncate text-xl font-semibold">{item.value}</div>
+                </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-        <section className="rounded-md border">
-          <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+      <Card>
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
-              <h2 className="text-base font-semibold">平台操作边界</h2>
-              <p className="mt-1 text-sm text-muted-foreground">默认不代入任何装修公司业务视角。</p>
+              <CardTitle>平台工作台</CardTitle>
+              <CardDescription>
+                常用平台级入口和处理边界，保持与用量统计页一致的表格化查看方式。
+              </CardDescription>
             </div>
-            <Badge variant="outline">平台级</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{employee?.name || "平台管理员"}</Badge>
+              <Badge variant="secondary">平台级</Badge>
+            </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>场景</TableHead>
-                <TableHead>当前处理方式</TableHead>
-                <TableHead className="text-right">入口</TableHead>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table className="border-t">
+            <TableHeader className="bg-muted/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead>入口</TableHead>
+                <TableHead>处理内容</TableHead>
+                <TableHead>定位</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {platformBoundaryRows.map((row) => (
-                <TableRow key={row.name}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.mode}</TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={row.href}>
-                        打开
-                        <ArrowRight data-icon="inline-end" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow>
-                <TableCell className="font-medium">租户业务数据</TableCell>
-                <TableCell className="text-muted-foreground">需要明确选择租户后进入，不在首页自动使用默认装修公司。</TableCell>
-                <TableCell className="text-right">
-                  <Badge variant="secondary">待租户选择</Badge>
-                </TableCell>
-              </TableRow>
+              {platformCards.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <TableRow key={item.href}>
+                    <TableCell className="min-w-[180px]">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                          <Icon />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{item.title}</div>
+                          <div className="truncate text-xs text-muted-foreground">{item.summary}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="min-w-[260px] text-muted-foreground">
+                      {item.description}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant="outline">{item.status}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant="success">已开放</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-right">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={item.href}>
+                          打开
+                          <ArrowRight data-icon="inline-end" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
-        </section>
+        </CardContent>
+      </Card>
 
-        <section className="rounded-md border">
-          <div className="border-b px-4 py-3">
-            <h2 className="text-base font-semibold">登录身份</h2>
-            <p className="mt-1 text-sm text-muted-foreground">用于后台登录和审计归因。</p>
-          </div>
-          <div className="flex flex-col">
+      <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>平台操作边界</CardTitle>
+            <CardDescription>平台超管默认处理平台数据，不默认代表某个装修公司。</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table className="border-t">
+              <TableHeader className="bg-muted/60">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>场景</TableHead>
+                  <TableHead>当前处理方式</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="text-right">入口</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {platformBoundaryRows.map((row) => (
+                  <TableRow key={row.name}>
+                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.mode}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant="success">{row.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={row.href}>
+                          打开
+                          <ArrowRight data-icon="inline-end" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell className="font-medium">租户业务数据</TableCell>
+                  <TableCell className="text-muted-foreground">需要明确选择租户后进入，不在首页自动使用默认装修公司。</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Badge variant="secondary">待租户选择</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant="outline">无默认入口</Badge>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>登录身份</CardTitle>
+            <CardDescription>用于后台登录和审计归因。</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
             {[
               ["员工", employee?.name || "-"],
               ["角色", session.roles.map(getRoleLabel).join(" / ") || "-"],
               ["用户编号", session.user_id || "-"],
-            ].map(([label, value], index) => (
-              <div
-                key={label}
-                className={index < 2 ? "border-b px-4 py-3" : "px-4 py-3"}
-              >
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-md border p-3">
                 <div className="text-xs text-muted-foreground">{label}</div>
                 <div className="mt-1 truncate text-sm font-medium">{value}</div>
               </div>
             ))}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
