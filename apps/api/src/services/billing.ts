@@ -280,9 +280,15 @@ class BillingService {
 
   async listPlatformLedger(query: BillingLedgerQuery, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
-    const result = await billingRepository.listLedger(query);
-    const tenantIds = Array.from(new Set(result.list.map((item) => item.tenant_id)));
-    const tenants = await billingRepository.listTenantsByIds(tenantIds);
+    const filterTenantIds = query.tenant_keyword
+      ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
+      : undefined;
+    const result = await billingRepository.listLedger({
+      ...query,
+      tenantIds: filterTenantIds,
+    });
+    const resultTenantIds = Array.from(new Set(result.list.map((item) => item.tenant_id)));
+    const tenants = await billingRepository.listTenantsByIds(resultTenantIds);
 
     return {
       ...result,
@@ -292,9 +298,15 @@ class BillingService {
 
   async listPlatformBillingEvents(query: BillingEventQuery, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
-    const result = await billingRepository.listBillingEvents(query);
-    const tenantIds = Array.from(new Set(result.list.map((item) => item.tenant_id)));
-    const tenants = await billingRepository.listTenantsByIds(tenantIds);
+    const filterTenantIds = query.tenant_keyword
+      ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
+      : undefined;
+    const result = await billingRepository.listBillingEvents({
+      ...query,
+      tenantIds: filterTenantIds,
+    });
+    const resultTenantIds = Array.from(new Set(result.list.map((item) => item.tenant_id)));
+    const tenants = await billingRepository.listTenantsByIds(resultTenantIds);
     const tenantMap = new Map(tenants.map((tenant) => [tenant.id, tenant]));
 
     return {
@@ -308,9 +320,13 @@ class BillingService {
 
   async getPlatformAiUsageStats(query: BillingAiUsageStatsQuery, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
+    const filterTenantIds = query.tenant_keyword
+      ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
+      : undefined;
     const [rows, rules] = await Promise.all([
       billingRepository.listAiUsageStatsRows({
         tenantId: query.tenant_id,
+        tenantIds: filterTenantIds,
         sceneCode: query.scene_code,
         providerCode: query.provider_code,
         modelCode: query.model_code,

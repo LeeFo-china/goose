@@ -301,6 +301,20 @@ class BillingRepository {
     };
   }
 
+  async listTenantIdsByKeyword(keyword: string) {
+    const escaped = keyword.replaceAll(",", "\\,");
+    const { data, error } = await this.from("tenants")
+      .select("id")
+      .or(`name.ilike.%${escaped}%,slug.ilike.%${escaped}%`)
+      .limit(500);
+
+    if (error) {
+      throw Errors.dbError("查询租户筛选条件失败", error);
+    }
+
+    return (data || []).map((item: { id: string }) => item.id);
+  }
+
   async listTenantsByIds(tenantIds: string[]) {
     if (!tenantIds.length) return [] as BillingTenantLite[];
 
@@ -365,9 +379,21 @@ class BillingRepository {
     };
   }
 
-  async listLedger(query: BillingLedgerQuery & { tenantId?: string }) {
+  async listLedger(query: BillingLedgerQuery & { tenantId?: string; tenantIds?: string[] }) {
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
+
+    if (query.tenantIds && query.tenantIds.length === 0) {
+      return {
+        list: [] as BillingLedgerRow[],
+        pagination: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
 
     let request = this.from("tenant_credit_ledger")
       .select("*", { count: "exact" })
@@ -376,7 +402,10 @@ class BillingRepository {
 
     const tenantId = query.tenantId || query.tenant_id;
     if (tenantId) request = request.eq("tenant_id", tenantId);
+    if (query.tenantIds?.length) request = request.in("tenant_id", query.tenantIds);
     if (query.direction) request = request.eq("direction", query.direction);
+    if (query.metric_code) request = request.eq("metric_code", query.metric_code);
+    if (query.source_type) request = request.eq("source_type", query.source_type);
     if (query.event_type) request = request.eq("event_type", query.event_type);
     if (query.start_date) request = request.gte("created_at", query.start_date);
     if (query.end_date) request = request.lte("created_at", query.end_date);
@@ -403,6 +432,7 @@ class BillingRepository {
 
   async listBillingEvents(input: BillingEventQuery & {
     tenantId?: string;
+    tenantIds?: string[];
     startDate?: string;
     endDate?: string;
     statuses?: string[];
@@ -413,13 +443,29 @@ class BillingRepository {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
+    if (input.tenantIds && input.tenantIds.length === 0) {
+      return {
+        list: [] as BillingEventRow[],
+        pagination: {
+          page,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
     let request = this.from("tenant_billing_events")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
 
     if (input.tenantId || input.tenant_id) request = request.eq("tenant_id", input.tenantId || input.tenant_id);
+    if (input.tenantIds?.length) request = request.in("tenant_id", input.tenantIds);
     if (input.metric_code) request = request.eq("metric_code", input.metric_code);
+    if (input.scene_code) request = request.eq("scene_code", input.scene_code);
+    if (input.provider) request = request.eq("provider", input.provider);
+    if (input.model) request = request.eq("model", input.model);
     if (input.source_type) request = request.eq("source_type", input.source_type);
     if (input.status) request = request.eq("status", input.status);
     if (input.statuses?.length) request = request.in("status", input.statuses);
@@ -508,6 +554,7 @@ class BillingRepository {
 
   async listAiUsageStatsRows(input: {
     tenantId?: string;
+    tenantIds?: string[];
     sceneCode?: string;
     providerCode?: string;
     modelCode?: string;
@@ -515,6 +562,10 @@ class BillingRepository {
     endDate?: string;
     limit: number;
   }) {
+    if (input.tenantIds && input.tenantIds.length === 0) {
+      return [] as BillingAiUsageStatsRow[];
+    }
+
     let request = this.from("ai_call_logs")
       .select(`
         id,
@@ -541,6 +592,7 @@ class BillingRepository {
       .limit(input.limit);
 
     if (input.tenantId) request = request.eq("tenant_id", input.tenantId);
+    if (input.tenantIds?.length) request = request.in("tenant_id", input.tenantIds);
     if (input.sceneCode) request = request.eq("scene_code", input.sceneCode);
     if (input.providerCode) request = request.eq("provider_code", input.providerCode);
     if (input.modelCode) request = request.eq("model_code", input.modelCode);

@@ -16,6 +16,8 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
@@ -27,9 +29,38 @@ type SearchParams = Promise<{
   rulePage?: string;
   eventPage?: string;
   tab?: string;
+  tenantKeyword?: string;
+  tenantStatus?: string;
+  tenantLowBalance?: string;
+  eventTenantKeyword?: string;
+  eventMetricCode?: string;
+  eventSceneCode?: string;
+  eventSourceType?: string;
+  eventStatus?: string;
+  eventStartDate?: string;
+  eventEndDate?: string;
+  aiTenantKeyword?: string;
+  aiSceneCode?: string;
+  aiProviderCode?: string;
+  aiModelCode?: string;
+  aiStartDate?: string;
+  aiEndDate?: string;
+  aiMinSampleCount?: string;
+  ruleMetricCode?: string;
+  ruleScope?: string;
+  ruleEnabled?: string;
+  ledgerTenantKeyword?: string;
+  ledgerDirection?: string;
+  ledgerMetricCode?: string;
+  ledgerSourceType?: string;
+  ledgerEventType?: string;
+  ledgerKeyword?: string;
+  ledgerStartDate?: string;
+  ledgerEndDate?: string;
 }>;
 
 type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger";
+type QueryValue = string | number | boolean | undefined | null;
 
 const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger"];
 
@@ -95,10 +126,19 @@ function normalizeBillingTab(value: string | undefined): BillingTab {
   return billingTabs.includes(value as BillingTab) ? value as BillingTab : "tenants";
 }
 
-function buildQuery(input: Record<string, string | number | undefined>) {
+function cleanParam(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function pickParam<T extends string>(value: string | undefined, options: readonly T[]) {
+  return options.includes(value as T) ? value as T : undefined;
+}
+
+function buildQuery(input: Record<string, QueryValue>) {
   const query = new URLSearchParams();
   Object.entries(input).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") {
+    if (value !== undefined && value !== null && value !== "") {
       query.set(key, String(value));
     }
   });
@@ -196,10 +236,12 @@ function PaginationLinks({
   pagination,
   pageKey,
   tab,
+  filters,
 }: {
   pagination: Pagination;
   pageKey: "page" | "ledgerPage" | "rulePage" | "eventPage";
   tab: BillingTab;
+  filters?: Record<string, QueryValue>;
 }) {
   const prevPage = Math.max(1, pagination.page - 1);
   const nextPage = pagination.page + 1;
@@ -209,14 +251,85 @@ function PaginationLinks({
       <span>共 {pagination.total} 条</span>
       <div className="flex items-center gap-2">
         <Button asChild size="sm" variant="outline" disabled={pagination.page <= 1}>
-          <Link href={`/platform/billing?${buildQuery({ tab, [pageKey]: prevPage })}`}>上一页</Link>
+          <Link href={`/platform/billing?${buildQuery({ ...filters, tab, [pageKey]: prevPage })}`}>上一页</Link>
         </Button>
         <span>{pagination.page} / {Math.max(1, pagination.totalPages)}</span>
         <Button asChild size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages}>
-          <Link href={`/platform/billing?${buildQuery({ tab, [pageKey]: nextPage })}`}>下一页</Link>
+          <Link href={`/platform/billing?${buildQuery({ ...filters, tab, [pageKey]: nextPage })}`}>下一页</Link>
         </Button>
       </div>
     </div>
+  );
+}
+
+function FilterPanel({
+  tab,
+  children,
+}: {
+  tab: BillingTab;
+  children: ReactNode;
+}) {
+  return (
+    <form action="/platform/billing" className="my-4 rounded-md border bg-muted/20 p-3">
+      <input type="hidden" name="tab" value={tab} />
+      <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-6">{children}</div>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <Button asChild variant="ghost" size="sm">
+          <Link href={`/platform/billing?${buildQuery({ tab })}`}>重置</Link>
+        </Button>
+        <Button type="submit" size="sm">筛选</Button>
+      </div>
+    </form>
+  );
+}
+
+function FilterInput({
+  label,
+  name,
+  defaultValue,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  placeholder?: string;
+  type?: "text" | "date" | "number";
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{label}</FieldLabel>
+      <Input id={name} name={name} type={type} defaultValue={defaultValue || ""} placeholder={placeholder} />
+    </Field>
+  );
+}
+
+function FilterSelect({
+  label,
+  name,
+  defaultValue,
+  options,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{label}</FieldLabel>
+      <select
+        id={name}
+        name={name}
+        defaultValue={defaultValue || ""}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        <option value="">全部</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </Field>
   );
 }
 
@@ -237,37 +350,122 @@ export default async function PlatformBillingPage({
   const rulePage = readPositiveInteger(params.rulePage, 1);
   const eventPage = readPositiveInteger(params.eventPage, 1);
   const activeTab = normalizeBillingTab(params.tab);
+  const tenantStatus = pickParam(params.tenantStatus, ["active", "suspended", "closed"] as const);
+  const tenantFilters = {
+    tenantKeyword: cleanParam(params.tenantKeyword),
+    tenantStatus,
+    tenantLowBalance: params.tenantLowBalance === "true" ? "true" : undefined,
+  };
+  const eventStatus = pickParam(params.eventStatus, ["pending", "estimated", "charged", "waived", "refunded", "failed"] as const);
+  const eventFilters = {
+    eventTenantKeyword: cleanParam(params.eventTenantKeyword),
+    eventMetricCode: cleanParam(params.eventMetricCode),
+    eventSceneCode: cleanParam(params.eventSceneCode),
+    eventSourceType: cleanParam(params.eventSourceType),
+    eventStatus,
+    eventStartDate: cleanParam(params.eventStartDate),
+    eventEndDate: cleanParam(params.eventEndDate),
+  };
+  const aiMinSampleCount = readPositiveInteger(params.aiMinSampleCount, emptyAiUsageStats.controls.min_sample_count);
+  const aiFilters = {
+    aiTenantKeyword: cleanParam(params.aiTenantKeyword),
+    aiSceneCode: cleanParam(params.aiSceneCode),
+    aiProviderCode: cleanParam(params.aiProviderCode),
+    aiModelCode: cleanParam(params.aiModelCode),
+    aiStartDate: cleanParam(params.aiStartDate),
+    aiEndDate: cleanParam(params.aiEndDate),
+    aiMinSampleCount: params.aiMinSampleCount ? aiMinSampleCount : undefined,
+  };
+  const ruleScope = pickParam(params.ruleScope, ["platform_default", "tenant_override"] as const);
+  const ruleEnabled = pickParam(params.ruleEnabled, ["true", "false"] as const);
+  const ruleFilters = {
+    ruleMetricCode: cleanParam(params.ruleMetricCode),
+    ruleScope,
+    ruleEnabled,
+  };
+  const ledgerDirection = pickParam(params.ledgerDirection, ["in", "out", "freeze", "unfreeze"] as const);
+  const ledgerFilters = {
+    ledgerTenantKeyword: cleanParam(params.ledgerTenantKeyword),
+    ledgerDirection,
+    ledgerMetricCode: cleanParam(params.ledgerMetricCode),
+    ledgerSourceType: cleanParam(params.ledgerSourceType),
+    ledgerEventType: cleanParam(params.ledgerEventType),
+    ledgerKeyword: cleanParam(params.ledgerKeyword),
+    ledgerStartDate: cleanParam(params.ledgerStartDate),
+    ledgerEndDate: cleanParam(params.ledgerEndDate),
+  };
 
   const summaryResult = hasPlatformAccess
     ? await fetchBackend<BillingPlatformSummary>("/platform/billing/summary", emptySummary)
     : { data: emptySummary, error: "当前账号不是平台超管，无法访问计费中心" };
   const tenantsResult = hasPlatformAccess
     ? await fetchBackend<BillingTenantListData>(
-      `/platform/billing/tenants?${buildQuery({ page, pageSize: 20 })}`,
+      `/platform/billing/tenants?${buildQuery({
+        page,
+        pageSize: 20,
+        keyword: tenantFilters.tenantKeyword,
+        status: tenantFilters.tenantStatus,
+        low_balance_only: tenantFilters.tenantLowBalance,
+      })}`,
       emptyTenantList(page),
     )
     : { data: emptyTenantList(page), error: null };
   const ledgerResult = hasPlatformAccess
     ? await fetchBackend<BillingLedgerListData>(
-      `/platform/billing/ledger?${buildQuery({ page: ledgerPage, pageSize: 10 })}`,
+      `/platform/billing/ledger?${buildQuery({
+        page: ledgerPage,
+        pageSize: 10,
+        tenant_keyword: ledgerFilters.ledgerTenantKeyword,
+        direction: ledgerFilters.ledgerDirection,
+        metric_code: ledgerFilters.ledgerMetricCode,
+        source_type: ledgerFilters.ledgerSourceType,
+        event_type: ledgerFilters.ledgerEventType,
+        keyword: ledgerFilters.ledgerKeyword,
+        start_date: ledgerFilters.ledgerStartDate,
+        end_date: ledgerFilters.ledgerEndDate,
+      })}`,
       emptyLedgerList(ledgerPage),
     )
     : { data: emptyLedgerList(ledgerPage), error: null };
   const pricingResult = hasPlatformAccess
     ? await fetchBackend<BillingPricingRuleListData>(
-      `/platform/billing/pricing-rules?${buildQuery({ page: rulePage, pageSize: 20 })}`,
+      `/platform/billing/pricing-rules?${buildQuery({
+        page: rulePage,
+        pageSize: 20,
+        metric_code: ruleFilters.ruleMetricCode,
+        scope: ruleFilters.ruleScope,
+        enabled: ruleFilters.ruleEnabled,
+      })}`,
       emptyPricingList(rulePage),
     )
     : { data: emptyPricingList(rulePage), error: null };
   const eventResult = hasPlatformAccess
     ? await fetchBackend<BillingEventListData>(
-      `/platform/billing/events?${buildQuery({ page: eventPage, pageSize: 20 })}`,
+      `/platform/billing/events?${buildQuery({
+        page: eventPage,
+        pageSize: 20,
+        tenant_keyword: eventFilters.eventTenantKeyword,
+        metric_code: eventFilters.eventMetricCode,
+        scene_code: eventFilters.eventSceneCode,
+        source_type: eventFilters.eventSourceType,
+        status: eventFilters.eventStatus,
+        start_date: eventFilters.eventStartDate,
+        end_date: eventFilters.eventEndDate,
+      })}`,
       emptyEventList(eventPage),
     )
     : { data: emptyEventList(eventPage), error: null };
   const aiStatsResult = hasPlatformAccess
     ? await fetchBackend<BillingAiUsageStats>(
-      "/platform/billing/ai-usage-stats",
+      `/platform/billing/ai-usage-stats?${buildQuery({
+        tenant_keyword: aiFilters.aiTenantKeyword,
+        scene_code: aiFilters.aiSceneCode,
+        provider_code: aiFilters.aiProviderCode,
+        model_code: aiFilters.aiModelCode,
+        start_date: aiFilters.aiStartDate,
+        end_date: aiFilters.aiEndDate,
+        min_sample_count: aiFilters.aiMinSampleCount,
+      })}`,
       emptyAiUsageStats,
     )
     : { data: emptyAiUsageStats, error: null };
@@ -333,6 +531,30 @@ export default async function PlatformBillingPage({
                 description="租户积分余额和人工充值入口。"
                 badge={`${tenantsResult.data.pagination.total} 个账户`}
               />
+              <FilterPanel tab="tenants">
+                <FilterInput
+                  label="租户"
+                  name="tenantKeyword"
+                  defaultValue={tenantFilters.tenantKeyword}
+                  placeholder="租户名称或标识"
+                />
+                <FilterSelect
+                  label="账户状态"
+                  name="tenantStatus"
+                  defaultValue={tenantFilters.tenantStatus}
+                  options={[
+                    { label: "正常", value: "active" },
+                    { label: "暂停", value: "suspended" },
+                    { label: "关闭", value: "closed" },
+                  ]}
+                />
+                <FilterSelect
+                  label="余额状态"
+                  name="tenantLowBalance"
+                  defaultValue={tenantFilters.tenantLowBalance}
+                  options={[{ label: "只看低余额", value: "true" }]}
+                />
+              </FilterPanel>
               <div className="overflow-hidden rounded-md border">
                 <Table>
                   <TableHeader>
@@ -377,7 +599,12 @@ export default async function PlatformBillingPage({
                   </TableBody>
                 </Table>
                 <div className="border-t p-4">
-                  <PaginationLinks pagination={tenantsResult.data.pagination} pageKey="page" tab="tenants" />
+                  <PaginationLinks
+                    pagination={tenantsResult.data.pagination}
+                    pageKey="page"
+                    tab="tenants"
+                    filters={tenantFilters}
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -388,6 +615,47 @@ export default async function PlatformBillingPage({
                 description="从 AI、短信、短视频日志生成预计账单，不扣真实积分。"
                 action={<ShadowBillingRunButton />}
               />
+              <FilterPanel tab="events">
+                <FilterInput
+                  label="租户"
+                  name="eventTenantKeyword"
+                  defaultValue={eventFilters.eventTenantKeyword}
+                  placeholder="租户名称或标识"
+                />
+                <FilterInput
+                  label="计费项"
+                  name="eventMetricCode"
+                  defaultValue={eventFilters.eventMetricCode}
+                  placeholder="metric_code"
+                />
+                <FilterInput
+                  label="场景"
+                  name="eventSceneCode"
+                  defaultValue={eventFilters.eventSceneCode}
+                  placeholder="scene_code"
+                />
+                <FilterInput
+                  label="来源"
+                  name="eventSourceType"
+                  defaultValue={eventFilters.eventSourceType}
+                  placeholder="source_type"
+                />
+                <FilterSelect
+                  label="状态"
+                  name="eventStatus"
+                  defaultValue={eventFilters.eventStatus}
+                  options={[
+                    { label: "待处理", value: "pending" },
+                    { label: "已试算", value: "estimated" },
+                    { label: "已扣费", value: "charged" },
+                    { label: "已免除", value: "waived" },
+                    { label: "已退回", value: "refunded" },
+                    { label: "异常", value: "failed" },
+                  ]}
+                />
+                <FilterInput label="开始时间" name="eventStartDate" type="date" defaultValue={eventFilters.eventStartDate} />
+                <FilterInput label="结束时间" name="eventEndDate" type="date" defaultValue={eventFilters.eventEndDate} />
+              </FilterPanel>
               <div className="overflow-hidden rounded-md border">
                 <Table>
                   <TableHeader>
@@ -438,7 +706,12 @@ export default async function PlatformBillingPage({
                   </TableBody>
                 </Table>
                 <div className="border-t p-4">
-                  <PaginationLinks pagination={eventResult.data.pagination} pageKey="eventPage" tab="events" />
+                  <PaginationLinks
+                    pagination={eventResult.data.pagination}
+                    pageKey="eventPage"
+                    tab="events"
+                    filters={eventFilters}
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -450,6 +723,41 @@ export default async function PlatformBillingPage({
                 badge={`${aiStatsResult.data.totals.ready_groups} 个场景可进入真扣费评估`}
                 badgeVariant={aiStatsResult.data.totals.ready_groups > 0 ? "success" : "warning"}
               />
+              <FilterPanel tab="ai">
+                <FilterInput
+                  label="租户"
+                  name="aiTenantKeyword"
+                  defaultValue={aiFilters.aiTenantKeyword}
+                  placeholder="租户名称或标识"
+                />
+                <FilterInput
+                  label="场景"
+                  name="aiSceneCode"
+                  defaultValue={aiFilters.aiSceneCode}
+                  placeholder="scene_code"
+                />
+                <FilterInput
+                  label="供应商"
+                  name="aiProviderCode"
+                  defaultValue={aiFilters.aiProviderCode}
+                  placeholder="provider_code"
+                />
+                <FilterInput
+                  label="模型"
+                  name="aiModelCode"
+                  defaultValue={aiFilters.aiModelCode}
+                  placeholder="model_code"
+                />
+                <FilterInput label="开始时间" name="aiStartDate" type="date" defaultValue={aiFilters.aiStartDate} />
+                <FilterInput label="结束时间" name="aiEndDate" type="date" defaultValue={aiFilters.aiEndDate} />
+                <FilterInput
+                  label="样本门槛"
+                  name="aiMinSampleCount"
+                  type="number"
+                  defaultValue={aiFilters.aiMinSampleCount ? String(aiFilters.aiMinSampleCount) : ""}
+                  placeholder="100"
+                />
+              </FilterPanel>
               <div className="grid gap-3 md:grid-cols-4">
                 <AiStatItem label="观察分组" value={formatCredits(aiStatsResult.data.totals.groups)} />
                 <AiStatItem label="有效样本" value={formatCredits(aiStatsResult.data.totals.billable_samples)} />
@@ -528,6 +836,32 @@ export default async function PlatformBillingPage({
                 description="平台默认价和租户定制价。第一版先由超管维护。"
                 action={<PricingRuleCreateButton />}
               />
+              <FilterPanel tab="pricing">
+                <FilterInput
+                  label="计费项"
+                  name="ruleMetricCode"
+                  defaultValue={ruleFilters.ruleMetricCode}
+                  placeholder="metric_code"
+                />
+                <FilterSelect
+                  label="范围"
+                  name="ruleScope"
+                  defaultValue={ruleFilters.ruleScope}
+                  options={[
+                    { label: "平台默认价", value: "platform_default" },
+                    { label: "租户定制价", value: "tenant_override" },
+                  ]}
+                />
+                <FilterSelect
+                  label="状态"
+                  name="ruleEnabled"
+                  defaultValue={ruleFilters.ruleEnabled}
+                  options={[
+                    { label: "启用", value: "true" },
+                    { label: "停用", value: "false" },
+                  ]}
+                />
+              </FilterPanel>
               <div className="overflow-hidden rounded-md border">
                 <Table>
                   <TableHeader>
@@ -573,7 +907,12 @@ export default async function PlatformBillingPage({
                   </TableBody>
                 </Table>
                 <div className="border-t p-4">
-                  <PaginationLinks pagination={pricingResult.data.pagination} pageKey="rulePage" tab="pricing" />
+                  <PaginationLinks
+                    pagination={pricingResult.data.pagination}
+                    pageKey="rulePage"
+                    tab="pricing"
+                    filters={ruleFilters}
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -584,6 +923,51 @@ export default async function PlatformBillingPage({
                 description="最近的充值、扣费、冻结和解冻记录。"
                 badge={`${ledgerResult.data.pagination.total} 条流水`}
               />
+              <FilterPanel tab="ledger">
+                <FilterInput
+                  label="租户"
+                  name="ledgerTenantKeyword"
+                  defaultValue={ledgerFilters.ledgerTenantKeyword}
+                  placeholder="租户名称或标识"
+                />
+                <FilterSelect
+                  label="方向"
+                  name="ledgerDirection"
+                  defaultValue={ledgerFilters.ledgerDirection}
+                  options={[
+                    { label: "入账", value: "in" },
+                    { label: "扣费", value: "out" },
+                    { label: "冻结", value: "freeze" },
+                    { label: "解冻", value: "unfreeze" },
+                  ]}
+                />
+                <FilterInput
+                  label="计费项"
+                  name="ledgerMetricCode"
+                  defaultValue={ledgerFilters.ledgerMetricCode}
+                  placeholder="metric_code"
+                />
+                <FilterInput
+                  label="来源"
+                  name="ledgerSourceType"
+                  defaultValue={ledgerFilters.ledgerSourceType}
+                  placeholder="source_type"
+                />
+                <FilterInput
+                  label="流水类型"
+                  name="ledgerEventType"
+                  defaultValue={ledgerFilters.ledgerEventType}
+                  placeholder="event_type"
+                />
+                <FilterInput
+                  label="关键词"
+                  name="ledgerKeyword"
+                  defaultValue={ledgerFilters.ledgerKeyword}
+                  placeholder="订单号或备注"
+                />
+                <FilterInput label="开始时间" name="ledgerStartDate" type="date" defaultValue={ledgerFilters.ledgerStartDate} />
+                <FilterInput label="结束时间" name="ledgerEndDate" type="date" defaultValue={ledgerFilters.ledgerEndDate} />
+              </FilterPanel>
               <div className="overflow-hidden rounded-md border">
                 <Table>
                   <TableHeader>
@@ -620,7 +1004,12 @@ export default async function PlatformBillingPage({
                   </TableBody>
                 </Table>
                 <div className="border-t p-4">
-                  <PaginationLinks pagination={ledgerResult.data.pagination} pageKey="ledgerPage" tab="ledger" />
+                  <PaginationLinks
+                    pagination={ledgerResult.data.pagination}
+                    pageKey="ledgerPage"
+                    tab="ledger"
+                    filters={ledgerFilters}
+                  />
                 </div>
               </div>
             </TabsContent>

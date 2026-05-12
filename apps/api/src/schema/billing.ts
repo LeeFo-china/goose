@@ -12,10 +12,18 @@ export const BillingPricingRuleParamSchema = z.object({
 export const BillingDirectionSchema = z.enum(["in", "out", "freeze", "unfreeze"]);
 export const BillingAccountStatusSchema = z.enum(["active", "suspended", "closed"]);
 export const BillingPricingScopeSchema = z.enum(["platform_default", "tenant_override"]);
+const BooleanQuerySchema = z.preprocess((value) => {
+  if (value === true || value === "true" || value === "1") return true;
+  if (value === false || value === "false" || value === "0") return false;
+  return value;
+}, z.boolean());
 
 export const BillingLedgerQuerySchema = PaginationQuerySchema.extend({
   tenant_id: z.uuid("无效的租户 ID").optional(),
+  tenant_keyword: z.string().trim().max(80, "租户关键词不能超过 80 个字符").optional(),
   direction: BillingDirectionSchema.optional(),
+  metric_code: z.string().trim().max(80, "计费项不能超过 80 个字符").optional(),
+  source_type: z.string().trim().max(80, "来源类型不能超过 80 个字符").optional(),
   event_type: z.string().trim().min(1, "流水类型不能为空").max(80, "流水类型不能超过 80 个字符").optional(),
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
   start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
@@ -25,7 +33,7 @@ export const BillingLedgerQuerySchema = PaginationQuerySchema.extend({
 export const BillingTenantListQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
   status: BillingAccountStatusSchema.optional(),
-  low_balance_only: z.coerce.boolean().optional(),
+  low_balance_only: BooleanQuerySchema.optional(),
 });
 
 export const BillingDateRangeQuerySchema = z.object({
@@ -45,12 +53,16 @@ export const BillingPricingRuleQuerySchema = PaginationQuerySchema.extend({
   tenant_id: z.uuid("无效的租户 ID").optional(),
   scope: BillingPricingScopeSchema.optional(),
   metric_code: z.string().trim().max(80, "计费项不能超过 80 个字符").optional(),
-  enabled: z.coerce.boolean().optional(),
+  enabled: BooleanQuerySchema.optional(),
 });
 
 export const BillingEventQuerySchema = PaginationQuerySchema.extend({
   tenant_id: z.uuid("无效的租户 ID").optional(),
+  tenant_keyword: z.string().trim().max(80, "租户关键词不能超过 80 个字符").optional(),
   metric_code: z.string().trim().max(80, "计费项不能超过 80 个字符").optional(),
+  scene_code: z.string().trim().max(120, "场景不能超过 120 个字符").optional(),
+  provider: z.string().trim().max(80, "供应商不能超过 80 个字符").optional(),
+  model: z.string().trim().max(120, "模型不能超过 120 个字符").optional(),
   source_type: z.string().trim().max(80, "来源类型不能超过 80 个字符").optional(),
   status: z.enum(["pending", "estimated", "charged", "waived", "refunded", "failed"]).optional(),
   start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
@@ -66,6 +78,7 @@ export const BillingShadowRunSchema = z.object({
 
 export const BillingAiUsageStatsQuerySchema = z.object({
   tenant_id: z.uuid("无效的租户 ID").optional(),
+  tenant_keyword: z.string().trim().max(80, "租户关键词不能超过 80 个字符").optional(),
   scene_code: z.string().trim().max(120, "场景不能超过 120 个字符").optional(),
   provider_code: z.string().trim().max(80, "供应商不能超过 80 个字符").optional(),
   model_code: z.string().trim().max(120, "模型不能超过 120 个字符").optional(),
