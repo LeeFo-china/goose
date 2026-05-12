@@ -10,6 +10,7 @@ import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
 import { TencentDeviceChannelTree } from "@/components/cameras/tencent-device-channel-tree";
+import { TenantDeviceAssetsPanel } from "@/components/cameras/tenant-device-assets-panel";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import {
   CreateTencentDeviceButton,
@@ -21,6 +22,7 @@ import type {
   CameraProjectGroup,
   EzvizDeviceChannel,
   Pagination,
+  TenantDeviceAsset,
   TencentDeviceChannel,
   TencentDeviceRecord,
   TencentSipServerConfig,
@@ -65,6 +67,11 @@ type TencentDeviceListData = {
   sip_server: TencentSipServerConfig | null;
   devices: TencentDeviceRecord[];
   list: TencentDeviceChannel[];
+};
+
+type TenantDeviceListData = {
+  list: TenantDeviceAsset[];
+  pagination: Pagination;
 };
 
 type CamerasPageSearchParams = {
@@ -275,6 +282,31 @@ async function getCameraProjectGroups(input: {
   }
 }
 
+async function getTenantDevices(token: string | null) {
+  if (!token) {
+    return {
+      list: [] as TenantDeviceAsset[],
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const data = await fetchBackendData<TenantDeviceListData>(
+      token,
+      "/tenant-devices?page=1&pageSize=100",
+    );
+    return {
+      list: data?.list || [],
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [] as TenantDeviceAsset[],
+      error: error instanceof Error ? error.message : "租户设备资产加载失败",
+    };
+  }
+}
+
 function buildCameraPageHref(input: {
   page: number;
   keyword: string;
@@ -325,6 +357,10 @@ export default async function CamerasPage({
     token,
     selectedProjectId,
   );
+  const {
+    list: tenantDevices,
+    error: tenantDeviceError,
+  } = await getTenantDevices(token);
   const unboundDeviceCount = devices.filter((device) => device.can_bind).length;
 
   return (
@@ -360,7 +396,10 @@ export default async function CamerasPage({
             </div>
             <div>
               <div className="text-sm text-muted-foreground">未绑定设备通道</div>
-              <div className="text-xl font-semibold">{unboundDeviceCount}</div>
+              <div className="text-xl font-semibold">{tenantDevices.filter((device) => !device.bound_camera_id).length}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                第三方可绑定 {unboundDeviceCount}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -530,6 +569,11 @@ export default async function CamerasPage({
           devices={(
             selectedProjectId ? (
               <div className="flex flex-col gap-4 border-t p-4">
+                <TenantDeviceAssetsPanel
+                  assets={tenantDevices}
+                  error={tenantDeviceError}
+                />
+
                 <div className="overflow-hidden rounded-md border">
                   <div className="flex flex-col justify-between gap-3 border-b bg-muted/30 p-4 md:flex-row md:items-center">
                     <CardTitle>腾讯云设备与通道</CardTitle>

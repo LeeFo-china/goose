@@ -116,6 +116,26 @@ export type TencentDeviceRecord = {
   group_name: string | null;
 };
 
+export type TenantDeviceAsset = {
+  id: string;
+  tenant_id: string;
+  vendor: "ezviz" | "tencent_iotvideo_industry" | string;
+  vendor_device_serial: string;
+  vendor_device_code: string | null;
+  vendor_device_name: string | null;
+  vendor_channel_id: string | null;
+  vendor_channel_code: string | null;
+  vendor_channel_name: string | null;
+  device_type: string | null;
+  source_project_id: string | null;
+  bound_project_id: string | null;
+  bound_camera_id: string | null;
+  status: "online" | "offline" | "unknown" | string;
+  raw_status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CameraDeviceChannel =
   | (EzvizDeviceChannel & { vendor: "ezviz" })
   | (TencentDeviceChannel & { vendor: "tencent_iotvideo_industry" });
