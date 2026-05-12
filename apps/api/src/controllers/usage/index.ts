@@ -28,6 +28,16 @@ class UsageController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/usage/overview")
+  async getTenantOverview(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = UsageDateRangeQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await usageService.getTenantOverview(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
   @Get("/usage/ai-logs")
   async listTenantAiLogs(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);

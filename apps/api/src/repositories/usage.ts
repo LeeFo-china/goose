@@ -14,6 +14,25 @@ export type UsageTenantStatsRow = {
   created_at: string | null;
 };
 
+export type UsageCustomerStatsRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+};
+
+export type UsageProjectStatsRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+};
+
+export type UsageExpenseStatsRow = {
+  id: string;
+  status: string | null;
+  total_amount: number | null;
+  created_at: string | null;
+};
+
 class UsageRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -78,6 +97,66 @@ class UsageRepository {
     }
 
     return (data || []) as UsageTenantStatsRow[];
+  }
+
+  async listCustomerStatsRows(input: {
+    tenantId: string;
+    createdTo?: string;
+  }) {
+    let query = this.from("customers")
+      .select("id, status, created_at")
+      .eq("tenant_id", input.tenantId);
+
+    if (input.createdTo) {
+      query = query.lt("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询客户概览统计失败", error);
+    }
+
+    return (data || []) as UsageCustomerStatsRow[];
+  }
+
+  async listProjectStatsRows(input: {
+    tenantId: string;
+    createdTo?: string;
+  }) {
+    let query = this.from("projects")
+      .select("id, status, created_at")
+      .eq("tenant_id", input.tenantId);
+
+    if (input.createdTo) {
+      query = query.lt("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询项目概览统计失败", error);
+    }
+
+    return (data || []) as UsageProjectStatsRow[];
+  }
+
+  async listExpenseStatsRows(input: {
+    tenantId: string;
+    createdTo?: string;
+  }) {
+    let query = this.from("expense_requests")
+      .select("id, status, total_amount, created_at")
+      .eq("tenant_id", input.tenantId);
+
+    if (input.createdTo) {
+      query = query.lt("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询费用概览统计失败", error);
+    }
+
+    return (data || []) as UsageExpenseStatsRow[];
   }
 }
 
