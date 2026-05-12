@@ -30,6 +30,17 @@ export type AiGatewayChatResult = {
   totalTokens: number | null;
 };
 
+export type AiGatewayResolvedChatConfig = {
+  providerCode: string;
+  modelCode: string;
+  modelName: string;
+  endpoint: string;
+  apiKey: string;
+  timeoutMs: number;
+  temperature: number;
+  responseFormat: "json_object" | "text" | null;
+};
+
 type AiSceneRouteRow = {
   scene_code: string;
   temperature: number | null;
@@ -62,6 +73,12 @@ type OpenAiCompatibleResponse = {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+    };
+    completion_tokens_details?: {
+      reasoning_tokens?: number;
+    };
   };
   error?: {
     code?: string;
@@ -86,6 +103,14 @@ function readUsageNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, Math.floor(value))
     : null;
+}
+
+function extractCachedInputTokens(usage: OpenAiCompatibleResponse["usage"]) {
+  return readUsageNumber(usage?.prompt_tokens_details?.cached_tokens);
+}
+
+function extractReasoningTokens(usage: OpenAiCompatibleResponse["usage"]) {
+  return readUsageNumber(usage?.completion_tokens_details?.reasoning_tokens);
 }
 
 function extractContent(result: OpenAiCompatibleResponse) {
@@ -298,35 +323,69 @@ class AiGateway {
     promptTokens?: number | null;
     completionTokens?: number | null;
     totalTokens?: number | null;
+    cachedInputTokens?: number | null;
+    reasoningTokens?: number | null;
+    rawUsage?: unknown;
     errorCode?: string | null;
     errorMessage?: string | null;
     metadata?: Record<string, unknown>;
     source?: string | null;
     billable?: boolean;
   }) {
-    const { error } = await this.client
+    const payload = {
+      tenant_id: input.tenantId || null,
+      scene_code: input.sceneCode,
+      provider_code: input.providerCode || null,
+      model_code: input.modelCode || null,
+      model_name: input.modelName || null,
+      status: input.status,
+      request_id: input.requestId || null,
+      duration_ms: input.durationMs ?? null,
+      prompt_tokens: input.promptTokens ?? null,
+      completion_tokens: input.completionTokens ?? null,
+      total_tokens: input.totalTokens ?? null,
+      cached_input_tokens: input.cachedInputTokens ?? null,
+      reasoning_tokens: input.reasoningTokens ?? null,
+      raw_usage: input.rawUsage ?? null,
+      error_code: input.errorCode || null,
+      error_message: input.errorMessage || null,
+      metadata: input.metadata || null,
+      source: input.source || null,
+      billable: input.billable ?? true,
+    };
+
+    const { error } = await (this.client as unknown as { from: (table: string) => any })
       .from("ai_call_logs")
-      .insert({
-        tenant_id: input.tenantId || null,
-        scene_code: input.sceneCode,
-        provider_code: input.providerCode || null,
-        model_code: input.modelCode || null,
-        model_name: input.modelName || null,
-        status: input.status,
-        request_id: input.requestId || null,
-        duration_ms: input.durationMs ?? null,
-        prompt_tokens: input.promptTokens ?? null,
-        completion_tokens: input.completionTokens ?? null,
-        total_tokens: input.totalTokens ?? null,
-        error_code: input.errorCode || null,
-        error_message: input.errorMessage || null,
-        metadata: input.metadata || null,
-        source: input.source || null,
-        billable: input.billable ?? true,
-      });
+      .insert(payload);
 
     // AI 日志不能影响主业务链路。
     if (error) return;
+  }
+
+  async resolveChatConfig(input: {
+    sceneCode: string;
+    temperature?: number;
+    responseFormat?: "json_object" | "text" | null;
+    timeoutMs?: number;
+    useFallback?: boolean;
+  }): Promise<AiGatewayResolvedChatConfig> {
+    const route = await this.findSceneRoute(input.sceneCode);
+    const model = await this.resolveRouteModel({
+      sceneCode: input.sceneCode,
+      route,
+      useFallback: input.useFallback,
+    });
+
+    return {
+      providerCode: model.providerCode,
+      modelCode: model.modelCode,
+      modelName: model.modelName,
+      endpoint: model.endpoint,
+      apiKey: model.apiKey,
+      timeoutMs: normalizeTimeout(input.timeoutMs ?? route?.timeout_ms, model.timeoutMs),
+      temperature: input.temperature ?? route?.temperature ?? 0.7,
+      responseFormat: input.responseFormat ?? route?.response_format ?? null,
+    };
   }
 
   async chat(input: AiGatewayChatInput): Promise<AiGatewayChatResult> {
@@ -375,6 +434,9 @@ class AiGateway {
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         totalTokens: result.totalTokens,
+        cachedInputTokens: extractCachedInputTokens(usage),
+        reasoningTokens: extractReasoningTokens(usage),
+        rawUsage: usage,
         metadata: {
           ...(input.metadata || {}),
           ai_attempt: useFallback ? "fallback" : "primary",

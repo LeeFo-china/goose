@@ -20,6 +20,7 @@ import PropertyControlle from "@/controllers/properties";
 import ProjectLogController from "@/controllers/project-logs";
 import ProjectLogCommentsController from "@/controllers/project-log-comments";
 import AiController from "@/controllers/ai";
+import AiConfigController from "@/controllers/ai-config";
 import UploadController from "@/controllers/uploads";
 import ExternalReferrersController from "@/controllers/external-referrers";
 import ProjectReferralsController from "@/controllers/project-referrals";
@@ -67,6 +68,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDeviceController.registerExtraRoutes(app);
   NotificationsController.registerExtraRoutes(app);
   UsageController.registerExtraRoutes(app);
+  AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   ProjectMemberRolePostRulesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

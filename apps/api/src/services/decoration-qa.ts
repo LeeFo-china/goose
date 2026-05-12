@@ -84,6 +84,12 @@ type OpenAiChatStreamChunk = {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+    };
+    completion_tokens_details?: {
+      reasoning_tokens?: number;
+    };
   };
   error?: {
     message?: string;
@@ -1273,11 +1279,12 @@ async function requestQaResult(
 async function createStreamRequestBody(
   input: DecorationQaStreamRequestInput,
   model: string,
+  temperature: number,
   extraSystemMessages: string[] = [],
 ): Promise<OpenAiRequestBody> {
   return {
     model,
-    temperature: 0.7,
+    temperature,
     messages: buildMessages(
       input.question,
       [],
@@ -1295,6 +1302,7 @@ async function requestQaStream(
   endpoint: string,
   apiKey: string,
   requestBody: OpenAiRequestBody,
+  timeoutMs: number,
   signal?: AbortSignal,
 ) {
   const controller = new AbortController();
@@ -1307,7 +1315,7 @@ async function requestQaStream(
       });
     }
   }
-  const timeout = setTimeout(() => controller.abort(), await getAiRequestTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(endpoint, {
@@ -1429,10 +1437,14 @@ export async function streamDecorationQa(
     signal?: AbortSignal;
   },
 ) {
-  const endpoint = await getAiEndpoint();
-  const apiKey = await getAiApiKey(endpoint);
-  const model = await getAiModel(endpoint);
-  const providerCode = getAiProviderCode(endpoint);
+  const routeConfig = await aiGateway.resolveChatConfig({
+    sceneCode: "decoration_qa",
+    temperature: 0.7,
+  });
+  const endpoint = routeConfig.endpoint;
+  const apiKey = routeConfig.apiKey;
+  const model = routeConfig.modelName;
+  const providerCode = routeConfig.providerCode;
   const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
   const projectId = input.context?.project_id?.trim() || null;
   const usageContext = await resolveDecorationQaUsageContext({
@@ -1453,6 +1465,8 @@ export async function streamDecorationQa(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let totalTokens: number | undefined;
+  let cachedInputTokens: number | undefined;
+  let reasoningTokens: number | undefined;
   let requestId: string | null = null;
   let streamRequest: Awaited<ReturnType<typeof requestQaStream>> | null = null;
   let reader: {
@@ -1464,7 +1478,8 @@ export async function streamDecorationQa(
     streamRequest = await requestQaStream(
       endpoint,
       apiKey,
-      await createStreamRequestBody(input, model, extraSystemMessages),
+      await createStreamRequestBody(input, model, routeConfig.temperature, extraSystemMessages),
+      routeConfig.timeoutMs,
       options?.signal,
     );
     reader = streamRequest.body.getReader();
@@ -1513,6 +1528,8 @@ export async function streamDecorationQa(
           inputTokens = chunk.usage.prompt_tokens;
           outputTokens = chunk.usage.completion_tokens;
           totalTokens = chunk.usage.total_tokens;
+          cachedInputTokens = chunk.usage.prompt_tokens_details?.cached_tokens;
+          reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1534,6 +1551,8 @@ export async function streamDecorationQa(
           inputTokens = chunk.usage.prompt_tokens;
           outputTokens = chunk.usage.completion_tokens;
           totalTokens = chunk.usage.total_tokens;
+          cachedInputTokens = chunk.usage.prompt_tokens_details?.cached_tokens;
+          reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1559,7 +1578,7 @@ export async function streamDecorationQa(
       tenantId: usageContext.tenantId,
       sceneCode: "decoration_qa",
       providerCode,
-      modelCode: model,
+      modelCode: routeConfig.modelCode,
       modelName: model,
       status: "success",
       requestId,
@@ -1571,6 +1590,19 @@ export async function streamDecorationQa(
         completionTokens: outputTokens,
         totalTokens,
       }),
+      cachedInputTokens: cachedInputTokens ?? null,
+      reasoningTokens: reasoningTokens ?? null,
+      rawUsage: {
+        prompt_tokens: inputTokens ?? null,
+        completion_tokens: outputTokens ?? null,
+        total_tokens: totalTokens ?? null,
+        prompt_tokens_details: {
+          cached_tokens: cachedInputTokens ?? null,
+        },
+        completion_tokens_details: {
+          reasoning_tokens: reasoningTokens ?? null,
+        },
+      },
       source: usageContext.source,
       billable: usageContext.billable,
       metadata: {
@@ -1588,7 +1620,7 @@ export async function streamDecorationQa(
       tenantId: usageContext.tenantId,
       sceneCode: "decoration_qa",
       providerCode,
-      modelCode: model,
+      modelCode: routeConfig.modelCode,
       modelName: model,
       status: "failure",
       requestId,
@@ -1600,6 +1632,19 @@ export async function streamDecorationQa(
         completionTokens: outputTokens,
         totalTokens,
       }),
+      cachedInputTokens: cachedInputTokens ?? null,
+      reasoningTokens: reasoningTokens ?? null,
+      rawUsage: {
+        prompt_tokens: inputTokens ?? null,
+        completion_tokens: outputTokens ?? null,
+        total_tokens: totalTokens ?? null,
+        prompt_tokens_details: {
+          cached_tokens: cachedInputTokens ?? null,
+        },
+        completion_tokens_details: {
+          reasoning_tokens: reasoningTokens ?? null,
+        },
+      },
       errorCode: error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code || "AI_STREAM_FAILED")
         : "AI_STREAM_FAILED",

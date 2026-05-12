@@ -97,6 +97,9 @@ class AiCallLogRepository {
         prompt_tokens: number | null;
         completion_tokens: number | null;
         total_tokens: number | null;
+        cached_input_tokens: number | null;
+        reasoning_tokens: number | null;
+        raw_usage: unknown;
         error_code: string | null;
         error_message: string | null;
         source: string | null;
