@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
+import { AlertCircle, BrainCircuit, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
 import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton, ShadowBillingRunButton } from "@/components/billing/billing-actions";
 import type {
+  BillingAiUsageStats,
   BillingEventListData,
   BillingLedgerListData,
   BillingPlatformSummary,
@@ -34,6 +35,19 @@ const emptySummary: BillingPlatformSummary = {
   total_consumed_credits: 0,
   low_balance_count: 0,
   low_balance_threshold: 5000,
+};
+
+const emptyAiUsageStats: BillingAiUsageStats = {
+  range: { start_date: null, end_date: null },
+  controls: { limit: 5000, min_sample_count: 100, safety_factor: 1.5 },
+  totals: {
+    groups: 0,
+    logs: 0,
+    billable_samples: 0,
+    missing_usage: 0,
+    ready_groups: 0,
+  },
+  list: [],
 };
 
 function emptyTenantList(page: number): BillingTenantListData {
@@ -136,6 +150,10 @@ function eventStatusLabel(status: string) {
   return labels[status] || status;
 }
 
+function readinessLabel(ready: boolean) {
+  return ready ? "样本达标" : "继续观察";
+}
+
 function PaginationLinks({
   pagination,
   pageKey,
@@ -206,6 +224,12 @@ export default async function PlatformBillingPage({
       emptyEventList(eventPage),
     )
     : { data: emptyEventList(eventPage), error: null };
+  const aiStatsResult = hasPlatformAccess
+    ? await fetchBackend<BillingAiUsageStats>(
+      "/platform/billing/ai-usage-stats",
+      emptyAiUsageStats,
+    )
+    : { data: emptyAiUsageStats, error: null };
 
   return (
     <div className="flex flex-col gap-5">
@@ -224,6 +248,7 @@ export default async function PlatformBillingPage({
       {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
       {pricingResult.error ? <StatusAlert>{pricingResult.error}</StatusAlert> : null}
       {eventResult.error ? <StatusAlert>{eventResult.error}</StatusAlert> : null}
+      {aiStatsResult.error ? <StatusAlert>{aiStatsResult.error}</StatusAlert> : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <SummaryItem icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
@@ -350,6 +375,92 @@ export default async function PlatformBillingPage({
       </Card>
 
       <Card>
+        <CardHeader>
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div>
+              <CardTitle>AI 试算观察</CardTitle>
+              <CardDescription>按场景和模型观察 token 分布，达标后再进入 AI 真扣费。</CardDescription>
+            </div>
+            <Badge variant={aiStatsResult.data.totals.ready_groups > 0 ? "success" : "warning"}>
+              {aiStatsResult.data.totals.ready_groups} 个场景可进入真扣费评估
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <AiStatItem label="观察分组" value={formatCredits(aiStatsResult.data.totals.groups)} />
+            <AiStatItem label="有效样本" value={formatCredits(aiStatsResult.data.totals.billable_samples)} />
+            <AiStatItem label="缺 token" value={formatCredits(aiStatsResult.data.totals.missing_usage)} />
+            <AiStatItem label="样本门槛" value={`${formatCredits(aiStatsResult.data.controls.min_sample_count)} 条`} />
+          </div>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>场景/模型</TableHead>
+                  <TableHead className="text-right">样本</TableHead>
+                  <TableHead className="text-right">Token P95</TableHead>
+                  <TableHead className="text-right">积分 P95</TableHead>
+                  <TableHead className="text-right">建议门槛</TableHead>
+                  <TableHead>状态</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {aiStatsResult.data.list.map((item) => (
+                  <TableRow key={`${item.scene_code}-${item.provider_code || "-"}-${item.model_code || "-"}`}>
+                    <TableCell>
+                      <div className="font-medium">{item.scene_code}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {[item.provider_code, item.model_code || item.model_name].filter(Boolean).join(" / ") || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatCredits(item.billable_sample_count)}</div>
+                      <div className="text-xs text-muted-foreground">总计 {formatCredits(item.total_logs)}</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatCredits(item.token_percentiles.p95)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        P50 {formatCredits(item.token_percentiles.p50)} · P99 {formatCredits(item.token_percentiles.p99)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatCredits(item.credit_percentiles.p95)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        P50 {formatCredits(item.credit_percentiles.p50)} · P99 {formatCredits(item.credit_percentiles.p99)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCredits(item.suggested_min_charge_credits)}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.ready_for_phase6 ? "success" : "outline"}>
+                        {readinessLabel(item.ready_for_phase6)}
+                      </Badge>
+                      {item.missing_usage_count > 0 ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          缺 token {formatCredits(item.missing_usage_count)} 条
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!aiStatsResult.data.list.length ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                      暂无 AI 试算观察样本
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+            <span>建议门槛 = 积分 P95 × {aiStatsResult.data.controls.safety_factor}</span>
+            <span>Phase 6 前每个主要场景建议至少 {formatCredits(aiStatsResult.data.controls.min_sample_count)} 条成功样本</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>价格规则</CardTitle>
@@ -452,6 +563,24 @@ export default async function PlatformBillingPage({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function AiStatItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background px-3 py-3">
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{label}</span>
+        <BrainCircuit className="size-4" />
+      </div>
+      <div className="mt-2 text-lg font-semibold tracking-normal">{value}</div>
     </div>
   );
 }

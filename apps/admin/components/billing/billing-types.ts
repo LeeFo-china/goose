@@ -125,6 +125,50 @@ export type BillingEventListData = {
   pagination: Pagination;
 };
 
+export type BillingAiUsageStats = {
+  range: {
+    start_date: string | null;
+    end_date: string | null;
+  };
+  controls: {
+    limit: number;
+    min_sample_count: number;
+    safety_factor: number;
+  };
+  totals: {
+    groups: number;
+    logs: number;
+    billable_samples: number;
+    missing_usage: number;
+    ready_groups: number;
+  };
+  list: Array<{
+    scene_code: string;
+    provider_code: string | null;
+    model_code: string | null;
+    model_name: string | null;
+    total_logs: number;
+    billable_sample_count: number;
+    missing_usage_count: number;
+    cached_input_token_call_count: number;
+    reasoning_token_call_count: number;
+    token_percentiles: {
+      p50: number;
+      p90: number;
+      p95: number;
+      p99: number;
+    };
+    credit_percentiles: {
+      p50: number;
+      p90: number;
+      p95: number;
+      p99: number;
+    };
+    suggested_min_charge_credits: number;
+    ready_for_phase6: boolean;
+  }>;
+};
+
 export type TenantBillingSummary = {
   account: BillingAccount;
   period: {
