@@ -5,6 +5,7 @@ import { tenantDeviceRepository } from "@/repositories/tenant-devices";
 import type {
   CreateTenantDeviceInput,
   TenantDeviceListQueryInput,
+  UpdateTenantDeviceInput,
 } from "@/schema/tenant-devices";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
@@ -90,6 +91,52 @@ class TenantDeviceService {
       tenant_id: tenantId,
       created_by: authContext.employeeId,
     });
+  }
+
+  async updateTenantDevice(input: {
+    authUserId?: string | null;
+    id: string;
+    payload: UpdateTenantDeviceInput;
+  }) {
+    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const device = await tenantDeviceRepository.findById(input.id, tenantId);
+    if (!device) {
+      throw Errors.badRequest("设备资产不存在");
+    }
+
+    return tenantDeviceRepository.update(input.id, {
+      ...input.payload,
+      updated_by: authContext.employeeId,
+    }, tenantId);
+  }
+
+  async deleteTenantDevice(input: {
+    authUserId?: string | null;
+    id: string;
+  }) {
+    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const device = await tenantDeviceRepository.findById(input.id, tenantId);
+    if (!device) {
+      throw Errors.badRequest("设备资产不存在");
+    }
+
+    if (device.bound_camera_id || device.bound_project_id) {
+      throw Errors.business(
+        409,
+        "设备已绑定项目，请先解绑项目摄像头后再删除",
+        ErrorCodes.CAMERA_ALREADY_BOUND,
+      );
+    }
+
+    await tenantDeviceRepository.softDelete(
+      input.id,
+      tenantId,
+      authContext.employeeId,
+    );
+
+    return { success: true };
   }
 }
 

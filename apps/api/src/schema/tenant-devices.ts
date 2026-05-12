@@ -59,6 +59,19 @@ export const CreateTenantDeviceSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const UpdateTenantDeviceSchema = z.object({
+  vendor_device_name: z.string().trim().max(100, "设备名称过长").nullable().optional(),
+  vendor_channel_name: z.string().trim().max(100, "通道名称过长").nullable().optional(),
+  device_type: z.string().trim().max(50, "设备类型过长").nullable().optional(),
+  status: z.enum(TenantDeviceStatusValues, {
+    message: "无效的设备状态",
+  }).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: "请至少提供一个要更新的字段",
+});
+
 export type TenantDeviceListQueryInput = z.infer<typeof TenantDeviceListQuerySchema>;
 export type CreateTenantDeviceInput = z.infer<typeof CreateTenantDeviceSchema>;
+export type UpdateTenantDeviceInput = z.infer<typeof UpdateTenantDeviceSchema>;
 export type TenantDeviceStatus = (typeof TenantDeviceStatusValues)[number];

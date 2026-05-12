@@ -5,9 +5,10 @@ import {
   CreateTenantDeviceSchema,
   TenantDeviceListQuerySchema,
   TenantDeviceParamsSchema,
+  UpdateTenantDeviceSchema,
 } from "@/schema/tenant-devices";
 import { tenantDeviceService } from "@/services/tenant-devices";
-import { Get, Post } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
 class TenantDeviceController extends BaseController {
@@ -49,6 +50,36 @@ class TenantDeviceController extends BaseController {
     const result = await tenantDeviceService.createTenantDevice({
       authUserId: request.user?.sub,
       payload: bodyResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Patch("/tenant-devices/:id")
+  async updateTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = UpdateTenantDeviceSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const result = await tenantDeviceService.updateTenantDevice({
+      authUserId: request.user?.sub,
+      id: paramsResult.data.id,
+      payload: bodyResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Delete("/tenant-devices/:id")
+  async deleteTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.deleteTenantDevice({
+      authUserId: request.user?.sub,
+      id: paramsResult.data.id,
     });
 
     return ResponseHandler.success(result);

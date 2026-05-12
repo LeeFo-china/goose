@@ -344,6 +344,55 @@ GET /tenant-devices/:id
 project.read
 ```
 
+### 修改租户设备资产
+
+```http
+PATCH /tenant-devices/:id
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+```
+
+请求体：
+
+```json
+{
+  "vendor_device_name": "工地入口 IPC",
+  "vendor_channel_name": "入口通道",
+  "device_type": "IPC",
+  "status": "unknown"
+}
+```
+
+权限：
+
+```text
+project.update
+```
+
+说明：
+
+- 只修改本地设备资产展示信息，不直接修改第三方平台设备名称。
+- 不允许修改 `tenant_id`、`vendor`、`vendor_device_serial`、`vendor_channel_id` 等归属和唯一识别字段。
+
+### 删除租户设备资产
+
+```http
+DELETE /tenant-devices/:id
+Authorization: Bearer <admin-token>
+```
+
+权限：
+
+```text
+project.update
+```
+
+说明：
+
+- 删除为软删除。
+- 已绑定项目的设备资产不能直接删除，需要先解绑项目摄像头。
+- 删除本地资产不等于删除腾讯云/萤石远端设备。
+
 ### 手动纳入设备资产
 
 用于萤石或历史设备补录：
@@ -507,6 +556,8 @@ Admin：
   - `GET /tenant-devices`
   - `GET /tenant-devices/:id`
   - `POST /tenant-devices`
+  - `PATCH /tenant-devices/:id`
+  - `DELETE /tenant-devices/:id`
 - 腾讯云创建设备成功后，会立即写入一条当前租户的设备级资产。
 - 项目摄像头绑定成功后，会写入或更新对应通道资产，并记录 `bound_project_id`、`bound_camera_id`。
 - 项目摄像头解绑后，不删除设备资产，只清空绑定字段。

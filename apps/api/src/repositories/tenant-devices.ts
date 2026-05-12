@@ -5,6 +5,7 @@ import type {
   CreateTenantDeviceInput,
   TenantDeviceListQueryInput,
   TenantDeviceStatus,
+  UpdateTenantDeviceInput,
 } from "@/schema/tenant-devices";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -266,6 +267,71 @@ class TenantDeviceRepository {
     if (error) {
       throw Errors.dbError("更新设备资产状态失败", error);
     }
+  }
+
+  async update(
+    id: string,
+    input: UpdateTenantDeviceInput & { updated_by?: string | null },
+    tenantId?: string | null,
+  ) {
+    const { updated_by, ...payload } = input;
+    let query = this.adminClient
+      .from("tenant_devices")
+      .update({
+        ...payload,
+        updated_by: updated_by || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新设备资产失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("设备资产不存在或更新失败");
+    }
+
+    return data as TenantDeviceRow;
+  }
+
+  async softDelete(id: string, tenantId?: string | null, actorEmployeeId?: string | null) {
+    let query = this.adminClient
+      .from("tenant_devices")
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_by: actorEmployeeId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("删除设备资产失败", error);
+    }
+
+    if (!data) {
+      throw Errors.badRequest("设备资产不存在或删除失败");
+    }
+
+    return data as { id: string };
   }
 }
 
