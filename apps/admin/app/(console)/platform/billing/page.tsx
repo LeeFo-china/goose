@@ -15,6 +15,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -24,7 +25,12 @@ type SearchParams = Promise<{
   ledgerPage?: string;
   rulePage?: string;
   eventPage?: string;
+  tab?: string;
 }>;
+
+type BillingTab = "tenants" | "events" | "ai" | "pricing" | "ledger";
+
+const billingTabs: BillingTab[] = ["tenants", "events", "ai", "pricing", "ledger"];
 
 const emptySummary: BillingPlatformSummary = {
   tenant_count: 0,
@@ -82,6 +88,10 @@ function emptyEventList(page: number): BillingEventListData {
 function readPositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeBillingTab(value: string | undefined): BillingTab {
+  return billingTabs.includes(value as BillingTab) ? value as BillingTab : "tenants";
 }
 
 function buildQuery(input: Record<string, string | number | undefined>) {
@@ -157,9 +167,11 @@ function readinessLabel(ready: boolean) {
 function PaginationLinks({
   pagination,
   pageKey,
+  tab,
 }: {
   pagination: Pagination;
   pageKey: "page" | "ledgerPage" | "rulePage" | "eventPage";
+  tab: BillingTab;
 }) {
   const prevPage = Math.max(1, pagination.page - 1);
   const nextPage = pagination.page + 1;
@@ -169,11 +181,11 @@ function PaginationLinks({
       <span>共 {pagination.total} 条</span>
       <div className="flex items-center gap-2">
         <Button asChild size="sm" variant="outline" disabled={pagination.page <= 1}>
-          <Link href={`/platform/billing?${buildQuery({ [pageKey]: prevPage })}`}>上一页</Link>
+          <Link href={`/platform/billing?${buildQuery({ tab, [pageKey]: prevPage })}`}>上一页</Link>
         </Button>
         <span>{pagination.page} / {Math.max(1, pagination.totalPages)}</span>
         <Button asChild size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages}>
-          <Link href={`/platform/billing?${buildQuery({ [pageKey]: nextPage })}`}>下一页</Link>
+          <Link href={`/platform/billing?${buildQuery({ tab, [pageKey]: nextPage })}`}>下一页</Link>
         </Button>
       </div>
     </div>
@@ -196,6 +208,7 @@ export default async function PlatformBillingPage({
   const ledgerPage = readPositiveInteger(params.ledgerPage, 1);
   const rulePage = readPositiveInteger(params.rulePage, 1);
   const eventPage = readPositiveInteger(params.eventPage, 1);
+  const activeTab = normalizeBillingTab(params.tab);
 
   const summaryResult = hasPlatformAccess
     ? await fetchBackend<BillingPlatformSummary>("/platform/billing/summary", emptySummary)
@@ -257,7 +270,27 @@ export default async function PlatformBillingPage({
         <SummaryItem icon={AlertCircle} label="低余额租户" value={formatCredits(summaryResult.data.low_balance_count)} />
       </div>
 
-      <Card>
+      <Tabs defaultValue={activeTab} className="flex flex-col gap-4">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="tenants" asChild>
+            <Link href={`/platform/billing?${buildQuery({ tab: "tenants" })}`}>租户账户</Link>
+          </TabsTrigger>
+          <TabsTrigger value="events" asChild>
+            <Link href={`/platform/billing?${buildQuery({ tab: "events" })}`}>影子计费</Link>
+          </TabsTrigger>
+          <TabsTrigger value="ai" asChild>
+            <Link href={`/platform/billing?${buildQuery({ tab: "ai" })}`}>AI 观察</Link>
+          </TabsTrigger>
+          <TabsTrigger value="pricing" asChild>
+            <Link href={`/platform/billing?${buildQuery({ tab: "pricing" })}`}>价格规则</Link>
+          </TabsTrigger>
+          <TabsTrigger value="ledger" asChild>
+            <Link href={`/platform/billing?${buildQuery({ tab: "ledger" })}`}>计费流水</Link>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="tenants" className="mt-0">
+          <Card>
         <CardHeader>
           <CardTitle>租户账户</CardTitle>
           <CardDescription>租户积分余额和人工充值入口。</CardDescription>
@@ -306,12 +339,14 @@ export default async function PlatformBillingPage({
             </TableBody>
           </Table>
           <div className="border-t p-4">
-            <PaginationLinks pagination={tenantsResult.data.pagination} pageKey="page" />
+            <PaginationLinks pagination={tenantsResult.data.pagination} pageKey="page" tab="tenants" />
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
 
-      <Card>
+        <TabsContent value="events" className="mt-0">
+          <Card>
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>影子计费</CardTitle>
@@ -369,12 +404,14 @@ export default async function PlatformBillingPage({
             </TableBody>
           </Table>
           <div className="border-t p-4">
-            <PaginationLinks pagination={eventResult.data.pagination} pageKey="eventPage" />
+            <PaginationLinks pagination={eventResult.data.pagination} pageKey="eventPage" tab="events" />
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
 
-      <Card>
+        <TabsContent value="ai" className="mt-0">
+          <Card>
         <CardHeader>
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
             <div>
@@ -459,8 +496,10 @@ export default async function PlatformBillingPage({
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
 
-      <Card>
+        <TabsContent value="pricing" className="mt-0">
+          <Card>
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>价格规则</CardTitle>
@@ -513,12 +552,14 @@ export default async function PlatformBillingPage({
             </TableBody>
           </Table>
           <div className="border-t p-4">
-            <PaginationLinks pagination={pricingResult.data.pagination} pageKey="rulePage" />
+            <PaginationLinks pagination={pricingResult.data.pagination} pageKey="rulePage" tab="pricing" />
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
 
-      <Card>
+        <TabsContent value="ledger" className="mt-0">
+          <Card>
         <CardHeader>
           <CardTitle>计费流水</CardTitle>
           <CardDescription>最近的充值、扣费、冻结和解冻记录。</CardDescription>
@@ -559,10 +600,12 @@ export default async function PlatformBillingPage({
             </TableBody>
           </Table>
           <div className="border-t p-4">
-            <PaginationLinks pagination={ledgerResult.data.pagination} pageKey="ledgerPage" />
+            <PaginationLinks pagination={ledgerResult.data.pagination} pageKey="ledgerPage" tab="ledger" />
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
