@@ -71,6 +71,16 @@ class UsageController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/platform/usage/overview")
+  async getPlatformOverview(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = UsageDateRangeQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await usageService.getPlatformOverview(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
   @Get("/platform/usage/ai-logs")
   async listPlatformAiLogs(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);

@@ -8,6 +8,12 @@ export type UsageTenantLite = {
   status: string | null;
 };
 
+export type UsageTenantStatsRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+};
+
 class UsageRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -54,6 +60,24 @@ class UsageRepository {
         totalPages: count ? Math.ceil(count / input.pageSize) : 0,
       },
     };
+  }
+
+  async listTenantStatsRows(input: {
+    createdTo?: string;
+  }) {
+    let query = this.from("tenants")
+      .select("id, status, created_at");
+
+    if (input.createdTo) {
+      query = query.lt("created_at", input.createdTo);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询平台租户趋势失败", error);
+    }
+
+    return (data || []) as UsageTenantStatsRow[];
   }
 }
 
