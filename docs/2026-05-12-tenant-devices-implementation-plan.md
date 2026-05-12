@@ -268,14 +268,15 @@ POST /projects/:project_id/cameras/tencent-devices
 1. `resolveActor` 校验员工有 `project.update`。
 2. 读取项目并确认 `project.tenant_id = actor.tenantId`。
 3. 调腾讯云 `CreateDevice`。
-4. 写入 `tenant_devices`：
+4. 如果云端已有同名设备，后端自动追加 4 位短后缀后再创建，例如 `客厅IPC` -> `客厅IPC-1234`。
+5. 写入 `tenant_devices`：
    - `tenant_id = actor.tenantId`
    - `source_project_id = project_id`
    - `vendor = tencent_iotvideo_industry`
    - `vendor_device_serial = DeviceId`
    - `vendor_device_code = DeviceCode`
    - `created_by = actor.employeeId`
-5. 返回设备接入信息。
+6. 返回设备接入信息；如发生自动改名，返回 `original_device_name` 和 `name_adjusted=true`，Admin 在成功弹窗提示最终名称。
 
 ### 腾讯云/萤石设备列表
 

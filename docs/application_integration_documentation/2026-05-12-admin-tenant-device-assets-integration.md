@@ -54,6 +54,20 @@ POST /projects/:project_id/cameras/tencent-devices
 
 创建完成后返回 SIP 接入信息，并写入当前租户设备资产池。用户后续点击“同步资产”补齐通道，再通过绑定摄像头弹窗把未绑定资产绑定到项目。
 
+如果云端已有同名腾讯云设备，后端会自动追加 4 位短后缀后再创建，不阻断用户流程。返回字段会包含：
+
+```json
+{
+  "device": {
+    "device_name": "客厅IPC-1234",
+    "original_device_name": "客厅IPC",
+    "name_adjusted": true
+  }
+}
+```
+
+Admin 成功弹窗展示最终设备名称；当 `name_adjusted=true` 时，同时提示云端已存在同名设备。
+
 ### 第三方通道纳入资产
 
 租户工地监控页不再常驻展示“腾讯云设备与通道”和“萤石设备通道”两个底层列表。租户日常只看设备资产池。

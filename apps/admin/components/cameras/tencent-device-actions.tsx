@@ -28,6 +28,8 @@ type TencentDeviceSecretResult = {
   device_id?: string | null;
   device_code?: string | null;
   device_name?: string | null;
+  original_device_name?: string | null;
+  name_adjusted?: boolean | null;
   device_type_label?: string | null;
   sip_username?: string | null;
   sip_password?: string | null;
@@ -110,6 +112,9 @@ function DeviceSecretDialog({
         </DialogHeader>
         <div className="grid gap-3 md:grid-cols-2">
           <SecretItem label="设备名称" value={device.device_name} />
+          {device.name_adjusted ? (
+            <SecretItem label="原始名称" value={device.original_device_name} />
+          ) : null}
           <SecretItem label="设备类型" value={device.device_type_label} />
           <SecretItem label="SIP用户名" value={device.sip_username || device.device_code} />
           <SecretItem label="SIP认证密码" value={device.sip_password} />
@@ -124,6 +129,11 @@ function DeviceSecretDialog({
             </>
           ) : null}
         </div>
+        {device.name_adjusted ? (
+          <StatusAlert tone="warning">
+            云端已存在同名设备，系统已自动追加短后缀生成新设备名称。
+          </StatusAlert>
+        ) : null}
         <StatusAlert tone="warning">
           SIP认证密码属于敏感信息。复制后请只发给现场安装人员，并在设备本地配置同步后再验证上线状态。
         </StatusAlert>

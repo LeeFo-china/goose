@@ -190,6 +190,23 @@ function generateDeviceNameFallback(deviceType: number) {
   return `${prefix}-${randomInt(1000, 9999)}`;
 }
 
+function normalizeDeviceName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function buildUniqueDeviceNameCandidate(baseName: string) {
+  const suffix = `-${randomInt(1000, 9999)}`;
+  return `${baseName.slice(0, 48 - suffix.length)}${suffix}`;
+}
+
+async function tencentDeviceNameExists(name: string) {
+  const normalizedName = normalizeDeviceName(name);
+  const devices = await tencentIotVideoService.listDeviceSummaries(normalizedName);
+  return devices.some((device) =>
+    normalizeDeviceName(device.device_name || "") === normalizedName
+  );
+}
+
 function getUserAgent(meta?: RequestLogMeta) {
   return meta?.userAgent || null;
 }
@@ -764,7 +781,21 @@ class ProjectCameraService {
     }
 
     const password = input.payload.password?.trim() || generateSipPassword();
-    const name = input.payload.name.trim() || generateDeviceNameFallback(input.payload.device_type);
+    const originalName = normalizeDeviceName(
+      input.payload.name || generateDeviceNameFallback(input.payload.device_type),
+    );
+    let name = originalName;
+
+    if (await tencentDeviceNameExists(originalName)) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = buildUniqueDeviceNameCandidate(originalName);
+        if (!await tencentDeviceNameExists(candidate)) {
+          name = candidate;
+          break;
+        }
+      }
+    }
+
     const created = await tencentIotVideoService.createDevice({
       name,
       password,
@@ -813,6 +844,8 @@ class ProjectCameraService {
         sip_password: password,
         sip_transport_protocol: "TCP",
         request_id: created.request_id,
+        original_device_name: originalName,
+        name_adjusted: name !== originalName,
       },
       sip_server: sipServer,
     };
