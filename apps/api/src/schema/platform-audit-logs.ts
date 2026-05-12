@@ -13,6 +13,8 @@ export const PlatformAuditLogActionSchema = z.enum([
   "platform_device_password_query",
   "platform_device_password_reset",
   "platform_device_cloud_delete",
+  "platform_billing_recharge",
+  "platform_billing_pricing_update",
   "platform_config_update",
 ]);
 

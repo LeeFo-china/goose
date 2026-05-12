@@ -41,6 +41,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
       { href: "/platform/leads", label: "平台线索", icon: Inbox },
       { href: "/platform/marketing-pages", label: "H5 活动页", icon: Megaphone },
       { href: "/platform/usage", label: "用量统计", icon: BarChart3 },
+      { href: "/platform/billing", label: "计费中心", icon: CircleDollarSign },
       { href: "/platform/ai-models", label: "AI 模型路由", icon: Bot },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
     ],
@@ -72,6 +73,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       { href: "/social-video", label: "自媒体脚本", icon: Clapperboard },
       { href: "/cameras", label: "工地监控", icon: Camera },
       { href: "/usage", label: "用量统计", icon: BarChart3 },
+      { href: "/billing", label: "计费账户", icon: CircleDollarSign },
     ],
   },
   {

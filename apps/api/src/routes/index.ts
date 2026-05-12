@@ -49,6 +49,7 @@ import TenantShareLinksController from "@/controllers/tenant-share-links";
 import TenantDeviceController from "@/controllers/tenant-devices";
 import NotificationsController from "@/controllers/notifications";
 import UsageController from "@/controllers/usage";
+import BillingController from "@/controllers/billing";
 
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
@@ -68,6 +69,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDeviceController.registerExtraRoutes(app);
   NotificationsController.registerExtraRoutes(app);
   UsageController.registerExtraRoutes(app);
+  BillingController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   ProjectMemberRolePostRulesController.registerExtraRoutes(app);

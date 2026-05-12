@@ -1,0 +1,385 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { AlertCircle, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
+import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton } from "@/components/billing/billing-actions";
+import type {
+  BillingLedgerListData,
+  BillingPlatformSummary,
+  BillingPricingRuleListData,
+  BillingTenantListData,
+  Pagination,
+} from "@/components/billing/billing-types";
+import { StatusAlert } from "@/components/admin/status-alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
+import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+
+type SearchParams = Promise<{
+  page?: string;
+  ledgerPage?: string;
+  rulePage?: string;
+}>;
+
+const emptySummary: BillingPlatformSummary = {
+  tenant_count: 0,
+  active_account_count: 0,
+  total_balance_credits: 0,
+  total_frozen_credits: 0,
+  total_available_credits: 0,
+  total_consumed_credits: 0,
+  low_balance_count: 0,
+  low_balance_threshold: 5000,
+};
+
+function emptyTenantList(page: number): BillingTenantListData {
+  return {
+    list: [],
+    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+    low_balance_threshold: 5000,
+  };
+}
+
+function emptyLedgerList(page: number): BillingLedgerListData {
+  return {
+    list: [],
+    pagination: { page, pageSize: 10, total: 0, totalPages: 0 },
+  };
+}
+
+function emptyPricingList(page: number): BillingPricingRuleListData {
+  return {
+    list: [],
+    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+  };
+}
+
+function readPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildQuery(input: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(input).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  return query.toString();
+}
+
+async function fetchBackend<T>(path: string, fallback: T) {
+  const token = await getAdminToken();
+  if (!token) {
+    return { data: fallback, error: "缺少登录凭证" };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl(path), {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<T>(response);
+    return { data: payload.data || fallback, error: null };
+  } catch (error) {
+    return {
+      data: fallback,
+      error: error instanceof Error ? error.message : "计费数据加载失败",
+    };
+  }
+}
+
+function formatCredits(value: number | null | undefined) {
+  return Number(value || 0).toLocaleString("zh-CN");
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function directionLabel(direction: string) {
+  const labels: Record<string, string> = {
+    in: "入账",
+    out: "扣费",
+    freeze: "冻结",
+    unfreeze: "解冻",
+  };
+  return labels[direction] || direction;
+}
+
+function scopeLabel(scope: string) {
+  return scope === "tenant_override" ? "租户定制价" : "平台默认价";
+}
+
+function PaginationLinks({
+  pagination,
+  pageKey,
+}: {
+  pagination: Pagination;
+  pageKey: "page" | "ledgerPage" | "rulePage";
+}) {
+  const prevPage = Math.max(1, pagination.page - 1);
+  const nextPage = pagination.page + 1;
+
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span>共 {pagination.total} 条</span>
+      <div className="flex items-center gap-2">
+        <Button asChild size="sm" variant="outline" disabled={pagination.page <= 1}>
+          <Link href={`/platform/billing?${buildQuery({ [pageKey]: prevPage })}`}>上一页</Link>
+        </Button>
+        <span>{pagination.page} / {Math.max(1, pagination.totalPages)}</span>
+        <Button asChild size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages}>
+          <Link href={`/platform/billing?${buildQuery({ [pageKey]: nextPage })}`}>下一页</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default async function PlatformBillingPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const session = await getAdminSession();
+  if (!session) {
+    redirect("/login");
+  }
+
+  const hasPlatformAccess = session.roles.includes("platform_admin");
+  const params = await searchParams;
+  const page = readPositiveInteger(params.page, 1);
+  const ledgerPage = readPositiveInteger(params.ledgerPage, 1);
+  const rulePage = readPositiveInteger(params.rulePage, 1);
+
+  const summaryResult = hasPlatformAccess
+    ? await fetchBackend<BillingPlatformSummary>("/platform/billing/summary", emptySummary)
+    : { data: emptySummary, error: "当前账号不是平台超管，无法访问计费中心" };
+  const tenantsResult = hasPlatformAccess
+    ? await fetchBackend<BillingTenantListData>(
+      `/platform/billing/tenants?${buildQuery({ page, pageSize: 20 })}`,
+      emptyTenantList(page),
+    )
+    : { data: emptyTenantList(page), error: null };
+  const ledgerResult = hasPlatformAccess
+    ? await fetchBackend<BillingLedgerListData>(
+      `/platform/billing/ledger?${buildQuery({ page: ledgerPage, pageSize: 10 })}`,
+      emptyLedgerList(ledgerPage),
+    )
+    : { data: emptyLedgerList(ledgerPage), error: null };
+  const pricingResult = hasPlatformAccess
+    ? await fetchBackend<BillingPricingRuleListData>(
+      `/platform/billing/pricing-rules?${buildQuery({ page: rulePage, pageSize: 20 })}`,
+      emptyPricingList(rulePage),
+    )
+    : { data: emptyPricingList(rulePage), error: null };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">计费中心</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            管理租户积分账户、人工充值、价格规则和计费流水。
+          </p>
+        </div>
+        <Badge variant="outline">低余额阈值 {formatCredits(summaryResult.data.low_balance_threshold)} 积分</Badge>
+      </div>
+
+      {summaryResult.error ? <StatusAlert>{summaryResult.error}</StatusAlert> : null}
+      {tenantsResult.error ? <StatusAlert>{tenantsResult.error}</StatusAlert> : null}
+      {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
+      {pricingResult.error ? <StatusAlert>{pricingResult.error}</StatusAlert> : null}
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <SummaryItem icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
+        <SummaryItem icon={Coins} label="冻结积分" value={formatCredits(summaryResult.data.total_frozen_credits)} />
+        <SummaryItem icon={CreditCard} label="累计消耗" value={formatCredits(summaryResult.data.total_consumed_credits)} />
+        <SummaryItem icon={AlertCircle} label="低余额租户" value={formatCredits(summaryResult.data.low_balance_count)} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>租户账户</CardTitle>
+          <CardDescription>租户积分余额和人工充值入口。</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>租户</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">可用</TableHead>
+                <TableHead className="text-right">冻结</TableHead>
+                <TableHead className="text-right">累计充值</TableHead>
+                <TableHead className="text-right">累计消耗</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tenantsResult.data.list.map((tenant) => (
+                <TableRow key={tenant.id}>
+                  <TableCell>
+                    <div className="font-medium">{tenant.name || tenant.slug || "未命名租户"}</div>
+                    <div className="text-xs text-muted-foreground">{tenant.slug || tenant.id}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={tenant.low_balance ? "warning" : "outline"}>
+                      {tenant.low_balance ? "低余额" : tenant.billing_account.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">{formatCredits(tenant.billing_account.available_credits)}</TableCell>
+                  <TableCell className="text-right">{formatCredits(tenant.billing_account.frozen_credits)}</TableCell>
+                  <TableCell className="text-right">{formatCredits(tenant.billing_account.total_recharged_credits)}</TableCell>
+                  <TableCell className="text-right">{formatCredits(tenant.billing_account.total_consumed_credits)}</TableCell>
+                  <TableCell className="text-right">
+                    <ManualRechargeButton tenant={tenant} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!tenantsResult.data.list.length ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                    暂无租户账户
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+          <div className="border-t p-4">
+            <PaginationLinks pagination={tenantsResult.data.pagination} pageKey="page" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>价格规则</CardTitle>
+            <CardDescription>平台默认价和租户定制价。第一版先由超管维护。</CardDescription>
+          </div>
+          <PricingRuleCreateButton />
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>范围</TableHead>
+                <TableHead>计费项</TableHead>
+                <TableHead>场景/模型</TableHead>
+                <TableHead className="text-right">单价</TableHead>
+                <TableHead className="text-right">最低</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pricingResult.data.list.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell>{scopeLabel(rule.scope)}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{rule.metric_code}</div>
+                    <div className="text-xs text-muted-foreground">优先级 {rule.priority} · v{rule.version}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div>{rule.scene_code || "-"}</div>
+                    <div className="text-xs text-muted-foreground">{[rule.provider, rule.model].filter(Boolean).join(" / ") || "-"}</div>
+                  </TableCell>
+                  <TableCell className="text-right">{formatCredits(rule.unit_credits)} / {rule.unit}</TableCell>
+                  <TableCell className="text-right">{formatCredits(rule.min_charge_credits)}</TableCell>
+                  <TableCell>
+                    <Badge variant={rule.enabled ? "success" : "secondary"}>{rule.enabled ? "启用" : "停用"}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <PricingRuleStatusButton rule={rule} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!pricingResult.data.list.length ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                    暂无价格规则
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+          <div className="border-t p-4">
+            <PaginationLinks pagination={pricingResult.data.pagination} pageKey="rulePage" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>计费流水</CardTitle>
+          <CardDescription>最近的充值、扣费、冻结和解冻记录。</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>时间</TableHead>
+                <TableHead>租户</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>来源</TableHead>
+                <TableHead className="text-right">积分</TableHead>
+                <TableHead className="text-right">余额</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ledgerResult.data.list.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>{formatDateTime(item.created_at)}</TableCell>
+                  <TableCell>{item.tenant?.name || item.tenant?.slug || item.tenant_id}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{directionLabel(item.direction)}</Badge>
+                    <div className="mt-1 text-xs text-muted-foreground">{item.event_type}</div>
+                  </TableCell>
+                  <TableCell>{[item.source_type, item.source_id].filter(Boolean).join(" / ") || item.order_no || "-"}</TableCell>
+                  <TableCell className="text-right">{formatCredits(item.change_credits)}</TableCell>
+                  <TableCell className="text-right">{formatCredits(item.balance_after)}</TableCell>
+                </TableRow>
+              ))}
+              {!ledgerResult.data.list.length ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                    暂无计费流水
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+          <div className="border-t p-4">
+            <PaginationLinks pagination={ledgerResult.data.pagination} pageKey="ledgerPage" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SummaryItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Landmark;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background px-4 py-3">
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="size-4" />
+      </div>
+      <div className="mt-2 text-2xl font-semibold tracking-normal">{value}</div>
+    </div>
+  );
+}
