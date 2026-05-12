@@ -9,14 +9,14 @@ import {
   ExpenseRequestStepConfig,
   ExpenseStatusConfig,
 } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Loader2, RotateCcw, Search, UserRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleDollarSign, Clock3, ListFilter, Loader2, RotateCcw, Search, UserRound } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
 import { ExpensesTable } from "@/components/expenses/expenses-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 type Pagination = {
@@ -213,7 +213,18 @@ export function ExpensesPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <ListFilter className="size-5" />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">当前筛选费用</div>
+              <div className="text-xl font-semibold">{pagination.total}</div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
@@ -250,95 +261,94 @@ export function ExpensesPanel({
       </div>
 
       <Card className="overflow-hidden">
-        <CardContent className="grid gap-3 p-4 xl:grid-cols-[140px_140px_160px_1fr_150px_150px_auto]">
-          <FormSelect
-            id="expense-status-filter"
-            value={filters.status || "__all"}
-            options={statusOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => updateFilter({ status: value === "__all" ? "" : value })}
-          />
-          <FormSelect
-            id="expense-mode-filter"
-            value={filters.mode || "__all"}
-            options={modeOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => updateFilter({ mode: value === "__all" ? "" : value })}
-          />
-          <FormSelect
-            id="expense-current-step-filter"
-            value={filters.currentStep || "__all"}
-            options={stepOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => updateFilter({ currentStep: value === "__all" ? "" : value })}
-          />
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={keywordDraft}
-              placeholder="搜索单号或标题"
-              className="pl-9"
-              onChange={(event) => setKeywordDraft(event.target.value)}
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <CardTitle>费用申请列表</CardTitle>
+              <CardDescription>
+                筛选条件作用于下方费用申请表格，当前共 {pagination.total} 条记录。
+              </CardDescription>
+            </div>
+            <Badge variant="outline">
+              {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
+              第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
+            </Badge>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_150px_150px_auto]">
+            <FormSelect
+              id="expense-status-filter"
+              value={filters.status || "__all"}
+              options={statusOptions.map(([value, label]) => ({
+                value: value || "__all",
+                label,
+              }))}
+              onChange={(value) => updateFilter({ status: value === "__all" ? "" : value })}
             />
+            <FormSelect
+              id="expense-mode-filter"
+              value={filters.mode || "__all"}
+              options={modeOptions.map(([value, label]) => ({
+                value: value || "__all",
+                label,
+              }))}
+              onChange={(value) => updateFilter({ mode: value === "__all" ? "" : value })}
+            />
+            <FormSelect
+              id="expense-current-step-filter"
+              value={filters.currentStep || "__all"}
+              options={stepOptions.map(([value, label]) => ({
+                value: value || "__all",
+                label,
+              }))}
+              onChange={(value) => updateFilter({ currentStep: value === "__all" ? "" : value })}
+            />
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={keywordDraft}
+                placeholder="搜索单号或标题"
+                className="pl-9"
+                onChange={(event) => setKeywordDraft(event.target.value)}
+              />
+            </div>
+            <Input
+              type="date"
+              value={filters.createdFrom}
+              aria-label="创建开始日期"
+              onChange={(event) => updateFilter({ createdFrom: event.target.value })}
+            />
+            <Input
+              type="date"
+              value={filters.createdTo}
+              aria-label="创建结束日期"
+              onChange={(event) => updateFilter({ createdTo: event.target.value })}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const emptyFilters = {
+                  status: "",
+                  mode: "",
+                  currentStep: "",
+                  keyword: "",
+                  createdFrom: "",
+                  createdTo: "",
+                };
+                setKeywordDraft("");
+                setFilters(emptyFilters);
+                setPage(1);
+              }}
+            >
+              <RotateCcw data-icon="inline-start" />
+              重置
+            </Button>
           </div>
-          <Input
-            type="date"
-            value={filters.createdFrom}
-            aria-label="创建开始日期"
-            onChange={(event) => updateFilter({ createdFrom: event.target.value })}
-          />
-          <Input
-            type="date"
-            value={filters.createdTo}
-            aria-label="创建结束日期"
-            onChange={(event) => updateFilter({ createdTo: event.target.value })}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              const emptyFilters = {
-                status: "",
-                mode: "",
-                currentStep: "",
-                keyword: "",
-                createdFrom: "",
-                createdTo: "",
-              };
-              setKeywordDraft("");
-              setFilters(emptyFilters);
-              setPage(1);
-            }}
-          >
-            <RotateCcw data-icon="inline-start" />
-            重置
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <div>
-            <CardTitle>费用申请列表</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              当前筛选共 {pagination.total} 条，筛选或分页变化后会自动更新。
-            </p>
-          </div>
-          <Badge variant="outline">
-            {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
-            第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
-          </Badge>
         </CardHeader>
-        <CardContent className="relative p-0">
+        <CardContent className="relative flex flex-col gap-4 p-0">
           {loading ? (
             <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-[1px]">
-              <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm">
+              <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" />
                 正在更新费用申请列表
               </div>
@@ -357,34 +367,33 @@ export function ExpensesPanel({
               }}
             />
           )}
+          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-muted-foreground">
+              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canGoPrev}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                <ChevronLeft data-icon="inline-start" />
+                上一页
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canGoNext}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                下一页
+                <ChevronRight data-icon="inline-end" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!canGoPrev}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            <ChevronLeft data-icon="inline-start" />
-            上一页
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!canGoNext}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            下一页
-            <ChevronRight data-icon="inline-end" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }
