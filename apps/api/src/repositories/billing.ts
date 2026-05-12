@@ -54,6 +54,7 @@ export type BillingLedgerRow = {
 export type BillingPricingRuleRow = {
   id: string;
   scope: "platform_default" | "tenant_override";
+  rule_group_id: string | null;
   tenant_id: string | null;
   metric_code: string;
   scene_code: string | null;
@@ -68,6 +69,32 @@ export type BillingPricingRuleRow = {
   effective_at: string | null;
   expires_at: string | null;
   metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type BillingPricingRuleDbRow = {
+  id: string;
+  scope?: "platform_default" | "tenant_override" | null;
+  rule_group_id?: string | null;
+  tenant_id: string | null;
+  metric_code: string;
+  scene_code: string | null;
+  provider?: string | null;
+  provider_code?: string | null;
+  model?: string | null;
+  model_code?: string | null;
+  unit?: string | null;
+  unit_name?: string | null;
+  unit_credits?: number | string | null;
+  unit_price_credits?: number | string | null;
+  min_charge_credits: number | string;
+  priority: number;
+  version: number;
+  enabled: boolean;
+  effective_at: string | null;
+  expires_at: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -177,6 +204,30 @@ class BillingRepository {
     return (this.client as unknown as {
       rpc: (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
     }).rpc(name, params);
+  }
+
+  private mapPricingRule(row: BillingPricingRuleDbRow): BillingPricingRuleRow {
+    return {
+      id: row.id,
+      scope: row.scope || (row.tenant_id ? "tenant_override" : "platform_default"),
+      rule_group_id: row.rule_group_id || null,
+      tenant_id: row.tenant_id,
+      metric_code: row.metric_code,
+      scene_code: row.scene_code,
+      provider: row.provider ?? row.provider_code ?? null,
+      model: row.model ?? row.model_code ?? null,
+      unit: row.unit ?? row.unit_name ?? "event",
+      unit_credits: Number(row.unit_credits ?? row.unit_price_credits ?? 0),
+      min_charge_credits: Number(row.min_charge_credits || 0),
+      priority: row.priority,
+      version: row.version,
+      enabled: row.enabled,
+      effective_at: row.effective_at,
+      expires_at: row.expires_at,
+      metadata: row.metadata || {},
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   }
 
   async ensureAccount(tenantId: string) {
@@ -687,7 +738,8 @@ class BillingRepository {
       .range(from, to);
 
     if (query.tenant_id) request = request.eq("tenant_id", query.tenant_id);
-    if (query.scope) request = request.eq("scope", query.scope);
+    if (query.scope === "tenant_override") request = request.not("tenant_id", "is", null);
+    if (query.scope === "platform_default") request = request.is("tenant_id", null);
     if (query.metric_code) request = request.eq("metric_code", query.metric_code);
     if (typeof query.enabled === "boolean") request = request.eq("enabled", query.enabled);
 
@@ -697,7 +749,7 @@ class BillingRepository {
     }
 
     return {
-      list: (data || []) as BillingPricingRuleRow[],
+      list: ((data || []) as BillingPricingRuleDbRow[]).map((item) => this.mapPricingRule(item)),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -710,11 +762,17 @@ class BillingRepository {
   async createPricingRule(input: BillingPricingRuleCreateInput) {
     const { data, error } = await this.from("tenant_pricing_rules")
       .insert({
-        ...input,
-        scene_code: input.scene_code || null,
-        provider: input.provider || null,
-        model: input.model || null,
         tenant_id: input.scope === "tenant_override" ? input.tenant_id : null,
+        metric_code: input.metric_code,
+        scene_code: input.scene_code || null,
+        provider_code: input.provider || null,
+        model_code: input.model || null,
+        unit_name: input.unit,
+        unit_price_credits: input.unit_credits,
+        min_charge_credits: input.min_charge_credits,
+        priority: input.priority,
+        version: input.version,
+        enabled: input.enabled,
         effective_at: input.effective_at || new Date().toISOString(),
         expires_at: input.expires_at || null,
       })
@@ -725,15 +783,25 @@ class BillingRepository {
       throw Errors.dbError("创建价格规则失败", error);
     }
 
-    return data as BillingPricingRuleRow;
+    return this.mapPricingRule(data as BillingPricingRuleDbRow);
   }
 
   async updatePricingRule(id: string, input: BillingPricingRuleUpdateInput) {
     const patch = {
-      ...input,
+      tenant_id: input.scope === undefined
+        ? undefined
+        : input.scope === "tenant_override" ? input.tenant_id : null,
+      metric_code: input.metric_code,
       scene_code: input.scene_code === undefined ? undefined : input.scene_code || null,
-      provider: input.provider === undefined ? undefined : input.provider || null,
-      model: input.model === undefined ? undefined : input.model || null,
+      provider_code: input.provider === undefined ? undefined : input.provider || null,
+      model_code: input.model === undefined ? undefined : input.model || null,
+      unit_name: input.unit,
+      unit_price_credits: input.unit_credits,
+      min_charge_credits: input.min_charge_credits,
+      priority: input.priority,
+      version: input.version,
+      enabled: input.enabled,
+      effective_at: input.effective_at,
       expires_at: input.expires_at === undefined ? undefined : input.expires_at || null,
     };
 
@@ -747,7 +815,7 @@ class BillingRepository {
       throw Errors.dbError("更新价格规则失败", error);
     }
 
-    return data as BillingPricingRuleRow;
+    return this.mapPricingRule(data as BillingPricingRuleDbRow);
   }
 }
 

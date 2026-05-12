@@ -27,6 +27,13 @@ type OpenAiRequestBody = {
   response_format?: { type: "json_object" };
 };
 
+type MarketingPageAiBillingContext = {
+  tenantId?: string | null;
+  source?: string | null;
+  billable?: boolean;
+  authUserId?: string | null;
+};
+
 type FieldDefinition = {
   type: "string" | "text" | "select";
   label: string;
@@ -500,11 +507,22 @@ function normalizeCreateResult(raw: unknown) {
   };
 }
 
-export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFillInput) {
+function resolveAiBillingContext(input: MarketingPageAiBillingContext) {
+  return {
+    tenantId: input.tenantId ?? null,
+    source: input.source ?? (input.tenantId ? "admin" : "platform_admin"),
+    billable: input.billable ?? Boolean(input.tenantId),
+  };
+}
+
+export async function fillMarketingPageBlockWithAi(
+  input: MarketingPageBlockAiFillInput & MarketingPageAiBillingContext,
+) {
   const fieldDefinitions = getAllowedFieldDefinitions(input);
   if (Object.keys(fieldDefinitions).length === 0) {
     throw Errors.badRequest("当前模块暂无可由 AI 填写的字段");
   }
+  const billingContext = resolveAiBillingContext(input);
 
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -516,9 +534,18 @@ export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFi
   try {
     result = await aiGateway.chat({
       sceneCode: "marketing_page_block_fill",
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.4,
       messages,
       responseFormat: "json_object",
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        page_id: input.page?.id ?? null,
+        block_id: input.block.id,
+        block_type: input.block.type,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -529,8 +556,17 @@ export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFi
 
     result = await aiGateway.chat({
       sceneCode: "marketing_page_block_fill",
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.4,
       messages,
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        page_id: input.page?.id ?? null,
+        block_id: input.block.id,
+        block_type: input.block.type,
+      },
     });
   }
 
@@ -550,11 +586,14 @@ export async function fillMarketingPageBlockWithAi(input: MarketingPageBlockAiFi
   };
 }
 
-export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettingsAiFillInput) {
+export async function fillMarketingPageSettingsWithAi(
+  input: MarketingPageSettingsAiFillInput & MarketingPageAiBillingContext,
+) {
   const fieldDefinitions = getAllowedSettingsFieldDefinitions(input);
   if (Object.keys(fieldDefinitions).length === 0) {
     throw Errors.badRequest("当前配置暂无可由 AI 填写的字段");
   }
+  const billingContext = resolveAiBillingContext(input);
 
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: SETTINGS_SYSTEM_PROMPT },
@@ -566,9 +605,16 @@ export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettin
   try {
     result = await aiGateway.chat({
       sceneCode: "marketing_page_settings_fill",
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.35,
       messages,
       responseFormat: "json_object",
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        page_id: input.page?.id ?? null,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -579,8 +625,15 @@ export async function fillMarketingPageSettingsWithAi(input: MarketingPageSettin
 
     result = await aiGateway.chat({
       sceneCode: "marketing_page_settings_fill",
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.35,
       messages,
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        page_id: input.page?.id ?? null,
+      },
     });
   }
 
@@ -606,6 +659,9 @@ export async function fillMarketingPageCreateWithAi(input: MarketingPageCreateAi
   scope: "tenant" | "platform";
   tenantId?: string | null;
   tenantName?: string | null;
+  source?: string | null;
+  billable?: boolean;
+  authUserId?: string | null;
   pages?: Array<{
     title: string;
     slug: string;
@@ -613,6 +669,7 @@ export async function fillMarketingPageCreateWithAi(input: MarketingPageCreateAi
     description: string | null;
   }>;
 }) {
+  const billingContext = resolveAiBillingContext(input);
   const messages: OpenAiRequestBody["messages"] = [
     { role: "system", content: CREATE_SYSTEM_PROMPT },
     { role: "user", content: buildCreateUserPrompt(input) },
@@ -623,10 +680,17 @@ export async function fillMarketingPageCreateWithAi(input: MarketingPageCreateAi
   try {
     result = await aiGateway.chat({
       sceneCode: "marketing_page_create_fill",
-      tenantId: input.tenantId ?? null,
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.45,
       messages,
       responseFormat: "json_object",
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        scope: input.scope,
+        tenant_name: input.tenantName ?? null,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "大模型接口调用失败";
@@ -637,9 +701,16 @@ export async function fillMarketingPageCreateWithAi(input: MarketingPageCreateAi
 
     result = await aiGateway.chat({
       sceneCode: "marketing_page_create_fill",
-      tenantId: input.tenantId ?? null,
+      tenantId: billingContext.tenantId,
+      source: billingContext.source,
+      billable: billingContext.billable,
       temperature: 0.45,
       messages,
+      metadata: {
+        auth_user_id: input.authUserId ?? null,
+        scope: input.scope,
+        tenant_name: input.tenantName ?? null,
+      },
     });
   }
 

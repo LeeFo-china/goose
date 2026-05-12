@@ -108,6 +108,9 @@ class MarketingPagesController extends BaseController {
       scope: "platform",
       tenantId: null,
       tenantName: null,
+      source: "platform_admin",
+      billable: false,
+      authUserId: authContext.authUserId,
       pages: createAiPageContext(pages.list),
     });
     return ResponseHandler.success(data);
@@ -217,6 +220,10 @@ class MarketingPagesController extends BaseController {
 
     const data = await fillMarketingPageBlockWithAi({
       ...bodyResult.data,
+      tenantId: null,
+      source: "platform_admin",
+      billable: false,
+      authUserId: authContext.authUserId,
       page: {
         ...bodyResult.data.page,
         id: paramsResult.data.id,
@@ -243,6 +250,10 @@ class MarketingPagesController extends BaseController {
 
     const data = await fillMarketingPageSettingsWithAi({
       ...bodyResult.data,
+      tenantId: null,
+      source: "platform_admin",
+      billable: false,
+      authUserId: authContext.authUserId,
       page: {
         ...bodyResult.data.page,
         id: paramsResult.data.id,
@@ -327,6 +338,9 @@ class MarketingPagesController extends BaseController {
       scope: "tenant",
       tenantId: authContext.tenantId,
       tenantName: authContext.tenantName,
+      source: "admin",
+      billable: Boolean(authContext.tenantId),
+      authUserId: authContext.authUserId,
       pages: createAiPageContext(pages.list),
     });
     return ResponseHandler.success(data);
@@ -457,6 +471,10 @@ class MarketingPagesController extends BaseController {
 
     const data = await fillMarketingPageBlockWithAi({
       ...bodyResult.data,
+      tenantId: authContext.tenantId,
+      source: "admin",
+      billable: Boolean(authContext.tenantId),
+      authUserId: authContext.authUserId,
       page: {
         ...bodyResult.data.page,
         id: paramsResult.data.id,
@@ -484,6 +502,10 @@ class MarketingPagesController extends BaseController {
 
     const data = await fillMarketingPageSettingsWithAi({
       ...bodyResult.data,
+      tenantId: authContext.tenantId,
+      source: "admin",
+      billable: Boolean(authContext.tenantId),
+      authUserId: authContext.authUserId,
       page: {
         ...bodyResult.data.page,
         id: paramsResult.data.id,
