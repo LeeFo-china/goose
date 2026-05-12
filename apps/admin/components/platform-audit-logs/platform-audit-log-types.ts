@@ -4,7 +4,11 @@ export type PlatformAuditLogAction =
   | "tenant_suspend"
   | "tenant_activate"
   | "tenant_admin_create"
-  | "platform_lead_assign";
+  | "platform_lead_assign"
+  | "platform_device_access_view"
+  | "platform_device_sync"
+  | "platform_device_password_query"
+  | "platform_device_password_reset";
 
 export type PlatformAuditLogStatus = "success" | "failure";
 
@@ -57,6 +61,10 @@ export const platformAuditLogActionOptions = [
   { value: "tenant_activate", label: "启用租户" },
   { value: "tenant_admin_create", label: "创建管理员" },
   { value: "platform_lead_assign", label: "分配平台线索" },
+  { value: "platform_device_access_view", label: "查看设备接入信息" },
+  { value: "platform_device_sync", label: "同步设备资产" },
+  { value: "platform_device_password_query", label: "查询设备密码" },
+  { value: "platform_device_password_reset", label: "重置设备密码" },
 ] as const;
 
 export function getPlatformAuditLogActionLabel(action: string | null | undefined) {
@@ -67,6 +75,8 @@ export function getPlatformAuditLogActionVariant(action: string | null | undefin
   if (action === "tenant_suspend") return "warning" as const;
   if (action === "tenant_activate" || action === "tenant_create") return "success" as const;
   if (action === "platform_lead_assign") return "secondary" as const;
+  if (action === "platform_device_sync") return "secondary" as const;
+  if (action === "platform_device_password_reset") return "warning" as const;
   return "outline" as const;
 }
 

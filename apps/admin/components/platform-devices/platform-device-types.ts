@@ -52,6 +52,49 @@ export type PlatformDeviceListData = {
   pagination: Pagination;
 };
 
+export type PlatformTencentDeviceAccessInfo = {
+  device: {
+    tenant_device_id: string;
+    device_id: string;
+    device_code: string | null;
+    device_name: string | null;
+    channel_id: string | null;
+    channel_code: string | null;
+    channel_name: string | null;
+    device_type_label: string | null;
+    sip_username: string | null;
+    sip_transport_protocol: "TCP";
+    source_project_id: string | null;
+    bound_project_id: string | null;
+  };
+  sip_server: {
+    sip_server_id: string | null;
+    sip_domain: string | null;
+    sip_host: string | null;
+    sip_port: number | null;
+    transport_protocol: "TCP";
+    request_id: string | null;
+  } | null;
+};
+
+export type PlatformTencentDevicePasswordResult = {
+  tenant_device_id: string;
+  device_id: string;
+  device_code: string | null;
+  device_name: string | null;
+  sip_username: string | null;
+  sip_transport_protocol: "TCP";
+  sip_password: string | null;
+  request_id: string | null;
+  status?: string | null;
+};
+
+export type PlatformDeviceSyncResult = {
+  created_count: number;
+  updated_count: number;
+  total_count: number;
+};
+
 export const platformDeviceVendorOptions = [
   { value: "ezviz", label: "萤石" },
   { value: "tencent_iotvideo_industry", label: "腾讯云" },

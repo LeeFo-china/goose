@@ -45,6 +45,62 @@ class TenantDeviceController extends BaseController {
     return ResponseHandler.success(result);
   }
 
+  @Get("/platform/tenant-devices/:id/tencent-access")
+  async getPlatformTencentDeviceAccessInfo(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.getPlatformTencentDeviceAccessInfo(
+      paramsResult.data.id,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/platform/tenant-devices/:id/tencent-password")
+  async getPlatformTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.getPlatformTencentDevicePassword(
+      paramsResult.data.id,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
+  @Post("/platform/tenant-devices/:id/tencent-password")
+  async resetPlatformTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.resetPlatformTencentDevicePassword(
+      paramsResult.data.id,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
+  @Post("/platform/tenant-devices/:id/sync")
+  async syncPlatformTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.syncPlatformTenantDevice(
+      paramsResult.data.id,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
   @Get("/tenant-devices/:id")
   async getTenantDevice(request: FastifyRequest, reply: FastifyReply) {
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);

@@ -8,6 +8,10 @@ export const PlatformAuditLogActionSchema = z.enum([
   "tenant_activate",
   "tenant_admin_create",
   "platform_lead_assign",
+  "platform_device_access_view",
+  "platform_device_sync",
+  "platform_device_password_query",
+  "platform_device_password_reset",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

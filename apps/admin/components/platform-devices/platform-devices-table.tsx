@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
+import { PlatformDeviceActions } from "@/components/platform-devices/platform-device-actions";
 import {
   getPlatformDeviceStatusMeta,
   getPlatformDeviceVendorLabel,
@@ -135,6 +136,15 @@ const columns: ColumnDef<PlatformDeviceRecord>[] = [
       cellClassName: "whitespace-nowrap",
     },
   },
+  {
+    id: "actions",
+    header: "操作",
+    cell: ({ row }) => <PlatformDeviceActions device={row.original} />,
+    meta: {
+      headerClassName: "text-right",
+      cellClassName: "whitespace-nowrap text-right",
+    },
+  },
 ];
 
 export function PlatformDevicesTable({ devices }: { devices: PlatformDeviceRecord[] }) {
@@ -143,7 +153,7 @@ export function PlatformDevicesTable({ devices }: { devices: PlatformDeviceRecor
       columns={columns}
       data={devices}
       emptyText="暂无平台设备资产"
-      minWidth="min-w-[1180px]"
+      minWidth="min-w-[1420px]"
     />
   );
 }
