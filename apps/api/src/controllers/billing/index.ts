@@ -2,12 +2,14 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   BillingDateRangeQuerySchema,
+  BillingEventQuerySchema,
   BillingLedgerQuerySchema,
   BillingManualRechargeSchema,
   BillingPricingRuleCreateSchema,
   BillingPricingRuleParamSchema,
   BillingPricingRuleQuerySchema,
   BillingPricingRuleUpdateSchema,
+  BillingShadowRunSchema,
   BillingTenantListQuerySchema,
   BillingTenantParamSchema,
 } from "@/schema/billing";
@@ -97,6 +99,26 @@ class BillingController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await billingService.listPlatformLedger(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/billing/events")
+  async listPlatformBillingEvents(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = BillingEventQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await billingService.listPlatformBillingEvents(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/billing/shadow-run")
+  async runShadowBilling(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const bodyResult = BillingShadowRunSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await billingService.runShadowBilling(bodyResult.data, authContext);
     return ResponseHandler.success(data);
   }
 

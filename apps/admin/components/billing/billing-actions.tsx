@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, WalletCards } from "lucide-react";
+import { Loader2, Plus, Radar, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -269,5 +269,39 @@ export function PricingRuleStatusButton({ rule }: { rule: BillingPricingRule }) 
       {pending ? <Loader2 className="size-4 animate-spin" /> : null}
       {rule.enabled ? "停用" : "启用"}
     </Button>
+  );
+}
+
+export function ShadowBillingRunButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  function run() {
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestJson("/api/backend/platform/billing/shadow-run", {
+          method: "POST",
+          body: JSON.stringify({
+            limit: 100,
+            sources: ["ai", "sms", "social_video"],
+          }),
+        });
+        router.refresh();
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : "影子计费执行失败");
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button size="sm" variant="outline" onClick={run} disabled={pending}>
+        {pending ? <Loader2 className="size-4 animate-spin" /> : <Radar className="size-4" />}
+        运行影子计费
+      </Button>
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+    </div>
   );
 }

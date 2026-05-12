@@ -48,6 +48,22 @@ export const BillingPricingRuleQuerySchema = PaginationQuerySchema.extend({
   enabled: z.coerce.boolean().optional(),
 });
 
+export const BillingEventQuerySchema = PaginationQuerySchema.extend({
+  tenant_id: z.uuid("无效的租户 ID").optional(),
+  metric_code: z.string().trim().max(80, "计费项不能超过 80 个字符").optional(),
+  source_type: z.string().trim().max(80, "来源类型不能超过 80 个字符").optional(),
+  status: z.enum(["pending", "estimated", "charged", "waived", "refunded", "failed"]).optional(),
+  start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
+  end_date: z.string().trim().max(30, "结束时间格式非法").optional(),
+});
+
+export const BillingShadowRunSchema = z.object({
+  limit: z.coerce.number().int().min(1, "扫描条数必须大于 0").max(500, "单次扫描最多 500 条").default(100),
+  start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
+  end_date: z.string().trim().max(30, "结束时间格式非法").optional(),
+  sources: z.array(z.enum(["ai", "sms", "social_video"])).optional(),
+});
+
 export const BillingPricingRuleCreateSchema = z.object({
   scope: BillingPricingScopeSchema.default("platform_default"),
   tenant_id: z.uuid("无效的租户 ID").nullable().optional(),
@@ -79,3 +95,5 @@ export type BillingManualRechargeInput = z.infer<typeof BillingManualRechargeSch
 export type BillingPricingRuleQuery = z.infer<typeof BillingPricingRuleQuerySchema>;
 export type BillingPricingRuleCreateInput = z.infer<typeof BillingPricingRuleCreateSchema>;
 export type BillingPricingRuleUpdateInput = z.infer<typeof BillingPricingRuleUpdateSchema>;
+export type BillingEventQuery = z.infer<typeof BillingEventQuerySchema>;
+export type BillingShadowRunInput = z.infer<typeof BillingShadowRunSchema>;

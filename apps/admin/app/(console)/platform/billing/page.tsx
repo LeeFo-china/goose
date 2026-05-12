@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertCircle, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
-import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton } from "@/components/billing/billing-actions";
+import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton, ShadowBillingRunButton } from "@/components/billing/billing-actions";
 import type {
+  BillingEventListData,
   BillingLedgerListData,
   BillingPlatformSummary,
   BillingPricingRuleListData,
@@ -21,6 +22,7 @@ type SearchParams = Promise<{
   page?: string;
   ledgerPage?: string;
   rulePage?: string;
+  eventPage?: string;
 }>;
 
 const emptySummary: BillingPlatformSummary = {
@@ -50,6 +52,13 @@ function emptyLedgerList(page: number): BillingLedgerListData {
 }
 
 function emptyPricingList(page: number): BillingPricingRuleListData {
+  return {
+    list: [],
+    pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+  };
+}
+
+function emptyEventList(page: number): BillingEventListData {
   return {
     list: [],
     pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
@@ -115,12 +124,24 @@ function scopeLabel(scope: string) {
   return scope === "tenant_override" ? "租户定制价" : "平台默认价";
 }
 
+function eventStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "待处理",
+    estimated: "已试算",
+    charged: "已扣费",
+    waived: "已免除",
+    refunded: "已退回",
+    failed: "异常",
+  };
+  return labels[status] || status;
+}
+
 function PaginationLinks({
   pagination,
   pageKey,
 }: {
   pagination: Pagination;
-  pageKey: "page" | "ledgerPage" | "rulePage";
+  pageKey: "page" | "ledgerPage" | "rulePage" | "eventPage";
 }) {
   const prevPage = Math.max(1, pagination.page - 1);
   const nextPage = pagination.page + 1;
@@ -156,6 +177,7 @@ export default async function PlatformBillingPage({
   const page = readPositiveInteger(params.page, 1);
   const ledgerPage = readPositiveInteger(params.ledgerPage, 1);
   const rulePage = readPositiveInteger(params.rulePage, 1);
+  const eventPage = readPositiveInteger(params.eventPage, 1);
 
   const summaryResult = hasPlatformAccess
     ? await fetchBackend<BillingPlatformSummary>("/platform/billing/summary", emptySummary)
@@ -178,6 +200,12 @@ export default async function PlatformBillingPage({
       emptyPricingList(rulePage),
     )
     : { data: emptyPricingList(rulePage), error: null };
+  const eventResult = hasPlatformAccess
+    ? await fetchBackend<BillingEventListData>(
+      `/platform/billing/events?${buildQuery({ page: eventPage, pageSize: 20 })}`,
+      emptyEventList(eventPage),
+    )
+    : { data: emptyEventList(eventPage), error: null };
 
   return (
     <div className="flex flex-col gap-5">
@@ -195,6 +223,7 @@ export default async function PlatformBillingPage({
       {tenantsResult.error ? <StatusAlert>{tenantsResult.error}</StatusAlert> : null}
       {ledgerResult.error ? <StatusAlert>{ledgerResult.error}</StatusAlert> : null}
       {pricingResult.error ? <StatusAlert>{pricingResult.error}</StatusAlert> : null}
+      {eventResult.error ? <StatusAlert>{eventResult.error}</StatusAlert> : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <SummaryItem icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
@@ -253,6 +282,69 @@ export default async function PlatformBillingPage({
           </Table>
           <div className="border-t p-4">
             <PaginationLinks pagination={tenantsResult.data.pagination} pageKey="page" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>影子计费</CardTitle>
+            <CardDescription>从 AI、短信、短视频日志生成预计账单，不扣真实积分。</CardDescription>
+          </div>
+          <ShadowBillingRunButton />
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>时间</TableHead>
+                <TableHead>租户</TableHead>
+                <TableHead>计费项</TableHead>
+                <TableHead>来源</TableHead>
+                <TableHead className="text-right">用量</TableHead>
+                <TableHead className="text-right">预计积分</TableHead>
+                <TableHead>状态</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {eventResult.data.list.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell>{formatDateTime(event.created_at)}</TableCell>
+                  <TableCell>{event.tenant?.name || event.tenant?.slug || event.tenant_id}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{event.metric_code}</div>
+                    <div className="text-xs text-muted-foreground">{event.scene_code || "-"}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div>{event.source_type}</div>
+                    <div className="text-xs text-muted-foreground">{event.source_sub_id || event.source_id}</div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {Number(event.billable_units || 0).toLocaleString("zh-CN")} {event.unit_name}
+                  </TableCell>
+                  <TableCell className="text-right">{formatCredits(event.credits)}</TableCell>
+                  <TableCell>
+                    <Badge variant={event.status === "failed" ? "danger" : "outline"}>
+                      {eventStatusLabel(event.status)}
+                    </Badge>
+                    {event.failure_message ? (
+                      <div className="mt-1 text-xs text-muted-foreground">{event.failure_message}</div>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!eventResult.data.list.length ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                    暂无影子计费事件
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+          <div className="border-t p-4">
+            <PaginationLinks pagination={eventResult.data.pagination} pageKey="eventPage" />
           </div>
         </CardContent>
       </Card>

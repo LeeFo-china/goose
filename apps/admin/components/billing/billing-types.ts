@@ -95,6 +95,36 @@ export type BillingPricingRuleListData = {
   pagination: Pagination;
 };
 
+export type BillingEvent = {
+  id: string;
+  tenant_id: string;
+  metric_code: string;
+  scene_code: string | null;
+  provider: string | null;
+  model: string | null;
+  source_type: string;
+  source_id: string;
+  source_sub_id: string | null;
+  billable_units: number;
+  unit_name: string;
+  unit_price_credits: number;
+  credits: number;
+  status: string;
+  failure_code: string | null;
+  failure_message: string | null;
+  created_at: string | null;
+  tenant?: {
+    id: string;
+    name: string | null;
+    slug: string | null;
+  } | null;
+};
+
+export type BillingEventListData = {
+  list: BillingEvent[];
+  pagination: Pagination;
+};
+
 export type TenantBillingSummary = {
   account: BillingAccount;
   period: {

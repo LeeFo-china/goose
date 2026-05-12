@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   BillingLedgerQuery,
+  BillingEventQuery,
   BillingManualRechargeInput,
   BillingPricingRuleCreateInput,
   BillingPricingRuleQuery,
@@ -75,9 +76,91 @@ export type BillingEventRow = {
   tenant_id: string;
   metric_code: string;
   scene_code: string | null;
+  provider: string | null;
+  model: string | null;
+  source_type: string;
+  source_id: string;
+  source_sub_id: string | null;
+  billable_units: number;
+  unit_name: string;
+  unit_price_credits: number;
   credits: number;
   status: string;
+  pricing_snapshot?: Record<string, unknown>;
+  raw_usage?: unknown;
+  failure_code: string | null;
+  failure_message: string | null;
+  settled_at: string | null;
   created_at: string | null;
+};
+
+export type BillingEventCreateInput = {
+  tenant_id: string;
+  metric_code: string;
+  scene_code?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  source_type: string;
+  source_id: string;
+  source_sub_id?: string | null;
+  billable_units: number;
+  unit_name: string;
+  unit_price_credits: number;
+  credits: number;
+  status: "estimated" | "failed";
+  pricing_rule_id?: string | null;
+  pricing_snapshot?: Record<string, unknown>;
+  raw_usage?: Record<string, unknown>;
+  failure_code?: string | null;
+  failure_message?: string | null;
+};
+
+export type BillingAiShadowRow = {
+  id: string;
+  tenant_id: string | null;
+  scene_code: string;
+  provider_code: string | null;
+  model_code: string | null;
+  model_name: string | null;
+  status: "success" | "failure";
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cached_input_tokens: number | null;
+  reasoning_tokens: number | null;
+  raw_usage: unknown;
+  billable: boolean | null;
+  source: string | null;
+  created_at: string | null;
+};
+
+export type BillingSmsShadowRow = {
+  id: string;
+  tenant_id: string | null;
+  provider: string;
+  channel_mode: string | null;
+  purpose: string;
+  template_code: string | null;
+  status: string;
+  request_id: string | null;
+  sms_count: number;
+  metadata: unknown;
+  created_at: string | null;
+};
+
+export type BillingSocialVideoShadowRow = {
+  id: string;
+  tenant_id: string | null;
+  platform: string;
+  status: string;
+  provider: string | null;
+  audio_duration_seconds: number | null;
+  billable: boolean | null;
+  billing_duration_seconds: number | null;
+  billing_minutes: number | null;
+  billing_source: string | null;
+  created_at: string | null;
+  completed_at: string | null;
 };
 
 class BillingRepository {
@@ -264,29 +347,227 @@ class BillingRepository {
     };
   }
 
-  async listBillingEvents(input: {
+  async listBillingEvents(input: BillingEventQuery & {
     tenantId?: string;
     startDate?: string;
     endDate?: string;
     statuses?: string[];
     pageSize?: number;
   }) {
-    let request = this.from("tenant_billing_events")
-      .select("id, tenant_id, metric_code, scene_code, credits, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(input.pageSize || 1000);
+    const page = input.page || 1;
+    const pageSize = input.pageSize || 1000;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    if (input.tenantId) request = request.eq("tenant_id", input.tenantId);
+    let request = this.from("tenant_billing_events")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.tenantId || input.tenant_id) request = request.eq("tenant_id", input.tenantId || input.tenant_id);
+    if (input.metric_code) request = request.eq("metric_code", input.metric_code);
+    if (input.source_type) request = request.eq("source_type", input.source_type);
+    if (input.status) request = request.eq("status", input.status);
     if (input.statuses?.length) request = request.in("status", input.statuses);
+    if (input.startDate || input.start_date) request = request.gte("created_at", input.startDate || input.start_date);
+    if (input.endDate || input.end_date) request = request.lte("created_at", input.endDate || input.end_date);
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询计费事件失败", error);
+    }
+
+    return {
+      list: (data || []) as BillingEventRow[],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
+  }
+
+  async listExistingBillingEventKeys(input: {
+    sourceType: string;
+    sourceIds: string[];
+  }) {
+    if (!input.sourceIds.length) return new Set<string>();
+
+    const { data, error } = await this.from("tenant_billing_events")
+      .select("metric_code, source_type, source_id, source_sub_id")
+      .eq("source_type", input.sourceType)
+      .in("source_id", input.sourceIds);
+
+    if (error) {
+      throw Errors.dbError("查询已生成计费事件失败", error);
+    }
+
+    return new Set((data || []).map((item: {
+      metric_code: string;
+      source_type: string;
+      source_id: string;
+      source_sub_id: string | null;
+    }) => this.buildEventKey(item)));
+  }
+
+  async listAiShadowRows(input: {
+    limit: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    let request = this.from("ai_call_logs")
+      .select(`
+        id,
+        tenant_id,
+        scene_code,
+        provider_code,
+        model_code,
+        model_name,
+        status,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        cached_input_tokens,
+        reasoning_tokens,
+        raw_usage,
+        billable,
+        source,
+        created_at
+      `)
+      .not("tenant_id", "is", null)
+      .eq("status", "success")
+      .eq("billable", true)
+      .order("created_at", { ascending: true })
+      .limit(input.limit);
+
     if (input.startDate) request = request.gte("created_at", input.startDate);
     if (input.endDate) request = request.lte("created_at", input.endDate);
 
     const { data, error } = await request;
     if (error) {
-      throw Errors.dbError("查询计费事件失败", error);
+      throw Errors.dbError("扫描 AI 影子计费日志失败", error);
     }
 
-    return (data || []) as BillingEventRow[];
+    return (data || []) as BillingAiShadowRow[];
+  }
+
+  async listSmsShadowRows(input: {
+    limit: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    let request = this.from("sms_send_logs")
+      .select(`
+        id,
+        tenant_id,
+        provider,
+        channel_mode,
+        purpose,
+        template_code,
+        status,
+        request_id,
+        sms_count,
+        metadata,
+        created_at
+      `)
+      .not("tenant_id", "is", null)
+      .eq("status", "success")
+      .order("created_at", { ascending: true })
+      .limit(input.limit);
+
+    if (input.startDate) request = request.gte("created_at", input.startDate);
+    if (input.endDate) request = request.lte("created_at", input.endDate);
+
+    const { data, error } = await request;
+    if (error) {
+      throw Errors.dbError("扫描短信影子计费日志失败", error);
+    }
+
+    return (data || []) as BillingSmsShadowRow[];
+  }
+
+  async listSocialVideoShadowRows(input: {
+    limit: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    let request = this.from("social_video_transcriptions")
+      .select(`
+        id,
+        tenant_id,
+        platform,
+        status,
+        provider,
+        audio_duration_seconds,
+        billable,
+        billing_duration_seconds,
+        billing_minutes,
+        billing_source,
+        created_at,
+        completed_at
+      `)
+      .not("tenant_id", "is", null)
+      .eq("status", "completed")
+      .eq("billable", true)
+      .order("created_at", { ascending: true })
+      .limit(input.limit);
+
+    if (input.startDate) request = request.gte("created_at", input.startDate);
+    if (input.endDate) request = request.lte("created_at", input.endDate);
+
+    const { data, error } = await request;
+    if (error) {
+      throw Errors.dbError("扫描短视频影子计费日志失败", error);
+    }
+
+    return (data || []) as BillingSocialVideoShadowRow[];
+  }
+
+  buildEventKey(input: {
+    metric_code: string;
+    source_type: string;
+    source_id: string;
+    source_sub_id?: string | null;
+  }) {
+    return `${input.metric_code}:${input.source_type}:${input.source_id}:${input.source_sub_id || ""}`;
+  }
+
+  async createBillingEvent(input: BillingEventCreateInput) {
+    const { data, error } = await this.from("tenant_billing_events")
+      .insert({
+        tenant_id: input.tenant_id,
+        metric_code: input.metric_code,
+        scene_code: input.scene_code || null,
+        provider: input.provider || null,
+        model: input.model || null,
+        source_type: input.source_type,
+        source_id: input.source_id,
+        source_sub_id: input.source_sub_id || null,
+        billable_units: input.billable_units,
+        unit_name: input.unit_name,
+        unit_price_credits: input.unit_price_credits,
+        credits: input.credits,
+        status: input.status,
+        pricing_rule_id: input.pricing_rule_id || null,
+        pricing_snapshot: input.pricing_snapshot || {},
+        raw_usage: input.raw_usage || {},
+        failure_code: input.failure_code || null,
+        failure_message: input.failure_message || null,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "23505") {
+        return null;
+      }
+
+      throw Errors.dbError("创建影子计费事件失败", error);
+    }
+
+    return data as BillingEventRow;
   }
 
   async listPricingRules(query: BillingPricingRuleQuery) {
