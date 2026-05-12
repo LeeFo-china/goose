@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, CalendarDays, House } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, House, ListFilter } from "lucide-react";
 import {
   CreateProjectButton,
   type ProjectRecord,
@@ -118,7 +118,18 @@ export default async function ProjectsPage({
         <CreateProjectButton />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <ListFilter className="size-5" />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">当前筛选项目</div>
+              <div className="text-xl font-semibold">{pagination.total}</div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">

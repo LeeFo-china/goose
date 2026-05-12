@@ -11,8 +11,8 @@ export default function ProjectsLoading() {
         </div>
         <Skeleton className="h-9 w-24" />
       </div>
-      <div className="grid gap-3 md:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
+      <div className="grid gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
           <Card key={index}>
             <CardContent className="flex items-center gap-3 p-4">
               <Skeleton className="size-10" />
@@ -25,22 +25,31 @@ export default function ProjectsLoading() {
         ))}
       </div>
       <Card>
-        <CardContent className="p-4">
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+            <Skeleton className="h-6 w-28" />
+          </div>
           <div className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px]">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-10" />
             ))}
           </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-24" />
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {Array.from({ length: 8 }).map((_, index) => (
             <Skeleton key={index} className="h-14" />
           ))}
+          <div className="flex flex-col gap-3 pt-1 md:flex-row md:items-center md:justify-between">
+            <Skeleton className="h-4 w-32" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-20" />
+              <Skeleton className="h-9 w-20" />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

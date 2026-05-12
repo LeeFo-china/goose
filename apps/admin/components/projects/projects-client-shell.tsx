@@ -11,7 +11,7 @@ import {
 import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { ProjectsTable } from "@/components/projects/projects-table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Pagination = {
   page: number;
@@ -47,8 +47,30 @@ export function ProjectsClientShell({
 
   return (
     <>
+      {error ? (
+        <StatusAlert>{error}</StatusAlert>
+      ) : null}
+
       <Card>
-        <CardContent className="p-4">
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <CardTitle>项目列表</CardTitle>
+              <CardDescription>
+                筛选条件作用于下方项目表格，当前共 {pagination.total} 条记录。
+              </CardDescription>
+            </div>
+            {pending ? (
+              <Badge variant="secondary">
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                正在更新
+              </Badge>
+            ) : (
+              <Badge variant="outline">
+                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+              </Badge>
+            )}
+          </div>
           <ProjectFilters
             status={status}
             ownership={ownership}
@@ -56,53 +78,32 @@ export function ProjectsClientShell({
             pending={pending}
             onNavigate={navigate}
           />
-        </CardContent>
-      </Card>
-
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>项目列表</CardTitle>
-          {pending ? (
-            <Badge variant="secondary">
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-              正在更新
-            </Badge>
-          ) : (
-            <Badge variant="outline">
-              第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-            </Badge>
-          )}
         </CardHeader>
-        <CardContent className="relative p-0">
+        <CardContent className="relative flex flex-col gap-4 p-0">
           <ProjectsTable projects={projects} />
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
-              <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm">
+              <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 className="animate-spin" data-icon="inline-start" />
                 正在更新列表
               </div>
             </div>
           ) : null}
+          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-muted-foreground">
+              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+            </div>
+            <ProjectsPagination
+              pagination={pagination}
+              status={status}
+              ownership={ownership}
+              keyword={keyword}
+              pending={pending}
+              onNavigate={navigate}
+            />
+          </div>
         </CardContent>
       </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <ProjectsPagination
-          pagination={pagination}
-          status={status}
-          ownership={ownership}
-          keyword={keyword}
-          pending={pending}
-          onNavigate={navigate}
-        />
-      </div>
     </>
   );
 }
