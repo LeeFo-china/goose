@@ -228,6 +228,25 @@ class TenantDeviceRepository {
     return (data || []) as TenantDeviceRow[];
   }
 
+  async listActiveByVendorDeviceSerial(
+    vendor: ProjectCameraVendor,
+    vendorDeviceSerial: string,
+  ) {
+    const { data, error } = await this.adminClient
+      .from("tenant_devices")
+      .select("*")
+      .eq("vendor", vendor)
+      .eq("vendor_device_serial", vendorDeviceSerial)
+      .is("deleted_at", null)
+      .range(0, 999);
+
+    if (error) {
+      throw Errors.dbError("查询设备资产归属失败", error);
+    }
+
+    return (data || []) as TenantDeviceRow[];
+  }
+
   async hydratePlatformRows(rows: TenantDeviceRow[]) {
     const [tenantMap, projectMap, cameraMap] = await Promise.all([
       this.findTenants(rows.map((item) => item.tenant_id)),

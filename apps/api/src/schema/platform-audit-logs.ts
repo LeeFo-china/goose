@@ -12,6 +12,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "platform_device_sync",
   "platform_device_password_query",
   "platform_device_password_reset",
+  "platform_device_cloud_delete",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

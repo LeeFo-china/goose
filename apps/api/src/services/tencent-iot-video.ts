@@ -88,6 +88,10 @@ type UpdateDevicePasswordResponse = {
   RequestId?: string;
 };
 
+type DeleteDeviceResponse = {
+  RequestId?: string;
+};
+
 type DescribeChannelLiveStreamURLResponse = {
   Data?: {
     RtspAddr?: string;
@@ -149,6 +153,10 @@ export type TencentIotVideoDevicePassword = {
 
 export type TencentIotVideoPasswordUpdate = {
   status: string | null;
+  request_id: string | null;
+};
+
+export type TencentIotVideoDeleteDeviceResult = {
   request_id: string | null;
 };
 
@@ -400,6 +408,11 @@ export class TencentIotVideoService {
       .filter((device): device is TencentIotVideoDevice => Boolean(device));
   }
 
+  async findDeviceSummary(deviceId: string): Promise<TencentIotVideoDevice | null> {
+    const devices = await this.listDeviceSummaries();
+    return devices.find((device) => device.device_id === deviceId) || null;
+  }
+
   async getSipServerConfig(): Promise<TencentIotVideoSipServerConfig> {
     const response = await this.request<DescribeSipServerResponse>(
       "DescribeSIPServer",
@@ -474,6 +487,19 @@ export class TencentIotVideoService {
 
     return {
       status: readString(response.Status),
+      request_id: response.RequestId || null,
+    };
+  }
+
+  async deleteDevice(deviceId: string): Promise<TencentIotVideoDeleteDeviceResult> {
+    const response = await this.request<DeleteDeviceResponse>(
+      "DeleteDevice",
+      {
+        DeviceId: deviceId,
+      },
+    );
+
+    return {
       request_id: response.RequestId || null,
     };
   }

@@ -156,6 +156,7 @@ class TenantDeviceService {
 
       const claimedChannelCount = deviceChannels.filter((channel) => channel.tenant_device_id).length;
       const boundChannelCount = deviceChannels.filter((channel) => channel.bound_camera_id).length;
+      const canDelete = claimedChannelCount === 0 && boundChannelCount === 0;
 
       return {
         ...device,
@@ -164,6 +165,7 @@ class TenantDeviceService {
         claimed_channel_count: claimedChannelCount,
         unclaimed_channel_count: Math.max(deviceChannels.length - claimedChannelCount, 0),
         bound_channel_count: boundChannelCount,
+        can_delete: canDelete,
         tenants: Array.from(tenantMap.values()),
         channels: deviceChannels,
       };
@@ -193,6 +195,54 @@ class TenantDeviceService {
         total: rows.length,
         totalPages: rows.length ? Math.ceil(rows.length / pageSize) : 0,
       },
+    };
+  }
+
+  async deletePlatformTencentDevice(deviceId: string, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+
+    const [device, channels, assets, bindings] = await Promise.all([
+      tencentIotVideoService.findDeviceSummary(deviceId),
+      tencentIotVideoService.listChannels(deviceId),
+      tenantDeviceRepository.listActiveByVendorDeviceSerial("tencent_iotvideo_industry", deviceId),
+      projectCameraRepository.listActiveBindingsByVendorDeviceSerial("tencent_iotvideo_industry", deviceId),
+    ]);
+
+    if (!device) {
+      throw Errors.business(404, "腾讯云设备不存在", ErrorCodes.CAMERA_NOT_FOUND);
+    }
+
+    if (assets.length > 0 || bindings.length > 0) {
+      throw Errors.business(
+        409,
+        "设备已纳入资产或已绑定项目，不能删除",
+        ErrorCodes.CAMERA_ALREADY_BOUND,
+      );
+    }
+
+    const result = await tencentIotVideoService.deleteDevice(deviceId);
+
+    await platformAuditLogService.recordBestEffort({
+      action: "platform_device_cloud_delete",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      targetTenantId: null,
+      resourceType: "tencent_device",
+      resourceId: deviceId,
+      resourceLabel: device.device_name || device.device_code || device.device_id,
+      summary: `删除腾讯云空闲设备「${device.device_name || device.device_code || device.device_id}」`,
+      metadata: {
+        vendor: "tencent_iotvideo_industry",
+        vendor_device_serial: deviceId,
+        vendor_device_code: device.device_code,
+        channel_count: channels.length,
+        request_id: result.request_id,
+      },
+    });
+
+    return {
+      success: true,
+      request_id: result.request_id,
     };
   }
 

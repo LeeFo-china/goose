@@ -92,6 +92,7 @@ export type PlatformTencentDeviceRecord = {
   claimed_channel_count: number;
   unclaimed_channel_count: number;
   bound_channel_count: number;
+  can_delete: boolean;
   tenants: PlatformTencentDeviceTenant[];
   channels: PlatformTencentDeviceChannel[];
 };

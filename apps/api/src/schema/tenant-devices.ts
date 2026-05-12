@@ -59,6 +59,10 @@ export const TenantDeviceParamsSchema = z.object({
   id: z.uuid("无效的设备资产 ID"),
 });
 
+export const PlatformTencentDeviceParamsSchema = z.object({
+  device_id: z.string().trim().min(1, "设备 ID 不能为空").max(160, "设备 ID 过长"),
+});
+
 export const CreateTenantDeviceSchema = z.object({
   vendor: z.enum(PROJECT_CAMERA_VENDOR_VALUES, {
     message: "无效的设备厂商",

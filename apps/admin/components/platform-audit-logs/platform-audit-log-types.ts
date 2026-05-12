@@ -8,7 +8,8 @@ export type PlatformAuditLogAction =
   | "platform_device_access_view"
   | "platform_device_sync"
   | "platform_device_password_query"
-  | "platform_device_password_reset";
+  | "platform_device_password_reset"
+  | "platform_device_cloud_delete";
 
 export type PlatformAuditLogStatus = "success" | "failure";
 
@@ -65,6 +66,7 @@ export const platformAuditLogActionOptions = [
   { value: "platform_device_sync", label: "同步设备资产" },
   { value: "platform_device_password_query", label: "查询设备密码" },
   { value: "platform_device_password_reset", label: "重置设备密码" },
+  { value: "platform_device_cloud_delete", label: "删除云端设备" },
 ] as const;
 
 export function getPlatformAuditLogActionLabel(action: string | null | undefined) {
@@ -77,6 +79,7 @@ export function getPlatformAuditLogActionVariant(action: string | null | undefin
   if (action === "platform_lead_assign") return "secondary" as const;
   if (action === "platform_device_sync") return "secondary" as const;
   if (action === "platform_device_password_reset") return "warning" as const;
+  if (action === "platform_device_cloud_delete") return "danger" as const;
   return "outline" as const;
 }
 

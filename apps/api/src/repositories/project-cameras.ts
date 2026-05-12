@@ -569,6 +569,36 @@ class ProjectCameraRepository {
     return (data || []) as ProjectCameraBindingRow[];
   }
 
+  async listActiveBindingsByVendorDeviceSerial(
+    vendor: ProjectCameraVendor,
+    vendorDeviceSerial: string,
+  ) {
+    const { data, error } = await this.adminClient
+      .from("project_cameras")
+      .select(`
+        id,
+        tenant_id,
+        project_id,
+        vendor,
+        vendor_device_serial,
+        vendor_channel_id,
+        vendor_device_code,
+        vendor_channel_code,
+        channel_no,
+        name,
+        project:projects(id, name)
+      `)
+      .eq("vendor", vendor)
+      .eq("vendor_device_serial", vendorDeviceSerial)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw Errors.dbError("查询摄像头绑定状态失败", error);
+    }
+
+    return (data || []) as ProjectCameraBindingRow[];
+  }
+
   async create(projectId: string, input: CreateProjectCameraInput, tenantId?: string | null) {
     const project = await this.getProject(projectId, tenantId);
     if (!project) {

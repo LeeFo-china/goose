@@ -3,6 +3,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantDeviceSchema,
+  PlatformTencentDeviceParamsSchema,
   PlatformTencentDeviceListQuerySchema,
   PlatformTenantDeviceListQuerySchema,
   TenantDeviceListQuerySchema,
@@ -54,6 +55,20 @@ class TenantDeviceController extends BaseController {
 
     const result = await tenantDeviceService.listPlatformTencentDevices(
       queryResult.data,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
+  @Delete("/platform/tencent-devices/:device_id")
+  async deletePlatformTencentDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const paramsResult = PlatformTencentDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.deletePlatformTencentDevice(
+      paramsResult.data.device_id,
       authContext,
     );
 

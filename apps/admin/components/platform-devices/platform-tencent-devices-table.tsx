@@ -1,14 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Eye } from "lucide-react";
+import { Eye, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { DataTable } from "@/components/admin/data-table";
 import {
   getPlatformDeviceStatusMeta,
   type PlatformTencentDeviceChannel,
   type PlatformTencentDeviceRecord,
 } from "@/components/platform-devices/platform-device-types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +31,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function compactIdentifier(value: string | null | undefined) {
   if (!value) return "-";
@@ -30,6 +50,25 @@ function channelStateLabel(channel: PlatformTencentDeviceChannel) {
   if (channel.bound_camera_id) return "已绑定项目";
   if (channel.tenant_device_id) return "已纳入资产";
   return "未纳入资产";
+}
+
+function getPayloadMessage(payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object" && "message" in payload) {
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
+async function requestBackend<T>(path: string, init?: RequestInit) {
+  const response = await fetch(`/api/backend${path}`, init);
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "操作失败"));
+  }
+
+  return payload.data as T;
 }
 
 function ChannelDetailDialog({
@@ -103,17 +142,93 @@ function ChannelDetailDialog({
 }
 
 function TencentDeviceDetailAction({ device }: { device: PlatformTencentDeviceRecord }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  function deleteDevice() {
+    if (pending || !device.can_delete) return;
+    startTransition(async () => {
+      try {
+        await requestBackend(`/platform/tencent-devices/${encodeURIComponent(device.device_id)}`, {
+          method: "DELETE",
+        });
+        setDeleteOpen(false);
+        toast.success("腾讯云空闲设备已删除");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "删除云端设备失败");
+      }
+    });
+  }
 
   return (
     <>
       <div className="flex justify-end">
-        <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
-          <Eye data-icon="inline-start" />
-          查看通道
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="sm" variant="outline" disabled={pending}>
+              {pending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <MoreHorizontal data-icon="inline-start" />
+              )}
+              操作
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="left" sideOffset={8} className="w-44">
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={pending} onSelect={() => setOpen(true)}>
+                <Eye />
+                查看通道
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            {device.can_delete ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    <Trash2 />
+                    删除云端设备
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <ChannelDetailDialog device={device} open={open} onOpenChange={setOpen} />
+      <AlertDialog open={deleteOpen} onOpenChange={(nextOpen) => !pending && setDeleteOpen(nextOpen)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除腾讯云空闲设备</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除云端设备「{device.device_name || device.device_code || device.device_id}」。仅未纳入资产、未绑定项目的设备允许删除，删除后现场设备需要重新接入。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                deleteDevice();
+              }}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -207,7 +322,7 @@ const columns: ColumnDef<PlatformTencentDeviceRecord>[] = [
   },
   {
     id: "actions",
-    header: "通道信息",
+    header: "操作",
     cell: ({ row }) => <TencentDeviceDetailAction device={row.original} />,
     meta: {
       headerClassName:
