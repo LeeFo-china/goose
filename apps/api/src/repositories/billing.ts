@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { randomUUID } from "node:crypto";
 import type {
   BillingLedgerQuery,
   BillingEventQuery,
@@ -568,6 +569,51 @@ class BillingRepository {
     }
 
     return data as BillingEventRow;
+  }
+
+  async findBillingEventBySource(input: {
+    metricCode: string;
+    sourceType: string;
+    sourceId: string;
+    sourceSubId?: string | null;
+  }) {
+    let request = this.from("tenant_billing_events")
+      .select("*")
+      .eq("metric_code", input.metricCode)
+      .eq("source_type", input.sourceType)
+      .eq("source_id", input.sourceId);
+
+    if (input.sourceSubId) {
+      request = request.eq("source_sub_id", input.sourceSubId);
+    } else {
+      request = request.is("source_sub_id", null);
+    }
+
+    const { data, error } = await request.maybeSingle();
+    if (error) {
+      throw Errors.dbError("查询计费事件失败", error);
+    }
+
+    return (data || null) as BillingEventRow | null;
+  }
+
+  async settleBillingEvent(eventId: string, operatorUserId?: string | null) {
+    const { data, error } = await this.rpc("billing_settle_event", {
+      p_billing_event_id: eventId,
+      p_correlation_id: randomUUID(),
+      p_operator_user_id: operatorUserId || null,
+    });
+
+    if (error) {
+      throw Errors.dbError("结算计费事件失败", error);
+    }
+
+    return data as {
+      event: BillingEventRow;
+      account: BillingAccountBalance;
+      ledger: BillingLedgerRow | null;
+      idempotent?: boolean;
+    };
   }
 
   async listPricingRules(query: BillingPricingRuleQuery) {

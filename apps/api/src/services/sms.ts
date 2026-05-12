@@ -4,6 +4,7 @@ import { Config } from "@alicloud/openapi-client";
 import Credential, { Config as CredentialConfig } from "@alicloud/credentials";
 import { RuntimeOptions } from "@alicloud/tea-util";
 import { smsSendLogRepository } from "@/repositories/sms-send-logs";
+import { billingService } from "@/services/billing";
 import { systemSettingsService } from "@/services/system-settings";
 import type { SmsScene } from "@gooes/domain";
 
@@ -261,6 +262,48 @@ function getErrorCode(error: unknown) {
   return "SMS_SEND_FAILED";
 }
 
+function isSmsChargeEnabled() {
+  return String(process.env.SMS_CHARGE_ENABLED || "").toLowerCase() === "true";
+}
+
+async function assertSmsChargeAvailable(input: {
+  channel: SmsChannel;
+  purpose: SmsTemplatePurpose;
+  templateCode?: string | null;
+}) {
+  if (!isSmsChargeEnabled() || !input.channel.tenantId) {
+    return;
+  }
+
+  await billingService.assertSmsChargeAvailable({
+    tenantId: input.channel.tenantId,
+    smsCount: 1,
+    purpose: input.purpose,
+    provider: input.channel.provider,
+    templateCode: input.templateCode,
+  });
+}
+
+async function recordSmsBilling(input: {
+  log: Awaited<ReturnType<typeof smsSendLogRepository.create>>;
+  chargeEnabled: boolean;
+}) {
+  if (!input.log) return;
+
+  const result = await billingService.recordSmsBilling({
+    log: input.log,
+    chargeEnabled: input.chargeEnabled,
+  });
+
+  if (result?.event) {
+    await smsSendLogRepository.markBillingResult({
+      id: input.log.id,
+      billingEventId: result.event.id,
+      billed: result.settled,
+    });
+  }
+}
+
 async function logSmsSend(input: {
   channel: SmsChannel;
   phone: string;
@@ -273,7 +316,7 @@ async function logSmsSend(input: {
   smsCount?: number;
 }) {
   try {
-    await smsSendLogRepository.create({
+    return await smsSendLogRepository.create({
       tenantId: input.channel.tenantId || null,
       provider: input.channel.provider,
       channelMode: input.channel.channelMode,
@@ -288,6 +331,11 @@ async function logSmsSend(input: {
       errorCode: input.error ? getErrorCode(input.error) : null,
       errorMessage: input.error instanceof Error ? input.error.message : null,
       smsCount: input.smsCount ?? (input.status === "mock" || input.status === "disabled" ? 0 : 1),
+      deliveryStatus: input.status === "success"
+        ? "submitted_success"
+        : input.status === "failure"
+          ? "submit_failed"
+          : null,
       durationMs: input.durationMs ?? null,
       metadata: {
         strict_tenant_config: input.channel.strictTenantConfig,
@@ -295,6 +343,7 @@ async function logSmsSend(input: {
     });
   } catch {
     // 短信日志不能影响主业务链路。
+    return null;
   }
 }
 
@@ -461,13 +510,18 @@ async function sendByChannel(input: {
     if (input.channel.provider === "aliyun") {
       templateCode = input.templateCode ||
         await getAliyunTemplateCode(input.channel, input.purpose);
+      await assertSmsChargeAvailable({
+        channel: input.channel,
+        purpose: input.purpose,
+        templateCode,
+      });
       const providerResult = await sendAliyunSms({
         channel: input.channel,
         phone: input.phone,
         templateCode,
         templateParam: input.templateParam,
       });
-      await logSmsSend({
+      const log = await logSmsSend({
         channel: input.channel,
         phone: input.phone,
         purpose: input.purpose,
@@ -477,18 +531,27 @@ async function sendByChannel(input: {
         durationMs: durationMs(),
       });
       logged = true;
+      await recordSmsBilling({
+        log,
+        chargeEnabled: isSmsChargeEnabled(),
+      });
       return;
     }
 
     if (input.channel.provider === "tencent") {
       templateCode = await getTencentTemplateId(input.channel, input.purpose);
+      await assertSmsChargeAvailable({
+        channel: input.channel,
+        purpose: input.purpose,
+        templateCode,
+      });
       const providerResult = await sendTencentSms({
         channel: input.channel,
         phone: input.phone,
         templateId: templateCode,
         templateParam: input.templateParam,
       });
-      await logSmsSend({
+      const log = await logSmsSend({
         channel: input.channel,
         phone: input.phone,
         purpose: input.purpose,
@@ -498,6 +561,10 @@ async function sendByChannel(input: {
         durationMs: durationMs(),
       });
       logged = true;
+      await recordSmsBilling({
+        log,
+        chargeEnabled: isSmsChargeEnabled(),
+      });
     }
   } catch (error) {
     if (!logged) {

@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import {
   billingRepository,
   type BillingAccountBalance,
@@ -10,6 +11,7 @@ import {
   type BillingSocialVideoShadowRow,
   type BillingTenantLite,
 } from "@/repositories/billing";
+import type { SmsSendLogRecord } from "@/repositories/sms-send-logs";
 import type {
   BillingDateRangeQuery,
   BillingEventQuery,
@@ -337,6 +339,147 @@ class BillingService {
         estimated_credits: 0,
       }),
     };
+  }
+
+  async assertSmsChargeAvailable(input: {
+    tenantId?: string | null;
+    smsCount?: number;
+    purpose?: string | null;
+    provider?: string | null;
+    templateCode?: string | null;
+  }) {
+    if (!input.tenantId) return null;
+
+    const preview = await this.buildSmsBillingEventInput({
+      tenantId: input.tenantId,
+      sourceId: "sms_preflight",
+      smsCount: input.smsCount ?? 1,
+      purpose: input.purpose || "sms",
+      provider: input.provider || "unknown",
+      templateCode: input.templateCode || null,
+      rawUsage: { preflight: true },
+    });
+
+    if (preview.status === "failed") {
+      throw Errors.business(
+        500,
+        preview.failure_message || "短信计费价格规则缺失",
+        ErrorCodes.TENANT_PRICING_RULE_MISSING,
+        { metric_code: preview.metric_code },
+      );
+    }
+
+    const account = await billingRepository.ensureAccount(input.tenantId);
+    if (Number(account.available_credits || 0) < preview.credits) {
+      throw Errors.business(
+        402,
+        "租户积分余额不足，无法发送计费短信",
+        ErrorCodes.TENANT_CREDITS_INSUFFICIENT,
+        {
+          required_credits: preview.credits,
+          available_credits: account.available_credits,
+        },
+      );
+    }
+
+    return {
+      required_credits: preview.credits,
+      available_credits: account.available_credits,
+    };
+  }
+
+  async recordSmsBilling(input: {
+    log: SmsSendLogRecord;
+    chargeEnabled: boolean;
+  }) {
+    const log = input.log;
+    if (!log.tenant_id || log.status !== "success") {
+      return null;
+    }
+
+    const eventInput = await this.buildSmsBillingEventInput({
+      tenantId: log.tenant_id,
+      sourceId: log.id,
+      smsCount: log.sms_count,
+      purpose: log.purpose,
+      provider: log.provider,
+      templateCode: log.template_code,
+      rawUsage: { log },
+    });
+    const event = await billingRepository.createBillingEvent(eventInput)
+      || await billingRepository.findBillingEventBySource({
+        metricCode: eventInput.metric_code,
+        sourceType: eventInput.source_type,
+        sourceId: eventInput.source_id,
+        sourceSubId: eventInput.source_sub_id,
+      });
+
+    if (!event) {
+      throw Errors.business(409, "短信计费事件创建失败", "TENANT_BILLING_EVENT_DUPLICATED");
+    }
+
+    if (!input.chargeEnabled || event.status === "failed") {
+      return {
+        event,
+        settled: false,
+      };
+    }
+
+    const settled = await billingRepository.settleBillingEvent(event.id);
+    if (settled.event.status === "failed") {
+      if (settled.event.failure_code === "TENANT_CREDITS_INSUFFICIENT") {
+        throw Errors.business(
+          402,
+          "租户积分余额不足，短信扣费失败",
+          ErrorCodes.TENANT_CREDITS_INSUFFICIENT,
+          settled.event,
+        );
+      }
+
+      throw Errors.business(
+        500,
+        settled.event.failure_message || "短信扣费失败",
+        settled.event.failure_code || "TENANT_SMS_BILLING_FAILED",
+        settled.event,
+      );
+    }
+
+    return {
+      event: settled.event,
+      ledger: settled.ledger,
+      settled: true,
+    };
+  }
+
+  private async buildSmsBillingEventInput(input: {
+    tenantId: string;
+    sourceId: string;
+    smsCount: number;
+    purpose: string;
+    provider: string;
+    templateCode?: string | null;
+    rawUsage: Record<string, unknown>;
+  }) {
+    const rules = await billingRepository.listPricingRules({
+      page: 1,
+      pageSize: 100,
+      enabled: true,
+      metric_code: "sms_domestic_success",
+    });
+
+    return this.buildEstimatedEvent({
+      tenantId: input.tenantId,
+      metricCode: "sms_domestic_success",
+      sourceType: BILLING_EVENT_SOURCE.sms,
+      sourceId: input.sourceId,
+      sourceSubId: null,
+      sceneCode: input.purpose,
+      provider: input.provider,
+      model: input.templateCode || null,
+      units: Math.max(1, toNumber(input.smsCount)),
+      rawUsage: input.rawUsage,
+      rules: rules.list,
+    });
   }
 
   private emptyShadowSourceResult() {

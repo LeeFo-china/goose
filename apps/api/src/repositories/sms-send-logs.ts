@@ -19,6 +19,10 @@ export type SmsSendLogRecord = {
   error_code: string | null;
   error_message: string | null;
   sms_count: number;
+  delivery_status: string | null;
+  billed: boolean;
+  billed_at: string | null;
+  billing_event_id: string | null;
   duration_ms: number | null;
   metadata: unknown;
   created_at: string;
@@ -39,6 +43,7 @@ export type CreateSmsSendLogInput = {
   errorCode?: string | null;
   errorMessage?: string | null;
   smsCount?: number;
+  deliveryStatus?: string | null;
   durationMs?: number | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -81,6 +86,7 @@ class SmsSendLogRepository {
         error_code: input.errorCode || null,
         error_message: input.errorMessage || null,
         sms_count: input.smsCount ?? 1,
+        delivery_status: input.deliveryStatus || null,
         duration_ms: input.durationMs ?? null,
         metadata: input.metadata || null,
       })
@@ -92,6 +98,29 @@ class SmsSendLogRepository {
     }
 
     return data as SmsSendLogRecord | null;
+  }
+
+  async markBillingResult(input: {
+    id: string;
+    billingEventId: string;
+    billed: boolean;
+    billedAt?: string | null;
+  }) {
+    const { data, error } = await this.table()
+      .update({
+        billing_event_id: input.billingEventId,
+        billed: input.billed,
+        billed_at: input.billed ? (input.billedAt || new Date().toISOString()) : null,
+      })
+      .eq("id", input.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新短信计费状态失败", error);
+    }
+
+    return data as SmsSendLogRecord;
   }
 
   async list(input: SmsSendLogListInput) {
