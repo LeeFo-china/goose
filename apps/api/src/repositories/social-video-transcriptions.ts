@@ -26,6 +26,11 @@ export type SocialVideoTranscriptionRecord = {
   billing_minutes: number | null;
   billing_source: string | null;
   billed_at: string | null;
+  billing_frozen_credits: number;
+  billing_correlation_id: string | null;
+  billing_event_id: string | null;
+  billing_charged: boolean;
+  billing_charged_at: string | null;
   title: string | null;
   text: string | null;
   segments: unknown;
@@ -47,6 +52,8 @@ type CreateSocialVideoTranscriptionRecordInput = {
   createdByAuthUserId: string | null;
   billable?: boolean;
   billingSource?: string | null;
+  billingFrozenCredits?: number;
+  billingCorrelationId?: string | null;
 };
 
 type UpdateSocialVideoTranscriptionRecordInput = {
@@ -67,6 +74,11 @@ type UpdateSocialVideoTranscriptionRecordInput = {
   billingMinutes?: number | null;
   billingSource?: string | null;
   billedAt?: string | null;
+  billingFrozenCredits?: number;
+  billingCorrelationId?: string | null;
+  billingEventId?: string | null;
+  billingCharged?: boolean;
+  billingChargedAt?: string | null;
   title?: string | null;
   text?: string | null;
   segments?: unknown;
@@ -98,6 +110,8 @@ class SocialVideoTranscriptionRepository {
         created_by_auth_user_id: input.createdByAuthUserId,
         billable: input.billable ?? true,
         billing_source: input.billingSource ?? null,
+        billing_frozen_credits: input.billingFrozenCredits ?? 0,
+        billing_correlation_id: input.billingCorrelationId ?? null,
       })
       .select("*")
       .single();
@@ -214,6 +228,11 @@ class SocialVideoTranscriptionRepository {
     if (input.billingMinutes !== undefined) payload.billing_minutes = input.billingMinutes;
     if (input.billingSource !== undefined) payload.billing_source = input.billingSource;
     if (input.billedAt !== undefined) payload.billed_at = input.billedAt;
+    if (input.billingFrozenCredits !== undefined) payload.billing_frozen_credits = input.billingFrozenCredits;
+    if (input.billingCorrelationId !== undefined) payload.billing_correlation_id = input.billingCorrelationId;
+    if (input.billingEventId !== undefined) payload.billing_event_id = input.billingEventId;
+    if (input.billingCharged !== undefined) payload.billing_charged = input.billingCharged;
+    if (input.billingChargedAt !== undefined) payload.billing_charged_at = input.billingChargedAt;
     if (input.title !== undefined) payload.title = input.title;
     if (input.text !== undefined) payload.text = input.text;
     if (input.segments !== undefined) payload.segments = input.segments;

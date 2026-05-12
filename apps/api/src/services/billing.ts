@@ -12,6 +12,7 @@ import {
   type BillingTenantLite,
 } from "@/repositories/billing";
 import type { SmsSendLogRecord } from "@/repositories/sms-send-logs";
+import type { SocialVideoTranscriptionRecord } from "@/repositories/social-video-transcriptions";
 import type {
   BillingDateRangeQuery,
   BillingEventQuery,
@@ -449,6 +450,151 @@ class BillingService {
       ledger: settled.ledger,
       settled: true,
     };
+  }
+
+  async assertSocialVideoChargeAvailable(input: {
+    tenantId?: string | null;
+    minChargeCredits?: number;
+  }) {
+    if (!input.tenantId) return null;
+
+    const requiredCredits = input.minChargeCredits || await this.getSocialVideoMinChargeCredits(input.tenantId);
+    const account = await billingRepository.ensureAccount(input.tenantId);
+    if (Number(account.available_credits || 0) < requiredCredits) {
+      throw Errors.business(
+        402,
+        "租户积分余额不足，无法创建视频转文本任务",
+        ErrorCodes.TENANT_CREDITS_INSUFFICIENT,
+        {
+          required_credits: requiredCredits,
+          available_credits: account.available_credits,
+        },
+      );
+    }
+
+    return {
+      required_credits: requiredCredits,
+      available_credits: account.available_credits,
+    };
+  }
+
+  async freezeSocialVideoTask(input: {
+    taskId: string;
+    tenantId: string;
+    correlationId: string;
+    credits?: number;
+  }) {
+    const credits = input.credits || await this.getSocialVideoMinChargeCredits(input.tenantId);
+    await billingRepository.freezeCredits({
+      tenantId: input.tenantId,
+      credits,
+      eventType: "social_video_transcription_freeze",
+      sourceType: BILLING_EVENT_SOURCE.socialVideo,
+      sourceId: input.taskId,
+      correlationId: input.correlationId,
+      remark: "视频转文本任务预冻结",
+    });
+
+    return credits;
+  }
+
+  async settleSocialVideoTask(task: SocialVideoTranscriptionRecord) {
+    if (!task.tenant_id || !task.billable) {
+      return null;
+    }
+
+    const eventInput = this.buildSocialVideoShadowEvent(task, (await billingRepository.listPricingRules({
+      page: 1,
+      pageSize: 100,
+      enabled: true,
+      metric_code: "social_video_transcription_minute",
+    })).list);
+    const event = await billingRepository.createBillingEvent(eventInput)
+      || await billingRepository.findBillingEventBySource({
+        metricCode: eventInput.metric_code,
+        sourceType: eventInput.source_type,
+        sourceId: eventInput.source_id,
+        sourceSubId: eventInput.source_sub_id,
+      });
+
+    if (!event) {
+      throw Errors.business(409, "视频转文本计费事件创建失败", "TENANT_BILLING_EVENT_DUPLICATED");
+    }
+
+    if (task.billing_frozen_credits > 0 && task.billing_correlation_id) {
+      await billingRepository.unfreezeCredits({
+        tenantId: task.tenant_id,
+        credits: task.billing_frozen_credits,
+        eventType: "social_video_transcription_unfreeze",
+        sourceType: BILLING_EVENT_SOURCE.socialVideo,
+        sourceId: task.id,
+        correlationId: task.billing_correlation_id,
+        remark: "视频转文本任务完成释放冻结",
+      });
+    }
+
+    if (event.status === "failed") {
+      return {
+        event,
+        settled: false,
+        ledger: null,
+      };
+    }
+
+    const settled = await billingRepository.settleBillingEvent(event.id);
+    if (settled.event.status !== "charged") {
+      return {
+        event: settled.event,
+        settled: false,
+        ledger: settled.ledger,
+      };
+    }
+
+    return {
+      event: settled.event,
+      settled: true,
+      ledger: settled.ledger,
+    };
+  }
+
+  async releaseSocialVideoTaskFreeze(task: SocialVideoTranscriptionRecord) {
+    if (!task.tenant_id || !task.billing_correlation_id || task.billing_frozen_credits <= 0) {
+      return null;
+    }
+
+    return billingRepository.unfreezeCredits({
+      tenantId: task.tenant_id,
+      credits: task.billing_frozen_credits,
+      eventType: "social_video_transcription_failed_unfreeze",
+      sourceType: BILLING_EVENT_SOURCE.socialVideo,
+      sourceId: task.id,
+      correlationId: task.billing_correlation_id,
+      remark: "视频转文本任务失败释放冻结",
+    });
+  }
+
+  private async getSocialVideoMinChargeCredits(tenantId: string) {
+    const rules = await billingRepository.listPricingRules({
+      page: 1,
+      pageSize: 100,
+      enabled: true,
+      metric_code: "social_video_transcription_minute",
+    });
+    const rule = this.resolvePricingRule(rules.list, {
+      tenantId,
+      metricCode: "social_video_transcription_minute",
+      sceneCode: "douyin_transcription",
+    });
+
+    if (!rule) {
+      throw Errors.business(
+        500,
+        "视频转文本计费价格规则缺失",
+        ErrorCodes.TENANT_PRICING_RULE_MISSING,
+      );
+    }
+
+    return Math.max(rule.min_charge_credits || 0, rule.unit_credits || 0, 60);
   }
 
   private async buildSmsBillingEventInput(input: {

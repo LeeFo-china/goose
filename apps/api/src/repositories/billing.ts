@@ -616,6 +616,66 @@ class BillingRepository {
     };
   }
 
+  async freezeCredits(input: {
+    tenantId: string;
+    credits: number;
+    eventType: string;
+    sourceType: string;
+    sourceId: string;
+    correlationId: string;
+    remark?: string | null;
+  }) {
+    const { data, error } = await this.rpc("billing_freeze_credits", {
+      p_tenant_id: input.tenantId,
+      p_change_credits: input.credits,
+      p_event_type: input.eventType,
+      p_source_type: input.sourceType,
+      p_source_id: input.sourceId,
+      p_correlation_id: input.correlationId,
+      p_remark: input.remark || null,
+    });
+
+    if (error) {
+      throw Errors.dbError("冻结租户积分失败", error);
+    }
+
+    return data as {
+      account: BillingAccountBalance;
+      ledger: BillingLedgerRow | null;
+      idempotent?: boolean;
+    };
+  }
+
+  async unfreezeCredits(input: {
+    tenantId: string;
+    credits: number;
+    eventType: string;
+    sourceType: string;
+    sourceId: string;
+    correlationId: string;
+    remark?: string | null;
+  }) {
+    const { data, error } = await this.rpc("billing_unfreeze_credits", {
+      p_tenant_id: input.tenantId,
+      p_change_credits: input.credits,
+      p_event_type: input.eventType,
+      p_source_type: input.sourceType,
+      p_source_id: input.sourceId,
+      p_correlation_id: input.correlationId,
+      p_remark: input.remark || null,
+    });
+
+    if (error) {
+      throw Errors.dbError("释放租户冻结积分失败", error);
+    }
+
+    return data as {
+      account: BillingAccountBalance;
+      ledger: BillingLedgerRow | null;
+      idempotent?: boolean;
+    };
+  }
+
   async listPricingRules(query: BillingPricingRuleQuery) {
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,6 +17,7 @@ import type {
   TestSocialVideoTranscriptionInput,
 } from "@/schema/social-video";
 import { systemSettingsService } from "@/services/system-settings";
+import { billingService } from "@/services/billing";
 import { tencentAsrGateway } from "@/services/tencent-asr";
 
 type ApifyRunStatus = "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED-OUT" | "ABORTED";
@@ -168,6 +169,11 @@ function serializeRecord(record: SocialVideoTranscriptionRecord, cached = false)
       source: record.billing_source,
       cached: reusedCachedResult,
       billed_at: record.billed_at,
+      frozen_credits: record.billing_frozen_credits,
+      correlation_id: record.billing_correlation_id,
+      event_id: record.billing_event_id,
+      charged: record.billing_charged,
+      charged_at: record.billing_charged_at,
     },
     error_code: record.error_code,
     error_message: record.error_message,
@@ -226,6 +232,10 @@ function calculateBilling(input: {
     billingSource: input.source,
     billedAt: new Date().toISOString(),
   };
+}
+
+function isSocialVideoChargeEnabled() {
+  return String(process.env.SOCIAL_VIDEO_CHARGE_ENABLED || "").toLowerCase() === "true";
 }
 
 function normalizeTranscriptText(item: ApifyTranscriptItem) {
@@ -775,6 +785,12 @@ class SocialVideoTranscriptionService {
       };
     }
 
+    const chargeEnabled = isSocialVideoChargeEnabled();
+    if (chargeEnabled) {
+      await billingService.assertSocialVideoChargeAvailable({ tenantId });
+    }
+
+    const billingCorrelationId = chargeEnabled ? randomUUID() : null;
     const task = await socialVideoTranscriptionRepository.create({
       tenantId,
       platform: input.platform,
@@ -782,7 +798,38 @@ class SocialVideoTranscriptionService {
       normalizedUrl,
       inputHash,
       createdByAuthUserId: authContext.authUserId,
+      billingCorrelationId,
     });
+
+    if (chargeEnabled && billingCorrelationId) {
+      try {
+        const frozenCredits = await billingService.freezeSocialVideoTask({
+          taskId: task.id,
+          tenantId,
+          correlationId: billingCorrelationId,
+        });
+        const frozenTask = await socialVideoTranscriptionRepository.update(task.id, {
+          billingFrozenCredits: frozenCredits,
+        });
+        return {
+          ...serializeRecord(frozenTask),
+          cached: false,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "视频转文本预冻结积分失败";
+        const code = error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code || "TENANT_SOCIAL_VIDEO_FREEZE_FAILED")
+          : "TENANT_SOCIAL_VIDEO_FREEZE_FAILED";
+        await socialVideoTranscriptionRepository.update(task.id, {
+          status: "failed",
+          progress: 100,
+          errorCode: code,
+          errorMessage: message,
+          completedAt: new Date().toISOString(),
+        });
+        throw error;
+      }
+    }
 
     return {
       ...serializeRecord(task),
@@ -893,7 +940,7 @@ class SocialVideoTranscriptionService {
             durationSeconds,
             source: asrResult.provider,
           });
-          await socialVideoTranscriptionRepository.update(id, {
+          const completed = await socialVideoTranscriptionRepository.update(id, {
             status: "completed",
             progress: 100,
             provider: asrResult.provider,
@@ -914,6 +961,7 @@ class SocialVideoTranscriptionService {
             errorCode: null,
             errorMessage: null,
           });
+          await this.finalizeCompletedBilling(completed);
         } finally {
           await rm(tempDir, { recursive: true, force: true }).catch(() => {});
         }
@@ -931,7 +979,7 @@ class SocialVideoTranscriptionService {
         source: result.provider,
       });
 
-      await socialVideoTranscriptionRepository.update(id, {
+      const completed = await socialVideoTranscriptionRepository.update(id, {
         status: "completed",
         progress: 100,
         provider: result.provider,
@@ -951,7 +999,16 @@ class SocialVideoTranscriptionService {
         errorCode: null,
         errorMessage: null,
       });
+      await this.finalizeCompletedBilling(completed);
     } catch (error) {
+      let releasedFreeze = false;
+      if (isSocialVideoChargeEnabled()) {
+        const currentTask = await socialVideoTranscriptionRepository.findById(id);
+        const released = currentTask
+          ? await billingService.releaseSocialVideoTaskFreeze(currentTask).catch(() => null)
+          : null;
+        releasedFreeze = Boolean(released);
+      }
       const message = error instanceof Error ? error.message : "短视频识别失败";
       const code = error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code || "SOCIAL_VIDEO_TRANSCRIPTION_FAILED")
@@ -962,6 +1019,45 @@ class SocialVideoTranscriptionService {
         errorCode: code,
         errorMessage: message,
         completedAt: new Date().toISOString(),
+        ...(releasedFreeze ? { billingFrozenCredits: 0 } : {}),
+      });
+    }
+  }
+
+  private async finalizeCompletedBilling(record: SocialVideoTranscriptionRecord) {
+    if (!isSocialVideoChargeEnabled() || !record.billable || record.billing_charged) {
+      return;
+    }
+
+    try {
+      const result = await billingService.settleSocialVideoTask(record);
+      if (!result?.event) {
+        return;
+      }
+
+      const chargedAt = result.settled ? new Date().toISOString() : null;
+      const failedEvent = result.event.status === "failed";
+      await socialVideoTranscriptionRepository.update(record.id, {
+        billingEventId: result.event.id,
+        billingCharged: result.settled,
+        billingChargedAt: chargedAt,
+        billedAt: chargedAt || record.billed_at,
+        billingFrozenCredits: 0,
+        errorCode: failedEvent
+          ? result.event.failure_code || "TENANT_SOCIAL_VIDEO_BILLING_FAILED"
+          : record.error_code,
+        errorMessage: failedEvent
+          ? result.event.failure_message || "视频转文本扣费失败"
+          : record.error_message,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "视频转文本扣费失败";
+      const code = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code || "TENANT_SOCIAL_VIDEO_BILLING_FAILED")
+        : "TENANT_SOCIAL_VIDEO_BILLING_FAILED";
+      await socialVideoTranscriptionRepository.update(record.id, {
+        errorCode: code,
+        errorMessage: message,
       });
     }
   }
