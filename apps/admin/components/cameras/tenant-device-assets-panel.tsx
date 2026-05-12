@@ -6,6 +6,17 @@ import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreateTencentDeviceButton } from "@/components/cameras/tencent-device-actions";
 import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -207,18 +218,19 @@ function EditDeviceDialog({
 function DeleteDeviceButton({ asset }: { asset: TenantDeviceAsset }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const bound = Boolean(asset.bound_camera_id || asset.bound_project_id);
 
   function deleteAsset() {
     if (bound || pending) return;
-    if (!window.confirm("确认删除这个未绑定设备资产？")) return;
     setError("");
     startTransition(async () => {
       try {
         await requestBackend(`/tenant-devices/${asset.id}`, {
           method: "DELETE",
         });
+        setOpen(false);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "删除设备资产失败");
@@ -228,21 +240,46 @@ function DeleteDeviceButton({ asset }: { asset: TenantDeviceAsset }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={bound || pending}
-        onClick={deleteAsset}
-        title={bound ? "已绑定项目，请先解绑项目摄像头" : "删除设备资产"}
-      >
-        {pending ? (
-          <Loader2 className="animate-spin" data-icon="inline-start" />
-        ) : (
-          <Trash2 data-icon="inline-start" />
-        )}
-        删除
-      </Button>
+      <AlertDialog open={open} onOpenChange={(nextOpen) => !pending && setOpen(nextOpen)}>
+        <AlertDialogTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={bound || pending}
+            title={bound ? "已绑定项目，请先解绑项目摄像头" : "删除设备资产"}
+          >
+            {pending ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Trash2 data-icon="inline-start" />
+            )}
+            删除
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除设备资产</AlertDialogTitle>
+            <AlertDialogDescription>
+              确认删除「{assetDisplayName(asset)}」？删除后不会删除第三方云端设备，但需要重新纳入资产池后才能绑定项目。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                deleteAsset();
+              }}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {bound ? (
         <span className="text-xs text-muted-foreground">需先解绑</span>
       ) : null}
