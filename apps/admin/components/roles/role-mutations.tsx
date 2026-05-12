@@ -125,7 +125,6 @@ function RoleDialog({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const code = String(formData.get("code") || "").trim();
     const name = String(formData.get("name") || "").trim();
     const description = String(formData.get("description") || "").trim();
 
@@ -138,7 +137,6 @@ function RoleDialog({
             method: role?.id ? "PATCH" : "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              code,
               name,
               description: description || null,
               status,
@@ -166,24 +164,16 @@ function RoleDialog({
               <DialogDescription>
                 角色用于承载一组权限点，再分配给员工。
               </DialogDescription>
+              {mode === "edit" && defaults.code ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  系统编码：{defaults.code}
+                </div>
+              ) : null}
             </div>
           </div>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor={`${mode}-role-code`}>角色编码</FieldLabel>
-              <Input
-                id={`${mode}-role-code`}
-                name="code"
-                defaultValue={defaults.code}
-                placeholder="例如 finance_manager"
-                minLength={2}
-                maxLength={100}
-                required
-                disabled={pending || mode === "edit"}
-              />
-            </Field>
             <Field>
               <FieldLabel htmlFor={`${mode}-role-name`}>角色名称</FieldLabel>
               <Input

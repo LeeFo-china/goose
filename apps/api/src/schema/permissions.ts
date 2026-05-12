@@ -69,13 +69,19 @@ export const RoleBaseSchema = z.object({
   updated_at: z.string().datetime("无效的时间格式").optional(),
 });
 
-export const CreateRoleSchema = RoleBaseSchema.omit({
+const RoleMutationSchema = RoleBaseSchema.omit({
   id: true,
   created_at: true,
   updated_at: true,
 });
 
-export const UpdateRoleSchema = CreateRoleSchema.partial();
+export const CreateRoleSchema = RoleMutationSchema.extend({
+  code: RoleBaseSchema.shape.code.optional(),
+});
+
+export const UpdateRoleSchema = RoleMutationSchema.omit({
+  code: true,
+}).partial();
 
 export const PermissionBaseSchema = z.object({
   id: z.uuid("无效的权限 ID").optional(),

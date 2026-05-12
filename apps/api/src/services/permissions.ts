@@ -14,8 +14,13 @@ import type {
 import { authorizationService } from "@/services/authorization";
 import type { AuthContext } from "@/services/authorization";
 import { PermissionCodeConfig } from "@gooes/domain";
+import { randomUUID } from "node:crypto";
 
 class PermissionService {
+  private generateRoleCode() {
+    return `role_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  }
+
   private requireTenantRoleContext(authContext: AuthContext) {
     if (!authContext.tenantId) {
       throw Errors.business(
@@ -51,8 +56,11 @@ class PermissionService {
 
   async createRole(input: CreateRoleInput, authContext: AuthContext) {
     const tenantId = this.requireTenantRoleContext(authContext);
+    const code = input.code?.trim() || this.generateRoleCode();
+
     return permissionRepository.createRole({
       ...input,
+      code,
       tenant_id: tenantId,
     });
   }
