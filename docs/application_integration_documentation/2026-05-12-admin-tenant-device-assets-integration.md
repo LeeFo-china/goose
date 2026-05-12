@@ -1,0 +1,114 @@
+# Admin 租户设备资产对接说明
+
+日期：2026-05-12
+
+## 范围
+
+工地监控页对接 `tenant_devices`，让租户先管理自己的设备资产，再把未绑定资产绑定到项目摄像头。
+
+## 页面行为
+
+### 设备资产区
+
+接口：
+
+```http
+GET /tenant-devices?page=1&pageSize=100
+```
+
+用途：
+
+- 展示当前租户设备资产。
+- 支持编辑本地设备名称、通道名称、设备类型。
+- 支持删除未绑定资产。
+- 已绑定资产不能删除，需要先解绑项目摄像头。
+
+编辑接口：
+
+```http
+PATCH /tenant-devices/:id
+```
+
+删除接口：
+
+```http
+DELETE /tenant-devices/:id
+```
+
+### 第三方通道纳入资产
+
+腾讯云/萤石第三方通道列表保留，但不再作为绑定弹窗的直接候选。
+
+未绑定第三方通道显示“纳入资产”：
+
+```http
+POST /tenant-devices
+```
+
+萤石示例：
+
+```json
+{
+  "vendor": "ezviz",
+  "vendor_device_serial": "EZVIZ_SERIAL",
+  "vendor_device_name": "设备名",
+  "vendor_channel_name": "通道名",
+  "source_project_id": "项目ID",
+  "status": "online",
+  "metadata": {
+    "channel_no": 1,
+    "raw_status": 1,
+    "video_encrypted": false
+  }
+}
+```
+
+腾讯云示例：
+
+```json
+{
+  "vendor": "tencent_iotvideo_industry",
+  "vendor_device_serial": "DeviceId",
+  "vendor_device_code": "DeviceCode",
+  "vendor_device_name": "设备名",
+  "vendor_channel_id": "ChannelId",
+  "vendor_channel_code": "ChannelCode",
+  "vendor_channel_name": "通道名",
+  "source_project_id": "项目ID",
+  "status": "online"
+}
+```
+
+### 绑定摄像头弹窗
+
+绑定弹窗不再直接请求：
+
+```http
+GET /projects/:project_id/cameras/ezviz-devices?only_unbound=true
+GET /projects/:project_id/cameras/tencent-devices?only_unbound=true
+```
+
+而是请求：
+
+```http
+GET /tenant-devices?only_unbound=true&page=1&pageSize=100
+```
+
+只展示当前租户资产池中未绑定的设备通道。
+
+## 交互顺序
+
+1. 用户进入工地监控页。
+2. 查看“租户设备资产”。
+3. 如果第三方通道还没有资产，先在腾讯云/萤石通道列表点击“纳入资产”。
+4. 点击“绑定摄像头”。
+5. 选择项目。
+6. 从未绑定资产中选择设备通道。
+7. 提交绑定。
+
+## 注意事项
+
+- Admin 不允许前端传 `tenant_id`。
+- 删除设备资产是软删除，不删除第三方远端设备。
+- 已绑定资产必须先解绑项目摄像头后才能删除。
+- 腾讯云设备级资产如果没有 `vendor_channel_id`，不会进入绑定候选；需要通道上报后纳入通道资产。

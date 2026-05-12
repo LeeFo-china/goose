@@ -132,6 +132,7 @@ export type TenantDeviceAsset = {
   bound_camera_id: string | null;
   status: "online" | "offline" | "unknown" | string;
   raw_status: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };

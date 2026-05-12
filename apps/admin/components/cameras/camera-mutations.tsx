@@ -40,8 +40,7 @@ import type {
   CameraDeviceChannel,
   CameraProjectOption,
   CameraRecord,
-  EzvizDeviceChannel,
-  TencentDeviceChannel,
+  TenantDeviceAsset,
 } from "@/components/cameras/camera-types";
 
 type CameraMode = "create" | "edit";
@@ -81,12 +80,8 @@ type CameraBindProjectOptionsData = {
   list?: CameraProjectOption[];
 };
 
-type EzvizDeviceListData = {
-  list?: EzvizDeviceChannel[];
-};
-
-type TencentDeviceListData = {
-  list?: TencentDeviceChannel[];
+type TenantDeviceListData = {
+  list?: TenantDeviceAsset[];
 };
 
 const CAMERA_CAPABILITY_VALUES = [
@@ -196,20 +191,74 @@ function getProjectOptionDescription(project: CameraProjectOption) {
   return parts.join(" · ");
 }
 
-function withVendorDevices(input: {
-  ezviz?: EzvizDeviceChannel[];
-  tencent?: TencentDeviceChannel[];
-}) {
-  return [
-    ...(input.ezviz || []).map((device) => ({
-      ...device,
-      vendor: "ezviz" as const,
-    })),
-    ...(input.tencent || []).map((device) => ({
-      ...device,
-      vendor: "tencent_iotvideo_industry" as const,
-    })),
-  ];
+function readAssetChannelNo(asset: TenantDeviceAsset) {
+  const value = asset.metadata && typeof asset.metadata === "object"
+    ? (asset.metadata as { channel_no?: unknown }).channel_no
+    : null;
+  const channelNo = Number(value || 1);
+  return Number.isInteger(channelNo) && channelNo > 0 ? channelNo : 1;
+}
+
+function assetToDeviceChannel(asset: TenantDeviceAsset): CameraDeviceChannel | null {
+  if (asset.bound_camera_id) return null;
+
+  if (asset.vendor === "tencent_iotvideo_industry") {
+    if (!asset.vendor_channel_id) return null;
+
+    return {
+      vendor: "tencent_iotvideo_industry",
+      device_id: asset.vendor_device_serial,
+      device_code: asset.vendor_device_code,
+      device_name: asset.vendor_device_name,
+      device_type: null,
+      device_type_label: asset.device_type,
+      channel_id: asset.vendor_channel_id,
+      channel_code: asset.vendor_channel_code,
+      channel_name: asset.vendor_channel_name,
+      channel_type: null,
+      status: asset.status,
+      raw_status: asset.raw_status,
+      protocol: null,
+      group_id: null,
+      group_name: null,
+      is_bound: false,
+      is_bound_to_current_project: false,
+      bound_project_id: null,
+      bound_project_name: null,
+      bound_camera_id: null,
+      bound_camera_name: null,
+      can_bind: true,
+    };
+  }
+
+  if (asset.vendor === "ezviz") {
+    return {
+      vendor: "ezviz",
+      device_name: asset.vendor_device_name,
+      device_serial: asset.vendor_device_serial,
+      channel_no: readAssetChannelNo(asset),
+      channel_name: asset.vendor_channel_name,
+      status: asset.status,
+      raw_status: asset.raw_status,
+      video_encrypted: false,
+      cover_url: null,
+      is_bound: false,
+      is_bound_to_current_project: false,
+      bound_project_id: null,
+      bound_project_name: null,
+      bound_camera_id: null,
+      bound_camera_name: null,
+      can_bind: true,
+    };
+  }
+
+  return null;
+}
+
+function tenantAssetsToDevices(assets: TenantDeviceAsset[]) {
+  return assets
+    .map(assetToDeviceChannel)
+    .filter((device): device is CameraDeviceChannel => Boolean(device));
 }
 
 function buildDeviceKey(device: CameraDeviceChannel) {
@@ -495,20 +544,12 @@ function CameraDialog({
     let disposed = false;
     setDeviceLoading(true);
     setError("");
-    Promise.all([
-      requestCamera({
-        path: `/projects/${selectedProjectId}/cameras/ezviz-devices?only_unbound=true`,
-      }),
-      requestCamera({
-        path: `/projects/${selectedProjectId}/cameras/tencent-devices?only_unbound=true`,
-      }),
-    ])
-      .then(([ezvizData, tencentData]: [EzvizDeviceListData, TencentDeviceListData]) => {
+    requestCamera({
+      path: "/tenant-devices?only_unbound=true&page=1&pageSize=100",
+    })
+      .then((data: TenantDeviceListData) => {
         if (disposed) return;
-        const nextDevices = withVendorDevices({
-          ezviz: ezvizData?.list || [],
-          tencent: tencentData?.list || [],
-        });
+        const nextDevices = tenantAssetsToDevices(data?.list || []);
         const nextKeys: Record<CameraFormValues["vendor"], string> = {
           ezviz: "",
           tencent_iotvideo_industry: "",
@@ -537,7 +578,7 @@ function CameraDialog({
       .catch((err) => {
         if (!disposed) {
           setCreateDevices([]);
-          setError(err instanceof Error ? err.message : "设备通道加载失败");
+          setError(err instanceof Error ? err.message : "租户设备资产加载失败");
         }
       })
       .finally(() => {
@@ -774,10 +815,10 @@ function CameraDialog({
                     />
                     <FieldDescription>
                       {deviceLoading
-                        ? "正在按所选房产项目加载可绑定设备通道。"
+                        ? "正在加载当前租户未绑定设备资产。"
                         : activeProjectId
-                          ? "只展示当前厂商下未绑定到任何项目的设备通道。"
-                          : "选择房产项目后才会加载可绑定设备通道。"}
+                          ? "只展示当前租户资产池中未绑定到项目的设备通道。"
+                          : "选择房产项目后才会加载可绑定设备资产。"}
                     </FieldDescription>
                     <FieldError errors={[fieldState.error]} />
                   </Field>

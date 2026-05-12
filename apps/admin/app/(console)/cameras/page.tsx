@@ -10,6 +10,7 @@ import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
 import { TencentDeviceChannelTree } from "@/components/cameras/tencent-device-channel-tree";
+import { ImportTenantDeviceButton } from "@/components/cameras/tenant-device-import-actions";
 import { TenantDeviceAssetsPanel } from "@/components/cameras/tenant-device-assets-panel";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import {
@@ -657,7 +658,25 @@ export default async function CamerasPage({
                                   </div>
                                 </div>
                               ) : (
-                                <Badge variant="outline">可绑定</Badge>
+                                <div className="flex flex-col items-start gap-2">
+                                  <Badge variant="outline">可纳入</Badge>
+                                  <ImportTenantDeviceButton
+                                    projectId={selectedProjectId}
+                                    payload={{
+                                      vendor: "ezviz",
+                                      vendor_device_serial: device.device_serial,
+                                      vendor_device_name: device.device_name,
+                                      vendor_channel_name: device.channel_name,
+                                      status: device.status || "unknown",
+                                      metadata: {
+                                        channel_no: device.channel_no,
+                                        raw_status: device.raw_status,
+                                        video_encrypted: device.video_encrypted,
+                                        cover_url: device.cover_url,
+                                      },
+                                    }}
+                                  />
+                                </div>
                               )}
                             </td>
                           </tr>
