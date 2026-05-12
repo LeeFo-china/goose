@@ -3,10 +3,12 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantDeviceSchema,
+  PlatformTenantDeviceListQuerySchema,
   TenantDeviceListQuerySchema,
   TenantDeviceParamsSchema,
   UpdateTenantDeviceSchema,
 } from "@/schema/tenant-devices";
+import { authorizationService } from "@/services/authorization";
 import { tenantDeviceService } from "@/services/tenant-devices";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -25,6 +27,20 @@ class TenantDeviceController extends BaseController {
       authUserId: request.user?.sub,
       query: queryResult.data,
     });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/platform/tenant-devices")
+  async listPlatformTenantDevices(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = PlatformTenantDeviceListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await tenantDeviceService.listPlatformTenantDevices(
+      queryResult.data,
+      authContext,
+    );
 
     return ResponseHandler.success(result);
   }

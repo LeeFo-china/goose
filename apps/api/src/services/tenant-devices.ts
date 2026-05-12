@@ -4,11 +4,12 @@ import { projectCameraRepository } from "@/repositories/project-cameras";
 import { tenantDeviceRepository } from "@/repositories/tenant-devices";
 import type {
   CreateTenantDeviceInput,
+  PlatformTenantDeviceListQueryInput,
   TenantDeviceListQueryInput,
   UpdateTenantDeviceInput,
 } from "@/schema/tenant-devices";
 import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
 import { ezvizDeviceService } from "@/services/ezviz";
 import { tencentIotVideoService } from "@/services/tencent-iot-video";
 
@@ -49,6 +50,14 @@ class TenantDeviceService {
       ...input.query,
       tenantId,
     });
+  }
+
+  async listPlatformTenantDevices(
+    query: PlatformTenantDeviceListQueryInput,
+    authContext: AuthContext,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    return tenantDeviceRepository.listPlatform(query);
   }
 
   async getTenantDevice(input: {
@@ -240,6 +249,12 @@ class TenantDeviceService {
       updated_count: updatedCount,
       total_count: createdCount + updatedCount,
     };
+  }
+
+  private assertPlatformAdmin(authContext: AuthContext) {
+    if (!authContext.isPlatformAdmin) {
+      throw Errors.forbidden();
+    }
   }
 }
 

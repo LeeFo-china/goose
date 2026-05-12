@@ -206,6 +206,44 @@ apps/api/src/services/tenant-devices.ts
 - 校验项目租户。
 - 统一做设备资产归属判断。
 - 处理第三方设备和本地资产的合并展示。
+- 平台超管可按租户、厂商、状态、绑定状态检索全量设备资产。
+
+### 平台设备资产视图
+
+新增平台超管接口：
+
+```http
+GET /platform/tenant-devices?page=1&pageSize=20
+```
+
+支持参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `tenant_id` | 按租户过滤 |
+| `vendor` | 按厂商过滤：`ezviz` / `tencent_iotvideo_industry` |
+| `status` | 按设备状态过滤：`online` / `offline` / `unknown` |
+| `only_unbound` | 仅看未绑定项目摄像头的资产 |
+| `keyword` | 搜索设备名、设备 ID、通道 ID |
+
+返回中补充租户、来源项目、绑定项目、绑定摄像头的轻量信息，便于平台排查设备归属：
+
+```json
+{
+  "tenant": { "id": "租户ID", "name": "装修公司", "slug": "tenant-slug" },
+  "source_project": { "id": "项目ID", "name": "来源项目" },
+  "bound_project": { "id": "项目ID", "name": "当前绑定项目" },
+  "bound_camera": { "id": "摄像头ID", "name": "当前摄像头" }
+}
+```
+
+Admin 新增页面：
+
+```text
+/platform/devices
+```
+
+用于查看全平台设备资产归属，不提供编辑和删除操作。租户侧仍在工地监控页维护自己的设备资产池。
 
 ### 腾讯云创建设备
 

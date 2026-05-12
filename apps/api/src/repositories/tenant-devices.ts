@@ -4,6 +4,7 @@ import type { ProjectCameraRow } from "@/repositories/project-cameras";
 import type { ProjectCameraVendor } from "@/schema/project-cameras";
 import type {
   CreateTenantDeviceInput,
+  PlatformTenantDeviceListQueryInput,
   TenantDeviceListQueryInput,
   TenantDeviceStatus,
   UpdateTenantDeviceInput,
@@ -33,6 +34,30 @@ export type TenantDeviceRow = {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type TenantDeviceTenantLite = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  status: string | null;
+};
+
+export type TenantDeviceProjectLite = {
+  id: string;
+  name: string | null;
+};
+
+export type TenantDeviceCameraLite = {
+  id: string;
+  name: string | null;
+};
+
+export type PlatformTenantDeviceRow = TenantDeviceRow & {
+  tenant: TenantDeviceTenantLite | null;
+  source_project: TenantDeviceProjectLite | null;
+  bound_project: TenantDeviceProjectLite | null;
+  bound_camera: TenantDeviceCameraLite | null;
 };
 
 class TenantDeviceRepository {
@@ -87,6 +112,61 @@ class TenantDeviceRepository {
         pageSize,
         total: count || 0,
         totalPages: count ? Math.ceil(count / pageSize) : 0,
+      },
+    };
+  }
+
+  async listPlatform(input: PlatformTenantDeviceListQueryInput) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    let query = this.applyListFilters(
+      this.adminClient
+        .from("tenant_devices")
+        .select("*", { count: "exact" })
+        .is("deleted_at", null)
+        .order("updated_at", { ascending: false }),
+      input,
+    );
+
+    if (input.tenant_id) {
+      query = query.eq("tenant_id", input.tenant_id);
+    }
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) {
+      throw Errors.dbError("查询平台设备资产失败", error);
+    }
+
+    const rows = (data || []) as TenantDeviceRow[];
+    const [tenantMap, projectMap, cameraMap] = await Promise.all([
+      this.findTenants(rows.map((item) => item.tenant_id)),
+      this.findProjects(rows.flatMap((item) => [
+        item.source_project_id,
+        item.bound_project_id,
+      ])),
+      this.findCameras(rows.map((item) => item.bound_camera_id)),
+    ]);
+
+    return {
+      list: rows.map((item): PlatformTenantDeviceRow => ({
+        ...item,
+        tenant: tenantMap.get(item.tenant_id) ?? null,
+        source_project: item.source_project_id
+          ? projectMap.get(item.source_project_id) ?? null
+          : null,
+        bound_project: item.bound_project_id
+          ? projectMap.get(item.bound_project_id) ?? null
+          : null,
+        bound_camera: item.bound_camera_id
+          ? cameraMap.get(item.bound_camera_id) ?? null
+          : null,
+      })),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / input.pageSize) : 0,
       },
     };
   }
@@ -266,6 +346,95 @@ class TenantDeviceRepository {
     }
 
     return { device: data as TenantDeviceRow, created: true };
+  }
+
+  private applyListFilters(query: any, input: TenantDeviceListQueryInput) {
+    const keyword = input.keyword?.trim();
+    let request = query;
+
+    if (input.vendor) {
+      request = request.eq("vendor", input.vendor);
+    }
+    if (input.status) {
+      request = request.eq("status", input.status);
+    }
+    if (input.only_unbound) {
+      request = request.is("bound_camera_id", null);
+    }
+    if (keyword) {
+      const safeKeyword = keyword.replace(/[%,()]/g, " ").replace(/\s+/g, " ");
+      request = request.or([
+        `vendor_device_serial.ilike.%${safeKeyword}%`,
+        `vendor_device_code.ilike.%${safeKeyword}%`,
+        `vendor_device_name.ilike.%${safeKeyword}%`,
+        `vendor_channel_id.ilike.%${safeKeyword}%`,
+        `vendor_channel_code.ilike.%${safeKeyword}%`,
+        `vendor_channel_name.ilike.%${safeKeyword}%`,
+      ].join(","));
+    }
+
+    return request;
+  }
+
+  private uniqueIds(ids: Array<string | null | undefined>) {
+    return Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
+  }
+
+  private async findTenants(ids: Array<string | null | undefined>) {
+    const uniqueIds = this.uniqueIds(ids);
+    if (uniqueIds.length === 0) return new Map<string, TenantDeviceTenantLite>();
+
+    const { data, error } = await this.adminClient
+      .from("tenants")
+      .select("id,name,slug,status")
+      .in("id", uniqueIds);
+
+    if (error) {
+      throw Errors.dbError("查询设备资产租户失败", error);
+    }
+
+    return new Map((data || []).map((item) => [
+      item.id,
+      item as TenantDeviceTenantLite,
+    ]));
+  }
+
+  private async findProjects(ids: Array<string | null | undefined>) {
+    const uniqueIds = this.uniqueIds(ids);
+    if (uniqueIds.length === 0) return new Map<string, TenantDeviceProjectLite>();
+
+    const { data, error } = await this.adminClient
+      .from("projects")
+      .select("id,name")
+      .in("id", uniqueIds);
+
+    if (error) {
+      throw Errors.dbError("查询设备资产项目失败", error);
+    }
+
+    return new Map((data || []).map((item) => [
+      item.id,
+      item as TenantDeviceProjectLite,
+    ]));
+  }
+
+  private async findCameras(ids: Array<string | null | undefined>) {
+    const uniqueIds = this.uniqueIds(ids);
+    if (uniqueIds.length === 0) return new Map<string, TenantDeviceCameraLite>();
+
+    const { data, error } = await this.adminClient
+      .from("project_cameras")
+      .select("id,name")
+      .in("id", uniqueIds);
+
+    if (error) {
+      throw Errors.dbError("查询设备资产摄像头失败", error);
+    }
+
+    return new Map((data || []).map((item) => [
+      item.id,
+      item as TenantDeviceCameraLite,
+    ]));
   }
 
   async upsertFromProjectCamera(camera: ProjectCameraRow, actorEmployeeId?: string | null) {

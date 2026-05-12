@@ -37,6 +37,10 @@ export const TenantDeviceListQuerySchema = z.object({
     .default(20),
 });
 
+export const PlatformTenantDeviceListQuerySchema = TenantDeviceListQuerySchema.extend({
+  tenant_id: z.uuid("无效的租户 ID").optional(),
+});
+
 export const TenantDeviceParamsSchema = z.object({
   id: z.uuid("无效的设备资产 ID"),
 });
@@ -72,6 +76,7 @@ export const UpdateTenantDeviceSchema = z.object({
 });
 
 export type TenantDeviceListQueryInput = z.infer<typeof TenantDeviceListQuerySchema>;
+export type PlatformTenantDeviceListQueryInput = z.infer<typeof PlatformTenantDeviceListQuerySchema>;
 export type CreateTenantDeviceInput = z.infer<typeof CreateTenantDeviceSchema>;
 export type UpdateTenantDeviceInput = z.infer<typeof UpdateTenantDeviceSchema>;
 export type TenantDeviceStatus = (typeof TenantDeviceStatusValues)[number];
