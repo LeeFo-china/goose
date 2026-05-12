@@ -3,6 +3,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantDeviceSchema,
+  PlatformTencentDeviceListQuerySchema,
   PlatformTenantDeviceListQuerySchema,
   TenantDeviceListQuerySchema,
   TenantDeviceParamsSchema,
@@ -38,6 +39,20 @@ class TenantDeviceController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const result = await tenantDeviceService.listPlatformTenantDevices(
+      queryResult.data,
+      authContext,
+    );
+
+    return ResponseHandler.success(result);
+  }
+
+  @Get("/platform/tencent-devices")
+  async listPlatformTencentDevices(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = PlatformTencentDeviceListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await tenantDeviceService.listPlatformTencentDevices(
       queryResult.data,
       authContext,
     );

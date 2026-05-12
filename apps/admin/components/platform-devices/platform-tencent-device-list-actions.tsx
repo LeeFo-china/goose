@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { buildPlatformDevicesHref } from "@/components/platform-devices/platform-device-href";
+import {
+  platformDeviceStatusOptions,
+  type Pagination,
+} from "@/components/platform-devices/platform-device-types";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -12,63 +16,37 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import {
-  platformDeviceStatusOptions,
-  platformDeviceVendorOptions,
-  type Pagination,
-} from "@/components/platform-devices/platform-device-types";
-
-const vendorOptions = [
-  { value: "__all", label: "全部厂商" },
-  ...platformDeviceVendorOptions,
-] as const;
 
 const statusOptions = [
   { value: "__all", label: "全部状态" },
   ...platformDeviceStatusOptions,
 ] as const;
 
-const boundOptions = [
-  { value: "__all", label: "全部绑定" },
-  { value: "true", label: "仅未绑定" },
-] as const;
-
-export function PlatformDeviceFilters({
-  vendor,
+export function PlatformTencentDeviceFilters({
   status,
-  onlyUnbound,
   keyword,
 }: {
-  vendor: string;
   status: string;
-  onlyUnbound: boolean;
   keyword: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [selectedVendor, setSelectedVendor] = useState(vendor || "__all");
   const [selectedStatus, setSelectedStatus] = useState(status || "__all");
-  const [selectedBound, setSelectedBound] = useState(onlyUnbound ? "true" : "__all");
   const [selectedKeyword, setSelectedKeyword] = useState(keyword);
 
   useEffect(() => {
-    setSelectedVendor(vendor || "__all");
     setSelectedStatus(status || "__all");
-    setSelectedBound(onlyUnbound ? "true" : "__all");
     setSelectedKeyword(keyword);
-  }, [keyword, onlyUnbound, status, vendor]);
+  }, [keyword, status]);
 
   function navigate(next: {
-    vendor?: string;
     status?: string;
-    onlyUnbound?: string;
     keyword?: string;
   }) {
     startTransition(() => {
       router.push(buildPlatformDevicesHref({
-        vendor: next.vendor ?? selectedVendor,
+        tab: "tencent",
         status: next.status ?? selectedStatus,
-        onlyUnbound: next.onlyUnbound ?? selectedBound,
         keyword: next.keyword ?? selectedKeyword.trim(),
       }));
       router.refresh();
@@ -81,35 +59,15 @@ export function PlatformDeviceFilters({
   }
 
   return (
-    <form className="grid gap-3 md:grid-cols-[150px_150px_150px_1fr_72px]" onSubmit={submit}>
+    <form className="grid gap-3 md:grid-cols-[150px_1fr_72px]" onSubmit={submit}>
       <FormSelect
-        id="platform-device-vendor-filter"
-        value={selectedVendor}
-        options={vendorOptions}
-        disabled={pending}
-        onChange={(value) => {
-          setSelectedVendor(value);
-          navigate({ vendor: value });
-        }}
-      />
-      <FormSelect
-        id="platform-device-status-filter"
+        id="platform-tencent-device-status-filter"
         value={selectedStatus}
         options={statusOptions}
         disabled={pending}
         onChange={(value) => {
           setSelectedStatus(value);
           navigate({ status: value });
-        }}
-      />
-      <FormSelect
-        id="platform-device-bound-filter"
-        value={selectedBound}
-        options={boundOptions}
-        disabled={pending}
-        onChange={(value) => {
-          setSelectedBound(value);
-          navigate({ onlyUnbound: value });
         }}
       />
       <InputGroup>
@@ -119,7 +77,7 @@ export function PlatformDeviceFilters({
         <InputGroupInput
           name="keyword"
           value={selectedKeyword}
-          placeholder="搜索设备名、设备 ID、通道 ID"
+          placeholder="搜索设备名、DeviceId、DeviceCode"
           disabled={pending}
           onChange={(event) => setSelectedKeyword(event.target.value)}
         />
@@ -147,17 +105,13 @@ export function PlatformDeviceFilters({
   );
 }
 
-export function PlatformDevicePagination({
+export function PlatformTencentDevicePagination({
   pagination,
-  vendor,
   status,
-  onlyUnbound,
   keyword,
 }: {
   pagination: Pagination;
-  vendor: string;
   status: string;
-  onlyUnbound: boolean;
   keyword: string;
 }) {
   const router = useRouter();
@@ -169,10 +123,9 @@ export function PlatformDevicePagination({
   function navigate(page: number) {
     startTransition(() => {
       router.push(buildPlatformDevicesHref({
+        tab: "tencent",
         page,
-        vendor,
         status,
-        onlyUnbound: onlyUnbound ? "true" : "__all",
         keyword,
       }));
       router.refresh();
@@ -182,7 +135,7 @@ export function PlatformDevicePagination({
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="text-sm text-muted-foreground">
-        第 {pagination.page} / {totalPages} 页，共 {pagination.total} 个设备资产
+        第 {pagination.page} / {totalPages} 页，共 {pagination.total} 台腾讯云设备
       </div>
       <div className="flex gap-2">
         <Button

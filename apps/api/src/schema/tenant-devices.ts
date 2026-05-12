@@ -41,6 +41,20 @@ export const PlatformTenantDeviceListQuerySchema = TenantDeviceListQuerySchema.e
   tenant_id: z.uuid("无效的租户 ID").optional(),
 });
 
+export const PlatformTencentDeviceListQuerySchema = z.object({
+  status: z.enum(TenantDeviceStatusValues, {
+    message: "无效的设备状态",
+  }).optional(),
+  keyword: z.string().trim().max(100, "关键词过长").optional(),
+  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0").default(1),
+  pageSize: z.coerce
+    .number()
+    .int("每页数量必须是整数")
+    .min(1, "每页数量必须大于 0")
+    .max(100, "每页最多 100 条")
+    .default(20),
+});
+
 export const TenantDeviceParamsSchema = z.object({
   id: z.uuid("无效的设备资产 ID"),
 });
@@ -77,6 +91,7 @@ export const UpdateTenantDeviceSchema = z.object({
 
 export type TenantDeviceListQueryInput = z.infer<typeof TenantDeviceListQuerySchema>;
 export type PlatformTenantDeviceListQueryInput = z.infer<typeof PlatformTenantDeviceListQuerySchema>;
+export type PlatformTencentDeviceListQueryInput = z.infer<typeof PlatformTencentDeviceListQuerySchema>;
 export type CreateTenantDeviceInput = z.infer<typeof CreateTenantDeviceSchema>;
 export type UpdateTenantDeviceInput = z.infer<typeof UpdateTenantDeviceSchema>;
 export type TenantDeviceStatus = (typeof TenantDeviceStatusValues)[number];

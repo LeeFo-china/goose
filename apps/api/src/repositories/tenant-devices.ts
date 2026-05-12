@@ -139,29 +139,9 @@ class TenantDeviceRepository {
     }
 
     const rows = (data || []) as TenantDeviceRow[];
-    const [tenantMap, projectMap, cameraMap] = await Promise.all([
-      this.findTenants(rows.map((item) => item.tenant_id)),
-      this.findProjects(rows.flatMap((item) => [
-        item.source_project_id,
-        item.bound_project_id,
-      ])),
-      this.findCameras(rows.map((item) => item.bound_camera_id)),
-    ]);
 
     return {
-      list: rows.map((item): PlatformTenantDeviceRow => ({
-        ...item,
-        tenant: tenantMap.get(item.tenant_id) ?? null,
-        source_project: item.source_project_id
-          ? projectMap.get(item.source_project_id) ?? null
-          : null,
-        bound_project: item.bound_project_id
-          ? projectMap.get(item.bound_project_id) ?? null
-          : null,
-        bound_camera: item.bound_camera_id
-          ? cameraMap.get(item.bound_camera_id) ?? null
-          : null,
-      })),
+      list: await this.hydratePlatformRows(rows),
       pagination: {
         page: input.page,
         pageSize: input.pageSize,
@@ -246,6 +226,31 @@ class TenantDeviceRepository {
     }
 
     return (data || []) as TenantDeviceRow[];
+  }
+
+  async hydratePlatformRows(rows: TenantDeviceRow[]) {
+    const [tenantMap, projectMap, cameraMap] = await Promise.all([
+      this.findTenants(rows.map((item) => item.tenant_id)),
+      this.findProjects(rows.flatMap((item) => [
+        item.source_project_id,
+        item.bound_project_id,
+      ])),
+      this.findCameras(rows.map((item) => item.bound_camera_id)),
+    ]);
+
+    return rows.map((item): PlatformTenantDeviceRow => ({
+      ...item,
+      tenant: tenantMap.get(item.tenant_id) ?? null,
+      source_project: item.source_project_id
+        ? projectMap.get(item.source_project_id) ?? null
+        : null,
+      bound_project: item.bound_project_id
+        ? projectMap.get(item.bound_project_id) ?? null
+        : null,
+      bound_camera: item.bound_camera_id
+        ? cameraMap.get(item.bound_camera_id) ?? null
+        : null,
+    }));
   }
 
   async create(input: CreateTenantDeviceInput & {

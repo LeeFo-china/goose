@@ -52,6 +52,55 @@ export type PlatformDeviceListData = {
   pagination: Pagination;
 };
 
+export type PlatformDevicesTabValue = "ownership" | "tencent";
+
+export type PlatformTencentDeviceTenant = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+};
+
+export type PlatformTencentDeviceChannel = {
+  channel_id: string;
+  channel_code: string | null;
+  channel_name: string;
+  channel_type: number | null;
+  status: "online" | "offline" | "unknown" | string;
+  raw_status: string | number | null;
+  tenant_device_id: string | null;
+  tenant_id: string | null;
+  tenant_name: string | null;
+  tenant_slug: string | null;
+  bound_project_id: string | null;
+  bound_project_name: string | null;
+  bound_camera_id: string | null;
+  bound_camera_name: string | null;
+};
+
+export type PlatformTencentDeviceRecord = {
+  device_id: string;
+  device_code: string | null;
+  device_name: string | null;
+  device_type: number | null;
+  device_type_label: string | null;
+  status: "online" | "offline" | "unknown" | string;
+  raw_status: string | number | null;
+  protocol: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  channel_count: number;
+  claimed_channel_count: number;
+  unclaimed_channel_count: number;
+  bound_channel_count: number;
+  tenants: PlatformTencentDeviceTenant[];
+  channels: PlatformTencentDeviceChannel[];
+};
+
+export type PlatformTencentDeviceListData = {
+  list: PlatformTencentDeviceRecord[];
+  pagination: Pagination;
+};
+
 export type PlatformTencentDeviceAccessInfo = {
   device: {
     tenant_device_id: string;

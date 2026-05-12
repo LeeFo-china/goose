@@ -1,9 +1,16 @@
 import { redirect } from "next/navigation";
+import { buildPlatformDevicesHref } from "@/components/platform-devices/platform-device-href";
+import { PlatformDeviceTabsNav } from "@/components/platform-devices/platform-device-tabs-nav";
 import {
   PlatformDeviceFilters,
   PlatformDevicePagination,
 } from "@/components/platform-devices/platform-device-list-actions";
 import { PlatformDevicesTable } from "@/components/platform-devices/platform-devices-table";
+import {
+  PlatformTencentDeviceFilters,
+  PlatformTencentDevicePagination,
+} from "@/components/platform-devices/platform-tencent-device-list-actions";
+import { PlatformTencentDevicesTable } from "@/components/platform-devices/platform-tencent-devices-table";
 import {
   getPlatformDeviceStatusMeta,
   getPlatformDeviceVendorLabel,
@@ -11,10 +18,14 @@ import {
   platformDeviceVendorOptions,
   type PlatformDeviceListData,
   type PlatformDeviceRecord,
+  type PlatformDevicesTabValue,
+  type PlatformTencentDeviceListData,
+  type PlatformTencentDeviceRecord,
 } from "@/components/platform-devices/platform-device-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -22,6 +33,7 @@ const DEVICE_VENDORS = platformDeviceVendorOptions.map((item) => item.value);
 const DEVICE_STATUSES = platformDeviceStatusOptions.map((item) => item.value);
 
 type SearchParams = Promise<{
+  tab?: string;
   page?: string;
   vendor?: string;
   status?: string;
@@ -46,7 +58,11 @@ function readBoolean(value: string | undefined) {
   return value === "true" || value === "1";
 }
 
-function buildDeviceQuery(params: {
+function readTab(value: string | undefined): PlatformDevicesTabValue {
+  return value === "tencent" ? "tencent" : "ownership";
+}
+
+function buildOwnershipQuery(params: {
   page: number;
   vendor: string;
   status: string;
@@ -59,6 +75,19 @@ function buildDeviceQuery(params: {
   if (params.vendor) query.set("vendor", params.vendor);
   if (params.status) query.set("status", params.status);
   if (params.onlyUnbound) query.set("only_unbound", "true");
+  if (params.keyword) query.set("keyword", params.keyword);
+  return query.toString();
+}
+
+function buildTencentQuery(params: {
+  page: number;
+  status: string;
+  keyword: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page));
+  query.set("pageSize", "20");
+  if (params.status) query.set("status", params.status);
   if (params.keyword) query.set("keyword", params.keyword);
   return query.toString();
 }
@@ -80,7 +109,7 @@ async function getPlatformDevices(input: {
   }
 
   try {
-    const response = await fetch(buildBackendUrl(`/platform/tenant-devices?${buildDeviceQuery(input)}`), {
+    const response = await fetch(buildBackendUrl(`/platform/tenant-devices?${buildOwnershipQuery(input)}`), {
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -103,12 +132,59 @@ async function getPlatformDevices(input: {
   }
 }
 
-function summarizeCurrentPage(list: PlatformDeviceRecord[]) {
+async function getPlatformTencentDevices(input: {
+  page: number;
+  status: string;
+  keyword: string;
+}) {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      list: [],
+      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl(`/platform/tencent-devices?${buildTencentQuery(input)}`), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<PlatformTencentDeviceListData>(response);
+    return {
+      ...(payload.data || {
+        list: [],
+        pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      }),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      list: [],
+      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
+      error: error instanceof Error ? error.message : "腾讯云设备列表加载失败",
+    };
+  }
+}
+
+function summarizeOwnershipPage(list: PlatformDeviceRecord[]) {
   return {
     online: list.filter((item) => item.status === "online").length,
     offline: list.filter((item) => item.status === "offline").length,
     unbound: list.filter((item) => !item.bound_camera_id && !item.bound_project_id).length,
     bound: list.filter((item) => item.bound_camera_id || item.bound_project_id).length,
+  };
+}
+
+function summarizeTencentPage(list: PlatformTencentDeviceRecord[]) {
+  return {
+    online: list.filter((item) => item.status === "online").length,
+    offline: list.filter((item) => item.status === "offline").length,
+    claimedChannels: list.reduce((count, item) => count + item.claimed_channel_count, 0),
+    unclaimedChannels: list.reduce((count, item) => count + item.unclaimed_channel_count, 0),
   };
 }
 
@@ -124,97 +200,196 @@ export default async function PlatformDevicesPage({
 
   const hasPlatformAccess = session.roles.includes("platform_admin");
   const params = await searchParams;
+  const activeTab = readTab(params.tab);
   const page = readPositiveInteger(params.page, 1);
   const vendor = readVendor(params.vendor);
   const status = readStatus(params.status);
   const onlyUnbound = readBoolean(params.only_unbound);
   const keyword = (params.keyword || "").trim().slice(0, 100);
-  const { list, pagination, error } = hasPlatformAccess
+
+  const ownershipData = activeTab === "ownership" && hasPlatformAccess
     ? await getPlatformDevices({ page, vendor, status, onlyUnbound, keyword })
     : {
       list: [],
       pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
-      error: "当前账号不是平台超管，无法访问设备资产",
+      error: hasPlatformAccess ? null : "当前账号不是平台超管，无法访问设备资产",
     };
-  const summary = summarizeCurrentPage(list);
+  const tencentData = activeTab === "tencent" && hasPlatformAccess
+    ? await getPlatformTencentDevices({ page, status, keyword })
+    : {
+      list: [],
+      pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
+      error: hasPlatformAccess ? null : "当前账号不是平台超管，无法访问腾讯云设备",
+    };
+
+  const error = activeTab === "ownership" ? ownershipData.error : tencentData.error;
+  const ownershipSummary = summarizeOwnershipPage(ownershipData.list);
+  const tencentSummary = summarizeTencentPage(tencentData.list);
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">设备资产</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          查看第三方设备通道的租户归属、绑定状态和最近同步结果。
+          平台分别从资产归属和腾讯云原始设备两个视角查看设备接入状态。
         </p>
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <div className="grid gap-3 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>设备总数</CardDescription>
-            <CardTitle>{pagination.total}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>本页在线</CardDescription>
-            <CardTitle>{summary.online}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>本页离线</CardDescription>
-            <CardTitle>{summary.offline}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>本页已绑定</CardDescription>
-            <CardTitle>{summary.bound}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>本页未绑定</CardDescription>
-            <CardTitle>{summary.unbound}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <Tabs value={activeTab} className="flex flex-col gap-4">
+        <PlatformDeviceTabsNav
+          activeTab={activeTab}
+          hrefs={{
+            ownership: buildPlatformDevicesHref({
+              tab: "ownership",
+              vendor,
+              status,
+              onlyUnbound: onlyUnbound ? "true" : "__all",
+              keyword,
+            }),
+            tencent: buildPlatformDevicesHref({
+              tab: "tencent",
+              status,
+              keyword,
+            }),
+          }}
+          counts={{
+            ownership: activeTab === "ownership" ? ownershipData.pagination.total : undefined,
+            tencent: activeTab === "tencent" ? tencentData.pagination.total : undefined,
+          }}
+        />
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>设备归属列表</CardTitle>
-              <CardDescription className="flex flex-wrap items-center gap-2">
-                {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
-                {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-                {onlyUnbound ? <Badge variant="secondary">仅未绑定</Badge> : <Badge variant="outline">全部绑定</Badge>}
-              </CardDescription>
-            </div>
-            <Badge variant="outline">共 {pagination.total} 个</Badge>
+        <TabsContent value="ownership" className="m-0 flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>设备总数</CardDescription>
+                <CardTitle>{ownershipData.pagination.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页在线</CardDescription>
+                <CardTitle>{ownershipSummary.online}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页离线</CardDescription>
+                <CardTitle>{ownershipSummary.offline}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页已绑定</CardDescription>
+                <CardTitle>{ownershipSummary.bound}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页未绑定</CardDescription>
+                <CardTitle>{ownershipSummary.unbound}</CardTitle>
+              </CardHeader>
+            </Card>
           </div>
-          <PlatformDeviceFilters
-            vendor={vendor}
-            status={status}
-            onlyUnbound={onlyUnbound}
-            keyword={keyword}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          <PlatformDevicesTable devices={list} />
-          <div className="px-4 pb-4">
-            <PlatformDevicePagination
-              pagination={pagination}
-              vendor={vendor}
-              status={status}
-              onlyUnbound={onlyUnbound}
-              keyword={keyword}
-            />
+
+          <Card>
+            <CardHeader className="flex flex-col gap-3">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <CardTitle>设备归属列表</CardTitle>
+                  <CardDescription className="flex flex-wrap items-center gap-2">
+                    {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
+                    {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
+                    {onlyUnbound ? <Badge variant="secondary">仅未绑定</Badge> : <Badge variant="outline">全部绑定</Badge>}
+                  </CardDescription>
+                </div>
+                <Badge variant="outline">共 {ownershipData.pagination.total} 个</Badge>
+              </div>
+              <PlatformDeviceFilters
+                vendor={vendor}
+                status={status}
+                onlyUnbound={onlyUnbound}
+                keyword={keyword}
+              />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-0">
+              <PlatformDevicesTable devices={ownershipData.list} />
+              <div className="px-4 pb-4">
+                <PlatformDevicePagination
+                  pagination={ownershipData.pagination}
+                  vendor={vendor}
+                  status={status}
+                  onlyUnbound={onlyUnbound}
+                  keyword={keyword}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tencent" className="m-0 flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>设备总数</CardDescription>
+                <CardTitle>{tencentData.pagination.total}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页在线</CardDescription>
+                <CardTitle>{tencentSummary.online}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页离线</CardDescription>
+                <CardTitle>{tencentSummary.offline}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页已纳入通道</CardDescription>
+                <CardTitle>{tencentSummary.claimedChannels}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>本页未纳入通道</CardDescription>
+                <CardTitle>{tencentSummary.unclaimedChannels}</CardTitle>
+              </CardHeader>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          <Card>
+            <CardHeader className="flex flex-col gap-3">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <CardTitle>腾讯云设备列表</CardTitle>
+                  <CardDescription className="flex flex-wrap items-center gap-2">
+                    {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
+                    <Badge variant="outline">包含设备基本信息与通道归属</Badge>
+                  </CardDescription>
+                </div>
+                <Badge variant="outline">共 {tencentData.pagination.total} 台</Badge>
+              </div>
+              <PlatformTencentDeviceFilters status={status} keyword={keyword} />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-0">
+              <PlatformTencentDevicesTable devices={tencentData.list} />
+              <div className="px-4 pb-4">
+                <PlatformTencentDevicePagination
+                  pagination={tencentData.pagination}
+                  status={status}
+                  keyword={keyword}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
