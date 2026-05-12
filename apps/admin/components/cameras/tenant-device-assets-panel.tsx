@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { CreateTencentDeviceButton } from "@/components/cameras/tencent-device-actions";
 import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -308,21 +309,34 @@ function SyncTenantDevicesButton() {
 export function TenantDeviceAssetsPanel({
   assets,
   error,
+  projectId,
 }: {
   assets: TenantDeviceAsset[];
   error?: string | null;
+  projectId?: string | null;
 }) {
+  const unboundCount = assets.filter((asset) => !asset.bound_camera_id).length;
+  const onlineCount = assets.filter((asset) => asset.status === "online").length;
+
   return (
     <div className="overflow-hidden rounded-md border">
       <div className="flex flex-col justify-between gap-3 border-b bg-muted/30 p-4 md:flex-row md:items-center">
         <div>
-          <h2 className="text-base font-semibold">租户设备资产</h2>
+          <h2 className="text-base font-semibold">设备资产池</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            当前租户已纳入的设备资产，可改名；未绑定项目的资产可删除。
+            统一管理当前租户设备资产，新增设备后同步通道，再绑定到项目摄像头。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">共 {assets.length} 个</Badge>
+          <Badge variant="secondary">未绑定 {unboundCount}</Badge>
+          <Badge variant="success">在线 {onlineCount}</Badge>
+          {projectId ? (
+            <CreateTencentDeviceButton
+              projectId={projectId}
+              sipServer={null}
+            />
+          ) : null}
           <SyncTenantDevicesButton />
         </div>
       </div>
