@@ -21,35 +21,37 @@ export default function OrganizationLoading() {
           </Card>
         ))}
       </div>
-      <div className="flex gap-2 rounded-md border bg-card p-2">
-        <Skeleton className="h-9 w-24" />
-        <Skeleton className="h-9 w-24" />
-        <Skeleton className="h-9 w-24" />
-        <Skeleton className="h-9 w-24" />
-      </div>
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-4 w-80" />
-            </div>
-            <Skeleton className="h-6 w-28" />
-          </div>
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="grid flex-1 gap-3 lg:grid-cols-[160px_1fr_72px]">
-              <Skeleton className="h-10" />
-              <Skeleton className="h-10" />
-              <Skeleton className="h-10" />
-            </div>
-            <Skeleton className="h-10 w-24" />
+          <div className="flex gap-2 overflow-x-auto">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-3 border-t p-0">
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-4 w-80" />
+              </div>
+              <Skeleton className="h-6 w-28" />
+            </div>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="grid flex-1 gap-3 lg:grid-cols-[160px_1fr_72px]">
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+              </div>
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
           {Array.from({ length: 8 }).map((_, index) => (
             <Skeleton key={index} className="h-14" />
           ))}
-          <div className="flex flex-col gap-3 pt-1 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 px-4 pb-4 pt-1 md:flex-row md:items-center md:justify-between">
             <Skeleton className="h-4 w-32" />
             <div className="flex gap-2">
               <Skeleton className="h-9 w-20" />

@@ -17,6 +17,7 @@ import type {
 } from "@/components/organization/organization-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type OrganizationTab = "departments" | "posts" | "role-rules" | "department-post-rules";
@@ -87,74 +88,81 @@ export function OrganizationTabs({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-2 overflow-x-auto rounded-md border bg-card p-2">
-        {tabs.map((tab) => {
-          const active = tab.value === activeTab;
-          const Icon = tab.icon;
-          const total = tab.value === "departments"
-            ? departments.pagination.total
-            : tab.value === "posts"
-              ? posts.pagination.total
-              : tab.value === "role-rules"
-                ? roleRuleConfig.roles.length
-                : departmentPostRuleConfig.departments.length;
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex gap-2 overflow-x-auto">
+          {tabs.map((tab) => {
+            const active = tab.value === activeTab;
+            const Icon = tab.icon;
+            const total = tab.value === "departments"
+              ? departments.pagination.total
+              : tab.value === "posts"
+                ? posts.pagination.total
+                : tab.value === "role-rules"
+                  ? roleRuleConfig.roles.length
+                  : departmentPostRuleConfig.departments.length;
 
-          return (
-            <Button
-              key={tab.value}
-              type="button"
-              variant={active ? "default" : "ghost"}
-              className={cn(
-                "h-9 shrink-0 gap-2 px-3",
-                active ? "" : "text-muted-foreground",
-              )}
-              disabled={pending}
-              aria-pressed={active}
-              onClick={() => switchTab(tab.value)}
-            >
-              {pending && active ? (
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <Icon data-icon="inline-start" />
-              )}
-              {tab.label}
-              <Badge variant={active ? "secondary" : "outline"}>{total}</Badge>
-            </Button>
-          );
-        })}
-      </div>
-
-      {activeTab === "departments" ? (
-        <DepartmentsClientShell
-          departments={departments.list}
-          pagination={departments.pagination}
-          code={departmentCode}
-          keyword={departmentKeyword}
-          error={departments.error}
-        />
-      ) : activeTab === "posts" ? (
-        <PostsClientShell
-          posts={posts.list}
-          pagination={posts.pagination}
-          status={postStatus}
-          salaryType={postSalaryType}
-          keyword={postKeyword}
-          error={posts.error}
-        />
-      ) : activeTab === "role-rules" ? (
-        <RolePostRulesClientShell
-          roles={roleRuleConfig.roles}
-          postOptions={roleRuleConfig.post_options}
-          error={roleRuleConfig.error}
-        />
-      ) : (
-        <DepartmentPostRulesClientShell
-          departments={departmentPostRuleConfig.departments}
-          postOptions={departmentPostRuleConfig.post_options}
-          error={departmentPostRuleConfig.error}
-        />
-      )}
-    </div>
+            return (
+              <Button
+                key={tab.value}
+                type="button"
+                variant={active ? "default" : "ghost"}
+                className={cn(
+                  "h-9 shrink-0 gap-2 px-3",
+                  active ? "" : "text-muted-foreground",
+                )}
+                disabled={pending}
+                aria-pressed={active}
+                onClick={() => switchTab(tab.value)}
+              >
+                {pending && active ? (
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <Icon data-icon="inline-start" />
+                )}
+                {tab.label}
+                <Badge variant={active ? "secondary" : "outline"}>{total}</Badge>
+              </Button>
+            );
+          })}
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {activeTab === "departments" ? (
+          <DepartmentsClientShell
+            departments={departments.list}
+            pagination={departments.pagination}
+            code={departmentCode}
+            keyword={departmentKeyword}
+            error={departments.error}
+          />
+        ) : activeTab === "posts" ? (
+          <PostsClientShell
+            posts={posts.list}
+            pagination={posts.pagination}
+            status={postStatus}
+            salaryType={postSalaryType}
+            keyword={postKeyword}
+            error={posts.error}
+          />
+        ) : activeTab === "role-rules" ? (
+          <div className="border-t p-4">
+            <RolePostRulesClientShell
+              roles={roleRuleConfig.roles}
+              postOptions={roleRuleConfig.post_options}
+              error={roleRuleConfig.error}
+            />
+          </div>
+        ) : (
+          <div className="border-t p-4">
+            <DepartmentPostRulesClientShell
+              departments={departmentPostRuleConfig.departments}
+              postOptions={departmentPostRuleConfig.post_options}
+              error={departmentPostRuleConfig.error}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
