@@ -15,7 +15,7 @@ import {
   type CameraAccessLogAction,
   type ProjectCameraRow,
 } from "@/repositories/project-cameras";
-import { tenantDeviceRepository } from "@/repositories/tenant-devices";
+import { tenantDeviceRepository, type TenantDeviceRow } from "@/repositories/tenant-devices";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
@@ -119,6 +119,38 @@ function buildDeviceChannelKey(deviceSerial: string, channelNo: number) {
 
 function buildTencentDeviceChannelKey(deviceId: string, channelId: string | null | undefined) {
   return `${deviceId}:${channelId || ""}`;
+}
+
+function buildTenantDeviceChannelKey(
+  vendor: string,
+  deviceSerial: string,
+  channelId?: string | number | null,
+) {
+  return `${vendor}:${deviceSerial}:${channelId || ""}`;
+}
+
+function createTenantDeviceAssetMap(assets: TenantDeviceRow[]) {
+  return new Map(assets.map((asset) => [
+    buildTenantDeviceChannelKey(
+      asset.vendor,
+      asset.vendor_device_serial,
+      asset.vendor_channel_id,
+    ),
+    asset,
+  ]));
+}
+
+function serializeAssetState(asset: TenantDeviceRow | null | undefined, tenantId: string | null) {
+  const isInTenantAssetPool = Boolean(asset);
+  const isAssetOwnedByCurrentTenant = Boolean(asset && asset.tenant_id === tenantId);
+
+  return {
+    tenant_device_id: asset?.id || null,
+    is_in_tenant_asset_pool: isInTenantAssetPool,
+    is_asset_owned_by_current_tenant: isAssetOwnedByCurrentTenant,
+    is_asset_owned_by_other_tenant: Boolean(asset && asset.tenant_id !== tenantId),
+    can_import_asset: !asset,
+  };
 }
 
 function getBindingProject(project: unknown) {
@@ -559,9 +591,10 @@ class ProjectCameraService {
       allowCustomer: false,
     });
 
-    const [channels, bindings] = await Promise.all([
+    const [channels, bindings, tenantDeviceAssets] = await Promise.all([
       ezvizDeviceService.listDeviceChannels(),
       projectCameraRepository.listActiveBindingsByVendor("ezviz"),
+      tenantDeviceRepository.listActiveByVendor("ezviz"),
     ]);
     const bindingMap = new Map(
       bindings.map((binding) => [
@@ -569,10 +602,14 @@ class ProjectCameraService {
         binding,
       ]),
     );
+    const assetMap = createTenantDeviceAssetMap(tenantDeviceAssets);
 
     const list = channels.map((channel) => {
       const binding = bindingMap.get(
         buildDeviceChannelKey(channel.device_serial, channel.channel_no),
+      );
+      const asset = assetMap.get(
+        buildTenantDeviceChannelKey("ezviz", channel.device_serial, null),
       );
       const isBound = Boolean(binding);
       const isOwnTenantBinding = binding?.tenant_id === actor.tenantId;
@@ -580,6 +617,7 @@ class ProjectCameraService {
       const boundProject = isOwnTenantBinding
         ? getBindingProject(binding?.project)
         : undefined;
+      const assetState = serializeAssetState(asset, actor.tenantId);
 
       return {
         device_name: channel.device_name,
@@ -596,7 +634,8 @@ class ProjectCameraService {
         bound_project_name: boundProject?.name || null,
         bound_camera_id: isOwnTenantBinding ? binding?.id || null : null,
         bound_camera_name: isOwnTenantBinding ? binding?.name || null : null,
-        can_bind: !isBound,
+        can_bind: !isBound && assetState.is_asset_owned_by_current_tenant,
+        ...assetState,
       };
     });
 
@@ -620,10 +659,11 @@ class ProjectCameraService {
       allowCustomer: false,
     });
 
-    const [deviceSummaries, channels, bindings] = await Promise.all([
+    const [deviceSummaries, channels, bindings, tenantDeviceAssets] = await Promise.all([
       tencentIotVideoService.listDeviceSummaries(input.keyword),
       tencentIotVideoService.listDeviceChannels(input.keyword),
       projectCameraRepository.listActiveBindingsByVendor("tencent_iotvideo_industry"),
+      tenantDeviceRepository.listActiveByVendor("tencent_iotvideo_industry"),
     ]);
     const sipServer = await tencentIotVideoService.getSipServerConfig().catch(() => null);
     const bindingMap = new Map(
@@ -635,6 +675,7 @@ class ProjectCameraService {
         binding,
       ]),
     );
+    const assetMap = createTenantDeviceAssetMap(tenantDeviceAssets);
 
     const devices = deviceSummaries.map((device) => ({
       device_id: device.device_id,
@@ -655,12 +696,20 @@ class ProjectCameraService {
       const binding = bindingMap.get(
         buildTencentDeviceChannelKey(channel.device_id, channel.channel_id),
       );
+      const asset = assetMap.get(
+        buildTenantDeviceChannelKey(
+          "tencent_iotvideo_industry",
+          channel.device_id,
+          channel.channel_id,
+        ),
+      );
       const isBound = Boolean(binding);
       const isOwnTenantBinding = binding?.tenant_id === actor.tenantId;
       const isBoundToCurrentProject = binding?.project_id === input.projectId;
       const boundProject = isOwnTenantBinding
         ? getBindingProject(binding?.project)
         : undefined;
+      const assetState = serializeAssetState(asset, actor.tenantId);
 
       return {
         device_id: channel.device_id,
@@ -685,7 +734,8 @@ class ProjectCameraService {
         bound_project_name: boundProject?.name || null,
         bound_camera_id: isOwnTenantBinding ? binding?.id || null : null,
         bound_camera_name: isOwnTenantBinding ? binding?.name || null : null,
-        can_bind: !isBound,
+        can_bind: !isBound && assetState.is_asset_owned_by_current_tenant,
+        ...assetState,
       };
     });
 

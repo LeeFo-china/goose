@@ -657,6 +657,10 @@ export default async function CamerasPage({
                                     {device.bound_project_name || device.bound_camera_name || "-"}
                                   </div>
                                 </div>
+                              ) : device.is_asset_owned_by_current_tenant ? (
+                                <Badge variant="success">已纳入资产</Badge>
+                              ) : device.is_asset_owned_by_other_tenant ? (
+                                <Badge variant="secondary">其他租户资产</Badge>
                               ) : (
                                 <div className="flex flex-col items-start gap-2">
                                   <Badge variant="outline">可纳入</Badge>

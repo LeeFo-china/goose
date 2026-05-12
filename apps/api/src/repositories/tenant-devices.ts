@@ -233,6 +233,21 @@ class TenantDeviceRepository {
     return (data || []) as TenantDeviceRow[];
   }
 
+  async listActiveByVendor(vendor: ProjectCameraVendor) {
+    const { data, error } = await this.adminClient
+      .from("tenant_devices")
+      .select("*")
+      .eq("vendor", vendor)
+      .is("deleted_at", null)
+      .range(0, 9999);
+
+    if (error) {
+      throw Errors.dbError("查询设备资产归属失败", error);
+    }
+
+    return (data || []) as TenantDeviceRow[];
+  }
+
   async create(input: CreateTenantDeviceInput & {
     tenant_id: string;
     created_by?: string | null;

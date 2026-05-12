@@ -73,6 +73,11 @@ export type EzvizDeviceChannel = {
   bound_camera_id: string | null;
   bound_camera_name: string | null;
   can_bind: boolean;
+  tenant_device_id?: string | null;
+  is_in_tenant_asset_pool?: boolean;
+  is_asset_owned_by_current_tenant?: boolean;
+  is_asset_owned_by_other_tenant?: boolean;
+  can_import_asset?: boolean;
 };
 
 export type TencentDeviceChannel = {
@@ -99,6 +104,11 @@ export type TencentDeviceChannel = {
   bound_camera_id: string | null;
   bound_camera_name: string | null;
   can_bind: boolean;
+  tenant_device_id?: string | null;
+  is_in_tenant_asset_pool?: boolean;
+  is_asset_owned_by_current_tenant?: boolean;
+  is_asset_owned_by_other_tenant?: boolean;
+  can_import_asset?: boolean;
 };
 
 export type TencentDeviceRecord = {

@@ -81,6 +81,12 @@ function ChannelAssetAction({
   channel: TencentDeviceChannel;
 }) {
   if (channel.is_bound) return <BindingState channel={channel} />;
+  if (channel.is_asset_owned_by_current_tenant) {
+    return <Badge variant="success">已纳入资产</Badge>;
+  }
+  if (channel.is_asset_owned_by_other_tenant) {
+    return <Badge variant="secondary">其他租户资产</Badge>;
+  }
 
   return (
     <div className="flex flex-col items-start gap-2">
