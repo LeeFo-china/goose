@@ -393,6 +393,36 @@ project.update
 - 已绑定项目的设备资产不能直接删除，需要先解绑项目摄像头。
 - 删除本地资产不等于删除腾讯云/萤石远端设备。
 
+### 同步租户设备资产
+
+```http
+POST /tenant-devices/sync
+Authorization: Bearer <admin-token>
+```
+
+权限：
+
+```text
+project.update
+```
+
+说明：
+
+- 后端只同步当前租户已经拥有的设备资产对应的第三方通道。
+- 不会把平台共享第三方设备池里的陌生设备自动纳入租户。
+- 腾讯云设备创建后如果先只有设备级资产，待通道上报后可通过该接口补齐通道资产。
+- 萤石会按当前租户已有设备序列号同步通道状态和通道信息。
+
+返回：
+
+```json
+{
+  "created_count": 1,
+  "updated_count": 2,
+  "total_count": 3
+}
+```
+
 ### 手动纳入设备资产
 
 用于萤石或历史设备补录：
@@ -558,10 +588,12 @@ Admin：
   - `POST /tenant-devices`
   - `PATCH /tenant-devices/:id`
   - `DELETE /tenant-devices/:id`
+  - `POST /tenant-devices/sync`
 - 腾讯云创建设备成功后，会立即写入一条当前租户的设备级资产。
 - 项目摄像头绑定成功后，会写入或更新对应通道资产，并记录 `bound_project_id`、`bound_camera_id`。
 - 项目摄像头解绑后，不删除设备资产，只清空绑定字段。
 - 摄像头状态刷新时，同步更新 `tenant_devices.status`、`raw_status`、`last_synced_at`。
+- Admin 设备资产区已提供“同步资产”，用于把当前租户已有设备的第三方通道补齐到资产池。
 
 暂未切换：
 

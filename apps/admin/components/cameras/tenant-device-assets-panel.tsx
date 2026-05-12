@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
@@ -270,6 +270,41 @@ function RowActions({ asset }: { asset: TenantDeviceAsset }) {
   );
 }
 
+function SyncTenantDevicesButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  function syncDevices() {
+    if (pending) return;
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestBackend("/tenant-devices/sync", {
+          method: "POST",
+        });
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "同步设备资产失败");
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={syncDevices}>
+        {pending ? (
+          <Loader2 className="animate-spin" data-icon="inline-start" />
+        ) : (
+          <RefreshCw data-icon="inline-start" />
+        )}
+        同步资产
+      </Button>
+      {error ? <span className="max-w-[220px] text-right text-xs text-destructive">{error}</span> : null}
+    </div>
+  );
+}
+
 export function TenantDeviceAssetsPanel({
   assets,
   error,
@@ -286,7 +321,10 @@ export function TenantDeviceAssetsPanel({
             当前租户已纳入的设备资产，可改名；未绑定项目的资产可删除。
           </p>
         </div>
-        <Badge variant="outline">共 {assets.length} 个</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">共 {assets.length} 个</Badge>
+          <SyncTenantDevicesButton />
+        </div>
       </div>
       {error ? (
         <div className="p-4">

@@ -60,3 +60,11 @@ Authorization: Bearer <customer-token>
 本次 admin 切到租户设备资产池，不影响小程序。
 
 小程序只有在 admin 完成“纳入资产 -> 绑定摄像头”后，才能看到项目下新增的摄像头。
+
+Admin 的“同步资产”接口：
+
+```http
+POST /tenant-devices/sync
+```
+
+仍然只面向 admin，不需要小程序调用。小程序等待项目摄像头绑定完成后，通过原项目摄像头接口获取结果即可。

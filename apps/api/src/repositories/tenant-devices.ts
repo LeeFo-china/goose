@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import type { ProjectCameraRow } from "@/repositories/project-cameras";
 import type { ProjectCameraVendor } from "@/schema/project-cameras";
 import type {
@@ -137,6 +138,21 @@ class TenantDeviceRepository {
     return (data || null) as TenantDeviceRow | null;
   }
 
+  async listAllByTenant(tenantId: string) {
+    const { data, error } = await this.adminClient
+      .from("tenant_devices")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .range(0, 999);
+
+    if (error) {
+      throw Errors.dbError("查询租户设备资产失败", error);
+    }
+
+    return (data || []) as TenantDeviceRow[];
+  }
+
   async create(input: CreateTenantDeviceInput & {
     tenant_id: string;
     created_by?: string | null;
@@ -167,6 +183,89 @@ class TenantDeviceRepository {
     }
 
     return data as TenantDeviceRow;
+  }
+
+  async upsertSynced(input: {
+    tenant_id: string;
+    vendor: ProjectCameraVendor;
+    vendor_device_serial: string;
+    vendor_device_code?: string | null;
+    vendor_device_name?: string | null;
+    vendor_channel_id?: string | null;
+    vendor_channel_code?: string | null;
+    vendor_channel_name?: string | null;
+    device_type?: string | null;
+    source_project_id?: string | null;
+    status: TenantDeviceStatus;
+    raw_status?: string | number | null;
+    metadata?: Record<string, unknown>;
+    updated_by?: string | null;
+  }) {
+    const existing = await this.findByVendorDeviceChannel({
+      vendor: input.vendor,
+      vendor_device_serial: input.vendor_device_serial,
+      vendor_channel_id: input.vendor_channel_id,
+    });
+    const payload = {
+      tenant_id: input.tenant_id,
+      vendor: input.vendor,
+      vendor_device_serial: input.vendor_device_serial,
+      vendor_device_code: input.vendor_device_code || null,
+      vendor_device_name: input.vendor_device_name || null,
+      vendor_channel_id: input.vendor_channel_id || null,
+      vendor_channel_code: input.vendor_channel_code || null,
+      vendor_channel_name: input.vendor_channel_name || null,
+      device_type: input.device_type || null,
+      source_project_id: input.source_project_id || null,
+      status: input.status,
+      raw_status: input.raw_status == null ? null : String(input.raw_status),
+      metadata: input.metadata || {},
+      updated_by: input.updated_by || null,
+      last_synced_at: new Date().toISOString(),
+    };
+
+    if (existing) {
+      if (existing.tenant_id !== input.tenant_id) {
+        throw Errors.business(
+          409,
+          "该设备已归属其他租户",
+          ErrorCodes.CAMERA_BOUND_TO_ANOTHER_PROJECT,
+        );
+      }
+
+      const { data, error } = await this.adminClient
+        .from("tenant_devices")
+        .update({
+          ...payload,
+          bound_project_id: existing.bound_project_id,
+          bound_camera_id: existing.bound_camera_id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw Errors.dbError("同步设备资产失败", error);
+      }
+
+      return { device: data as TenantDeviceRow, created: false };
+    }
+
+    const { data, error } = await this.adminClient
+      .from("tenant_devices")
+      .insert({
+        ...payload,
+        created_by: input.updated_by || null,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw Errors.dbError("同步设备资产失败", error);
+    }
+
+    return { device: data as TenantDeviceRow, created: true };
   }
 
   async upsertFromProjectCamera(camera: ProjectCameraRow, actorEmployeeId?: string | null) {

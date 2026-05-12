@@ -55,6 +55,15 @@ class TenantDeviceController extends BaseController {
     return ResponseHandler.success(result);
   }
 
+  @Post("/tenant-devices/sync")
+  async syncTenantDevices(request: FastifyRequest, reply: FastifyReply) {
+    const result = await tenantDeviceService.syncTenantDevices({
+      authUserId: request.user?.sub,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
   @Patch("/tenant-devices/:id")
   async updateTenantDevice(request: FastifyRequest, reply: FastifyReply) {
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
