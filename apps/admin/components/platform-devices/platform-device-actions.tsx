@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, KeyRound, Loader2, RefreshCw } from "lucide-react";
+import { Eye, KeyRound, Loader2, MoreHorizontal, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -13,7 +13,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type {
   PlatformDeviceRecord,
   PlatformDeviceSyncResult,
@@ -170,54 +177,78 @@ export function PlatformDeviceActions({ device }: { device: PlatformDeviceRecord
 
   return (
     <>
-      <div className="flex justify-end gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={syncDevice}>
-          {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
-          同步
-        </Button>
-        {isTencent ? (
-          <>
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={openAccessInfo}>
-              <Eye data-icon="inline-start" />
-              接入信息
+      <div className="flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="sm" variant="outline" disabled={pending}>
+              {pending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <MoreHorizontal data-icon="inline-start" />
+              )}
+              操作
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={queryPassword}>
-              <KeyRound data-icon="inline-start" />
-              查密码
-            </Button>
-            <AlertDialog open={resetOpen} onOpenChange={(open) => !pending && setResetOpen(open)}>
-              <AlertDialogTrigger asChild>
-                <Button type="button" size="sm" variant="outline" disabled={pending}>
-                  <RefreshCw data-icon="inline-start" />
-                  重置密码
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>重置设备密码</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    将为「{device.vendor_device_name || device.vendor_device_serial}」生成新的 SIP 密码。现场设备需要同步更新后才能继续注册上线。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="left" sideOffset={8} className="w-40">
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={pending} onSelect={syncDevice}>
+                <RefreshCw />
+                同步
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            {isTencent ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem disabled={pending} onSelect={openAccessInfo}>
+                    <Eye />
+                    接入信息
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={pending} onSelect={queryPassword}>
+                    <KeyRound />
+                    查密码
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     disabled={pending}
-                    onClick={(event) => {
+                    onSelect={(event) => {
                       event.preventDefault();
-                      resetPassword();
+                      setResetOpen(true);
                     }}
                   >
-                    {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                    确认重置
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </>
-        ) : null}
+                    <RefreshCw />
+                    重置密码
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <AlertDialog open={resetOpen} onOpenChange={(open) => !pending && setResetOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>重置设备密码</AlertDialogTitle>
+            <AlertDialogDescription>
+              将为「{device.vendor_device_name || device.vendor_device_serial}」生成新的 SIP 密码。现场设备需要同步更新后才能继续注册上线。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                resetPassword();
+              }}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认重置
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <DeviceInfoDialog
         open={accessOpen}
