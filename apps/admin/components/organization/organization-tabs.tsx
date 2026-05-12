@@ -107,7 +107,7 @@ export function OrganizationTabs({
               variant={active ? "default" : "ghost"}
               className={cn(
                 "h-9 shrink-0 gap-2 px-3",
-                active ? "shadow-sm" : "text-muted-foreground",
+                active ? "" : "text-muted-foreground",
               )}
               disabled={pending}
               aria-pressed={active}

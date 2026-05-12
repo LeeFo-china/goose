@@ -1,3 +1,4 @@
+import { Building2, BriefcaseBusiness, GitBranch, Workflow } from "lucide-react";
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import type {
@@ -7,6 +8,7 @@ import type {
   ProjectMemberRolePostRuleConfig,
   PostRecord,
 } from "@/components/organization/organization-types";
+import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -219,6 +221,53 @@ export default async function OrganizationPage({
         <p className="mt-1 text-sm text-muted-foreground">
           统一维护部门与岗位。当前共 {departments.pagination.total} 个部门，{posts.pagination.total} 个岗位。
         </p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Building2 />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">当前筛选部门</div>
+              <div className="text-xl font-semibold">{departments.pagination.total}</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <BriefcaseBusiness />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">当前筛选岗位</div>
+              <div className="text-xl font-semibold">{posts.pagination.total}</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+              <Workflow />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">项目候选规则</div>
+              <div className="text-xl font-semibold">{roleRuleConfig.roles.length}</div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
+              <GitBranch />
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">部门岗位规则</div>
+              <div className="text-xl font-semibold">{departmentPostRuleConfig.departments.length}</div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <OrganizationTabs
