@@ -162,6 +162,8 @@ export type BillingAiShadowRow = {
   created_at: string | null;
 };
 
+export type BillingAiUsageStatsRow = BillingAiShadowRow;
+
 export type BillingSmsShadowRow = {
   id: string;
   tenant_id: string | null;
@@ -502,6 +504,55 @@ class BillingRepository {
     }
 
     return (data || []) as BillingAiShadowRow[];
+  }
+
+  async listAiUsageStatsRows(input: {
+    tenantId?: string;
+    sceneCode?: string;
+    providerCode?: string;
+    modelCode?: string;
+    startDate?: string;
+    endDate?: string;
+    limit: number;
+  }) {
+    let request = this.from("ai_call_logs")
+      .select(`
+        id,
+        tenant_id,
+        scene_code,
+        provider_code,
+        model_code,
+        model_name,
+        status,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        cached_input_tokens,
+        reasoning_tokens,
+        raw_usage,
+        billable,
+        source,
+        created_at
+      `)
+      .not("tenant_id", "is", null)
+      .eq("status", "success")
+      .eq("billable", true)
+      .order("created_at", { ascending: false })
+      .limit(input.limit);
+
+    if (input.tenantId) request = request.eq("tenant_id", input.tenantId);
+    if (input.sceneCode) request = request.eq("scene_code", input.sceneCode);
+    if (input.providerCode) request = request.eq("provider_code", input.providerCode);
+    if (input.modelCode) request = request.eq("model_code", input.modelCode);
+    if (input.startDate) request = request.gte("created_at", input.startDate);
+    if (input.endDate) request = request.lte("created_at", input.endDate);
+
+    const { data, error } = await request;
+    if (error) {
+      throw Errors.dbError("分析 AI 试算用量失败", error);
+    }
+
+    return (data || []) as BillingAiUsageStatsRow[];
   }
 
   async listSmsShadowRows(input: {

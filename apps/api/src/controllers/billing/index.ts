@@ -1,6 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  BillingAiUsageStatsQuerySchema,
   BillingDateRangeQuerySchema,
   BillingEventQuerySchema,
   BillingLedgerQuerySchema,
@@ -109,6 +110,16 @@ class BillingController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await billingService.listPlatformBillingEvents(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/billing/ai-usage-stats")
+  async getPlatformAiUsageStats(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const queryResult = BillingAiUsageStatsQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await billingService.getPlatformAiUsageStats(queryResult.data, authContext);
     return ResponseHandler.success(data);
   }
 

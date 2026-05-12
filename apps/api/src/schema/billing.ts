@@ -64,6 +64,18 @@ export const BillingShadowRunSchema = z.object({
   sources: z.array(z.enum(["ai", "sms", "social_video"])).optional(),
 });
 
+export const BillingAiUsageStatsQuerySchema = z.object({
+  tenant_id: z.uuid("无效的租户 ID").optional(),
+  scene_code: z.string().trim().max(120, "场景不能超过 120 个字符").optional(),
+  provider_code: z.string().trim().max(80, "供应商不能超过 80 个字符").optional(),
+  model_code: z.string().trim().max(120, "模型不能超过 120 个字符").optional(),
+  start_date: z.string().trim().max(30, "开始时间格式非法").optional(),
+  end_date: z.string().trim().max(30, "结束时间格式非法").optional(),
+  limit: z.coerce.number().int().min(1, "扫描条数必须大于 0").max(10000, "单次最多分析 10000 条").default(5000),
+  min_sample_count: z.coerce.number().int().min(1, "样本门槛必须大于 0").max(10000, "样本门槛过大").default(100),
+  safety_factor: z.coerce.number().min(1, "安全系数不能小于 1").max(3, "安全系数不能大于 3").default(1.5),
+});
+
 export const BillingPricingRuleCreateSchema = z.object({
   scope: BillingPricingScopeSchema.default("platform_default"),
   tenant_id: z.uuid("无效的租户 ID").nullable().optional(),
@@ -97,3 +109,4 @@ export type BillingPricingRuleCreateInput = z.infer<typeof BillingPricingRuleCre
 export type BillingPricingRuleUpdateInput = z.infer<typeof BillingPricingRuleUpdateSchema>;
 export type BillingEventQuery = z.infer<typeof BillingEventQuerySchema>;
 export type BillingShadowRunInput = z.infer<typeof BillingShadowRunSchema>;
+export type BillingAiUsageStatsQuery = z.infer<typeof BillingAiUsageStatsQuerySchema>;

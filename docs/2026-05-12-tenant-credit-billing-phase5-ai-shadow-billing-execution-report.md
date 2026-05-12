@@ -174,7 +174,15 @@ credits = 0
 
 ## 5. Admin 对接
 
-本阶段不新增页面。
+本阶段新增平台观察接口：
+
+```text
+GET /platform/billing/ai-usage-stats
+```
+
+对接文档：
+
+- `docs/application_integration_documentation/2026-05-12-admin-ai-shadow-usage-stats-integration.md`
 
 现有平台计费中心应能查看：
 

@@ -4,6 +4,7 @@ import {
   billingRepository,
   type BillingAccountBalance,
   type BillingAiShadowRow,
+  type BillingAiUsageStatsRow,
   type BillingEventCreateInput,
   type BillingLedgerRow,
   type BillingPricingRuleRow,
@@ -16,6 +17,7 @@ import type { SocialVideoTranscriptionRecord } from "@/repositories/social-video
 import type {
   BillingDateRangeQuery,
   BillingEventQuery,
+  BillingAiUsageStatsQuery,
   BillingLedgerQuery,
   BillingManualRechargeInput,
   BillingPricingRuleCreateInput,
@@ -93,6 +95,13 @@ function ceilCredits(units: number, unitCredits: number, minChargeCredits = 0) {
 
 function toNumber(value: number | null | undefined) {
   return Number(value || 0);
+}
+
+function percentileDisc(values: number[], percentile: number) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.max(0, Math.ceil(percentile * sorted.length) - 1);
+  return sorted[Math.min(index, sorted.length - 1)] ?? 0;
 }
 
 class BillingService {
@@ -294,6 +303,115 @@ class BillingService {
         ...item,
         tenant: tenantMap.get(item.tenant_id) || null,
       })),
+    };
+  }
+
+  async getPlatformAiUsageStats(query: BillingAiUsageStatsQuery, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const [rows, rules] = await Promise.all([
+      billingRepository.listAiUsageStatsRows({
+        tenantId: query.tenant_id,
+        sceneCode: query.scene_code,
+        providerCode: query.provider_code,
+        modelCode: query.model_code,
+        startDate: query.start_date,
+        endDate: query.end_date,
+        limit: query.limit,
+      }),
+      billingRepository.listPricingRules({
+        page: 1,
+        pageSize: 500,
+        enabled: true,
+      }),
+    ]);
+
+    const groups = new Map<string, BillingAiUsageStatsRow[]>();
+    for (const row of rows) {
+      const key = [
+        row.scene_code || "",
+        row.provider_code || "",
+        row.model_code || "",
+      ].join("::");
+      groups.set(key, [...(groups.get(key) || []), row]);
+    }
+
+    const list = Array.from(groups.values()).map((items) => {
+      const first = items[0]!;
+      const tokenValues: number[] = [];
+      const creditValues: number[] = [];
+      let missingUsageCount = 0;
+      let cachedInputTokenCalls = 0;
+      let reasoningTokenCalls = 0;
+
+      for (const row of items) {
+        const promptTokens = toNumber(row.prompt_tokens);
+        const completionTokens = toNumber(row.completion_tokens);
+        const cachedInputTokens = toNumber(row.cached_input_tokens);
+        const reasoningTokens = toNumber(row.reasoning_tokens);
+        const totalTokens = toNumber(row.total_tokens) || promptTokens + completionTokens;
+        const hasUsage = promptTokens > 0 || completionTokens > 0 || cachedInputTokens > 0;
+        if (!hasUsage) {
+          missingUsageCount += 1;
+          continue;
+        }
+
+        tokenValues.push(totalTokens + cachedInputTokens);
+        creditValues.push(this.estimateAiRowCredits(row, rules.list));
+        if (cachedInputTokens > 0) cachedInputTokenCalls += 1;
+        if (reasoningTokens > 0) reasoningTokenCalls += 1;
+      }
+
+      const p95Credits = percentileDisc(creditValues, 0.95);
+      return {
+        scene_code: first.scene_code,
+        provider_code: first.provider_code,
+        model_code: first.model_code,
+        model_name: first.model_name,
+        total_logs: items.length,
+        billable_sample_count: tokenValues.length,
+        missing_usage_count: missingUsageCount,
+        cached_input_token_call_count: cachedInputTokenCalls,
+        reasoning_token_call_count: reasoningTokenCalls,
+        token_percentiles: {
+          p50: percentileDisc(tokenValues, 0.5),
+          p90: percentileDisc(tokenValues, 0.9),
+          p95: percentileDisc(tokenValues, 0.95),
+          p99: percentileDisc(tokenValues, 0.99),
+        },
+        credit_percentiles: {
+          p50: percentileDisc(creditValues, 0.5),
+          p90: percentileDisc(creditValues, 0.9),
+          p95: p95Credits,
+          p99: percentileDisc(creditValues, 0.99),
+        },
+        suggested_min_charge_credits: Math.ceil(p95Credits * query.safety_factor),
+        ready_for_phase6: tokenValues.length >= query.min_sample_count && p95Credits > 0,
+      };
+    }).sort((a, b) => {
+      if (a.ready_for_phase6 !== b.ready_for_phase6) {
+        return a.ready_for_phase6 ? -1 : 1;
+      }
+      return b.billable_sample_count - a.billable_sample_count;
+    });
+
+    return {
+      range: {
+        start_date: query.start_date || null,
+        end_date: query.end_date || null,
+      },
+      controls: {
+        limit: query.limit,
+        min_sample_count: query.min_sample_count,
+        safety_factor: query.safety_factor,
+      },
+      totals: {
+        groups: list.length,
+        logs: rows.length,
+        billable_samples: list.reduce((sum, item) => sum + item.billable_sample_count, 0),
+        missing_usage: list.reduce((sum, item) => sum + item.missing_usage_count, 0),
+        ready_groups: list.filter((item) => item.ready_for_phase6).length,
+      },
+      list,
     };
   }
 
@@ -810,6 +928,62 @@ class BillingService {
     }
 
     return output;
+  }
+
+  private estimateAiRowCredits(row: BillingAiUsageStatsRow, rules: BillingPricingRuleRow[]) {
+    const tenantId = row.tenant_id;
+    if (!tenantId) return 0;
+
+    const inputCredits = this.estimateMetricCredits({
+      tenantId,
+      metricCode: "ai_input_text_token",
+      sceneCode: row.scene_code,
+      provider: row.provider_code,
+      model: row.model_code,
+      units: toNumber(row.prompt_tokens) / 1000,
+      rules,
+    });
+    const outputCredits = this.estimateMetricCredits({
+      tenantId,
+      metricCode: "ai_output_text_token",
+      sceneCode: row.scene_code,
+      provider: row.provider_code,
+      model: row.model_code,
+      units: toNumber(row.completion_tokens) / 1000,
+      rules,
+    });
+    const cachedCredits = this.estimateMetricCredits({
+      tenantId,
+      metricCode: "ai_cached_input_token",
+      sceneCode: row.scene_code,
+      provider: row.provider_code,
+      model: row.model_code,
+      units: toNumber(row.cached_input_tokens) / 1000,
+      rules,
+    });
+
+    return inputCredits + outputCredits + cachedCredits;
+  }
+
+  private estimateMetricCredits(input: {
+    tenantId: string;
+    metricCode: string;
+    sceneCode?: string | null;
+    provider?: string | null;
+    model?: string | null;
+    units: number;
+    rules: BillingPricingRuleRow[];
+  }) {
+    if (input.units <= 0) return 0;
+    const rule = this.resolvePricingRule(input.rules, {
+      tenantId: input.tenantId,
+      metricCode: input.metricCode,
+      sceneCode: input.sceneCode,
+      provider: input.provider,
+      model: input.model,
+    });
+    if (!rule) return 0;
+    return ceilCredits(input.units, rule.unit_credits, rule.min_charge_credits);
   }
 
   private buildSmsShadowEvent(row: BillingSmsShadowRow, rules: BillingPricingRuleRow[]) {
