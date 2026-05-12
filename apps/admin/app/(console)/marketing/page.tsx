@@ -333,72 +333,170 @@ export default async function MarketingPage({
         ) : null}
       </div>
 
-      <Tabs value={activeTab} className="flex flex-col gap-5">
-        <MarketingTabsNav
-          activeTab={activeTab}
-          hrefs={tabHrefs}
-          counts={{
-            campaigns: pagination.total,
-            h5: h5Pages.pagination.total,
-            leads: h5Leads.pagination.total,
-          }}
-        />
+      {activeTab === "campaigns" ? (
+        <div className="grid gap-3 md:grid-cols-4">
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                <Megaphone className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">筛选活动</div>
+                <div className="text-xl font-semibold">{pagination.total}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <PlayCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">{statusLabel.active}</div>
+                <div className="text-xl font-semibold">{activeCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                <PauseCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">{statusLabel.paused}</div>
+                <div className="text-xl font-semibold">{pausedCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
+                <Gift className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">分享 / 预约</div>
+                <div className="text-xl font-semibold">{shareAssistCount} / {rewardCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : activeTab === "h5" ? (
+        <div className="grid gap-3 md:grid-cols-4">
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                <MonitorSmartphone className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">H5 页面</div>
+                <div className="text-xl font-semibold">{h5Pages.pagination.total}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <PlayCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">当前已发布</div>
+                <div className="text-xl font-semibold">{publishedH5Count}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                <ClipboardList className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">草稿页面</div>
+                <div className="text-xl font-semibold">{draftH5Count}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
+                <PauseCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">已下线</div>
+                <div className="text-xl font-semibold">{offlineH5Count}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-4">
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                <Users className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">筛选线索</div>
+                <div className="text-xl font-semibold">{h5Leads.pagination.total}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <ClipboardList className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">新线索</div>
+                <div className="text-xl font-semibold">{newLeadCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                <PlayCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">已转化</div>
+                <div className="text-xl font-semibold">{convertedLeadCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
+                <PauseCircle className="size-5" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">已作废</div>
+                <div className="text-xl font-semibold">{invalidLeadCount}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-        <TabsContent value="campaigns" className="m-0">
-          <div className="flex flex-col gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    <Megaphone className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">筛选活动</div>
-                    <div className="text-xl font-semibold">{pagination.total}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <PlayCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">{statusLabel.active}</div>
-                    <div className="text-xl font-semibold">{activeCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                    <PauseCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">{statusLabel.paused}</div>
-                    <div className="text-xl font-semibold">{pausedCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                    <Gift className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">分享 / 预约</div>
-                    <div className="text-xl font-semibold">{shareAssistCount} / {rewardCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {error ? (
-              <StatusAlert>{error}</StatusAlert>
-            ) : null}
-
-            <Card>
-              <CardHeader className="flex flex-col gap-3">
+      <Tabs value={activeTab}>
+        <Card>
+          <CardHeader className="pb-3">
+            <MarketingTabsNav
+              activeTab={activeTab}
+              hrefs={tabHrefs}
+              counts={{
+                campaigns: pagination.total,
+                h5: h5Pages.pagination.total,
+                leads: h5Leads.pagination.total,
+              }}
+            />
+          </CardHeader>
+          <CardContent className="p-0">
+            <TabsContent value="campaigns" className="m-0">
+              {error ? (
+                <div className="border-t px-4 pt-4">
+                  <StatusAlert>{error}</StatusAlert>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-3 border-t px-4 py-4">
                 <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
                   <div>
                     <CardTitle>活动列表</CardTitle>
@@ -415,8 +513,8 @@ export default async function MarketingPage({
                   status={status}
                   keyword={keyword}
                 />
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 p-0">
+              </div>
+              <div className="flex flex-col gap-4">
                 <MarketingCampaignsTable campaigns={list} projects={projects} />
                 <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
                   <div className="text-sm text-muted-foreground">
@@ -429,144 +527,43 @@ export default async function MarketingPage({
                     keyword={keyword}
                   />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+              </div>
+            </TabsContent>
 
-        <TabsContent value="h5" className="m-0">
-          <div className="flex flex-col gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    <MonitorSmartphone className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">H5 页面</div>
-                    <div className="text-xl font-semibold">{h5Pages.pagination.total}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <PlayCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">当前已发布</div>
-                    <div className="text-xl font-semibold">{publishedH5Count}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                    <ClipboardList className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">草稿页面</div>
-                    <div className="text-xl font-semibold">{draftH5Count}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                    <PauseCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">已下线</div>
-                    <div className="text-xl font-semibold">{offlineH5Count}</div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+            <TabsContent value="h5" className="m-0">
+              <div className="flex flex-col gap-3 border-t px-4 py-4">
                 <div>
                   <CardTitle>H5 活动页</CardTitle>
                   <CardDescription>
                     用于小程序 web-view 加载的活动页，发布后访问 https://h5.goodcms.cn/p/页面路径。
                   </CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {h5Pages.error ? (
-                  <div className="p-4">
-                    <StatusAlert>{h5Pages.error}</StatusAlert>
-                  </div>
+              </div>
+              {h5Pages.error ? (
+                <div className="px-4 pb-4">
+                  <StatusAlert>{h5Pages.error}</StatusAlert>
+                </div>
               ) : (
                 <H5MarketingPagesTable pages={h5Pages.list} tenantSlug={tenantSlug} />
               )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+            </TabsContent>
 
-        <TabsContent value="leads" className="m-0">
-          <div className="flex flex-col gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    <Users className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">筛选线索</div>
-                    <div className="text-xl font-semibold">{h5Leads.pagination.total}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <ClipboardList className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">新线索</div>
-                    <div className="text-xl font-semibold">{newLeadCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                    <PlayCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">已转化</div>
-                    <div className="text-xl font-semibold">{convertedLeadCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                    <PauseCircle className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">已作废</div>
-                    <div className="text-xl font-semibold">{invalidLeadCount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <H5LeadsPanel
-              initialData={h5Leads}
-              initialFilters={{
-                status: leadStatus,
-                pageId: leadPageId,
-                keyword: leadKeyword,
-                createdFrom: leadCreatedFrom,
-                createdTo: leadCreatedTo,
-              }}
-              pages={h5Pages.list}
-            />
-          </div>
-        </TabsContent>
+            <TabsContent value="leads" className="m-0">
+              <H5LeadsPanel
+                initialData={h5Leads}
+                initialFilters={{
+                  status: leadStatus,
+                  pageId: leadPageId,
+                  keyword: leadKeyword,
+                  createdFrom: leadCreatedFrom,
+                  createdTo: leadCreatedTo,
+                }}
+                pages={h5Pages.list}
+                embedded
+              />
+            </TabsContent>
+          </CardContent>
+        </Card>
       </Tabs>
     </div>
   );
