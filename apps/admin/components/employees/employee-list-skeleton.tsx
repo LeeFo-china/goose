@@ -1,7 +1,7 @@
 import { Search, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -21,13 +21,34 @@ export function EmployeeListSkeleton() {
           </p>
         </div>
         <Button disabled>
-          <UserRound />
+          <UserRound data-icon="inline-start" />
           新增员工
         </Button>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Card key={index}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <SkeletonBlock className="size-10" />
+              <div className="flex flex-col gap-2">
+                <SkeletonBlock className="h-4 w-24" />
+                <SkeletonBlock className="h-6 w-12" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <Card>
-        <CardContent className="p-4">
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <CardTitle>员工列表</CardTitle>
+              <CardDescription>正在加载员工列表和当前筛选条件。</CardDescription>
+            </div>
+            <Badge variant="outline">加载中</Badge>
+          </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">
               {["全部", "在职", "待入职", "已封禁", "已离职"].map((item, index) => (
@@ -44,7 +65,7 @@ export function EmployeeListSkeleton() {
                 </div>
               ))}
             </div>
-          <div className="flex w-full gap-2 xl:w-[360px]">
+            <div className="flex w-full gap-2 xl:w-[360px]">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input disabled placeholder="搜索姓名或手机号" className="pl-9" />
@@ -52,15 +73,8 @@ export function EmployeeListSkeleton() {
               <Button type="button" variant="outline" disabled>搜索</Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>员工列表</CardTitle>
-          <Badge variant="outline">加载中</Badge>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="flex flex-col gap-3 p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1040px] border-t text-sm">
               <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
@@ -112,16 +126,15 @@ export function EmployeeListSkeleton() {
               </tbody>
             </table>
           </div>
+          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+            <SkeletonBlock className="h-4 w-32" />
+            <div className="flex gap-2">
+              <Button variant="outline" disabled>上一页</Button>
+              <Button variant="outline" disabled>下一页</Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
-
-      <div className="flex items-center justify-between">
-        <SkeletonBlock className="h-4 w-32" />
-        <div className="flex gap-2">
-          <Button variant="outline" disabled>上一页</Button>
-          <Button variant="outline" disabled>下一页</Button>
-        </div>
-      </div>
     </div>
   );
 }
