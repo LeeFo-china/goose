@@ -26,7 +26,7 @@ import type {
   TencentSipServerConfig,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -407,8 +407,8 @@ export default async function CamerasPage({
       {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
         <CamerasWorkspaceTabs
           cameras={(
-            <Card>
-              <CardHeader className="flex flex-col gap-3">
+            <>
+              <div className="flex flex-col gap-3 border-t px-4 py-4">
                 <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
                   <div>
                     <CardTitle>项目摄像头</CardTitle>
@@ -437,9 +437,9 @@ export default async function CamerasPage({
                     </Button>
                   )}
                 </form>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 p-0">
-                <div className="flex flex-col gap-4 px-4">
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 px-4 pt-4">
                   {cameraProjectGroups.map((group) => (
                     <div key={group.project.id} className="overflow-hidden rounded-md border">
                       <div className="flex flex-col gap-3 border-b bg-muted/30 p-4 lg:flex-row lg:items-start lg:justify-between">
@@ -524,43 +524,40 @@ export default async function CamerasPage({
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </>
           )}
           devices={(
             selectedProjectId ? (
-              <div className="flex flex-col gap-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                  <CardTitle>腾讯云设备与通道</CardTitle>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
-                    <Badge variant="outline">通道 {tencentDevices.length}</Badge>
-                    <TencentSipAccessButton sipServer={tencentSipServer} />
-                    <CreateTencentDeviceButton
-                      projectId={selectedProjectId}
-                      sipServer={tencentSipServer}
-                    />
+              <div className="flex flex-col gap-4 border-t p-4">
+                <div className="overflow-hidden rounded-md border">
+                  <div className="flex flex-col justify-between gap-3 border-b bg-muted/30 p-4 md:flex-row md:items-center">
+                    <CardTitle>腾讯云设备与通道</CardTitle>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Badge variant="outline">设备 {tencentDeviceRecords.length}</Badge>
+                      <Badge variant="outline">通道 {tencentDevices.length}</Badge>
+                      <TencentSipAccessButton sipServer={tencentSipServer} />
+                      <CreateTencentDeviceButton
+                        projectId={selectedProjectId}
+                        sipServer={tencentSipServer}
+                      />
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent className="p-0">
                   <TencentDeviceChannelTree
                     projectId={selectedProjectId}
                     devices={tencentDeviceRecords}
                     channels={tencentDevices}
                     sipServer={tencentSipServer}
                   />
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                  <CardTitle>萤石设备通道</CardTitle>
-                  <Badge variant="outline">共 {ezvizDevices.length} 个通道</Badge>
-                </CardHeader>
-                <CardContent className="p-0">
+                <div className="overflow-hidden rounded-md border">
+                  <div className="flex flex-col justify-between gap-3 border-b bg-muted/30 p-4 md:flex-row md:items-center">
+                    <CardTitle>萤石设备通道</CardTitle>
+                    <Badge variant="outline">共 {ezvizDevices.length} 个通道</Badge>
+                  </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[980px] border-t text-sm">
+                    <table className="w-full min-w-[980px] text-sm">
                       <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
                         <tr>
                           <th className="px-4 py-3">设备</th>
@@ -631,9 +628,8 @@ export default async function CamerasPage({
                       </tbody>
                     </table>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </div>
             ) : (
               <Empty>
                 <EmptyHeader>

@@ -26,22 +26,28 @@ export default function CamerasLoading() {
       </div>
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-5 w-28" />
-              <Skeleton className="h-4 w-96" />
-            </div>
-            <Skeleton className="h-6 w-28" />
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <Skeleton className="h-10" />
-            <Skeleton className="h-10 w-16" />
-            <Skeleton className="h-10 w-16" />
+          <div className="flex gap-2 overflow-x-auto">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-28" />
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-3 border-t p-0">
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-5 w-28" />
+                <Skeleton className="h-4 w-96" />
+              </div>
+              <Skeleton className="h-6 w-28" />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10 w-16" />
+              <Skeleton className="h-10 w-16" />
+            </div>
+          </div>
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="overflow-hidden rounded-md border">
+            <div key={index} className="mx-4 overflow-hidden rounded-md border">
               <div className="flex flex-col gap-3 border-b bg-muted/30 p-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-col gap-2">
                   <Skeleton className="h-5 w-56" />
@@ -55,7 +61,7 @@ export default function CamerasLoading() {
               </div>
             </div>
           ))}
-          <div className="flex flex-col gap-3 pt-1 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 px-4 pb-4 pt-1 md:flex-row md:items-center md:justify-between">
             <Skeleton className="h-4 w-40" />
             <div className="flex gap-2">
               <Skeleton className="h-9 w-20" />
