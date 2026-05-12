@@ -31,7 +31,7 @@ import type {
   Pagination,
 } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -393,43 +393,44 @@ export default async function MarketingPage({
               </Card>
             </div>
 
-            <Card>
-              <CardContent className="p-4">
-                <MarketingFilters
-                  campaignType={campaignType}
-                  status={status}
-                  keyword={keyword}
-                />
-              </CardContent>
-            </Card>
-
             {error ? (
               <StatusAlert>{error}</StatusAlert>
             ) : null}
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                <CardTitle>活动列表</CardTitle>
-                <Badge variant="outline">
-                  第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-                </Badge>
+              <CardHeader className="flex flex-col gap-3">
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                  <div>
+                    <CardTitle>活动列表</CardTitle>
+                    <CardDescription>
+                      筛选条件作用于下方活动表格，当前共 {pagination.total} 条记录。
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline">
+                    第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+                  </Badge>
+                </div>
+                <MarketingFilters
+                  campaignType={campaignType}
+                  status={status}
+                  keyword={keyword}
+                />
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="flex flex-col gap-4 p-0">
                 <MarketingCampaignsTable campaigns={list} projects={projects} />
+                <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    每页 {pagination.pageSize} 条，共 {pagination.total} 条
+                  </div>
+                  <MarketingPagination
+                    pagination={pagination}
+                    campaignType={campaignType}
+                    status={status}
+                    keyword={keyword}
+                  />
+                </div>
               </CardContent>
             </Card>
-
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                每页 {pagination.pageSize} 条，共 {pagination.total} 条
-              </div>
-              <MarketingPagination
-                pagination={pagination}
-                campaignType={campaignType}
-                status={status}
-                keyword={keyword}
-              />
-            </div>
           </div>
         </TabsContent>
 
@@ -486,9 +487,9 @@ export default async function MarketingPage({
               <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
                 <div>
                   <CardTitle>H5 活动页</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <CardDescription>
                     用于小程序 web-view 加载的活动页，发布后访问 https://h5.goodcms.cn/p/页面路径。
-                  </p>
+                  </CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
