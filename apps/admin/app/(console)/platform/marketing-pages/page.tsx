@@ -7,7 +7,7 @@ import type {
 } from "@/components/marketing/marketing-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -127,13 +127,31 @@ export default async function PlatformMarketingPagesPage() {
         </Card>
       </div>
 
-      <H5MarketingPagesTable
-        pages={list}
-        apiBasePath={PLATFORM_H5_API_BASE_PATH}
-        editBasePath={PLATFORM_H5_EDIT_BASE_PATH}
-        returnTo={PLATFORM_H5_RETURN_TO}
-        stickyActionColumn
-      />
+      <Card>
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <CardTitle>H5 活动页列表</CardTitle>
+              <CardDescription>
+                统一管理平台公域 H5 页面，发布后通过 `h5.goodcms.cn` 对外访问。
+              </CardDescription>
+            </div>
+            <Badge variant="outline">共 {pagination.total} 个</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 p-0">
+          <H5MarketingPagesTable
+            pages={list}
+            apiBasePath={PLATFORM_H5_API_BASE_PATH}
+            editBasePath={PLATFORM_H5_EDIT_BASE_PATH}
+            returnTo={PLATFORM_H5_RETURN_TO}
+            stickyActionColumn
+          />
+          <div className="px-4 pb-4 text-sm text-muted-foreground">
+            当前展示 {list.length} 条记录，共 {pagination.total} 条。
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
