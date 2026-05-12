@@ -25,7 +25,7 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -225,6 +225,9 @@ export default async function PlatformDevicesPage({
   const error = activeTab === "ownership" ? ownershipData.error : tencentData.error;
   const ownershipSummary = summarizeOwnershipPage(ownershipData.list);
   const tencentSummary = summarizeTencentPage(tencentData.list);
+  const currentTotal = activeTab === "ownership"
+    ? ownershipData.pagination.total
+    : tencentData.pagination.total;
 
   return (
     <div className="flex flex-col gap-5">
@@ -238,29 +241,7 @@ export default async function PlatformDevicesPage({
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
       <Tabs value={activeTab} className="flex flex-col gap-4">
-        <PlatformDeviceTabsNav
-          activeTab={activeTab}
-          hrefs={{
-            ownership: buildPlatformDevicesHref({
-              tab: "ownership",
-              vendor,
-              status,
-              onlyUnbound: onlyUnbound ? "true" : "__all",
-              keyword,
-            }),
-            tencent: buildPlatformDevicesHref({
-              tab: "tencent",
-              status,
-              keyword,
-            }),
-          }}
-          counts={{
-            ownership: activeTab === "ownership" ? ownershipData.pagination.total : undefined,
-            tencent: activeTab === "tencent" ? tencentData.pagination.total : undefined,
-          }}
-        />
-
-        <TabsContent value="ownership" className="m-0 flex flex-col gap-4">
+        {activeTab === "ownership" ? (
           <div className="grid gap-3 md:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
@@ -293,43 +274,7 @@ export default async function PlatformDevicesPage({
               </CardHeader>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader className="flex flex-col gap-3">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                  <CardTitle>设备归属列表</CardTitle>
-                  <CardDescription className="flex flex-wrap items-center gap-2">
-                    {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
-                    {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-                    {onlyUnbound ? <Badge variant="secondary">仅未绑定</Badge> : <Badge variant="outline">全部绑定</Badge>}
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">共 {ownershipData.pagination.total} 个</Badge>
-              </div>
-              <PlatformDeviceFilters
-                vendor={vendor}
-                status={status}
-                onlyUnbound={onlyUnbound}
-                keyword={keyword}
-              />
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 p-0">
-              <PlatformDevicesTable devices={ownershipData.list} />
-              <div className="px-4 pb-4">
-                <PlatformDevicePagination
-                  pagination={ownershipData.pagination}
-                  vendor={vendor}
-                  status={status}
-                  onlyUnbound={onlyUnbound}
-                  keyword={keyword}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="tencent" className="m-0 flex flex-col gap-4">
+        ) : (
           <div className="grid gap-3 md:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
@@ -362,33 +307,90 @@ export default async function PlatformDevicesPage({
               </CardHeader>
             </Card>
           </div>
+        )}
 
-          <Card>
-            <CardHeader className="flex flex-col gap-3">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                  <CardTitle>腾讯云设备列表</CardTitle>
-                  <CardDescription className="flex flex-wrap items-center gap-2">
-                    {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-                    <Badge variant="outline">包含设备基本信息与通道归属</Badge>
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">共 {tencentData.pagination.total} 台</Badge>
+        <Card>
+          <CardHeader className="flex flex-col gap-4">
+            <PlatformDeviceTabsNav
+              activeTab={activeTab}
+              hrefs={{
+                ownership: buildPlatformDevicesHref({
+                  tab: "ownership",
+                  vendor,
+                  status,
+                  onlyUnbound: onlyUnbound ? "true" : "__all",
+                  keyword,
+                }),
+                tencent: buildPlatformDevicesHref({
+                  tab: "tencent",
+                  status,
+                  keyword,
+                }),
+              }}
+              counts={{
+                ownership: activeTab === "ownership" ? ownershipData.pagination.total : undefined,
+                tencent: activeTab === "tencent" ? tencentData.pagination.total : undefined,
+              }}
+            />
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div>
+                <CardTitle>{activeTab === "ownership" ? "设备归属列表" : "腾讯云设备列表"}</CardTitle>
+                <CardDescription className="flex flex-wrap items-center gap-2">
+                  {activeTab === "ownership" ? (
+                    <>
+                      {vendor ? <Badge variant="outline">{getPlatformDeviceVendorLabel(vendor)}</Badge> : <Badge variant="outline">全部厂商</Badge>}
+                      {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
+                      {onlyUnbound ? <Badge variant="secondary">仅未绑定</Badge> : <Badge variant="outline">全部绑定</Badge>}
+                    </>
+                  ) : (
+                    <>
+                      {status ? <Badge variant={getPlatformDeviceStatusMeta(status).variant}>{getPlatformDeviceStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
+                      <Badge variant="outline">包含设备基本信息与通道归属</Badge>
+                    </>
+                  )}
+                </CardDescription>
               </div>
+              <Badge variant="outline">共 {currentTotal} {activeTab === "ownership" ? "个" : "台"}</Badge>
+            </div>
+            {activeTab === "ownership" ? (
+              <PlatformDeviceFilters
+                vendor={vendor}
+                status={status}
+                onlyUnbound={onlyUnbound}
+                keyword={keyword}
+              />
+            ) : (
               <PlatformTencentDeviceFilters status={status} keyword={keyword} />
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 p-0">
-              <PlatformTencentDevicesTable devices={tencentData.list} />
-              <div className="px-4 pb-4">
-                <PlatformTencentDevicePagination
-                  pagination={tencentData.pagination}
-                  status={status}
-                  keyword={keyword}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            )}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 p-0">
+            {activeTab === "ownership" ? (
+              <>
+                <PlatformDevicesTable devices={ownershipData.list} />
+                <div className="px-4 pb-4">
+                  <PlatformDevicePagination
+                    pagination={ownershipData.pagination}
+                    vendor={vendor}
+                    status={status}
+                    onlyUnbound={onlyUnbound}
+                    keyword={keyword}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <PlatformTencentDevicesTable devices={tencentData.list} />
+                <div className="px-4 pb-4">
+                  <PlatformTencentDevicePagination
+                    pagination={tencentData.pagination}
+                    status={status}
+                    keyword={keyword}
+                  />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </Tabs>
     </div>
   );
