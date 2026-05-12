@@ -26,7 +26,7 @@ import type {
   TencentSipServerConfig,
 } from "@/components/cameras/camera-types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -407,77 +407,83 @@ export default async function CamerasPage({
       {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
         <CamerasWorkspaceTabs
           cameras={(
-            <div className="flex flex-col gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <form className="flex flex-col gap-3 md:flex-row md:items-center" action="/cameras">
-                    <Input
-                      name="camera_keyword"
-                      defaultValue={cameraKeyword}
-                      placeholder="搜索项目、客户、手机号、小区或房号"
-                      className="md:max-w-[360px]"
-                    />
-                    <div className="flex gap-2">
-                      <Button type="submit">搜索</Button>
-                      {cameraKeyword ? (
-                        <Button type="button" variant="outline" asChild>
-                          <Link href="/cameras">清除</Link>
-                        </Button>
-                      ) : null}
-                    </div>
-                    <div className="text-sm text-muted-foreground md:ml-auto">
-                      每页 {cameraProjectPagination.pageSize} 个项目，共 {cameraProjectPagination.total} 个
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-
-              {cameraProjectGroups.map((group) => (
-                <Card key={group.project.id}>
-                  <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate">
-                        {group.project.address || group.project.name || "未命名项目"}
-                      </CardTitle>
-                      <div className="mt-1 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                        {group.project.customer_name ? <span>{group.project.customer_name}</span> : null}
-                        {group.project.phone_masked ? <span>{group.project.phone_masked}</span> : null}
-                        {group.project.property?.layout ? <span>{group.project.property.layout}</span> : null}
-                        {group.project.property?.area ? <span>{group.project.property.area}㎡</span> : null}
+            <Card>
+              <CardHeader className="flex flex-col gap-3">
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                  <div>
+                    <CardTitle>项目摄像头</CardTitle>
+                    <CardDescription>
+                      搜索条件作用于下方项目摄像头列表，当前共 {cameraProjectPagination.total} 个项目。
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline">
+                    第 {cameraProjectPagination.page} / {Math.max(cameraProjectPagination.totalPages, 1)} 页
+                  </Badge>
+                </div>
+                <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]" action="/cameras">
+                  <Input
+                    name="camera_keyword"
+                    defaultValue={cameraKeyword}
+                    placeholder="搜索项目、客户、手机号、小区或房号"
+                  />
+                  <Button type="submit">搜索</Button>
+                  {cameraKeyword ? (
+                    <Button type="button" variant="outline" asChild>
+                      <Link href="/cameras">清除</Link>
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="outline" disabled>
+                      清除
+                    </Button>
+                  )}
+                </form>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 p-0">
+                <div className="flex flex-col gap-4 px-4">
+                  {cameraProjectGroups.map((group) => (
+                    <div key={group.project.id} className="overflow-hidden rounded-md border">
+                      <div className="flex flex-col gap-3 border-b bg-muted/30 p-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold">
+                            {group.project.address || group.project.name || "未命名项目"}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-sm text-muted-foreground">
+                            {group.project.customer_name ? <span>{group.project.customer_name}</span> : null}
+                            {group.project.phone_masked ? <span>{group.project.phone_masked}</span> : null}
+                            {group.project.property?.layout ? <span>{group.project.property.layout}</span> : null}
+                            {group.project.property?.area ? <span>{group.project.property.area}㎡</span> : null}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="success">在线 {group.summary.online_count}</Badge>
+                          <Badge variant="secondary">隐藏 {group.summary.hidden_count}</Badge>
+                          <Badge variant="outline">腾讯云 {group.summary.tencent_count}</Badge>
+                          <Badge variant="outline">共 {group.summary.camera_count}</Badge>
+                        </div>
                       </div>
+                      <CamerasTable
+                        projectId={group.project.id}
+                        cameras={group.cameras}
+                        devices={[]}
+                      />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="success">在线 {group.summary.online_count}</Badge>
-                      <Badge variant="secondary">隐藏 {group.summary.hidden_count}</Badge>
-                      <Badge variant="outline">腾讯云 {group.summary.tencent_count}</Badge>
-                      <Badge variant="outline">共 {group.summary.camera_count}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <CamerasTable
-                      projectId={group.project.id}
-                      cameras={group.cameras}
-                      devices={[]}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
+                  ))}
 
-              {!cameraProjectGroups.length && !cameraProjectError ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>暂无已绑定摄像头的项目</EmptyTitle>
-                    <EmptyDescription>
-                      点击右上角绑定摄像头，选择房产项目后会出现在这里。
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : null}
+                  {!cameraProjectGroups.length && !cameraProjectError ? (
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyTitle>暂无已绑定摄像头的项目</EmptyTitle>
+                        <EmptyDescription>
+                          点击右上角绑定摄像头，选择房产项目后会出现在这里。
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : null}
+                </div>
 
-              {cameraProjectPagination.totalPages > 1 ? (
-                <div className="flex items-center justify-between gap-3 rounded-md border bg-background p-3">
+                <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
                   <div className="text-sm text-muted-foreground">
-                    第 {cameraProjectPagination.page} / {cameraProjectPagination.totalPages} 页
+                    每页 {cameraProjectPagination.pageSize} 个项目，共 {cameraProjectPagination.total} 个
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -518,8 +524,8 @@ export default async function CamerasPage({
                     </Button>
                   </div>
                 </div>
-              ) : null}
-            </div>
+              </CardContent>
+            </Card>
           )}
           devices={(
             selectedProjectId ? (
