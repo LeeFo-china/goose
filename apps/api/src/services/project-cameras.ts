@@ -15,6 +15,7 @@ import {
   type CameraAccessLogAction,
   type ProjectCameraRow,
 } from "@/repositories/project-cameras";
+import { tenantDeviceRepository } from "@/repositories/tenant-devices";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateProjectCameraInput,
@@ -219,6 +220,11 @@ class ProjectCameraService {
   }) {
     try {
       await projectCameraRepository.updateStatus(input);
+      await tenantDeviceRepository.updateStatusByCameraId({
+        cameraId: input.cameraId,
+        status: input.status,
+        rawStatus: input.errorMessage || null,
+      });
     } catch {
       // 状态回写只用于提升列表体验，不能影响播放主链路。
     }
@@ -697,12 +703,15 @@ class ProjectCameraService {
     projectId: string;
     payload: CreateProjectCameraTencentDeviceInput;
   }) {
-    await this.resolveActor({
+    const actor = await this.resolveActor({
       authUserId: input.authUserId,
       projectId: input.projectId,
       permissionCode: "project.update",
       allowCustomer: false,
     });
+    if (!actor.tenantId) {
+      throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
+    }
 
     const password = input.payload.password?.trim() || generateSipPassword();
     const name = input.payload.name.trim() || generateDeviceNameFallback(input.payload.device_type);
@@ -713,6 +722,34 @@ class ProjectCameraService {
       groupId: input.payload.group_id,
     });
     const sipServer = await tencentIotVideoService.getSipServerConfig().catch(() => null);
+    if (created.device_id) {
+      const existing = await tenantDeviceRepository.findByVendorDeviceChannel({
+        vendor: "tencent_iotvideo_industry",
+        vendor_device_serial: created.device_id,
+        vendor_channel_id: null,
+      });
+      if (!existing) {
+        await tenantDeviceRepository.create({
+          tenant_id: actor.tenantId,
+          vendor: "tencent_iotvideo_industry",
+          vendor_device_serial: created.device_id,
+          vendor_device_code: created.device_code,
+          vendor_device_name: name,
+          vendor_channel_id: null,
+          vendor_channel_code: null,
+          vendor_channel_name: null,
+          device_type: getTencentDeviceTypeLabel(input.payload.device_type),
+          source_project_id: input.projectId,
+          status: "unknown",
+          metadata: {
+            virtual_group_id: created.virtual_group_id,
+            group_id: input.payload.group_id || null,
+            sip_transport_protocol: "TCP",
+          },
+          created_by: actor.authContext?.employeeId || null,
+        });
+      }
+    }
 
     return {
       device: {
@@ -1003,11 +1040,40 @@ class ProjectCameraService {
       permissionCode: "project.update",
       allowCustomer: false,
     });
+    if (!actor.tenantId) {
+      throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
+    }
+    const existingDevice = await tenantDeviceRepository.findByVendorDeviceChannel({
+      vendor: input.payload.vendor,
+      vendor_device_serial: input.payload.vendor_device_serial,
+      vendor_channel_id: input.payload.vendor_channel_id,
+    });
+    if (existingDevice && existingDevice.tenant_id !== actor.tenantId) {
+      throw Errors.business(
+        409,
+        "该设备已归属其他租户",
+        ErrorCodes.CAMERA_BOUND_TO_ANOTHER_PROJECT,
+      );
+    }
+    if (
+      existingDevice?.bound_camera_id &&
+      existingDevice.bound_project_id !== input.projectId
+    ) {
+      throw Errors.business(
+        409,
+        "该设备已绑定到当前租户其他项目，请先解绑后再绑定",
+        ErrorCodes.CAMERA_ALREADY_BOUND,
+      );
+    }
 
     const camera = await projectCameraRepository.create(
       input.projectId,
       input.payload,
       actor.tenantId,
+    );
+    await tenantDeviceRepository.upsertFromProjectCamera(
+      camera,
+      actor.authContext?.employeeId || null,
     );
 
     return { id: camera.id };
@@ -1048,6 +1114,10 @@ class ProjectCameraService {
       allowCustomer: false,
     });
     await projectCameraRepository.softDelete(input.projectId, input.cameraId, actor.tenantId);
+    await tenantDeviceRepository.markUnboundByCameraId(
+      input.cameraId,
+      actor.authContext?.employeeId || null,
+    );
     return { success: true };
   }
 }
