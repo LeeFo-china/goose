@@ -186,18 +186,21 @@ class AdminAuthRepository {
   }
 
   async findAdminAuthUserByEmail(email: string) {
-    const { data, error } = await this.adminClient
-      .schema("auth")
-      .from("users")
-      .select("id, email")
-      .eq("email", email)
-      .maybeSingle<AuthUserRecord>();
+    const { data, error } = await (this.adminClient as unknown as {
+      rpc: (
+        functionName: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>;
+    }).rpc("find_auth_user_by_email", {
+      p_email: email,
+    });
 
     if (error) {
       throw Errors.dbError("查询后台登录用户失败", error);
     }
 
-    return data || null;
+    const rows = Array.isArray(data) ? (data as AuthUserRecord[]) : [];
+    return rows[0] || null;
   }
 
   async createAdminAuthUser(input: {
