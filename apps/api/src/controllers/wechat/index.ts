@@ -379,20 +379,29 @@ export class WeChatController extends BaseController {
     }
 
     if (target_role === "employee") {
-      await this.bindEmployeeRole(request.user.sub, phone);
+      const employeeAuthUserId = await this.bindEmployeeRole(
+        request.user.sub,
+        phone,
+        request.user.openid ?? null,
+      );
 
       authorizationService.invalidateAuthContext({
         authUserId: request.user.sub,
       });
+      if (employeeAuthUserId !== request.user.sub) {
+        authorizationService.invalidateAuthContext({
+          authUserId: employeeAuthUserId,
+        });
+      }
 
       if (verificationRecord) {
         await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
       }
 
-      const openid = await this.getOpenIdByAuthUserId(request.user.sub);
-      const roles = await this.getUserRoles(request.user.sub);
+      const openid = await this.getOpenIdByAuthUserId(employeeAuthUserId);
+      const roles = await this.getUserRoles(employeeAuthUserId);
       const employeeLogin = await this.buildEmployeeLoginContext(
-        request.user.sub,
+        employeeAuthUserId,
         openid,
         roles,
       );
@@ -403,7 +412,7 @@ export class WeChatController extends BaseController {
       return ResponseHandler.success({
         mode: "employee",
         token: employeeLogin.token,
-        user_id: request.user.sub,
+        user_id: employeeAuthUserId,
         roles,
         is_new_user: false,
         tenant: employeeLogin.tenant,
@@ -1338,7 +1347,11 @@ export class WeChatController extends BaseController {
     });
   }
 
-  private async bindEmployeeRole(authUserId: string, phone: string) {
+  private async bindEmployeeRole(
+    authUserId: string,
+    phone: string,
+    openid: string | null,
+  ) {
     const adminClient = SupabaseDB.getAdminClient();
     const { data, error } = await adminClient
       .from("employees")
@@ -1367,8 +1380,6 @@ export class WeChatController extends BaseController {
       throw Errors.badRequest("该手机号未绑定员工身份");
     }
 
-    await wechatRebindRequestService.assertEmployeeCanBind(authUserId, employee);
-
     if (!isEmployeeOperableStatus(employee.status)) {
       throw Errors.badRequest("该员工账号已停用，无法登录");
     }
@@ -1379,6 +1390,40 @@ export class WeChatController extends BaseController {
     if (!tenant?.id || tenant.status !== "active") {
       throw Errors.badRequest("该员工未绑定可用装修公司，无法登录");
     }
+
+    if (employee.user_id && employee.user_id !== authUserId) {
+      const existingOpenid = await this.findOpenIdByAuthUserId(employee.user_id);
+      if (existingOpenid) {
+        await wechatRebindRequestService.assertEmployeeCanBind(authUserId, employee);
+      }
+
+      if (!openid) {
+        throw Errors.badRequest("当前账号未绑定微信身份");
+      }
+
+      await this.bindWechatOpenIdToExistingAuthUser({
+        openid,
+        fromAuthUserId: authUserId,
+        toAuthUserId: employee.user_id,
+      });
+      await userIdentityService.syncOauthIdentityBestEffort({
+        userId: employee.user_id,
+        platform: "wechat_mini",
+        openid,
+        source: "employee_verify_role_bind_existing_auth_user",
+      });
+      await userIdentityService.syncBusinessMembershipBestEffort({
+        userId: employee.user_id,
+        tenantId: tenant.id,
+        identityType: "employee",
+        identityId: employee.id,
+        deactivateOtherSameType: true,
+        source: "employee_verify_role_bind_existing_auth_user",
+      });
+      return employee.user_id;
+    }
+
+    await wechatRebindRequestService.assertEmployeeCanBind(authUserId, employee);
 
     const { error: cleanupError } = await adminClient
       .from("employees")
@@ -1407,6 +1452,77 @@ export class WeChatController extends BaseController {
       deactivateOtherSameType: true,
       source: "employee_verify_role_bind",
     });
+
+    return authUserId;
+  }
+
+  private async findOpenIdByAuthUserId(authUserId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_identities")
+      .select("openid")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle<{ openid: string }>();
+
+    if (error) {
+      throw Errors.dbError("查询微信身份失败", error);
+    }
+
+    return data?.openid ?? null;
+  }
+
+  private async bindWechatOpenIdToExistingAuthUser(input: {
+    openid: string;
+    fromAuthUserId: string;
+    toAuthUserId: string;
+  }) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const targetOpenid = await this.findOpenIdByAuthUserId(input.toAuthUserId);
+    if (targetOpenid && targetOpenid !== input.openid) {
+      throw Errors.business(
+        409,
+        "该手机号已绑定其他微信账号，可提交换绑申请",
+        ErrorCodes.WECHAT_ALREADY_BOUND,
+        {
+          can_request_rebind: true,
+          target_role: "employee",
+        },
+      );
+    }
+
+    const currentIdentity = await this.findIdentityByOpenId(input.openid);
+    if (currentIdentity && currentIdentity.auth_user_id !== input.fromAuthUserId) {
+      if (currentIdentity.auth_user_id === input.toAuthUserId) {
+        return;
+      }
+
+      throw Errors.business(
+        409,
+        "当前微信已绑定其他账号，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
+    if (currentIdentity) {
+      const { error } = await adminClient
+        .from("wechat_identities")
+        .update({ auth_user_id: input.toAuthUserId })
+        .eq("auth_user_id", input.fromAuthUserId)
+        .eq("openid", input.openid);
+
+      if (error) {
+        throw Errors.dbError("更新微信身份映射失败", error);
+      }
+      return;
+    }
+
+    const { error } = await adminClient.from("wechat_identities").upsert({
+      auth_user_id: input.toAuthUserId,
+      openid: input.openid,
+    });
+
+    if (error) {
+      throw Errors.dbError("创建微信身份映射失败", error);
+    }
   }
 
   private async getOpenIdByAuthUserId(authUserId: string) {
