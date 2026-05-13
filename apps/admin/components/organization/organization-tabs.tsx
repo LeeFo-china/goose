@@ -144,6 +144,7 @@ export function OrganizationTabs({
             salaryType={postSalaryType}
             keyword={postKeyword}
             error={posts.error}
+            departments={departmentPostRuleConfig.departments}
           />
         ) : activeTab === "role-rules" ? (
           <div className="border-t p-4">

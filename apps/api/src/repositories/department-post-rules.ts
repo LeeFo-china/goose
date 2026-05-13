@@ -70,6 +70,25 @@ class DepartmentPostRuleRepository {
     return (data || []) as DepartmentPostRuleDepartmentRecord[];
   }
 
+  async findDepartmentById(input: {
+    departmentId: string;
+    tenantId?: string | null;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("departments")
+      .select("id, code, name")
+      .eq("id", input.departmentId);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) throw Errors.dbError("查询部门失败", error);
+    return data as DepartmentPostRuleDepartmentRecord | null;
+  }
+
   async listPostOptions(tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("posts")
@@ -125,6 +144,29 @@ class DepartmentPostRuleRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("department_post_rules")
       .upsert(payload, {
+        onConflict: input.tenantId
+          ? "tenant_id,department_code,post_code"
+          : "department_code,post_code",
+      });
+
+    if (error) throw Errors.dbError("保存部门岗位映射失败", error);
+  }
+
+  async enableDepartmentPostRule(input: {
+    departmentCode: DepartmentCode;
+    postCode: EmployeePostCode;
+    tenantId?: string | null;
+  }) {
+    const now = new Date().toISOString();
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("department_post_rules")
+      .upsert({
+        department_code: input.departmentCode,
+        post_code: input.postCode,
+        tenant_id: input.tenantId ?? null,
+        enabled: true,
+        updated_at: now,
+      }, {
         onConflict: input.tenantId
           ? "tenant_id,department_code,post_code"
           : "department_code,post_code",

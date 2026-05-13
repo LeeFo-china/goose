@@ -45,6 +45,10 @@ export const CreatePostSchema = PostBaseSchema.omit({
   updated_at: true,
 });
 
+export const CreateTenantPostSchema = CreatePostSchema.extend({
+  department_id: z.uuid("无效的部门 ID"),
+});
+
 /**
  * 更新职位校验 (PATCH)
  * 将所有字段设为可选，方便局部更新
@@ -58,6 +62,7 @@ export type PostType = z.infer<typeof PostBaseSchema>;
 
 /** 创建职位时的输入类型 */
 export type CreatePostInput = z.infer<typeof CreatePostSchema>;
+export type CreateTenantPostInput = z.infer<typeof CreateTenantPostSchema>;
 
 /** 更新职位时的输入类型 */
 export type UpdatePostInput = z.infer<typeof UpdatePostSchema>;

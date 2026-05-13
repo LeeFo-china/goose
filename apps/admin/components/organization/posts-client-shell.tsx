@@ -11,6 +11,7 @@ import {
 import { CreatePostButton } from "@/components/organization/post-mutations";
 import { PostsTable } from "@/components/organization/posts-table";
 import type {
+  DepartmentPostRuleDepartment,
   Pagination,
   PostRecord,
 } from "@/components/organization/organization-types";
@@ -24,6 +25,7 @@ export function PostsClientShell({
   salaryType,
   keyword,
   error,
+  departments,
 }: {
   posts: PostRecord[];
   pagination: Pagination;
@@ -31,6 +33,7 @@ export function PostsClientShell({
   salaryType: string;
   keyword: string;
   error: string | null;
+  departments: DepartmentPostRuleDepartment[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -77,7 +80,7 @@ export function PostsClientShell({
             pending={pending}
             onNavigate={navigate}
           />
-          <CreatePostButton />
+          <CreatePostButton departments={departments} />
         </div>
       </div>
       <div className="relative flex flex-col gap-4">

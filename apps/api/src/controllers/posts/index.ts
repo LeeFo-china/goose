@@ -1,6 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import {
   CreatePostSchema,
+  CreateTenantPostSchema,
   POST_CODE_PATTERN,
   UpdatePostSchema,
 } from "@/schema/post";
@@ -64,7 +65,7 @@ class PostsController extends BaseController<
       authContext,
       "岗位管理必须在租户上下文中操作",
     );
-    const result = CreatePostSchema.safeParse(request.body);
+    const result = CreateTenantPostSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
     return ResponseHandler.success(

@@ -5,9 +5,10 @@ import {
   type PostListQuery,
 } from "@/repositories/posts";
 import type {
-  CreatePostInput,
+  CreateTenantPostInput,
   UpdatePostInput,
 } from "@/schema/post";
+import { departmentPostRuleService } from "@/services/department-post-rules";
 
 class PostsService {
   private requireTenantId(tenantId?: string | null) {
@@ -69,23 +70,36 @@ class PostsService {
     return existing;
   }
 
-  async createPost(input: CreatePostInput, tenantId?: string | null) {
+  async createPost(input: CreateTenantPostInput, tenantId?: string | null) {
     const scopedTenantId = this.requireTenantId(tenantId);
     const code = this.normalizeCode(input.code);
     if (!code) {
       throw Errors.badRequest("岗位编码不能为空");
     }
+    await departmentPostRuleService.assertDepartmentExists({
+      departmentId: input.department_id,
+      tenantId: scopedTenantId,
+    });
 
+    const { department_id, ...postInput } = input;
     const normalized = {
-      ...input,
+      ...postInput,
       code,
-      name: this.normalizeName(input.name) || input.name,
+      name: this.normalizeName(postInput.name) || postInput.name,
     };
     await this.ensureCodeUnique(normalized.code, scopedTenantId);
-    return postsRepository.create({
+    const post = await postsRepository.create({
       ...normalized,
       tenant_id: scopedTenantId,
     });
+
+    await departmentPostRuleService.enablePostForDepartment({
+      departmentId: department_id,
+      postCode: post.code,
+      tenantId: scopedTenantId,
+    });
+
+    return post;
   }
 
   async updatePost(id: string, input: UpdatePostInput, tenantId?: string | null) {

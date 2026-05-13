@@ -70,6 +70,47 @@ class DepartmentPostRuleService {
     return this.getConfig(scopedTenantId);
   }
 
+  async enablePostForDepartment(input: {
+    departmentId: string;
+    postCode: string;
+    tenantId?: string | null;
+  }) {
+    const scopedTenantId = this.requireTenantId(input.tenantId);
+    const department = await departmentPostRuleRepository.findDepartmentById({
+      departmentId: input.departmentId,
+      tenantId: scopedTenantId,
+    });
+
+    if (!department?.code) {
+      throw Errors.badRequest("请先选择有效部门");
+    }
+
+    await departmentPostRuleRepository.enableDepartmentPostRule({
+      departmentCode: department.code,
+      postCode: input.postCode as EmployeePostCode,
+      tenantId: scopedTenantId,
+    });
+
+    return department;
+  }
+
+  async assertDepartmentExists(input: {
+    departmentId: string;
+    tenantId?: string | null;
+  }) {
+    const scopedTenantId = this.requireTenantId(input.tenantId);
+    const department = await departmentPostRuleRepository.findDepartmentById({
+      departmentId: input.departmentId,
+      tenantId: scopedTenantId,
+    });
+
+    if (!department?.code) {
+      throw Errors.badRequest("请先选择有效部门");
+    }
+
+    return department;
+  }
+
   async assertEmployeeDepartmentPostAllowed(input: {
     departmentId: string | null | undefined;
     postId: string | null | undefined;

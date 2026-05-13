@@ -31,9 +31,15 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { PostRecord } from "@/components/organization/organization-types";
+import type {
+  DepartmentPostRuleDepartment,
+  PostRecord,
+} from "@/components/organization/organization-types";
 
 type PostMode = "create" | "edit";
+type PostDepartmentOption = Pick<DepartmentPostRuleDepartment, "id" | "code" | "name">;
+
+const EMPTY_DEPARTMENT_VALUE = "__none";
 
 const salaryTypeOptions = [
   { value: "__none", label: "不设置薪资类型" },
@@ -83,11 +89,17 @@ function toSalaryType(value: string | null | undefined) {
 function PostDialog({
   mode,
   post,
+  departments = [],
+  defaultDepartmentId = "",
+  lockDepartment = false,
   open,
   onOpenChange,
 }: {
   mode: PostMode;
   post?: PostRecord;
+  departments?: PostDepartmentOption[];
+  defaultDepartmentId?: string;
+  lockDepartment?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -102,18 +114,28 @@ function PostDialog({
     sort: post?.sort != null ? String(post.sort) : "0",
     status: post?.status === 0 ? "0" : "1",
     description: post?.description || "",
-  }), [post]);
+    departmentId: defaultDepartmentId,
+  }), [defaultDepartmentId, post]);
   const [code, setCode] = useState(defaults.code);
   const [salaryType, setSalaryType] = useState(defaults.salaryType);
   const [status, setStatus] = useState(defaults.status);
+  const [departmentId, setDepartmentId] = useState(defaults.departmentId);
+  const departmentOptions = useMemo(() => [
+    { value: EMPTY_DEPARTMENT_VALUE, label: "请选择部门" },
+    ...departments.map((department) => ({
+      value: department.id,
+      label: `${department.name} · ${department.code}`,
+    })),
+  ], [departments]);
 
   useEffect(() => {
     if (!open) return;
     setCode(defaults.code);
     setSalaryType(defaults.salaryType);
     setStatus(defaults.status);
+    setDepartmentId(defaults.departmentId);
     setError("");
-  }, [defaults.code, defaults.salaryType, defaults.status, open]);
+  }, [defaults.code, defaults.departmentId, defaults.salaryType, defaults.status, open]);
 
   function close() {
     if (pending) return;
@@ -128,6 +150,15 @@ function PostDialog({
     const sortValue = String(formData.get("sort") || "").trim();
     const description = String(formData.get("description") || "").trim();
     const codeValue = code.trim().toUpperCase();
+    const normalizedDepartmentId = departmentId === EMPTY_DEPARTMENT_VALUE
+      ? ""
+      : departmentId;
+
+    if (mode === "create" && !normalizedDepartmentId) {
+      setError("请先选择部门，再新增岗位");
+      return;
+    }
+
     const payload = {
       name: String(formData.get("name") || "").trim(),
       code: codeValue,
@@ -136,6 +167,7 @@ function PostDialog({
       sort: sortValue ? Number(sortValue) : 0,
       status: Number(status),
       description: description || null,
+      ...(mode === "create" ? { department_id: normalizedDepartmentId } : {}),
     };
 
     setError("");
@@ -165,13 +197,30 @@ function PostDialog({
             <div>
               <DialogTitle>{mode === "create" ? "新增岗位" : "编辑岗位"}</DialogTitle>
               <DialogDescription>
-                岗位用于员工职责标识、薪资类型和业务角色管理。
+                {mode === "create"
+                  ? "先确定部门，再在部门下新增岗位，保存后自动写入部门岗位规则。"
+                  : "岗位用于员工职责标识、薪资类型和业务角色管理。"}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
+            {mode === "create" ? (
+              <Field className="md:col-span-2">
+                <FieldLabel htmlFor={`${mode}-post-department`}>所属部门</FieldLabel>
+                <FormSelect
+                  id={`${mode}-post-department`}
+                  value={departmentId || EMPTY_DEPARTMENT_VALUE}
+                  options={departmentOptions}
+                  disabled={pending || lockDepartment}
+                  onChange={setDepartmentId}
+                />
+                <FieldDescription>
+                  岗位创建后会自动加入该部门的可选岗位。
+                </FieldDescription>
+              </Field>
+            ) : null}
             <Field>
               <FieldLabel htmlFor={`${mode}-post-name`}>岗位名称</FieldLabel>
               <Input
@@ -281,16 +330,39 @@ function PostDialog({
   );
 }
 
-export function CreatePostButton() {
+export function CreatePostButton({
+  departments = [],
+  defaultDepartmentId = "",
+  lockDepartment = false,
+  disabled = false,
+  label = "新增岗位",
+}: {
+  departments?: PostDepartmentOption[];
+  defaultDepartmentId?: string;
+  lockDepartment?: boolean;
+  disabled?: boolean;
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        disabled={disabled || departments.length === 0}
+        onClick={() => setOpen(true)}
+      >
         <Plus data-icon="inline-start" />
-        新增岗位
+        {label}
       </Button>
-      <PostDialog mode="create" open={open} onOpenChange={setOpen} />
+      <PostDialog
+        mode="create"
+        departments={departments}
+        defaultDepartmentId={defaultDepartmentId}
+        lockDepartment={lockDepartment}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   );
 }

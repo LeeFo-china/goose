@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { BriefcaseBusiness, Loader2, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { CreatePostButton } from "@/components/organization/post-mutations";
 import type {
   DepartmentPostRuleDepartment,
   DepartmentPostRulePostOption,
@@ -111,6 +112,17 @@ export function DepartmentPostRulesClientShell({
       getPostSearchText(post).includes(normalizedKeyword)
     )
     : postOptions;
+
+  useEffect(() => {
+    const nextState = createSelectedState(departments);
+    setSelected(nextState);
+    setBaseline(nextState);
+    setActiveDepartmentCode((currentCode) =>
+      departments.some((department) => department.code === currentCode)
+        ? currentCode
+        : departments[0]?.code || "",
+    );
+  }, [departments]);
 
   function updateDepartmentCodes(
     departmentCode: string,
@@ -234,6 +246,13 @@ export function DepartmentPostRulesClientShell({
               </InputGroup>
             </div>
             <div className="flex flex-wrap gap-2">
+              <CreatePostButton
+                departments={departments}
+                defaultDepartmentId={activeDepartment?.id || ""}
+                lockDepartment
+                disabled={pending || !activeDepartment}
+                label="当前部门新增岗位"
+              />
               <Button
                 type="button"
                 variant="outline"
