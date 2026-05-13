@@ -47,16 +47,18 @@
 - `/department-post-rules`
 - 该接口已只返回启用部门
 
-新增岗位提交仍使用兼容部门 ID：
+新增岗位提交必须优先使用租户部门 ID：
 
 ```json
 {
-  "department_id": "旧 departments.id，也就是 /department-post-rules 返回的 department.id",
+  "tenant_department_id": "tenant_departments.id，也就是 /department-post-rules 返回的 department.tenant_department_id",
   "code": "DESIGNER",
   "name": "设计师",
   "status": 1
 }
 ```
+
+兼容期后端仍接受旧 `department_id`，但 admin 新代码不得再把旧 `department_id` 作为新增岗位的主提交字段。
 
 ### 员工新增/编辑
 
@@ -68,7 +70,9 @@
 
 - 只展示启用部门
 - 选择部门后再展示该部门允许的岗位
-- 提交时继续传兼容 `department_id`
+- 提交时传 `tenant_department_id`
+- 不要求同时传旧 `department_id`
+- 后端会根据 `tenant_department_id` 自动反写旧 `department_id`
 
 ## API 对接
 
@@ -102,8 +106,8 @@ GET /departments?code=DESIGN&enabled=true&keyword=设计
 
 注意：
 
-- 当前阶段 admin 表单继续使用 `id`
-- `tenant_department_id` 是后续迁移用字段，当前不要提交给员工/岗位接口
+- 当前阶段 admin 新增/编辑员工、新增岗位应使用 `tenant_department_id`
+- `id` 仍是旧 `departments.id`，只做兼容展示和旧客户端兜底
 
 ### 启用部门
 
@@ -154,7 +158,7 @@ PATCH /departments/:id
 }
 ```
 
-后端会忽略/拒绝编码修改语义，前端不要提供编码编辑入口。
+后端会拒绝编码修改语义，前端不要提供编码编辑入口。
 
 ## 禁止对接方式
 
@@ -170,8 +174,9 @@ PATCH /departments/:id
 - `employees.department_id -> departments.id`
 - `department_post_rules.department_code`
 - `/department-post-rules` 返回兼容部门 `id`
+- `POST /posts` 仍兼容旧 `department_id`
 
-后续迁移到 `tenant_department_id` 前，admin 端仍按兼容 ID 提交。
+兼容字段只用于旧客户端和历史数据兜底。admin 新写入必须以 `tenant_department_id` 为主。
 
 ## 回归检查
 
@@ -182,4 +187,6 @@ PATCH /departments/:id
 - 停用部门后，岗位新增不能选择该部门
 - 部门岗位规则只显示启用部门
 - 已有员工列表仍能显示部门名称
-
+- 员工新增/编辑请求体包含 `tenant_department_id`
+- 岗位新增请求体包含 `tenant_department_id`
+- 请求体携带 `code` 修改部门时，后端返回“标准部门编码不可修改”

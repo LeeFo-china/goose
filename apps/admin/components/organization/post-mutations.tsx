@@ -44,6 +44,10 @@ type PostDepartmentOption = Pick<
 
 const EMPTY_DEPARTMENT_VALUE = "__none";
 
+function getTenantDepartmentOptionValue(department: PostDepartmentOption) {
+  return department.tenant_department_id || "";
+}
+
 const salaryTypeOptions = [
   { value: "__none", label: "不设置薪资类型" },
   ...SALARY_TYPE_VALUES.map((value) => ({
@@ -127,7 +131,7 @@ function PostDialog({
     { value: EMPTY_DEPARTMENT_VALUE, label: "请选择部门" },
     ...departments
       .map((department) => ({
-        value: department.tenant_department_id || department.id,
+        value: getTenantDepartmentOptionValue(department),
         label: `${department.name} · ${department.code}`,
       }))
       .filter((option) => option.value),
@@ -349,12 +353,16 @@ export function CreatePostButton({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const writableDepartmentCount = useMemo(
+    () => departments.filter((department) => getTenantDepartmentOptionValue(department)).length,
+    [departments],
+  );
 
   return (
     <>
       <Button
         type="button"
-        disabled={disabled || departments.length === 0}
+        disabled={disabled || writableDepartmentCount === 0}
         onClick={() => setOpen(true)}
       >
         <Plus data-icon="inline-start" />

@@ -14,6 +14,9 @@
   - `tenant_department_id`
 - 员工列表/详情响应同时返回新旧字段
 - `/department-post-rules` 候选部门返回 `tenant_department_id`
+- 登录上下文返回 `tenant_department_id`、`department_code`、`department_name`
+- 岗位新增接口支持 `tenant_department_id`
+- 旧 `departments` 表已收口为兼容映射层
 
 ## 字段口径
 
@@ -23,7 +26,8 @@
 
 - 含义：旧 `departments.id`
 - 当前仍保留，作为兼容字段
-- 不建议新页面继续以它作为选择控件的 value
+- 新页面不得继续以它作为选择控件的 value
+- 新写入不得以它作为主字段
 
 ### 新字段
 
@@ -31,7 +35,8 @@
 
 - 含义：租户部门配置 `tenant_departments.id`
 - 表达租户启用的标准部门
-- 后续 admin、小程序、权限和业务筛选都应逐步切到该字段
+- 当前 admin 新增/编辑员工、新增岗位已经应使用该字段
+- 小程序展示、权限体验判断、业务筛选应优先使用该字段
 
 ### 展示字段
 
@@ -85,6 +90,32 @@
 
 后端会根据 `tenant_department_id` 自动反写旧 `department_id`。
 
+### 岗位新增
+
+新增岗位时，部门选择控件同样使用：
+
+```json
+{
+  "value": "tenant_department_id",
+  "label": "部门名称 · 部门编码"
+}
+```
+
+提交岗位创建时应传：
+
+```json
+{
+  "tenant_department_id": "租户部门配置 ID",
+  "code": "DESIGNER",
+  "name": "设计师",
+  "status": 1
+}
+```
+
+不再要求 admin 同时传 `department_id`。
+
+后端兼容旧客户端只传 `department_id`，但 admin 新代码不得继续主写旧字段。
+
 ### 兼容期
 
 过渡期后端仍支持：
@@ -100,6 +131,15 @@
   "success": false,
   "code": "VALIDATION_ERROR",
   "message": "department_id 与 tenant_department_id 不匹配"
+}
+```
+
+如果修改部门配置时提交 `code`，后端返回：
+
+```json
+{
+  "success": false,
+  "message": "标准部门编码不可修改"
 }
 ```
 
@@ -139,6 +179,24 @@
 }
 ```
 
+### 权限与业务判断
+
+小程序端如果需要做体验层权限判断，应使用登录上下文中的：
+
+```json
+{
+  "tenant_department_id": "租户部门配置 ID",
+  "department_code": "标准部门编码"
+}
+```
+
+其中：
+
+- 部门范围匹配优先使用 `tenant_department_id`
+- 页面展示使用 `department_name`
+- 固定语义判断使用 `department_code`
+- 旧 `department_id` 仅作为历史缓存或旧接口兼容，不再作为新逻辑主判断
+
 ## 验收标准
 
 admin：
@@ -148,17 +206,21 @@ admin：
 - 保存后员工响应中同时存在 `department_id` 和 `tenant_department_id`
 - 列表部门名称优先展示 `department_name`
 - 新旧部门 ID 不匹配时能展示后端错误
+- 岗位新增时，部门选择控件 value 为 `tenant_department_id`
+- 岗位新增请求体包含 `tenant_department_id`
+- 部门配置不能编辑 `code`
 
 微信小程序：
 
 - 员工身份展示优先读取 `department_name`
 - 需要部门 ID 的判断优先使用 `tenant_department_id`
+- 固定部门语义判断优先使用 `department_code`
 - 旧版本只读 `department_id` 时仍不受影响
 
 ## 后续
 
-阶段 6 完成后，再进入阶段 7：
+后续进入观察期：
 
-- 登录上下文切换到 `tenant_department_id`
-- 权限范围判断切换到 `tenant_department_id`
-- 客户、项目、费用等部门范围查询逐步收口
+- 连续一个版本周期执行 `scripts/audit-tenant-department-retirement.sh`
+- 巡检结果所有 blocker 均为 0 后，再评估旧字段退场
+- 未完成观察期前，不删除 `departments`、`employees.department_id`、`department_post_rules.department_code`

@@ -106,7 +106,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
 }
 
 function getDepartmentOptionValue(department: EmployeeDepartmentOption) {
-  return department.tenant_department_id || department.id;
+  return department.tenant_department_id || "";
 }
 
 async function uploadEmployeeAvatar(file: File) {
@@ -232,10 +232,12 @@ function EmployeeDialog({
 
   const departmentOptions = useMemo(() => [
     { value: EMPTY_SELECT_VALUE, label: "不分配部门" },
-    ...departments.map((department) => ({
-      value: getDepartmentOptionValue(department),
-      label: `${department.name} · ${department.code}`,
-    })),
+    ...departments
+      .map((department) => ({
+        value: getDepartmentOptionValue(department),
+        label: `${department.name} · ${department.code}`,
+      }))
+      .filter((option) => option.value),
   ], [departments]);
 
   const postOptions = useMemo(() => [

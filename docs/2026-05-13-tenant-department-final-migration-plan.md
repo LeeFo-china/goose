@@ -624,3 +624,30 @@ admin 迁移要求：
   - `tenant_department_legacy_missing_department`：0
   - `enabled_tenant_department_missing_legacy`：0
 - 当前阶段 9C 通过；但旧字段删除仍需满足“连续一个版本周期为 0”的门槛
+
+阶段 10 第 3 步已执行：补齐 admin / 微信小程序对接文档。
+
+- 新增运行期写入契约：
+  - `docs/application_integration_documentation/2026-05-13-admin-miniprogram-tenant-department-runtime-write-contract.md`
+- 更新部门 ID 切换对接文档：
+  - `docs/application_integration_documentation/2026-05-13-admin-miniprogram-tenant-department-id-switch-integration.md`
+- 更新 admin 租户部门配置文档：
+  - `docs/application_integration_documentation/2026-05-13-admin-tenant-department-config-integration.md`
+- 明确 admin 新写入：
+  - 员工新增/编辑主提交 `tenant_department_id`
+  - 岗位新增主提交 `tenant_department_id`
+  - 旧 `department_id` 只做兼容
+- 明确微信小程序：
+  - 登录上下文优先使用 `tenant_department_id`
+  - 展示使用 `department_name`
+  - 固定语义判断使用 `department_code`
+  - 如有组织归属写入，提交 `tenant_department_id`
+
+阶段 10 admin 端已对接：
+
+- 员工新增/编辑部门下拉只使用有 `tenant_department_id` 的候选部门作为可写选项
+- 员工新增/编辑请求体只提交 `tenant_department_id`
+- 岗位新增部门下拉只使用有 `tenant_department_id` 的候选部门作为可写选项
+- “当前部门新增岗位”在当前部门缺少 `tenant_department_id` 时禁用
+- 岗位新增请求体只提交 `tenant_department_id`
+- 员工列表展示仍保留旧 `department_id` fallback，不影响历史数据展示
