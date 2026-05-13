@@ -68,6 +68,8 @@ export const EmployeeBaseSchema = z.object({
 
   // 部门 ID：关联外键，校验 UUID
   department_id: z.string().uuid("无效的部门 ID").nullable().optional(),
+  // 租户部门配置 ID：新组织架构字段，过渡期与 department_id 双写
+  tenant_department_id: z.string().uuid("无效的租户部门 ID").nullable().optional(),
   // 职位 ID：关联外键，校验 UUID
   post_id: z.string().uuid("无效的职位 ID").nullable().optional(),
   // ✅ 修正为对象传参

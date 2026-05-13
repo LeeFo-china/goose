@@ -53,6 +53,26 @@ type EmployeeLoginBindingRpcRow = {
   wechat_openid_masked: string | null;
 };
 
+type TenantDepartmentWriteRow = {
+  id: string;
+  tenant_id: string | null;
+  code: string;
+  alias_name: string;
+  enabled: boolean;
+  legacy_department_id: string | null;
+};
+
+type EmployeeDepartmentWriteInput = {
+  tenantId: string | null;
+  departmentId?: string | null;
+  tenantDepartmentId?: string | null;
+};
+
+type NormalizedEmployeeDepartment = {
+  departmentId: string | null;
+  tenantDepartmentId: string | null;
+};
+
 /**
  * 员工控制器类
  *
@@ -198,6 +218,165 @@ class EmployeeController extends BaseController<
     };
   }
 
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value) return null;
+    if (Array.isArray(value)) {
+      const first = value[0];
+      return first && typeof first === "object"
+        ? first as Record<string, unknown>
+        : null;
+    }
+
+    return typeof value === "object"
+      ? value as Record<string, unknown>
+      : null;
+  }
+
+  private normalizeEmployeeDepartment<T extends object>(employee: T) {
+    const source = employee as Record<string, unknown>;
+    const tenantDepartment = this.asRecord(source.tenant_department);
+    const legacyDepartment = this.asRecord(source.department);
+    const tenantDepartmentId =
+      typeof source.tenant_department_id === "string"
+        ? source.tenant_department_id
+        : typeof tenantDepartment?.id === "string"
+          ? tenantDepartment.id
+          : null;
+    const departmentId =
+      typeof source.department_id === "string"
+        ? source.department_id
+        : typeof tenantDepartment?.legacy_department_id === "string"
+          ? tenantDepartment.legacy_department_id
+          : null;
+    const departmentName =
+      typeof tenantDepartment?.alias_name === "string"
+        ? tenantDepartment.alias_name
+        : typeof legacyDepartment?.name === "string"
+          ? legacyDepartment.name
+          : null;
+    const departmentCode =
+      typeof tenantDepartment?.code === "string"
+        ? tenantDepartment.code
+        : typeof legacyDepartment?.code === "string"
+          ? legacyDepartment.code
+          : null;
+
+    return {
+      ...source,
+      department_id: departmentId,
+      tenant_department_id: tenantDepartmentId,
+      department_name: departmentName,
+      department_code: departmentCode,
+      department: departmentName || departmentCode || departmentId
+        ? {
+          id: departmentId,
+          tenant_department_id: tenantDepartmentId,
+          name: departmentName,
+          code: departmentCode,
+        }
+        : null,
+    };
+  }
+
+  private employeeSelectWithDepartment(): "*" {
+    return `
+      *,
+      tenant_department:tenant_departments!employees_tenant_department_id_fkey(
+        id,
+        code,
+        alias_name,
+        enabled,
+        legacy_department_id
+      ),
+      department:departments!employees_department_id_fkey(
+        id,
+        code,
+        name
+      )
+    ` as "*";
+  }
+
+  private async findTenantDepartmentForEmployee(input: EmployeeDepartmentWriteInput) {
+    if (!input.tenantId) {
+      throw Errors.badRequest("缺少租户上下文，无法选择部门");
+    }
+
+    let query = SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .select("id, tenant_id, code, alias_name, enabled, legacy_department_id")
+      .eq("tenant_id", input.tenantId)
+      .eq("enabled", true);
+
+    if (input.tenantDepartmentId) {
+      query = query.eq("id", input.tenantDepartmentId);
+    } else if (input.departmentId) {
+      query = query.eq("legacy_department_id", input.departmentId);
+    } else {
+      return null;
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error) throw Errors.dbError("查询部门失败", error);
+
+    return data as TenantDepartmentWriteRow | null;
+  }
+
+  private async normalizeDepartmentForWrite(
+    input: EmployeeDepartmentWriteInput,
+  ): Promise<NormalizedEmployeeDepartment> {
+    const hasDepartmentId = input.departmentId !== undefined;
+    const hasTenantDepartmentId = input.tenantDepartmentId !== undefined;
+
+    if (!hasDepartmentId && !hasTenantDepartmentId) {
+      return {
+        departmentId: null,
+        tenantDepartmentId: null,
+      };
+    }
+
+    if (input.departmentId === null || input.tenantDepartmentId === null) {
+      if (
+        (input.departmentId ?? null) !== null ||
+        (input.tenantDepartmentId ?? null) !== null
+      ) {
+        throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
+      }
+
+      return {
+        departmentId: null,
+        tenantDepartmentId: null,
+      };
+    }
+
+    const department = await this.findTenantDepartmentForEmployee(input);
+    if (!department) {
+      throw Errors.badRequest("部门不存在或未启用");
+    }
+
+    if (!department.legacy_department_id) {
+      throw Errors.badRequest("部门缺少旧部门映射，暂不能分配员工");
+    }
+
+    if (
+      input.departmentId &&
+      department.legacy_department_id !== input.departmentId
+    ) {
+      throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
+    }
+
+    if (
+      input.tenantDepartmentId &&
+      department.id !== input.tenantDepartmentId
+    ) {
+      throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
+    }
+
+    return {
+      departmentId: department.legacy_department_id,
+      tenantDepartmentId: department.id,
+    };
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     const scope = accessPolicyService.assertPermission(
@@ -238,7 +417,7 @@ class EmployeeController extends BaseController<
 
     let query = SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("*")
+      .select(this.employeeSelectWithDepartment())
       .order("created_at", { ascending: false });
     query = this.applyEmployeeListFilters(
       query,
@@ -259,7 +438,7 @@ class EmployeeController extends BaseController<
 
     return ResponseHandler.success({
       list: employees.map((employee) => ({
-        ...employee,
+        ...this.normalizeEmployeeDepartment(employee),
         login_bindings: this.buildEmployeeLoginBindings(
           employee,
           bindingRows.get(employee.id),
@@ -280,8 +459,14 @@ class EmployeeController extends BaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
+    const department = await this.normalizeDepartmentForWrite({
+      tenantId: authContext.tenantId,
       departmentId: result.data.department_id,
+      tenantDepartmentId: result.data.tenant_department_id,
+    });
+
+    await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
+      departmentId: department.departmentId,
       postId: result.data.post_id,
       tenantId: authContext.tenantId,
     });
@@ -290,13 +475,15 @@ class EmployeeController extends BaseController<
       .from(this.tableName)
       .insert({
         ...result.data,
+        department_id: department.departmentId,
+        tenant_department_id: department.tenantDepartmentId,
         tenant_id: authContext.tenantId ?? null,
       })
-      .select()
+      .select(this.employeeSelectWithDepartment())
       .single();
 
     if (error) throw Errors.dbError("创建失败", error);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.normalizeEmployeeDepartment(data));
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -308,7 +495,7 @@ class EmployeeController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("id, department_id, post_id, tenant_id")
+      .select("id, department_id, tenant_department_id, post_id, tenant_id")
       .eq("id", idVerify.data.id)
       .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
@@ -327,26 +514,57 @@ class EmployeeController extends BaseController<
     const result = this.updateSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
-      departmentId: result.data.department_id !== undefined
-        ? result.data.department_id
-        : existing.data.department_id,
-      postId: result.data.post_id !== undefined
-        ? result.data.post_id
-        : existing.data.post_id,
-      tenantId: authContext.tenantId,
-    });
+    const shouldUpdateDepartment =
+      result.data.department_id !== undefined ||
+      result.data.tenant_department_id !== undefined;
+    const department = shouldUpdateDepartment
+      ? await this.normalizeDepartmentForWrite({
+        tenantId: authContext.tenantId,
+        departmentId: result.data.department_id,
+        tenantDepartmentId: result.data.tenant_department_id,
+      })
+      : {
+        departmentId: existing.data.department_id,
+        tenantDepartmentId: existing.data.tenant_department_id,
+      };
+    const postId = result.data.post_id !== undefined
+      ? result.data.post_id
+      : existing.data.post_id;
+    const departmentChanged = shouldUpdateDepartment &&
+      (
+        department.departmentId !== existing.data.department_id ||
+        department.tenantDepartmentId !== existing.data.tenant_department_id
+      );
+    const postChanged =
+      result.data.post_id !== undefined &&
+      result.data.post_id !== existing.data.post_id;
+
+    if (departmentChanged || postChanged) {
+      await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
+        departmentId: department.departmentId,
+        postId,
+        tenantId: authContext.tenantId,
+      });
+    }
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .update(result.data)
+      .update({
+        ...result.data,
+        ...(shouldUpdateDepartment
+          ? {
+            department_id: department.departmentId,
+            tenant_department_id: department.tenantDepartmentId,
+          }
+          : {}),
+      })
       .eq("id", idVerify.data.id)
       .eq("tenant_id", authContext.tenantId)
-      .select()
+      .select(this.employeeSelectWithDepartment())
       .single();
 
     if (error) throw Errors.dbError("更新失败", error);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.normalizeEmployeeDepartment(data));
   };
 
   @Delete("/employees/:id")
@@ -434,7 +652,16 @@ class EmployeeController extends BaseController<
 
     let query = SupabaseDB.getAdminClient().from(this.tableName).select(`
         *,
-        department:departments (
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey (
+          id,
+          code,
+          alias_name,
+          enabled,
+          legacy_department_id
+        ),
+        department:departments!employees_department_id_fkey (
+          id,
+          code,
           name
         )
       `);
@@ -447,7 +674,9 @@ class EmployeeController extends BaseController<
     const { data, error } = await query;
 
     if (error) throw Errors.dbError("查询失败", error);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success((data || []).map((employee) =>
+      this.normalizeEmployeeDepartment(employee)
+    ));
   }
 
   /**
@@ -474,7 +703,16 @@ class EmployeeController extends BaseController<
     const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
       .select(`
         *,
-        department:departments (
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey (
+          id,
+          code,
+          alias_name,
+          enabled,
+          legacy_department_id
+        ),
+        department:departments!employees_department_id_fkey (
+          id,
+          code,
           name
         )
       `)
@@ -489,7 +727,7 @@ class EmployeeController extends BaseController<
       throw Errors.forbidden();
     }
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.normalizeEmployeeDepartment(data));
   }
 
   /**
@@ -548,14 +786,14 @@ class EmployeeController extends BaseController<
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     let { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
-      .select()
+      .select(this.employeeSelectWithDepartment())
       .eq("id", idVerify.data.id)
       .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (!data && !error) {
       const fallback = await SupabaseDB.getAdminClient().from(this.tableName)
-        .select()
+        .select(this.employeeSelectWithDepartment())
         .eq("user_id", idVerify.data.id)
         .eq("tenant_id", authContext.tenantId)
         .maybeSingle();
@@ -569,7 +807,7 @@ class EmployeeController extends BaseController<
       throw Errors.forbidden();
     }
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(this.normalizeEmployeeDepartment(data));
   };
 }
 

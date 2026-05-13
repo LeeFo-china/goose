@@ -392,4 +392,34 @@ admin 迁移要求：
 - 可映射但未回填：0
 - 新旧字段映射不一致：0
 
-下一步进入阶段 5：员工接口双写，读优先新字段。阶段 5 需要单独提交，不要和阶段 6 的 admin、小程序切换合并。
+阶段 5 已执行完成：
+
+- 员工创建 schema 支持 `tenant_department_id`
+- 员工更新 schema 支持 `tenant_department_id`
+- 员工创建时支持旧 `department_id` 或新 `tenant_department_id` 入参
+- 员工更新时支持旧 `department_id` 或新 `tenant_department_id` 入参
+- 后端写入时同步维护：
+  - `employees.department_id`
+  - `employees.tenant_department_id`
+- 当 `department_id` 与 `tenant_department_id` 同时传入但不匹配时，返回 `VALIDATION_ERROR`
+- 员工列表、详情、带部门接口返回：
+  - `department_id`
+  - `tenant_department_id`
+  - `department_name`
+  - `department_code`
+  - 兼容 `department` 对象
+- 员工部门展示优先使用 `tenant_departments.alias_name/code`，fallback 旧 `departments`
+- 更新员工时仅在部门或岗位实际变化时校验部门岗位规则，避免历史不合规组合阻塞无关编辑
+
+阶段 5 验收记录：
+
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- 旧 `department_id` 同值更新：通过，响应包含 `tenant_department_id`
+- 新 `tenant_department_id` 同值更新：通过，响应包含兼容 `department_id`
+- 新旧部门 ID 不匹配：已拦截，返回 `VALIDATION_ERROR`
+- 数据库一致性核查：
+  - 可映射但未回填：0
+  - 新旧字段映射不一致：0
+
+下一步进入阶段 6：admin 和小程序切换新字段。阶段 6 需要先输出对接说明，再改 admin 表单和小程序消费字段。
