@@ -96,6 +96,38 @@ class UserIdentityService {
     }
   }
 
+  async unbindOauthIdentityBestEffort(input: {
+    userId: string;
+    platform: OAuthPlatform;
+    source: string;
+  }) {
+    try {
+      await userIdentityRepository.unbindOauthIdentities({
+        userId: input.userId,
+        platform: input.platform,
+      });
+    } catch (error) {
+      await this.recordEventBestEffort({
+        userId: input.userId,
+        eventType: "identity_oauth_unbind_failed",
+        platform: input.platform,
+        metadata: {
+          source: input.source,
+          error: this.serializeError(error),
+        },
+      });
+    }
+  }
+
+  async isOauthIdentityUnbound(input: {
+    userId: string;
+    platform: OAuthPlatform;
+    openid: string;
+  }) {
+    const identity = await userIdentityRepository.findUnboundOauthIdentity(input);
+    return Boolean(identity);
+  }
+
   async syncBusinessMembershipBestEffort(input: BusinessMembershipSyncInput) {
     if (!input.tenantId) {
       await this.recordEventBestEffort({

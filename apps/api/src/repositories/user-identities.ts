@@ -63,6 +63,7 @@ type UntypedTable = {
   gte: (...args: unknown[]) => UntypedTable;
   lte: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
+  limit: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
@@ -96,6 +97,45 @@ class UserIdentityRepository {
     }
 
     return (data || null) as UserOAuthIdentityRecord | null;
+  }
+
+  async findUnboundOauthIdentity(input: {
+    userId: string;
+    platform: OAuthPlatform;
+    openid: string;
+  }) {
+    const { data, error } = await this.from("user_oauth_identities")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("platform", input.platform)
+      .eq("openid", input.openid)
+      .eq("status", "unbound")
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询已解绑登录凭证失败", error);
+    }
+
+    return (data || null) as UserOAuthIdentityRecord | null;
+  }
+
+  async unbindOauthIdentities(input: {
+    userId: string;
+    platform: OAuthPlatform;
+  }) {
+    const { error } = await this.from("user_oauth_identities")
+      .update({
+        status: "unbound",
+        unbound_at: new Date().toISOString(),
+      })
+      .eq("user_id", input.userId)
+      .eq("platform", input.platform)
+      .eq("status", "active");
+
+    if (error) {
+      throw Errors.dbError("解绑用户登录凭证失败", error);
+    }
   }
 
   async createOauthIdentity(input: {

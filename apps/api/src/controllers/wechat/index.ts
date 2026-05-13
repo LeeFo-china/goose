@@ -603,6 +603,37 @@ export class WeChatController extends BaseController {
     );
 
     if (existingIdentity) {
+      const existingOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
+        userId: existingIdentity.auth_user_id,
+        platform: "wechat_mini",
+        openid,
+      });
+
+      if (existingOauthUnbound) {
+        const { error: staleIdentityError } = await adminClient
+          .from("wechat_identities")
+          .delete()
+          .eq("auth_user_id", existingIdentity.auth_user_id)
+          .eq("openid", openid);
+
+        if (staleIdentityError) {
+          throw Errors.dbError("清理已解绑微信身份映射失败", staleIdentityError);
+        }
+
+        request.log.info(
+          { requestId: request.id, openid, userId: existingIdentity.auth_user_id },
+          "[auth] create visitor for unbound existing identity",
+        );
+
+        return this.createWechatVisitorUser({
+          request,
+          openid,
+          unionid: unionid ?? existingIdentity.unionid ?? null,
+          uniqueEmail: true,
+          source: "wechat_auth_existing_identity_unbound",
+        });
+      }
+
       await userIdentityService.syncOauthIdentityBestEffort({
         userId: existingIdentity.auth_user_id,
         platform: "wechat_mini",
@@ -638,6 +669,27 @@ export class WeChatController extends BaseController {
 
       const legacyUser = await this.findLegacyAuthUser(openid);
       if (legacyUser) {
+        const legacyOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
+          userId: legacyUser.id,
+          platform: "wechat_mini",
+          openid,
+        });
+
+        if (legacyOauthUnbound) {
+          request.log.info(
+            { requestId: request.id, openid, userId: legacyUser.id },
+            "[auth] skip legacy identity repair for unbound oauth",
+          );
+
+          return this.createWechatVisitorUser({
+            request,
+            openid,
+            unionid: unionid || legacyUser.unionid || null,
+            uniqueEmail: true,
+            source: "wechat_auth_legacy_unbound",
+          });
+        }
+
         const { error: identityError } = await adminClient.from("wechat_identities").upsert({
           auth_user_id: legacyUser.id,
           openid,
@@ -693,6 +745,73 @@ export class WeChatController extends BaseController {
     });
 
     request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
+
+    return {
+      userId: data.user.id,
+      isNewUser: true,
+    };
+  }
+
+  private async createWechatVisitorUser(input: {
+    request: FastifyRequest;
+    openid: string;
+    unionid?: string | null;
+    uniqueEmail?: boolean;
+    source: string;
+  }) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const emailLocalPart = input.uniqueEmail
+      ? `${input.openid}.${crypto.randomUUID()}`
+      : input.openid;
+    const { data, error } = await adminClient.auth.admin.createUser({
+      email: `${emailLocalPart}@wechat.local`,
+      password: crypto.randomUUID(),
+      email_confirm: true,
+      user_metadata: {
+        openid: input.openid,
+        unionid: input.unionid || null,
+        source: "wechat_miniprogram",
+      },
+    });
+
+    if (error) {
+      input.request.log.error(
+        {
+          requestId: input.request.id,
+          openid: input.openid,
+          error: { message: error.message, status: error.status, name: error.name },
+        },
+        "[auth] create visitor user failed",
+      );
+      throw Errors.dbError("创建微信用户失败", error);
+    }
+
+    if (!data.user) {
+      throw Errors.dbError("创建微信用户失败");
+    }
+
+    const { error: identityError } = await adminClient.from("wechat_identities").upsert({
+      auth_user_id: data.user.id,
+      openid: input.openid,
+      unionid: input.unionid || null,
+    });
+
+    if (identityError) {
+      throw Errors.dbError("创建微信身份映射失败", identityError);
+    }
+
+    await userIdentityService.syncOauthIdentityBestEffort({
+      userId: data.user.id,
+      platform: "wechat_mini",
+      openid: input.openid,
+      unionid: input.unionid || null,
+      source: input.source,
+    });
+
+    input.request.log.info(
+      { requestId: input.request.id, openid: input.openid, userId: data.user.id },
+      "[auth] create visitor user result",
+    );
 
     return {
       userId: data.user.id,

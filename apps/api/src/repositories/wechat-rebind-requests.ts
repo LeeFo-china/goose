@@ -133,10 +133,11 @@ class WechatRebindRequestRepository {
     authUserId: string;
   }) {
     const { data, error } = await this.from("employees")
-      .select("id, tenant_id, name, phone, user_id, status")
+      .update({ user_id: null })
       .eq("id", input.employeeId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)
+      .select("id, tenant_id, name, phone, user_id, status")
       .maybeSingle();
 
     if (error) {
