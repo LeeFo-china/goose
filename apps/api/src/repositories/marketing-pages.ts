@@ -126,6 +126,44 @@ function escapeSupabaseOrValue(value: string) {
     .replace(/,/g, "\\,");
 }
 
+function isCurrentPublishedPage(page: MarketingPageRecord, now = Date.now()) {
+  if (page.status !== "published") {
+    return false;
+  }
+
+  const startAt = page.start_at ? new Date(page.start_at).getTime() : null;
+  const endAt = page.end_at ? new Date(page.end_at).getTime() : null;
+
+  if (startAt != null && !Number.isNaN(startAt) && startAt > now) {
+    return false;
+  }
+
+  if (endAt != null && !Number.isNaN(endAt) && endAt < now) {
+    return false;
+  }
+
+  return true;
+}
+
+function compareMarketingPageListOrder(a: MarketingPageRecord, b: MarketingPageRecord) {
+  const now = Date.now();
+  const aActive = isCurrentPublishedPage(a, now);
+  const bActive = isCurrentPublishedPage(b, now);
+
+  if (aActive !== bActive) {
+    return aActive ? -1 : 1;
+  }
+
+  if (aActive && bActive) {
+    const sortDiff = (a.sort_order ?? 100) - (b.sort_order ?? 100);
+    if (sortDiff !== 0) return sortDiff;
+
+    return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
+  }
+
+  return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+}
+
 const PROJECT_OPTION_SELECT = `
   id,
   name,
@@ -240,16 +278,17 @@ class MarketingPageRepository {
       );
     }
 
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .range(from, to);
+    const { data, error, count } = await request;
 
     if (error) {
       throw Errors.dbError("查询 H5 活动页列表失败", error);
     }
 
+    const sortedList = ((data || []) as MarketingPageRecord[])
+      .sort(compareMarketingPageListOrder);
+
     return {
-      list: (data || []) as MarketingPageRecord[],
+      list: sortedList.slice(from, to + 1),
       pagination: {
         page,
         pageSize,
