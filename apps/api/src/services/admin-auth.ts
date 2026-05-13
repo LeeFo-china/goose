@@ -7,6 +7,7 @@ import {
 } from "@/repositories/admin-auth";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { sendSmsCode } from "@/services/sms";
+import { userIdentityService } from "@/services/user-identities";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { getJwtExpiresAt, signToken } from "@/utils/jwt";
 import { isEmployeeOperableStatus } from "@gooes/domain";
@@ -203,6 +204,19 @@ class AdminAuthService {
         employeeId: employee.id,
       });
     }
+
+    await userIdentityService.syncBusinessMembershipBestEffort({
+      userId: authUserId,
+      tenantId: employee.tenant_id,
+      identityType: "employee",
+      identityId: employee.id,
+      deactivateOtherSameType: true,
+      source: "admin_web_login",
+    });
+    await userIdentityService.observeLegacyIdentityStateBestEffort({
+      userId: authUserId,
+      source: "admin_web_login",
+    });
 
     if (verificationCode) {
       await adminAuthRepository.markVerificationCodeVerified(verificationCode.id);

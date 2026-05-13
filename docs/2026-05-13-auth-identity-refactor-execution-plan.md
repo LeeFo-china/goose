@@ -270,6 +270,21 @@ on conflict do nothing;
 
 目标：代码仍以旧字段为主，但旁路读取新表并比对差异。
 
+落地状态：
+
+- 已新增 `apps/api/src/repositories/user-identities.ts` 和 `apps/api/src/services/user-identities.ts`。
+- `/auth` 微信登录主链路仍以 `wechat_identities`、`customers.user_id`、`employees.user_id` 为准，新增新旧模型旁路比对。
+- 微信登录、后台员工登录、客户手机号绑定、员工手机号绑定、客户分享绑定、客户/员工解绑、微信换绑审批已接入新模型同步。
+- 新模型同步为 best-effort：失败不改变现有登录/绑定响应，会写入 `user_auth_events` 便于排查。
+- 差异事件类型：
+  - `identity_oauth_mismatch`
+  - `identity_membership_mismatch`
+  - `identity_observe_failed`
+  - `identity_oauth_dual_write_failed`
+  - `identity_membership_dual_write_failed`
+  - `identity_membership_unbind_failed`
+  - `identity_membership_dual_write_skipped`
+
 执行内容：
 
 1. 新增 `identityService`：

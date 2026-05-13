@@ -14,6 +14,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { authorizationService } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { userIdentityService } from "@/services/user-identities";
 import { SupabaseDB } from "@/utils/supabase";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { isEmployeeOperableStatus, type SmsScene, type SmsVerificationStatus } from "@gooes/domain";
@@ -235,6 +236,14 @@ class WechatRebindRequestService {
       );
     }
 
+    await userIdentityService.unbindBusinessMembershipBestEffort({
+      userId: user.sub,
+      tenantId: user.tenant_id,
+      identityType: "customer",
+      identityId: user.customer_id,
+      source: "customer_unbind_wechat",
+    });
+
     authorizationService.invalidateAuthContext({ authUserId: user.sub });
     return { success: true, message: "微信绑定已解除" };
   }
@@ -265,6 +274,14 @@ class WechatRebindRequestService {
         ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
       );
     }
+
+    await userIdentityService.unbindBusinessMembershipBestEffort({
+      userId: user.sub,
+      tenantId: user.tenant_id,
+      identityType: "employee",
+      identityId: user.employee_id,
+      source: "employee_unbind_wechat",
+    });
 
     authorizationService.invalidateAuthContext({
       authUserId: user.sub,
@@ -406,6 +423,17 @@ class WechatRebindRequestService {
     if (!updatedTarget) {
       throw Errors.badRequest("目标身份已变化，无法完成换绑");
     }
+
+    await userIdentityService.transferBusinessMembershipBestEffort({
+      oldUserId: record.old_auth_user_id,
+      newUserId: record.new_auth_user_id,
+      tenantId: record.tenant_id,
+      identityType: record.target_role,
+      identityId: record.target_role === "customer"
+        ? record.target_customer_id!
+        : record.target_employee_id!,
+      source: "wechat_rebind_approve",
+    });
 
     const reviewed = await wechatRebindRequestRepository.review({
       id,

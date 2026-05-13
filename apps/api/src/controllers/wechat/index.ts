@@ -20,6 +20,7 @@ import { authorizationService, type AuthContext } from "@/services/authorization
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
+import { userIdentityService } from "@/services/user-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -199,6 +200,12 @@ export class WeChatController extends BaseController {
     );
 
     const roles = await this.getUserRoles(userId);
+    await userIdentityService.observeLegacyIdentityStateBestEffort({
+      userId,
+      openid: wxData.openid,
+      unionid: wxData.unionid ?? null,
+      source: "wechat_auth",
+    });
 
     request.log.info({ requestId: request.id, userId, roles }, "[auth] resolve login context start");
     const employeeLogin = roles.includes("employee")
@@ -585,6 +592,14 @@ export class WeChatController extends BaseController {
     );
 
     if (existingIdentity) {
+      await userIdentityService.syncOauthIdentityBestEffort({
+        userId: existingIdentity.auth_user_id,
+        platform: "wechat_mini",
+        openid,
+        unionid: unionid ?? existingIdentity.unionid ?? null,
+        source: "wechat_auth_existing_identity",
+      });
+
       return {
         userId: existingIdentity.auth_user_id,
         isNewUser: false,
@@ -627,6 +642,14 @@ export class WeChatController extends BaseController {
           "[auth] repaired legacy identity mapping",
         );
 
+        await userIdentityService.syncOauthIdentityBestEffort({
+          userId: legacyUser.id,
+          platform: "wechat_mini",
+          openid,
+          unionid: unionid || legacyUser.unionid || null,
+          source: "wechat_auth_legacy_repair",
+        });
+
         return {
           userId: legacyUser.id,
           isNewUser: false,
@@ -649,6 +672,14 @@ export class WeChatController extends BaseController {
     if (identityError) {
       throw Errors.dbError("创建微信身份映射失败", identityError);
     }
+
+    await userIdentityService.syncOauthIdentityBestEffort({
+      userId: data.user.id,
+      platform: "wechat_mini",
+      openid,
+      unionid: unionid || null,
+      source: "wechat_auth_create_user",
+    });
 
     request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
 
@@ -995,6 +1026,13 @@ export class WeChatController extends BaseController {
     await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
 
     if (customer.user_id === authUserId) {
+      await userIdentityService.syncBusinessMembershipBestEffort({
+        userId: authUserId,
+        tenantId: customer.tenant_id,
+        identityType: "customer",
+        identityId: customer.id,
+        source: "customer_bind_auth_user_existing",
+      });
       return;
     }
 
@@ -1020,6 +1058,14 @@ export class WeChatController extends BaseController {
 
     authorizationService.invalidateAuthContext({
       authUserId,
+    });
+
+    await userIdentityService.syncBusinessMembershipBestEffort({
+      userId: authUserId,
+      tenantId: customer.tenant_id,
+      identityType: "customer",
+      identityId: customer.id,
+      source: "customer_bind_auth_user",
     });
   }
 
@@ -1113,6 +1159,14 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("员工分享客户绑定后未找到客户档案", bound);
     }
 
+    await userIdentityService.syncBusinessMembershipBestEffort({
+      userId: input.authUserId,
+      tenantId: bound.tenant_id,
+      identityType: "customer",
+      identityId: bound.customer_id,
+      source: "customer_share_token_bind",
+    });
+
     return {
       ...(await this.signCustomerSession({
         authUserId: input.authUserId,
@@ -1185,11 +1239,11 @@ export class WeChatController extends BaseController {
     const [{ data, error }, { data: boundCustomers, error: boundError }] = await Promise.all([
       adminClient
         .from("customers")
-        .select("id, phone, user_id, customer_origin, claimed_at")
+        .select("id, phone, user_id, tenant_id, customer_origin, claimed_at")
         .eq("phone", phone),
       adminClient
         .from("customers")
-        .select("id, phone, user_id")
+        .select("id, phone, user_id, tenant_id")
         .eq("user_id", authUserId)
         .limit(2),
     ]);
@@ -1274,6 +1328,14 @@ export class WeChatController extends BaseController {
     if (updateError) {
       throw Errors.dbError("绑定客户身份失败", updateError);
     }
+
+    await userIdentityService.syncBusinessMembershipBestEffort({
+      userId: authUserId,
+      tenantId: customer.tenant_id,
+      identityType: "customer",
+      identityId: customer.id,
+      source: "customer_verify_role_bind",
+    });
   }
 
   private async bindEmployeeRole(authUserId: string, phone: string) {
@@ -1336,6 +1398,15 @@ export class WeChatController extends BaseController {
     if (updateError) {
       throw Errors.dbError("绑定员工身份失败", updateError);
     }
+
+    await userIdentityService.syncBusinessMembershipBestEffort({
+      userId: authUserId,
+      tenantId: tenant.id,
+      identityType: "employee",
+      identityId: employee.id,
+      deactivateOtherSameType: true,
+      source: "employee_verify_role_bind",
+    });
   }
 
   private async getOpenIdByAuthUserId(authUserId: string) {
