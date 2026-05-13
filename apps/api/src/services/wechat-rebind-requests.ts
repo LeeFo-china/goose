@@ -243,6 +243,12 @@ class WechatRebindRequestService {
       identityId: user.customer_id,
       source: "customer_unbind_wechat",
     });
+    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
+    await userIdentityService.unbindOauthIdentityBestEffort({
+      userId: user.sub,
+      platform: "wechat_mini",
+      source: "customer_unbind_wechat",
+    });
 
     authorizationService.invalidateAuthContext({ authUserId: user.sub });
     return { success: true, message: "微信绑定已解除" };
