@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Megaphone,
   ScrollText,
+  SearchCheck,
   Shield,
   SlidersHorizontal,
   TerminalSquare,
@@ -44,6 +45,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
       { href: "/platform/billing", label: "计费中心", icon: CircleDollarSign },
       { href: "/platform/ai-models", label: "AI 模型路由", icon: Bot },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
+      { href: "/platform/identity-diagnostics", label: "身份排障", icon: SearchCheck },
     ],
   },
   {
