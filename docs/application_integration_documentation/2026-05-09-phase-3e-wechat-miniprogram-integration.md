@@ -15,7 +15,8 @@
 
 ## 行为变化
 
-- 客户提交抖音链接时，后端从 `customers.user_id` 解析客户租户。
+- 客户提交抖音链接时，后端从当前登录用户的 active `user_business_memberships` 客户身份解析客户租户。
+- `AUTH_IDENTITY_SOURCE=membership` 后，旧的 `customers.user_id` 只作为兼容观察字段，不再作为小程序业务身份判断口径。
 - 如果当前账号只绑定一个租户客户，任务直接创建成功。
 - 如果当前账号绑定多个租户客户，后端返回：
 

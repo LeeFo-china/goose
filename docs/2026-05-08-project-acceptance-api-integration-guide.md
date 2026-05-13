@@ -331,7 +331,8 @@ GET /customer/project-acceptances?project_id=project-id&page=1&pageSize=10
 
 后端按当前客户登录态校验：
 
-- `customers.user_id = 当前 authUserId`
+- 当前 `authUserId` 必须拥有 active `user_business_memberships` 客户身份。
+- membership 的 `tenant_id`、`identity_id` 必须与当前客户和项目归属一致。
 - `projects.customer_id = 当前 customer.id`
 
 客户只能看到自己项目的验收单。
@@ -476,7 +477,7 @@ POST /project-acceptances/:id/customer-dispute
 
 业主确认接口支持两种校验：
 
-- 当前客户登录态，根据 `customers.user_id` 匹配当前客户。
+- 当前客户登录态，根据 active `user_business_memberships` 匹配当前客户。
 - 短信 ticket，校验 ticket 与验收单、项目、客户匹配且未过期。
 
 短信和小程序拉起相关配置：

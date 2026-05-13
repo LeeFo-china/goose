@@ -420,6 +420,13 @@ POST /customer/auth/unbind-wechat
 
 目标：完成模型收敛，减少双写复杂度。
 
+当前状态（2026-05-14）：
+
+- 已完成 `AUTH_IDENTITY_SOURCE=membership` 的本地灰度验收记录。
+- 本阶段暂不删除旧字段和旧表。
+- 需要等 membership 模式在灰度/生产稳定一个版本周期后，再执行旧模型删除 migration。
+- 阶段 7 前置验收记录见：`docs/2026-05-14-auth-identity-stage7-membership-gray-acceptance.md`。
+
 可清理项：
 
 - `wechat_identities` 改为只读归档或迁移到 `user_oauth_identities`。
