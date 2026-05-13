@@ -468,7 +468,65 @@ class PlatformTenantRepository {
       throw Errors.dbError("初始化租户部门失败", error);
     }
 
-    return (data || []) as Array<{ id: string; code: string; name: string }>;
+    const departments = (data || []) as Array<{ id: string; code: string; name: string }>;
+    await this.upsertTenantDepartmentConfigs({
+      tenantId,
+      departments,
+    });
+
+    return departments;
+  }
+
+  private async upsertTenantDepartmentConfigs(input: {
+    tenantId: string;
+    departments: Array<{ id: string; code: string; name: string }>;
+  }) {
+    if (input.departments.length === 0) {
+      return;
+    }
+
+    const codes = input.departments.map((department) => department.code);
+    const { data: templates, error: templateError } = await this.from("department_templates")
+      .select("id, code, sort")
+      .in("code", codes);
+
+    if (templateError) {
+      throw Errors.dbError("查询部门模板失败", templateError);
+    }
+
+    const templateMap = new Map(
+      ((templates || []) as Array<{ id: string; code: string; sort: number | null }>)
+        .map((template) => [template.code, template]),
+    );
+    const rows = input.departments
+      .map((department) => {
+        const template = templateMap.get(department.code);
+        if (!template) {
+          return null;
+        }
+
+        return {
+          tenant_id: input.tenantId,
+          template_id: template.id,
+          code: department.code,
+          alias_name: department.name,
+          enabled: true,
+          sort: template.sort ?? 0,
+          legacy_department_id: department.id,
+        };
+      })
+      .filter(Boolean);
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const { error } = await this.from("tenant_departments")
+      .upsert(rows, { onConflict: "tenant_id,code" });
+
+    if (error) {
+      throw Errors.dbError("初始化租户部门配置失败", error);
+    }
   }
 
   private async upsertDefaultPosts(tenantId: string) {

@@ -35,6 +35,57 @@ class DepartmentController extends BaseController<
     return authContext;
   }
 
+  private async syncTenantDepartmentConfig(input: {
+    tenantId: string;
+    department: { id: string; code: string; name: string };
+  }) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const { data: template, error: templateError } = await adminClient
+      .from("department_templates")
+      .select("id, sort")
+      .eq("code", input.department.code)
+      .maybeSingle();
+
+    if (templateError) throw Errors.dbError("查询部门模板失败", templateError);
+    if (!template) throw Errors.badRequest("部门模板不存在");
+
+    const payload = {
+      tenant_id: input.tenantId,
+      template_id: template.id,
+      code: input.department.code,
+      alias_name: input.department.name,
+      enabled: true,
+      sort: template.sort ?? 0,
+      legacy_department_id: input.department.id,
+    };
+    const { data: existing, error: existingError } = await adminClient
+      .from("tenant_departments")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("legacy_department_id", input.department.id)
+      .maybeSingle();
+
+    if (existingError) {
+      throw Errors.dbError("查询租户部门配置失败", existingError);
+    }
+
+    if (existing?.id) {
+      const { error } = await adminClient
+        .from("tenant_departments")
+        .update(payload)
+        .eq("id", existing.id);
+
+      if (error) throw Errors.dbError("同步租户部门配置失败", error);
+      return;
+    }
+
+    const { error } = await adminClient
+      .from("tenant_departments")
+      .upsert(payload, { onConflict: "tenant_id,code" });
+
+    if (error) throw Errors.dbError("同步租户部门配置失败", error);
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     const tenantId = accessPolicyService.assertTenantContext(
@@ -116,6 +167,10 @@ class DepartmentController extends BaseController<
       .single();
 
     if (error) throw Errors.dbError("创建部门失败", error);
+    await this.syncTenantDepartmentConfig({
+      tenantId,
+      department: data as { id: string; code: string; name: string },
+    });
     return ResponseHandler.success(data);
   };
 
@@ -141,6 +196,10 @@ class DepartmentController extends BaseController<
 
     if (error) throw Errors.dbError("更新部门失败", error);
     if (!data) throw Errors.badRequest("部门不存在或更新失败");
+    await this.syncTenantDepartmentConfig({
+      tenantId,
+      department: data as { id: string; code: string; name: string },
+    });
     return ResponseHandler.success(data);
   };
 }
