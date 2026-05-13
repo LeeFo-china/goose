@@ -96,6 +96,16 @@ class UserIdentityService {
     }
   }
 
+  async findActiveOauthIdentity(input: {
+    platform: OAuthPlatform;
+    openid: string;
+  }) {
+    return userIdentityRepository.findActiveOauthIdentity(
+      input.platform,
+      input.openid,
+    );
+  }
+
   async unbindOauthIdentityBestEffort(input: {
     userId: string;
     platform: OAuthPlatform;
@@ -126,6 +136,19 @@ class UserIdentityService {
   }) {
     const identity = await userIdentityRepository.findUnboundOauthIdentity(input);
     return Boolean(identity);
+  }
+
+  async listActiveBusinessMemberships(input: {
+    userId: string;
+    identityType?: BusinessIdentityType;
+  }) {
+    const memberships = await userIdentityRepository.listBusinessMemberships(input.userId);
+    return memberships
+      .filter((item) => (
+        item.status === "active" &&
+        (!input.identityType || item.identity_type === input.identityType)
+      ))
+      .sort((a, b) => Number(b.is_default) - Number(a.is_default));
   }
 
   async syncBusinessMembershipBestEffort(input: BusinessMembershipSyncInput) {

@@ -90,6 +90,8 @@ type CustomerTenantOption = CustomerIdentityRow & {
   latest_project_name?: string | null;
 };
 
+type AuthIdentitySource = "legacy" | "dual" | "membership";
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
@@ -129,6 +131,15 @@ export class WeChatController extends BaseController {
     return authorizationService.getRequiredAuthContext(request.user?.sub);
   }
 
+  private getAuthIdentitySource(): AuthIdentitySource {
+    const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+    if (value === "legacy" || value === "membership") {
+      return value;
+    }
+
+    return "dual";
+  }
+
   private serializeEmployeeFromAuthContext(authContext: AuthContext) {
     if (!authContext.employeeId) {
       return null;
@@ -153,7 +164,20 @@ export class WeChatController extends BaseController {
     openid?: string | null,
     roles: string[] = ["employee"],
   ) {
-    const authContext = await authorizationService.getAuthContextByAuthUserId(authUserId);
+    let authContext = await authorizationService.getAuthContextByAuthUserId(authUserId);
+    if (!authContext.employeeId && this.getAuthIdentitySource() !== "legacy") {
+      const employeeMembership = (await userIdentityService.listActiveBusinessMemberships({
+        userId: authUserId,
+        identityType: "employee",
+      }))[0];
+
+      if (employeeMembership) {
+        authContext = await authorizationService.getAuthContextByEmployeeId(
+          employeeMembership.identity_id,
+        );
+      }
+    }
+
     if (!authContext.employeeId) {
       return null;
     }
@@ -595,6 +619,44 @@ export class WeChatController extends BaseController {
   ) {
     const adminClient = SupabaseDB.getAdminClient();
     request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource !== "legacy") {
+      const activeOauthIdentity = await userIdentityService.findActiveOauthIdentity({
+        platform: "wechat_mini",
+        openid,
+      });
+
+      if (activeOauthIdentity) {
+        request.log.info(
+          {
+            requestId: request.id,
+            openid,
+            authUserId: activeOauthIdentity.user_id,
+            identitySource,
+          },
+          "[auth] resolved user by active oauth identity",
+        );
+
+        await this.syncLegacyWechatIdentityMapping({
+          authUserId: activeOauthIdentity.user_id,
+          openid,
+          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
+        });
+        await userIdentityService.syncOauthIdentityBestEffort({
+          userId: activeOauthIdentity.user_id,
+          platform: "wechat_mini",
+          openid,
+          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
+          source: "wechat_auth_oauth_primary",
+        });
+
+        return {
+          userId: activeOauthIdentity.user_id,
+          isNewUser: false,
+        };
+      }
+    }
+
     const existingIdentity = await this.findIdentityByOpenId(openid);
 
     request.log.info(
@@ -839,6 +901,35 @@ export class WeChatController extends BaseController {
     return data;
   }
 
+  private async syncLegacyWechatIdentityMapping(input: {
+    authUserId: string;
+    openid: string;
+    unionid?: string | null;
+  }) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const currentIdentity = await this.findIdentityByOpenId(input.openid);
+    if (currentIdentity && currentIdentity.auth_user_id !== input.authUserId) {
+      const { error: deleteError } = await adminClient
+        .from("wechat_identities")
+        .delete()
+        .eq("openid", input.openid);
+
+      if (deleteError) {
+        throw Errors.dbError("清理旧微信身份映射失败", deleteError);
+      }
+    }
+
+    const { error } = await adminClient.from("wechat_identities").upsert({
+      auth_user_id: input.authUserId,
+      openid: input.openid,
+      unionid: input.unionid ?? null,
+    });
+
+    if (error) {
+      throw Errors.dbError("同步微信身份映射失败", error);
+    }
+  }
+
   private async findLegacyAuthUser(openid: string) {
     const adminClient = SupabaseDB.getAdminClient();
     const { data, error } = await adminClient.rpc("find_auth_user_by_openid", {
@@ -1037,6 +1128,13 @@ export class WeChatController extends BaseController {
   }
 
   private async listCustomerTenantOptionsByAuthUser(authUserId: string) {
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource === "membership") {
+      return this.enrichCustomerTenantOptions(
+        await this.listCustomerTenantOptionsByMembership(authUserId),
+      );
+    }
+
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
       .select(`
@@ -1066,7 +1164,67 @@ export class WeChatController extends BaseController {
         return item.tenant_id && tenant?.status === "active";
       });
 
-    return this.enrichCustomerTenantOptions(customers);
+    if (identitySource === "legacy") {
+      return this.enrichCustomerTenantOptions(customers);
+    }
+
+    const membershipCustomers = await this.listCustomerTenantOptionsByMembership(authUserId);
+    const customerMap = new Map<string, CustomerTenantOption>();
+    for (const customer of [...membershipCustomers, ...customers]) {
+      customerMap.set(customer.id, customer);
+    }
+
+    return this.enrichCustomerTenantOptions(Array.from(customerMap.values()));
+  }
+
+  private async listCustomerTenantOptionsByMembership(authUserId: string) {
+    const memberships = await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+      identityType: "customer",
+    });
+    const customerIds = Array.from(new Set(memberships.map((item) => item.identity_id)));
+    if (customerIds.length === 0) {
+      return [] as CustomerTenantOption[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        customer_origin,
+        claimed_at,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
+      .in("id", customerIds);
+
+    if (error) {
+      throw Errors.dbError("查询客户业务身份失败", error);
+    }
+
+    const membershipTenantMap = new Map(
+      memberships.map((item) => [item.identity_id, item.tenant_id]),
+    );
+    const customers = ((data || []) as unknown as CustomerTenantOption[])
+      .filter((item) => {
+        const tenant = this.normalizeTenantRelation(item.tenant);
+        const membershipTenantId = membershipTenantMap.get(item.id);
+        return (
+          item.tenant_id &&
+          item.tenant_id === membershipTenantId &&
+          tenant?.status === "active"
+        );
+      });
+
+    return customers;
   }
 
   private async getCustomerTenantOptionById(customerId: string, tenantId: string) {
@@ -1670,6 +1828,99 @@ export class WeChatController extends BaseController {
   }
 
   private async getUserRoles(userId: string) {
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource === "legacy") {
+      return this.getLegacyUserRoles(userId);
+    }
+
+    const memberships = await userIdentityService.listActiveBusinessMemberships({ userId });
+    const employeeIds = Array.from(new Set(
+      memberships
+        .filter((item) => item.identity_type === "employee")
+        .map((item) => item.identity_id),
+    ));
+    const customerIds = Array.from(new Set(
+      memberships
+        .filter((item) => item.identity_type === "customer")
+        .map((item) => item.identity_id),
+    ));
+    const adminClient = SupabaseDB.getAdminClient();
+    const [employeeResult, customerResult] = await Promise.all([
+      employeeIds.length > 0
+        ? adminClient
+          .from("employees")
+          .select(`
+            id,
+            status,
+            tenant:tenants!employees_tenant_id_fkey(
+              id,
+              status
+            )
+          `)
+          .in("id", employeeIds)
+        : Promise.resolve({ data: [], error: null }),
+      customerIds.length > 0
+        ? adminClient
+          .from("customers")
+          .select(`
+            id,
+            tenant:tenants!customers_tenant_id_fkey(
+              id,
+              status
+            )
+          `)
+          .in("id", customerIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (employeeResult.error) {
+      throw Errors.dbError("查询员工业务身份失败", employeeResult.error);
+    }
+
+    if (customerResult.error) {
+      throw Errors.dbError("查询客户业务身份失败", customerResult.error);
+    }
+
+    const roles = new Set<string>();
+    const hasActiveEmployee = ((employeeResult.data || []) as unknown as Array<{
+      status?: string | null;
+      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
+    }>).some((item) => {
+      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
+      return item.status === "active" && tenant?.status === "active";
+    });
+
+    if (hasActiveEmployee) {
+      roles.add("employee");
+    }
+
+    const hasActiveCustomer = ((customerResult.data || []) as unknown as Array<{
+      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
+    }>).some((item) => {
+      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
+      return tenant?.status === "active";
+    });
+
+    if (hasActiveCustomer) {
+      roles.add("customer");
+    }
+
+    if (identitySource === "dual") {
+      for (const role of await this.getLegacyUserRoles(userId)) {
+        if (role !== "visitor") {
+          roles.add(role);
+        }
+      }
+    }
+
+    if (roles.size === 0) {
+      return ["visitor"];
+    }
+
+    return Array.from(roles);
+  }
+
+  private async getLegacyUserRoles(userId: string) {
     const adminClient = SupabaseDB.getAdminClient();
     const roles: string[] = [];
 
