@@ -17,7 +17,33 @@ const DepartmentListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(100, "每页条数不能超过 100").default(20),
   keyword: z.string().trim().optional(),
   code: z.enum(DEPARTMENT_CODE_VALUES).optional(),
+  enabled: z.union([
+    z.literal("true").transform(() => true),
+    z.literal("false").transform(() => false),
+    z.boolean(),
+  ]).optional(),
 });
+
+type DepartmentTemplateRow = {
+  id: string;
+  code: string;
+  default_name: string;
+  sort: number | null;
+};
+
+type TenantDepartmentRow = {
+  id: string;
+  tenant_id: string;
+  template_id: string;
+  code: string;
+  alias_name: string;
+  enabled: boolean;
+  sort: number | null;
+  legacy_department_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  department_templates?: DepartmentTemplateRow | DepartmentTemplateRow[] | null;
+};
 
 class DepartmentController extends BaseController<
   typeof CreateDepartmentSchema,
@@ -35,27 +61,75 @@ class DepartmentController extends BaseController<
     return authContext;
   }
 
+  private normalizeTemplate(value: TenantDepartmentRow["department_templates"]) {
+    if (Array.isArray(value)) return value[0] ?? null;
+    return value ?? null;
+  }
+
+  private serializeTenantDepartment(row: TenantDepartmentRow) {
+    const template = this.normalizeTemplate(row.department_templates);
+
+    return {
+      id: row.legacy_department_id,
+      tenant_department_id: row.id,
+      code: row.code,
+      name: row.alias_name,
+      template_name: template?.default_name ?? row.alias_name,
+      enabled: row.enabled,
+      sort: row.sort,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+  }
+
+  private async findDepartmentTemplate(code: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("department_templates")
+      .select("id, code, default_name, sort")
+      .eq("code", code)
+      .eq("enabled", true)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询部门模板失败", error);
+    if (!data) throw Errors.badRequest("部门模板不存在或已停用");
+
+    return data as DepartmentTemplateRow;
+  }
+
+  private async ensureLegacyDepartment(input: {
+    tenantId: string;
+    code: string;
+    name: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("departments")
+      .upsert({
+        tenant_id: input.tenantId,
+        code: input.code,
+        name: input.name,
+      }, { onConflict: "tenant_id,code" })
+      .select("id, code, name, created_at")
+      .single();
+
+    if (error) throw Errors.dbError("同步兼容部门失败", error);
+    return data as { id: string; code: string; name: string; created_at: string | null };
+  }
+
   private async syncTenantDepartmentConfig(input: {
     tenantId: string;
     department: { id: string; code: string; name: string };
+    enabled?: boolean;
+    sort?: number | null;
   }) {
     const adminClient = SupabaseDB.getAdminClient();
-    const { data: template, error: templateError } = await adminClient
-      .from("department_templates")
-      .select("id, sort")
-      .eq("code", input.department.code)
-      .maybeSingle();
-
-    if (templateError) throw Errors.dbError("查询部门模板失败", templateError);
-    if (!template) throw Errors.badRequest("部门模板不存在");
-
+    const template = await this.findDepartmentTemplate(input.department.code);
     const payload = {
       tenant_id: input.tenantId,
       template_id: template.id,
       code: input.department.code,
       alias_name: input.department.name,
-      enabled: true,
-      sort: template.sort ?? 0,
+      enabled: input.enabled ?? true,
+      sort: input.sort ?? template.sort ?? 0,
       legacy_department_id: input.department.id,
     };
     const { data: existing, error: existingError } = await adminClient
@@ -95,29 +169,54 @@ class DepartmentController extends BaseController<
     const queryResult = DepartmentListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword, code } = queryResult.data;
+    const { page, pageSize, keyword, code, enabled } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    let query = SupabaseDB.from("departments")
-      .select("*", { count: "exact" })
+    let query = SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `, { count: "exact" })
       .eq("tenant_id", tenantId);
 
     if (keyword) {
       const escaped = keyword.replaceAll(",", "\\,");
-      query = query.or(`name.ilike.%${escaped}%,code.ilike.%${escaped}%`);
+      query = query.or(`alias_name.ilike.%${escaped}%,code.ilike.%${escaped}%`);
     }
 
     if (code) {
       query = query.eq("code", code);
     }
 
+    if (enabled !== undefined) {
+      query = query.eq("enabled", enabled);
+    }
+
     const { data, error, count } = await query
-      .order("created_at", { ascending: false })
+      .order("sort", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true })
       .range(from, to);
 
     if (error) throw Errors.dbError("部门列表查询失败", error);
     return ResponseHandler.success({
-      list: data || [],
+      list: ((data || []) as TenantDepartmentRow[]).map((row) =>
+        this.serializeTenantDepartment(row)
+      ),
       pagination: {
         page,
         pageSize,
@@ -137,15 +236,34 @@ class DepartmentController extends BaseController<
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     const { data, error } = await SupabaseDB.getAdminClient()
-      .from("departments")
-      .select("*")
-      .eq("id", idVerify.data.id)
+      .from("tenant_departments")
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `)
+      .eq("legacy_department_id", idVerify.data.id)
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw Errors.dbError("部门查询失败", error);
     if (!data) throw Errors.badRequest("部门不存在");
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      this.serializeTenantDepartment(data as TenantDepartmentRow),
+    );
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -156,22 +274,49 @@ class DepartmentController extends BaseController<
     );
     const result = CreateDepartmentSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
+    const template = await this.findDepartmentTemplate(result.data.code);
+    const aliasName = result.data.name || template.default_name;
+    const legacyDepartment = await this.ensureLegacyDepartment({
+      tenantId,
+      code: template.code,
+      name: aliasName,
+    });
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("departments")
-      .insert({
-        ...result.data,
-        tenant_id: tenantId,
-      })
-      .select("*")
-      .single();
-
-    if (error) throw Errors.dbError("创建部门失败", error);
     await this.syncTenantDepartmentConfig({
       tenantId,
-      department: data as { id: string; code: string; name: string },
+      department: legacyDepartment,
+      enabled: result.data.enabled ?? true,
+      sort: result.data.sort ?? template.sort ?? 0,
     });
-    return ResponseHandler.success(data);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("code", template.code)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询部门失败", error);
+    if (!data) throw Errors.badRequest("部门启用失败");
+    return ResponseHandler.success(
+      this.serializeTenantDepartment(data as TenantDepartmentRow),
+    );
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -186,21 +331,57 @@ class DepartmentController extends BaseController<
     const result = UpdateDepartmentSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("departments")
-      .update(result.data)
-      .eq("id", idVerify.data.id)
+    const { data: current, error: currentError } = await SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .select("id, code, alias_name, enabled, sort, legacy_department_id")
+      .eq("legacy_department_id", idVerify.data.id)
       .eq("tenant_id", tenantId)
-      .select("*")
+      .maybeSingle();
+
+    if (currentError) throw Errors.dbError("查询部门失败", currentError);
+    if (!current?.legacy_department_id) throw Errors.badRequest("部门不存在或更新失败");
+
+    const nextAliasName = result.data.name ?? current.alias_name;
+    const legacyDepartment = await this.ensureLegacyDepartment({
+      tenantId,
+      code: current.code,
+      name: nextAliasName,
+    });
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .update({
+        alias_name: nextAliasName,
+        enabled: result.data.enabled ?? current.enabled,
+        sort: result.data.sort ?? current.sort,
+        legacy_department_id: legacyDepartment.id,
+      })
+      .eq("id", current.id)
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `)
       .maybeSingle();
 
     if (error) throw Errors.dbError("更新部门失败", error);
     if (!data) throw Errors.badRequest("部门不存在或更新失败");
-    await this.syncTenantDepartmentConfig({
-      tenantId,
-      department: data as { id: string; code: string; name: string },
-    });
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      this.serializeTenantDepartment(data as TenantDepartmentRow),
+    );
   };
 }
 

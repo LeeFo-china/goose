@@ -22,6 +22,8 @@ export const DepartmentBaseSchema = z.object({
 
   // 创建时间
   created_at: z.string().datetime().nullable().optional(),
+  enabled: z.boolean().optional(),
+  sort: z.number().int().nullable().optional(),
 });
 
 /**
@@ -35,7 +37,13 @@ export const CreateDepartmentSchema = DepartmentBaseSchema.omit({
 /**
  * 更新部门校验 (PATCH)
  */
-export const UpdateDepartmentSchema = CreateDepartmentSchema.partial();
+export const UpdateDepartmentSchema = CreateDepartmentSchema
+  .omit({ code: true })
+  .extend({
+    enabled: z.boolean().optional(),
+    sort: z.number().int().nullable().optional(),
+  })
+  .partial();
 
 // 导出类型
 export type DepartmentType = z.infer<typeof DepartmentBaseSchema>;
