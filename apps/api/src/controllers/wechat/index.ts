@@ -1311,7 +1311,22 @@ export class WeChatController extends BaseController {
     authUserId: string,
     customer: CustomerTenantOption,
   ) {
-    await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
+    const hasActiveMembership = this.getAuthIdentitySource() !== "legacy"
+      ? await userIdentityService.hasActiveBusinessMembership({
+        userId: authUserId,
+        tenantId: customer.tenant_id,
+        identityType: "customer",
+        identityId: customer.id,
+      })
+      : false;
+
+    if (!hasActiveMembership) {
+      await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
+    }
+
+    if (customer.user_id === authUserId && hasActiveMembership) {
+      return;
+    }
 
     if (customer.user_id === authUserId) {
       await userIdentityService.syncBusinessMembershipBestEffort({
@@ -1322,6 +1337,12 @@ export class WeChatController extends BaseController {
         source: "customer_bind_auth_user_existing",
       });
       return;
+    }
+
+    if (hasActiveMembership && customer.user_id && customer.user_id !== authUserId) {
+      authorizationService.invalidateAuthContext({
+        authUserId: customer.user_id,
+      });
     }
 
     const updatePayload: {
@@ -1494,12 +1515,20 @@ export class WeChatController extends BaseController {
     }
 
     const canSelectByCurrentBinding = customer.user_id === input.authUserId;
+    const canSelectByMembership = this.getAuthIdentitySource() !== "legacy"
+      ? await userIdentityService.hasActiveBusinessMembership({
+        userId: input.authUserId,
+        tenantId: customer.tenant_id,
+        identityType: "customer",
+        identityId: customer.id,
+      })
+      : false;
     const canSelectByVerifiedPhone = Boolean(
       input.verifiedPhone &&
         customer.phone &&
         input.verifiedPhone === customer.phone,
     );
-    if (!canSelectByCurrentBinding && !canSelectByVerifiedPhone) {
+    if (!canSelectByMembership && !canSelectByCurrentBinding && !canSelectByVerifiedPhone) {
       throw Errors.business(403, "当前账号不能选择该装修公司", "FORBIDDEN");
     }
 
@@ -1668,6 +1697,46 @@ export class WeChatController extends BaseController {
       : employee.tenant;
     if (!tenant?.id || tenant.status !== "active") {
       throw Errors.badRequest("该员工未绑定可用装修公司，无法登录");
+    }
+
+    const hasActiveMembership = this.getAuthIdentitySource() !== "legacy"
+      ? await userIdentityService.hasActiveBusinessMembership({
+        userId: authUserId,
+        tenantId: tenant.id,
+        identityType: "employee",
+        identityId: employee.id,
+      })
+      : false;
+
+    if (hasActiveMembership) {
+      if (employee.user_id && employee.user_id !== authUserId) {
+        authorizationService.invalidateAuthContext({
+          authUserId: employee.user_id,
+          employeeId: employee.id,
+        });
+      }
+
+      if (employee.user_id !== authUserId) {
+        const { error: updateMembershipEmployeeError } = await adminClient
+          .from("employees")
+          .update({ user_id: authUserId })
+          .eq("id", employee.id);
+
+        if (updateMembershipEmployeeError) {
+          throw Errors.dbError("同步员工身份绑定失败", updateMembershipEmployeeError);
+        }
+      }
+
+      await userIdentityService.syncBusinessMembershipBestEffort({
+        userId: authUserId,
+        tenantId: tenant.id,
+        identityType: "employee",
+        identityId: employee.id,
+        deactivateOtherSameType: true,
+        source: "employee_verify_role_membership_primary",
+      });
+      authorizationService.invalidateAuthContext({ authUserId, employeeId: employee.id });
+      return authUserId;
     }
 
     if (employee.user_id && employee.user_id !== authUserId) {

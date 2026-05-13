@@ -151,6 +151,23 @@ class UserIdentityService {
       .sort((a, b) => Number(b.is_default) - Number(a.is_default));
   }
 
+  async hasActiveBusinessMembership(input: {
+    userId: string;
+    tenantId: string | null;
+    identityType: BusinessIdentityType;
+    identityId: string;
+  }) {
+    const memberships = await this.listActiveBusinessMemberships({
+      userId: input.userId,
+      identityType: input.identityType,
+    });
+
+    return memberships.some((item) => (
+      item.identity_id === input.identityId &&
+      item.tenant_id === input.tenantId
+    ));
+  }
+
   async syncBusinessMembershipBestEffort(input: BusinessMembershipSyncInput) {
     if (!input.tenantId) {
       await this.recordEventBestEffort({
