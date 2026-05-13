@@ -197,8 +197,10 @@ export function EmployeesTable({
                     </div>
                   </td>
                   <td className="px-5 py-4">{maskPhone(employee.phone)}</td>
-                  <td className="px-5 py-4">
-                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <Badge variant={meta.variant} className="whitespace-nowrap">
+                      {meta.label}
+                    </Badge>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex min-w-[116px] flex-col gap-1">
@@ -211,11 +213,11 @@ export function EmployeesTable({
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-muted-foreground">
+                  <td className="px-5 py-4 whitespace-nowrap text-muted-foreground">
                     {department ? (
                       <div>
-                        <div className="font-medium text-foreground">{department.name}</div>
-                        <div className="text-xs text-muted-foreground">{department.code}</div>
+                        <div className="whitespace-nowrap font-medium text-foreground">{department.name}</div>
+                        <div className="whitespace-nowrap text-xs text-muted-foreground">{department.code}</div>
                       </div>
                     ) : (
                       "-"
