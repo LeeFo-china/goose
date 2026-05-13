@@ -22,6 +22,7 @@ import { projectAcceptanceRepository } from "@/repositories/project-acceptances"
 import { projectAcceptanceOpenTicketRepository } from "@/repositories/project-acceptance-open-tickets";
 import { systemSettingsService } from "@/services/system-settings";
 import { sendSmsTemplate } from "@/services/sms";
+import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import type {
   ProjectAcceptanceActionRow,
@@ -49,6 +50,8 @@ const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "leader_approved",
   "rejected",
 ];
+
+type AuthIdentitySource = "legacy" | "dual" | "membership";
 
 type AcceptanceImageSource = "acceptance_item" | "rectification_item";
 
@@ -130,6 +133,89 @@ class ProjectAcceptanceWorkflowService {
 const projectAcceptanceWorkflowService = new ProjectAcceptanceWorkflowService();
 
 class ProjectAcceptanceService {
+  private getAuthIdentitySource(): AuthIdentitySource {
+    const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+    if (value === "legacy" || value === "membership") {
+      return value;
+    }
+
+    return "dual";
+  }
+
+  private async listCustomerProfilesByMembership(
+    authUserId: string,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    const memberships = (await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+      identityType: "customer",
+    })).filter((item) => (
+      (!scope?.tenantId || item.tenant_id === scope.tenantId) &&
+      (!scope?.customerId || item.identity_id === scope.customerId)
+    ));
+
+    const customerIds = Array.from(new Set(memberships.map((item) => item.identity_id)));
+    if (customerIds.length === 0) {
+      return [] as ProjectAcceptanceCustomerRow[];
+    }
+
+    const customers = await projectAcceptanceRepository.listCustomers(customerIds);
+    const membershipTenantMap = new Map(
+      memberships.map((item) => [item.identity_id, item.tenant_id]),
+    );
+
+    return customers.filter((customer) => {
+      const membershipTenantId = membershipTenantMap.get(customer.id);
+      return (
+        customer.tenant_id &&
+        customer.tenant_id === membershipTenantId &&
+        (!scope?.tenantId || customer.tenant_id === scope.tenantId) &&
+        (!scope?.customerId || customer.id === scope.customerId)
+      );
+    });
+  }
+
+  private async getCustomerByAuthUserId(
+    authUserId: string,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource === "membership") {
+      const customers = await this.listCustomerProfilesByMembership(authUserId, scope);
+      if (customers.length > 1) {
+        throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
+      }
+      return customers[0] || null;
+    }
+
+    const legacyCustomer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+      authUserId,
+      scope,
+    );
+    if (identitySource === "legacy") {
+      return legacyCustomer;
+    }
+
+    const membershipCustomers = await this.listCustomerProfilesByMembership(authUserId, scope);
+    const customerMap = new Map<string, ProjectAcceptanceCustomerRow>();
+    for (const customer of [...membershipCustomers, ...(legacyCustomer ? [legacyCustomer] : [])]) {
+      customerMap.set(customer.id, customer);
+    }
+
+    const customers = Array.from(customerMap.values());
+    if (customers.length > 1) {
+      throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
+    }
+
+    return customers[0] || null;
+  }
+
   private getStatusLabel(status: ProjectAcceptanceStatus) {
     const labels: Record<ProjectAcceptanceStatus, string> = {
       draft: "草稿",
@@ -985,7 +1071,7 @@ class ProjectAcceptanceService {
       customerId?: string | null;
     },
   ) {
-    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+    const customer = await this.getCustomerByAuthUserId(
       authUserId,
       scope,
     );
@@ -1029,7 +1115,7 @@ class ProjectAcceptanceService {
       customerId?: string | null;
     },
   ) {
-    const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+    const customer = await this.getCustomerByAuthUserId(
       authUserId,
       scope,
     );
@@ -1054,7 +1140,7 @@ class ProjectAcceptanceService {
     const row = await this.getRequiredAcceptance(input.id);
 
     if (input.authUserId) {
-      const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+      const customer = await this.getCustomerByAuthUserId(
         input.authUserId,
         {
           tenantId: input.tenantId,
@@ -1120,7 +1206,7 @@ class ProjectAcceptanceService {
     projectId?: string;
   }) {
     if (input.authUserId) {
-      const customer = await projectAcceptanceRepository.getCustomerByAuthUserId(
+      const customer = await this.getCustomerByAuthUserId(
         input.authUserId,
         {
           tenantId: input.tenantId,

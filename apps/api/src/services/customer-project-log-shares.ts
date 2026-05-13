@@ -5,6 +5,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import { aiGateway } from "@/services/ai-gateway";
 import type { AuthContext } from "@/services/authorization";
 import { systemSettingsService } from "@/services/system-settings";
+import { userIdentityService } from "@/services/user-identities";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
 import {
   marketingCampaignRepository,
@@ -102,6 +103,7 @@ type CustomerProjectLogRow = {
 
 type CustomerRow = {
   id: string;
+  tenant_id: string | null;
   name: string | null;
   user_id: string | null;
 };
@@ -185,6 +187,8 @@ type CampaignOwnerRow = {
   name: string | null;
   user_id: string | null;
 };
+
+type AuthIdentitySource = "legacy" | "dual" | "membership";
 
 type UserProfileRow = {
   auth_user_id: string;
@@ -603,10 +607,62 @@ class CustomerProjectLogShareService {
       .data.publicUrl;
   }
 
-  private async getCustomerByAuthUserId(authUserId: string) {
+  private getAuthIdentitySource(): AuthIdentitySource {
+    const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+    if (value === "legacy" || value === "membership") {
+      return value;
+    }
+
+    return "dual";
+  }
+
+  private async listCustomerProfilesByMembership(authUserId: string) {
+    const memberships = await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+      identityType: "customer",
+    });
+    const customerIds = Array.from(new Set(memberships.map((item) => item.identity_id)));
+    if (customerIds.length === 0) {
+      return [] as CustomerRow[];
+    }
+
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, name, user_id")
+      .select("id, tenant_id, name, user_id")
+      .in("id", customerIds);
+
+    if (error) {
+      throw Errors.dbError("查询客户身份失败", error);
+    }
+
+    const membershipTenantMap = new Map(
+      memberships.map((item) => [item.identity_id, item.tenant_id]),
+    );
+
+    return ((data || []) as CustomerRow[]).filter((customer) => (
+      customer.tenant_id &&
+      customer.tenant_id === membershipTenantMap.get(customer.id)
+    ));
+  }
+
+  private async getCustomerByAuthUserId(authUserId: string) {
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource === "membership") {
+      const list = await this.listCustomerProfilesByMembership(authUserId);
+      if (list.length > 1) {
+        throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
+      }
+
+      if (!list[0]) {
+        throw Errors.forbidden();
+      }
+
+      return list[0];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, tenant_id, name, user_id")
       .eq("user_id", authUserId)
       .limit(2);
 
@@ -614,7 +670,26 @@ class CustomerProjectLogShareService {
       throw Errors.dbError("查询客户身份失败", error);
     }
 
-    const list = (data || []) as CustomerRow[];
+    const legacyList = (data || []) as CustomerRow[];
+    if (identitySource === "legacy") {
+      if (legacyList.length > 1) {
+        throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
+      }
+
+      if (!legacyList[0]) {
+        throw Errors.forbidden();
+      }
+
+      return legacyList[0];
+    }
+
+    const membershipList = await this.listCustomerProfilesByMembership(authUserId);
+    const customerMap = new Map<string, CustomerRow>();
+    for (const customer of [...membershipList, ...legacyList]) {
+      customerMap.set(customer.id, customer);
+    }
+
+    const list = Array.from(customerMap.values());
     if (list.length > 1) {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
     }

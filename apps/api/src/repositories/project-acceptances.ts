@@ -462,7 +462,17 @@ class ProjectAcceptanceRepository {
     if (ids.length === 0) return [] as ProjectAcceptanceCustomerRow[];
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, tenant_id, name, phone, user_id")
+      .select(`
+        id,
+        tenant_id,
+        name,
+        phone,
+        user_id,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          status
+        )
+      `)
       .in("id", ids);
 
     if (error) throw Errors.dbError("查询客户失败", error);
