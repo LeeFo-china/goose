@@ -23,6 +23,13 @@ type Employee = {
   user_id?: string | null;
   created_at: string | null;
   last_login_time?: string | null;
+  login_bindings?: {
+    status: "none" | "web_only" | "wechat_only" | "web_and_wechat" | "other";
+    label: string;
+    web: boolean;
+    wechat_mini: boolean;
+    wechat_openid_masked?: string | null;
+  } | null;
 };
 
 type EmployeeDepartmentOption = {

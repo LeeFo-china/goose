@@ -33,6 +33,14 @@ type StatusOption = {
   value: "" | EmployeeStatus;
 };
 
+function hasLoginBinding(employee: EmployeeRecord) {
+  if (employee.login_bindings) {
+    return employee.login_bindings.status !== "none";
+  }
+
+  return Boolean(employee.user_id);
+}
+
 export function EmployeesClientShell({
   employees,
   pagination,
@@ -63,7 +71,7 @@ export function EmployeesClientShell({
   }
   const activeCount = employees.filter((employee) => employee.status === "active").length;
   const pendingCount = employees.filter((employee) => employee.status === "pending").length;
-  const boundAccountCount = employees.filter((employee) => Boolean(employee.user_id)).length;
+  const loginEnabledCount = employees.filter(hasLoginBinding).length;
 
   return (
     <>
@@ -107,8 +115,8 @@ export function EmployeesClientShell({
               <ShieldCheck />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">本页已绑定登录</div>
-              <div className="text-xl font-semibold">{boundAccountCount}</div>
+              <div className="text-sm text-muted-foreground">本页已开通登录</div>
+              <div className="text-xl font-semibold">{loginEnabledCount}</div>
             </div>
           </CardContent>
         </Card>

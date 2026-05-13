@@ -1,6 +1,13 @@
 "use client";
 
-import { BadgeCheck, UserRound } from "lucide-react";
+import {
+  CircleSlash2,
+  Globe2,
+  MonitorSmartphone,
+  Smartphone,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   EMPLOYEE_STATUS_VALUES,
   EmployeeStatusConfig,
@@ -25,6 +32,13 @@ export type EmployeeRecord = {
   user_id?: string | null;
   created_at: string | null;
   last_login_time?: string | null;
+  login_bindings?: {
+    status: "none" | "web_only" | "wechat_only" | "web_and_wechat" | "other";
+    label: string;
+    web: boolean;
+    wechat_mini: boolean;
+    wechat_openid_masked?: string | null;
+  } | null;
 };
 
 const statusMeta: Record<string, {
@@ -57,6 +71,63 @@ function formatDate(value: string | null | undefined) {
 function maskPhone(value: string | null) {
   if (!value || value.length < 7) return value || "-";
   return `${value.slice(0, 3)}****${value.slice(-4)}`;
+}
+
+function getLoginBindingMeta(employee: EmployeeRecord): {
+  label: string;
+  description: string;
+  variant: "success" | "warning" | "secondary" | "outline";
+  icon: LucideIcon;
+} {
+  const binding = employee.login_bindings;
+  const status = binding?.status || (employee.user_id ? "other" : "none");
+
+  if (status === "web_and_wechat") {
+    return {
+      label: "后台 + 微信",
+      description: binding?.wechat_openid_masked
+        ? `微信 ${binding.wechat_openid_masked}`
+        : "后台与小程序均可登录",
+      variant: "success",
+      icon: MonitorSmartphone,
+    };
+  }
+
+  if (status === "web_only") {
+    return {
+      label: "仅后台账号",
+      description: "可登录租户后台",
+      variant: "outline",
+      icon: Globe2,
+    };
+  }
+
+  if (status === "wechat_only") {
+    return {
+      label: "仅微信小程序",
+      description: binding?.wechat_openid_masked
+        ? `微信 ${binding.wechat_openid_masked}`
+        : "仅可通过小程序登录",
+      variant: "warning",
+      icon: Smartphone,
+    };
+  }
+
+  if (status === "other") {
+    return {
+      label: binding?.label || "其他登录账号",
+      description: "已有关联账号，登录入口待识别",
+      variant: "secondary",
+      icon: UserRound,
+    };
+  }
+
+  return {
+    label: "未开通登录",
+    description: "暂无后台或小程序登录账号",
+    variant: "secondary",
+    icon: CircleSlash2,
+  };
 }
 
 export function EmployeesTable({
@@ -97,6 +168,8 @@ export function EmployeesTable({
                 ? departmentMap.get(employee.department_id)
                 : null;
               const post = employee.post_id ? postMap.get(employee.post_id) : null;
+              const loginMeta = getLoginBindingMeta(employee);
+              const LoginIcon = loginMeta.icon;
 
               return (
                 <tr key={employee.id} className="border-t transition-colors hover:bg-muted/40">
@@ -128,14 +201,15 @@ export function EmployeesTable({
                     <Badge variant={meta.variant}>{meta.label}</Badge>
                   </td>
                   <td className="px-5 py-4">
-                    {employee.user_id ? (
-                      <Badge variant="success">
-                        <BadgeCheck className="size-3" />
-                        已绑定
+                    <div className="flex min-w-[116px] flex-col gap-1">
+                      <Badge variant={loginMeta.variant} className="w-fit gap-1">
+                        <LoginIcon className="size-3" />
+                        {loginMeta.label}
                       </Badge>
-                    ) : (
-                      <Badge variant="secondary">未绑定</Badge>
-                    )}
+                      <div className="text-xs text-muted-foreground">
+                        {loginMeta.description}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {department ? (

@@ -38,6 +38,21 @@ function buildPagination(page: number, pageSize: number, total: number) {
   };
 }
 
+type EmployeeLoginBindingStatus =
+  | "none"
+  | "web_only"
+  | "wechat_only"
+  | "web_and_wechat"
+  | "other";
+
+type EmployeeLoginBindingRpcRow = {
+  employee_id: string;
+  auth_user_id: string | null;
+  has_admin_web: boolean | null;
+  has_wechat_mini: boolean | null;
+  wechat_openid_masked: string | null;
+};
+
 /**
  * 员工控制器类
  *
@@ -128,6 +143,61 @@ class EmployeeController extends BaseController<
     return filteredQuery;
   }
 
+  private async listEmployeeLoginBindingRows(employeeIds: string[]) {
+    if (employeeIds.length === 0) {
+      return new Map<string, EmployeeLoginBindingRpcRow>();
+    }
+
+    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (
+        functionName: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>;
+    }).rpc("list_employee_login_bindings", {
+      p_employee_ids: employeeIds,
+    });
+
+    if (error) {
+      throw Errors.dbError("查询员工登录绑定失败", error);
+    }
+
+    const rows = Array.isArray(data)
+      ? (data as EmployeeLoginBindingRpcRow[])
+      : [];
+
+    return new Map(rows.map((row) => [row.employee_id, row]));
+  }
+
+  private buildEmployeeLoginBindings(employee: Record<string, unknown>, row?: EmployeeLoginBindingRpcRow) {
+    const hasAuthUser = Boolean(employee.user_id);
+    const web = Boolean(row?.has_admin_web);
+    const wechatMini = Boolean(row?.has_wechat_mini);
+    let status: EmployeeLoginBindingStatus = "none";
+    let label = "未开通登录";
+
+    if (web && wechatMini) {
+      status = "web_and_wechat";
+      label = "后台 + 微信";
+    } else if (web) {
+      status = "web_only";
+      label = "仅后台账号";
+    } else if (wechatMini) {
+      status = "wechat_only";
+      label = "仅微信小程序";
+    } else if (hasAuthUser) {
+      status = "other";
+      label = "其他登录账号";
+    }
+
+    return {
+      status,
+      label,
+      web,
+      wechat_mini: wechatMini,
+      wechat_openid_masked: row?.wechat_openid_masked ?? null,
+    };
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredAuthContext(request);
     const scope = accessPolicyService.assertPermission(
@@ -182,8 +252,19 @@ class EmployeeController extends BaseController<
     const { data, error } = await query.range(from, to);
 
     if (error) throw Errors.dbError("列表查询失败", error);
+    const employees = data || [];
+    const bindingRows = await this.listEmployeeLoginBindingRows(
+      employees.map((employee) => employee.id),
+    );
+
     return ResponseHandler.success({
-      list: data || [],
+      list: employees.map((employee) => ({
+        ...employee,
+        login_bindings: this.buildEmployeeLoginBindings(
+          employee,
+          bindingRows.get(employee.id),
+        ),
+      })),
       pagination: buildPagination(page, pageSize, total),
     });
   };
