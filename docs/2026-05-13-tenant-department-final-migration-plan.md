@@ -371,11 +371,25 @@ admin 迁移要求：
 
 ## 当前建议
 
-下一步执行阶段 4，但必须单独提交：
+阶段 4 已执行完成：
 
 - migration 增加 `employees.tenant_department_id`
 - 数据回填
 - 异常清单 SQL
 - 不切业务读写
 
-阶段 4 完成并验收后，再进入阶段 5 的员工接口双写。不要把阶段 4 和阶段 5 合并在一个提交里，否则一旦员工接口出现问题，无法快速判断是数据回填问题还是读写切换问题。
+执行记录：
+
+- migration：`20260513203000_add_employee_tenant_department_id.sql`
+- 远端执行：已完成
+- `employees.tenant_department_id` 字段：已创建
+- `employees_tenant_department_id_idx`：已创建
+- `employees_tenant_tenant_department_id_idx`：已创建
+- `employees_tenant_department_id_fkey`：已创建并校验
+- 当前员工总数：32
+- 已设置旧部门员工数：6
+- 已回填新部门员工数：6
+- 可映射但未回填：0
+- 新旧字段映射不一致：0
+
+下一步进入阶段 5：员工接口双写，读优先新字段。阶段 5 需要单独提交，不要和阶段 6 的 admin、小程序切换合并。
