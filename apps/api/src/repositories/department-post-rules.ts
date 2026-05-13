@@ -7,6 +7,7 @@ import type {
 
 export type DepartmentPostRuleRecord = {
   id: string;
+  tenant_department_id: string | null;
   department_code: DepartmentCode;
   post_code: EmployeePostCode;
   enabled: boolean;
@@ -40,8 +41,8 @@ class DepartmentPostRuleRepository {
   async listRules(tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("department_post_rules")
-      .select("id, department_code, post_code, enabled, sort, created_at, updated_at")
-      .order("department_code", { ascending: true })
+      .select("id, tenant_department_id, department_code, post_code, enabled, sort, created_at, updated_at")
+      .order("tenant_department_id", { ascending: true, nullsFirst: false })
       .order("sort", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -138,6 +139,7 @@ class DepartmentPostRuleRepository {
   }
 
   async replaceDepartmentRules(input: {
+    tenantDepartmentId: string;
     departmentCode: DepartmentCode;
     postCodes: EmployeePostCode[];
     tenantId?: string | null;
@@ -148,7 +150,7 @@ class DepartmentPostRuleRepository {
         enabled: false,
         updated_at: new Date().toISOString(),
       })
-      .eq("department_code", input.departmentCode);
+      .eq("tenant_department_id", input.tenantDepartmentId);
 
     if (input.tenantId) {
       disableQuery = disableQuery.eq("tenant_id", input.tenantId);
@@ -164,6 +166,7 @@ class DepartmentPostRuleRepository {
 
     const now = new Date().toISOString();
     const payload = input.postCodes.map((postCode, index) => ({
+      tenant_department_id: input.tenantDepartmentId,
       department_code: input.departmentCode,
       post_code: postCode,
       tenant_id: input.tenantId ?? null,
@@ -175,15 +178,14 @@ class DepartmentPostRuleRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("department_post_rules")
       .upsert(payload, {
-        onConflict: input.tenantId
-          ? "tenant_id,department_code,post_code"
-          : "department_code,post_code",
+        onConflict: "tenant_id,tenant_department_id,post_code",
       });
 
     if (error) throw Errors.dbError("保存部门岗位映射失败", error);
   }
 
   async enableDepartmentPostRule(input: {
+    tenantDepartmentId: string;
     departmentCode: DepartmentCode;
     postCode: EmployeePostCode;
     tenantId?: string | null;
@@ -192,15 +194,14 @@ class DepartmentPostRuleRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("department_post_rules")
       .upsert({
+        tenant_department_id: input.tenantDepartmentId,
         department_code: input.departmentCode,
         post_code: input.postCode,
         tenant_id: input.tenantId ?? null,
         enabled: true,
         updated_at: now,
       }, {
-        onConflict: input.tenantId
-          ? "tenant_id,department_code,post_code"
-          : "department_code,post_code",
+        onConflict: "tenant_id,tenant_department_id,post_code",
       });
 
     if (error) throw Errors.dbError("保存部门岗位映射失败", error);
@@ -253,6 +254,7 @@ class DepartmentPostRuleRepository {
   }
 
   async findEnabledRule(input: {
+    tenantDepartmentId: string;
     departmentCode: DepartmentCode;
     postCode: EmployeePostCode;
     tenantId?: string | null;
@@ -260,7 +262,7 @@ class DepartmentPostRuleRepository {
     let query = SupabaseDB.getAdminClient()
       .from("department_post_rules")
       .select("id, enabled")
-      .eq("department_code", input.departmentCode)
+      .eq("tenant_department_id", input.tenantDepartmentId)
       .eq("post_code", input.postCode)
       .eq("enabled", true);
 

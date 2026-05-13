@@ -477,3 +477,39 @@ admin 迁移要求：
 - `department_id` 继续作为旧客户端兼容字段
 - 旧 `departments` 关系仍作为展示 fallback
 - 后续阶段 8 再迁移 `department_post_rules.tenant_department_id`
+
+阶段 8 已执行完成：
+
+- 新增 migration：
+  - `supabase/migrations/20260513213000_add_department_post_rule_tenant_department_id.sql`
+- `department_post_rules` 新增：
+  - `tenant_department_id`
+  - `department_post_rules_tenant_department_id_fkey`
+  - `department_post_rules_tenant_department_id_idx`
+  - `department_post_rules_tenant_tenant_department_enabled_sort_idx`
+  - `department_post_rules_tenant_tenant_department_post_unique`
+- 规则数据已按 `tenant_id + department_code` 回填 `tenant_department_id`
+- 规则读取按 `tenant_department_id` 匹配部门，旧 `department_code` fallback
+- 规则写入同时维护：
+  - `tenant_department_id`
+  - `department_code`
+- 部门岗位规则保存使用 `tenant_id,tenant_department_id,post_code` 作为 upsert 冲突键
+- 员工部门岗位校验优先使用 `tenant_department_id`
+
+阶段 8 验收记录：
+
+- 远端 migration：已执行
+- `supabase db push --dry-run`：远端已最新
+- `department_post_rules` 总数：2016
+- 已回填 `tenant_department_id`：2016
+- 可映射但未回填：0
+- `department_code` 与 `tenant_department_id` 映射不一致：0
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- `/department-post-rules` 正常返回候选部门和 `tenant_department_id`
+
+阶段 8 仍保留兼容：
+
+- URL 仍使用 `/department-post-rules/:department_code`
+- 响应规则仍返回 `department_code`
+- 后续旧字段退场前，不删除 `department_code`

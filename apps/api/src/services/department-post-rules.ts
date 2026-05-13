@@ -29,7 +29,9 @@ class DepartmentPostRuleService {
     return {
       departments: departments.map((department) => {
         const departmentRules = rules.filter(
-          (rule) => rule.department_code === department.code,
+          (rule) =>
+            rule.tenant_department_id === department.tenant_department_id ||
+            (!rule.tenant_department_id && rule.department_code === department.code),
         );
         return {
           ...department,
@@ -61,7 +63,14 @@ class DepartmentPostRuleService {
       throw Errors.badRequest(`岗位编码不存在：${invalidPostCodes.join(", ")}`);
     }
 
+    const departments = await departmentPostRuleRepository.listDepartments(scopedTenantId);
+    const department = departments.find((item) => item.code === departmentCode);
+    if (!department?.tenant_department_id) {
+      throw Errors.badRequest("部门不存在或未启用");
+    }
+
     await departmentPostRuleRepository.replaceDepartmentRules({
+      tenantDepartmentId: department.tenant_department_id,
       departmentCode,
       postCodes: uniquePostCodes as EmployeePostCode[],
       tenantId: scopedTenantId,
@@ -81,11 +90,12 @@ class DepartmentPostRuleService {
       tenantId: scopedTenantId,
     });
 
-    if (!department?.code) {
+    if (!department?.code || !department.tenant_department_id) {
       throw Errors.badRequest("请先选择有效部门");
     }
 
     await departmentPostRuleRepository.enableDepartmentPostRule({
+      tenantDepartmentId: department.tenant_department_id,
       departmentCode: department.code,
       postCode: input.postCode as EmployeePostCode,
       tenantId: scopedTenantId,
@@ -126,7 +136,7 @@ class DepartmentPostRuleService {
         tenantId,
       });
 
-    if (!department?.code) {
+    if (!department?.code || !department.tenant_department_id) {
       throw Errors.badRequest("部门不存在或缺少部门编码");
     }
 
@@ -135,6 +145,7 @@ class DepartmentPostRuleService {
     }
 
     const rule = await departmentPostRuleRepository.findEnabledRule({
+      tenantDepartmentId: department.tenant_department_id,
       departmentCode: department.code,
       postCode: post.code,
       tenantId,
