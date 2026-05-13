@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ComponentProps, ReactNode } from "react";
 import { AlertCircle, BrainCircuit, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
 import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton, ShadowBillingRunButton } from "@/components/billing/billing-actions";
+import { BillingFilterCombobox } from "@/components/billing/billing-filter-combobox";
 import type {
   BillingAiUsageFilterOptions,
   BillingAiUsageStats,
@@ -321,34 +322,6 @@ function FilterInput({
     <Field>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
       <Input id={name} name={name} type={type} defaultValue={defaultValue || ""} placeholder={placeholder} />
-    </Field>
-  );
-}
-
-function FilterSearchSelectInput({
-  label,
-  name,
-  defaultValue,
-  placeholder,
-  options,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  placeholder?: string;
-  options: Array<{ value: string; label?: string }>;
-}) {
-  const listId = `${name}-options`;
-
-  return (
-    <Field>
-      <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <Input id={name} name={name} list={listId} defaultValue={defaultValue || ""} placeholder={placeholder} />
-      <datalist id={listId}>
-        {options.map((option) => (
-          <option key={`${option.value}-${option.label || ""}`} value={option.value} label={option.label} />
-        ))}
-      </datalist>
     </Field>
   );
 }
@@ -780,38 +753,44 @@ export default async function PlatformBillingPage({
                 badgeVariant={aiStatsResult.data.totals.ready_groups > 0 ? "success" : "warning"}
               />
               <FilterPanel tab="ai">
-                <FilterSearchSelectInput
+                <BillingFilterCombobox
                   label="租户"
                   name="aiTenantKeyword"
                   defaultValue={aiFilters.aiTenantKeyword}
                   placeholder="搜索或选择租户"
+                  searchPlaceholder="搜索租户名称或标识"
                   options={aiFilterOptionsResult.data.tenants.map((tenant) => ({
                     value: tenant.name,
                     label: tenant.slug || tenant.id,
+                    keywords: [tenant.slug || "", tenant.id],
                   }))}
                 />
-                <FilterSearchSelectInput
+                <BillingFilterCombobox
                   label="场景"
                   name="aiSceneCode"
                   defaultValue={aiFilters.aiSceneCode}
                   placeholder="搜索或选择场景"
+                  searchPlaceholder="搜索场景"
                   options={aiFilterOptionsResult.data.scene_codes.map((value) => ({ value }))}
                 />
-                <FilterSearchSelectInput
+                <BillingFilterCombobox
                   label="供应商"
                   name="aiProviderCode"
                   defaultValue={aiFilters.aiProviderCode}
                   placeholder="搜索或选择供应商"
+                  searchPlaceholder="搜索供应商"
                   options={aiFilterOptionsResult.data.provider_codes.map((value) => ({ value }))}
                 />
-                <FilterSearchSelectInput
+                <BillingFilterCombobox
                   label="模型"
                   name="aiModelCode"
                   defaultValue={aiFilters.aiModelCode}
                   placeholder="搜索或选择模型"
+                  searchPlaceholder="搜索模型"
                   options={aiFilterOptionsResult.data.models.map((model) => ({
                     value: model.code,
                     label: [model.provider_code, model.name].filter(Boolean).join(" / ") || undefined,
+                    keywords: [model.provider_code || "", model.name || ""],
                   }))}
                 />
                 <FilterInput label="开始时间" name="aiStartDate" type="date" defaultValue={aiFilters.aiStartDate} />
