@@ -14,6 +14,7 @@ import { systemSettingsService } from "@/services/system-settings";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   ProjectStatusConfig,
+  isEmployeeOperableStatus,
   isProjectLogStageCode,
   isProjectStatus,
   type AiMessageRole,
@@ -696,6 +697,16 @@ function normalizeStringArray(value: unknown) {
 }
 
 async function getCustomerContextByAuthUserId(authUserId: string) {
+  const customer = await findCustomerContextByAuthUserId(authUserId);
+
+  if (!customer) {
+    throw Errors.forbidden();
+  }
+
+  return customer;
+}
+
+async function findCustomerContextByAuthUserId(authUserId: string) {
   const { data, error } = await SupabaseDB.getAdminClient()
     .from("customers")
     .select("id, name, user_id, tenant_id")
@@ -711,11 +722,7 @@ async function getCustomerContextByAuthUserId(authUserId: string) {
     throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
   }
 
-  if (!list[0]) {
-    throw Errors.forbidden();
-  }
-
-  return list[0];
+  return list[0] ?? null;
 }
 
 function getSourceFromAuth(input: DecorationQaAuthInput): DecorationQaUsageSource {
@@ -730,6 +737,65 @@ function getSourceFromAuth(input: DecorationQaAuthInput): DecorationQaUsageSourc
   return "visitor";
 }
 
+async function inferDecorationQaUsageContextFromAuth(input: DecorationQaAuthInput & {
+  projectId?: string | null;
+}): Promise<DecorationQaUsageContext | null> {
+  if (!input.authUserId) {
+    return null;
+  }
+
+  const customer = await findCustomerContextByAuthUserId(input.authUserId);
+  if (customer) {
+    if (input.projectId) {
+      const context = await buildCustomerProjectQaContext(input.authUserId, input.projectId);
+      if (!context.tenant_id) {
+        return null;
+      }
+
+      return {
+        authUserId: input.authUserId,
+        tenantId: context.tenant_id,
+        customerId: context.customer_id,
+        employeeId: null,
+        projectId: context.project_id,
+        source: "customer_miniprogram",
+        billable: true,
+      };
+    }
+
+    if (customer.tenant_id) {
+      return {
+        authUserId: input.authUserId,
+        tenantId: customer.tenant_id,
+        customerId: customer.id,
+        employeeId: null,
+        projectId: null,
+        source: "customer_miniprogram",
+        billable: true,
+      };
+    }
+  }
+
+  const employeeContext = await authorizationService.getAuthContextByAuthUserId(input.authUserId);
+  if (
+    employeeContext.employeeId &&
+    employeeContext.tenantId &&
+    isEmployeeOperableStatus(employeeContext.employeeStatus)
+  ) {
+    return {
+      authUserId: input.authUserId,
+      tenantId: employeeContext.tenantId,
+      customerId: null,
+      employeeId: employeeContext.employeeId,
+      projectId: input.projectId ?? null,
+      source: "employee_miniprogram",
+      billable: true,
+    };
+  }
+
+  return null;
+}
+
 async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
   role?: "visitor" | "customer" | "employee";
   projectId?: string | null;
@@ -741,6 +807,11 @@ async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
     : getSourceFromAuth(input);
 
   if (source === "visitor") {
+    const inferredContext = await inferDecorationQaUsageContextFromAuth(input);
+    if (inferredContext) {
+      return inferredContext;
+    }
+
     return {
       authUserId: input.authUserId,
       tenantId: null,
