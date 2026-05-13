@@ -860,6 +860,13 @@ class CustomerSelfServiceController extends BaseController {
       tenantId: request.user?.tenant_id ?? null,
       customerId: request.user?.customer_id ?? null,
     });
+    if (!customer && (request.user?.customer_id || request.user?.tenant_id)) {
+      throw Errors.business(
+        403,
+        "当前客户身份已失效，请重新登录",
+        ErrorCodes.CUSTOMER_CONTEXT_MISSING,
+      );
+    }
     this.assertCustomerTenantAvailable(customer);
     const userProfile = await this.getUserProfileByAuthUserId(authUserId);
     const tenant = customer ? this.normalizeTenantRelation(customer.tenant) : null;
@@ -868,7 +875,7 @@ class CustomerSelfServiceController extends BaseController {
       mode: customer ? "customer" : "platform_visitor",
       auth_user_id: authUserId,
       customer_id: customer?.id ?? null,
-      tenant_id: customer?.tenant_id ?? request.user?.tenant_id ?? null,
+      tenant_id: customer?.tenant_id ?? null,
       tenant_status: tenant?.status ?? null,
       customer_name: customer?.name ?? null,
       has_customer_profile: Boolean(customer),

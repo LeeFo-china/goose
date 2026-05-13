@@ -95,7 +95,10 @@ class WechatRebindRequestRepository {
     authUserId: string;
   }) {
     const { data, error } = await this.from("customers")
-      .update({ user_id: null })
+      .update({
+        user_id: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)
@@ -109,13 +112,33 @@ class WechatRebindRequestRepository {
     return (data || null) as WechatTargetIdentityRecord | null;
   }
 
+  async findCustomerBinding(input: {
+    customerId: string;
+    tenantId: string;
+  }) {
+    const { data, error } = await this.from("customers")
+      .select("id, tenant_id, name, phone, user_id")
+      .eq("id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户微信绑定失败", error);
+    }
+
+    return (data || null) as WechatTargetIdentityRecord | null;
+  }
+
   async unbindEmployee(input: {
     employeeId: string;
     tenantId: string;
     authUserId: string;
   }) {
     const { data, error } = await this.from("employees")
-      .update({ user_id: null })
+      .update({
+        user_id: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", input.employeeId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)

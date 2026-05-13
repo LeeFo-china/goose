@@ -200,25 +200,73 @@ export class WeChatController extends BaseController {
 
     const roles = await this.getUserRoles(userId);
 
-    request.log.info({ requestId: request.id, userId, roles }, "[auth] sign jwt start");
+    request.log.info({ requestId: request.id, userId, roles }, "[auth] resolve login context start");
     const employeeLogin = roles.includes("employee")
       ? await this.buildEmployeeLoginContext(userId, wxData.openid, roles)
       : null;
-    const token = employeeLogin?.token ?? signToken({
+
+    if (employeeLogin) {
+      request.log.info({ requestId: request.id, userId }, "[auth] resolved employee login context");
+      return ResponseHandler.success({
+        mode: "employee",
+        token: employeeLogin.token,
+        user_id: userId,
+        roles,
+        is_new_user: isNewUser,
+        tenant: employeeLogin.tenant,
+        employee: employeeLogin.employee,
+      }, "登录成功");
+    }
+
+    const customerOptions = await this.listCustomerTenantOptionsByAuthUser(userId);
+    if (customerOptions.length === 1) {
+      request.log.info({ requestId: request.id, userId }, "[auth] resolved customer login context");
+      return ResponseHandler.success(
+        await this.signCustomerSession({
+          authUserId: userId,
+          openid: wxData.openid,
+          customer: customerOptions[0]!,
+        }),
+        "登录成功",
+      );
+    }
+
+    if (customerOptions.length > 1) {
+      const token = signToken({
+        sub: userId,
+        openid: wxData.openid,
+        login_channel: "wechat",
+        roles,
+      });
+
+      return ResponseHandler.success({
+        mode: "select_tenant",
+        token,
+        user_id: userId,
+        roles,
+        is_new_user: isNewUser,
+        tenants: customerOptions.map((item) => this.serializeCustomerTenantOption(item)),
+      }, "登录成功");
+    }
+
+    const token = signToken({
       sub: userId,
       openid: wxData.openid,
       login_channel: "wechat",
       roles,
     });
-    request.log.info({ requestId: request.id, userId }, "[auth] sign jwt result");
+    request.log.info({ requestId: request.id, userId }, "[auth] resolved visitor login context");
 
     return ResponseHandler.success({
+      mode: "platform_visitor",
       token,
       user_id: userId,
       roles,
       is_new_user: isNewUser,
-      tenant: employeeLogin?.tenant ?? null,
-      employee: employeeLogin?.employee ?? null,
+      tenant: null,
+      employee: null,
+      customer: null,
+      has_customer_profile: false,
     }, "登录成功");
   }
 
@@ -827,6 +875,39 @@ export class WeChatController extends BaseController {
     return this.enrichCustomerTenantOptions(customers);
   }
 
+  private async listCustomerTenantOptionsByAuthUser(authUserId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        customer_origin,
+        claimed_at,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
+      .eq("user_id", authUserId);
+
+    if (error) {
+      throw Errors.dbError("查询客户微信绑定失败", error);
+    }
+
+    const customers = ((data || []) as unknown as CustomerTenantOption[])
+      .filter((item) => {
+        const tenant = this.normalizeTenantRelation(item.tenant);
+        return item.tenant_id && tenant?.status === "active";
+      });
+
+    return this.enrichCustomerTenantOptions(customers);
+  }
+
   private async getCustomerTenantOptionById(customerId: string, tenantId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
@@ -1285,15 +1366,37 @@ export class WeChatController extends BaseController {
     const roles: string[] = [];
 
     const [{ data: employeeData }, { data: customerData }] = await Promise.all([
-      adminClient.from("employees").select("id").eq("user_id", userId).limit(1),
-      adminClient.from("customers").select("id").eq("user_id", userId).limit(1),
+      adminClient
+        .from("employees")
+        .select("id, status")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1),
+      adminClient
+        .from("customers")
+        .select(`
+          id,
+          tenant:tenants!customers_tenant_id_fkey(
+            id,
+            status
+          )
+        `)
+        .eq("user_id", userId)
+        .limit(2),
     ]);
 
     if ((employeeData || []).length > 0) {
       roles.push("employee");
     }
 
-    if ((customerData || []).length > 0) {
+    const hasActiveCustomer = ((customerData || []) as unknown as Array<{
+      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
+    }>).some((item) => {
+      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
+      return tenant?.status === "active";
+    });
+
+    if (hasActiveCustomer) {
       roles.push("customer");
     }
 

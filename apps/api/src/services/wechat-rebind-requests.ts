@@ -214,6 +214,20 @@ class WechatRebindRequestService {
     });
 
     if (!customer) {
+      const current = await wechatRebindRequestRepository.findCustomerBinding({
+        customerId: user.customer_id,
+        tenantId: user.tenant_id,
+      });
+
+      if (current && !current.user_id) {
+        authorizationService.invalidateAuthContext({ authUserId: user.sub });
+        throw Errors.business(
+          409,
+          "当前客户已经没有绑定微信",
+          ErrorCodes.CUSTOMER_WECHAT_NOT_BOUND,
+        );
+      }
+
       throw Errors.business(
         409,
         "当前微信绑定关系已变化，请重新登录",
