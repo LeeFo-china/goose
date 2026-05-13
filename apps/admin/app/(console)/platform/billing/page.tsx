@@ -85,6 +85,9 @@ const emptyAiUsageStats: BillingAiUsageStats = {
     billable_samples: 0,
     missing_usage: 0,
     ready_groups: 0,
+    watch_groups: 0,
+    pricing_rule_missing_groups: 0,
+    usage_missing_groups: 0,
   },
   list: [],
 };
@@ -211,6 +214,16 @@ function eventStatusLabel(status: string) {
 
 function readinessLabel(ready: boolean) {
   return ready ? "样本达标" : "继续观察";
+}
+
+function readinessReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    sample_insufficient: "样本不足",
+    usage_missing: "缺 token",
+    pricing_rule_missing: "缺价格规则",
+    credit_p95_zero: "P95 为 0",
+  };
+  return labels[reason] || reason;
 }
 
 function SectionHeader({
@@ -812,10 +825,10 @@ export default async function PlatformBillingPage({
                 />
               </FilterPanel>
               <div className="grid gap-3 md:grid-cols-4">
-                <AiStatItem label="观察分组" value={formatCredits(aiStatsResult.data.totals.groups)} />
-                <AiStatItem label="有效样本" value={formatCredits(aiStatsResult.data.totals.billable_samples)} />
-                <AiStatItem label="缺 token" value={formatCredits(aiStatsResult.data.totals.missing_usage)} />
-                <AiStatItem label="样本门槛" value={`${formatCredits(aiStatsResult.data.controls.min_sample_count)} 条`} />
+                <AiStatItem label="可评估场景" value={formatCredits(aiStatsResult.data.totals.ready_groups)} />
+                <AiStatItem label="需继续观察" value={formatCredits(aiStatsResult.data.totals.watch_groups)} />
+                <AiStatItem label="缺价格规则" value={formatCredits(aiStatsResult.data.totals.pricing_rule_missing_groups)} />
+                <AiStatItem label="缺 token 场景" value={formatCredits(aiStatsResult.data.totals.usage_missing_groups)} />
               </div>
               <div className="mt-4 overflow-hidden rounded-md border">
                 <Table>
@@ -840,7 +853,10 @@ export default async function PlatformBillingPage({
                         </TableCell>
                         <TableCell className="text-right">
                           <div>{formatCredits(item.billable_sample_count)}</div>
-                          <div className="text-xs text-muted-foreground">总计 {formatCredits(item.total_logs)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            总计 {formatCredits(item.total_logs)}
+                            {item.sample_gap > 0 ? ` · 差 ${formatCredits(item.sample_gap)}` : ""}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div>{formatCredits(item.token_percentiles.p95)}</div>
@@ -859,11 +875,20 @@ export default async function PlatformBillingPage({
                           <Badge variant={item.ready_for_phase6 ? "success" : "outline"}>
                             {readinessLabel(item.ready_for_phase6)}
                           </Badge>
-                          {item.missing_usage_count > 0 ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              缺 token {formatCredits(item.missing_usage_count)} 条
-                            </div>
-                          ) : null}
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {item.ready_for_phase6 ? (
+                              <Badge variant="secondary">价格规则已命中</Badge>
+                            ) : item.blocking_reasons.map((reason) => (
+                              <Badge key={reason} variant={reason === "pricing_rule_missing" ? "danger" : "secondary"}>
+                                {readinessReasonLabel(reason)}
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {item.missing_usage_count > 0 ? `缺 token ${formatCredits(item.missing_usage_count)} 条` : null}
+                            {item.missing_usage_count > 0 && item.missing_pricing_rule_count > 0 ? " · " : null}
+                            {item.missing_pricing_rule_count > 0 ? `缺规则 ${formatCredits(item.missing_pricing_rule_count)} 项` : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

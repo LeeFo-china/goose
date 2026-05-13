@@ -141,6 +141,9 @@ export type BillingAiUsageStats = {
     billable_samples: number;
     missing_usage: number;
     ready_groups: number;
+    watch_groups: number;
+    pricing_rule_missing_groups: number;
+    usage_missing_groups: number;
   };
   list: Array<{
     scene_code: string;
@@ -149,7 +152,10 @@ export type BillingAiUsageStats = {
     model_name: string | null;
     total_logs: number;
     billable_sample_count: number;
+    sample_gap: number;
     missing_usage_count: number;
+    missing_pricing_rule_count: number;
+    pricing_rule_matched: boolean;
     cached_input_token_call_count: number;
     reasoning_token_call_count: number;
     token_percentiles: {
@@ -165,6 +171,7 @@ export type BillingAiUsageStats = {
       p99: number;
     };
     suggested_min_charge_credits: number;
+    blocking_reasons: string[];
     ready_for_phase6: boolean;
   }>;
 };

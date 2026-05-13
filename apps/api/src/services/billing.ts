@@ -360,6 +360,7 @@ class BillingService {
       const tokenValues: number[] = [];
       const creditValues: number[] = [];
       let missingUsageCount = 0;
+      let missingPricingRuleCount = 0;
       let cachedInputTokenCalls = 0;
       let reasoningTokenCalls = 0;
 
@@ -376,12 +377,20 @@ class BillingService {
         }
 
         tokenValues.push(totalTokens + cachedInputTokens);
+        missingPricingRuleCount += this.countMissingAiPricingRules(row, rules.list);
         creditValues.push(this.estimateAiRowCredits(row, rules.list));
         if (cachedInputTokens > 0) cachedInputTokenCalls += 1;
         if (reasoningTokens > 0) reasoningTokenCalls += 1;
       }
 
       const p95Credits = percentileDisc(creditValues, 0.95);
+      const sampleGap = Math.max(0, query.min_sample_count - tokenValues.length);
+      const blockingReasons: string[] = [];
+      if (sampleGap > 0) blockingReasons.push("sample_insufficient");
+      if (missingUsageCount > 0) blockingReasons.push("usage_missing");
+      if (missingPricingRuleCount > 0) blockingReasons.push("pricing_rule_missing");
+      if (p95Credits <= 0 && missingPricingRuleCount === 0) blockingReasons.push("credit_p95_zero");
+
       return {
         scene_code: first.scene_code,
         provider_code: first.provider_code,
@@ -389,7 +398,10 @@ class BillingService {
         model_name: first.model_name,
         total_logs: items.length,
         billable_sample_count: tokenValues.length,
+        sample_gap: sampleGap,
         missing_usage_count: missingUsageCount,
+        missing_pricing_rule_count: missingPricingRuleCount,
+        pricing_rule_matched: tokenValues.length > 0 && missingPricingRuleCount === 0,
         cached_input_token_call_count: cachedInputTokenCalls,
         reasoning_token_call_count: reasoningTokenCalls,
         token_percentiles: {
@@ -405,7 +417,8 @@ class BillingService {
           p99: percentileDisc(creditValues, 0.99),
         },
         suggested_min_charge_credits: Math.ceil(p95Credits * query.safety_factor),
-        ready_for_phase6: tokenValues.length >= query.min_sample_count && p95Credits > 0,
+        blocking_reasons: blockingReasons,
+        ready_for_phase6: blockingReasons.length === 0,
       };
     }).sort((a, b) => {
       if (a.ready_for_phase6 !== b.ready_for_phase6) {
@@ -430,6 +443,9 @@ class BillingService {
         billable_samples: list.reduce((sum, item) => sum + item.billable_sample_count, 0),
         missing_usage: list.reduce((sum, item) => sum + item.missing_usage_count, 0),
         ready_groups: list.filter((item) => item.ready_for_phase6).length,
+        watch_groups: list.filter((item) => item.blocking_reasons.includes("sample_insufficient")).length,
+        pricing_rule_missing_groups: list.filter((item) => item.blocking_reasons.includes("pricing_rule_missing")).length,
+        usage_missing_groups: list.filter((item) => item.blocking_reasons.includes("usage_missing")).length,
       },
       list,
     };
@@ -1018,6 +1034,29 @@ class BillingService {
     });
 
     return inputCredits + outputCredits + cachedCredits;
+  }
+
+  private countMissingAiPricingRules(row: BillingAiUsageStatsRow, rules: BillingPricingRuleRow[]) {
+    const tenantId = row.tenant_id;
+    if (!tenantId) return 0;
+
+    const checks = [
+      { metricCode: "ai_input_text_token", units: toNumber(row.prompt_tokens) / 1000 },
+      { metricCode: "ai_output_text_token", units: toNumber(row.completion_tokens) / 1000 },
+      { metricCode: "ai_cached_input_token", units: toNumber(row.cached_input_tokens) / 1000 },
+    ];
+
+    return checks.reduce((count, check) => {
+      if (check.units <= 0) return count;
+      const rule = this.resolvePricingRule(rules, {
+        tenantId,
+        metricCode: check.metricCode,
+        sceneCode: row.scene_code,
+        provider: row.provider_code,
+        model: row.model_code,
+      });
+      return rule ? count : count + 1;
+    }, 0);
   }
 
   private estimateMetricCredits(input: {
