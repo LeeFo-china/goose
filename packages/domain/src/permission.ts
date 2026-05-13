@@ -65,6 +65,8 @@ export const PERMISSION_CODE_VALUES = [
   'marketing_lead.read',
   'marketing_lead.update',
   'marketing_event.read',
+  'social_video_transcription.create',
+  'social_video_transcription.manage',
   'system.ops.read',
   'system.ops.run',
   'system.settings.read',
@@ -241,6 +243,14 @@ export const PermissionCodeConfig: Record<
   'marketing_event.read': {
     label: '查看营销埋点',
     module: 'marketing',
+  },
+  'social_video_transcription.create': {
+    label: '发起短视频转文本',
+    module: 'social_video',
+  },
+  'social_video_transcription.manage': {
+    label: '管理短视频转写与脚本',
+    module: 'social_video',
   },
   'system.ops.read': {
     label: '查看运维脚本',

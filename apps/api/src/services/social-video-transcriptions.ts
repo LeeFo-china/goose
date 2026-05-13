@@ -737,6 +737,10 @@ class SocialVideoTranscriptionService {
 
   async createTask(input: CreateSocialVideoTranscriptionInput, authContext: AuthContext) {
     await this.assertEnabled();
+    if (authContext.employeeId && !authContext.isPlatformAdmin) {
+      accessPolicyService.assertPermission(authContext, "social_video_transcription.create");
+    }
+
     const tenantId = await this.resolveTenantId(authContext);
     await this.assertDailyLimit(authContext.authUserId, tenantId);
 
