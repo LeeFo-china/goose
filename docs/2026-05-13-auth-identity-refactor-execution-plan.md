@@ -276,6 +276,10 @@ on conflict do nothing;
 - `/auth` 微信登录主链路仍以 `wechat_identities`、`customers.user_id`、`employees.user_id` 为准，新增新旧模型旁路比对。
 - 微信登录、后台员工登录、客户手机号绑定、员工手机号绑定、客户分享绑定、客户/员工解绑、微信换绑审批已接入新模型同步。
 - 新模型同步为 best-effort：失败不改变现有登录/绑定响应，会写入 `user_auth_events` 便于排查。
+- 已新增超管只读观测接口：
+  - `GET /platform/user-auth-events`
+  - `GET /platform/user-auth-events/summary`
+- 已新增对接文档：`docs/2026-05-13-auth-identity-stage3-observability-integration.md`。
 - 差异事件类型：
   - `identity_oauth_mismatch`
   - `identity_membership_mismatch`

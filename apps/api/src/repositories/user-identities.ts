@@ -1,4 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import type {
+  UserAuthEventListQuery,
+  UserAuthEventSummaryQuery,
+} from "@/schema/user-auth-events";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type OAuthPlatform = "wechat_mini" | "wechat_web" | "ios" | "android" | "web" | "apple";
@@ -37,13 +41,30 @@ export type LegacyBusinessBindingRecord = {
   status?: string | null;
 };
 
+export type UserAuthEventRecord = {
+  id: string;
+  user_id: string | null;
+  event_type: string;
+  platform: OAuthPlatform | null;
+  openid_hash: string | null;
+  operator_user_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  metadata: unknown;
+  created_at: string;
+};
+
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
   neq: (...args: unknown[]) => UntypedTable;
+  gte: (...args: unknown[]) => UntypedTable;
+  lte: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
+  order: (...args: unknown[]) => UntypedTable;
+  range: (...args: unknown[]) => UntypedTable;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
   single: () => Promise<{ data: unknown; error: unknown }>;
   then: Promise<{
@@ -297,6 +318,89 @@ class UserIdentityRepository {
     if (error) {
       throw Errors.dbError("记录用户身份事件失败", error);
     }
+  }
+
+  async listAuthEvents(query: UserAuthEventListQuery) {
+    const from = (query.page - 1) * query.pageSize;
+    const to = from + query.pageSize - 1;
+
+    let request = this.from("user_auth_events")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (query.event_type) {
+      request = request.eq("event_type", query.event_type);
+    }
+
+    if (query.user_id) {
+      request = request.eq("user_id", query.user_id);
+    }
+
+    if (query.operator_user_id) {
+      request = request.eq("operator_user_id", query.operator_user_id);
+    }
+
+    if (query.platform) {
+      request = request.eq("platform", query.platform);
+    }
+
+    if (query.date_from) {
+      request = request.gte("created_at", query.date_from);
+    }
+
+    if (query.date_to) {
+      request = request.lte("created_at", query.date_to);
+    }
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询用户身份事件失败", error);
+    }
+
+    return {
+      list: (data || []) as UserAuthEventRecord[],
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / query.pageSize) : 0,
+      },
+    };
+  }
+
+  async summarizeAuthEvents(query: UserAuthEventSummaryQuery) {
+    let request = this.from("user_auth_events")
+      .select("event_type,count()");
+
+    if (query.date_from) {
+      request = request.gte("created_at", query.date_from);
+    }
+
+    if (query.date_to) {
+      request = request.lte("created_at", query.date_to);
+    }
+
+    const { data, error } = await request;
+    if (error) {
+      throw Errors.dbError("统计用户身份事件失败", error);
+    }
+
+    const byEventType = ((data || []) as Array<{
+      event_type: string;
+      count: number | string | null;
+    }>).map((item) => ({
+      event_type: item.event_type,
+      count: typeof item.count === "string"
+        ? Number.parseInt(item.count, 10) || 0
+        : item.count ?? 0,
+    }));
+
+    return {
+      total: byEventType.reduce((sum, item) => sum + item.count, 0),
+      by_event_type: byEventType
+        .sort((a, b) => b.count - a.count),
+    };
   }
 }
 
