@@ -65,6 +65,17 @@ function summarizePages(list: H5MarketingPageRecord[]) {
   };
 }
 
+function isCurrentPublishedH5Page(page: H5MarketingPageRecord, now = Date.now()) {
+  if (page.status !== "published") return false;
+  const startAt = page.start_at ? new Date(page.start_at).getTime() : null;
+  const endAt = page.end_at ? new Date(page.end_at).getTime() : null;
+
+  if (startAt != null && !Number.isNaN(startAt) && startAt > now) return false;
+  if (endAt != null && !Number.isNaN(endAt) && endAt < now) return false;
+
+  return true;
+}
+
 export default async function PlatformMarketingPagesPage() {
   const session = await getAdminSession();
   if (!session) {
@@ -80,6 +91,7 @@ export default async function PlatformMarketingPagesPage() {
       error: "当前账号不是平台超管，无法访问平台 H5 活动页",
     };
   const summary = summarizePages(list);
+  const activePublishedCount = list.filter((item) => isCurrentPublishedH5Page(item)).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -94,7 +106,10 @@ export default async function PlatformMarketingPagesPage() {
           </p>
         </div>
         {hasPlatformAccess ? (
-          <CreateH5MarketingPageButton apiBasePath={PLATFORM_H5_API_BASE_PATH} />
+          <CreateH5MarketingPageButton
+            apiBasePath={PLATFORM_H5_API_BASE_PATH}
+            activePageCount={activePublishedCount}
+          />
         ) : null}
       </div>
 

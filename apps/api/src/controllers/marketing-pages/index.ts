@@ -15,6 +15,7 @@ import {
   MarketingPageSlugParamsSchema,
   PublicTenantMarketingPageParamsSchema,
   PublicMarketingPageListQuerySchema,
+  ReorderMarketingPageSchema,
   SaveMarketingPageDraftSchema,
   SubmitMarketingLeadSchema,
   TrackMarketingEventSchema,
@@ -294,6 +295,24 @@ class MarketingPagesController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/platform/marketing-pages/:id/reorder")
+  async reorderPlatformPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ReorderMarketingPageSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.reorderPlatformPage(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/marketing-pages")
   async listPages(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
@@ -541,6 +560,25 @@ class MarketingPagesController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await marketingPageService.duplicatePage(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/marketing-pages/:id/reorder")
+  async reorderPage(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+    accessPolicyService.assertPermission(authContext, "marketing_page.update");
+
+    const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ReorderMarketingPageSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await marketingPageService.reorderPage(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, Copy, ExternalLink, Loader2, MoreHorizontal, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, ChevronsUp, Copy, ExternalLink, Loader2, MoreHorizontal, PauseCircle, Pencil, PlayCircle, Plus, RefreshCw, Settings, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { FormSelect } from "@/components/admin/form-select";
@@ -46,6 +46,11 @@ import {
 } from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const H5PageFormSchema = z.object({
   title: z.string().trim().min(1, "页面标题不能为空").max(120, "页面标题不能超过 120 个字符"),
@@ -61,7 +66,6 @@ const H5PageFormSchema = z.object({
     ),
   description: z.string().trim().max(500, "页面描述不能超过 500 个字符").optional(),
   display_scene: z.enum(["all", "home", "customer_home", "project_detail", "marketing_list"]),
-  sort_order: z.coerce.number().int("排序值必须是整数").min(0, "排序值不能小于 0").max(9999, "排序值不能超过 9999"),
   start_at: z.string().optional(),
   end_at: z.string().optional(),
 });
@@ -113,6 +117,7 @@ type H5MarketingPageRouteOptions = {
   editBasePath?: string;
   returnTo?: string;
   tenantSlug?: string | null;
+  activePageCount?: number;
 };
 
 const DEFAULT_H5_PAGE_API_BASE_PATH = "/marketing-pages";
@@ -162,7 +167,6 @@ function buildPagePayload(values: H5PageFormValues) {
     slug: values.slug,
     description: values.description || null,
     display_scene: values.display_scene,
-    sort_order: values.sort_order,
     start_at: toApiDateTime(values.start_at),
     end_at: toApiDateTime(values.end_at),
   };
@@ -191,6 +195,109 @@ async function requestH5Page<T>(input: {
     throw new Error(getPayloadMessage(payload, "操作失败"));
   }
   return payload.data as T;
+}
+
+type H5PageOrderAction = "move_up" | "move_down" | "pin_top";
+
+const h5PageOrderActionConfig: Record<H5PageOrderAction, {
+  label: string;
+  success: string;
+  icon: typeof ArrowUp;
+}> = {
+  move_up: {
+    label: "上移",
+    success: "已上移一位",
+    icon: ArrowUp,
+  },
+  move_down: {
+    label: "下移",
+    success: "已下移一位",
+    icon: ArrowDown,
+  },
+  pin_top: {
+    label: "置顶",
+    success: "已置顶",
+    icon: ChevronsUp,
+  },
+};
+
+export function H5PageOrderControls({
+  page,
+  apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
+  position,
+  total,
+}: {
+  page: H5MarketingPageRecord;
+  apiBasePath?: string;
+  position?: number | null;
+  total: number;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const isSortable = page.status === "published" && Boolean(position);
+
+  function runOrderAction(action: H5PageOrderAction) {
+    const config = h5PageOrderActionConfig[action];
+    startTransition(async () => {
+      try {
+        await requestH5Page({
+          path: `${apiBasePath}/${page.id}/reorder`,
+          method: "POST",
+          payload: { action },
+        });
+        toast.success(config.success);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "排序更新失败");
+      }
+    });
+  }
+
+  const actions: Array<{
+    action: H5PageOrderAction;
+    disabled: boolean;
+  }> = [
+    {
+      action: "pin_top",
+      disabled: !isSortable || position === 1,
+    },
+    {
+      action: "move_up",
+      disabled: !isSortable || position === 1,
+    },
+    {
+      action: "move_down",
+      disabled: !isSortable || position === total,
+    },
+  ];
+
+  return (
+    <div className="flex items-center gap-1">
+      {actions.map((item) => {
+        const config = h5PageOrderActionConfig[item.action];
+        const Icon = config.icon;
+        return (
+          <Tooltip key={item.action}>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={pending || item.disabled}
+                  aria-label={config.label}
+                  onClick={() => runOrderAction(item.action)}
+                >
+                  {pending ? <Loader2 className="animate-spin" /> : <Icon />}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{config.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
 }
 
 function buildDefaultConfig(values: H5PageFormValues) {
@@ -265,7 +372,6 @@ function createDefaultH5PageValues(slug = ""): H5PageFormValues {
     slug,
     description: "",
     display_scene: "all",
-    sort_order: 100,
     start_at: toDateTimeLocalInputValue(startAt),
     end_at: toDateTimeLocalInputValue(endAt),
   };
@@ -274,6 +380,7 @@ function createDefaultH5PageValues(slug = ""): H5PageFormValues {
 export function CreateH5MarketingPageButton({
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
   tenantSlug,
+  activePageCount = 0,
 }: H5MarketingPageRouteOptions = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -544,18 +651,14 @@ export function CreateH5MarketingPageButton({
                   onChange={(value) => updateValue("display_scene", value as H5MarketingPageDisplayScene)}
                 />
               </Field>
-              <Field data-invalid={Boolean(firstIssue?.path[0] === "sort_order")}>
-                <FieldLabel htmlFor="h5-page-sort-order">排序</FieldLabel>
-                <Input
-                  id="h5-page-sort-order"
-                  type="number"
-                  min={0}
-                  max={9999}
-                  value={values.sort_order}
-                  aria-invalid={Boolean(firstIssue?.path[0] === "sort_order")}
-                  onChange={(event) => updateValue("sort_order", Number(event.target.value))}
-                />
-                <FieldDescription>数值越小，小程序入口越靠前。</FieldDescription>
+              <Field>
+                <FieldLabel>发布后顺序</FieldLabel>
+                <div className="flex min-h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                  第 {activePageCount + 1} 位
+                </div>
+                <FieldDescription>
+                  草稿不占展示位，发布时会按当时有效活动自动排到最后。
+                </FieldDescription>
               </Field>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -624,7 +727,6 @@ function H5PageSettingsButton({
     slug: page.slug || "",
     description: page.description || "",
     display_scene: page.display_scene || "all",
-    sort_order: page.sort_order ?? 100,
     start_at: toDateTimeLocalValue(page.start_at),
     end_at: toDateTimeLocalValue(page.end_at),
   });
@@ -741,7 +843,7 @@ function H5PageSettingsButton({
           <DialogHeader>
             <DialogTitle>活动展示配置</DialogTitle>
             <DialogDescription>
-              配置小程序展示场景、排序和活动有效时间，发布页列表会按这里过滤。
+              配置小程序展示场景和活动有效时间；展示顺序在列表中用上移、下移和置顶调整。
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3">
@@ -836,17 +938,12 @@ function H5PageSettingsButton({
                   onChange={(value) => updateValue("display_scene", value as H5MarketingPageDisplayScene)}
                 />
               </Field>
-              <Field data-invalid={Boolean(firstIssue?.path[0] === "sort_order")}>
-                <FieldLabel htmlFor={`h5-page-sort-order-${page.id}`}>排序</FieldLabel>
-                <Input
-                  id={`h5-page-sort-order-${page.id}`}
-                  type="number"
-                  min={0}
-                  max={9999}
-                  value={values.sort_order}
-                  aria-invalid={Boolean(firstIssue?.path[0] === "sort_order")}
-                  onChange={(event) => updateValue("sort_order", Number(event.target.value))}
-                />
+              <Field>
+                <FieldLabel>展示顺序</FieldLabel>
+                <div className="flex min-h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                  在活动页列表中调整
+                </div>
+                <FieldDescription>只有已发布且当前有效的活动页参与小程序入口排序。</FieldDescription>
               </Field>
             </div>
             <div className="grid gap-3 md:grid-cols-2">

@@ -243,6 +243,12 @@ export const DuplicateMarketingPageSchema = z.object({
   slug: MarketingPageSlugSchema.optional(),
 });
 
+export const ReorderMarketingPageSchema = z.object({
+  action: z.enum(["move_up", "move_down", "pin_top"], {
+    message: "无效的排序动作",
+  }),
+});
+
 export const MarketingLeadListQuerySchema = PaginationQuerySchema.extend({
   status: optionalQueryValue(
     z.enum(MARKETING_LEAD_STATUS_VALUES, {
@@ -302,6 +308,7 @@ export type MarketingPageBlockAiFillInput = z.infer<typeof MarketingPageBlockAiF
 export type MarketingPageSettingsAiFillInput = z.infer<typeof MarketingPageSettingsAiFillSchema>;
 export type MarketingPageCreateAiFillInput = z.infer<typeof MarketingPageCreateAiFillSchema>;
 export type DuplicateMarketingPageInput = z.infer<typeof DuplicateMarketingPageSchema>;
+export type ReorderMarketingPageInput = z.infer<typeof ReorderMarketingPageSchema>;
 export type MarketingLeadListQuery = z.infer<typeof MarketingLeadListQuerySchema>;
 export type UpdateMarketingLeadInput = z.infer<typeof UpdateMarketingLeadSchema>;
 export type ConvertMarketingLeadInput = z.infer<typeof ConvertMarketingLeadSchema>;

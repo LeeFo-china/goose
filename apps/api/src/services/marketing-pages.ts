@@ -12,6 +12,7 @@ import type {
   MarketingPageListQuery,
   MarketingPageProjectOptionQuery,
   PublicMarketingPageListQuery,
+  ReorderMarketingPageInput,
   SubmitMarketingLeadInput,
   TrackMarketingEventInput,
   UpdateMarketingLeadInput,
@@ -57,6 +58,10 @@ function getDedupSince() {
   const since = new Date();
   since.setHours(since.getHours() - 24);
   return since.toISOString();
+}
+
+function getSortStep(total: number) {
+  return Math.max(1, Math.floor(9999 / Math.max(total, 1)));
 }
 
 function normalizeRelation<T extends Record<string, unknown>>(
@@ -207,6 +212,74 @@ class MarketingPageService {
     return marketingPageRepository.listPages(query, null, true);
   }
 
+  private async getNextActiveSortOrder(tenantId?: string | null, platformScope = false) {
+    const activePages = await marketingPageRepository.listActivePublishedPages(
+      tenantId,
+      platformScope,
+    );
+    return Math.min(9999, (activePages.length + 1) * 100);
+  }
+
+  private async reorderActivePages(input: {
+    pageId: string;
+    tenantId?: string | null;
+    platformScope?: boolean;
+    employeeId: string | null;
+    action: ReorderMarketingPageInput["action"];
+  }) {
+    const activePages = await marketingPageRepository.listActivePublishedPages(
+      input.tenantId,
+      input.platformScope,
+    );
+    const currentIndex = activePages.findIndex((page) => page.id === input.pageId);
+
+    if (currentIndex < 0) {
+      throw Errors.badRequest("只有已发布且当前有效的 H5 活动页可以调整展示顺序");
+    }
+
+    const reordered = [...activePages];
+    if (input.action === "pin_top" && currentIndex > 0) {
+      const [current] = reordered.splice(currentIndex, 1);
+      reordered.unshift(current!);
+    }
+
+    if (input.action === "move_up" && currentIndex > 0) {
+      [reordered[currentIndex - 1], reordered[currentIndex]] = [
+        reordered[currentIndex]!,
+        reordered[currentIndex - 1]!,
+      ];
+    }
+
+    if (input.action === "move_down" && currentIndex < reordered.length - 1) {
+      [reordered[currentIndex], reordered[currentIndex + 1]] = [
+        reordered[currentIndex + 1]!,
+        reordered[currentIndex]!,
+      ];
+    }
+
+    const step = getSortStep(reordered.length);
+    await Promise.all(reordered.map((page, index) =>
+      marketingPageRepository.updatePageSortOrder({
+        id: page.id,
+        sortOrder: Math.min(9999, (index + 1) * step),
+        tenantId: input.tenantId,
+        platformScope: input.platformScope,
+        employeeId: input.employeeId,
+      })
+    ));
+
+    const newIndex = reordered.findIndex((page) => page.id === input.pageId);
+    const page = input.platformScope
+      ? await marketingPageRepository.findPageById(input.pageId, null, true)
+      : await marketingPageRepository.findPageById(input.pageId, input.tenantId);
+
+    return {
+      page,
+      order: newIndex >= 0 ? newIndex + 1 : null,
+      total: reordered.length,
+    };
+  }
+
   async listPublishedEntries(query: PublicMarketingPageListQuery = {}) {
     const tenant = query.tenant_slug
       ? await marketingPageRepository.findTenantBySlug(query.tenant_slug)
@@ -308,6 +381,7 @@ class MarketingPageService {
   async createPage(authContext: AuthContext, input: CreateMarketingPageInput) {
     await this.assertSlugAvailable(input.slug);
     const tenantId = accessPolicyService.assertTenantId(authContext);
+    const sortOrder = input.sort_order ?? await this.getNextActiveSortOrder(tenantId);
 
     const page = await marketingPageRepository.createPage({
       tenantId,
@@ -316,7 +390,7 @@ class MarketingPageService {
       description: input.description ?? null,
       cover_image: input.cover_image ?? null,
       display_scene: input.display_scene ?? "all",
-      sort_order: input.sort_order ?? 100,
+      sort_order: sortOrder,
       start_at: input.start_at ?? null,
       end_at: input.end_at ?? null,
       employeeId: authContext.employeeId,
@@ -342,6 +416,7 @@ class MarketingPageService {
   async createPlatformPage(authContext: AuthContext, input: CreateMarketingPageInput) {
     this.assertPlatformAdmin(authContext);
     await this.assertSlugAvailable(input.slug);
+    const sortOrder = input.sort_order ?? await this.getNextActiveSortOrder(null, true);
 
     const page = await marketingPageRepository.createPage({
       tenantId: null,
@@ -350,7 +425,7 @@ class MarketingPageService {
       description: input.description ?? null,
       cover_image: input.cover_image ?? null,
       display_scene: input.display_scene ?? "all",
-      sort_order: input.sort_order ?? 100,
+      sort_order: sortOrder,
       start_at: input.start_at ?? null,
       end_at: input.end_at ?? null,
       employeeId: authContext.employeeId,
@@ -426,6 +501,39 @@ class MarketingPageService {
     this.assertPlatformAdmin(authContext);
     await this.getExistingPage(id, null, true);
     return marketingPageRepository.archivePage(id, authContext.employeeId, null, true);
+  }
+
+  async reorderPage(
+    authContext: AuthContext,
+    id: string,
+    input: ReorderMarketingPageInput,
+  ) {
+    const tenantId = accessPolicyService.assertTenantId(authContext);
+    await this.getExistingPage(id, tenantId);
+
+    return this.reorderActivePages({
+      pageId: id,
+      tenantId,
+      employeeId: authContext.employeeId,
+      action: input.action,
+    });
+  }
+
+  async reorderPlatformPage(
+    authContext: AuthContext,
+    id: string,
+    input: ReorderMarketingPageInput,
+  ) {
+    this.assertPlatformAdmin(authContext);
+    await this.getExistingPage(id, null, true);
+
+    return this.reorderActivePages({
+      pageId: id,
+      tenantId: null,
+      platformScope: true,
+      employeeId: authContext.employeeId,
+      action: input.action,
+    });
   }
 
   async getDraft(authContext: AuthContext, id: string) {
@@ -538,6 +646,9 @@ class MarketingPageService {
 
     const publishedAt = new Date().toISOString();
     const nextVersionNo = await this.getNextVersionNo(page.id);
+    const sortOrder = page.status === "published"
+      ? null
+      : await this.getNextActiveSortOrder(tenantId);
 
     await marketingPageRepository.archivePublishedVersions(page.id, tenantId);
 
@@ -557,6 +668,7 @@ class MarketingPageService {
       versionId: publishedVersion.id,
       employeeId: authContext.employeeId,
       publishedAt,
+      sortOrder,
     });
 
     return {
@@ -576,6 +688,9 @@ class MarketingPageService {
 
     const publishedAt = new Date().toISOString();
     const nextVersionNo = await this.getNextVersionNo(page.id);
+    const sortOrder = page.status === "published"
+      ? null
+      : await this.getNextActiveSortOrder(null, true);
 
     await marketingPageRepository.archivePublishedVersions(page.id, null, true);
 
@@ -596,6 +711,7 @@ class MarketingPageService {
       versionId: publishedVersion.id,
       employeeId: authContext.employeeId,
       publishedAt,
+      sortOrder,
     });
 
     return {

@@ -302,6 +302,27 @@ class MarketingPageRepository {
     >[];
   }
 
+  async listActivePublishedPages(tenantId?: string | null, platformScope = false) {
+    const now = new Date().toISOString();
+    let request = this.pages()
+      .select("*")
+      .eq("status", "published")
+      .or(`start_at.is.null,start_at.lte.${now}`)
+      .or(`end_at.is.null,end_at.gte.${now}`);
+
+    request = this.applyTenantScope(request, { tenantId, platformScope });
+
+    const { data, error } = await request
+      .order("sort_order", { ascending: true })
+      .order("published_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询有效 H5 活动页排序失败", error);
+    }
+
+    return (data || []) as MarketingPageRecord[];
+  }
+
   async listProjectOptions(
     query: MarketingPageProjectOptionQuery,
     visibleProjectIds: string[] | null,
@@ -537,6 +558,38 @@ class MarketingPageRepository {
     return data as MarketingPageRecord;
   }
 
+  async updatePageSortOrder(input: {
+    id: string;
+    sortOrder: number;
+    tenantId?: string | null;
+    platformScope?: boolean;
+    employeeId: string | null;
+  }) {
+    let request = this.pages()
+      .update({
+        sort_order: input.sortOrder,
+        updated_by: input.employeeId,
+      })
+      .eq("id", input.id)
+      .neq("status", "archived");
+
+    request = this.applyTenantScope(request, input);
+
+    const { data, error } = await request
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新 H5 活动页排序失败", error);
+    }
+
+    if (!data) {
+      throw Errors.notFound("H5 活动页不存在");
+    }
+
+    return data as MarketingPageRecord;
+  }
+
   async archivePage(
     id: string,
     employeeId: string | null,
@@ -734,6 +787,7 @@ class MarketingPageRepository {
     versionId: string;
     employeeId: string | null;
     publishedAt: string;
+    sortOrder?: number | null;
   }) {
     let request = this.pages()
       .update({
@@ -741,6 +795,7 @@ class MarketingPageRepository {
         published_version_id: input.versionId,
         published_by: input.employeeId,
         published_at: input.publishedAt,
+        ...(input.sortOrder != null ? { sort_order: input.sortOrder } : {}),
         updated_by: input.employeeId,
       })
       .eq("id", input.pageId);

@@ -4,7 +4,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table";
 import { h5PageDisplaySceneOptions, h5PageStatusOptions } from "@/components/marketing/marketing-constants";
-import { H5PageRowActions } from "@/components/marketing/h5-page-mutations";
+import { H5PageOrderControls, H5PageRowActions } from "@/components/marketing/h5-page-mutations";
 import type { H5MarketingPageRecord } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,17 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function isActivePublishedPage(page: H5MarketingPageRecord, now = Date.now()) {
+  if (page.status !== "published") return false;
+  const startAt = page.start_at ? new Date(page.start_at).getTime() : null;
+  const endAt = page.end_at ? new Date(page.end_at).getTime() : null;
+
+  if (startAt != null && !Number.isNaN(startAt) && startAt > now) return false;
+  if (endAt != null && !Number.isNaN(endAt) && endAt < now) return false;
+
+  return true;
+}
+
 type H5MarketingPagesTableProps = {
   pages: H5MarketingPageRecord[];
   apiBasePath?: string;
@@ -60,6 +71,15 @@ function createColumns({
   tenantSlug,
   stickyActionColumn,
 }: H5MarketingPagesTableProps): ColumnDef<H5MarketingPageRecord>[] {
+  const activePages = pages
+    .filter((page) => isActivePublishedPage(page))
+    .sort((a, b) => {
+      const sortDiff = (a.sort_order ?? 100) - (b.sort_order ?? 100);
+      if (sortDiff !== 0) return sortDiff;
+      return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
+    });
+  const activeOrderMap = new Map(activePages.map((page, index) => [page.id, index + 1]));
+
   return [
     {
       accessorKey: "title",
@@ -108,12 +128,27 @@ function createColumns({
     {
       accessorKey: "display_scene",
       header: "小程序展示",
-      cell: ({ row }) => (
-        <div className="flex flex-col gap-1">
-          <span className="text-sm">{sceneLabel[row.original.display_scene] || row.original.display_scene}</span>
-          <span className="text-xs text-muted-foreground">排序 {row.original.sort_order ?? 100}</span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const position = activeOrderMap.get(row.original.id) ?? null;
+        return (
+          <div className="flex min-w-[160px] flex-col gap-2">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm">{sceneLabel[row.original.display_scene] || row.original.display_scene}</span>
+              <span className="text-xs text-muted-foreground">
+                {position ? `展示第 ${position} / ${activePages.length} 位` : "未参与当前排序"}
+              </span>
+            </div>
+            {position ? (
+              <H5PageOrderControls
+                page={row.original}
+                apiBasePath={apiBasePath}
+                position={position}
+                total={activePages.length}
+              />
+            ) : null}
+          </div>
+        );
+      },
       meta: {
         cellClassName: "whitespace-nowrap",
       },

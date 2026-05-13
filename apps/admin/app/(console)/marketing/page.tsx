@@ -79,6 +79,17 @@ type H5LeadListData = {
   pagination: Pagination;
 };
 
+function isCurrentPublishedH5Page(page: H5MarketingPageRecord, now = Date.now()) {
+  if (page.status !== "published") return false;
+  const startAt = page.start_at ? new Date(page.start_at).getTime() : null;
+  const endAt = page.end_at ? new Date(page.end_at).getTime() : null;
+
+  if (startAt != null && !Number.isNaN(startAt) && startAt > now) return false;
+  if (endAt != null && !Number.isNaN(endAt) && endAt < now) return false;
+
+  return true;
+}
+
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -306,6 +317,7 @@ export default async function MarketingPage({
   const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
   const shareAssistCount = list.filter((item) => item.campaign_type === "share_assist").length;
   const publishedH5Count = h5Pages.list.filter((item) => item.status === "published").length;
+  const activePublishedH5Count = h5Pages.list.filter((item) => isCurrentPublishedH5Page(item)).length;
   const draftH5Count = h5Pages.list.filter((item) => item.status === "draft").length;
   const offlineH5Count = h5Pages.list.filter((item) => item.status === "offline").length;
   const newLeadCount = h5Leads.list.filter((item) => item.lead_status === "new").length;
@@ -329,7 +341,10 @@ export default async function MarketingPage({
         {activeTab === "campaigns" ? (
           <CreateMarketingCampaignButton projects={projects} />
         ) : activeTab === "h5" ? (
-          <CreateH5MarketingPageButton tenantSlug={tenantSlug} />
+          <CreateH5MarketingPageButton
+            tenantSlug={tenantSlug}
+            activePageCount={activePublishedH5Count}
+          />
         ) : null}
       </div>
 
