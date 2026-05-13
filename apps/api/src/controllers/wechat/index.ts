@@ -3,16 +3,24 @@ import { SupabaseDB } from "@/utils/supabase";
 import { BaseController } from "@/controllers/BaseController";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import { Post } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
 import { signToken } from "@/utils/jwt";
-import { SendCodeSchema, VerifyRoleSchema } from "@/schema/wechat";
+import {
+  ReviewWechatRebindRequestSchema,
+  SendCodeSchema,
+  VerifyRoleSchema,
+  WechatRebindRequestListQuerySchema,
+  WechatRebindRequestParamsSchema,
+  WechatRebindRequestSchema,
+} from "@/schema/wechat";
 import { sendSmsCode } from "@/services/sms";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
+import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import {
@@ -114,6 +122,10 @@ export class WeChatController extends BaseController {
       slug: authContext.tenantSlug,
       status: authContext.tenantStatus,
     };
+  }
+
+  private async getRequiredAuthContext(request: FastifyRequest) {
+    return authorizationService.getRequiredAuthContext(request.user?.sub);
   }
 
   private serializeEmployeeFromAuthContext(authContext: AuthContext) {
@@ -378,6 +390,89 @@ export class WeChatController extends BaseController {
     });
 
     return ResponseHandler.success(data, "客户租户已选择");
+  }
+
+  @Post("/customer/auth/unbind-wechat")
+  async unbindCustomerWechat(request: FastifyRequest, reply: FastifyReply) {
+    const data = await wechatRebindRequestService.unbindCustomer(request.user || {});
+    return ResponseHandler.success(data, "微信绑定已解除");
+  }
+
+  @Post("/employee/auth/unbind-wechat")
+  async unbindEmployeeWechat(request: FastifyRequest, reply: FastifyReply) {
+    const data = await wechatRebindRequestService.unbindEmployee(request.user || {});
+    return ResponseHandler.success(data, "微信绑定已解除");
+  }
+
+  @Post("/auth/wechat-rebind-requests")
+  async createWechatRebindRequest(request: FastifyRequest, reply: FastifyReply) {
+    const bodyResult = WechatRebindRequestSchema.safeParse(request.body || {});
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await wechatRebindRequestService.create(
+      request.user?.sub,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data, "换绑申请已提交，请等待工作人员审核");
+  }
+
+  @Get("/employee/auth/wechat-rebind-requests")
+  async listWechatRebindRequests(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const queryResult = WechatRebindRequestListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const data = await wechatRebindRequestService.list(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/employee/auth/wechat-rebind-requests/:id/approve")
+  async approveWechatRebindRequest(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = WechatRebindRequestParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) {
+      throw Errors.fromZod(paramsResult.error);
+    }
+
+    const bodyResult = ReviewWechatRebindRequestSchema.safeParse(request.body || {});
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await wechatRebindRequestService.approve(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data, "微信换绑申请已通过");
+  }
+
+  @Post("/employee/auth/wechat-rebind-requests/:id/reject")
+  async rejectWechatRebindRequest(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredAuthContext(request);
+
+    const paramsResult = WechatRebindRequestParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) {
+      throw Errors.fromZod(paramsResult.error);
+    }
+
+    const bodyResult = ReviewWechatRebindRequestSchema.safeParse(request.body || {});
+    if (!bodyResult.success) {
+      throw Errors.fromZod(bodyResult.error);
+    }
+
+    const data = await wechatRebindRequestService.reject(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data, "微信换绑申请已拒绝");
   }
 
   @Post("/wechat/h5-session")
@@ -816,9 +911,7 @@ export class WeChatController extends BaseController {
     authUserId: string,
     customer: CustomerTenantOption,
   ) {
-    if (customer.user_id && customer.user_id !== authUserId) {
-      throw Errors.badRequest("该客户档案已绑定其他账号");
-    }
+    await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
 
     if (customer.user_id === authUserId) {
       return;
@@ -1081,9 +1174,7 @@ export class WeChatController extends BaseController {
       throw Errors.badRequest("当前微信已绑定其他客户，请联系工作人员");
     }
 
-    if (customer.user_id && customer.user_id !== authUserId) {
-      throw Errors.badRequest("该客户档案已绑定其他账号");
-    }
+    await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
 
     const updatePayload: {
       user_id: string;
@@ -1133,12 +1224,7 @@ export class WeChatController extends BaseController {
       throw Errors.badRequest("该手机号未绑定员工身份");
     }
 
-    if (employee.user_id && employee.user_id !== authUserId) {
-      authorizationService.invalidateAuthContext({
-        authUserId: employee.user_id,
-        employeeId: employee.id,
-      });
-    }
+    await wechatRebindRequestService.assertEmployeeCanBind(authUserId, employee);
 
     if (!isEmployeeOperableStatus(employee.status)) {
       throw Errors.badRequest("该员工账号已停用，无法登录");

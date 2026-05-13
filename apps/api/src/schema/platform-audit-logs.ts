@@ -16,6 +16,8 @@ export const PlatformAuditLogActionSchema = z.enum([
   "platform_billing_recharge",
   "platform_billing_pricing_update",
   "platform_config_update",
+  "wechat_rebind_approve",
+  "wechat_rebind_reject",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

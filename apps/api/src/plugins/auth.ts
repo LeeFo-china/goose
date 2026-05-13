@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
+import { SupabaseDB } from "@/utils/supabase";
 
 const publicRoutes = new Set([
   "/",
@@ -119,6 +120,56 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
   return Errors.unauthorized("登录凭证无效", ErrorCodes.TOKEN_INVALID);
 }
 
+async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToken>) {
+  if (!payload?.openid || !payload.sub || !payload.tenant_id) {
+    return;
+  }
+
+  const adminClient = SupabaseDB.getAdminClient();
+
+  if (payload.customer_id) {
+    const { data, error } = await adminClient
+      .from("customers")
+      .select("id")
+      .eq("id", payload.customer_id)
+      .eq("tenant_id", payload.tenant_id)
+      .eq("user_id", payload.sub)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("校验客户微信绑定失败", error);
+    }
+
+    if (!data) {
+      throw Errors.unauthorized(
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+  }
+
+  if (payload.employee_id) {
+    const { data, error } = await adminClient
+      .from("employees")
+      .select("id")
+      .eq("id", payload.employee_id)
+      .eq("tenant_id", payload.tenant_id)
+      .eq("user_id", payload.sub)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("校验员工微信绑定失败", error);
+    }
+
+    if (!data) {
+      throw Errors.unauthorized(
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+  }
+}
+
 const authPlugin = (app: FastifyInstance) => {
   app.addHook("onRequest", async (request, reply) => {
     const url = request.url.split("?")[0] ?? "/";
@@ -151,6 +202,8 @@ const authPlugin = (app: FastifyInstance) => {
       const error = getTokenError("invalid");
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
+
+    await assertWechatBusinessBinding(payload);
 
     request.user = payload;
   });

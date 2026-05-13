@@ -2,7 +2,12 @@ export const AUTH_TARGET_ROLE_VALUES = ['customer', 'employee'] as const;
 
 export type AuthTargetRole = (typeof AUTH_TARGET_ROLE_VALUES)[number];
 
-export const SMS_SCENE_VALUES = ['bind_customer', 'bind_employee', 'admin_login'] as const;
+export const SMS_SCENE_VALUES = [
+  'bind_customer',
+  'bind_employee',
+  'admin_login',
+  'rebind_wechat',
+] as const;
 
 export type SmsScene = (typeof SMS_SCENE_VALUES)[number];
 
