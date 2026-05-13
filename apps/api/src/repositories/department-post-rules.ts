@@ -18,6 +18,7 @@ export type DepartmentPostRuleRecord = {
 
 export type DepartmentPostRuleDepartmentRecord = {
   id: string;
+  tenant_department_id: string | null;
   code: DepartmentCode;
   name: string;
 };
@@ -57,7 +58,7 @@ class DepartmentPostRuleRepository {
   async listDepartments(tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("tenant_departments")
-      .select("legacy_department_id, code, alias_name, sort")
+      .select("id, legacy_department_id, code, alias_name, sort")
       .eq("enabled", true)
       .not("legacy_department_id", "is", null)
       .order("sort", { ascending: true, nullsFirst: false });
@@ -70,11 +71,13 @@ class DepartmentPostRuleRepository {
 
     if (error) throw Errors.dbError("查询部门列表失败", error);
     return ((data || []) as Array<{
+      id: string;
       legacy_department_id: string;
       code: DepartmentCode;
       alias_name: string;
     }>).map((department) => ({
       id: department.legacy_department_id,
+      tenant_department_id: department.id,
       code: department.code,
       name: department.alias_name,
     }));
@@ -86,9 +89,12 @@ class DepartmentPostRuleRepository {
   }) {
     let query = SupabaseDB.getAdminClient()
       .from("tenant_departments")
-      .select("legacy_department_id, code, alias_name")
-      .eq("legacy_department_id", input.departmentId)
+      .select("id, legacy_department_id, code, alias_name")
       .eq("enabled", true);
+
+    query = query.or(
+      `id.eq.${input.departmentId},legacy_department_id.eq.${input.departmentId}`,
+    );
 
     if (input.tenantId) {
       query = query.eq("tenant_id", input.tenantId);
@@ -100,6 +106,7 @@ class DepartmentPostRuleRepository {
     if (!data) return null;
 
     const row = data as {
+      id: string;
       legacy_department_id: string;
       code: DepartmentCode;
       alias_name: string;
@@ -107,6 +114,7 @@ class DepartmentPostRuleRepository {
 
     return {
       id: row.legacy_department_id,
+      tenant_department_id: row.id,
       code: row.code,
       name: row.alias_name,
     } as DepartmentPostRuleDepartmentRecord;
@@ -206,8 +214,8 @@ class DepartmentPostRuleRepository {
     const [departmentResult, postResult] = await Promise.all([
       SupabaseDB.getAdminClient()
         .from("tenant_departments")
-        .select("legacy_department_id, code, alias_name")
-        .eq("legacy_department_id", input.departmentId)
+        .select("id, legacy_department_id, code, alias_name")
+        .or(`id.eq.${input.departmentId},legacy_department_id.eq.${input.departmentId}`)
         .eq("tenant_id", input.tenantId)
         .eq("enabled", true)
         .maybeSingle(),
@@ -233,6 +241,9 @@ class DepartmentPostRuleRepository {
           id: (departmentResult.data as {
             legacy_department_id: string;
           }).legacy_department_id,
+          tenant_department_id: (departmentResult.data as {
+            id: string;
+          }).id,
           code: (departmentResult.data as { code: DepartmentCode }).code,
           name: (departmentResult.data as { alias_name: string }).alias_name,
         }

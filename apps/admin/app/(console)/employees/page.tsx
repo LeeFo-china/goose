@@ -18,6 +18,9 @@ type Employee = {
   role?: string | null;
   status: EmployeeStatus | string | null;
   department_id: string | null;
+  tenant_department_id?: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
   post_id: string | null;
   avatar: string | null;
   user_id?: string | null;
@@ -34,6 +37,7 @@ type Employee = {
 
 type EmployeeDepartmentOption = {
   id: string;
+  tenant_department_id?: string | null;
   code: string;
   name: string;
   selected_post_codes?: string[];

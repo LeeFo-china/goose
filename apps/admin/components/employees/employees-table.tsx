@@ -27,6 +27,9 @@ export type EmployeeRecord = {
   role?: string | null;
   status: EmployeeStatus | string | null;
   department_id: string | null;
+  tenant_department_id?: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
   post_id: string | null;
   avatar: string | null;
   user_id?: string | null;
@@ -139,7 +142,14 @@ export function EmployeesTable({
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
 }) {
-  const departmentMap = new Map(departments.map((department) => [department.id, department]));
+  const departmentMap = new Map(
+    departments.flatMap((department) => [
+      [department.id, department] as const,
+      department.tenant_department_id
+        ? [department.tenant_department_id, department] as const
+        : null,
+    ].filter((item): item is readonly [string, EmployeeDepartmentOption] => Boolean(item))),
+  );
   const postMap = new Map(posts.map((post) => [post.id, post]));
 
   return (
@@ -164,9 +174,13 @@ export function EmployeesTable({
                 label: employee.status || "未知",
                 variant: "outline" as const,
               };
-              const department = employee.department_id
-                ? departmentMap.get(employee.department_id)
-                : null;
+              const department = employee.tenant_department_id
+                ? departmentMap.get(employee.tenant_department_id)
+                : employee.department_id
+                  ? departmentMap.get(employee.department_id)
+                  : null;
+              const departmentName = employee.department_name || department?.name || "";
+              const departmentCode = employee.department_code || department?.code || "";
               const post = employee.post_id ? postMap.get(employee.post_id) : null;
               const loginMeta = getLoginBindingMeta(employee);
               const LoginIcon = loginMeta.icon;
@@ -214,10 +228,10 @@ export function EmployeesTable({
                     </div>
                   </td>
                   <td className="px-5 py-4 whitespace-nowrap text-muted-foreground">
-                    {department ? (
+                    {departmentName || departmentCode ? (
                       <div>
-                        <div className="whitespace-nowrap font-medium text-foreground">{department.name}</div>
-                        <div className="whitespace-nowrap text-xs text-muted-foreground">{department.code}</div>
+                        <div className="whitespace-nowrap font-medium text-foreground">{departmentName || "-"}</div>
+                        <div className="whitespace-nowrap text-xs text-muted-foreground">{departmentCode || "-"}</div>
                       </div>
                     ) : (
                       "-"

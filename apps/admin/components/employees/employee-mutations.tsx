@@ -36,12 +36,16 @@ export type EmployeeMutationRecord = {
   phone: string | null;
   status: EmployeeStatus | string | null;
   department_id: string | null;
+  tenant_department_id?: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
   post_id: string | null;
   avatar: string | null;
 };
 
 export type EmployeeDepartmentOption = {
   id: string;
+  tenant_department_id?: string | null;
   code: string;
   name: string;
   selected_post_codes?: string[];
@@ -99,6 +103,10 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function getDepartmentOptionValue(department: EmployeeDepartmentOption) {
+  return department.tenant_department_id || department.id;
 }
 
 async function uploadEmployeeAvatar(file: File) {
@@ -190,18 +198,23 @@ function EmployeeDialog({
     phone: employee?.phone || "",
     avatar: employee?.avatar || "",
     status: isEmployeeStatus(employee?.status) ? employee.status : "active",
-    departmentId: employee?.department_id || "",
+    tenantDepartmentId: employee?.tenant_department_id ||
+      departments.find((department) => department.id === employee?.department_id)
+        ?.tenant_department_id ||
+      "",
     postId: employee?.post_id || "",
-  }), [employee]);
+  }), [departments, employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
   const [avatar, setAvatar] = useState(defaults.avatar);
-  const [departmentId, setDepartmentId] = useState(defaults.departmentId);
+  const [tenantDepartmentId, setTenantDepartmentId] = useState(defaults.tenantDepartmentId);
   const [postId, setPostId] = useState(defaults.postId);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedDepartment = departments.find((item) => item.id === departmentId) || null;
+  const selectedDepartment = departments.find((item) =>
+    getDepartmentOptionValue(item) === tenantDepartmentId
+  ) || null;
   const currentPost = posts.find((item) => item.id === postId) || null;
   const availablePosts = useMemo(() => {
     if (!selectedDepartment) {
@@ -220,7 +233,7 @@ function EmployeeDialog({
   const departmentOptions = useMemo(() => [
     { value: EMPTY_SELECT_VALUE, label: "不分配部门" },
     ...departments.map((department) => ({
-      value: department.id,
+      value: getDepartmentOptionValue(department),
       label: `${department.name} · ${department.code}`,
     })),
   ], [departments]);
@@ -237,11 +250,11 @@ function EmployeeDialog({
     if (!open) return;
     setStatus(defaults.status);
     setAvatar(defaults.avatar);
-    setDepartmentId(defaults.departmentId);
+    setTenantDepartmentId(defaults.tenantDepartmentId);
     setPostId(defaults.postId);
     setUploadingAvatar(false);
     setAvatarLoadFailed(false);
-  }, [defaults.avatar, defaults.departmentId, defaults.postId, defaults.status, open]);
+  }, [defaults.avatar, defaults.postId, defaults.status, defaults.tenantDepartmentId, open]);
 
   function close() {
     if (pending || uploadingAvatar) return;
@@ -250,10 +263,12 @@ function EmployeeDialog({
   }
 
   function changeDepartment(value: string) {
-    const nextDepartmentId = value === EMPTY_SELECT_VALUE ? "" : value;
-    setDepartmentId(nextDepartmentId);
+    const nextTenantDepartmentId = value === EMPTY_SELECT_VALUE ? "" : value;
+    setTenantDepartmentId(nextTenantDepartmentId);
 
-    const nextDepartment = departments.find((item) => item.id === nextDepartmentId);
+    const nextDepartment = departments.find((item) =>
+      getDepartmentOptionValue(item) === nextTenantDepartmentId
+    );
     if (!nextDepartment) {
       setPostId("");
       return;
@@ -296,7 +311,7 @@ function EmployeeDialog({
       phone: phone || null,
       avatar: avatar || null,
       status,
-      department_id: departmentId || null,
+      tenant_department_id: tenantDepartmentId || null,
       post_id: postId || null,
     };
 
@@ -439,7 +454,7 @@ function EmployeeDialog({
               <FormSelect
                 id={`${mode}-employee-department`}
                 disabled={pending}
-                value={departmentId || EMPTY_SELECT_VALUE}
+                value={tenantDepartmentId || EMPTY_SELECT_VALUE}
                 options={departmentOptions}
                 onChange={changeDepartment}
               />

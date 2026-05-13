@@ -73,6 +73,7 @@ export type DepartmentPostRuleRecord = {
 
 export type DepartmentPostRuleDepartment = {
   id: string;
+  tenant_department_id?: string | null;
   code: string;
   name: string;
   selected_post_codes: string[];

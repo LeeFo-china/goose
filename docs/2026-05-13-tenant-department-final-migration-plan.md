@@ -422,4 +422,23 @@ admin 迁移要求：
   - 可映射但未回填：0
   - 新旧字段映射不一致：0
 
-下一步进入阶段 6：admin 和小程序切换新字段。阶段 6 需要先输出对接说明，再改 admin 表单和小程序消费字段。
+阶段 6 已执行完成：
+
+- 已补 admin/微信小程序对接说明：
+  - `docs/application_integration_documentation/2026-05-13-admin-miniprogram-tenant-department-id-switch-integration.md`
+- `/department-post-rules` 候选部门返回 `tenant_department_id`
+- admin 员工新增/编辑部门选择控件改用 `tenant_department_id` 作为 value
+- admin 员工新增/编辑提交改传 `tenant_department_id`
+- admin 员工列表部门展示优先使用 `department_name` / `department_code`
+
+阶段 6 验收记录：
+
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`：通过
+- `pnpm --dir apps/admin build`：通过
+- `/department-post-rules` 返回 `tenant_department_id`：通过
+- 员工使用 `tenant_department_id` 保存后响应同时存在 `department_id` 和 `tenant_department_id`：通过
+- 小程序端只读展示可直接消费新增字段，对接说明已落文档
+
+阶段 6 完成后再进入阶段 7：登录上下文、权限、费用、项目等联查收口到 `tenant_department_id`。
