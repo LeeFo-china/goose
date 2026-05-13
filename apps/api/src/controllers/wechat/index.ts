@@ -1310,6 +1310,9 @@ export class WeChatController extends BaseController {
   private async bindCustomerToAuthUser(
     authUserId: string,
     customer: CustomerTenantOption,
+    options?: {
+      openid?: string | null;
+    },
   ) {
     const hasActiveMembership = this.getAuthIdentitySource() !== "legacy"
       ? await userIdentityService.hasActiveBusinessMembership({
@@ -1320,12 +1323,46 @@ export class WeChatController extends BaseController {
       })
       : false;
 
+    if (customer.user_id && customer.user_id !== authUserId && !hasActiveMembership) {
+      const existingOpenid = await this.findOpenIdByAuthUserId(customer.user_id);
+      if (existingOpenid) {
+        await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
+      }
+
+      if (!options?.openid) {
+        throw Errors.badRequest("当前账号未绑定微信身份");
+      }
+
+      await this.bindWechatOpenIdToExistingAuthUser({
+        openid: options.openid,
+        fromAuthUserId: authUserId,
+        toAuthUserId: customer.user_id,
+        targetRole: "customer",
+      });
+      await userIdentityService.syncOauthIdentityBestEffort({
+        userId: customer.user_id,
+        platform: "wechat_mini",
+        openid: options.openid,
+        source: "customer_verify_role_bind_existing_auth_user",
+      });
+      await userIdentityService.syncBusinessMembershipBestEffort({
+        userId: customer.user_id,
+        tenantId: customer.tenant_id,
+        identityType: "customer",
+        identityId: customer.id,
+        source: "customer_verify_role_bind_existing_auth_user",
+      });
+      authorizationService.invalidateAuthContext({ authUserId });
+      authorizationService.invalidateAuthContext({ authUserId: customer.user_id });
+      return customer.user_id;
+    }
+
     if (!hasActiveMembership) {
       await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
     }
 
     if (customer.user_id === authUserId && hasActiveMembership) {
-      return;
+      return authUserId;
     }
 
     if (customer.user_id === authUserId) {
@@ -1336,7 +1373,7 @@ export class WeChatController extends BaseController {
         identityId: customer.id,
         source: "customer_bind_auth_user_existing",
       });
-      return;
+      return authUserId;
     }
 
     if (hasActiveMembership && customer.user_id && customer.user_id !== authUserId) {
@@ -1376,6 +1413,8 @@ export class WeChatController extends BaseController {
       identityId: customer.id,
       source: "customer_bind_auth_user",
     });
+
+    return authUserId;
   }
 
   private async resolveCustomerLoginState(
@@ -1418,13 +1457,17 @@ export class WeChatController extends BaseController {
 
     if (customers.length === 1) {
       const customer = customers[0]!;
-      await this.bindCustomerToAuthUser(authUserId, customer);
-      return this.signCustomerSession({
+      const customerAuthUserId = await this.bindCustomerToAuthUser(
         authUserId,
+        customer,
+        { openid },
+      );
+      return this.signCustomerSession({
+        authUserId: customerAuthUserId,
         openid,
         customer: {
           ...customer,
-          user_id: authUserId,
+          user_id: customerAuthUserId,
         },
       });
     }
@@ -1532,14 +1575,18 @@ export class WeChatController extends BaseController {
       throw Errors.business(403, "当前账号不能选择该装修公司", "FORBIDDEN");
     }
 
-    await this.bindCustomerToAuthUser(input.authUserId, customer);
+    const customerAuthUserId = await this.bindCustomerToAuthUser(
+      input.authUserId,
+      customer,
+      { openid: input.openid },
+    );
 
     return this.signCustomerSession({
-      authUserId: input.authUserId,
+      authUserId: customerAuthUserId,
       openid: input.openid,
       customer: {
         ...customer,
-        user_id: input.authUserId,
+        user_id: customerAuthUserId,
       },
     });
   }
@@ -1822,6 +1869,7 @@ export class WeChatController extends BaseController {
     openid: string;
     fromAuthUserId: string;
     toAuthUserId: string;
+    targetRole?: "customer" | "employee";
   }) {
     const adminClient = SupabaseDB.getAdminClient();
     const targetOpenid = await this.findOpenIdByAuthUserId(input.toAuthUserId);
@@ -1832,7 +1880,7 @@ export class WeChatController extends BaseController {
         ErrorCodes.WECHAT_ALREADY_BOUND,
         {
           can_request_rebind: true,
-          target_role: "employee",
+          target_role: input.targetRole ?? "employee",
         },
       );
     }

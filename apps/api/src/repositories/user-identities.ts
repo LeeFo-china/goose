@@ -123,8 +123,9 @@ class UserIdentityRepository {
   async unbindOauthIdentities(input: {
     userId: string;
     platform: OAuthPlatform;
+    openid?: string | null;
   }) {
-    const { error } = await this.from("user_oauth_identities")
+    let query = this.from("user_oauth_identities")
       .update({
         status: "unbound",
         unbound_at: new Date().toISOString(),
@@ -132,6 +133,12 @@ class UserIdentityRepository {
       .eq("user_id", input.userId)
       .eq("platform", input.platform)
       .eq("status", "active");
+
+    if (input.openid) {
+      query = query.eq("openid", input.openid);
+    }
+
+    const { error } = await query;
 
     if (error) {
       throw Errors.dbError("解绑用户登录凭证失败", error);

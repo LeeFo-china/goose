@@ -109,12 +109,23 @@ class UserIdentityService {
   async unbindOauthIdentityBestEffort(input: {
     userId: string;
     platform: OAuthPlatform;
+    openid?: string | null;
     source: string;
   }) {
     try {
       await userIdentityRepository.unbindOauthIdentities({
         userId: input.userId,
         platform: input.platform,
+        openid: input.openid ?? null,
+      });
+      await this.recordEventBestEffort({
+        userId: input.userId,
+        eventType: "identity_oauth_unbound",
+        platform: input.platform,
+        openid: input.openid ?? null,
+        metadata: {
+          source: input.source,
+        },
       });
     } catch (error) {
       await this.recordEventBestEffort({

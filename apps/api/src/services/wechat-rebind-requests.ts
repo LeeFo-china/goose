@@ -30,6 +30,7 @@ type SmsVerificationCodeRow = {
 
 type JwtUserLike = {
   sub?: string | null;
+  openid?: string | null;
   tenant_id?: string | null;
   customer_id?: string | null;
   employee_id?: string | null;
@@ -195,10 +196,79 @@ class WechatRebindRequestService {
     }
   }
 
+  private assertWechatUnbindPrerequisites(user: JwtUserLike) {
+    if (!user.openid) {
+      throw Errors.business(
+        409,
+        "当前账号未绑定微信登录凭证",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+  }
+
+  private assertHasPhoneRecovery(target: {
+    phone?: string | null;
+  }) {
+    if (!normalizeNullableText(target.phone)) {
+      throw Errors.business(
+        409,
+        "当前账号未绑定手机号，无法解绑唯一微信登录方式",
+        ErrorCodes.UNBIND_FORBIDDEN,
+      );
+    }
+  }
+
+  private async assertActiveWechatOauth(user: JwtUserLike) {
+    if (!user.sub || !user.openid) {
+      throw Errors.business(
+        409,
+        "当前账号未绑定微信登录凭证",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
+    const activeOauth = await userIdentityService.findActiveOauthIdentity({
+      platform: "wechat_mini",
+      openid: user.openid,
+    });
+    if (!activeOauth || activeOauth.user_id !== user.sub) {
+      throw Errors.business(
+        409,
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+  }
+
+  private async assertBusinessIdentityBelongsToUser(input: {
+    userId: string;
+    tenantId: string;
+    identityType: "customer" | "employee";
+    identityId: string;
+    legacyUserId?: string | null;
+  }) {
+    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: input.userId,
+      tenantId: input.tenantId,
+      identityType: input.identityType,
+      identityId: input.identityId,
+    });
+    if (hasActiveMembership || input.legacyUserId === input.userId) {
+      return;
+    }
+
+    throw Errors.business(
+      409,
+      "当前微信绑定关系已变化，请重新登录",
+      ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+    );
+  }
+
   async unbindCustomer(user: JwtUserLike) {
     if (!user.sub) {
       throw Errors.unauthorized("请先登录", ErrorCodes.UNAUTHORIZED);
     }
+    this.assertWechatUnbindPrerequisites(user);
 
     if (!user.customer_id || !user.tenant_id) {
       throw Errors.business(
@@ -208,27 +278,11 @@ class WechatRebindRequestService {
       );
     }
 
-    const customer = await wechatRebindRequestRepository.unbindCustomer({
+    const customer = await wechatRebindRequestRepository.findCustomerBinding({
       customerId: user.customer_id,
       tenantId: user.tenant_id,
-      authUserId: user.sub,
     });
-
     if (!customer) {
-      const current = await wechatRebindRequestRepository.findCustomerBinding({
-        customerId: user.customer_id,
-        tenantId: user.tenant_id,
-      });
-
-      if (current && !current.user_id) {
-        authorizationService.invalidateAuthContext({ authUserId: user.sub });
-        throw Errors.business(
-          409,
-          "当前客户已经没有绑定微信",
-          ErrorCodes.CUSTOMER_WECHAT_NOT_BOUND,
-        );
-      }
-
       throw Errors.business(
         409,
         "当前微信绑定关系已变化，请重新登录",
@@ -236,17 +290,19 @@ class WechatRebindRequestService {
       );
     }
 
-    await userIdentityService.unbindBusinessMembershipBestEffort({
+    this.assertHasPhoneRecovery(customer);
+    await this.assertBusinessIdentityBelongsToUser({
       userId: user.sub,
       tenantId: user.tenant_id,
       identityType: "customer",
       identityId: user.customer_id,
-      source: "customer_unbind_wechat",
     });
+    await this.assertActiveWechatOauth(user);
     await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
     await userIdentityService.unbindOauthIdentityBestEffort({
       userId: user.sub,
       platform: "wechat_mini",
+      openid: user.openid,
       source: "customer_unbind_wechat",
     });
 
@@ -258,6 +314,7 @@ class WechatRebindRequestService {
     if (!user.sub) {
       throw Errors.unauthorized("请先登录", ErrorCodes.UNAUTHORIZED);
     }
+    this.assertWechatUnbindPrerequisites(user);
 
     if (!user.employee_id || !user.tenant_id) {
       throw Errors.business(
@@ -267,11 +324,10 @@ class WechatRebindRequestService {
       );
     }
 
-    const employee = await wechatRebindRequestRepository.unbindEmployee({
-      employeeId: user.employee_id,
-      tenantId: user.tenant_id,
-      authUserId: user.sub,
-    });
+    const employee = await wechatRebindRequestRepository.findEmployee(
+      user.employee_id,
+      user.tenant_id,
+    );
 
     if (!employee) {
       throw Errors.business(
@@ -281,17 +337,20 @@ class WechatRebindRequestService {
       );
     }
 
-    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
-    await userIdentityService.unbindOauthIdentityBestEffort({
-      userId: user.sub,
-      platform: "wechat_mini",
-      source: "employee_unbind_wechat",
-    });
-    await userIdentityService.unbindBusinessMembershipBestEffort({
+    this.assertHasPhoneRecovery(employee);
+    await this.assertBusinessIdentityBelongsToUser({
       userId: user.sub,
       tenantId: user.tenant_id,
       identityType: "employee",
       identityId: user.employee_id,
+      legacyUserId: employee.user_id,
+    });
+    await this.assertActiveWechatOauth(user);
+    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
+    await userIdentityService.unbindOauthIdentityBestEffort({
+      userId: user.sub,
+      platform: "wechat_mini",
+      openid: user.openid,
       source: "employee_unbind_wechat",
     });
 

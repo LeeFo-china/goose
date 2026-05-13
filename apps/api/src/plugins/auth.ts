@@ -221,6 +221,47 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
   }
 }
 
+async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToken>) {
+  if (!payload?.openid || !payload.sub) {
+    return;
+  }
+
+  const identitySource = getAuthIdentitySource();
+  if (identitySource === "legacy") {
+    return;
+  }
+
+  const activeOauth = await userIdentityService.findActiveOauthIdentity({
+    platform: "wechat_mini",
+    openid: payload.openid,
+  });
+  if (activeOauth?.user_id === payload.sub) {
+    return;
+  }
+
+  if (identitySource === "dual") {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("wechat_identities")
+      .select("auth_user_id")
+      .eq("openid", payload.openid)
+      .eq("auth_user_id", payload.sub)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("校验微信登录凭证失败", error);
+    }
+
+    if (data) {
+      return;
+    }
+  }
+
+  throw Errors.unauthorized(
+    "当前微信登录凭证已失效，请重新登录",
+    ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+  );
+}
+
 const authPlugin = (app: FastifyInstance) => {
   app.addHook("onRequest", async (request, reply) => {
     const url = request.url.split("?")[0] ?? "/";
@@ -254,6 +295,7 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
+    await assertWechatOauthCredential(payload);
     await assertWechatBusinessBinding(payload);
 
     request.user = payload;
