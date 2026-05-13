@@ -183,7 +183,15 @@ export type BillingAiUsageFilterOptions = {
     slug: string | null;
   }>;
   scene_codes: string[];
+  scene_options: Array<{
+    code: string;
+    name: string | null;
+  }>;
   provider_codes: string[];
+  provider_options: Array<{
+    code: string;
+    name: string | null;
+  }>;
   models: Array<{
     code: string;
     name: string | null;

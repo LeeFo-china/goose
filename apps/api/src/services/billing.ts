@@ -453,13 +453,56 @@ class BillingService {
 
   async getPlatformAiUsageFilterOptions(authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
-    const rows = await billingRepository.listAiUsageFilterOptionRows({ limit: 10000 });
+    const [rows, routes] = await Promise.all([
+      billingRepository.listAiUsageFilterOptionRows({ limit: 10000 }),
+      billingRepository.listAiRoutingFilterOptionRows(),
+    ]);
     const tenantIds = Array.from(new Set(rows.map((row) => row.tenant_id).filter(Boolean))) as string[];
     const tenants = await billingRepository.listTenantsByIds(tenantIds);
     const tenantMap = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+    const sceneMap = new Map<string, { code: string; name: string | null }>();
+    const providerMap = new Map<string, { code: string; name: string | null }>();
     const modelMap = new Map<string, { code: string; name: string | null; provider_code: string | null }>();
 
+    for (const route of routes) {
+      if (route.scene_code) {
+        sceneMap.set(route.scene_code, {
+          code: route.scene_code,
+          name: route.name,
+        });
+      }
+
+      for (const model of [route.primary_model, route.fallback_model]) {
+        if (!model) continue;
+        if (model.provider?.code && !providerMap.has(model.provider.code)) {
+          providerMap.set(model.provider.code, {
+            code: model.provider.code,
+            name: model.provider.name,
+          });
+        }
+        if (model.code && !modelMap.has(model.code)) {
+          modelMap.set(model.code, {
+            code: model.code,
+            name: model.name || model.model_name,
+            provider_code: model.provider?.code || null,
+          });
+        }
+      }
+    }
+
     for (const row of rows) {
+      if (row.scene_code && !sceneMap.has(row.scene_code)) {
+        sceneMap.set(row.scene_code, {
+          code: row.scene_code,
+          name: null,
+        });
+      }
+      if (row.provider_code && !providerMap.has(row.provider_code)) {
+        providerMap.set(row.provider_code, {
+          code: row.provider_code,
+          name: null,
+        });
+      }
       if (row.model_code && !modelMap.has(row.model_code)) {
         modelMap.set(row.model_code, {
           code: row.model_code,
@@ -480,8 +523,10 @@ class BillingService {
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "zh-CN")),
-      scene_codes: sortStrings(rows.map((row) => row.scene_code).filter(Boolean) as string[]),
-      provider_codes: sortStrings(rows.map((row) => row.provider_code).filter(Boolean) as string[]),
+      scene_codes: sortStrings(sceneMap.keys()),
+      scene_options: Array.from(sceneMap.values()).sort((a, b) => a.code.localeCompare(b.code, "zh-CN")),
+      provider_codes: sortStrings(providerMap.keys()),
+      provider_options: Array.from(providerMap.values()).sort((a, b) => a.code.localeCompare(b.code, "zh-CN")),
       models: Array.from(modelMap.values()).sort((a, b) => a.code.localeCompare(b.code, "zh-CN")),
     };
   }

@@ -169,6 +169,30 @@ export type BillingAiUsageFilterOptionRow = Pick<
   "tenant_id" | "scene_code" | "provider_code" | "model_code" | "model_name"
 >;
 
+export type BillingAiRoutingFilterOptionRow = {
+  scene_code: string;
+  name: string | null;
+  status: string | null;
+  primary_model?: {
+    code: string;
+    name: string | null;
+    model_name: string | null;
+    provider?: {
+      code: string;
+      name: string | null;
+    } | null;
+  } | null;
+  fallback_model?: {
+    code: string;
+    name: string | null;
+    model_name: string | null;
+    provider?: {
+      code: string;
+      name: string | null;
+    } | null;
+  } | null;
+};
+
 export type BillingSmsShadowRow = {
   id: string;
   tenant_id: string | null;
@@ -632,6 +656,35 @@ class BillingRepository {
     }
 
     return (data || []) as BillingAiUsageFilterOptionRow[];
+  }
+
+  async listAiRoutingFilterOptionRows() {
+    const { data, error } = await this.from("ai_scene_routes")
+      .select(`
+        scene_code,
+        name,
+        status,
+        primary_model:ai_models!ai_scene_routes_primary_model_id_fkey(
+          code,
+          name,
+          model_name,
+          provider:ai_providers!ai_models_provider_id_fkey(code,name)
+        ),
+        fallback_model:ai_models!ai_scene_routes_fallback_model_id_fkey(
+          code,
+          name,
+          model_name,
+          provider:ai_providers!ai_models_provider_id_fkey(code,name)
+        )
+      `)
+      .eq("status", "active")
+      .order("scene_code", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询 AI 场景筛选选项失败", error);
+    }
+
+    return (data || []) as BillingAiRoutingFilterOptionRow[];
   }
 
   async listSmsShadowRows(input: {

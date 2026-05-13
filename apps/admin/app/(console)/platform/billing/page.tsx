@@ -96,7 +96,9 @@ const emptyAiUsageStats: BillingAiUsageStats = {
 const emptyAiFilterOptions: BillingAiUsageFilterOptions = {
   tenants: [],
   scene_codes: [],
+  scene_options: [],
   provider_codes: [],
+  provider_options: [],
   models: [],
 };
 
@@ -771,7 +773,14 @@ export default async function PlatformBillingPage({
                   defaultValue={aiFilters.aiSceneCode}
                   placeholder="搜索或选择场景"
                   searchPlaceholder="搜索场景"
-                  options={aiFilterOptionsResult.data.scene_codes.map((value) => ({ value }))}
+                  options={(aiFilterOptionsResult.data.scene_options.length
+                    ? aiFilterOptionsResult.data.scene_options
+                    : aiFilterOptionsResult.data.scene_codes.map((code) => ({ code, name: null }))
+                  ).map((scene) => ({
+                    value: scene.code,
+                    label: scene.name || undefined,
+                    keywords: [scene.name || ""],
+                  }))}
                 />
                 <BillingFilterCombobox
                   label="供应商"
@@ -779,7 +788,14 @@ export default async function PlatformBillingPage({
                   defaultValue={aiFilters.aiProviderCode}
                   placeholder="搜索或选择供应商"
                   searchPlaceholder="搜索供应商"
-                  options={aiFilterOptionsResult.data.provider_codes.map((value) => ({ value }))}
+                  options={(aiFilterOptionsResult.data.provider_options.length
+                    ? aiFilterOptionsResult.data.provider_options
+                    : aiFilterOptionsResult.data.provider_codes.map((code) => ({ code, name: null }))
+                  ).map((provider) => ({
+                    value: provider.code,
+                    label: provider.name || undefined,
+                    keywords: [provider.name || ""],
+                  }))}
                 />
                 <BillingFilterCombobox
                   label="模型"
