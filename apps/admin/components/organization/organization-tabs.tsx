@@ -59,6 +59,7 @@ export function OrganizationTabs({
   departmentPostRuleConfig,
   departmentCode,
   departmentKeyword,
+  departmentEnabled,
   postStatus,
   postSalaryType,
   postKeyword,
@@ -70,6 +71,7 @@ export function OrganizationTabs({
   departmentPostRuleConfig: DepartmentPostRuleConfig & { error: string | null };
   departmentCode: string;
   departmentKeyword: string;
+  departmentEnabled: string;
   postStatus: string;
   postSalaryType: string;
   postKeyword: string;
@@ -134,6 +136,7 @@ export function OrganizationTabs({
             pagination={departments.pagination}
             code={departmentCode}
             keyword={departmentKeyword}
+            enabled={departmentEnabled}
             error={departments.error}
           />
         ) : activeTab === "posts" ? (

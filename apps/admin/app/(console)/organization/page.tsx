@@ -19,6 +19,7 @@ type OrganizationSearchParams = {
   departmentPage?: string;
   departmentCode?: string;
   departmentKeyword?: string;
+  departmentEnabled?: string;
   postPage?: string;
   postStatus?: string;
   postSalaryType?: string;
@@ -167,8 +168,10 @@ function buildDepartmentQuery(params: OrganizationSearchParams) {
   });
   const keyword = params.departmentKeyword?.trim() || "";
   const code = params.departmentCode?.trim() || "";
+  const enabled = params.departmentEnabled?.trim() || "";
   if (keyword) query.set("keyword", keyword);
   if (code) query.set("code", code);
+  if (enabled === "true" || enabled === "false") query.set("enabled", enabled);
   return query;
 }
 
@@ -219,7 +222,7 @@ export default async function OrganizationPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">组织架构</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          统一维护部门与岗位。当前共 {departments.pagination.total} 个部门，{posts.pagination.total} 个岗位。
+          选择启用标准部门，维护租户显示名称，并在部门下扩展岗位。当前共 {departments.pagination.total} 个部门配置，{posts.pagination.total} 个岗位。
         </p>
       </div>
 
@@ -230,7 +233,7 @@ export default async function OrganizationPage({
               <Building2 />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">当前筛选部门</div>
+              <div className="text-sm text-muted-foreground">部门配置</div>
               <div className="text-xl font-semibold">{departments.pagination.total}</div>
             </div>
           </CardContent>
@@ -278,6 +281,7 @@ export default async function OrganizationPage({
         departmentPostRuleConfig={departmentPostRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
+        departmentEnabled={params.departmentEnabled?.trim() || ""}
         postStatus={params.postStatus?.trim() || ""}
         postSalaryType={params.postSalaryType?.trim() || ""}
         postKeyword={params.postKeyword?.trim() || ""}

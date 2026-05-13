@@ -7,9 +7,14 @@ export type Pagination = {
 
 export type DepartmentRecord = {
   id: string;
+  tenant_department_id?: string | null;
   code: string | null;
   name: string;
+  template_name?: string | null;
+  enabled?: boolean | null;
+  sort?: number | null;
   created_at: string | null;
+  updated_at?: string | null;
 };
 
 export type PostRecord = {

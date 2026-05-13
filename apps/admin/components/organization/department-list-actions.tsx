@@ -26,16 +26,24 @@ const codeOptions = [
   ] as const),
 ] as const;
 
+const enabledOptions = [
+  { value: "__all", label: "全部状态" },
+  { value: "true", label: "已启用" },
+  { value: "false", label: "已停用" },
+] as const;
+
 function buildDepartmentsHref(input: {
   page?: number;
   code?: string;
   keyword?: string;
+  enabled?: string;
 }) {
   const params = new URLSearchParams();
   params.set("tab", "departments");
   if (input.page && input.page > 1) params.set("departmentPage", String(input.page));
   if (input.code) params.set("departmentCode", input.code);
   if (input.keyword) params.set("departmentKeyword", input.keyword);
+  if (input.enabled) params.set("departmentEnabled", input.enabled);
   const query = params.toString();
   return query ? `/organization?${query}` : "/organization";
 }
@@ -43,26 +51,39 @@ function buildDepartmentsHref(input: {
 export function DepartmentFilters({
   code,
   keyword,
+  enabled,
   pending,
   onNavigate,
 }: {
   code: string;
   keyword: string;
+  enabled: string;
   pending: boolean;
   onNavigate: Navigate;
 }) {
   const [selectedCode, setSelectedCode] = useState(code);
+  const [selectedEnabled, setSelectedEnabled] = useState(enabled);
   const [selectedKeyword, setSelectedKeyword] = useState(keyword);
 
   useEffect(() => {
     setSelectedCode(code);
+    setSelectedEnabled(enabled);
     setSelectedKeyword(keyword);
-  }, [code, keyword]);
+  }, [code, enabled, keyword]);
 
   function applyCodeFilter(nextCode: string) {
     onNavigate(buildDepartmentsHref({
       code: nextCode,
       keyword,
+      enabled,
+    }));
+  }
+
+  function applyEnabledFilter(nextEnabled: string) {
+    onNavigate(buildDepartmentsHref({
+      code,
+      keyword,
+      enabled: nextEnabled,
     }));
   }
 
@@ -71,11 +92,12 @@ export function DepartmentFilters({
     onNavigate(buildDepartmentsHref({
       code: selectedCode,
       keyword: selectedKeyword.trim(),
+      enabled: selectedEnabled,
     }));
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[160px_1fr_72px]" onSubmit={submit}>
+    <form className="grid gap-3 lg:grid-cols-[160px_128px_1fr_72px]" onSubmit={submit}>
       <input type="hidden" name="code" value={selectedCode} />
       <FormSelect
         id="department-code-filter"
@@ -89,6 +111,17 @@ export function DepartmentFilters({
           const nextCode = value === "__all" ? "" : value;
           setSelectedCode(nextCode);
           applyCodeFilter(nextCode);
+        }}
+      />
+      <FormSelect
+        id="department-enabled-filter"
+        value={selectedEnabled || "__all"}
+        disabled={pending}
+        options={enabledOptions}
+        onChange={(value) => {
+          const nextEnabled = value === "__all" ? "" : value;
+          setSelectedEnabled(nextEnabled);
+          applyEnabledFilter(nextEnabled);
         }}
       />
       <InputGroup>
@@ -127,12 +160,14 @@ export function DepartmentsPagination({
   pagination,
   code,
   keyword,
+  enabled,
   pending,
   onNavigate,
 }: {
   pagination: Pagination;
   code: string;
   keyword: string;
+  enabled: string;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -146,6 +181,7 @@ export function DepartmentsPagination({
           page: Math.max(1, pagination.page - 1),
           code,
           keyword,
+          enabled,
         }))}
       >
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <ChevronLeft data-icon="inline-start" />}
@@ -159,6 +195,7 @@ export function DepartmentsPagination({
           page: pagination.page + 1,
           code,
           keyword,
+          enabled,
         }))}
       >
         下一页

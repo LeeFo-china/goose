@@ -29,18 +29,32 @@ function getDepartmentLabel(code: string | null) {
 const columns: ColumnDef<DepartmentRecord>[] = [
   {
     accessorKey: "name",
-    header: "部门",
+    header: "显示名称",
     cell: ({ row }) => {
-      const label = getDepartmentLabel(row.original.code);
+      const label = row.original.template_name || getDepartmentLabel(row.original.code);
 
       return (
         <div className="min-w-0">
           <div className="truncate font-medium">{row.original.name}</div>
           {label ? (
-            <div className="mt-1 text-xs text-muted-foreground">{label}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              标准部门：{label}
+            </div>
           ) : null}
         </div>
       );
+    },
+  },
+  {
+    accessorKey: "enabled",
+    header: "状态",
+    cell: ({ row }) => (
+      <Badge variant={row.original.enabled === false ? "secondary" : "success"}>
+        {row.original.enabled === false ? "已停用" : "已启用"}
+      </Badge>
+    ),
+    meta: {
+      cellClassName: "whitespace-nowrap",
     },
   },
   {
@@ -53,6 +67,14 @@ const columns: ColumnDef<DepartmentRecord>[] = [
     ),
     meta: {
       cellClassName: "whitespace-nowrap",
+    },
+  },
+  {
+    accessorKey: "sort",
+    header: "排序",
+    cell: ({ row }) => row.original.sort ?? "-",
+    meta: {
+      cellClassName: "whitespace-nowrap text-muted-foreground",
     },
   },
   {
@@ -84,7 +106,7 @@ export function DepartmentsTable({
       columns={columns}
       data={departments}
       emptyText="没有符合条件的部门"
-      minWidth="min-w-[760px]"
+      minWidth="min-w-[900px]"
     />
   );
 }

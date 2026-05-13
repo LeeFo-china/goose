@@ -8,7 +8,7 @@ import {
   DepartmentFilters,
   DepartmentsPagination,
 } from "@/components/organization/department-list-actions";
-import { CreateDepartmentButton } from "@/components/organization/department-mutations";
+import { EnableDepartmentButton } from "@/components/organization/department-mutations";
 import { DepartmentsTable } from "@/components/organization/departments-table";
 import type {
   DepartmentRecord,
@@ -22,12 +22,14 @@ export function DepartmentsClientShell({
   pagination,
   code,
   keyword,
+  enabled,
   error,
 }: {
   departments: DepartmentRecord[];
   pagination: Pagination;
   code: string;
   keyword: string;
+  enabled: string;
   error: string | null;
 }) {
   const router = useRouter();
@@ -53,7 +55,7 @@ export function DepartmentsClientShell({
           <div>
             <CardTitle>部门列表</CardTitle>
             <CardDescription>
-              筛选条件作用于下方部门表格，当前共 {pagination.total} 条记录。
+              从平台标准部门中启用租户需要的部门，并维护显示名称、状态和排序。
             </CardDescription>
           </div>
           {pending ? (
@@ -71,10 +73,11 @@ export function DepartmentsClientShell({
           <DepartmentFilters
             code={code}
             keyword={keyword}
+            enabled={enabled}
             pending={pending}
             onNavigate={navigate}
           />
-          <CreateDepartmentButton />
+          <EnableDepartmentButton />
         </div>
       </div>
       <div className="relative flex flex-col gap-4">
@@ -95,6 +98,7 @@ export function DepartmentsClientShell({
             pagination={pagination}
             code={code}
             keyword={keyword}
+            enabled={enabled}
             pending={pending}
             onNavigate={navigate}
           />
