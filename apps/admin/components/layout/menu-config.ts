@@ -70,7 +70,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       { href: "/projects", label: "项目", icon: BriefcaseBusiness },
       { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
       { href: "/marketing", label: "营销活动", icon: Megaphone },
-      { href: "/social-video", label: "自媒体脚本", icon: Clapperboard },
+      {
+        href: "/social-video",
+        label: "自媒体脚本",
+        icon: Clapperboard,
+        permission: "social_video_transcription.manage",
+      },
       { href: "/cameras", label: "工地监控", icon: Camera },
       { href: "/usage", label: "用量统计", icon: BarChart3 },
       { href: "/billing", label: "计费账户", icon: CircleDollarSign },
