@@ -76,12 +76,16 @@ class PostsService {
     if (!code) {
       throw Errors.badRequest("岗位编码不能为空");
     }
+    const departmentId = input.tenant_department_id || input.department_id;
+    if (!departmentId) {
+      throw Errors.badRequest("请先选择部门");
+    }
     await departmentPostRuleService.assertDepartmentExists({
-      departmentId: input.department_id,
+      departmentId,
       tenantId: scopedTenantId,
     });
 
-    const { department_id, ...postInput } = input;
+    const { department_id, tenant_department_id, ...postInput } = input;
     const normalized = {
       ...postInput,
       code,
@@ -94,7 +98,7 @@ class PostsService {
     });
 
     await departmentPostRuleService.enablePostForDepartment({
-      departmentId: department_id,
+      departmentId,
       postCode: post.code,
       tenantId: scopedTenantId,
     });

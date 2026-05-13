@@ -37,7 +37,10 @@ import type {
 } from "@/components/organization/organization-types";
 
 type PostMode = "create" | "edit";
-type PostDepartmentOption = Pick<DepartmentPostRuleDepartment, "id" | "code" | "name">;
+type PostDepartmentOption = Pick<
+  DepartmentPostRuleDepartment,
+  "id" | "tenant_department_id" | "code" | "name"
+>;
 
 const EMPTY_DEPARTMENT_VALUE = "__none";
 
@@ -122,10 +125,12 @@ function PostDialog({
   const [departmentId, setDepartmentId] = useState(defaults.departmentId);
   const departmentOptions = useMemo(() => [
     { value: EMPTY_DEPARTMENT_VALUE, label: "请选择部门" },
-    ...departments.map((department) => ({
-      value: department.id,
-      label: `${department.name} · ${department.code}`,
-    })),
+    ...departments
+      .map((department) => ({
+        value: department.tenant_department_id || department.id,
+        label: `${department.name} · ${department.code}`,
+      }))
+      .filter((option) => option.value),
   ], [departments]);
 
   useEffect(() => {
@@ -167,7 +172,7 @@ function PostDialog({
       sort: sortValue ? Number(sortValue) : 0,
       status: Number(status),
       description: description || null,
-      ...(mode === "create" ? { department_id: normalizedDepartmentId } : {}),
+      ...(mode === "create" ? { tenant_department_id: normalizedDepartmentId } : {}),
     };
 
     setError("");

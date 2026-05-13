@@ -101,17 +101,35 @@ class DepartmentController extends BaseController<
     code: string;
     name: string;
   }) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    const adminClient = SupabaseDB.getAdminClient();
+    const { data: existing, error: existingError } = await adminClient
       .from("departments")
-      .upsert({
+      .select("id, code, name, created_at")
+      .eq("tenant_id", input.tenantId)
+      .eq("code", input.code)
+      .maybeSingle();
+
+    if (existingError) throw Errors.dbError("查询兼容部门失败", existingError);
+    if (existing) {
+      return existing as {
+        id: string;
+        code: string;
+        name: string;
+        created_at: string | null;
+      };
+    }
+
+    const { data, error } = await adminClient
+      .from("departments")
+      .insert({
         tenant_id: input.tenantId,
         code: input.code,
         name: input.name,
-      }, { onConflict: "tenant_id,code" })
+      })
       .select("id, code, name, created_at")
       .single();
 
-    if (error) throw Errors.dbError("同步兼容部门失败", error);
+    if (error) throw Errors.dbError("创建兼容部门失败", error);
     return data as { id: string; code: string; name: string; created_at: string | null };
   }
 
@@ -327,6 +345,14 @@ class DepartmentController extends BaseController<
     );
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    if (
+      request.body &&
+      typeof request.body === "object" &&
+      "code" in request.body
+    ) {
+      throw Errors.badRequest("标准部门编码不可修改");
+    }
 
     const result = UpdateDepartmentSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);

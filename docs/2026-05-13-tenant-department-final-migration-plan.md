@@ -513,3 +513,75 @@ admin 迁移要求：
 - URL 仍使用 `/department-post-rules/:department_code`
 - 响应规则仍返回 `department_code`
 - 后续旧字段退场前，不删除 `department_code`
+
+阶段 9 已完成第一步依赖扫描：
+
+- 已新增退场清单：
+  - `docs/2026-05-13-tenant-department-legacy-retirement-checklist.md`
+- 当前结论：不能删除旧 `departments` 表
+- 当前结论：不能删除 `employees.department_id`
+- 当前结论：不能删除 `department_post_rules.department_code`
+
+主要原因：
+
+- 新租户初始化仍会同步旧 `departments`
+- `/departments` 启用标准部门仍需要 `legacy_department_id`
+- admin 组织架构新增岗位仍提交兼容 `department_id`
+- 多个展示链路仍使用旧 `departments` 作为 fallback
+- 旧客户端仍可能读取 `department_id`
+
+下一步建议进入阶段 9A：岗位创建切新字段，让 admin 新增岗位提交 `tenant_department_id`，后端 posts 接口同时兼容新旧部门 ID。
+
+阶段 9A 已执行完成：
+
+- admin 组织架构新增岗位下拉 value 改为 `tenant_department_id`
+- admin 部门岗位规则页“当前部门新增岗位”默认传入 `tenant_department_id`
+- `POST /posts` 支持新字段：
+  - `tenant_department_id`
+  - 兼容旧 `department_id`
+- 岗位创建服务统一按 `tenant_department_id || department_id` 解析部门
+- 新增岗位后，部门岗位规则仍自动写入：
+  - `department_post_rules.tenant_department_id`
+  - `department_post_rules.department_code`
+
+阶段 9A 验收要求：
+
+- admin 新增岗位请求体包含 `tenant_department_id`
+- 旧客户端提交 `department_id` 仍可创建岗位
+- 创建岗位后，对应部门岗位规则自动启用
+- `bun run api:typecheck` 通过
+- `bun run api:build` 通过
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过
+
+阶段 9A 验收记录：
+
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`：通过
+
+阶段 9B 已执行完成：
+
+- 旧 `departments` 表继续保留为兼容映射层
+- `/departments` 新增仍只允许启用标准部门模板
+- `/departments/:id` 更新时显式拒绝修改 `code`
+- 兼容旧部门同步逻辑改为：
+  - 已存在 `tenant_id + code` 时只复用旧部门 ID
+  - 不再因为租户别名变化而更新旧 `departments.name`
+  - 没有兼容记录时才创建旧部门映射
+- 租户部门别名、启停、排序仍只维护在 `tenant_departments`
+
+阶段 9B 验收要求：
+
+- 非标准部门编码不能通过 schema 校验
+- 停用或不存在的部门模板不能启用
+- 更新部门时提交 `code` 返回“标准部门编码不可修改”
+- 修改别名不再覆盖旧 `departments.name`
+- `bun run api:typecheck` 通过
+- `bun run api:build` 通过
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过
+
+阶段 9B 验收记录：
+
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`：通过

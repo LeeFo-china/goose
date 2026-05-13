@@ -248,7 +248,9 @@ export function DepartmentPostRulesClientShell({
             <div className="flex flex-wrap gap-2">
               <CreatePostButton
                 departments={departments}
-                defaultDepartmentId={activeDepartment?.id || ""}
+                defaultDepartmentId={
+                  activeDepartment?.tenant_department_id || activeDepartment?.id || ""
+                }
                 lockDepartment
                 disabled={pending || !activeDepartment}
                 label="当前部门新增岗位"
