@@ -54,9 +54,29 @@ class AccessPolicyService {
     return this.getScope(authContext, permissionCode);
   }
 
+  private matchesDepartmentScope(
+    authContext: AuthContext,
+    target: { department_id?: string | null; tenant_department_id?: string | null },
+  ) {
+    if (authContext.tenantDepartmentId && target.tenant_department_id) {
+      return authContext.tenantDepartmentId === target.tenant_department_id;
+    }
+
+    return Boolean(
+      authContext.departmentId &&
+        target.department_id &&
+        authContext.departmentId === target.department_id,
+    );
+  }
+
   canAccessEmployee(
     authContext: AuthContext,
-    target: { id: string; department_id: string | null; tenant_id?: string | null },
+    target: {
+      id: string;
+      department_id: string | null;
+      tenant_department_id?: string | null;
+      tenant_id?: string | null;
+    },
     permissionCode = "employee.read",
   ) {
     const scope = this.assertPermission(authContext, permissionCode);
@@ -73,11 +93,7 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      return Boolean(
-        authContext.departmentId &&
-          target.department_id &&
-          authContext.departmentId === target.department_id,
-      );
+      return this.matchesDepartmentScope(authContext, target);
     }
 
     return target.id === authContext.employeeId;
@@ -100,6 +116,7 @@ class AccessPolicyService {
       scope,
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
+      tenantDepartmentId: authContext.tenantDepartmentId,
       tenantId: authContext.tenantId,
     });
   }
@@ -113,6 +130,7 @@ class AccessPolicyService {
       scope: "self",
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
+      tenantDepartmentId: authContext.tenantDepartmentId,
       tenantId: authContext.tenantId,
     });
   }
@@ -172,12 +190,13 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      if (!authContext.departmentId) {
+      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
+      if (!departmentScopeId) {
         return [];
       }
 
       return permissionRepository.listEmployeeIdsByDepartmentId(
-        authContext.departmentId,
+        departmentScopeId,
         authContext.tenantId,
       );
     }
@@ -216,6 +235,7 @@ class AccessPolicyService {
     targetEmployee: {
       id: string;
       department_id: string | null;
+      tenant_department_id?: string | null;
       status: string | null;
       tenant_id?: string | null;
     },
@@ -239,6 +259,7 @@ class AccessPolicyService {
     targetEmployee: {
       id: string;
       department_id: string | null;
+      tenant_department_id?: string | null;
       status: string | null;
       tenant_id?: string | null;
     },
@@ -261,11 +282,7 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      return Boolean(
-        authContext.departmentId &&
-          targetEmployee.department_id &&
-          authContext.departmentId === targetEmployee.department_id,
-      );
+      return this.matchesDepartmentScope(authContext, targetEmployee);
     }
 
     return targetEmployee.id === authContext.employeeId;
@@ -291,9 +308,10 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      const employeeIds = authContext.departmentId
+      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
+      const employeeIds = departmentScopeId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
-          authContext.departmentId,
+          departmentScopeId,
           authContext.tenantId,
         )
         : [];

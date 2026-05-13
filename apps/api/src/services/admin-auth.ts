@@ -32,12 +32,32 @@ function getRelationName(
   return value?.name ?? null;
 }
 
+function getRelationField<T extends Record<string, unknown>, K extends keyof T>(
+  value: T | T[] | null | undefined,
+  key: K,
+): T[K] | null {
+  const record = Array.isArray(value) ? value[0] : value;
+  return record?.[key] ?? null;
+}
+
+function getEmployeeDepartmentName(employee: AdminAuthEmployeeRecord) {
+  return (getRelationField(employee.tenant_department, "alias_name") as string | null) ??
+    getRelationName(employee.department);
+}
+
+function getEmployeeDepartmentCode(employee: AdminAuthEmployeeRecord) {
+  return (getRelationField(employee.tenant_department, "code") as string | null) ??
+    (getRelationField(employee.department, "code") as string | null);
+}
+
 function serializeEmployeeFromAuthContext(authContext: AuthContext) {
   return {
     id: authContext.employeeId,
     name: authContext.employeeName,
     status: authContext.employeeStatus,
     department_id: authContext.departmentId,
+    tenant_department_id: authContext.tenantDepartmentId,
+    department_code: authContext.departmentCode,
     department_name: authContext.departmentName,
     post_id: authContext.postId,
     post_name: authContext.postName,
@@ -65,7 +85,9 @@ function serializeEmployeeRecord(employee: AdminAuthEmployeeRecord) {
     phone: employee.phone,
     status: employee.status,
     department_id: employee.department_id,
-    department_name: getRelationName(employee.department),
+    tenant_department_id: employee.tenant_department_id,
+    department_code: getEmployeeDepartmentCode(employee),
+    department_name: getEmployeeDepartmentName(employee),
     post_id: employee.post_id,
     post_name: getRelationName(employee.post),
     avatar: employee.avatar,

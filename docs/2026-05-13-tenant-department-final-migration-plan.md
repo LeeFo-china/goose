@@ -441,4 +441,39 @@ admin 迁移要求：
 - 员工使用 `tenant_department_id` 保存后响应同时存在 `department_id` 和 `tenant_department_id`：通过
 - 小程序端只读展示可直接消费新增字段，对接说明已落文档
 
-阶段 6 完成后再进入阶段 7：登录上下文、权限、费用、项目等联查收口到 `tenant_department_id`。
+阶段 7 已执行完成：
+
+- `AuthContext` 增加：
+  - `tenantDepartmentId`
+  - `departmentCode`
+- 后台登录 `/admin/auth/login`、`/admin/auth/me` 返回：
+  - `department_id`
+  - `tenant_department_id`
+  - `department_code`
+  - `department_name`
+- 微信小程序员工登录上下文返回：
+  - `tenant_department_id`
+  - `department_code`
+  - `department_name`
+- 权限范围判断优先使用 `tenantDepartmentId`，fallback 旧 `departmentId`
+- 部门范围员工查询支持新旧部门 ID：
+  - `employees.tenant_department_id`
+  - `employees.department_id`
+- 员工列表部门级权限筛选支持新旧部门 ID
+- 客户负责人分配的部门范围判断支持 `tenant_department_id`
+- 费用审批候选人部门范围判断支持 `tenant_department_id`
+- 费用审批链审批人联查带出 `tenant_department`
+- 项目创建员工候选人联查带出 `tenant_department`
+
+阶段 7 验收记录：
+
+- `bun run api:typecheck`：通过
+- `bun run api:build`：通过
+- `/admin/auth/me` 已返回 `tenant_department_id` 和 `department_code`
+- `/projects/create/employees?scene=project_designer` 可正常返回员工候选人
+
+阶段 7 仍保留兼容：
+
+- `department_id` 继续作为旧客户端兼容字段
+- 旧 `departments` 关系仍作为展示 fallback
+- 后续阶段 8 再迁移 `department_post_rules.tenant_department_id`

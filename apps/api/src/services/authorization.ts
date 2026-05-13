@@ -30,6 +30,8 @@ export type AuthContext = {
   employeeName: string | null;
   employeeStatus: string | null;
   departmentId: string | null;
+  tenantDepartmentId: string | null;
+  departmentCode: string | null;
   departmentName: string | null;
   postId: string | null;
   postName: string | null;
@@ -118,6 +120,20 @@ class AuthorizationService {
     return value?.name ?? null;
   }
 
+  private getTenantDepartmentName(
+    value:
+      | { alias_name: string | null }
+      | Array<{ alias_name: string | null }>
+      | null
+      | undefined,
+  ) {
+    if (Array.isArray(value)) {
+      return value[0]?.alias_name ?? null;
+    }
+
+    return value?.alias_name ?? null;
+  }
+
   private getRelationValue<T extends Record<string, unknown>, K extends keyof T>(
     value: T | T[] | null | undefined,
     key: K,
@@ -161,6 +177,8 @@ class AuthorizationService {
         employeeName: null,
         employeeStatus: null,
         departmentId: null,
+        tenantDepartmentId: null,
+        departmentCode: null,
         departmentName: null,
         postId: null,
         postName: null,
@@ -171,7 +189,12 @@ class AuthorizationService {
       };
     }
 
-    const departmentName = this.getRelationName(employee.department);
+    const tenantDepartmentId = employee.tenant_department_id ?? null;
+    const tenantDepartmentName = this.getTenantDepartmentName(employee.tenant_department);
+    const departmentCode =
+      this.getRelationValue(employee.tenant_department, "code") as string | null ??
+      this.getRelationValue(employee.department, "code") as string | null;
+    const departmentName = tenantDepartmentName ?? this.getRelationName(employee.department);
     const postName = this.getRelationName(employee.post);
     const tenantContext = this.buildTenantContext(employee, roleCodes);
 
@@ -183,6 +206,8 @@ class AuthorizationService {
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
+        tenantDepartmentId,
+        departmentCode,
         departmentName,
         postId: employee.post_id,
         postName,
@@ -201,6 +226,8 @@ class AuthorizationService {
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
         departmentId: employee.department_id,
+        tenantDepartmentId,
+        departmentCode,
         departmentName,
         postId: employee.post_id,
         postName,
@@ -244,6 +271,8 @@ class AuthorizationService {
       employeeName: employee.name ?? null,
       employeeStatus: employee.status,
       departmentId: employee.department_id,
+      tenantDepartmentId,
+      departmentCode,
       departmentName,
       postId: employee.post_id,
       postName,

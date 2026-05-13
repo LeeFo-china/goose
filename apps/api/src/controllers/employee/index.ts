@@ -118,11 +118,14 @@ class EmployeeController extends BaseController<
     }
 
     if (scope === "department") {
-      if (!authContext.departmentId) {
+      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
+      if (!departmentScopeId) {
         return query.eq("id", "00000000-0000-0000-0000-000000000000");
       }
 
-      return query.eq("department_id", authContext.departmentId);
+      return query.or(
+        `tenant_department_id.eq.${departmentScopeId},department_id.eq.${departmentScopeId}`,
+      );
     }
 
     if (!authContext.employeeId) {
@@ -577,7 +580,7 @@ class EmployeeController extends BaseController<
 
     const existing = await SupabaseDB.getAdminClient()
       .from(this.tableName)
-      .select("id, user_id, department_id, tenant_id")
+      .select("id, user_id, department_id, tenant_department_id, tenant_id")
       .eq("id", idVerify.data.id)
       .eq("tenant_id", authContext.tenantId)
       .maybeSingle();

@@ -9,6 +9,7 @@ export type AdminAuthEmployeeRecord = {
   tenant_id: string | null;
   status: string | null;
   department_id: string | null;
+  tenant_department_id: string | null;
   post_id: string | null;
   name: string | null;
   phone: string | null;
@@ -18,8 +19,12 @@ export type AdminAuthEmployeeRecord = {
     | Array<{ id: string | null; name: string | null; slug: string | null; status: string | null }>
     | null;
   department:
-    | { name: string | null }
-    | Array<{ name: string | null }>
+    | { name: string | null; code?: string | null }
+    | Array<{ name: string | null; code?: string | null }>
+    | null;
+  tenant_department:
+    | { id: string | null; alias_name: string | null; code: string | null; legacy_department_id: string | null }
+    | Array<{ id: string | null; alias_name: string | null; code: string | null; legacy_department_id: string | null }>
     | null;
   post:
     | { name: string | null }
@@ -56,12 +61,14 @@ class AdminAuthRepository {
         tenant_id,
         status,
         department_id,
+        tenant_department_id,
         post_id,
         name,
         phone,
         avatar,
         tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
-        department:departments!employees_department_id_fkey(name),
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
+        department:departments!employees_department_id_fkey(name, code),
         post:posts!employees_post_id_fkey(name)
       `)
       .eq("phone", phone);

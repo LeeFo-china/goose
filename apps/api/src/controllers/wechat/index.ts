@@ -139,6 +139,8 @@ export class WeChatController extends BaseController {
       name: authContext.employeeName,
       status: authContext.employeeStatus,
       department_id: authContext.departmentId,
+      tenant_department_id: authContext.tenantDepartmentId,
+      department_code: authContext.departmentCode,
       department_name: authContext.departmentName,
       post_id: authContext.postId,
       post_name: authContext.postName,

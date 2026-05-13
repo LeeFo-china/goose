@@ -1655,6 +1655,9 @@ class ProjectController extends BaseController<
         name,
         avatar,
         phone,
+        department_id,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
         department:departments!employees_department_id_fkey(id, name, code),
         post:posts!employees_post_id_fkey(id, name, code)
       `,

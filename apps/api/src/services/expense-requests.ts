@@ -131,6 +131,35 @@ function normalizeRelationName(value: unknown) {
   return null;
 }
 
+function normalizeTenantDepartmentName(value: unknown) {
+  if (Array.isArray(value)) {
+    const first = value[0] as { alias_name?: unknown } | undefined;
+    return typeof first?.alias_name === "string" ? first.alias_name : null;
+  }
+
+  if (value && typeof value === "object") {
+    const item = value as { alias_name?: unknown };
+    return typeof item.alias_name === "string" ? item.alias_name : null;
+  }
+
+  return null;
+}
+
+function sameDepartmentScope(
+  left: { department_id: string | null; tenant_department_id?: string | null },
+  right: { department_id: string | null; tenant_department_id?: string | null },
+) {
+  if (left.tenant_department_id && right.tenant_department_id) {
+    return left.tenant_department_id === right.tenant_department_id;
+  }
+
+  return Boolean(
+    left.department_id &&
+      right.department_id &&
+      left.department_id === right.department_id,
+  );
+}
+
 function normalizeScope(value: string | null | undefined): ExpenseRequestAccessScope {
   if (value === "department" || value === "assigned" || value === "all") {
     return value;
@@ -348,7 +377,11 @@ class ExpenseRequestService {
   private scopeCoversApplicant(input: {
     scope: string | null;
     candidate: ExpenseApprovalCandidateEmployee;
-    applicant: { id: string; department_id: string | null };
+    applicant: {
+      id: string;
+      department_id: string | null;
+      tenant_department_id?: string | null;
+    };
   }) {
     const scope = normalizeScope(input.scope);
     if (scope === "all") {
@@ -356,11 +389,7 @@ class ExpenseRequestService {
     }
 
     if (scope === "department") {
-      return Boolean(
-        input.applicant.department_id &&
-          input.candidate.department_id &&
-          input.applicant.department_id === input.candidate.department_id,
-      );
+      return sameDepartmentScope(input.applicant, input.candidate);
     }
 
     return input.candidate.id === input.applicant.id;
@@ -610,7 +639,11 @@ class ExpenseRequestService {
     const filtered = candidates
       .filter((candidate) => candidate.id !== applicant.id)
       .filter((candidate) => {
-        if (params.department_id && candidate.department_id !== params.department_id) {
+        if (
+          params.department_id &&
+          candidate.department_id !== params.department_id &&
+          candidate.tenant_department_id !== params.department_id
+        ) {
           return false;
         }
 
@@ -633,7 +666,10 @@ class ExpenseRequestService {
         phone: item.phone,
         avatar: item.avatar,
         department_id: item.department_id,
-        department_name: normalizeRelationName(item.department),
+        tenant_department_id: item.tenant_department_id,
+        department_name:
+          normalizeTenantDepartmentName(item.tenant_department) ??
+          normalizeRelationName(item.department),
         post_name: normalizeRelationName(item.post),
         matched_permission: permissionCode,
         matched_scope: scopeMap.get(item.id) ?? null,

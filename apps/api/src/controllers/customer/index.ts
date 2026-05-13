@@ -346,7 +346,7 @@ class CustomerController extends BaseController<
     let query = SupabaseDB
       .getAdminClient()
       .from("employees")
-      .select("id, name, department_id, status, tenant_id")
+      .select("id, name, department_id, tenant_department_id, status, tenant_id")
       .eq("id", ownerId);
 
     if (tenantId) {
@@ -1484,7 +1484,7 @@ class CustomerController extends BaseController<
       const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
         .getAdminClient()
         .from("employees")
-        .select("id, department_id, status, tenant_id")
+        .select("id, department_id, tenant_department_id, status, tenant_id")
         .eq("id", payload.owner_id)
         .eq("tenant_id", authContext.tenantId)
         .maybeSingle();

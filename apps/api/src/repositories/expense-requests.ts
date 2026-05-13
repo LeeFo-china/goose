@@ -128,7 +128,9 @@ export type ExpenseApprovalCandidateEmployee = {
   avatar: string | null;
   status: string | null;
   department_id: string | null;
+  tenant_department_id: string | null;
   post_id: string | null;
+  tenant_department?: unknown;
   department?: unknown;
   post?: unknown;
 };
@@ -173,6 +175,9 @@ class ExpenseRequestRepository {
         phone,
         avatar,
         status,
+        department_id,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       )
@@ -251,6 +256,9 @@ class ExpenseRequestRepository {
         phone,
         avatar,
         status,
+        department_id,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       )
@@ -466,6 +474,9 @@ class ExpenseRequestRepository {
           phone,
           avatar,
           status,
+          department_id,
+          tenant_department_id,
+          tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
           department:departments!employees_department_id_fkey(name),
           post:posts!employees_post_id_fkey(name)
         )
@@ -524,7 +535,9 @@ class ExpenseRequestRepository {
         avatar,
         status,
         department_id,
+        tenant_department_id,
         post_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)
@@ -556,7 +569,9 @@ class ExpenseRequestRepository {
         avatar,
         status,
         department_id,
+        tenant_department_id,
         post_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
         department:departments!employees_department_id_fkey(name),
         post:posts!employees_post_id_fkey(name)
       `)
