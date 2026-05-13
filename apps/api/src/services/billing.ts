@@ -89,7 +89,7 @@ function enrichLedger(rows: BillingLedgerRow[], tenants: BillingTenantLite[]) {
 }
 
 function sortStrings(values: Iterable<string>) {
-  return Array.from(values).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "zh-CN"));
 }
 
 function ceilCredits(units: number, unitCredits: number, minChargeCredits = 0) {

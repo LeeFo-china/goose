@@ -40,9 +40,17 @@ export function BillingFilterCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(defaultValue || "");
+  const uniqueOptions = useMemo(() => {
+    const map = new Map<string, BillingFilterComboboxOption>();
+    for (const option of options) {
+      if (!option.value || map.has(option.value)) continue;
+      map.set(option.value, option);
+    }
+    return Array.from(map.values());
+  }, [options]);
   const selected = useMemo(
-    () => options.find((option) => option.value === value),
-    [options, value],
+    () => uniqueOptions.find((option) => option.value === value),
+    [uniqueOptions, value],
   );
 
   return (
@@ -81,7 +89,7 @@ export function BillingFilterCombobox({
                   <Check className={cn("opacity-0", !value && "opacity-100")} />
                   全部
                 </CommandItem>
-                {options.map((option) => (
+                {uniqueOptions.map((option) => (
                   <CommandItem
                     key={`${option.value}-${option.label || ""}`}
                     value={option.value}
