@@ -100,6 +100,39 @@ POST /customer/auth/select-tenant
 
 结论：`AUTH_IDENTITY_SOURCE=membership` 下，客户租户选择可以通过 active customer membership 完成正式客户登录。
 
+### `/auth/me/customer-context`
+
+补充验收：
+
+- 全局 auth 插件的微信业务绑定校验已支持 active membership 主读。
+- `customer-context` 已支持通过 active customer membership 查询客户档案，不再只依赖 `customers.user_id`。
+
+本地使用 `AUTH_IDENTITY_SOURCE=membership` 调用：
+
+```http
+GET /auth/me/customer-context
+```
+
+样本 token：
+
+- `sub`: `d08b0231-af88-4ebf-9ef7-0b792bf0b7e8`
+- `tenant_id`: `91d255fe-60a2-4379-b939-8aff35e693ac`
+- `customer_id`: `31b5f2c7-103b-49f9-b3c7-4ab9e3775114`
+
+返回结果：
+
+```json
+{
+  "message": "success",
+  "mode": "customer",
+  "tenant_id": "91d255fe-60a2-4379-b939-8aff35e693ac",
+  "customer_id": "31b5f2c7-103b-49f9-b3c7-4ab9e3775114",
+  "has_customer_profile": true
+}
+```
+
+结论：`AUTH_IDENTITY_SOURCE=membership` 下，客户上下文接口可以通过 active customer membership 完成身份恢复。
+
 ## 当前结论
 
 阶段 4 第一轮后端切换可以继续灰度。
@@ -115,6 +148,5 @@ POST /customer/auth/select-tenant
 
 进入阶段 5 前，建议先补齐：
 
-1. `/auth/me/customer-context` active customer membership 校验。
-2. 客户/员工业务接口鉴权逐步从旧字段切到 membership。
-3. 微信解绑语义从“清业务身份绑定”切换为“停用微信登录凭证”，并确保用户仍有手机号等其他登录方式。
+1. 客户/员工业务接口鉴权逐步从旧字段切到 membership。
+2. 微信解绑语义从“清业务身份绑定”切换为“停用微信登录凭证”，并确保用户仍有手机号等其他登录方式。

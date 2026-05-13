@@ -4,6 +4,9 @@ import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
+import { userIdentityService } from "@/services/user-identities";
+
+type AuthIdentitySource = "legacy" | "dual" | "membership";
 
 const publicRoutes = new Set([
   "/",
@@ -120,52 +123,100 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
   return Errors.unauthorized("登录凭证无效", ErrorCodes.TOKEN_INVALID);
 }
 
+function getAuthIdentitySource(): AuthIdentitySource {
+  const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+  if (value === "legacy" || value === "membership") {
+    return value;
+  }
+
+  return "dual";
+}
+
 async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToken>) {
   if (!payload?.openid || !payload.sub || !payload.tenant_id) {
     return;
   }
 
   const adminClient = SupabaseDB.getAdminClient();
+  const identitySource = getAuthIdentitySource();
 
   if (payload.customer_id) {
-    const { data, error } = await adminClient
-      .from("customers")
-      .select("id")
-      .eq("id", payload.customer_id)
-      .eq("tenant_id", payload.tenant_id)
-      .eq("user_id", payload.sub)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("校验客户微信绑定失败", error);
+    let hasActiveMembership = false;
+    if (identitySource !== "legacy") {
+      hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+        userId: payload.sub,
+        tenantId: payload.tenant_id,
+        identityType: "customer",
+        identityId: payload.customer_id,
+      });
     }
 
-    if (!data) {
+    if (!hasActiveMembership && identitySource === "membership") {
       throw Errors.unauthorized(
         "当前微信绑定关系已变化，请重新登录",
         ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
       );
+    }
+
+    if (!hasActiveMembership) {
+      const { data, error } = await adminClient
+        .from("customers")
+        .select("id")
+        .eq("id", payload.customer_id)
+        .eq("tenant_id", payload.tenant_id)
+        .eq("user_id", payload.sub)
+        .maybeSingle();
+
+      if (error) {
+        throw Errors.dbError("校验客户微信绑定失败", error);
+      }
+
+      if (!data) {
+        throw Errors.unauthorized(
+          "当前微信绑定关系已变化，请重新登录",
+          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+        );
+      }
     }
   }
 
   if (payload.employee_id) {
-    const { data, error } = await adminClient
-      .from("employees")
-      .select("id")
-      .eq("id", payload.employee_id)
-      .eq("tenant_id", payload.tenant_id)
-      .eq("user_id", payload.sub)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("校验员工微信绑定失败", error);
+    let hasActiveMembership = false;
+    if (identitySource !== "legacy") {
+      hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+        userId: payload.sub,
+        tenantId: payload.tenant_id,
+        identityType: "employee",
+        identityId: payload.employee_id,
+      });
     }
 
-    if (!data) {
+    if (!hasActiveMembership && identitySource === "membership") {
       throw Errors.unauthorized(
         "当前微信绑定关系已变化，请重新登录",
         ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
       );
+    }
+
+    if (!hasActiveMembership) {
+      const { data, error } = await adminClient
+        .from("employees")
+        .select("id")
+        .eq("id", payload.employee_id)
+        .eq("tenant_id", payload.tenant_id)
+        .eq("user_id", payload.sub)
+        .maybeSingle();
+
+      if (error) {
+        throw Errors.dbError("校验员工微信绑定失败", error);
+      }
+
+      if (!data) {
+        throw Errors.unauthorized(
+          "当前微信绑定关系已变化，请重新登录",
+          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+        );
+      }
     }
   }
 }

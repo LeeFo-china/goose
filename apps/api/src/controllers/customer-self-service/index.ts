@@ -10,6 +10,7 @@ import {
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
+import { userIdentityService } from "@/services/user-identities";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { IdParamSchema, PaginationQuerySchema } from "@/schema/request";
 import {
@@ -50,6 +51,8 @@ type CustomerContextRow = {
     }>
     | null;
 };
+
+type AuthIdentitySource = "legacy" | "dual" | "membership";
 
 type UserProfileRow = {
   auth_user_id: string;
@@ -230,6 +233,15 @@ class CustomerSelfServiceController extends BaseController {
     super("customer-self-service");
   }
 
+  private getAuthIdentitySource(): AuthIdentitySource {
+    const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+    if (value === "legacy" || value === "membership") {
+      return value;
+    }
+
+    return "dual";
+  }
+
   private async getRequiredAuthUserId(request: FastifyRequest) {
     const authUserId = request.user?.sub;
     if (!authUserId) {
@@ -320,6 +332,11 @@ class CustomerSelfServiceController extends BaseController {
       customerId?: string | null;
     },
   ) {
+    const identitySource = this.getAuthIdentitySource();
+    if (identitySource === "membership") {
+      return this.getCustomerProfileByMembership(authUserId, options);
+    }
+
     let query = SupabaseDB.getAdminClient()
       .from("customers")
       .select(`
@@ -351,7 +368,19 @@ class CustomerSelfServiceController extends BaseController {
       throw Errors.dbError("查询客户身份失败", error);
     }
 
-    const list = (data || []) as CustomerContextRow[];
+    let list = (data || []) as CustomerContextRow[];
+    if (identitySource === "dual") {
+      const membershipCustomers = await this.listCustomerProfilesByMembership(
+        authUserId,
+        options,
+      );
+      const customerMap = new Map<string, CustomerContextRow>();
+      for (const customer of [...membershipCustomers, ...list]) {
+        customerMap.set(customer.id, customer);
+      }
+      list = Array.from(customerMap.values());
+    }
+
     if (list.length > 1) {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
     }
@@ -362,6 +391,83 @@ class CustomerSelfServiceController extends BaseController {
     }
 
     return customer;
+  }
+
+  private async getCustomerProfileByMembership(
+    authUserId: string,
+    options?: {
+      required?: boolean;
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    const list = await this.listCustomerProfilesByMembership(authUserId, options);
+    if (list.length > 1) {
+      throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
+    }
+
+    const customer = list[0] || null;
+    if (!customer && options?.required) {
+      throw Errors.forbidden();
+    }
+
+    return customer;
+  }
+
+  private async listCustomerProfilesByMembership(
+    authUserId: string,
+    options?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    const memberships = (await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+      identityType: "customer",
+    })).filter((item) => (
+      (!options?.tenantId || item.tenant_id === options.tenantId) &&
+      (!options?.customerId || item.identity_id === options.customerId)
+    ));
+
+    const customerIds = Array.from(new Set(memberships.map((item) => item.identity_id)));
+    if (customerIds.length === 0) {
+      return [] as CustomerContextRow[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select(`
+        id,
+        name,
+        phone,
+        user_id,
+        tenant_id,
+        tenant:tenants!customers_tenant_id_fkey(
+          id,
+          name,
+          slug,
+          status
+        )
+      `)
+      .in("id", customerIds);
+
+    if (error) {
+      throw Errors.dbError("查询客户业务身份失败", error);
+    }
+
+    const membershipTenantMap = new Map(
+      memberships.map((item) => [item.identity_id, item.tenant_id]),
+    );
+
+    return ((data || []) as CustomerContextRow[]).filter((item) => {
+      const membershipTenantId = membershipTenantMap.get(item.id);
+      return (
+        item.tenant_id &&
+        item.tenant_id === membershipTenantId &&
+        (!options?.tenantId || item.tenant_id === options.tenantId) &&
+        (!options?.customerId || item.id === options.customerId)
+      );
+    });
   }
 
   private normalizeTenantRelation(value: CustomerContextRow["tenant"]) {
