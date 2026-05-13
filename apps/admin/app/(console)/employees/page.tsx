@@ -25,6 +25,26 @@ type Employee = {
   last_login_time?: string | null;
 };
 
+type EmployeeDepartmentOption = {
+  id: string;
+  code: string;
+  name: string;
+  selected_post_codes?: string[];
+};
+
+type EmployeePostOption = {
+  id: string;
+  code: string;
+  name: string;
+  status: number | null;
+  sort: number | null;
+};
+
+type DepartmentPostRuleConfig = {
+  departments: EmployeeDepartmentOption[];
+  post_options: EmployeePostOption[];
+};
+
 type Pagination = {
   page: number;
   pageSize: number;
@@ -103,6 +123,38 @@ async function getEmployees(params: EmployeePageSearchParams) {
   }
 }
 
+async function getDepartmentPostRuleConfig() {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      departments: [],
+      post_options: [],
+      error: "缺少登录凭证",
+    };
+  }
+
+  try {
+    const response = await fetch(buildBackendUrl("/department-post-rules"), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<DepartmentPostRuleConfig>(response);
+    return {
+      departments: payload.data?.departments || [],
+      post_options: payload.data?.post_options || [],
+      error: null,
+    };
+  } catch (error) {
+    return {
+      departments: [],
+      post_options: [],
+      error: error instanceof Error ? error.message : "部门岗位配置加载失败",
+    };
+  }
+}
+
 export default async function EmployeesPage({
   searchParams,
 }: {
@@ -114,7 +166,11 @@ export default async function EmployeesPage({
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const keyword = params.keyword?.trim() || "";
-  const { list, pagination, error } = await getEmployees(params);
+  const [employeeData, departmentPostConfig] = await Promise.all([
+    getEmployees(params),
+    getDepartmentPostRuleConfig(),
+  ]);
+  const { list, pagination, error } = employeeData;
 
   return (
     <div className="flex flex-col gap-5">
@@ -125,7 +181,10 @@ export default async function EmployeesPage({
             员工档案、登录绑定、状态和权限入口。当前共 {pagination.total} 条记录。
           </p>
         </div>
-        <CreateEmployeeButton />
+        <CreateEmployeeButton
+          departments={departmentPostConfig.departments}
+          posts={departmentPostConfig.post_options}
+        />
       </div>
 
       <EmployeesClientShell
@@ -133,8 +192,10 @@ export default async function EmployeesPage({
         pagination={pagination}
         status={status}
         keyword={keyword}
-        error={error}
+        error={error || departmentPostConfig.error}
         statusOptions={statusOptions}
+        departments={departmentPostConfig.departments}
+        posts={departmentPostConfig.post_options}
       />
     </div>
   );

@@ -14,6 +14,10 @@ import {
   EmployeesTable,
   type EmployeeRecord,
 } from "@/components/employees/employees-table";
+import type {
+  EmployeeDepartmentOption,
+  EmployeePostOption,
+} from "@/components/employees/employee-mutations";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -36,6 +40,8 @@ export function EmployeesClientShell({
   keyword,
   error,
   statusOptions,
+  departments,
+  posts,
 }: {
   employees: EmployeeRecord[];
   pagination: Pagination;
@@ -43,6 +49,8 @@ export function EmployeesClientShell({
   keyword: string;
   error: string | null;
   statusOptions: StatusOption[];
+  departments: EmployeeDepartmentOption[];
+  posts: EmployeePostOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -147,7 +155,11 @@ export function EmployeesClientShell({
           </div>
         </CardHeader>
         <CardContent className="relative flex flex-col gap-4 p-0">
-          <EmployeesTable employees={employees} />
+          <EmployeesTable
+            employees={employees}
+            departments={departments}
+            posts={posts}
+          />
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">

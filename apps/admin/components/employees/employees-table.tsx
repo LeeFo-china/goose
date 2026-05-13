@@ -6,7 +6,11 @@ import {
   EmployeeStatusConfig,
   type EmployeeStatus,
 } from "@gooes/domain";
-import { EmployeeRowActions } from "@/components/employees/employee-mutations";
+import {
+  EmployeeRowActions,
+  type EmployeeDepartmentOption,
+  type EmployeePostOption,
+} from "@/components/employees/employee-mutations";
 import { Badge } from "@/components/ui/badge";
 
 export type EmployeeRecord = {
@@ -57,9 +61,16 @@ function maskPhone(value: string | null) {
 
 export function EmployeesTable({
   employees,
+  departments,
+  posts,
 }: {
   employees: EmployeeRecord[];
+  departments: EmployeeDepartmentOption[];
+  posts: EmployeePostOption[];
 }) {
+  const departmentMap = new Map(departments.map((department) => [department.id, department]));
+  const postMap = new Map(posts.map((post) => [post.id, post]));
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1040px] border-t text-sm">
@@ -70,6 +81,7 @@ export function EmployeesTable({
             <th className="px-5 py-3">状态</th>
             <th className="px-5 py-3">登录绑定</th>
             <th className="px-5 py-3">部门</th>
+            <th className="px-5 py-3">职位</th>
             <th className="px-5 py-3">创建时间</th>
             <th className="px-5 py-3 text-right">操作</th>
           </tr>
@@ -81,13 +93,25 @@ export function EmployeesTable({
                 label: employee.status || "未知",
                 variant: "outline" as const,
               };
+              const department = employee.department_id
+                ? departmentMap.get(employee.department_id)
+                : null;
+              const post = employee.post_id ? postMap.get(employee.post_id) : null;
 
               return (
                 <tr key={employee.id} className="border-t transition-colors hover:bg-muted/40">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                        <UserRound className="size-4" />
+                      <div className="flex size-9 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
+                        {employee.avatar ? (
+                          <img
+                            src={employee.avatar}
+                            alt={`${employee.name || "员工"}头像`}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <UserRound className="size-4" />
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="truncate font-medium">
@@ -114,20 +138,41 @@ export function EmployeesTable({
                     )}
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">
-                    {employee.department_id ? employee.department_id.slice(0, 8) : "-"}
+                    {department ? (
+                      <div>
+                        <div className="font-medium text-foreground">{department.name}</div>
+                        <div className="text-xs text-muted-foreground">{department.code}</div>
+                      </div>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {post ? (
+                      <div>
+                        <div className="font-medium text-foreground">{post.name}</div>
+                        <div className="text-xs text-muted-foreground">{post.code}</div>
+                      </div>
+                    ) : (
+                      "-"
+                    )}
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {formatDate(employee.created_at)}
                   </td>
                   <td className="relative px-5 py-4">
-                    <EmployeeRowActions employee={employee} />
+                    <EmployeeRowActions
+                      employee={employee}
+                      departments={departments}
+                      posts={posts}
+                    />
                   </td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={7}>
+              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={8}>
                 没有符合条件的员工
               </td>
             </tr>

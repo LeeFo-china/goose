@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   EMPLOYEE_STATUS_VALUES,
   EmployeeStatusConfig,
@@ -10,7 +10,7 @@ import {
   type RoleStatus,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
-import { Edit3, KeyRound, Loader2, Plus, Trash2, UserRound } from "lucide-react";
+import { Edit3, KeyRound, Loader2, Plus, Trash2, Upload, UserRound, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,24 @@ export type EmployeeMutationRecord = {
   name: string | null;
   phone: string | null;
   status: EmployeeStatus | string | null;
+  department_id: string | null;
+  post_id: string | null;
   avatar: string | null;
+};
+
+export type EmployeeDepartmentOption = {
+  id: string;
+  code: string;
+  name: string;
+  selected_post_codes?: string[];
+};
+
+export type EmployeePostOption = {
+  id: string;
+  code: string;
+  name: string;
+  status: number | null;
+  sort: number | null;
 };
 
 type MutationMode = "create" | "edit";
@@ -63,6 +80,16 @@ const employeeStatusSelectOptions = statusOptions.map((item) => ({
   label: item.label,
 }));
 
+const EMPTY_SELECT_VALUE = "__empty__";
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
@@ -72,6 +99,36 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+async function uploadEmployeeAvatar(file: File) {
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+  }
+
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error("头像图片不能超过 2MB");
+  }
+
+  const formData = new FormData();
+  formData.append("scene", "employee_avatar");
+  formData.append("files", file);
+
+  const response = await fetch("/api/backend/uploads/images", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "上传头像失败"));
+  }
+
+  const uploadedUrl = payload.data?.list?.[0]?.url;
+  if (typeof uploadedUrl !== "string" || !uploadedUrl) {
+    throw new Error("头像上传成功但未返回图片地址");
+  }
+
+  return uploadedUrl;
 }
 
 async function mutateEmployee(input: {
@@ -110,11 +167,15 @@ async function requestBackend<T>(path: string, init?: RequestInit) {
 function EmployeeDialog({
   mode,
   employee,
+  departments,
+  posts,
   open,
   onOpenChange,
 }: {
   mode: MutationMode;
   employee?: EmployeeMutationRecord;
+  departments: EmployeeDepartmentOption[];
+  posts: EmployeePostOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -129,22 +190,98 @@ function EmployeeDialog({
     phone: employee?.phone || "",
     avatar: employee?.avatar || "",
     status: isEmployeeStatus(employee?.status) ? employee.status : "active",
+    departmentId: employee?.department_id || "",
+    postId: employee?.post_id || "",
   }), [employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
   const [avatar, setAvatar] = useState(defaults.avatar);
+  const [departmentId, setDepartmentId] = useState(defaults.departmentId);
+  const [postId, setPostId] = useState(defaults.postId);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedDepartment = departments.find((item) => item.id === departmentId) || null;
+  const currentPost = posts.find((item) => item.id === postId) || null;
+  const availablePosts = useMemo(() => {
+    if (!selectedDepartment) {
+      return currentPost ? [currentPost] : [];
+    }
+
+    const allowedCodes = new Set(selectedDepartment.selected_post_codes || []);
+    const scopedPosts = posts.filter((post) => allowedCodes.has(post.code));
+    if (currentPost && !scopedPosts.some((post) => post.id === currentPost.id)) {
+      return [...scopedPosts, currentPost];
+    }
+
+    return scopedPosts;
+  }, [currentPost, posts, selectedDepartment]);
+
+  const departmentOptions = useMemo(() => [
+    { value: EMPTY_SELECT_VALUE, label: "不分配部门" },
+    ...departments.map((department) => ({
+      value: department.id,
+      label: `${department.name} · ${department.code}`,
+    })),
+  ], [departments]);
+
+  const postOptions = useMemo(() => [
+    { value: EMPTY_SELECT_VALUE, label: selectedDepartment ? "不分配职位" : "请先选择部门" },
+    ...availablePosts.map((post) => ({
+      value: post.id,
+      label: `${post.name} · ${post.code}${post.status === 0 ? "（已停用）" : ""}`,
+    })),
+  ], [availablePosts, selectedDepartment]);
 
   useEffect(() => {
     if (!open) return;
     setStatus(defaults.status);
     setAvatar(defaults.avatar);
+    setDepartmentId(defaults.departmentId);
+    setPostId(defaults.postId);
+    setUploadingAvatar(false);
     setAvatarLoadFailed(false);
-  }, [defaults.avatar, defaults.status, open]);
+  }, [defaults.avatar, defaults.departmentId, defaults.postId, defaults.status, open]);
 
   function close() {
-    if (pending) return;
+    if (pending || uploadingAvatar) return;
     setError("");
     onOpenChange(false);
+  }
+
+  function changeDepartment(value: string) {
+    const nextDepartmentId = value === EMPTY_SELECT_VALUE ? "" : value;
+    setDepartmentId(nextDepartmentId);
+
+    const nextDepartment = departments.find((item) => item.id === nextDepartmentId);
+    if (!nextDepartment) {
+      setPostId("");
+      return;
+    }
+
+    const allowedCodes = new Set(nextDepartment.selected_post_codes || []);
+    const nextPost = posts.find((post) => post.id === postId);
+    if (!nextPost || !allowedCodes.has(nextPost.code)) {
+      setPostId("");
+    }
+  }
+
+  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setError("");
+    setUploadingAvatar(true);
+    try {
+      const url = await uploadEmployeeAvatar(file);
+      setAvatar(url);
+      setAvatarLoadFailed(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "上传头像失败");
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -152,7 +289,6 @@ function EmployeeDialog({
     const formData = new FormData(event.currentTarget);
     const name = String(formData.get("name") || "").trim();
     const phone = String(formData.get("phone") || "").trim();
-    const avatar = String(formData.get("avatar") || "").trim();
     const status = String(formData.get("status") || "active");
 
     const payload = {
@@ -160,6 +296,8 @@ function EmployeeDialog({
       phone: phone || null,
       avatar: avatar || null,
       status,
+      department_id: departmentId || null,
+      post_id: postId || null,
     };
 
     setError("");
@@ -180,7 +318,7 @@ function EmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-[480px]">
+      <DialogContent className="max-w-[560px]">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
@@ -189,7 +327,7 @@ function EmployeeDialog({
             <div>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>
-                {mode === "create" ? "创建可登录后台或小程序员工身份的基础档案。" : "调整员工基础档案和在职状态。"}
+                {mode === "create" ? "创建可登录后台或小程序员工身份的完整档案。" : "调整员工档案、组织归属和在职状态。"}
               </DialogDescription>
             </div>
           </div>
@@ -197,44 +335,8 @@ function EmployeeDialog({
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor={`${mode}-employee-name`}>姓名</FieldLabel>
-            <Input
-              id={`${mode}-employee-name`}
-              name="name"
-              defaultValue={defaults.name}
-              minLength={2}
-              maxLength={50}
-              required
-              placeholder="请输入员工姓名"
-              disabled={pending}
-            />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`${mode}-employee-phone`}>手机号</FieldLabel>
-            <Input
-              id={`${mode}-employee-phone`}
-              name="phone"
-              defaultValue={defaults.phone}
-              inputMode="tel"
-              maxLength={11}
-              required
-              placeholder="请输入 11 位手机号"
-              disabled={pending}
-            />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`${mode}-employee-status`}>状态</FieldLabel>
-              <input type="hidden" name="status" value={status} />
-              <FormSelect
-              id={`${mode}-employee-status`}
-              disabled={pending}
-                value={status}
-                options={employeeStatusSelectOptions}
-                onChange={(value) => setStatus(value as EmployeeStatus)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`${mode}-employee-avatar`}>头像地址</FieldLabel>
+              <FieldLabel htmlFor={`${mode}-employee-avatar-file`}>头像</FieldLabel>
+              <input type="hidden" name="avatar" value={avatar} />
               <div className="flex gap-3">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
                   {avatar && !avatarLoadFailed ? (
@@ -248,37 +350,119 @@ function EmployeeDialog({
                     <UserRound className="size-6" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={pending || uploadingAvatar}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {uploadingAvatar
+                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                        : <Upload data-icon="inline-start" />}
+                      上传头像
+                    </Button>
+                    {avatar ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={pending || uploadingAvatar}
+                        onClick={() => {
+                          setAvatar("");
+                          setAvatarLoadFailed(false);
+                        }}
+                      >
+                        <X data-icon="inline-start" />
+                        清除
+                      </Button>
+                    ) : null}
+                  </div>
                   <Input
-                    id={`${mode}-employee-avatar`}
-                    name="avatar"
-                    value={avatar}
-                    placeholder="可留空，粘贴图片 URL 后显示预览"
-                    disabled={pending}
-                    onChange={(event) => {
-                      setAvatar(event.target.value);
-                      setAvatarLoadFailed(false);
-                    }}
+                    id={`${mode}-employee-avatar-file`}
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    className="sr-only"
+                    disabled={pending || uploadingAvatar}
+                    onChange={handleAvatarChange}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {avatar
                       ? avatarLoadFailed
-                        ? "头像图片加载失败，请检查地址是否可访问"
-                        : "当前头像缩略图预览"
-                      : "未设置头像时使用默认图标"}
+                        ? "头像图片加载失败，请重新上传"
+                        : "已上传头像"
+                      : "支持 JPG、PNG、WebP、HEIC，单张不超过 2MB"}
                   </p>
                 </div>
               </div>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-name`}>姓名</FieldLabel>
+              <Input
+                id={`${mode}-employee-name`}
+                name="name"
+                defaultValue={defaults.name}
+                minLength={2}
+                maxLength={50}
+                required
+                placeholder="请输入员工姓名"
+                disabled={pending}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-phone`}>手机号</FieldLabel>
+              <Input
+                id={`${mode}-employee-phone`}
+                name="phone"
+                defaultValue={defaults.phone}
+                inputMode="tel"
+                maxLength={11}
+                required
+                placeholder="请输入 11 位手机号"
+                disabled={pending}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-status`}>状态</FieldLabel>
+              <input type="hidden" name="status" value={status} />
+              <FormSelect
+                id={`${mode}-employee-status`}
+                disabled={pending}
+                value={status}
+                options={employeeStatusSelectOptions}
+                onChange={(value) => setStatus(value as EmployeeStatus)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-department`}>部门</FieldLabel>
+              <FormSelect
+                id={`${mode}-employee-department`}
+                disabled={pending}
+                value={departmentId || EMPTY_SELECT_VALUE}
+                options={departmentOptions}
+                onChange={changeDepartment}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${mode}-employee-post`}>职位</FieldLabel>
+              <FormSelect
+                id={`${mode}-employee-post`}
+                disabled={pending || (!selectedDepartment && !currentPost)}
+                value={postId || EMPTY_SELECT_VALUE}
+                options={postOptions}
+                onChange={(value) => setPostId(value === EMPTY_SELECT_VALUE ? "" : value)}
+              />
             </Field>
           </FieldGroup>
           {error ? (
             <StatusAlert>{error}</StatusAlert>
           ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={close} disabled={pending}>
+            <Button type="button" variant="outline" onClick={close} disabled={pending || uploadingAvatar}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || uploadingAvatar}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {submitText}
             </Button>
@@ -467,7 +651,13 @@ function ManageEmployeeRolesButton({
   );
 }
 
-export function CreateEmployeeButton() {
+export function CreateEmployeeButton({
+  departments,
+  posts,
+}: {
+  departments: EmployeeDepartmentOption[];
+  posts: EmployeePostOption[];
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -476,15 +666,25 @@ export function CreateEmployeeButton() {
         <Plus />
         新增员工
       </Button>
-      <EmployeeDialog mode="create" open={open} onOpenChange={setOpen} />
+      <EmployeeDialog
+        mode="create"
+        departments={departments}
+        posts={posts}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   );
 }
 
 export function EmployeeRowActions({
   employee,
+  departments,
+  posts,
 }: {
   employee: EmployeeMutationRecord;
+  departments: EmployeeDepartmentOption[];
+  posts: EmployeePostOption[];
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -537,6 +737,8 @@ export function EmployeeRowActions({
       <EmployeeDialog
         mode="edit"
         employee={employee}
+        departments={departments}
+        posts={posts}
         open={editOpen}
         onOpenChange={setEditOpen}
       />
