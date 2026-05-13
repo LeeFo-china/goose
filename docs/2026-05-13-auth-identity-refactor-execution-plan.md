@@ -166,6 +166,13 @@ create table public.user_auth_events (
 
 目标：把现有绑定关系写入新模型，但旧字段仍保留。
 
+落地状态：
+
+- 已新增 migration：`supabase/migrations/20260513150000_backfill_user_auth_identity_tables.sql`。
+- 回填只读取 `wechat_identities`、`customers.user_id`、`employees.user_id`，不修改旧模型字段。
+- 当前远端 `wechat_identities`、`customers`、`employees` 均不依赖 `updated_at`，回填时使用 `created_at` 或 `now()`。
+- 同一用户、同一租户、同一身份类型下如存在多条业务档案，只把创建时间最早的一条标记为 `is_default=true`，避免默认身份唯一索引冲突。
+
 回填微信凭证：
 
 ```sql
