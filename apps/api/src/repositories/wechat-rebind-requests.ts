@@ -95,10 +95,7 @@ class WechatRebindRequestRepository {
     authUserId: string;
   }) {
     const { data, error } = await this.from("customers")
-      .update({
-        user_id: null,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ user_id: null })
       .eq("id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)
@@ -135,10 +132,7 @@ class WechatRebindRequestRepository {
     authUserId: string;
   }) {
     const { data, error } = await this.from("employees")
-      .update({
-        user_id: null,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ user_id: null })
       .eq("id", input.employeeId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)
