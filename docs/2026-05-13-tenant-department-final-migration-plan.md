@@ -585,3 +585,42 @@ admin 迁移要求：
 - `bun run api:typecheck`：通过
 - `bun run api:build`：通过
 - `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`：通过
+
+阶段 9C 已执行：
+
+- 新增巡检方案文档：
+  - `docs/2026-05-13-tenant-department-retirement-audit-plan.md`
+- 新增统一巡检 SQL：
+  - `scripts/audit-tenant-department-retirement.sql`
+- 新增执行脚本：
+  - `scripts/audit-tenant-department-retirement.sh`
+- 巡检覆盖：
+  - 员工旧部门字段与新租户部门字段映射完整性
+  - 员工 `tenant_id` 与租户部门 `tenant_id` 一致性
+  - 部门岗位规则新旧字段映射完整性
+  - 部门岗位规则 `tenant_id` 与租户部门 `tenant_id` 一致性
+  - 启用租户部门旧映射缺失情况
+  - 租户部门旧映射是否指向存在的旧部门
+  - 租户部门 code 与标准模板 code 是否一致
+
+阶段 9C 验收要求：
+
+- `scripts/audit-tenant-department-retirement.sh` 可以在 linked Supabase 上执行
+- 所有 `blocker` 巡检项 `issue_count = 0`
+- `warning` 巡检项如非 0，必须记录原因
+- 阶段 9C 只建立退场巡检能力，不删除旧表或旧字段
+
+阶段 9C 验收记录：
+
+- `scripts/audit-tenant-department-retirement.sh`：通过
+- linked Supabase 巡检结果：
+  - `employee_department_mismatch`：0
+  - `employee_tenant_department_tenant_mismatch`：0
+  - `employees_missing_tenant_department`：0
+  - `rule_department_code_mismatch`：0
+  - `rule_tenant_department_tenant_mismatch`：0
+  - `rules_missing_tenant_department`：0
+  - `tenant_department_code_template_mismatch`：0
+  - `tenant_department_legacy_missing_department`：0
+  - `enabled_tenant_department_missing_legacy`：0
+- 当前阶段 9C 通过；但旧字段删除仍需满足“连续一个版本周期为 0”的门槛

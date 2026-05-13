@@ -192,36 +192,32 @@
 
 ### 阶段 9C：退场前数据巡检
 
-建议 SQL：
+状态：已落地巡检 SQL 和执行脚本，并在 linked Supabase 通过。
 
-```sql
-select count(*) as employees_missing_tenant_department
-from public.employees
-where department_id is not null
-  and tenant_department_id is null;
+巡检文档：
 
-select count(*) as employee_department_mismatch
-from public.employees as employee
-join public.tenant_departments as tenant_department
-  on tenant_department.id = employee.tenant_department_id
-where employee.department_id is distinct from tenant_department.legacy_department_id;
+- `docs/2026-05-13-tenant-department-retirement-audit-plan.md`
 
-select count(*) as rules_missing_tenant_department
-from public.department_post_rules
-where tenant_department_id is null;
+执行脚本：
 
-select count(*) as rule_department_mismatch
-from public.department_post_rules as rule
-join public.tenant_departments as tenant_department
-  on tenant_department.id = rule.tenant_department_id
-where rule.department_code is distinct from tenant_department.code;
-```
+- `scripts/audit-tenant-department-retirement.sh`
+
+底层 SQL：
+
+- `scripts/audit-tenant-department-retirement.sql`
 
 验收：
 
-- 四个巡检结果连续一个版本周期为 0
+- 所有 `blocker` 巡检结果连续一个版本周期为 0
+- `warning` 巡检结果如果非 0，需要人工记录原因
 - admin 和小程序均不再以旧字段作为主写入字段
 - 新增租户、新增员工、新增岗位、新增规则都主写新字段
+
+本次执行结果：
+
+- 所有 `blocker` 巡检项：0
+- `enabled_tenant_department_missing_legacy`：0
+- 当前只代表本次巡检通过，不代表可以立即删除旧字段
 
 ## 删除旧表前置条件
 
