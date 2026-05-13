@@ -164,6 +164,11 @@ export type BillingAiShadowRow = {
 
 export type BillingAiUsageStatsRow = BillingAiShadowRow;
 
+export type BillingAiUsageFilterOptionRow = Pick<
+  BillingAiShadowRow,
+  "tenant_id" | "scene_code" | "provider_code" | "model_code" | "model_name"
+>;
+
 export type BillingSmsShadowRow = {
   id: string;
   tenant_id: string | null;
@@ -605,6 +610,28 @@ class BillingRepository {
     }
 
     return (data || []) as BillingAiUsageStatsRow[];
+  }
+
+  async listAiUsageFilterOptionRows(input: { limit: number }) {
+    const { data, error } = await this.from("ai_call_logs")
+      .select(`
+        tenant_id,
+        scene_code,
+        provider_code,
+        model_code,
+        model_name
+      `)
+      .not("tenant_id", "is", null)
+      .eq("status", "success")
+      .eq("billable", true)
+      .order("created_at", { ascending: false })
+      .limit(input.limit);
+
+    if (error) {
+      throw Errors.dbError("查询 AI 试算筛选选项失败", error);
+    }
+
+    return (data || []) as BillingAiUsageFilterOptionRow[];
   }
 
   async listSmsShadowRows(input: {

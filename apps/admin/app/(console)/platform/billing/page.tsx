@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { AlertCircle, BrainCircuit, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
 import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton, ShadowBillingRunButton } from "@/components/billing/billing-actions";
 import type {
+  BillingAiUsageFilterOptions,
   BillingAiUsageStats,
   BillingEventListData,
   BillingLedgerListData,
@@ -86,6 +87,13 @@ const emptyAiUsageStats: BillingAiUsageStats = {
     ready_groups: 0,
   },
   list: [],
+};
+
+const emptyAiFilterOptions: BillingAiUsageFilterOptions = {
+  tenants: [],
+  scene_codes: [],
+  provider_codes: [],
+  models: [],
 };
 
 function emptyTenantList(page: number): BillingTenantListData {
@@ -304,6 +312,34 @@ function FilterInput({
   );
 }
 
+function FilterSearchSelectInput({
+  label,
+  name,
+  defaultValue,
+  placeholder,
+  options,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  placeholder?: string;
+  options: Array<{ value: string; label?: string }>;
+}) {
+  const listId = `${name}-options`;
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={name}>{label}</FieldLabel>
+      <Input id={name} name={name} list={listId} defaultValue={defaultValue || ""} placeholder={placeholder} />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={`${option.value}-${option.label || ""}`} value={option.value} label={option.label} />
+        ))}
+      </datalist>
+    </Field>
+  );
+}
+
 function FilterSelect({
   label,
   name,
@@ -469,6 +505,12 @@ export default async function PlatformBillingPage({
       emptyAiUsageStats,
     )
     : { data: emptyAiUsageStats, error: null };
+  const aiFilterOptionsResult = hasPlatformAccess
+    ? await fetchBackend<BillingAiUsageFilterOptions>(
+      "/platform/billing/ai-usage-filter-options",
+      emptyAiFilterOptions,
+    )
+    : { data: emptyAiFilterOptions, error: null };
 
   return (
     <div className="flex flex-col gap-5">
@@ -488,6 +530,7 @@ export default async function PlatformBillingPage({
       {pricingResult.error ? <StatusAlert>{pricingResult.error}</StatusAlert> : null}
       {eventResult.error ? <StatusAlert>{eventResult.error}</StatusAlert> : null}
       {aiStatsResult.error ? <StatusAlert>{aiStatsResult.error}</StatusAlert> : null}
+      {aiFilterOptionsResult.error ? <StatusAlert>{aiFilterOptionsResult.error}</StatusAlert> : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <SummaryItem icon={WalletCards} label="可用积分" value={formatCredits(summaryResult.data.total_available_credits)} />
@@ -724,29 +767,39 @@ export default async function PlatformBillingPage({
                 badgeVariant={aiStatsResult.data.totals.ready_groups > 0 ? "success" : "warning"}
               />
               <FilterPanel tab="ai">
-                <FilterInput
+                <FilterSearchSelectInput
                   label="租户"
                   name="aiTenantKeyword"
                   defaultValue={aiFilters.aiTenantKeyword}
-                  placeholder="租户名称或标识"
+                  placeholder="搜索或选择租户"
+                  options={aiFilterOptionsResult.data.tenants.map((tenant) => ({
+                    value: tenant.name,
+                    label: tenant.slug || tenant.id,
+                  }))}
                 />
-                <FilterInput
+                <FilterSearchSelectInput
                   label="场景"
                   name="aiSceneCode"
                   defaultValue={aiFilters.aiSceneCode}
-                  placeholder="scene_code"
+                  placeholder="搜索或选择场景"
+                  options={aiFilterOptionsResult.data.scene_codes.map((value) => ({ value }))}
                 />
-                <FilterInput
+                <FilterSearchSelectInput
                   label="供应商"
                   name="aiProviderCode"
                   defaultValue={aiFilters.aiProviderCode}
-                  placeholder="provider_code"
+                  placeholder="搜索或选择供应商"
+                  options={aiFilterOptionsResult.data.provider_codes.map((value) => ({ value }))}
                 />
-                <FilterInput
+                <FilterSearchSelectInput
                   label="模型"
                   name="aiModelCode"
                   defaultValue={aiFilters.aiModelCode}
-                  placeholder="model_code"
+                  placeholder="搜索或选择模型"
+                  options={aiFilterOptionsResult.data.models.map((model) => ({
+                    value: model.code,
+                    label: [model.provider_code, model.name].filter(Boolean).join(" / ") || undefined,
+                  }))}
                 />
                 <FilterInput label="开始时间" name="aiStartDate" type="date" defaultValue={aiFilters.aiStartDate} />
                 <FilterInput label="结束时间" name="aiEndDate" type="date" defaultValue={aiFilters.aiEndDate} />

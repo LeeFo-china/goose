@@ -88,6 +88,10 @@ function enrichLedger(rows: BillingLedgerRow[], tenants: BillingTenantLite[]) {
   }));
 }
 
+function sortStrings(values: Iterable<string>) {
+  return Array.from(values).sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
 function ceilCredits(units: number, unitCredits: number, minChargeCredits = 0) {
   if (units <= 0 || unitCredits <= 0) return 0;
   return Math.max(Math.ceil(units * unitCredits), minChargeCredits);
@@ -428,6 +432,41 @@ class BillingService {
         ready_groups: list.filter((item) => item.ready_for_phase6).length,
       },
       list,
+    };
+  }
+
+  async getPlatformAiUsageFilterOptions(authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const rows = await billingRepository.listAiUsageFilterOptionRows({ limit: 10000 });
+    const tenantIds = Array.from(new Set(rows.map((row) => row.tenant_id).filter(Boolean))) as string[];
+    const tenants = await billingRepository.listTenantsByIds(tenantIds);
+    const tenantMap = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+    const modelMap = new Map<string, { code: string; name: string | null; provider_code: string | null }>();
+
+    for (const row of rows) {
+      if (row.model_code && !modelMap.has(row.model_code)) {
+        modelMap.set(row.model_code, {
+          code: row.model_code,
+          name: row.model_name,
+          provider_code: row.provider_code,
+        });
+      }
+    }
+
+    return {
+      tenants: tenantIds
+        .map((tenantId) => {
+          const tenant = tenantMap.get(tenantId);
+          return {
+            id: tenantId,
+            name: tenant?.name || tenant?.slug || tenantId,
+            slug: tenant?.slug || null,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, "zh-CN")),
+      scene_codes: sortStrings(rows.map((row) => row.scene_code).filter(Boolean) as string[]),
+      provider_codes: sortStrings(rows.map((row) => row.provider_code).filter(Boolean) as string[]),
+      models: Array.from(modelMap.values()).sort((a, b) => a.code.localeCompare(b.code, "zh-CN")),
     };
   }
 

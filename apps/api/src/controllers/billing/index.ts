@@ -123,6 +123,13 @@ class BillingController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/platform/billing/ai-usage-filter-options")
+  async getPlatformAiUsageFilterOptions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const data = await billingService.getPlatformAiUsageFilterOptions(authContext);
+    return ResponseHandler.success(data);
+  }
+
   @Post("/platform/billing/shadow-run")
   async runShadowBilling(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);

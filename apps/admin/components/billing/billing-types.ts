@@ -169,6 +169,21 @@ export type BillingAiUsageStats = {
   }>;
 };
 
+export type BillingAiUsageFilterOptions = {
+  tenants: Array<{
+    id: string;
+    name: string;
+    slug: string | null;
+  }>;
+  scene_codes: string[];
+  provider_codes: string[];
+  models: Array<{
+    code: string;
+    name: string | null;
+    provider_code: string | null;
+  }>;
+};
+
 export type TenantBillingSummary = {
   account: BillingAccount;
   period: {
