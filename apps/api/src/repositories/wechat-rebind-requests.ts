@@ -38,6 +38,7 @@ type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
+  delete: () => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
@@ -132,11 +133,10 @@ class WechatRebindRequestRepository {
     authUserId: string;
   }) {
     const { data, error } = await this.from("employees")
-      .update({ user_id: null })
+      .select("id, tenant_id, name, phone, user_id, status")
       .eq("id", input.employeeId)
       .eq("tenant_id", input.tenantId)
       .eq("user_id", input.authUserId)
-      .select("id, tenant_id, name, phone, user_id, status")
       .maybeSingle();
 
     if (error) {
@@ -144,6 +144,16 @@ class WechatRebindRequestRepository {
     }
 
     return (data || null) as WechatTargetIdentityRecord | null;
+  }
+
+  async deleteWechatIdentity(authUserId: string) {
+    const { error } = await this.from("wechat_identities")
+      .delete()
+      .eq("auth_user_id", authUserId);
+
+    if (error) {
+      throw Errors.dbError("删除微信身份映射失败", error);
+    }
   }
 
   async findPendingDuplicate(input: {

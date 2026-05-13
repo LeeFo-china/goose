@@ -275,6 +275,7 @@ class WechatRebindRequestService {
       );
     }
 
+    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
     await userIdentityService.unbindBusinessMembershipBestEffort({
       userId: user.sub,
       tenantId: user.tenant_id,
