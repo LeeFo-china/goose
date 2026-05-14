@@ -347,15 +347,6 @@ async function downloadLegacyObject(item: DryRunItem) {
 
 async function checkPublicUrl(url: string) {
   try {
-    const headResponse = await fetchWithTimeout(
-      url,
-      { method: "HEAD" },
-      ACCESS_CHECK_TIMEOUT_MS,
-    );
-    if (headResponse.ok) {
-      return String(headResponse.status);
-    }
-
     const response = await fetchWithTimeout(
       url,
       {
