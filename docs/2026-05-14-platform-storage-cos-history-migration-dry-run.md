@@ -199,7 +199,8 @@ pnpm --dir apps/api storage:migration:dry-run -- --tenant-id 91d255fe-60a2-4379-
 
 ## 10. 第一次真实上传样本记录
 
-验证时间：2026-05-14  
+验证时间：2026-05-14
+
 输入报告：
 
 ```text
@@ -259,3 +260,97 @@ bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migrat
 2. 如果采用公开 CDN，需配置 COS bucket/CDN 访问策略，并验证样本 URL 返回 `200`。
 3. 如果采用签名 URL，需要改造 `file-url-resolver`，让 object key 出参生成短期可访问 URL，而不是直接拼 public base URL。
 4. 访问策略验证通过后，再继续做 20 条以上真实迁移样本。
+
+## 11. 签名 URL 策略通过后的扩大样本记录
+
+验证时间：2026-05-14
+
+输入报告：
+
+```text
+/tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 25 |
+| uploaded | 5 |
+| already_exists | 20 |
+| failed | 0 |
+
+数据库确认：
+
+- `platform_file_objects` 中该租户历史迁移 object key 已写入 25 条。
+- 业务表未回填，仍保持旧图片值。
+
+访问验证：
+
+- COS 签名 URL 使用 `GET Range` 抽验返回 `206`。
+- `HEAD` 对 COS 签名 GET URL 返回 `403`，脚本已调整为先 `HEAD`、失败后使用 `GET Range` 兜底验证。
+
+## 12. 回填前一致性验收记录
+
+验证时间：2026-05-14
+
+验收脚本：
+
+```text
+apps/api/src/scripts/storage-migration-verify.ts
+apps/api/src/scripts/project-logs-image-backfill.ts
+```
+
+一致性抽样命令：
+
+```bash
+bun src/scripts/storage-migration-verify.ts -- --input /tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv --limit 5 --out /tmp/gooes-storage-migration-verify-reports
+```
+
+一致性报告：
+
+```text
+/tmp/gooes-storage-migration-verify-reports/20260514T110453Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 5 |
+| matched | 5 |
+| mismatch | 0 |
+| failed | 0 |
+
+`project_logs.images` 回填 dry-run 命令：
+
+```bash
+bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv --limit 15 --out /tmp/gooes-project-logs-image-backfill-reports
+```
+
+回填 dry-run 报告：
+
+```text
+/tmp/gooes-project-logs-image-backfill-reports/20260514T110453Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 15 |
+| planned | 15 |
+| updated | 0 |
+| failed | 0 |
+
+重要校验：
+
+- 本次只 dry-run，没有修改 `project_logs.images`。
+- 同一条 `project_logs` 记录包含多张图片时，脚本按 `tenant_id + source_id` 分组，一次性生成完整 `images` 新数组，避免逐张更新导致前一次替换被后一次覆盖。
+- 抽样检查显示同一条日志的 `new_images` 中已同时包含该日志的多张 COS object key。
+
+下一步建议：
+
+1. 先选择 1-2 条 `project_logs` 做 `--apply` 小范围回填。
+2. 回填后通过 admin/小程序实际打开项目日志图片，确认 resolver 可正常把 object key 转成签名 URL。
+3. 小范围回填验收通过后，再扩大到该租户全部 25 条迁移图片。
