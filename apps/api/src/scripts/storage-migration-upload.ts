@@ -3,6 +3,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import COS from "cos-nodejs-sdk-v5";
 import { platformFileObjectRepository } from "@/repositories/platform-file-objects";
+import {
+  refreshPlatformCosPublicBaseUrlCache,
+  resolveStoredFileUrl,
+} from "@/services/files/file-url-resolver";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -40,7 +44,7 @@ type MigrationResult = DryRunItem & {
   mime_type: string;
   size_bytes: string;
   checksum: string;
-  public_url_http_status: string;
+  access_url_http_status: string;
   migrated_reason: string;
 };
 
@@ -187,7 +191,7 @@ function toCsv(items: MigrationResult[]) {
     "mime_type",
     "size_bytes",
     "checksum",
-    "public_url_http_status",
+    "access_url_http_status",
     "migrated_reason",
   ] as const;
 
@@ -326,7 +330,7 @@ async function migrateOne(input: {
     mime_type: "",
     size_bytes: "",
     checksum: "",
-    public_url_http_status: "",
+    access_url_http_status: "",
     migrated_reason: "",
   };
 
@@ -351,8 +355,8 @@ async function migrateOne(input: {
       mime_type: existing.mime_type,
       size_bytes: String(existing.size_bytes),
       checksum: existing.checksum || "",
-      public_url_http_status: existing.public_url
-        ? await checkPublicUrl(existing.public_url)
+      access_url_http_status: resolveStoredFileUrl(existing.object_key)
+        ? await checkPublicUrl(resolveStoredFileUrl(existing.object_key) || "")
         : "",
       migrated_reason: "platform_file_object_exists",
     };
@@ -363,7 +367,7 @@ async function migrateOne(input: {
       ...emptyResult,
       migrated_status: "planned",
       public_url: joinPublicUrl(config.publicBaseUrl, item.target_object_key),
-      public_url_http_status: "",
+      access_url_http_status: "",
       migrated_reason: "apply_not_set",
     };
   }
@@ -381,7 +385,9 @@ async function migrateOne(input: {
   });
 
   const publicUrl = joinPublicUrl(config.publicBaseUrl, item.target_object_key);
-  const publicUrlHttpStatus = await checkPublicUrl(publicUrl);
+  await refreshPlatformCosPublicBaseUrlCache();
+  const accessUrl = resolveStoredFileUrl(item.target_object_key) || publicUrl;
+  const accessUrlHttpStatus = await checkPublicUrl(accessUrl);
   const fileObject = await platformFileObjectRepository.create({
     tenant_id: item.tenant_id || null,
     owner_type: item.source_table,
@@ -418,7 +424,7 @@ async function migrateOne(input: {
     mime_type: downloaded.mimeType,
     size_bytes: String(downloaded.buffer.length),
     checksum,
-    public_url_http_status: publicUrlHttpStatus,
+    access_url_http_status: accessUrlHttpStatus,
   };
 }
 
@@ -455,6 +461,7 @@ async function main() {
     .filter((item) => item.status === "migratable")
     .slice(0, options.limit);
   const config = await getCosConfig();
+  await refreshPlatformCosPublicBaseUrlCache();
   const cos = new COS({
     SecretId: config.secretId,
     SecretKey: config.secretKey,
@@ -482,7 +489,7 @@ async function main() {
         mime_type: "",
         size_bytes: "",
         checksum: "",
-        public_url_http_status: "",
+        access_url_http_status: "",
         migrated_reason: error instanceof Error ? error.message : "unknown_error",
       });
     }

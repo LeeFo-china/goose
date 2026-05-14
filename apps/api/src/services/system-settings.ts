@@ -370,6 +370,70 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "900",
   },
   {
+    key: "PLATFORM_FILE_ACCESS_POLICY",
+    groupCode: "storage",
+    name: "平台文件访问策略",
+    description: "按业务场景控制文件访问模式和签名 URL 有效期。access_mode 支持 public/signed，signed_url_ttl_seconds 单位秒。",
+    valueType: "json",
+    envNames: ["PLATFORM_FILE_ACCESS_POLICY"],
+    defaultValue: JSON.stringify({
+      default: {
+        access_mode: "signed",
+        signed_url_ttl_seconds: 1800,
+      },
+      scenes: {
+        project_log: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        project_log_comment: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        project_acceptance: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        customer_follow_up_comment: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        customer_douyin_screenshot: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        expense_request: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 600,
+        },
+        expense_request_settlement: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 600,
+        },
+        referral_payment: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 600,
+        },
+        employee_avatar: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 21600,
+        },
+        customer_avatar: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 21600,
+        },
+        h5_marketing_page: {
+          access_mode: "public",
+          signed_url_ttl_seconds: 0,
+        },
+        panorama_tiles: {
+          access_mode: "public",
+          signed_url_ttl_seconds: 0,
+        },
+      },
+    }, null, 2),
+  },
+  {
     key: "AI_CHAT_COMPLETIONS_URL",
     groupCode: "ai",
     name: "AI 对话接口地址",
