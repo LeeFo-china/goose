@@ -1,17 +1,49 @@
 import { SupabaseDB } from "@/utils/supabase";
+import { systemSettingsService } from "@/services/system-settings";
 
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
+const COS_PUBLIC_BASE_URL_CACHE_TTL_MS = 30 * 1000;
+
+let cachedPlatformCosPublicBaseUrl = (
+  process.env.PLATFORM_COS_PUBLIC_BASE_URL ||
+  process.env.COS_PUBLIC_BASE_URL ||
+  ""
+).trim().replace(/\/+$/, "");
+let cacheExpiresAt = 0;
+let refreshPromise: Promise<void> | null = null;
 
 function trimSlashes(value: string) {
   return value.trim().replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
+function refreshPlatformCosPublicBaseUrlCache() {
+  if (refreshPromise) {
+    return;
+  }
+
+  refreshPromise = systemSettingsService
+    .getString("PLATFORM_COS_PUBLIC_BASE_URL", cachedPlatformCosPublicBaseUrl)
+    .then((value) => {
+      const normalized = value.trim().replace(/\/+$/, "");
+      if (normalized) {
+        cachedPlatformCosPublicBaseUrl = normalized;
+      }
+      cacheExpiresAt = Date.now() + COS_PUBLIC_BASE_URL_CACHE_TTL_MS;
+    })
+    .catch(() => {
+      cacheExpiresAt = Date.now() + 5 * 1000;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+}
+
 function getPlatformCosPublicBaseUrl() {
-  return (
-    process.env.PLATFORM_COS_PUBLIC_BASE_URL ||
-    process.env.COS_PUBLIC_BASE_URL ||
-    ""
-  ).trim().replace(/\/+$/, "");
+  if (Date.now() >= cacheExpiresAt) {
+    refreshPlatformCosPublicBaseUrlCache();
+  }
+
+  return cachedPlatformCosPublicBaseUrl;
 }
 
 function encodeObjectKey(objectKey: string) {
