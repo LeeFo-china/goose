@@ -113,6 +113,9 @@ type CustomerProjectLogRow = {
 type CustomerProjectRecentLogSummaryRow = {
   project_id: string;
   id: string;
+  employee_id: string | null;
+  employee_name: string | null;
+  employee_avatar: string | null;
   stage_code: string | null;
   node_name: string | null;
   created_at: string | null;
@@ -650,6 +653,16 @@ class CustomerSelfServiceController extends BaseController {
 
     return {
       id: row.id,
+      employee_id: row.employee_id,
+      employee_name: row.employee_name,
+      employee_avatar: row.employee_avatar,
+      employee: row.employee_id
+        ? {
+          id: row.employee_id,
+          name: row.employee_name,
+          avatar: row.employee_avatar,
+        }
+        : null,
       stage_code: stageCode,
       stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
       node_name: row.node_name,

@@ -4951,6 +4951,9 @@ export type Database = {
           comment_count: number
           cover_image_path: string
           created_at: string
+          employee_avatar: string
+          employee_id: string
+          employee_name: string
           id: string
           image_count: number
           node_name: string
