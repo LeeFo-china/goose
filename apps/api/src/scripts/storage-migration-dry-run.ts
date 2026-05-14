@@ -17,6 +17,7 @@ type SourceConfig = {
   select: string;
   field: string;
   scene: string;
+  hasDirectTenantId: boolean;
   tenantId: (row: Record<string, unknown>) => string | null;
   values: (row: Record<string, unknown>) => Array<{
     sourceField: string;
@@ -161,6 +162,10 @@ function nestedMetadataValues(row: Record<string, unknown>) {
 }
 
 function singleValue(field: string, value: unknown) {
+  if (normalizeString(value) === "") {
+    return [];
+  }
+
   return [{ sourceField: field, value, arrayIndex: null }];
 }
 
@@ -171,6 +176,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,images",
     field: "images",
     scene: "project-log",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => stringArrayValues("images", row.images),
   },
@@ -180,6 +186,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,images",
     field: "images",
     scene: "project-log-comment",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => stringArrayValues("images", row.images),
   },
@@ -189,6 +196,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,images,rectification_images",
     field: "images,rectification_images",
     scene: "project-acceptance",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => [
       ...stringArrayValues("images", row.images),
@@ -201,6 +209,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,metadata",
     field: "metadata",
     scene: "project-acceptance",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: nestedMetadataValues,
   },
@@ -210,6 +219,7 @@ const sources: SourceConfig[] = [
     select: "id,images,follow_up:customer_follow_ups(customer:customers(tenant_id))",
     field: "images",
     scene: "customer-follow-up-comment",
+    hasDirectTenantId: false,
     tenantId: (row) => getNestedTenantId(row.follow_up),
     values: (row) => stringArrayValues("images", row.images),
   },
@@ -219,6 +229,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,douyin_screenshot_images",
     field: "douyin_screenshot_images",
     scene: "customer-douyin-screenshot",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) =>
       stringArrayValues("douyin_screenshot_images", row.douyin_screenshot_images),
@@ -229,6 +240,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,evidence_images",
     field: "evidence_images",
     scene: "expense-request",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => stringArrayValues("evidence_images", row.evidence_images),
   },
@@ -238,6 +250,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,evidence_images",
     field: "evidence_images",
     scene: "expense-request-settlement",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => stringArrayValues("evidence_images", row.evidence_images),
   },
@@ -247,6 +260,7 @@ const sources: SourceConfig[] = [
     select: "id,paid_evidence_images,project:projects(tenant_id)",
     field: "paid_evidence_images",
     scene: "project-referral",
+    hasDirectTenantId: false,
     tenantId: (row) => getNestedTenantId(row.project),
     values: (row) => stringArrayValues("paid_evidence_images", row.paid_evidence_images),
   },
@@ -256,6 +270,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,avatar",
     field: "avatar",
     scene: "employee-avatar",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => singleValue("avatar", row.avatar),
   },
@@ -265,6 +280,7 @@ const sources: SourceConfig[] = [
     select: "id,tenant_id,cover_image",
     field: "cover_image",
     scene: "h5-marketing-page",
+    hasDirectTenantId: true,
     tenantId: (row) => typeof row.tenant_id === "string" ? row.tenant_id : null,
     values: (row) => singleValue("cover_image", row.cover_image),
   },
@@ -485,7 +501,7 @@ async function scanSource(source: SourceConfig, options: CliOptions, remaining: 
     .select(source.select)
     .limit(Math.max(remaining, 1));
 
-  if (options.tenantId && source.select.includes("tenant_id")) {
+  if (options.tenantId && source.hasDirectTenantId) {
     query = query.eq("tenant_id", options.tenantId);
   }
 

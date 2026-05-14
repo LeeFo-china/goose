@@ -155,3 +155,44 @@ pnpm --dir apps/api storage:migration:dry-run -- --all-tenants --limit 5000 --ou
 ## 8. 下一步
 
 建议下一步先实现 `storage-migration-dry-run.ts` 的 P0 字段扫描和报告输出，然后选一个测试租户跑 500 条以内样本。dry-run 验收通过后，再进入“小批量真实上传 COS + 写入 platform_file_objects + 业务表仍不改”的阶段。
+
+## 9. 第一次小批量验证记录
+
+验证时间：2026-05-14  
+租户：`91d255fe-60a2-4379-b939-8aff35e693ac`  
+命令：
+
+```bash
+pnpm --dir apps/api storage:migration:dry-run -- --tenant-id 91d255fe-60a2-4379-b939-8aff35e693ac --limit 50 --check-remote --out /tmp/gooes-storage-migration-reports
+```
+
+报告目录：
+
+```text
+/tmp/gooes-storage-migration-reports/20260514T094625Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_values | 49 |
+| migratable | 25 |
+| external_url | 23 |
+| download_failed | 1 |
+| invalid | 0 |
+| estimated_bytes | 20,427,558 |
+
+失败项：
+
+- `expense_request_items.a4fcab99-987a-4c93-9563-f138b39e1cfc.evidence_images[0]`
+- 原始值：`verify-expense-item-1`
+- 分类：`supabase_legacy_path`
+- 失败原因：`head_400`
+
+结论：
+
+- 项目日志历史 Supabase path 可访问，能拿到 `content-length`，具备进入小批量真实上传验证的条件。
+- 外部 URL 被正确跳过，不会误迁移第三方图片。
+- 空头像等无图片字段已从脚本中跳过，不再计入 invalid。
+- 费用审批中存在测试占位路径，后续真实迁移前需要按 `download_failed` 清单人工判断是否忽略或修正。
