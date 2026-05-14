@@ -38,6 +38,7 @@ import {
   customerPhonePrivacyService,
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 
 function escapeSupabaseOrValue(value: string) {
@@ -495,25 +496,7 @@ class ProjectController extends BaseController<
   }
 
   private normalizeProjectLogImages(images: unknown) {
-    if (!Array.isArray(images)) {
-      return [] as string[];
-    }
-
-    return images
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item) => {
-        if (/^https?:\/\//i.test(item)) {
-          return item;
-        }
-
-        return SupabaseDB.getAdminClient()
-          .storage
-          .from("project-logs")
-          .getPublicUrl(item)
-          .data.publicUrl;
-      });
+    return resolveStoredFileUrlList(images);
   }
 
   private isPublicProjectVisible(row: Record<string, unknown>) {

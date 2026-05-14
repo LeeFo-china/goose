@@ -16,13 +16,12 @@ import { ResponseHandler } from "@/utils/response";
 import { ProjectLogQuerySchema } from "@/schema/project-logs";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   isProjectLogStageCode,
   type ProjectLogStageCode,
 } from "@gooes/domain";
-
-const PROJECT_LOGS_BUCKET = "project-logs";
 
 type ProjectLogCalendarItem = {
   date: string;
@@ -110,25 +109,7 @@ class ProjectLogController extends BaseController<
   }
 
   private normalizeProjectLogImages(images: unknown) {
-    if (!Array.isArray(images)) {
-      return [];
-    }
-
-    return images
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item) => {
-        if (/^https?:\/\//i.test(item)) {
-          return item;
-        }
-
-        return SupabaseDB.getAdminClient()
-          .storage
-          .from(PROJECT_LOGS_BUCKET)
-          .getPublicUrl(item)
-          .data.publicUrl;
-      });
+    return resolveStoredFileUrlList(images);
   }
 
   private serializeProjectLog<T extends Record<string, unknown>>(row: T) {

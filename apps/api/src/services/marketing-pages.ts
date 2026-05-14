@@ -25,6 +25,7 @@ import {
   signH5MarketingToken,
   verifyH5MarketingToken,
 } from "@/utils/jwt";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 function createDefaultConfig(title: string): MarketingPageConfigInput {
   return {
@@ -96,14 +97,7 @@ function normalizeStringArray(value: unknown) {
 }
 
 function normalizeProjectLogImages(images: unknown) {
-  if (!Array.isArray(images)) {
-    return [] as string[];
-  }
-
-  return images
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return resolveStoredFileUrlList(images);
 }
 
 function createProjectImageMap(rows: MarketingPageProjectOptionRow[]) {

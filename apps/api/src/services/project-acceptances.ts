@@ -41,9 +41,7 @@ import {
   type ProjectAcceptanceStatus,
   type ProjectLogStageCode,
 } from "@gooes/domain";
-import { SupabaseDB } from "@/utils/supabase";
-
-const PROJECT_LOGS_BUCKET = "project-logs";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "draft",
   "submitted",
@@ -435,15 +433,7 @@ class ProjectAcceptanceService {
   }
 
   private getImagePublicUrl(path: string) {
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-
-    return SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .getPublicUrl(path)
-      .data.publicUrl;
+    return resolveStoredFileUrl(path) || path;
   }
 
   private getStageLabel(stageCode: string | null | undefined) {

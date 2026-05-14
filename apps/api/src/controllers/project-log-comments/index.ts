@@ -13,6 +13,7 @@ import { SupabaseDB } from "@/utils/supabase";
 import type { ProjectLogCommentAuthorType } from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 type EmployeeAuthor = {
   id: string;
@@ -442,7 +443,9 @@ class ProjectLogCommentsController extends BaseController {
   private attachAuthor(row: ProjectLogCommentRow, author: CommentAuthor | null): ProjectLogCommentResponseItem {
     return {
       ...row,
-      images: this.normalizeImages((row as ProjectLogCommentRow & { images?: unknown }).images),
+      images: resolveStoredFileUrlList(
+        (row as ProjectLogCommentRow & { images?: unknown }).images,
+      ),
       author,
     };
   }

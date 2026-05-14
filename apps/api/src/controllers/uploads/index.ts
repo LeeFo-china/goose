@@ -1,15 +1,14 @@
-import { randomUUID } from "node:crypto";
-import { extname } from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Get, Post } from "@/utils/decorators/route";
-import { SupabaseDB } from "@/utils/supabase";
 import { ResponseHandler } from "@/utils/response";
+import { authorizationService } from "@/services/authorization";
+import { platformFileStorageService } from "@/services/files/platform-file-storage";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { z } from "zod";
 
-const PROJECT_LOGS_BUCKET = "project-logs";
 const MAX_UPLOAD_FILES = 9;
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
@@ -52,6 +51,11 @@ const UploadPublicUrlQuerySchema = z.object({
 type UploadImageItem = {
   url: string;
   path: string;
+  file_id?: string;
+  provider?: string;
+  bucket?: string;
+  region?: string | null;
+  object_key?: string;
 };
 
 type UploadScene = (typeof ALLOWED_UPLOAD_SCENES)[number];
@@ -116,11 +120,18 @@ class UploadController extends BaseController {
       throw Errors.fromZod(fieldResult.error);
     }
 
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user.sub,
+    );
+
     const uploadedFiles = await Promise.all(
       files.map((file) =>
         this.uploadSingleFile(file, {
+          authUserId: request.user?.sub,
+          employeeId: authContext.employeeId,
           projectId: fieldResult.data.project_id,
           scene: fieldResult.data.scene ?? "project_log",
+          tenantId: authContext.tenantId,
         })
       ),
     );
@@ -141,18 +152,24 @@ class UploadController extends BaseController {
       throw Errors.fromZod(queryResult.error);
     }
 
-    const { data } = SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .getPublicUrl(queryResult.data.path);
+    const publicUrl = resolveStoredFileUrl(queryResult.data.path);
+    if (!publicUrl) {
+      throw Errors.badRequest("图片路径不合法");
+    }
 
-    return reply.redirect(data.publicUrl);
+    return reply.redirect(publicUrl);
   }
 
   private async uploadSingleFile(
     file: PendingUploadFile,
-    options: { projectId?: string; scene: UploadScene },
-  ) {
+    options: {
+      authUserId?: string | null;
+      employeeId?: string | null;
+      projectId?: string;
+      scene: UploadScene;
+      tenantId?: string | null;
+    },
+  ): Promise<UploadImageItem> {
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
     }
@@ -164,57 +181,16 @@ class UploadController extends BaseController {
       );
     }
 
-    const extension = this.getFileExtension(file);
-    const objectPath = this.buildObjectPath(options, extension);
-
-    const { error } = await SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .upload(objectPath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-
-    if (error) {
-      throw Errors.dbError("上传图片失败", error);
-    }
-
-    const { data } = SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .getPublicUrl(objectPath);
-
-    return {
-      url: data.publicUrl,
-      path: objectPath,
-    };
-  }
-
-  private buildObjectPath(
-    options: { projectId?: string; scene: UploadScene },
-    extension: string,
-  ) {
-    const now = new Date();
-    const year = String(now.getFullYear());
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    const prefixByScene: Record<UploadScene, string> = {
-      project_log: options.projectId?.trim() || "unassigned",
-      project_log_comment: "project-log-comment",
-      customer_follow_up_comment: "customer-follow-up-comment",
-      expense_request: "expense-request",
-      referral_payment: "referral-payment",
-      employee_avatar: "employee-avatar",
-      customer_avatar: "customer-avatar",
-      customer_douyin_screenshot: "customer-douyin-screenshots",
-      h5_marketing_page: "h5-marketing-pages",
-      project_acceptance: options.projectId?.trim()
-        ? `${options.projectId.trim()}/acceptance`
-        : "project-acceptance",
-    };
-    const prefix = prefixByScene[options.scene];
-
-    return `${prefix}/${year}/${month}/${day}/${randomUUID()}${extension}`;
+    return platformFileStorageService.uploadImage({
+      buffer: file.buffer,
+      filename: file.filename,
+      mimetype: file.mimetype,
+      scene: options.scene,
+      projectId: options.projectId,
+      tenantId: options.tenantId,
+      authUserId: options.authUserId,
+      employeeId: options.employeeId,
+    });
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {
@@ -223,22 +199,6 @@ class UploadController extends BaseController {
       : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
 
-  private getFileExtension(file: Pick<PendingUploadFile, "filename" | "mimetype">) {
-    const filenameExtension = extname(file.filename || "").toLowerCase();
-    if (filenameExtension) {
-      return filenameExtension;
-    }
-
-    const mimeToExtension: Record<string, string> = {
-      "image/jpeg": ".jpg",
-      "image/png": ".png",
-      "image/webp": ".webp",
-      "image/heic": ".heic",
-      "image/heif": ".heif",
-    };
-
-    return mimeToExtension[file.mimetype] || ".jpg";
-  }
 }
 
 export default new UploadController();

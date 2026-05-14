@@ -29,6 +29,7 @@ import {
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import type { Tables } from "@/types/database";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 type CustomerContextRow = {
   id: string;
@@ -186,8 +187,6 @@ type CustomerProjectMemberSummary = {
   is_virtual?: boolean;
 };
 
-const PROJECT_LOGS_BUCKET = "project-logs";
-
 function optionalCustomerQueryValue<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((value) => {
     if (value == null) {
@@ -298,19 +297,7 @@ class CustomerSelfServiceController extends BaseController {
   }
 
   private getImagePublicUrl(path: string | null | undefined) {
-    if (!path) {
-      return null;
-    }
-
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-
-    return SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .getPublicUrl(path)
-      .data.publicUrl;
+    return resolveStoredFileUrl(path);
   }
 
   private normalizeProjectLogImages(images: unknown) {

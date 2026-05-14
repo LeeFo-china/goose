@@ -67,6 +67,10 @@ import {
   isProjectStatus,
   type ProjectLogStageCode,
 } from "@gooes/domain";
+import {
+  resolveStoredFileUrl,
+  resolveStoredFileUrlList,
+} from "@/services/files/file-url-resolver";
 
 type CustomerProjectRow = {
   id: string;
@@ -135,7 +139,6 @@ type GeneratedShareCopy = {
   text: string;
 };
 
-const PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_SHARE_REWARD_TITLE = "专属到店礼";
 const DEFAULT_SHARE_REWARD_REMARK = "凭分享图到店可领取";
 const DEFAULT_SHARE_CAMPAIGN_PAGE = "pages/share-campaign/index";
@@ -348,25 +351,7 @@ function normalizeStringArray(value: unknown) {
 }
 
 function normalizeProjectLogImages(images: unknown) {
-  if (!Array.isArray(images)) {
-    return [] as string[];
-  }
-
-  return images
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      if (/^https?:\/\//i.test(item)) {
-        return item;
-      }
-
-      return SupabaseDB.getAdminClient()
-        .storage
-        .from(PROJECT_LOGS_BUCKET)
-        .getPublicUrl(item)
-        .data.publicUrl;
-    });
+  return resolveStoredFileUrlList(images);
 }
 
 function buildShareRewardCode(input: {
@@ -592,19 +577,7 @@ class CustomerProjectLogShareService {
   }
 
   private getImagePublicUrl(path: string | null | undefined) {
-    if (!path) {
-      return null;
-    }
-
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-
-    return SupabaseDB.getAdminClient()
-      .storage
-      .from(PROJECT_LOGS_BUCKET)
-      .getPublicUrl(path)
-      .data.publicUrl;
+    return resolveStoredFileUrl(path);
   }
 
   private getAuthIdentitySource(): AuthIdentitySource {

@@ -3,6 +3,7 @@ import { customerFollowUpCommentRepository } from "@/repositories/customer-follo
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import type { CreateCustomerFollowUpCommentInput } from "@/schema/customer-follow-up-comments";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 type CommentAuthor = {
   id: string;
@@ -126,7 +127,7 @@ class CustomerFollowUpCommentService {
 
     return rows.map((item) => ({
       ...item,
-      images: item.images || [],
+      images: resolveStoredFileUrlList(item.images || []),
       author: authorMap.get(item.author_employee_id) ?? null,
       can_reply: item.parent_id === null && item.status === "active" && canComment,
       can_moderate: canModerate,
