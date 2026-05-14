@@ -41,6 +41,15 @@ type UploadImageInput = {
   customerId?: string | null;
 };
 
+type DirectUploadInput = Omit<UploadImageInput, "buffer"> & {
+  sizeBytes: number;
+};
+
+type CompleteDirectUploadInput = DirectUploadInput & {
+  objectKey: string;
+  etag?: string | null;
+};
+
 type StorageUploadResult = {
   provider: PlatformFileProvider;
   bucket: string;
@@ -50,6 +59,18 @@ type StorageUploadResult = {
   accessUrl: string;
   legacyPath?: string | null;
   metadata?: Record<string, unknown>;
+};
+
+type PlatformUploadResponse = {
+  url: string;
+  path: string;
+  file_id?: string;
+  provider?: string;
+  bucket?: string;
+  region?: string | null;
+  object_key?: string;
+  storage_path?: string;
+  public_url?: string;
 };
 
 function normalizeProvider(value: string | null | undefined): PlatformFileProvider {
@@ -97,6 +118,10 @@ function getFileExtension(input: Pick<UploadImageInput, "filename" | "mimetype">
   };
 
   return mimeToExtension[input.mimetype] || ".jpg";
+}
+
+function normalizeEtag(value: string | null | undefined) {
+  return value?.trim().replace(/^"+|"+$/g, "") || null;
 }
 
 class PlatformFileStorageService {
@@ -190,7 +215,10 @@ class PlatformFileStorageService {
     return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
   }
 
-  private buildCosObjectKey(input: UploadImageInput) {
+  private buildCosObjectKey(input: Pick<
+    UploadImageInput,
+    "filename" | "mimetype" | "scene" | "projectId" | "tenantId"
+  >) {
     const now = new Date();
     const year = String(now.getFullYear());
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -301,6 +329,67 @@ class PlatformFileStorageService {
     };
   }
 
+  private buildCosPublicUrl(input: {
+    publicBaseUrl: string;
+    bucket: string;
+    region: string;
+    objectKey: string;
+  }) {
+    if (input.publicBaseUrl) {
+      return joinPublicUrl(input.publicBaseUrl, input.objectKey);
+    }
+
+    return `https://${input.bucket}.cos.${input.region}.myqcloud.com/${
+      trimSlashes(input.objectKey)
+        .split("/")
+        .map((part) => encodeURIComponent(part))
+        .join("/")
+    }`;
+  }
+
+  private setCosAccessCache(config: {
+    secretId: string;
+    secretKey: string;
+    bucket: string;
+    region: string;
+    publicBaseUrl: string;
+    signedUrlTtl: number;
+    policyText: string;
+  }) {
+    setPlatformCosPublicBaseUrlCache(config.publicBaseUrl);
+    setPlatformCosAccessConfigCache({
+      secretId: config.secretId,
+      secretKey: config.secretKey,
+      bucket: config.bucket,
+      region: config.region,
+      publicBaseUrl: config.publicBaseUrl,
+      signedUrlTtlSeconds: config.signedUrlTtl,
+      policyText: config.policyText,
+    });
+  }
+
+  private toUploadResponse(input: {
+    fileId?: string;
+    provider: PlatformFileProvider;
+    bucket: string;
+    region: string | null;
+    objectKey: string;
+    publicUrl: string;
+    accessUrl: string;
+  }): PlatformUploadResponse {
+    return {
+      url: input.accessUrl || input.publicUrl,
+      path: input.objectKey,
+      file_id: input.fileId,
+      provider: input.provider,
+      bucket: input.bucket,
+      region: input.region,
+      object_key: input.objectKey,
+      storage_path: input.objectKey,
+      public_url: input.publicUrl,
+    };
+  }
+
   async uploadImage(input: UploadImageInput) {
     const provider = await this.getStorageProvider();
     const uploaded = provider === "tencent_cos"
@@ -330,17 +419,142 @@ class PlatformFileStorageService {
       created_by_employee_id: input.employeeId ?? null,
     });
 
-    return {
-      url: uploaded.accessUrl || uploaded.publicUrl,
-      path: uploaded.objectKey,
-      file_id: fileObject.id,
+    return this.toUploadResponse({
+      fileId: fileObject.id,
       provider: uploaded.provider,
       bucket: uploaded.bucket,
       region: uploaded.region,
-      object_key: uploaded.objectKey,
-      storage_path: uploaded.objectKey,
-      public_url: uploaded.publicUrl,
+      objectKey: uploaded.objectKey,
+      publicUrl: uploaded.publicUrl,
+      accessUrl: uploaded.accessUrl,
+    });
+  }
+
+  async createDirectUpload(input: DirectUploadInput) {
+    const provider = await this.getStorageProvider();
+    if (provider !== "tencent_cos") {
+      throw Errors.business(
+        503,
+        "当前存储暂不支持直传",
+        ErrorCodes.FILE_STORAGE_CONFIG_MISSING,
+        { provider },
+      );
+    }
+
+    const config = await this.getCosConfig();
+    const objectKey = this.buildCosObjectKey(input);
+    const cos = this.getCosClient(config);
+    this.setCosAccessCache(config);
+
+    const uploadUrl = cos.getObjectUrl({
+      Bucket: config.bucket,
+      Region: config.region,
+      Key: objectKey,
+      Method: "PUT",
+      Sign: true,
+      Expires: config.signedUrlTtl,
+      Protocol: "https:",
+    });
+
+    return {
+      provider: "tencent_cos" as const,
+      bucket: config.bucket,
+      region: config.region,
+      object_key: objectKey,
+      storage_path: objectKey,
+      upload_url: uploadUrl,
+      method: "PUT" as const,
+      headers: {
+        "content-type": input.mimetype,
+      },
+      expires_in: config.signedUrlTtl,
+      expires_at: new Date(Date.now() + config.signedUrlTtl * 1000).toISOString(),
     };
+  }
+
+  async completeDirectUpload(input: CompleteDirectUploadInput) {
+    const config = await this.getCosConfig();
+    const cos = this.getCosClient(config);
+    this.setCosAccessCache(config);
+
+    let headObject;
+    try {
+      headObject = await cos.headObject({
+        Bucket: config.bucket,
+        Region: config.region,
+        Key: input.objectKey,
+      });
+    } catch (error) {
+      throw Errors.business(
+        400,
+        "直传文件不存在或尚未上传完成",
+        ErrorCodes.FILE_STORAGE_UPLOAD_FAILED,
+        error,
+      );
+    }
+
+    const existing = await platformFileObjectRepository.findActiveByObjectKey({
+      provider: "tencent_cos",
+      bucket: config.bucket,
+      objectKey: input.objectKey,
+    });
+    const publicUrl = this.buildCosPublicUrl({
+      publicBaseUrl: config.publicBaseUrl,
+      bucket: config.bucket,
+      region: config.region,
+      objectKey: input.objectKey,
+    });
+    const accessUrl = resolveStoredFileUrl(input.objectKey) || publicUrl;
+
+    if (existing) {
+      return this.toUploadResponse({
+        fileId: existing.id,
+        provider: existing.provider,
+        bucket: existing.bucket,
+        region: existing.region,
+        objectKey: existing.object_key,
+        publicUrl: existing.public_url || publicUrl,
+        accessUrl,
+      });
+    }
+
+    const headers = (headObject.headers || {}) as Record<string, string | number | undefined>;
+    const contentLength = Number(headers["content-length"] ?? input.sizeBytes);
+    const contentType = String(headers["content-type"] || input.mimetype);
+    const etag = normalizeEtag(input.etag) || normalizeEtag(headObject.ETag);
+    const fileObject = await platformFileObjectRepository.create({
+      tenant_id: input.tenantId ?? null,
+      owner_type: input.scene,
+      scene: input.scene,
+      provider: "tencent_cos",
+      bucket: config.bucket,
+      region: config.region,
+      object_key: input.objectKey,
+      original_name: input.filename ?? null,
+      mime_type: contentType,
+      size_bytes: Number.isFinite(contentLength) ? contentLength : input.sizeBytes,
+      checksum: etag,
+      visibility: "public",
+      public_url: publicUrl,
+      metadata: {
+        project_id: input.projectId ?? null,
+        customer_id: input.customerId ?? null,
+        direct_upload: true,
+        signed_url: accessUrl !== publicUrl,
+      },
+      created_by_auth_user_id: input.authUserId ?? null,
+      created_by_employee_id: input.employeeId ?? null,
+    });
+
+    return this.toUploadResponse({
+      fileId: fileObject.id,
+      provider: "tencent_cos",
+      bucket: config.bucket,
+      region: config.region,
+      objectKey: input.objectKey,
+      publicUrl,
+      accessUrl,
+    });
   }
 }
 

@@ -40,6 +40,37 @@ const UploadImageFieldSchema = z.object({
   project_id: z.string().uuid("无效的项目ID").optional(),
 });
 
+const DIRECT_UPLOAD_SCENES = ["project_log_comment"] as const;
+
+const DirectUploadInitSchema = z.object({
+  scene: z.enum(DIRECT_UPLOAD_SCENES, {
+    message: "当前场景暂不支持直传",
+  }),
+  project_id: z.string().uuid("无效的项目ID").optional(),
+  filename: z.string().trim().max(200, "文件名过长").optional(),
+  mimetype: z.enum([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+  ], {
+    message: "仅支持 jpg、png、webp、heic、heif 图片",
+  }),
+  size_bytes: z.number().int().positive("图片大小无效"),
+});
+
+const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
+  object_key: z.string()
+    .trim()
+    .min(1, "缺少对象路径")
+    .max(1000, "对象路径过长")
+    .refine((value) => !value.includes(".."), "对象路径不合法")
+    .refine((value) => !value.startsWith("/"), "对象路径不合法")
+    .refine((value) => !value.includes("\\"), "对象路径不合法"),
+  etag: z.string().trim().max(200, "ETag 过长").optional(),
+});
+
 const UploadPublicUrlQuerySchema = z.object({
   path: z.string()
     .trim()
@@ -168,6 +199,72 @@ class UploadController extends BaseController {
     return reply.redirect(publicUrl);
   }
 
+  @Post("/uploads/cos/direct-init")
+  async initDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) {
+      throw Errors.unauthorized("未登录或登录状态无效");
+    }
+
+    const result = DirectUploadInitSchema.safeParse(request.body || {});
+    if (!result.success) {
+      throw Errors.fromZod(result.error);
+    }
+
+    const scene = result.data.scene;
+    this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
+    const actorContext = await this.resolveUploadActorContext(request.user.sub);
+    const directUpload = await platformFileStorageService.createDirectUpload({
+      filename: result.data.filename,
+      mimetype: result.data.mimetype,
+      sizeBytes: result.data.size_bytes,
+      scene,
+      projectId: result.data.project_id,
+      tenantId: actorContext.tenantId,
+      authUserId: request.user.sub,
+      employeeId: actorContext.employeeId,
+      customerId: actorContext.customerId,
+    });
+
+    return ResponseHandler.success(directUpload);
+  }
+
+  @Post("/uploads/cos/direct-complete")
+  async completeDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
+    if (!request.user?.sub) {
+      throw Errors.unauthorized("未登录或登录状态无效");
+    }
+
+    const result = DirectUploadCompleteSchema.safeParse(request.body || {});
+    if (!result.success) {
+      throw Errors.fromZod(result.error);
+    }
+
+    const scene = result.data.scene;
+    this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
+    const actorContext = await this.resolveUploadActorContext(request.user.sub);
+    this.assertDirectObjectKeyBelongsToActor(
+      result.data.object_key,
+      scene,
+      actorContext,
+    );
+
+    const uploaded = await platformFileStorageService.completeDirectUpload({
+      filename: result.data.filename,
+      mimetype: result.data.mimetype,
+      sizeBytes: result.data.size_bytes,
+      scene,
+      projectId: result.data.project_id,
+      tenantId: actorContext.tenantId,
+      authUserId: request.user.sub,
+      employeeId: actorContext.employeeId,
+      customerId: actorContext.customerId,
+      objectKey: result.data.object_key,
+      etag: result.data.etag,
+    });
+
+    return ResponseHandler.success(uploaded);
+  }
+
   private async uploadSingleFile(
     file: PendingUploadFile,
     options: {
@@ -179,16 +276,7 @@ class UploadController extends BaseController {
       tenantId?: string | null;
     },
   ): Promise<UploadImageItem> {
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
-    }
-
-    const maxUploadFileSize = this.getMaxUploadFileSize(options.scene);
-    if (file.buffer.length > maxUploadFileSize) {
-      throw Errors.badRequest(
-        `单张图片不能超过 ${Math.floor(maxUploadFileSize / 1024 / 1024)}MB`,
-      );
-    }
+    this.assertAllowedFile(file.mimetype, file.buffer.length, options.scene);
 
     return platformFileStorageService.uploadImage({
       buffer: file.buffer,
@@ -201,6 +289,34 @@ class UploadController extends BaseController {
       employeeId: options.employeeId,
       customerId: options.customerId,
     });
+  }
+
+  private assertAllowedFile(mimetype: string, sizeBytes: number, scene: UploadScene) {
+    if (!ALLOWED_MIME_TYPES.has(mimetype)) {
+      throw Errors.badRequest("仅支持 jpg、png、webp、heic、heif 图片");
+    }
+
+    const maxUploadFileSize = this.getMaxUploadFileSize(scene);
+    if (sizeBytes > maxUploadFileSize) {
+      throw Errors.badRequest(
+        `单张图片不能超过 ${Math.floor(maxUploadFileSize / 1024 / 1024)}MB`,
+      );
+    }
+  }
+
+  private assertDirectObjectKeyBelongsToActor(
+    objectKey: string,
+    scene: UploadScene,
+    actorContext: UploadActorContext,
+  ) {
+    const scenePrefix = scene.replace(/_/g, "-");
+    const expectedPrefix = actorContext.tenantId
+      ? `tenants/${actorContext.tenantId}/${scenePrefix}/`
+      : `public/${scenePrefix}/`;
+
+    if (!objectKey.startsWith(expectedPrefix)) {
+      throw Errors.business(403, "上传对象不属于当前登录身份", ErrorCodes.FORBIDDEN);
+    }
   }
 
   private async resolveUploadActorContext(authUserId: string): Promise<UploadActorContext> {
