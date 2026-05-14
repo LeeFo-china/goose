@@ -58,6 +58,7 @@ type UploadImageItem = {
   region?: string | null;
   object_key?: string;
   storage_path?: string;
+  public_url?: string;
 };
 
 type UploadScene = (typeof ALLOWED_UPLOAD_SCENES)[number];

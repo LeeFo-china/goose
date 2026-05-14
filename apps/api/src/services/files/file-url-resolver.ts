@@ -112,6 +112,34 @@ export function setPlatformCosPublicBaseUrlCache(value: string | null | undefine
   cacheExpiresAt = Date.now() + COS_PUBLIC_BASE_URL_CACHE_TTL_MS;
 }
 
+export function setPlatformCosAccessConfigCache(input: {
+  secretId: string;
+  secretKey: string;
+  bucket: string;
+  region: string;
+  publicBaseUrl?: string | null;
+  signedUrlTtlSeconds?: number | null;
+  policyText?: string | null;
+}) {
+  const normalizedPublicBaseUrl = (input.publicBaseUrl || "").trim().replace(/\/+$/, "");
+  const ttl = input.signedUrlTtlSeconds || DEFAULT_SIGNED_URL_TTL_SECONDS;
+  cachedPlatformCosPublicBaseUrl = normalizedPublicBaseUrl;
+  cachedCosAccessConfig = {
+    secretId: input.secretId,
+    secretKey: input.secretKey,
+    bucket: input.bucket,
+    region: input.region,
+    publicBaseUrl: normalizedPublicBaseUrl,
+    signedUrlTtlSeconds: ttl,
+    policy: parseAccessPolicy(
+      input.policyText || JSON.stringify(DEFAULT_FILE_ACCESS_POLICY),
+      ttl,
+    ),
+  };
+  cosClient = null;
+  cacheExpiresAt = Date.now() + COS_PUBLIC_BASE_URL_CACHE_TTL_MS;
+}
+
 export function refreshPlatformCosPublicBaseUrlCache() {
   if (!refreshPromise) {
     refreshPromise = Promise.all([
@@ -250,6 +278,26 @@ function isLikelyPlatformCosObjectKey(value: string) {
   );
 }
 
+function getObjectKeyFromCosUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    const publicBaseUrl = getPlatformCosPublicBaseUrl();
+    const publicBaseHost = publicBaseUrl ? new URL(publicBaseUrl).host : "";
+    const isConfiguredCosHost = publicBaseHost && parsed.host === publicBaseHost;
+    const isTencentCosHost = parsed.host.includes(".cos.") ||
+      parsed.host.endsWith(".myqcloud.com");
+
+    if (!isConfiguredCosHost && !isTencentCosHost) {
+      return null;
+    }
+
+    const objectKey = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+    return isLikelyPlatformCosObjectKey(objectKey) ? objectKey : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSceneCode(value: string) {
   return value.trim().replace(/-/g, "_");
 }
@@ -325,6 +373,19 @@ export function resolveStoredFileUrl(value: string | null | undefined) {
   }
 
   if (isHttpUrl(normalized)) {
+    const objectKey = getObjectKeyFromCosUrl(normalized);
+    if (objectKey) {
+      const rule = getAccessRuleForObjectKey(objectKey);
+      if (rule.access_mode === "signed") {
+        const signedUrl = getSignedCosUrl(objectKey);
+        if (signedUrl) {
+          return signedUrl;
+        }
+      }
+
+      return getPublicCosUrl(objectKey) || normalized;
+    }
+
     return normalized;
   }
 

@@ -7,7 +7,11 @@ import { platformFileObjectRepository } from "@/repositories/platform-file-objec
 import type { PlatformFileProvider } from "@/repositories/platform-file-objects";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
-import { setPlatformCosPublicBaseUrlCache } from "@/services/files/file-url-resolver";
+import {
+  resolveStoredFileUrl,
+  setPlatformCosAccessConfigCache,
+  setPlatformCosPublicBaseUrlCache,
+} from "@/services/files/file-url-resolver";
 
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
@@ -43,6 +47,7 @@ type StorageUploadResult = {
   region: string | null;
   objectKey: string;
   publicUrl: string;
+  accessUrl: string;
   legacyPath?: string | null;
   metadata?: Record<string, unknown>;
 };
@@ -106,7 +111,7 @@ class PlatformFileStorageService {
   }
 
   private async getCosConfig() {
-    const [secretId, secretKey, bucket, region, publicBaseUrl, signedUrlTtl] =
+    const [secretId, secretKey, bucket, region, publicBaseUrl, signedUrlTtl, policyText] =
       await Promise.all([
         systemSettingsService.getSecretString("TENCENT_COS_SECRET_ID"),
         systemSettingsService.getSecretString("TENCENT_COS_SECRET_KEY"),
@@ -117,6 +122,7 @@ class PlatformFileStorageService {
           "PLATFORM_COS_SIGNED_URL_TTL_SECONDS",
           DEFAULT_COS_SIGNED_URL_TTL_SECONDS,
         ),
+        systemSettingsService.getString("PLATFORM_FILE_ACCESS_POLICY", ""),
       ]);
 
     if (!secretId || !secretKey || !bucket || !region) {
@@ -142,6 +148,7 @@ class PlatformFileStorageService {
       region,
       publicBaseUrl: publicBaseUrl.trim(),
       signedUrlTtl,
+      policyText,
     };
   }
 
@@ -234,6 +241,16 @@ class PlatformFileStorageService {
         Protocol: "https:",
       });
     setPlatformCosPublicBaseUrlCache(config.publicBaseUrl);
+    setPlatformCosAccessConfigCache({
+      secretId: config.secretId,
+      secretKey: config.secretKey,
+      bucket: config.bucket,
+      region: config.region,
+      publicBaseUrl: config.publicBaseUrl,
+      signedUrlTtlSeconds: config.signedUrlTtl,
+      policyText: config.policyText,
+    });
+    const accessUrl = resolveStoredFileUrl(objectKey) || publicUrl;
 
     return {
       provider: "tencent_cos",
@@ -241,8 +258,9 @@ class PlatformFileStorageService {
       region: config.region,
       objectKey,
       publicUrl,
+      accessUrl,
       metadata: {
-        signed_url: !config.publicBaseUrl,
+        signed_url: accessUrl !== publicUrl,
       },
     };
   }
@@ -278,6 +296,7 @@ class PlatformFileStorageService {
       region: null,
       objectKey,
       publicUrl: data.publicUrl,
+      accessUrl: data.publicUrl,
       legacyPath: objectKey,
     };
   }
@@ -312,16 +331,15 @@ class PlatformFileStorageService {
     });
 
     return {
-      url: uploaded.publicUrl,
-      path: uploaded.provider === "tencent_cos"
-        ? uploaded.publicUrl
-        : uploaded.objectKey,
+      url: uploaded.accessUrl || uploaded.publicUrl,
+      path: uploaded.objectKey,
       file_id: fileObject.id,
       provider: uploaded.provider,
       bucket: uploaded.bucket,
       region: uploaded.region,
       object_key: uploaded.objectKey,
       storage_path: uploaded.objectKey,
+      public_url: uploaded.publicUrl,
     };
   }
 }
