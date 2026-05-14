@@ -304,7 +304,16 @@ async function downloadLegacyObject(item: DryRunItem) {
 
 async function checkPublicUrl(url: string) {
   try {
-    const response = await fetch(url, { method: "HEAD" });
+    const headResponse = await fetch(url, { method: "HEAD" });
+    if (headResponse.ok) {
+      return String(headResponse.status);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        range: "bytes=0-31",
+      },
+    });
     return String(response.status);
   } catch (error) {
     return error instanceof Error ? error.message : "check_failed";
