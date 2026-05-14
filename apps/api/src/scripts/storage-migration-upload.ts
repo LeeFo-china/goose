@@ -52,7 +52,7 @@ const LEGACY_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const ACCESS_CHECK_TIMEOUT_MS = 10_000;
-const COS_UPLOAD_TIMEOUT_MS = 60_000;
+const COS_UPLOAD_TIMEOUT_MS = 180_000;
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
