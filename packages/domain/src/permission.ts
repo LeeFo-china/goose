@@ -65,6 +65,11 @@ export const PERMISSION_CODE_VALUES = [
   'marketing_lead.read',
   'marketing_lead.update',
   'marketing_event.read',
+  'panorama.read',
+  'panorama.create',
+  'panorama.update',
+  'panorama.delete',
+  'panorama.retry',
   'social_video_transcription.create',
   'social_video_transcription.manage',
   'system.ops.read',
@@ -243,6 +248,26 @@ export const PermissionCodeConfig: Record<
   'marketing_event.read': {
     label: '查看营销埋点',
     module: 'marketing',
+  },
+  'panorama.read': {
+    label: '查看 360 全景',
+    module: 'panorama',
+  },
+  'panorama.create': {
+    label: '创建 360 全景',
+    module: 'panorama',
+  },
+  'panorama.update': {
+    label: '编辑 360 全景',
+    module: 'panorama',
+  },
+  'panorama.delete': {
+    label: '删除 360 全景',
+    module: 'panorama',
+  },
+  'panorama.retry': {
+    label: '重试 360 全景处理',
+    module: 'panorama',
   },
   'social_video_transcription.create': {
     label: '发起短视频转文本',

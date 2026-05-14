@@ -14,7 +14,7 @@
 阶段 1 不继续扩展临时 Python 服务，而是落正式业务模型：
 
 1. 新增 `tenant_panorama_assets` 和 `tenant_panorama_jobs`。
-2. 新增 Supabase Storage bucket 与路径规范。
+2. 新增腾讯云 COS 存储抽象与路径规范。
 3. 新增后端 API 契约和权限点。
 4. H5 上传页从临时接口迁移到正式 API。
 5. Admin 和小程序先按“查看与管理”对接，worker 真正拼接可在阶段 2 接入。
@@ -28,8 +28,9 @@
 - 建表：
   - `tenant_panorama_assets`
   - `tenant_panorama_jobs`
-- 建 Storage bucket：
-  - `panorama-assets`
+- 建腾讯云 COS 存储约定：
+  - 逻辑 bucket：`panorama-assets`
+  - 实际 bucket、region 由平台环境变量或系统配置提供。
 - 建权限点：
   - `panorama.read`
   - `panorama.create`
@@ -145,6 +146,8 @@ create table public.tenant_panorama_assets (
   panorama_path text null,
   manifest_path text null,
   tile_base_path text null,
+  storage_provider text not null default 'tencent_cos',
+  storage_region text null,
   storage_bucket text not null default 'panorama-assets',
 
   latest_job_id uuid null,
@@ -153,7 +156,7 @@ create table public.tenant_panorama_assets (
   quality_score numeric null,
   metadata jsonb not null default '{}',
 
-  created_by_user_id uuid null references public.users(id) on delete set null,
+  created_by_auth_user_id uuid null references auth.users(id) on delete set null,
   created_by_employee_id uuid null references public.employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -218,7 +221,7 @@ create table public.tenant_panorama_jobs (
   completed_at timestamptz null,
   timeout_at timestamptz null,
 
-  created_by_user_id uuid null references public.users(id) on delete set null,
+  created_by_auth_user_id uuid null references auth.users(id) on delete set null,
   created_by_employee_id uuid null references public.employees(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -256,12 +259,22 @@ alter table public.tenant_panorama_assets
   on delete set null;
 ```
 
-## 5. Storage 设计
+## 5. 腾讯云 COS 存储设计
 
-Bucket：
+阶段 1 正式存储使用腾讯云 COS，不使用 Supabase Storage 承载全景原图、输出图和 tiles。
+
+逻辑 bucket：
 
 ```text
 panorama-assets
+```
+
+实际 COS bucket：
+
+```text
+PANORAMA_COS_BUCKET
+PANORAMA_COS_REGION
+PANORAMA_COS_PUBLIC_BASE_URL   # 可选，后续接 CDN 时使用
 ```
 
 路径规范：
@@ -277,10 +290,12 @@ panorama-assets
 
 第一版建议：
 
-- 原图不公开，使用后端签名 URL 上传和读取。
-- `preview.jpg`、`panorama.jpg`、`manifest.json` 可通过后端签名读取，避免 bucket 直接公开。
-- H5 viewer 获取 manifest 时，由后端返回带有效期的资源 URL。
+- COS bucket 不公开。
+- 原图使用后端生成的 COS 临时上传签名 URL 上传。
+- worker 从 COS 读取源图，处理后把 `preview.jpg`、`panorama.jpg`、`manifest.json`、`tiles/` 写回 COS。
+- H5 viewer 获取 manifest 时，由后端返回 COS 临时读取签名 URL 或 CDN URL。
 - 签名 URL 有效期第一版建议 `30` 分钟。
+- 数据库只保存对象 key，不保存一次性签名 URL。
 
 ## 6. Viewer Manifest
 
@@ -361,6 +376,8 @@ panorama.create
   "id": "asset-id",
   "tenant_id": "tenant-id",
   "status": "draft",
+  "storage_provider": "tencent_cos",
+  "storage_region": "ap-guangzhou",
   "storage_bucket": "panorama-assets",
   "source_prefix": "tenant-id/asset-id/source/"
 }
@@ -401,7 +418,7 @@ panorama.create
 ```json
 {
   "path": "tenant-id/asset-id/source/001-uuid.jpg",
-  "upload_url": "https://signed-upload-url",
+  "upload_url": "https://cos-signed-upload-url",
   "expires_in": 1800
 }
 ```
@@ -624,10 +641,10 @@ controller
   只处理 HTTP、参数、ResponseHandler.success
 
 service
-  租户隔离、权限校验、业务状态流转、签名 URL、任务创建
+  租户隔离、权限校验、业务状态流转、COS 签名 URL、任务创建
 
 repository / gateway
-  Supabase 表查询、Storage signed URL、RPC
+  Supabase 表查询、Tencent COS signed URL、RPC
 ```
 
 建议文件：
@@ -807,7 +824,9 @@ panorama.retry
 阶段 1 完成后必须满足：
 
 - migration 可重复执行，表、索引、约束创建成功。
-- Supabase Storage bucket `panorama-assets` 创建成功。
+- migration 不再创建 Supabase Storage bucket。
+- `tenant_panorama_assets` 具备 `storage_provider/storage_region/storage_bucket` 字段。
+- 后端 COS 配置项明确，能生成腾讯云 COS 上传/读取签名 URL。
 - 权限点可由超管创建并分配给租户角色。
 - `POST /panoramas/draft` 能创建租户隔离资产。
 - `POST /panoramas/:assetId/upload-token` 返回当前租户路径。
@@ -824,7 +843,7 @@ panorama.retry
 
 建议按以下顺序推进：
 
-1. 写 migration：表、索引、约束、bucket seed、权限点 seed。
+1. 写 migration：表、索引、约束、COS 存储字段、权限点 seed。
 2. 写 domain 类型和值域常量。
 3. 写后端 schema、repository、service、controller、routes。
 4. 写最小 API 验证脚本或 curl 验收命令。
@@ -841,7 +860,7 @@ panorama.retry
 
 - 任务表中能稳定生成 `pending` job。
 - 前端能稳定轮询 job。
-- Storage 路径和签名 URL 验证通过。
+- COS object key 规则和签名 URL 验证通过。
 - 租户隔离没有越权。
 - ready manifest 能被 viewer 渲染。
 
