@@ -354,3 +354,46 @@ bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-storage-mig
 1. 先选择 1-2 条 `project_logs` 做 `--apply` 小范围回填。
 2. 回填后通过 admin/小程序实际打开项目日志图片，确认 resolver 可正常把 object key 转成签名 URL。
 3. 小范围回填验收通过后，再扩大到该租户全部 25 条迁移图片。
+
+## 13. `project_logs.images` 小范围真实回填记录
+
+执行时间：2026-05-14
+
+回填命令：
+
+```bash
+bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv --limit 2 --apply --out /tmp/gooes-project-logs-image-backfill-reports
+```
+
+回填报告：
+
+```text
+/tmp/gooes-project-logs-image-backfill-reports/20260514T110858Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 2 |
+| planned | 0 |
+| updated | 2 |
+| failed | 0 |
+
+实际更新记录：
+
+- `tenant_id`: `91d255fe-60a2-4379-b939-8aff35e693ac`
+- `project_logs.id`: `fdddee47-e799-445b-a7e9-6025a87630ae`
+- `images` 已由旧 Supabase path 回填为 2 个 COS object key。
+
+回填后验收：
+
+- 数据库查询确认 `project_logs.images` 已保存为 COS object key。
+- 使用 `resolveStoredFileUrlList(images)` 生成 2 个签名 URL。
+- 2 个签名 URL 使用 `GET Range` 抽验均返回 `206`。
+
+结论：
+
+- 小范围真实回填通过。
+- resolver 对业务表内 object key 的读取链路可用。
+- 下一步可以对该租户剩余 `project_logs.images` 做扩大回填，并在 admin/小程序实际页面验收图片展示。
