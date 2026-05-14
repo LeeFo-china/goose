@@ -19,11 +19,16 @@ import type {
   ExpenseApprovalCandidateEmployee,
   ExpenseApprovalChainPayload,
   ExpenseApprovalChainRecord,
+  ExpenseRequestRecord,
 } from "@/repositories/expense-requests";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { expenseRequestCategoryService } from "@/services/expense-request-categories";
+import {
+  resolveStoredFileUrl,
+  resolveStoredFileUrlList,
+} from "@/services/files/file-url-resolver";
 
 type ExpenseRequestVisibilityFilter = Awaited<
   ReturnType<typeof accessPolicyService.getVisibleExpenseFilters>
@@ -168,7 +173,95 @@ function normalizeScope(value: string | null | undefined): ExpenseRequestAccessS
   return "self";
 }
 
+function resolveAvatarRelation(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveAvatarRelation(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const row = value as Record<string, unknown>;
+  if (!("avatar" in row)) {
+    return value;
+  }
+
+  return {
+    ...row,
+    avatar: resolveStoredFileUrl(typeof row.avatar === "string" ? row.avatar : null),
+  };
+}
+
+function resolveEvidenceImagesRelation(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveEvidenceImagesRelation(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const row = value as Record<string, unknown>;
+  if (!("evidence_images" in row)) {
+    return value;
+  }
+
+  return {
+    ...row,
+    evidence_images: resolveStoredFileUrlList(row.evidence_images),
+  };
+}
+
+function resolveApprovalChainRelations(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value.map((item) => {
+    if (!item || typeof item !== "object") {
+      return item;
+    }
+
+    const row = item as Record<string, unknown>;
+    return {
+      ...row,
+      assignee: resolveAvatarRelation(row.assignee),
+    };
+  });
+}
+
 class ExpenseRequestService {
+  private serializeExpenseRequest<T extends ExpenseRequestRecord | null>(record: T): T {
+    if (!record) {
+      return record;
+    }
+
+    const row = record as ExpenseRequestRecord & Record<string, unknown>;
+    const serialized: Record<string, unknown> = { ...record };
+
+    if ("evidence_images" in row) {
+      serialized.evidence_images = resolveStoredFileUrlList(row.evidence_images);
+    }
+    if ("items" in row) {
+      serialized.items = resolveEvidenceImagesRelation(row.items);
+    }
+    if ("settlement" in row) {
+      serialized.settlement = resolveEvidenceImagesRelation(row.settlement);
+    }
+    if ("employee" in row) {
+      serialized.employee = resolveAvatarRelation(row.employee);
+    }
+    if ("assignee" in row) {
+      serialized.assignee = resolveAvatarRelation(row.assignee);
+    }
+    if ("approval_chain" in row) {
+      serialized.approval_chain = resolveApprovalChainRelations(row.approval_chain);
+    }
+
+    return serialized as T;
+  }
+
   private async resolveItems(
     items: ExpenseRequestItemInput[],
     tenantId?: string | null,
@@ -664,7 +757,7 @@ class ExpenseRequestService {
         id: item.id,
         name: item.name,
         phone: item.phone,
-        avatar: item.avatar,
+        avatar: resolveStoredFileUrl(item.avatar),
         department_id: item.department_id,
         tenant_department_id: item.tenant_department_id,
         department_name:
@@ -723,10 +816,12 @@ class ExpenseRequestService {
         ),
         tenantId,
       );
-      return expenseRequestRepository.findById(created.id, tenantId);
+      return this.serializeExpenseRequest(
+        await expenseRequestRepository.findById(created.id, tenantId),
+      );
     }
 
-    return created;
+    return this.serializeExpenseRequest(created);
   }
 
   async updateExpenseRequest(
@@ -791,10 +886,12 @@ class ExpenseRequestService {
         ),
         tenantId,
       );
-      return expenseRequestRepository.findById(id, tenantId);
+      return this.serializeExpenseRequest(
+        await expenseRequestRepository.findById(id, tenantId),
+      );
     }
 
-    return updated;
+    return this.serializeExpenseRequest(updated);
   }
 
   async submitExpenseRequest(
@@ -881,7 +978,9 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id, tenantId);
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(updated.id, tenantId),
+    );
   }
 
   async approveExpenseRequest(
@@ -992,7 +1091,9 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id, tenantId);
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(updated.id, tenantId),
+    );
   }
 
   async rejectExpenseRequest(
@@ -1099,7 +1200,9 @@ class ExpenseRequestService {
       comment: input.comment ?? rejectedReason,
     });
 
-    return expenseRequestRepository.findById(updated.id, tenantId);
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(updated.id, tenantId),
+    );
   }
 
   async cancelExpenseRequest(
@@ -1154,7 +1257,9 @@ class ExpenseRequestService {
       comment: input.comment ?? null,
     });
 
-    return expenseRequestRepository.findById(updated.id, tenantId);
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(updated.id, tenantId),
+    );
   }
 
   async payExpenseRequest(
@@ -1223,7 +1328,9 @@ class ExpenseRequestService {
       assignee_id: null,
     }, undefined, tenantId);
 
-    return expenseRequestRepository.findById(id, tenantId);
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(id, tenantId),
+    );
   }
 
   async getExpenseRequestById(authContext: AuthContext, id: string) {
@@ -1235,7 +1342,7 @@ class ExpenseRequestService {
 
     await this.assertCanReadExpenseRequest(authContext, data);
 
-    return data;
+    return this.serializeExpenseRequest(data);
   }
 
   async listExpenseRequests(
@@ -1263,7 +1370,10 @@ class ExpenseRequestService {
     );
 
     if (!processPermission) {
-      return result;
+      return {
+        ...result,
+        list: result.list.map((item) => this.serializeExpenseRequest(item)),
+      };
     }
 
     const rows = result.list.filter((item) => {
@@ -1278,7 +1388,7 @@ class ExpenseRequestService {
     const list = rows.slice(from, from + params.pageSize);
 
     return {
-      list,
+      list: list.map((item) => this.serializeExpenseRequest(item)),
       pagination: {
         page: params.page,
         pageSize: params.pageSize,

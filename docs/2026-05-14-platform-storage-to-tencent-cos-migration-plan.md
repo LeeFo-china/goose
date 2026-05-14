@@ -262,19 +262,23 @@ PANORAMA_COS_PUBLIC_BASE_URL=https://panorama.goodcms.cn
 
 ### 阶段 2：高频业务读路径接入 resolver
 
-目标：所有项目日志和验收相关读取都通过 resolver 输出 URL。
+目标：所有项目日志、验收、费用凭证、H5 封面等高频展示读取都通过 resolver 输出 URL。
 
 执行项：
 
 - 改造项目日志、项目详情、客户自助端、客户分享服务。
 - 改造工序验收图片、整改图片、引用图片输出。
 - 改造客户首页最近动态 RPC 后的后端 URL 解析。
+- 改造客户抖音截图、费用申请凭证、费用打款凭证、项目介绍费打款凭证、H5 活动页封面输出。
+- 形成历史图片迁移 COS dry-run 方案：`docs/2026-05-14-platform-storage-cos-history-migration-dry-run.md`。
 
 验收标准：
 
 - 同一个项目日志同时包含旧 Supabase path、旧 public URL、新 COS object key 时，Admin 和小程序均能显示。
 - 工序验收“客户引用图片”“提交整改图片”均能显示。
 - 小程序客户首页最近动态封面不受影响。
+- 费用审批、项目介绍费、H5 活动页封面保存旧 path 或新 COS object key 时，接口出参均为可访问 URL。
+- dry-run 方案明确扫描字段、旧值分类、报告格式和进入真实迁移的验收标准。
 
 ### 阶段 3：其余业务上传入口切换 COS
 

@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { projectRepository } from "@/repositories/projects";
 import { projectReferralRepository } from "@/repositories/project-referrals";
+import type { ProjectReferralRecord } from "@/repositories/project-referrals";
 import type {
   CreateProjectReferralInput,
   MarkProjectReferralPaidInput,
@@ -10,12 +11,26 @@ import type {
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 function calculateCommissionAmount(baseAmount: number, rateBps: number) {
   return Number(((baseAmount * rateBps) / 10000).toFixed(2));
 }
 
 class ProjectReferralService {
+  private serializeReferral<T extends { paid_evidence_images?: unknown } | null>(
+    record: T,
+  ): T {
+    if (!record) {
+      return record;
+    }
+
+    return {
+      ...record,
+      paid_evidence_images: resolveStoredFileUrlList(record.paid_evidence_images),
+    };
+  }
+
   private ensureCurrentEmployee(
     authContext: AuthContext,
     employeeId: string,
@@ -51,7 +66,7 @@ class ProjectReferralService {
     }
 
     const created = await projectReferralRepository.create(input);
-    return projectReferralRepository.findById(created.id);
+    return this.serializeReferral(await projectReferralRepository.findById(created.id));
   }
 
   async updateProjectReferral(
@@ -79,7 +94,7 @@ class ProjectReferralService {
     }
 
     const updated = await projectReferralRepository.update(id, input);
-    return projectReferralRepository.findById(updated.id);
+    return this.serializeReferral(await projectReferralRepository.findById(updated.id));
   }
 
   async calculateOnProjectSigned(projectId: string) {
@@ -94,7 +109,9 @@ class ProjectReferralService {
       throw Errors.dbError("计算项目介绍费失败", error);
     }
 
-    return projectReferralRepository.findByProjectId(projectId);
+    return this.serializeReferral(
+      await projectReferralRepository.findByProjectId(projectId),
+    );
   }
 
   async markReferralPaid(
@@ -114,7 +131,7 @@ class ProjectReferralService {
       throw Errors.badRequest("只有已计算的项目介绍费才能标记支付");
     }
 
-    return projectReferralRepository.markPaid(id, input);
+    return this.serializeReferral(await projectReferralRepository.markPaid(id, input));
   }
 
   async getProjectReferral(authContext: AuthContext, projectId: string) {
@@ -128,7 +145,9 @@ class ProjectReferralService {
       throw Errors.forbidden();
     }
 
-    return projectReferralRepository.findByProjectId(projectId);
+    return this.serializeReferral(
+      await projectReferralRepository.findByProjectId(projectId),
+    );
   }
 
   async listProjectReferrals(
@@ -139,7 +158,13 @@ class ProjectReferralService {
       authContext,
       "project_referral.read",
     );
-    return projectReferralRepository.list(params, visibleProjectIds);
+    const result = await projectReferralRepository.list(params, visibleProjectIds);
+    return {
+      ...result,
+      list: (result.list as unknown as ProjectReferralRecord[]).map((item) =>
+        this.serializeReferral(item)
+      ),
+    };
   }
 
   async getProjectReferralById(authContext: AuthContext, id: string) {
@@ -158,7 +183,7 @@ class ProjectReferralService {
       throw Errors.forbidden();
     }
 
-    return data;
+    return this.serializeReferral(data);
   }
 }
 

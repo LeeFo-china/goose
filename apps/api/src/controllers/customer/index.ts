@@ -43,6 +43,7 @@ import {
 } from "@/services/customer-sources";
 import { ErrorCodes } from "@/errors/error-codes";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
@@ -295,7 +296,7 @@ class CustomerController extends BaseController<
       ...phoneFields,
       owner,
       owner_name: owner?.name ?? null,
-      douyin_screenshot_images: this.normalizeStoredDouyinScreenshotImages(
+      douyin_screenshot_images: resolveStoredFileUrlList(
         row.douyin_screenshot_images,
       ),
     };

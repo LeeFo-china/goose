@@ -25,7 +25,10 @@ import {
   signH5MarketingToken,
   verifyH5MarketingToken,
 } from "@/utils/jwt";
-import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
+import {
+  resolveStoredFileUrl,
+  resolveStoredFileUrlList,
+} from "@/services/files/file-url-resolver";
 
 function createDefaultConfig(title: string): MarketingPageConfigInput {
   return {
@@ -98,6 +101,19 @@ function normalizeStringArray(value: unknown) {
 
 function normalizeProjectLogImages(images: unknown) {
   return resolveStoredFileUrlList(images);
+}
+
+function resolveMarketingPageCover<T extends { cover_image?: string | null } | null>(
+  page: T,
+): T {
+  if (!page) {
+    return page;
+  }
+
+  return {
+    ...page,
+    cover_image: resolveStoredFileUrl(page.cover_image),
+  };
 }
 
 function createProjectImageMap(rows: MarketingPageProjectOptionRow[]) {
@@ -198,12 +214,20 @@ class MarketingPageService {
 
   async listPages(authContext: AuthContext, query: MarketingPageListQuery) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
-    return marketingPageRepository.listPages(query, tenantId);
+    const result = await marketingPageRepository.listPages(query, tenantId);
+    return {
+      ...result,
+      list: result.list.map((page) => resolveMarketingPageCover(page)),
+    };
   }
 
   async listPlatformPages(authContext: AuthContext, query: MarketingPageListQuery) {
     this.assertPlatformAdmin(authContext);
-    return marketingPageRepository.listPages(query, null, true);
+    const result = await marketingPageRepository.listPages(query, null, true);
+    return {
+      ...result,
+      list: result.list.map((page) => resolveMarketingPageCover(page)),
+    };
   }
 
   private async getNextActiveSortOrder(tenantId?: string | null, platformScope = false) {
@@ -268,7 +292,7 @@ class MarketingPageService {
       : await marketingPageRepository.findPageById(input.pageId, input.tenantId);
 
     return {
-      page,
+      page: resolveMarketingPageCover(page),
       order: newIndex >= 0 ? newIndex + 1 : null,
       total: reordered.length,
     };
@@ -294,7 +318,7 @@ class MarketingPageService {
         title: page.title,
         slug: page.slug,
         description: page.description,
-        cover_image: page.cover_image,
+        cover_image: resolveStoredFileUrl(page.cover_image),
         display_scene: page.display_scene,
         sort_order: page.sort_order,
         tenant_slug: tenant?.slug ?? null,
@@ -349,7 +373,7 @@ class MarketingPageService {
     ]);
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: publishedVersion,
     };
@@ -366,7 +390,7 @@ class MarketingPageService {
     ]);
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: publishedVersion,
     };
@@ -401,7 +425,7 @@ class MarketingPageService {
     });
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: null,
     };
@@ -436,7 +460,7 @@ class MarketingPageService {
     });
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: null,
     };
@@ -488,13 +512,17 @@ class MarketingPageService {
   async archivePage(authContext: AuthContext, id: string) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.getExistingPage(id, tenantId);
-    return marketingPageRepository.archivePage(id, authContext.employeeId, tenantId);
+    return resolveMarketingPageCover(
+      await marketingPageRepository.archivePage(id, authContext.employeeId, tenantId),
+    );
   }
 
   async archivePlatformPage(authContext: AuthContext, id: string) {
     this.assertPlatformAdmin(authContext);
     await this.getExistingPage(id, null, true);
-    return marketingPageRepository.archivePage(id, authContext.employeeId, null, true);
+    return resolveMarketingPageCover(
+      await marketingPageRepository.archivePage(id, authContext.employeeId, null, true),
+    );
   }
 
   async reorderPage(
@@ -541,7 +569,7 @@ class MarketingPageService {
     );
 
     return {
-      page,
+      page: resolveMarketingPageCover(page),
       draft_version: draftVersion,
     };
   }
@@ -558,7 +586,7 @@ class MarketingPageService {
     );
 
     return {
-      page,
+      page: resolveMarketingPageCover(page),
       draft_version: draftVersion,
     };
   }
@@ -590,7 +618,9 @@ class MarketingPageService {
     });
 
     return {
-      page: await marketingPageRepository.findPageById(page.id, tenantId),
+      page: resolveMarketingPageCover(
+        await marketingPageRepository.findPageById(page.id, tenantId),
+      ),
       draft_version: savedVersion,
     };
   }
@@ -625,7 +655,9 @@ class MarketingPageService {
     });
 
     return {
-      page: await marketingPageRepository.findPageById(page.id, null, true),
+      page: resolveMarketingPageCover(
+        await marketingPageRepository.findPageById(page.id, null, true),
+      ),
       draft_version: savedVersion,
     };
   }
@@ -666,7 +698,7 @@ class MarketingPageService {
     });
 
     return {
-      ...publishedPage,
+      ...resolveMarketingPageCover(publishedPage),
       draft_version: draftVersion,
       published_version: publishedVersion,
     };
@@ -709,7 +741,7 @@ class MarketingPageService {
     });
 
     return {
-      ...publishedPage,
+      ...resolveMarketingPageCover(publishedPage),
       draft_version: draftVersion,
       published_version: publishedVersion,
     };
@@ -718,13 +750,17 @@ class MarketingPageService {
   async offlinePage(authContext: AuthContext, id: string) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.getExistingPage(id, tenantId);
-    return marketingPageRepository.setPageOffline(id, authContext.employeeId, tenantId);
+    return resolveMarketingPageCover(
+      await marketingPageRepository.setPageOffline(id, authContext.employeeId, tenantId),
+    );
   }
 
   async offlinePlatformPage(authContext: AuthContext, id: string) {
     this.assertPlatformAdmin(authContext);
     await this.getExistingPage(id, null, true);
-    return marketingPageRepository.setPageOffline(id, authContext.employeeId, null, true);
+    return resolveMarketingPageCover(
+      await marketingPageRepository.setPageOffline(id, authContext.employeeId, null, true),
+    );
   }
 
   async duplicatePage(
@@ -772,7 +808,7 @@ class MarketingPageService {
     });
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: null,
     };
@@ -823,7 +859,7 @@ class MarketingPageService {
     });
 
     return {
-      ...page,
+      ...resolveMarketingPageCover(page),
       draft_version: draftVersion,
       published_version: null,
     };
@@ -859,7 +895,7 @@ class MarketingPageService {
     }
 
     return {
-      page,
+      page: resolveMarketingPageCover(page),
       tenant,
       version,
       config: version.config,
