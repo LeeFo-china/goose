@@ -13,6 +13,7 @@
     "storage:migration:verify": "bun src/scripts/storage-migration-verify.ts",
     "project-logs:images:backfill": "bun src/scripts/project-logs-image-backfill.ts",
     "project-log-comments:images:backfill": "bun src/scripts/project-log-comments-image-backfill.ts",
+    "project-acceptance:images:backfill": "bun src/scripts/project-acceptance-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > src/types/database.ts"

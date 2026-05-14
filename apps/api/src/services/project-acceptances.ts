@@ -331,11 +331,12 @@ class ProjectAcceptanceService {
     value: Record<string, unknown>,
   ): AcceptanceImageItem | null {
     const path = typeof value.path === "string" ? value.path : "";
-    const url = typeof value.url === "string"
+    const rawUrl = typeof value.url === "string"
       ? value.url
       : path
       ? this.getImagePublicUrl(path)
       : "";
+    const url = rawUrl ? this.getImagePublicUrl(rawUrl) : "";
     if (!path && !url) return null;
 
     const source = value.source === "acceptance_item" ||
@@ -354,7 +355,9 @@ class ProjectAcceptanceService {
         : null,
       path,
       url,
-      thumb_url: typeof value.thumb_url === "string" ? value.thumb_url : url,
+      thumb_url: typeof value.thumb_url === "string"
+        ? this.getImagePublicUrl(value.thumb_url)
+        : url,
       source,
       created_at: typeof value.created_at === "string"
         ? value.created_at
