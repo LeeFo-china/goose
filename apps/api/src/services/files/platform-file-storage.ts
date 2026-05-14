@@ -7,6 +7,7 @@ import { platformFileObjectRepository } from "@/repositories/platform-file-objec
 import type { PlatformFileProvider } from "@/repositories/platform-file-objects";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
+import { setPlatformCosPublicBaseUrlCache } from "@/services/files/file-url-resolver";
 
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
@@ -231,6 +232,7 @@ class PlatformFileStorageService {
         Expires: config.signedUrlTtl,
         Protocol: "https:",
       });
+    setPlatformCosPublicBaseUrlCache(config.publicBaseUrl);
 
     return {
       provider: "tencent_cos",
