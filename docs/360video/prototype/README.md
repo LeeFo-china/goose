@@ -39,6 +39,7 @@ brew install vips
 python3 docs/360video/prototype/stitch_panorama.py \
   ./tmp/360-input/living-room \
   ./tmp/360-output/living-room \
+  --max-input-side 1600 \
   --make-tiles \
   --run-dzsave
 ```
@@ -88,7 +89,30 @@ http://127.0.0.1:5178/docs/360video/prototype/viewer.html?manifest=/tmp/360-outp
 - `--make-tiles` 能生成 Photo Sphere Viewer 可加载的简单网格瓦片。
 - `--run-dzsave` 在安装 vips 后能生成 Deep Zoom 瓦片。
 - `viewer.html` 能拖拽预览。
+- 临时上传页能创建后台拼接任务。
+- `GET /api/jobs` 能返回最近验证记录。
+- 成功任务能通过 `viewer?manifest=output/<case-name>/manifest.json` 重新打开预览。
+- 失败任务能返回明确的 `error_code` 和中文处理建议。
+
+## 临时 H5 MVP
+
+服务器阶段 0 页面地址：
+
+```text
+https://h5.goodcms.cn/__360-upload/
+```
+
+当前能力：
+
+- 多图上传与缩略图排序。
+- “只上传”保存输入图片。
+- “上传并拼接”创建后台任务，页面轮询任务状态。
+- 验证记录展示 `uploaded`、`queued`、`running`、`succeeded`、`failed`。
+- 成功记录可重新打开预览。
+- 失败记录展示错误码和中文建议。
 
 ## 注意
 
 `vips dzsave` 生成的是 Deep Zoom 瓦片，主要用于验证大图切片能力；Photo Sphere Viewer 的 equirectangular tiles adapter 使用的是经纬网格瓦片。因此脚本里 `--make-tiles` 会额外生成 PSV 可直接加载的 `tiles/{col}_{row}.jpg`。
+
+手机原图通常较大，阶段 0 默认建议用 `--max-input-side 1600` 先验证拼接成功率。直接用 3000px 以上原图可能导致 OpenCV 拼接耗时过长或超时。

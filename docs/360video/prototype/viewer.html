@@ -6,7 +6,7 @@
     <title>360 Panorama Prototype</title>
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5/index.min.css"
+      href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.14.1/index.min.css"
     />
     <style>
       html,
@@ -21,7 +21,7 @@
         background: #0f172a;
       }
 
-      .hint {
+      .status {
         position: fixed;
         z-index: 10;
         left: 12px;
@@ -33,56 +33,66 @@
         color: #e2e8f0;
         font: 13px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
+
+      .status[hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div id="viewer"></div>
-    <div class="hint">
-      默认读取同目录 <code>manifest.json</code>。也可以用
-      <code>?manifest=/path/manifest.json</code> 指定输出目录。
-    </div>
+    <div id="status" class="status">正在加载全景...</div>
 
     <script type="module">
-      import { Viewer } from "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5/+esm";
-      import { EquirectangularTilesAdapter } from "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/equirectangular-tiles-adapter@5/+esm";
+      import { Viewer } from "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.14.1/+esm";
+      import { EquirectangularTilesAdapter } from "https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/equirectangular-tiles-adapter@5.14.1/+esm";
 
       const params = new URLSearchParams(window.location.search);
       const manifestUrl = params.get("manifest") || "./manifest.json";
-      const manifest = await fetch(manifestUrl).then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load manifest: ${response.status}`);
-        }
-        return response.json();
-      });
-      const baseUrl = new URL(".", new URL(manifestUrl, window.location.href)).toString();
-      const resolveAsset = (path) => new URL(path, baseUrl).toString();
+      const statusEl = document.querySelector("#status");
 
-      if (manifest.tiles?.cols && manifest.tiles?.rows) {
-        new Viewer({
-          container: "viewer",
-          adapter: EquirectangularTilesAdapter,
-          panorama: {
-            width: manifest.width,
-            cols: manifest.tiles.cols,
-            rows: manifest.tiles.rows,
-            baseUrl: resolveAsset(manifest.previewUrl || "preview.jpg"),
-            tileUrl: (col, row) =>
-              resolveAsset(
-                (manifest.tiles.tileUrlTemplate || "tiles/{col}_{row}.jpg")
-                  .replace("{col}", col)
-                  .replace("{row}", row),
-              ),
-          },
-          navbar: ["zoom", "move", "fullscreen"],
-          defaultZoomLvl: 35,
+      try {
+        const manifest = await fetch(manifestUrl).then((response) => {
+          if (!response.ok) {
+            throw new Error(`manifest 加载失败：${response.status}`);
+          }
+          return response.json();
         });
-      } else {
-        new Viewer({
-          container: "viewer",
-          panorama: resolveAsset(manifest.panoramaUrl || "panorama.jpg"),
-          navbar: ["zoom", "move", "fullscreen"],
-          defaultZoomLvl: 35,
-        });
+
+        const baseUrl = new URL(".", new URL(manifestUrl, window.location.href)).toString();
+        const resolveAsset = (path) => new URL(path, baseUrl).toString();
+
+        if (manifest.tiles?.cols && manifest.tiles?.rows) {
+          new Viewer({
+            container: "viewer",
+            adapter: EquirectangularTilesAdapter,
+            panorama: {
+              width: manifest.width,
+              cols: manifest.tiles.cols,
+              rows: manifest.tiles.rows,
+              baseUrl: resolveAsset(manifest.previewUrl || "preview.jpg"),
+              tileUrl: (col, row) =>
+                resolveAsset(
+                  (manifest.tiles.tileUrlTemplate || "tiles/{col}_{row}.jpg")
+                    .replace("{col}", col)
+                    .replace("{row}", row),
+                ),
+            },
+            navbar: ["zoom", "move", "fullscreen"],
+            defaultZoomLvl: 35,
+          });
+        } else {
+          new Viewer({
+            container: "viewer",
+            panorama: resolveAsset(manifest.panoramaUrl || "panorama.jpg"),
+            navbar: ["zoom", "move", "fullscreen"],
+            defaultZoomLvl: 35,
+          });
+        }
+
+        statusEl.hidden = true;
+      } catch (error) {
+        statusEl.textContent = `${error.message}。请从上传结果页打开预览，或使用 ?manifest=output/<case-name>/manifest.json 指定输出。`;
       }
     </script>
   </body>

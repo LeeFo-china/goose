@@ -63,6 +63,7 @@ Stitcher_OK: 0
 ├── .venv/
 ├── README.md
 ├── stitch_panorama.py
+├── upload_server.py
 ├── viewer.html
 └── smoke/
 ```
@@ -70,6 +71,7 @@ Stitcher_OK: 0
 已从仓库同步到服务器：
 
 - `docs/360video/prototype/stitch_panorama.py`
+- `docs/360video/prototype/upload_server.py`
 - `docs/360video/prototype/viewer.html`
 - `docs/360video/prototype/README.md`
 
@@ -84,7 +86,112 @@ chmod +x /home/ubuntu/goose-360-prototype/stitch_panorama.py
 ```bash
 /home/ubuntu/goose-360-prototype/.venv/bin/python \
   -m py_compile /home/ubuntu/goose-360-prototype/stitch_panorama.py
+
+/home/ubuntu/goose-360-prototype/.venv/bin/python \
+  -m py_compile /home/ubuntu/goose-360-prototype/upload_server.py
 ```
+
+## 临时 H5 上传服务
+
+访问地址：
+
+```text
+https://h5.goodcms.cn/__360-upload/
+```
+
+本机服务：
+
+```text
+0.0.0.0:5179
+```
+
+进程：
+
+```bash
+/home/ubuntu/goose-360-prototype/.venv/bin/python \
+  /home/ubuntu/goose-360-prototype/upload_server.py
+```
+
+启动方式：
+
+```bash
+nohup /home/ubuntu/goose-360-prototype/.venv/bin/python \
+  /home/ubuntu/goose-360-prototype/upload_server.py \
+  > /home/ubuntu/goose-360-prototype/upload_server.log 2>&1 &
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:5179/health
+curl https://h5.goodcms.cn/__360-upload/health
+```
+
+当前 nginx 已在 `h5.goodcms.cn` 增加临时反代：
+
+```nginx
+client_max_body_size 900m;
+
+location ^~ /__360-upload/ {
+    proxy_pass http://127.0.0.1:5179/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 480s;
+    proxy_send_timeout 480s;
+    proxy_request_buffering off;
+}
+```
+
+页面能力：
+
+- 多图拖拽上传。
+- 缩略图排序。
+- 保存到 `/home/ubuntu/goose-360-prototype/input/<case-name>/`。
+- 可选择“只上传”或“上传并拼接”。
+- “上传并拼接”会创建后台任务，页面轮询任务状态，不再长时间阻塞等待。
+- 页面展示最近验证记录，成功任务可以重新打开预览和预览图。
+- 拼接成功后打开 `viewer.html` 预览。
+
+注意：这是阶段 0 临时验证入口，不是正式生产业务 API。
+
+当前上传服务的拼接参数：
+
+- 上传上限：最多 `30` 张，单次总量不超过 `800MB`。
+- 拼接前默认将每张图等比例压缩到长边 `1600px`。
+- 后端拼接超时：`420s`。
+- nginx 反代等待：`480s`，需要高于后端拼接超时。
+
+阶段 0 MVP 临时接口：
+
+```text
+GET  /__360-upload/health
+GET  /__360-upload/api/jobs
+GET  /__360-upload/api/jobs/<case-name>
+POST /__360-upload/api/upload
+GET  /__360-upload/viewer?manifest=output/<case-name>/manifest.json
+GET  /__360-upload/output/<case-name>/manifest.json
+```
+
+任务状态：
+
+| 状态 | 含义 |
+| --- | --- |
+| `uploaded` | 已上传，仅保存原图，未触发拼接。 |
+| `queued` | 等待后台线程开始拼接。 |
+| `running` | 拼接中。 |
+| `succeeded` | 拼接成功，已生成 manifest、预览图、全景图和瓦片。 |
+| `failed` | 拼接失败，返回 `error_code` 和中文 `error_hint`。 |
+ 
+任务记录保存位置：
+
+```text
+/home/ubuntu/goose-360-prototype/jobs.json
+```
+
+说明：阶段 0 仍然是单进程临时服务，任务状态只用于验证链路；正式版需要迁移到 `tenant_panorama_jobs` 表和 worker。
 
 ## 验证记录
 
@@ -101,6 +208,20 @@ vips dzsave \
 ```text
 /home/ubuntu/goose-360-prototype/smoke/dz_smoke.dzi
 /home/ubuntu/goose-360-prototype/smoke/dz_smoke_files/vips-properties.xml
+```
+
+用户实测 `case-20260514-124850`：
+
+- 上传：`16` 张手机原图。
+- 原图尺寸：`3024x4032`。
+- 原图总量：约 `42MB`。
+- 直接使用原图拼接超过阶段 0 服务超时，返回 `STITCH_TIMEOUT`。
+- 改为长边 `1600px` 后重跑成功，耗时约 `40s`。
+- 输出全景：`7285x1594`。
+- 预览地址：
+
+```text
+https://h5.goodcms.cn/__360-upload/viewer?manifest=output/case-20260514-124850/manifest.json
 ```
 
 ## 后续使用方式
@@ -147,5 +268,6 @@ cd /home/ubuntu/goose-360-prototype
 - 本次只配置阶段 0 原型环境，没有创建 `tenant_panorama_jobs`，没有启动正式 worker。
 - 没有修改生产 PM2 进程。
 - 没有接入 API、Admin、小程序或 H5 正式业务链路。
+- 当前 `jobs.json` 只是临时验证记录，不作为正式业务数据源。
 - `vips dzsave` 生成 Deep Zoom 瓦片，用于验证大图切片能力；`viewer.html` 默认读取脚本生成的 PSV 网格瓦片。
 - PEM 密钥仅用于本次 SSH 连接，不应提交到 Git。
