@@ -910,3 +910,87 @@ bun src/scripts/project-acceptance-images-backfill.ts -- --input /tmp/gooes-proj
 - 工序验收迁移范围内的验收图片、整改图片、流程 action 图片、引用图片快照字段均已完成业务表回填。
 - 工序验收图片读取链路已进入 COS object key + resolver 签名 URL 模式。
 - 下一步可以进入客户抖音截图、费用凭证等低频字段回填。
+
+## 20. 低频图片字段业务表回填记录
+
+执行时间：2026-05-14
+
+脚本：
+
+```text
+apps/api/src/scripts/storage-low-frequency-images-backfill.ts
+```
+
+脚本支持范围：
+
+- `customers.douyin_screenshot_images`
+- `expense_request_items.evidence_images`
+- `expense_request_settlements.evidence_images`
+- `project_referrals.paid_evidence_images`
+- `employees.avatar`
+- `marketing_pages.cover_image`
+
+本次实际回填范围：
+
+| source_table | source_field | 数量 |
+| --- | --- | ---: |
+| `customers` | `douyin_screenshot_images` | 1 |
+| `expense_request_items` | `evidence_images` | 1 |
+
+输入文件：
+
+```text
+/tmp/gooes-storage-low-frequency-images-backfill-input/all-tenants-low-frequency-20260514T121505Z.csv
+```
+
+dry-run 命令：
+
+```bash
+bun src/scripts/storage-low-frequency-images-backfill.ts -- --input /tmp/gooes-storage-low-frequency-images-backfill-input/all-tenants-low-frequency-20260514T121505Z.csv --limit 100000 --out /tmp/gooes-storage-low-frequency-images-backfill-reports
+```
+
+dry-run 报告：
+
+```text
+/tmp/gooes-storage-low-frequency-images-backfill-reports/20260514T124444Z
+```
+
+dry-run 结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| planned | 2 |
+| failed | 0 |
+
+真实回填命令：
+
+```bash
+bun src/scripts/storage-low-frequency-images-backfill.ts -- --input /tmp/gooes-storage-low-frequency-images-backfill-input/all-tenants-low-frequency-20260514T121505Z.csv --limit 100000 --apply --out /tmp/gooes-storage-low-frequency-images-backfill-reports
+```
+
+真实回填报告：
+
+```text
+/tmp/gooes-storage-low-frequency-images-backfill-reports/20260514T124458Z
+```
+
+真实回填结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 2 |
+| updated | 2 |
+| failed | 0 |
+
+回填后验收：
+
+| 字段 | 记录 ID | 签名 URL 状态 |
+| --- | --- | --- |
+| `customers.douyin_screenshot_images` | `efac76b8-e861-4097-bb95-4252f52ae46e` | `206` |
+| `expense_request_items.evidence_images` | `b3a1aa09-da12-4714-9fde-6b5d99fd3bfc` | `206` |
+
+结论：
+
+- 本轮迁移范围内客户抖音截图和费用凭证已完成业务表回填。
+- `verify-expense-item-1` 是 dry-run 阶段发现的测试占位路径，`head_400`，未迁移、未回填。
+- 至此，本轮 dry-run 中 88 个可迁移对象已全部进入 COS，且对应业务字段已完成回填。
