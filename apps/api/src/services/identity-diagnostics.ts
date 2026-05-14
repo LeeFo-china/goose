@@ -111,7 +111,12 @@ class IdentityDiagnosticsService {
     }
 
     for (const oauth of data.oauth_identities) {
-      this.checkOauthIdentity(oauth, data.legacy_wechat_identities, issues);
+      this.checkOauthIdentity(
+        oauth,
+        data.oauth_identities,
+        data.legacy_wechat_identities,
+        issues,
+      );
     }
 
     for (const legacy of data.legacy_wechat_identities) {
@@ -221,6 +226,7 @@ class IdentityDiagnosticsService {
 
   private checkOauthIdentity(
     oauth: IdentityDiagnosticOauthRecord,
+    oauthRows: IdentityDiagnosticOauthRecord[],
     legacyRows: IdentityDiagnosticLegacyWechatRecord[],
     issues: DiagnosticIssue[],
   ) {
@@ -241,7 +247,14 @@ class IdentityDiagnosticsService {
       });
     }
 
-    if (oauth.status === "unbound" && legacy) {
+    const hasActiveOauthForSameCredential = oauthRows.some((item) => (
+      item.user_id === oauth.user_id &&
+      item.platform === oauth.platform &&
+      item.openid === oauth.openid &&
+      item.status === "active"
+    ));
+
+    if (oauth.status === "unbound" && legacy && !hasActiveOauthForSameCredential) {
       issues.push({
         severity: "danger",
         code: "unbound_oauth_has_legacy_wechat",
