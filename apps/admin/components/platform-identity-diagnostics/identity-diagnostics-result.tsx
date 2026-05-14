@@ -9,6 +9,8 @@ import type {
   IdentityDiagnosticAuthEvent,
   IdentityDiagnosticData,
   IdentityDiagnosticIssue,
+  IdentityDiagnosticMembership,
+  IdentityDiagnosticOauthIdentity,
   IdentityDiagnosticSeverity,
 } from "@/components/platform-identity-diagnostics/identity-diagnostics-types";
 
@@ -162,7 +164,13 @@ function AuthUsersTable({ data }: { data: IdentityDiagnosticData }) {
   );
 }
 
-function OauthTable({ data }: { data: IdentityDiagnosticData }) {
+function OauthTable({
+  oauthIdentities,
+  emptyText,
+}: {
+  oauthIdentities: IdentityDiagnosticOauthIdentity[];
+  emptyText: string;
+}) {
   return (
     <Table>
       <TableHeader>
@@ -175,7 +183,7 @@ function OauthTable({ data }: { data: IdentityDiagnosticData }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.oauth_identities.length === 0 ? <EmptyRows colSpan={5} text="没有匹配到新 OAuth 凭证" /> : data.oauth_identities.map((item) => (
+        {oauthIdentities.length === 0 ? <EmptyRows colSpan={5} text={emptyText} /> : oauthIdentities.map((item) => (
           <TableRow key={item.id}>
             <TableCell className="whitespace-nowrap">{item.platform}</TableCell>
             <TableCell className="whitespace-nowrap"><Badge variant={statusVariant(item.status)}>{item.status}</Badge></TableCell>
@@ -214,7 +222,15 @@ function LegacyWechatTable({ data }: { data: IdentityDiagnosticData }) {
   );
 }
 
-function MembershipsTable({ data }: { data: IdentityDiagnosticData }) {
+function MembershipsTable({
+  data,
+  memberships,
+  emptyText,
+}: {
+  data: IdentityDiagnosticData;
+  memberships: IdentityDiagnosticMembership[];
+  emptyText: string;
+}) {
   const tenantName = new Map(data.tenants.map((tenant) => [tenant.id, tenant.name || tenant.slug || tenant.id]));
 
   return (
@@ -230,7 +246,7 @@ function MembershipsTable({ data }: { data: IdentityDiagnosticData }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.memberships.length === 0 ? <EmptyRows colSpan={6} text="没有匹配到业务身份关系" /> : data.memberships.map((item) => (
+        {memberships.length === 0 ? <EmptyRows colSpan={6} text={emptyText} /> : memberships.map((item) => (
           <TableRow key={item.id}>
             <TableCell className="whitespace-nowrap">{item.identity_type}</TableCell>
             <TableCell className="whitespace-nowrap"><Badge variant={statusVariant(item.status)}>{item.status}</Badge></TableCell>
@@ -329,14 +345,16 @@ export function IdentityDiagnosticsResult({ data }: { data: IdentityDiagnosticDa
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>业务身份</CardDescription>
-            <CardTitle className="text-lg">{data.summary.membership_count}</CardTitle>
+            <CardDescription>当前业务身份</CardDescription>
+            <CardTitle className="text-lg">{data.summary.active_membership_count}</CardTitle>
+            <p className="text-xs text-muted-foreground">历史 {data.summary.history_membership_count}</p>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>OAuth 凭证</CardDescription>
-            <CardTitle className="text-lg">{data.summary.oauth_identity_count}</CardTitle>
+            <CardDescription>当前 OAuth</CardDescription>
+            <CardTitle className="text-lg">{data.summary.active_oauth_identity_count}</CardTitle>
+            <p className="text-xs text-muted-foreground">历史 {data.summary.history_oauth_identity_count}</p>
           </CardHeader>
         </Card>
         <Card>
@@ -362,26 +380,34 @@ export function IdentityDiagnosticsResult({ data }: { data: IdentityDiagnosticDa
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Tabs defaultValue="memberships" className="flex flex-col gap-3">
+          <Tabs defaultValue="current-memberships" className="flex flex-col gap-3">
             <div className="px-4">
               <TabsList className="flex flex-wrap justify-start">
-                <TabsTrigger value="memberships">业务身份</TabsTrigger>
+                <TabsTrigger value="current-memberships">当前身份</TabsTrigger>
+                <TabsTrigger value="history-memberships">历史身份</TabsTrigger>
                 <TabsTrigger value="profiles">客户/员工</TabsTrigger>
-                <TabsTrigger value="oauth">OAuth</TabsTrigger>
+                <TabsTrigger value="current-oauth">当前 OAuth</TabsTrigger>
+                <TabsTrigger value="history-oauth">历史 OAuth</TabsTrigger>
                 <TabsTrigger value="legacy">旧微信表</TabsTrigger>
                 <TabsTrigger value="users">Auth Users</TabsTrigger>
                 <TabsTrigger value="events">事件</TabsTrigger>
               </TabsList>
             </div>
             <Separator />
-            <TabsContent value="memberships" className="mt-0 overflow-x-auto">
-              <MembershipsTable data={data} />
+            <TabsContent value="current-memberships" className="mt-0 overflow-x-auto">
+              <MembershipsTable data={data} memberships={data.current.memberships} emptyText="没有当前有效业务身份" />
+            </TabsContent>
+            <TabsContent value="history-memberships" className="mt-0 overflow-x-auto">
+              <MembershipsTable data={data} memberships={data.history.memberships} emptyText="没有历史解绑业务身份" />
             </TabsContent>
             <TabsContent value="profiles" className="mt-0 overflow-x-auto">
               <BusinessProfilesTable data={data} />
             </TabsContent>
-            <TabsContent value="oauth" className="mt-0 overflow-x-auto">
-              <OauthTable data={data} />
+            <TabsContent value="current-oauth" className="mt-0 overflow-x-auto">
+              <OauthTable oauthIdentities={data.current.oauth_identities} emptyText="没有当前 active OAuth 凭证" />
+            </TabsContent>
+            <TabsContent value="history-oauth" className="mt-0 overflow-x-auto">
+              <OauthTable oauthIdentities={data.history.oauth_identities} emptyText="没有历史 OAuth 凭证" />
             </TabsContent>
             <TabsContent value="legacy" className="mt-0 overflow-x-auto">
               <LegacyWechatTable data={data} />

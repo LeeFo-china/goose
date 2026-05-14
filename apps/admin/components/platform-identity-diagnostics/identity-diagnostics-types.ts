@@ -9,8 +9,12 @@ export type IdentityDiagnosticQuery = {
 export type IdentityDiagnosticSummary = {
   auth_user_count: number;
   oauth_identity_count: number;
+  active_oauth_identity_count: number;
+  history_oauth_identity_count: number;
   legacy_wechat_identity_count: number;
   membership_count: number;
+  active_membership_count: number;
+  history_membership_count: number;
   customer_count: number;
   employee_count: number;
   event_count: number;
@@ -111,6 +115,14 @@ export type IdentityDiagnosticIssue = {
 export type IdentityDiagnosticData = {
   query: IdentityDiagnosticQuery;
   summary: IdentityDiagnosticSummary;
+  current: {
+    memberships: IdentityDiagnosticMembership[];
+    oauth_identities: IdentityDiagnosticOauthIdentity[];
+  };
+  history: {
+    memberships: IdentityDiagnosticMembership[];
+    oauth_identities: IdentityDiagnosticOauthIdentity[];
+  };
   auth_users: IdentityDiagnosticAuthUser[];
   oauth_identities: IdentityDiagnosticOauthIdentity[];
   legacy_wechat_identities: IdentityDiagnosticLegacyWechatIdentity[];

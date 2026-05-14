@@ -27,14 +27,28 @@ class IdentityDiagnosticsService {
 
     const data = await identityDiagnosticsRepository.lookup(query.keyword);
     const issues = this.buildIssues(data);
+    const current = {
+      memberships: data.memberships.filter((item) => item.status === "active"),
+      oauth_identities: data.oauth_identities.filter((item) => item.status === "active"),
+    };
+    const history = {
+      memberships: data.memberships.filter((item) => item.status !== "active"),
+      oauth_identities: data.oauth_identities.filter((item) => item.status !== "active"),
+    };
 
     return {
       ...data,
+      current,
+      history,
       summary: {
         auth_user_count: data.auth_users.length,
         oauth_identity_count: data.oauth_identities.length,
+        active_oauth_identity_count: current.oauth_identities.length,
+        history_oauth_identity_count: history.oauth_identities.length,
         legacy_wechat_identity_count: data.legacy_wechat_identities.length,
         membership_count: data.memberships.length,
+        active_membership_count: current.memberships.length,
+        history_membership_count: history.memberships.length,
         customer_count: data.customers.length,
         employee_count: data.employees.length,
         event_count: data.auth_events.length,

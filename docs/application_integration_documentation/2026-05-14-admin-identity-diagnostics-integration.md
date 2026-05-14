@@ -30,6 +30,12 @@ GET /platform/identity-diagnostics?keyword=关键词
 - `oauth_identities`
 - `legacy_wechat_identities`
 - `memberships`
+- `current`
+  - `memberships`：当前 `active` 业务身份。
+  - `oauth_identities`：当前 `active` OAuth 凭证。
+- `history`
+  - `memberships`：历史解绑、禁用等非 `active` 业务身份。
+  - `oauth_identities`：历史解绑、禁用等非 `active` OAuth 凭证。
 - `customers`
 - `employees`
 - `tenants`
@@ -54,9 +60,11 @@ GET /platform/identity-diagnostics?keyword=关键词
 页面能力：
 
 - 输入手机号 / openid / user_id 查询。
-- 查看业务身份关系。
+- 查看当前业务身份关系。
+- 查看历史解绑业务身份。
 - 查看客户 / 员工档案旧 `user_id`。
-- 查看 `user_oauth_identities`。
+- 查看当前 `user_oauth_identities`。
+- 查看历史解绑 `user_oauth_identities`。
 - 查看旧 `wechat_identities`。
 - 查看最近身份事件。
 - 展示一致性问题：
@@ -96,4 +104,5 @@ GET /platform/identity-diagnostics?keyword=oD-Pj5FxfjI8pupbHleYD9XGVTlM
 - 接口返回 `success`。
 - 能识别手机号和 openid。
 - 能聚合 OAuth、membership、旧微信表、客户/员工档案和身份事件。
-- 能提示 `unbound_oauth_has_legacy_wechat` 等一致性问题。
+- 能区分当前 `active` 记录与历史 `unbound` 记录。
+- 重绑后如果同一 `user_id + platform + openid` 已存在当前 active OAuth，历史 unbound OAuth 不再触发 `unbound_oauth_has_legacy_wechat` 误报。
