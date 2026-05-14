@@ -397,3 +397,79 @@ bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-storage-mig
 - 小范围真实回填通过。
 - resolver 对业务表内 object key 的读取链路可用。
 - 下一步可以对该租户剩余 `project_logs.images` 做扩大回填，并在 admin/小程序实际页面验收图片展示。
+
+## 14. `project_logs.images` 租户样本扩大回填记录
+
+执行时间：2026-05-14
+
+范围：
+
+- 租户：`91d255fe-60a2-4379-b939-8aff35e693ac`
+- 来源报告：`/tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv`
+- 本批只处理 `project_logs.images`。
+- 已排除前一批小范围回填过的 `project_logs.id = fdddee47-e799-445b-a7e9-6025a87630ae`。
+
+剩余输入文件：
+
+```text
+/tmp/gooes-project-logs-image-backfill-input/remaining-project-logs-after-20260514T110858Z.csv
+```
+
+回填命令：
+
+```bash
+bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-project-logs-image-backfill-input/remaining-project-logs-after-20260514T110858Z.csv --limit 100 --apply --out /tmp/gooes-project-logs-image-backfill-reports
+```
+
+回填报告：
+
+```text
+/tmp/gooes-project-logs-image-backfill-reports/20260514T111101Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 13 |
+| updated | 13 |
+| failed | 0 |
+
+扩大回填后整体状态：
+
+| `project_logs.id` | 图片数 | COS object key 数 | 签名 URL 抽验 |
+| --- | ---: | ---: | --- |
+| `fdddee47-e799-445b-a7e9-6025a87630ae` | 2 | 2 | `206, 206` |
+| `878e0cf3-26fe-41ca-8e3b-fd7bafc14c52` | 2 | 2 | `206, 206` |
+| `8a80dafa-5975-440b-9560-5e83b96ce3ce` | 1 | 1 | `206` |
+| `a7c65fa2-646d-46fd-a474-16ce64429e43` | 3 | 3 | `206, 206` |
+| `e0e3d24f-1661-4962-a00f-8882cf4bc6ac` | 6 | 6 | `206, 206` |
+| `75e1530e-b979-4553-81ec-48fc034ee62c` | 1 | 1 | `206` |
+
+全量一致性验收：
+
+```bash
+bun src/scripts/storage-migration-verify.ts -- --input /tmp/gooes-storage-migration-upload-reports/20260514T105527Z/migration-items.csv --limit 15 --out /tmp/gooes-storage-migration-verify-reports
+```
+
+一致性报告：
+
+```text
+/tmp/gooes-storage-migration-verify-reports/20260514T111146Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 15 |
+| matched | 15 |
+| mismatch | 0 |
+| failed | 0 |
+
+结论：
+
+- 该租户样本内 `project_logs.images` 的 15 张历史图片已全部回填为 COS object key。
+- 新旧文件 sha256 一致，未发现内容偏差。
+- 业务读取链路能通过 resolver 生成签名 URL，抽验访问返回 `206`。
+- 下一步应在 admin 和微信小程序实际页面打开项目日志，验收图片展示、缩略图和预览交互。
