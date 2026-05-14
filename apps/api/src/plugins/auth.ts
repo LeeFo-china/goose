@@ -7,6 +7,13 @@ import { SupabaseDB } from "@/utils/supabase";
 import { userIdentityService } from "@/services/user-identities";
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
+type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
+
+const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 10_000;
+const MAX_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 60_000;
+const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
+
+const wechatIdentityCheckCache = new Map<string, { expiresAt: number }>();
 
 const publicRoutes = new Set([
   "/",
@@ -132,8 +139,79 @@ function getAuthIdentitySource(): AuthIdentitySource {
   return "dual";
 }
 
+function getWechatIdentityCheckCacheTtlMs() {
+  const parsed = Number(process.env.WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS;
+  }
+
+  return Math.min(parsed, MAX_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
+}
+
+function pruneWechatIdentityCheckCache(now: number) {
+  if (wechatIdentityCheckCache.size < MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE) {
+    return;
+  }
+
+  for (const [key, value] of wechatIdentityCheckCache.entries()) {
+    if (value.expiresAt <= now) {
+      wechatIdentityCheckCache.delete(key);
+    }
+  }
+
+  if (wechatIdentityCheckCache.size >= MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE) {
+    wechatIdentityCheckCache.clear();
+  }
+}
+
+function buildWechatIdentityCheckCacheKey(kind: "oauth" | "business", payload: VerifiedJwtPayload) {
+  return [
+    getAuthIdentitySource(),
+    kind,
+    payload.sub,
+    payload.openid ?? "",
+    payload.tenant_id ?? "",
+    payload.customer_id ?? "",
+    payload.employee_id ?? "",
+  ].join(":");
+}
+
+function hasWechatIdentityCheckCache(key: string) {
+  const cached = wechatIdentityCheckCache.get(key);
+  if (!cached) {
+    return false;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    wechatIdentityCheckCache.delete(key);
+    return false;
+  }
+
+  return true;
+}
+
+function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
+  const now = Date.now();
+  pruneWechatIdentityCheckCache(now);
+
+  const tokenExpiresAt = payload.exp ? payload.exp * 1000 : Number.POSITIVE_INFINITY;
+  const expiresAt = Math.min(
+    now + getWechatIdentityCheckCacheTtlMs(),
+    tokenExpiresAt,
+  );
+
+  if (expiresAt > now) {
+    wechatIdentityCheckCache.set(key, { expiresAt });
+  }
+}
+
 async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToken>) {
   if (!payload?.openid || !payload.sub || !payload.tenant_id) {
+    return;
+  }
+
+  const cacheKey = buildWechatIdentityCheckCacheKey("business", payload);
+  if (hasWechatIdentityCheckCache(cacheKey)) {
     return;
   }
 
@@ -219,6 +297,8 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
       }
     }
   }
+
+  setWechatIdentityCheckCache(cacheKey, payload);
 }
 
 async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToken>) {
@@ -231,11 +311,17 @@ async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToke
     return;
   }
 
+  const cacheKey = buildWechatIdentityCheckCacheKey("oauth", payload);
+  if (hasWechatIdentityCheckCache(cacheKey)) {
+    return;
+  }
+
   const activeOauth = await userIdentityService.findActiveOauthIdentity({
     platform: "wechat_mini",
     openid: payload.openid,
   });
   if (activeOauth?.user_id === payload.sub) {
+    setWechatIdentityCheckCache(cacheKey, payload);
     return;
   }
 
@@ -252,6 +338,7 @@ async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToke
     }
 
     if (data) {
+      setWechatIdentityCheckCache(cacheKey, payload);
       return;
     }
   }
