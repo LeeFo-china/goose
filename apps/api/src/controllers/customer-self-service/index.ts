@@ -103,11 +103,24 @@ type CustomerProjectListItem = {
 type CustomerProjectLogRow = {
   id: string;
   project_id: string;
+  employee_id: string | null;
   stage_code: string | null;
   node_name: string | null;
   content: string | null;
   images: unknown;
   created_at: string | null;
+  employee:
+    | {
+      id: string | null;
+      name: string | null;
+      avatar?: string | null;
+    }
+    | {
+      id: string | null;
+      name: string | null;
+      avatar?: string | null;
+    }[]
+    | null;
 };
 
 type CustomerProjectRecentLogSummaryRow = {
@@ -686,10 +699,30 @@ class CustomerSelfServiceController extends BaseController {
       width: null as number | null,
       height: null as number | null,
     }));
+    const employee = this.normalizeRelation(row.employee, {
+      id: null,
+      name: null,
+      avatar: null,
+    });
+    const employeeId = typeof employee.id === "string"
+      ? employee.id
+      : row.employee_id ?? null;
+    const employeeName = typeof employee.name === "string" ? employee.name : null;
+    const employeeAvatar = typeof employee.avatar === "string" ? employee.avatar : null;
 
     return {
       id: row.id,
       project_id: row.project_id,
+      employee_id: employeeId,
+      employee_name: employeeName,
+      employee_avatar: employeeAvatar,
+      employee: employeeId
+        ? {
+          id: employeeId,
+          name: employeeName,
+          avatar: employeeAvatar,
+        }
+        : null,
       stage_code: stageCode,
       stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
       node_name: row.node_name,
@@ -1215,9 +1248,21 @@ class CustomerSelfServiceController extends BaseController {
 
     const { data, error, count } = await SupabaseDB.getAdminClient()
       .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at", {
-        count: "exact",
-      })
+      .select(`
+        id,
+        project_id,
+        employee_id,
+        stage_code,
+        node_name,
+        content,
+        images,
+        created_at,
+        employee:employees!project_logs_employee_id_fkey(
+          id,
+          name,
+          avatar
+        )
+      `, { count: "exact" })
       .eq("project_id", idVerify.data.id)
       .eq("tenant_id", project.tenant_id)
       .order("created_at", { ascending: false })
