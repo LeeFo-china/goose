@@ -196,3 +196,66 @@ pnpm --dir apps/api storage:migration:dry-run -- --tenant-id 91d255fe-60a2-4379-
 - 外部 URL 被正确跳过，不会误迁移第三方图片。
 - 空头像等无图片字段已从脚本中跳过，不再计入 invalid。
 - 费用审批中存在测试占位路径，后续真实迁移前需要按 `download_failed` 清单人工判断是否忽略或修正。
+
+## 10. 第一次真实上传样本记录
+
+验证时间：2026-05-14  
+输入报告：
+
+```text
+/tmp/gooes-storage-migration-reports/20260514T094625Z/items.csv
+```
+
+服务器执行预演：
+
+```bash
+bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migration-upload-input/items.csv --limit 3 --out /tmp/gooes-storage-migration-upload-reports
+```
+
+预演结果：
+
+- `planned=3`
+- `failed=0`
+- `already_exists=0`
+
+服务器执行真实上传：
+
+```bash
+bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migration-upload-input/items.csv --limit 3 --apply --out /tmp/gooes-storage-migration-upload-reports
+```
+
+真实上传报告：
+
+```text
+/tmp/gooes-storage-migration-upload-reports/20260514T095337Z
+```
+
+结果摘要：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 3 |
+| uploaded | 3 |
+| failed | 0 |
+| already_exists | 0 |
+| uploaded_bytes | 4,656,646 |
+
+写入的 `platform_file_objects.id`：
+
+- `b84d3df4-247f-44aa-8498-0835daf21f14`
+- `8d957870-f8b3-4bb6-9037-e6fc1dd8086a`
+- `d8d247c9-2e89-49dd-bf43-ba813700a081`
+
+重要发现：
+
+- COS 对象上传成功，`platform_file_objects` 已写入 3 条索引。
+- 当前业务表未回填，线上展示仍读取旧 Supabase path，不受影响。
+- 当前 `PLATFORM_COS_PUBLIC_BASE_URL` 拼出的 COS URL 返回 `403 Forbidden`，说明 COS bucket 或 CDN 公开读取策略尚未打通。
+- 在公开访问或签名 URL 解析策略修复前，不能扩大真实迁移，也不能回填业务表。
+
+下一步阻塞项：
+
+1. 明确普通业务图片采用公开 CDN 访问，还是后端签名 URL 访问。
+2. 如果采用公开 CDN，需配置 COS bucket/CDN 访问策略，并验证样本 URL 返回 `200`。
+3. 如果采用签名 URL，需要改造 `file-url-resolver`，让 object key 出参生成短期可访问 URL，而不是直接拼 public base URL。
+4. 访问策略验证通过后，再继续做 20 条以上真实迁移样本。
