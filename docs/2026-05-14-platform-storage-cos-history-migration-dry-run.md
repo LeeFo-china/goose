@@ -628,7 +628,93 @@ bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migrat
 - 全租户 88 个可迁移历史图片对象已全部上传 COS，并写入 `platform_file_objects`。
 - 本阶段没有对未验证字段做业务表全量回填。
 - 下一步应按字段补业务表回填脚本，优先顺序建议为：
-  1. `project_logs.images` 全租户回填。
-  2. `project_log_comments.images` 回填。
-  3. 工序验收相关图片字段回填。
-  4. 客户抖音截图、费用凭证等低频字段回填。
+ 1. `project_logs.images` 全租户回填。
+ 2. `project_log_comments.images` 回填。
+ 3. 工序验收相关图片字段回填。
+ 4. 客户抖音截图、费用凭证等低频字段回填。
+
+## 17. `project_logs.images` 全租户业务表回填记录
+
+执行时间：2026-05-14
+
+回填原则：
+
+- 只回填当前业务表中仍等于旧图片值的 `project_logs.images` 项。
+- 已在租户样本验收阶段回填过的记录不会重复写入。
+- 回填脚本按 `tenant_id + project_logs.id` 分组，一次性更新整条日志的 `images` 数组。
+
+剩余输入生成结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| upload report project_logs items | 45 |
+| remaining legacy image items | 45 |
+| skipped already migrated | 0 |
+| project_logs count | 9 |
+
+剩余输入文件：
+
+```text
+/tmp/gooes-project-logs-image-backfill-input/all-tenants-project-logs-remaining-20260514T121505Z.csv
+```
+
+dry-run 命令：
+
+```bash
+bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-project-logs-image-backfill-input/all-tenants-project-logs-remaining-20260514T121505Z.csv --limit 100000 --out /tmp/gooes-project-logs-image-backfill-reports
+```
+
+dry-run 报告：
+
+```text
+/tmp/gooes-project-logs-image-backfill-reports/20260514T122536Z
+```
+
+dry-run 结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| planned | 45 |
+| failed | 0 |
+
+真实回填命令：
+
+```bash
+bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-project-logs-image-backfill-input/all-tenants-project-logs-remaining-20260514T121505Z.csv --limit 100000 --apply --out /tmp/gooes-project-logs-image-backfill-reports
+```
+
+真实回填报告：
+
+```text
+/tmp/gooes-project-logs-image-backfill-reports/20260514T122548Z
+```
+
+真实回填结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 45 |
+| updated | 45 |
+| failed | 0 |
+
+回填后验收：
+
+| 指标 | 数量 |
+| --- | ---: |
+| project_logs count | 9 |
+| total images | 45 |
+| COS object key images | 45 |
+| sampled URL status | 全部 `206` |
+
+本次回填租户分布：
+
+| tenant_id | project_logs count | images |
+| --- | ---: | ---: |
+| `51111111-1111-4111-8111-111111111111` | 7 | 28 |
+| `52222222-2222-4222-8222-222222222222` | 2 | 17 |
+
+结论：
+
+- 全租户剩余 `project_logs.images` 已完成业务表回填。
+- 加上前序已验收租户 `91d255fe-60a2-4379-b939-8aff35e693ac` 的 15 张图，当前已迁移样本中的 `project_logs.images` 均已进入 COS object key 读取链路。
+- 下一步可以进入 `project_log_comments.images` 回填。
