@@ -101,17 +101,19 @@ class ProjectLogCommentsController extends BaseController {
       await this.ensureParentComment(payload.log_id, payload.parent_id, log.tenant_id);
     }
 
-    if (author.author_type === "employee" && payload.rating != null) {
+    const submittedRating = payload.rating === 0 ? null : payload.rating ?? null;
+
+    if (author.author_type === "employee" && submittedRating != null) {
       throw Errors.badRequest("员工评论不允许评分");
     }
 
-    if (payload.parent_id && payload.rating != null) {
+    if (payload.parent_id && submittedRating != null) {
       throw Errors.badRequest("回复评论不允许评分");
     }
 
     let resolvedRating: number | null = null;
     if (author.author_type === "customer" && !payload.parent_id) {
-      resolvedRating = payload.rating ?? null;
+      resolvedRating = submittedRating;
       if (resolvedRating != null) {
         const hasExistingRating = await this.hasCustomerExistingRating(
           payload.log_id,

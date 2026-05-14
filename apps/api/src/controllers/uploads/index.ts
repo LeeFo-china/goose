@@ -7,6 +7,7 @@ import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
+import { SupabaseDB } from "@/utils/supabase";
 import { z } from "zod";
 
 const MAX_UPLOAD_FILES = 9;
@@ -56,6 +57,7 @@ type UploadImageItem = {
   bucket?: string;
   region?: string | null;
   object_key?: string;
+  storage_path?: string;
 };
 
 type UploadScene = (typeof ALLOWED_UPLOAD_SCENES)[number];
@@ -64,6 +66,12 @@ type PendingUploadFile = {
   buffer: Buffer;
   filename?: string;
   mimetype: string;
+};
+
+type UploadActorContext = {
+  tenantId: string | null;
+  employeeId: string | null;
+  customerId: string | null;
 };
 
 class UploadController extends BaseController {
@@ -120,18 +128,17 @@ class UploadController extends BaseController {
       throw Errors.fromZod(fieldResult.error);
     }
 
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user.sub,
-    );
+    const actorContext = await this.resolveUploadActorContext(request.user.sub);
 
     const uploadedFiles = await Promise.all(
       files.map((file) =>
         this.uploadSingleFile(file, {
           authUserId: request.user?.sub,
-          employeeId: authContext.employeeId,
+          employeeId: actorContext.employeeId,
+          customerId: actorContext.customerId,
           projectId: fieldResult.data.project_id,
           scene: fieldResult.data.scene ?? "project_log",
-          tenantId: authContext.tenantId,
+          tenantId: actorContext.tenantId,
         })
       ),
     );
@@ -165,6 +172,7 @@ class UploadController extends BaseController {
     options: {
       authUserId?: string | null;
       employeeId?: string | null;
+      customerId?: string | null;
       projectId?: string;
       scene: UploadScene;
       tenantId?: string | null;
@@ -190,7 +198,77 @@ class UploadController extends BaseController {
       tenantId: options.tenantId,
       authUserId: options.authUserId,
       employeeId: options.employeeId,
+      customerId: options.customerId,
     });
+  }
+
+  private async resolveUploadActorContext(authUserId: string): Promise<UploadActorContext> {
+    const authContext = await authorizationService.getRequiredAuthContext(authUserId);
+    if (authContext.tenantId || authContext.employeeId) {
+      return {
+        tenantId: authContext.tenantId,
+        employeeId: authContext.employeeId,
+        customerId: null,
+      };
+    }
+
+    const membership = await this.findCustomerMembership(authUserId);
+    if (membership) {
+      return {
+        tenantId: membership.tenant_id,
+        employeeId: null,
+        customerId: membership.identity_id,
+      };
+    }
+
+    const customer = await this.findLegacyCustomerBinding(authUserId);
+    return {
+      tenantId: customer?.tenant_id ?? null,
+      employeeId: null,
+      customerId: customer?.id ?? null,
+    };
+  }
+
+  private async findCustomerMembership(authUserId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("user_business_memberships")
+      .select("tenant_id, identity_id, is_default, created_at")
+      .eq("user_id", authUserId)
+      .eq("identity_type", "customer")
+      .eq("status", "active")
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{
+        tenant_id: string | null;
+        identity_id: string;
+        is_default: boolean;
+        created_at: string;
+      }>();
+
+    if (error) {
+      throw Errors.dbError("查询客户上传身份失败", error);
+    }
+
+    return data ?? null;
+  }
+
+  private async findLegacyCustomerBinding(authUserId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, tenant_id")
+      .eq("user_id", authUserId)
+      .limit(1)
+      .maybeSingle<{
+        id: string;
+        tenant_id: string | null;
+      }>();
+
+    if (error) {
+      throw Errors.dbError("查询客户上传身份失败", error);
+    }
+
+    return data ?? null;
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {

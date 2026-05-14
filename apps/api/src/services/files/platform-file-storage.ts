@@ -34,6 +34,7 @@ type UploadImageInput = {
   tenantId?: string | null;
   authUserId?: string | null;
   employeeId?: string | null;
+  customerId?: string | null;
 };
 
 type StorageUploadResult = {
@@ -304,6 +305,7 @@ class PlatformFileStorageService {
       metadata: {
         ...(uploaded.metadata || {}),
         project_id: input.projectId ?? null,
+        customer_id: input.customerId ?? null,
       },
       created_by_auth_user_id: input.authUserId ?? null,
       created_by_employee_id: input.employeeId ?? null,
@@ -319,6 +321,7 @@ class PlatformFileStorageService {
       bucket: uploaded.bucket,
       region: uploaded.region,
       object_key: uploaded.objectKey,
+      storage_path: uploaded.objectKey,
     };
   }
 }
