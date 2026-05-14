@@ -1054,3 +1054,63 @@ bun src/scripts/storage-migration-final-verify.ts \
 - 文件索引、业务表字段、签名 URL 访问均通过复核。
 - 遗留项仍只有 dry-run 阶段的测试占位路径 `verify-expense-item-1`，未迁移、未回填。
 - 下一步进入 admin 和微信小程序页面级验收；验收通过后再考虑旧 Supabase Storage 文件观察期和清理方案。
+
+## 22. 接口输出烟测记录
+
+执行时间：2026-05-14
+
+脚本：
+
+```text
+apps/api/src/scripts/storage-migration-output-smoke.ts
+```
+
+烟测目标：
+
+- 使用最终数据库复核报告中的 88 个当前业务字段值。
+- 逐项通过 `resolveStoredFileUrl` 模拟接口输出转换。
+- 确认输出不是 `tenants/...` 裸 object key。
+- 确认输出是 HTTP 签名 URL。
+- 对签名 URL 执行 `GET Range` 访问校验。
+
+烟测命令：
+
+```bash
+bun src/scripts/storage-migration-output-smoke.ts \
+  --input /tmp/gooes-storage-migration-final-verify-reports/20260514T125100Z/final-verify-items.csv \
+  --limit 100000 \
+  --out /tmp/gooes-storage-migration-output-smoke-reports
+```
+
+烟测报告：
+
+```text
+/tmp/gooes-storage-migration-output-smoke-reports/20260514T125917Z
+```
+
+烟测结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 88 |
+| passed | 88 |
+| failed | 0 |
+| 签名 URL `206` | 88 |
+| 裸 object key 输出 | 0 |
+
+来源分布：
+
+| source_table | 数量 |
+| --- | ---: |
+| `project_logs` | 45 |
+| `project_log_comments` | 8 |
+| `project_acceptance_items` | 16 |
+| `project_acceptance_actions` | 17 |
+| `customers` | 1 |
+| `expense_request_items` | 1 |
+
+结论：
+
+- 接口输出依赖的 resolver 链路通过烟测。
+- 迁移后的 object key 可以转换为可访问签名 URL，不会直接暴露为裸 key。
+- 下一步需要进行真实页面点击验收，重点覆盖 admin 和微信小程序中的缩略图、预览大图、重新进入页面后的签名 URL 刷新。
