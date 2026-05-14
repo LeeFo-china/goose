@@ -16,6 +16,7 @@ import {
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
 const DEFAULT_COS_SIGNED_URL_TTL_SECONDS = 900;
+const COS_CONFIG_CACHE_TTL_MS = 60_000;
 
 export type PlatformUploadScene =
   | "project_log"
@@ -73,6 +74,16 @@ type PlatformUploadResponse = {
   public_url?: string;
 };
 
+type CosStorageConfig = {
+  secretId: string;
+  secretKey: string;
+  bucket: string;
+  region: string;
+  publicBaseUrl: string;
+  signedUrlTtl: number;
+  policyText: string;
+};
+
 function normalizeProvider(value: string | null | undefined): PlatformFileProvider {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "tencent_cos" || normalized === "supabase_storage") {
@@ -126,6 +137,11 @@ function normalizeEtag(value: string | null | undefined) {
 
 class PlatformFileStorageService {
   private cosClient: COS | null = null;
+  private cosClientKey: string | null = null;
+  private cosConfigCache: {
+    expiresAt: number;
+    value: CosStorageConfig;
+  } | null = null;
 
   private async getStorageProvider() {
     const configured = await systemSettingsService.getString(
@@ -135,7 +151,11 @@ class PlatformFileStorageService {
     return normalizeProvider(configured);
   }
 
-  private async getCosConfig() {
+  private async getCosConfig(): Promise<CosStorageConfig> {
+    if (this.cosConfigCache && this.cosConfigCache.expiresAt > Date.now()) {
+      return this.cosConfigCache.value;
+    }
+
     const [secretId, secretKey, bucket, region, publicBaseUrl, signedUrlTtl, policyText] =
       await Promise.all([
         systemSettingsService.getSecretString("TENCENT_COS_SECRET_ID"),
@@ -166,7 +186,7 @@ class PlatformFileStorageService {
       );
     }
 
-    return {
+    const config = {
       secretId,
       secretKey,
       bucket,
@@ -175,17 +195,30 @@ class PlatformFileStorageService {
       signedUrlTtl,
       policyText,
     };
+
+    this.cosConfigCache = {
+      expiresAt: Date.now() + COS_CONFIG_CACHE_TTL_MS,
+      value: config,
+    };
+
+    return config;
   }
 
   private getCosClient(config: { secretId: string; secretKey: string }) {
-    if (!this.cosClient) {
+    const clientKey = `${config.secretId}:${config.secretKey}`;
+    if (!this.cosClient || this.cosClientKey !== clientKey) {
       this.cosClient = new COS({
         SecretId: config.secretId,
         SecretKey: config.secretKey,
       });
+      this.cosClientKey = clientKey;
     }
 
     return this.cosClient;
+  }
+
+  private shouldVerifyDirectUploadHead() {
+    return process.env.PLATFORM_COS_DIRECT_UPLOAD_VERIFY_HEAD === "true";
   }
 
   private buildLegacyObjectPath(input: {
@@ -477,20 +510,26 @@ class PlatformFileStorageService {
     const cos = this.getCosClient(config);
     this.setCosAccessCache(config);
 
-    let headObject;
-    try {
-      headObject = await cos.headObject({
-        Bucket: config.bucket,
-        Region: config.region,
-        Key: input.objectKey,
-      });
-    } catch (error) {
-      throw Errors.business(
-        400,
-        "直传文件不存在或尚未上传完成",
-        ErrorCodes.FILE_STORAGE_UPLOAD_FAILED,
-        error,
-      );
+    let headObject: {
+      headers?: Record<string, string | number | undefined>;
+      ETag?: string | null;
+    } | null = null;
+    const verifyHeadObject = this.shouldVerifyDirectUploadHead();
+    if (verifyHeadObject) {
+      try {
+        headObject = await cos.headObject({
+          Bucket: config.bucket,
+          Region: config.region,
+          Key: input.objectKey,
+        });
+      } catch (error) {
+        throw Errors.business(
+          400,
+          "直传文件不存在或尚未上传完成",
+          ErrorCodes.FILE_STORAGE_UPLOAD_FAILED,
+          error,
+        );
+      }
     }
 
     const existing = await platformFileObjectRepository.findActiveByObjectKey({
@@ -504,7 +543,7 @@ class PlatformFileStorageService {
       region: config.region,
       objectKey: input.objectKey,
     });
-    const accessUrl = resolveStoredFileUrl(input.objectKey) || publicUrl;
+    const accessUrl = publicUrl;
 
     if (existing) {
       return this.toUploadResponse({
@@ -518,10 +557,10 @@ class PlatformFileStorageService {
       });
     }
 
-    const headers = (headObject.headers || {}) as Record<string, string | number | undefined>;
+    const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
     const contentLength = Number(headers["content-length"] ?? input.sizeBytes);
     const contentType = String(headers["content-type"] || input.mimetype);
-    const etag = normalizeEtag(input.etag) || normalizeEtag(headObject.ETag);
+    const etag = normalizeEtag(input.etag) || normalizeEtag(headObject?.ETag);
     const fileObject = await platformFileObjectRepository.create({
       tenant_id: input.tenantId ?? null,
       owner_type: input.scene,
@@ -540,7 +579,8 @@ class PlatformFileStorageService {
         project_id: input.projectId ?? null,
         customer_id: input.customerId ?? null,
         direct_upload: true,
-        signed_url: accessUrl !== publicUrl,
+        verified_head_object: verifyHeadObject,
+        signed_url: false,
       },
       created_by_auth_user_id: input.authUserId ?? null,
       created_by_employee_id: input.employeeId ?? null,
