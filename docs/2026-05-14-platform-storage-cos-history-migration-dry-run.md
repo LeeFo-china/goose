@@ -994,3 +994,63 @@ bun src/scripts/storage-low-frequency-images-backfill.ts -- --input /tmp/gooes-s
 - 本轮迁移范围内客户抖音截图和费用凭证已完成业务表回填。
 - `verify-expense-item-1` 是 dry-run 阶段发现的测试占位路径，`head_400`，未迁移、未回填。
 - 至此，本轮 dry-run 中 88 个可迁移对象已全部进入 COS，且对应业务字段已完成回填。
+
+## 21. 迁移后最终数据库复核记录
+
+执行时间：2026-05-14
+
+脚本：
+
+```text
+apps/api/src/scripts/storage-migration-final-verify.ts
+```
+
+复核内容：
+
+- 合并主批上传报告和失败补跑报告。
+- 对每个成功迁移对象校验 `platform_file_objects` active 记录存在。
+- 对每个对象校验对应业务表字段已经回填为 COS object key。
+- 对每个 object key 通过 resolver 生成签名 URL，并使用 `GET Range` 校验访问状态。
+
+复核命令：
+
+```bash
+bun src/scripts/storage-migration-final-verify.ts \
+  --input /tmp/gooes-storage-migration-all-tenants-upload-reports/20260514T115252Z/migration-items.csv \
+  --input /tmp/gooes-storage-migration-all-tenants-upload-retry-reports/20260514T121505Z/migration-items.csv \
+  --limit 100000 \
+  --out /tmp/gooes-storage-migration-final-verify-reports
+```
+
+复核报告：
+
+```text
+/tmp/gooes-storage-migration-final-verify-reports/20260514T125100Z
+```
+
+复核结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 88 |
+| passed | 88 |
+| failed | 0 |
+| 签名 URL `206` | 88 |
+
+来源分布：
+
+| source_table | 数量 |
+| --- | ---: |
+| `project_logs` | 45 |
+| `project_log_comments` | 8 |
+| `project_acceptance_items` | 16 |
+| `project_acceptance_actions` | 17 |
+| `customers` | 1 |
+| `expense_request_items` | 1 |
+
+结论：
+
+- 本轮 88 个可迁移历史图片对象数据库层面全部闭环。
+- 文件索引、业务表字段、签名 URL 访问均通过复核。
+- 遗留项仍只有 dry-run 阶段的测试占位路径 `verify-expense-item-1`，未迁移、未回填。
+- 下一步进入 admin 和微信小程序页面级验收；验收通过后再考虑旧 Supabase Storage 文件观察期和清理方案。
