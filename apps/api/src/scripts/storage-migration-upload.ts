@@ -247,6 +247,27 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+async function downloadWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return { response, buffer };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`download_timeout_${timeoutMs}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function guessMimeType(input: { contentType: string | null; objectKey: string }) {
   const contentType = input.contentType?.split(";")[0]?.trim();
   if (contentType) {
@@ -309,13 +330,12 @@ async function downloadLegacyObject(item: DryRunItem) {
   const url = item.value_type === "supabase_legacy_path"
     ? legacyPathToPublicUrl(item.legacy_path)
     : item.legacy_value;
-  const response = await fetchWithTimeout(url, {}, DOWNLOAD_TIMEOUT_MS);
+  const { response, buffer } = await downloadWithTimeout(url, DOWNLOAD_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`download_${response.status}`);
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
   return {
     buffer,
     mimeType: guessMimeType({
@@ -546,9 +566,10 @@ async function main() {
       });
     }
 
-    if ((index + 1) % 10 === 0 || index + 1 === dryRunItems.length) {
-      console.log(`progress ${index + 1}/${dryRunItems.length}`);
-    }
+    const lastResult = results[results.length - 1] as MigrationResult;
+    console.log(
+      `progress ${index + 1}/${dryRunItems.length} ${lastResult.migrated_status} ${lastResult.source_table}.${lastResult.source_id}`,
+    );
   }
 
   await mkdir(outputDir, { recursive: true });
