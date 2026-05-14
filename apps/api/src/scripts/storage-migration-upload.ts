@@ -50,6 +50,9 @@ type MigrationResult = DryRunItem & {
 
 const LEGACY_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+const ACCESS_CHECK_TIMEOUT_MS = 10_000;
+const COS_UPLOAD_TIMEOUT_MS = 60_000;
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
@@ -224,6 +227,26 @@ function legacyPathToPublicUrl(path: string) {
     .data.publicUrl;
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`fetch_timeout_${timeoutMs}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function guessMimeType(input: { contentType: string | null; objectKey: string }) {
   const contentType = input.contentType?.split(";")[0]?.trim();
   if (contentType) {
@@ -286,7 +309,7 @@ async function downloadLegacyObject(item: DryRunItem) {
   const url = item.value_type === "supabase_legacy_path"
     ? legacyPathToPublicUrl(item.legacy_path)
     : item.legacy_value;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, DOWNLOAD_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`download_${response.status}`);
@@ -304,20 +327,40 @@ async function downloadLegacyObject(item: DryRunItem) {
 
 async function checkPublicUrl(url: string) {
   try {
-    const headResponse = await fetch(url, { method: "HEAD" });
+    const headResponse = await fetchWithTimeout(
+      url,
+      { method: "HEAD" },
+      ACCESS_CHECK_TIMEOUT_MS,
+    );
     if (headResponse.ok) {
       return String(headResponse.status);
     }
 
-    const response = await fetch(url, {
-      headers: {
-        range: "bytes=0-31",
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          range: "bytes=0-31",
+        },
       },
-    });
+      ACCESS_CHECK_TIMEOUT_MS,
+    );
     return String(response.status);
   } catch (error) {
     return error instanceof Error ? error.message : "check_failed";
   }
+}
+
+async function putObjectWithTimeout(cos: COS, params: COS.PutObjectParams) {
+  await Promise.race([
+    cos.putObject(params),
+    new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error(`cos_upload_timeout_${COS_UPLOAD_TIMEOUT_MS}ms`)),
+        COS_UPLOAD_TIMEOUT_MS,
+      );
+    }),
+  ]);
 }
 
 async function migrateOne(input: {
@@ -384,7 +427,7 @@ async function migrateOne(input: {
   const downloaded = await downloadLegacyObject(item);
   const checksum = createHash("sha256").update(downloaded.buffer).digest("hex");
 
-  await cos.putObject({
+  await putObjectWithTimeout(cos, {
     Bucket: config.bucket,
     Region: config.region,
     Key: item.target_object_key,
@@ -477,7 +520,7 @@ async function main() {
   });
   const results: MigrationResult[] = [];
 
-  for (const item of dryRunItems) {
+  for (const [index, item] of dryRunItems.entries()) {
     try {
       results.push(await migrateOne({
         item,
@@ -501,6 +544,10 @@ async function main() {
         access_url_http_status: "",
         migrated_reason: error instanceof Error ? error.message : "unknown_error",
       });
+    }
+
+    if ((index + 1) % 10 === 0 || index + 1 === dryRunItems.length) {
+      console.log(`progress ${index + 1}/${dryRunItems.length}`);
     }
   }
 
