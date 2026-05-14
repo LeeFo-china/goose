@@ -532,11 +532,6 @@ class PlatformFileStorageService {
       }
     }
 
-    const existing = await platformFileObjectRepository.findActiveByObjectKey({
-      provider: "tencent_cos",
-      bucket: config.bucket,
-      objectKey: input.objectKey,
-    });
     const publicUrl = this.buildCosPublicUrl({
       publicBaseUrl: config.publicBaseUrl,
       bucket: config.bucket,
@@ -545,23 +540,11 @@ class PlatformFileStorageService {
     });
     const accessUrl = publicUrl;
 
-    if (existing) {
-      return this.toUploadResponse({
-        fileId: existing.id,
-        provider: existing.provider,
-        bucket: existing.bucket,
-        region: existing.region,
-        objectKey: existing.object_key,
-        publicUrl: existing.public_url || publicUrl,
-        accessUrl,
-      });
-    }
-
     const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
     const contentLength = Number(headers["content-length"] ?? input.sizeBytes);
     const contentType = String(headers["content-type"] || input.mimetype);
     const etag = normalizeEtag(input.etag) || normalizeEtag(headObject?.ETag);
-    const fileObject = await platformFileObjectRepository.create({
+    const fileObject = await platformFileObjectRepository.createOrFindByObjectKey({
       tenant_id: input.tenantId ?? null,
       owner_type: input.scene,
       scene: input.scene,
@@ -588,11 +571,11 @@ class PlatformFileStorageService {
 
     return this.toUploadResponse({
       fileId: fileObject.id,
-      provider: "tencent_cos",
-      bucket: config.bucket,
-      region: config.region,
-      objectKey: input.objectKey,
-      publicUrl,
+      provider: fileObject.provider,
+      bucket: fileObject.bucket,
+      region: fileObject.region,
+      objectKey: fileObject.object_key,
+      publicUrl: fileObject.public_url || publicUrl,
       accessUrl,
     });
   }

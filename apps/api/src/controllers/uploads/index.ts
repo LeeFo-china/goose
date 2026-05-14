@@ -8,6 +8,7 @@ import { authorizationService } from "@/services/authorization";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { SupabaseDB } from "@/utils/supabase";
+import type { JwtPayload } from "@/utils/jwt";
 import { z } from "zod";
 
 const MAX_UPLOAD_FILES = 9;
@@ -160,7 +161,7 @@ class UploadController extends BaseController {
       throw Errors.fromZod(fieldResult.error);
     }
 
-    const actorContext = await this.resolveUploadActorContext(request.user.sub);
+    const actorContext = await this.resolveUploadActorContext(request.user);
 
     const uploadedFiles = await Promise.all(
       files.map((file) =>
@@ -212,7 +213,7 @@ class UploadController extends BaseController {
 
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(request.user.sub);
+    const actorContext = await this.resolveUploadActorContext(request.user);
     const directUpload = await platformFileStorageService.createDirectUpload({
       filename: result.data.filename,
       mimetype: result.data.mimetype,
@@ -241,7 +242,7 @@ class UploadController extends BaseController {
 
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(request.user.sub);
+    const actorContext = await this.resolveUploadActorContext(request.user);
     this.assertDirectObjectKeyBelongsToActor(
       result.data.object_key,
       scene,
@@ -319,7 +320,28 @@ class UploadController extends BaseController {
     }
   }
 
-  private async resolveUploadActorContext(authUserId: string): Promise<UploadActorContext> {
+  private async resolveUploadActorContext(user: JwtPayload): Promise<UploadActorContext> {
+    const tokenTenantId = user.tenant_id ?? null;
+    const tokenEmployeeId = user.employee_id ?? null;
+    const tokenCustomerId = user.customer_id ?? null;
+
+    if (tokenTenantId && tokenEmployeeId) {
+      return {
+        tenantId: tokenTenantId,
+        employeeId: tokenEmployeeId,
+        customerId: null,
+      };
+    }
+
+    if (tokenTenantId && tokenCustomerId) {
+      return {
+        tenantId: tokenTenantId,
+        employeeId: null,
+        customerId: tokenCustomerId,
+      };
+    }
+
+    const authUserId = user.sub;
     const authContext = await authorizationService.getRequiredAuthContext(authUserId);
     if (authContext.tenantId || authContext.employeeId) {
       return {
