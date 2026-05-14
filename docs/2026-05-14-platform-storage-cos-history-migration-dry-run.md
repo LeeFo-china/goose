@@ -811,3 +811,102 @@ bun src/scripts/project-log-comments-image-backfill.ts -- --input /tmp/gooes-pro
 - 全租户迁移范围内的 `project_log_comments.images` 已完成业务表回填。
 - 评论图片读取链路已进入 COS object key + resolver 签名 URL 模式。
 - 下一步可以进入工序验收相关图片字段回填。
+
+## 19. 工序验收图片字段业务表回填记录
+
+执行时间：2026-05-14
+
+脚本：
+
+```text
+apps/api/src/scripts/project-acceptance-images-backfill.ts
+```
+
+配套服务层调整：
+
+- `project_acceptances` 服务的 `metadata.referenced_images.url`、`thumb_url` 解析已改为走 `resolveStoredFileUrl`。
+- 这样 action metadata 中的 `path/url/thumb_url` 回填为 COS object key 后，接口仍返回可访问签名 URL。
+
+回填范围：
+
+| source_table | source_field | 数量 |
+| --- | --- | ---: |
+| `project_acceptance_items` | `images` | 13 |
+| `project_acceptance_items` | `rectification_images` | 3 |
+| `project_acceptance_actions` | `metadata.images` | 1 |
+| `project_acceptance_actions` | `metadata.referenced_image_paths` | 4 |
+| `project_acceptance_actions` | `metadata.referenced_images.path` | 4 |
+| `project_acceptance_actions` | `metadata.referenced_images.url` | 4 |
+| `project_acceptance_actions` | `metadata.referenced_images.thumb_url` | 4 |
+
+输入文件：
+
+```text
+/tmp/gooes-project-acceptance-images-backfill-input/all-tenants-project-acceptance-20260514T121505Z.csv
+```
+
+输入统计：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total image values | 33 |
+| `project_acceptance_items` values | 16 |
+| `project_acceptance_actions` values | 17 |
+| affected records | 18 |
+
+dry-run 命令：
+
+```bash
+bun src/scripts/project-acceptance-images-backfill.ts -- --input /tmp/gooes-project-acceptance-images-backfill-input/all-tenants-project-acceptance-20260514T121505Z.csv --limit 100000 --out /tmp/gooes-project-acceptance-images-backfill-reports
+```
+
+dry-run 报告：
+
+```text
+/tmp/gooes-project-acceptance-images-backfill-reports/20260514T123842Z
+```
+
+dry-run 结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| planned | 33 |
+| failed | 0 |
+
+真实回填命令：
+
+```bash
+bun src/scripts/project-acceptance-images-backfill.ts -- --input /tmp/gooes-project-acceptance-images-backfill-input/all-tenants-project-acceptance-20260514T121505Z.csv --limit 100000 --apply --out /tmp/gooes-project-acceptance-images-backfill-reports
+```
+
+真实回填报告：
+
+```text
+/tmp/gooes-project-acceptance-images-backfill-reports/20260514T123902Z
+```
+
+真实回填结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 33 |
+| updated | 33 |
+| failed | 0 |
+
+回填后验收：
+
+| 区域 | 记录数 | 图片值 | COS object key |
+| --- | ---: | ---: | ---: |
+| `project_acceptance_items` | 13 | 16 | 16 |
+| `project_acceptance_actions.metadata` | 5 | 17 | 17 |
+
+访问验收：
+
+- 抽样 10 个 object key。
+- 经 `resolveStoredFileUrl` 转签名 URL 后，`GET Range` 均返回 `206`。
+
+结论：
+
+- 工序验收迁移范围内的验收图片、整改图片、流程 action 图片、引用图片快照字段均已完成业务表回填。
+- 工序验收图片读取链路已进入 COS object key + resolver 签名 URL 模式。
+- 下一步可以进入客户抖音截图、费用凭证等低频字段回填。
