@@ -494,3 +494,141 @@ bun src/scripts/storage-migration-verify.ts -- --input /tmp/gooes-storage-migrat
 
 - 该租户 `project_logs.images` 历史图片迁移闭环通过。
 - 后续可以按相同流程扩大到其他租户或继续处理 `project_log_comments`、工序验收、客户跟进评论等图片字段。
+
+## 16. 全租户后端迁移记录
+
+执行时间：2026-05-14
+
+迁移原则：
+
+- 本阶段只做后端文件迁移和索引写入。
+- 写入 COS 和 `platform_file_objects`。
+- 不全量回填业务表图片字段。
+- 已验收通过的租户 `91d255fe-60a2-4379-b939-8aff35e693ac` 的 `project_logs.images` 保持前序回填结果。
+
+全租户 dry-run 命令：
+
+```bash
+bun src/scripts/storage-migration-dry-run.ts -- --all-tenants --limit 100000 --check-remote --out /tmp/gooes-storage-migration-all-tenants-reports
+```
+
+dry-run 报告：
+
+```text
+/tmp/gooes-storage-migration-all-tenants-reports/20260514T112440Z
+```
+
+dry-run 结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_values | 148 |
+| migratable | 88 |
+| already_cos | 15 |
+| external_url | 44 |
+| invalid | 0 |
+| download_failed | 1 |
+| estimated_bytes | 32,406,334 |
+
+租户分布：
+
+| tenant_id | total_values | migratable |
+| --- | ---: | ---: |
+| `51111111-1111-4111-8111-111111111111` | 52 | 52 |
+| `52222222-2222-4222-8222-222222222222` | 18 | 18 |
+| `91d255fe-60a2-4379-b939-8aff35e693ac` | 77 | 18 |
+| public/null | 1 | 0 |
+
+失败项：
+
+- `expense_request_items.a4fcab99-987a-4c93-9563-f138b39e1cfc.evidence_images[0]`
+- 原始值：`verify-expense-item-1`
+- 原因：`head_400`
+- 判断：测试占位路径，不进入本次迁移。
+
+上传脚本稳定性调整：
+
+- 给旧文件下载增加 30 秒超时。
+- 给 COS 上传增加 180 秒超时。
+- COS 访问验证改为直接 `GET Range`，不再先走 `HEAD`。
+- 上传过程逐条输出进度，方便定位慢对象。
+
+主批上传命令：
+
+```bash
+bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migration-all-tenants-reports/20260514T112440Z/items.csv --limit 100000 --apply --out /tmp/gooes-storage-migration-all-tenants-upload-reports
+```
+
+主批上传报告：
+
+```text
+/tmp/gooes-storage-migration-all-tenants-upload-reports/20260514T115252Z
+```
+
+主批上传结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 88 |
+| uploaded | 42 |
+| already_exists | 42 |
+| failed | 4 |
+| uploaded_bytes | 29,738,947 |
+
+失败项补跑输入：
+
+```text
+/tmp/gooes-storage-migration-retry-input/failed-20260514T115252Z.csv
+```
+
+补跑命令：
+
+```bash
+bun src/scripts/storage-migration-upload.ts -- --input /tmp/gooes-storage-migration-retry-input/failed-20260514T115252Z.csv --limit 10 --apply --out /tmp/gooes-storage-migration-all-tenants-upload-retry-reports
+```
+
+补跑报告：
+
+```text
+/tmp/gooes-storage-migration-all-tenants-upload-retry-reports/20260514T121505Z
+```
+
+补跑结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 4 |
+| uploaded | 4 |
+| failed | 0 |
+| already_exists | 0 |
+
+最终后端验收：
+
+| 指标 | 数量 |
+| --- | ---: |
+| dry-run migratable | 88 |
+| `platform_file_objects` active found | 88 |
+| missing | 0 |
+| 签名 URL 抽样 | 10 |
+| 抽样返回 `206` | 10 |
+
+本次覆盖的来源：
+
+| source_table | 数量 |
+| --- | ---: |
+| `project_logs` | 45 |
+| `project_acceptance_actions` | 17 |
+| `project_acceptance_items` | 16 |
+| `project_log_comments` | 8 |
+| `customers` | 1 |
+| `expense_request_items` | 1 |
+
+结论：
+
+- 全租户 88 个可迁移历史图片对象已全部上传 COS，并写入 `platform_file_objects`。
+- 本阶段没有对未验证字段做业务表全量回填。
+- 下一步应按字段补业务表回填脚本，优先顺序建议为：
+  1. `project_logs.images` 全租户回填。
+  2. `project_log_comments.images` 回填。
+  3. 工序验收相关图片字段回填。
+  4. 客户抖音截图、费用凭证等低频字段回填。
