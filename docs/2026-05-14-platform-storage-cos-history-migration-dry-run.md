@@ -108,11 +108,22 @@ tenant_id,source_table,source_id,source_field,array_index,legacy_value,value_typ
 apps/api/src/scripts/storage-migration-dry-run.ts
 ```
 
+当前已落地：
+
+- 脚本路径：`apps/api/src/scripts/storage-migration-dry-run.ts`
+- package script：`pnpm --dir apps/api storage:migration:dry-run -- ...`
+- 支持参数：
+  - `--tenant-id <uuid>`：扫描指定租户。
+  - `--all-tenants`：扫描全部租户和平台公共数据。
+  - `--limit <number>`：限制本次报告输出的图片值数量。
+  - `--out <dir>`：指定报告输出根目录。
+  - `--check-remote`：对可迁移对象执行 HEAD 检查并记录 content-length/失败原因。
+
 执行参数：
 
 ```bash
-bun run src/scripts/storage-migration-dry-run.ts --tenant-id 51111111-1111-4111-8111-111111111111 --limit 500 --out reports/storage-migration
-bun run src/scripts/storage-migration-dry-run.ts --all-tenants --limit 5000 --out reports/storage-migration
+pnpm --dir apps/api storage:migration:dry-run -- --tenant-id 51111111-1111-4111-8111-111111111111 --limit 500 --out reports/storage-migration
+pnpm --dir apps/api storage:migration:dry-run -- --all-tenants --limit 5000 --out reports/storage-migration
 ```
 
 第一版只做：

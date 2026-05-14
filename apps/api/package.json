@@ -8,6 +8,7 @@
     "dev": "bun --watch src/app.ts",
     "start": "bun src/app.ts",
     "worker:social-video": "bun src/workers/social-video-transcription-worker.ts",
+    "storage:migration:dry-run": "bun src/scripts/storage-migration-dry-run.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > src/types/database.ts"
