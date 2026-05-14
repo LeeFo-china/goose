@@ -718,3 +718,96 @@ bun src/scripts/project-logs-image-backfill.ts -- --input /tmp/gooes-project-log
 - 全租户剩余 `project_logs.images` 已完成业务表回填。
 - 加上前序已验收租户 `91d255fe-60a2-4379-b939-8aff35e693ac` 的 15 张图，当前已迁移样本中的 `project_logs.images` 均已进入 COS object key 读取链路。
 - 下一步可以进入 `project_log_comments.images` 回填。
+
+## 18. `project_log_comments.images` 全租户业务表回填记录
+
+执行时间：2026-05-14
+
+脚本：
+
+```text
+apps/api/src/scripts/project-log-comments-image-backfill.ts
+```
+
+回填原则：
+
+- 只回填 `project_log_comments.images`。
+- 合并主批上传报告和失败补跑报告，确保补跑成功的评论图片也进入回填输入。
+- 只回填当前业务表中仍等于旧图片值的数组项。
+- 按 `tenant_id + project_log_comments.id` 分组，一次性更新整条评论的 `images` 数组。
+
+输入生成结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| source_items | 8 |
+| remaining | 8 |
+| skipped | 0 |
+| comment_count | 8 |
+
+输入文件：
+
+```text
+/tmp/gooes-project-log-comments-image-backfill-input/all-tenants-project-log-comments-20260514T121505Z.csv
+```
+
+dry-run 命令：
+
+```bash
+bun src/scripts/project-log-comments-image-backfill.ts -- --input /tmp/gooes-project-log-comments-image-backfill-input/all-tenants-project-log-comments-20260514T121505Z.csv --limit 100000 --out /tmp/gooes-project-log-comments-image-backfill-reports
+```
+
+dry-run 报告：
+
+```text
+/tmp/gooes-project-log-comments-image-backfill-reports/20260514T123004Z
+```
+
+dry-run 结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| planned | 8 |
+| failed | 0 |
+
+真实回填命令：
+
+```bash
+bun src/scripts/project-log-comments-image-backfill.ts -- --input /tmp/gooes-project-log-comments-image-backfill-input/all-tenants-project-log-comments-20260514T121505Z.csv --limit 100000 --apply --out /tmp/gooes-project-log-comments-image-backfill-reports
+```
+
+真实回填报告：
+
+```text
+/tmp/gooes-project-log-comments-image-backfill-reports/20260514T123016Z
+```
+
+真实回填结果：
+
+| 指标 | 数量 |
+| --- | ---: |
+| total_items | 8 |
+| updated | 8 |
+| failed | 0 |
+
+回填后验收：
+
+| 指标 | 数量 |
+| --- | ---: |
+| project_log_comments count | 8 |
+| total images | 8 |
+| COS object key images | 8 |
+| sampled URL status | 全部 `206` |
+
+本次回填租户分布：
+
+| tenant_id | comments | images |
+| --- | ---: | ---: |
+| `52222222-2222-4222-8222-222222222222` | 1 | 1 |
+| `91d255fe-60a2-4379-b939-8aff35e693ac` | 7 | 7 |
+
+结论：
+
+- 全租户迁移范围内的 `project_log_comments.images` 已完成业务表回填。
+- 评论图片读取链路已进入 COS object key + resolver 签名 URL 模式。
+- 下一步可以进入工序验收相关图片字段回填。
