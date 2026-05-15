@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 适用端：Admin 租户客户管理  
-状态：第一版已接入 Admin，微信小程序端不在本次改动范围。
+状态：第一版已接入 Admin；Admin 已优先走 COS 直传，失败时回退 `/uploads/images`；微信小程序端不在本次改动范围。
 
 ## 1. 后端变更
 
@@ -21,7 +21,17 @@ add column if not exists avatar text;
 
 ## 2. Admin 上传流程
 
-Admin 客户新增/编辑弹窗增加头像上传控件，流程如下：
+Admin 客户新增/编辑弹窗增加头像上传控件，优先直传 COS：
+
+```text
+选择头像
+-> POST /uploads/cos/direct-init，scene=customer_avatar
+-> 浏览器 PUT upload_url
+-> POST /uploads/cos/direct-complete
+-> POST/PATCH /customers 时写入 storage_path/object_key
+```
+
+直传失败时回退兼容上传：
 
 ```text
 选择头像
@@ -91,6 +101,7 @@ PATCH /customers/:id
 - Admin 新增客户时可以上传头像，保存后列表/详情再次打开能显示头像。
 - Admin 编辑客户时可以替换头像。
 - Admin 编辑客户时可以清除头像。
+- 正常情况下后端 `/uploads/images` 不应再出现 `scene = customer_avatar` 的新头像上传请求；只有直传失败时才会回退。
 - `customers.avatar` 有值时，接口返回可访问 URL。
 - `platform_file_objects` 有 `scene = customer_avatar` 的记录。
 - 小程序端不需要为了本次后端/Admin 变更改代码。

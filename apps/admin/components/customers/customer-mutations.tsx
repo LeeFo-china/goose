@@ -221,6 +221,7 @@ const ALLOWED_AVATAR_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
+const DIRECT_COS_UPLOAD_ENABLED = true;
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -337,6 +338,10 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function buildAvatarPreviewUrl(value: string) {
+  return `/api/backend/uploads/public-url?path=${encodeURIComponent(value)}`;
+}
+
 async function requestCustomer(input: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
@@ -354,15 +359,53 @@ async function requestCustomer(input: {
   return payload.data;
 }
 
-async function uploadCustomerAvatar(file: File) {
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+async function uploadCustomerAvatarDirect(file: File) {
+  const init = await requestCustomer({
+    path: "/uploads/cos/direct-init",
+    method: "POST",
+    payload: {
+      scene: "customer_avatar",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+    },
+  });
+
+  const uploadResponse = await fetch(init.upload_url, {
+    method: init.method || "PUT",
+    headers: init.headers || { "content-type": file.type },
+    body: file,
+  });
+  if (!uploadResponse.ok) {
+    throw new Error("上传头像到 COS 失败");
   }
 
-  if (file.size > MAX_AVATAR_SIZE) {
-    throw new Error("头像图片不能超过 2MB");
+  const completed = await requestCustomer({
+    path: "/uploads/cos/direct-complete",
+    method: "POST",
+    payload: {
+      scene: "customer_avatar",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+      object_key: init.object_key,
+      etag: uploadResponse.headers.get("etag") || undefined,
+    },
+  });
+
+  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
+    init.object_key;
+  if (typeof storageValue !== "string" || !storageValue) {
+    throw new Error("头像上传成功但未返回图片地址");
   }
 
+  return {
+    value: storageValue,
+    previewUrl: completed.url || buildAvatarPreviewUrl(storageValue),
+  };
+}
+
+async function uploadCustomerAvatarFallback(file: File) {
   const formData = new FormData();
   formData.append("scene", "customer_avatar");
   formData.append("files", file);
@@ -387,6 +430,26 @@ async function uploadCustomerAvatar(file: File) {
     value: storageValue,
     previewUrl: typeof previewUrl === "string" ? previewUrl : storageValue,
   };
+}
+
+async function uploadCustomerAvatar(file: File) {
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+  }
+
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error("头像图片不能超过 2MB");
+  }
+
+  if (DIRECT_COS_UPLOAD_ENABLED) {
+    try {
+      return await uploadCustomerAvatarDirect(file);
+    } catch {
+      return uploadCustomerAvatarFallback(file);
+    }
+  }
+
+  return uploadCustomerAvatarFallback(file);
 }
 
 function buildDefaults(customer?: CustomerRecord): CustomerFormValues {

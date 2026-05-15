@@ -5,6 +5,7 @@ import {
 } from "@/repositories/permissions";
 import { ErrorCodes } from "@/errors/error-codes";
 import { isEmployeeOperableStatus, PERMISSION_CODE_VALUES } from "@gooes/domain";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 export type EffectivePermission = {
   code: string;
@@ -211,7 +212,7 @@ class AuthorizationService {
         departmentName,
         postId: employee.post_id,
         postName,
-        avatar: employee.avatar ?? null,
+        avatar: resolveStoredFileUrl(employee.avatar ?? null),
         roleCodes,
         roles,
         permissions: [],
@@ -231,7 +232,7 @@ class AuthorizationService {
         departmentName,
         postId: employee.post_id,
         postName,
-        avatar: employee.avatar ?? null,
+        avatar: resolveStoredFileUrl(employee.avatar ?? null),
         roleCodes,
         roles,
         permissions: PERMISSION_CODE_VALUES.map((code) => ({
@@ -276,7 +277,7 @@ class AuthorizationService {
       departmentName,
       postId: employee.post_id,
       postName,
-      avatar: employee.avatar ?? null,
+      avatar: resolveStoredFileUrl(employee.avatar ?? null),
       roleCodes,
       roles,
       permissions: Array.from(permissionMap.entries()).map(([code, scope]) => ({

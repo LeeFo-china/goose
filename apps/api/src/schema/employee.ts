@@ -27,6 +27,19 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
   }, schema.optional());
 }
 
+function normalizeOptionalText(value: unknown) {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized === "" ? null : normalized;
+  }
+
+  return value;
+}
+
 const optionalNullableDateTime = (message: string) =>
   z.preprocess((value) => {
     if (value == null) {
@@ -72,8 +85,11 @@ export const EmployeeBaseSchema = z.object({
   tenant_department_id: z.string().uuid("无效的租户部门 ID").nullable().optional(),
   // 职位 ID：关联外键，校验 UUID
   post_id: z.string().uuid("无效的职位 ID").nullable().optional(),
-  // ✅ 修正为对象传参
-  avatar: z.url({ message: "头像地址格式不正确" }).nullable(),
+  // 头像保存平台存储 object key、历史 URL 或兼容路径
+  avatar: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(1000, "头像路径过长").nullable().optional(),
+  ),
 
   // 新建员工时允许不传；传空字符串时按 null 处理
   last_login_time: optionalNullableDateTime(

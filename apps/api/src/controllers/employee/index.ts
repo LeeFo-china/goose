@@ -21,6 +21,7 @@ import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { departmentPostRuleService } from "@/services/department-post-rules";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 function escapeSupabaseOrValue(value: string) {
   return value
@@ -266,6 +267,9 @@ class EmployeeController extends BaseController<
 
     return {
       ...source,
+      avatar: resolveStoredFileUrl(
+        typeof source.avatar === "string" ? source.avatar : null,
+      ),
       department_id: departmentId,
       tenant_department_id: tenantDepartmentId,
       department_name: departmentName,

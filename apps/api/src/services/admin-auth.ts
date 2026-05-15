@@ -11,6 +11,7 @@ import { userIdentityService } from "@/services/user-identities";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { getJwtExpiresAt, signToken } from "@/utils/jwt";
 import { isEmployeeOperableStatus } from "@gooes/domain";
+import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 const ADMIN_LOGIN_SCENE = "admin_login" as const;
 
@@ -61,7 +62,7 @@ function serializeEmployeeFromAuthContext(authContext: AuthContext) {
     department_name: authContext.departmentName,
     post_id: authContext.postId,
     post_name: authContext.postName,
-    avatar: authContext.avatar,
+    avatar: resolveStoredFileUrl(authContext.avatar),
   };
 }
 
@@ -90,7 +91,7 @@ function serializeEmployeeRecord(employee: AdminAuthEmployeeRecord) {
     department_name: getEmployeeDepartmentName(employee),
     post_id: employee.post_id,
     post_name: getRelationName(employee.post),
-    avatar: employee.avatar,
+    avatar: resolveStoredFileUrl(employee.avatar),
   };
 }
 

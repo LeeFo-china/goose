@@ -93,6 +93,7 @@ const ALLOWED_AVATAR_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
+const DIRECT_COS_UPLOAD_ENABLED = true;
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -109,15 +110,78 @@ function getDepartmentOptionValue(department: EmployeeDepartmentOption) {
   return department.tenant_department_id || "";
 }
 
-async function uploadEmployeeAvatar(file: File) {
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+function buildAvatarPreviewUrl(value: string) {
+  return `/api/backend/uploads/public-url?path=${encodeURIComponent(value)}`;
+}
+
+async function requestJson(input: {
+  path: string;
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  payload?: unknown;
+  fallbackMessage: string;
+}) {
+  const response = await fetch(input.path, {
+    method: input.method || "GET",
+    headers: input.payload ? { "content-type": "application/json" } : undefined,
+    body: input.payload ? JSON.stringify(input.payload) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, input.fallbackMessage));
   }
 
-  if (file.size > MAX_AVATAR_SIZE) {
-    throw new Error("头像图片不能超过 2MB");
+  return payload.data;
+}
+
+async function uploadEmployeeAvatarDirect(file: File) {
+  const init = await requestJson({
+    path: "/api/backend/uploads/cos/direct-init",
+    method: "POST",
+    payload: {
+      scene: "employee_avatar",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+    },
+    fallbackMessage: "初始化头像直传失败",
+  });
+
+  const uploadResponse = await fetch(init.upload_url, {
+    method: init.method || "PUT",
+    headers: init.headers || { "content-type": file.type },
+    body: file,
+  });
+  if (!uploadResponse.ok) {
+    throw new Error("上传头像到 COS 失败");
   }
 
+  const completed = await requestJson({
+    path: "/api/backend/uploads/cos/direct-complete",
+    method: "POST",
+    payload: {
+      scene: "employee_avatar",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+      object_key: init.object_key,
+      etag: uploadResponse.headers.get("etag") || undefined,
+    },
+    fallbackMessage: "登记头像直传结果失败",
+  });
+
+  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
+    init.object_key;
+  if (typeof storageValue !== "string" || !storageValue) {
+    throw new Error("头像上传成功但未返回图片地址");
+  }
+
+  return {
+    value: storageValue,
+    previewUrl: completed.url || buildAvatarPreviewUrl(storageValue),
+  };
+}
+
+async function uploadEmployeeAvatarFallback(file: File) {
   const formData = new FormData();
   formData.append("scene", "employee_avatar");
   formData.append("files", file);
@@ -131,12 +195,37 @@ async function uploadEmployeeAvatar(file: File) {
     throw new Error(getPayloadMessage(payload, "上传头像失败"));
   }
 
-  const uploadedUrl = payload.data?.list?.[0]?.url;
-  if (typeof uploadedUrl !== "string" || !uploadedUrl) {
+  const uploaded = payload.data?.list?.[0] || {};
+  const storageValue = uploaded.storage_path || uploaded.object_key || uploaded.path || uploaded.url;
+  const previewUrl = uploaded.url || storageValue;
+  if (typeof storageValue !== "string" || !storageValue) {
     throw new Error("头像上传成功但未返回图片地址");
   }
 
-  return uploadedUrl;
+  return {
+    value: storageValue,
+    previewUrl: typeof previewUrl === "string" ? previewUrl : storageValue,
+  };
+}
+
+async function uploadEmployeeAvatar(file: File) {
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+  }
+
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error("头像图片不能超过 2MB");
+  }
+
+  if (DIRECT_COS_UPLOAD_ENABLED) {
+    try {
+      return await uploadEmployeeAvatarDirect(file);
+    } catch {
+      return uploadEmployeeAvatarFallback(file);
+    }
+  }
+
+  return uploadEmployeeAvatarFallback(file);
 }
 
 async function mutateEmployee(input: {
@@ -206,6 +295,8 @@ function EmployeeDialog({
   }), [departments, employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);
   const [avatar, setAvatar] = useState(defaults.avatar);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(defaults.avatar);
+  const [avatarDirty, setAvatarDirty] = useState(false);
   const [tenantDepartmentId, setTenantDepartmentId] = useState(defaults.tenantDepartmentId);
   const [postId, setPostId] = useState(defaults.postId);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -252,6 +343,8 @@ function EmployeeDialog({
     if (!open) return;
     setStatus(defaults.status);
     setAvatar(defaults.avatar);
+    setAvatarPreviewUrl(defaults.avatar);
+    setAvatarDirty(false);
     setTenantDepartmentId(defaults.tenantDepartmentId);
     setPostId(defaults.postId);
     setUploadingAvatar(false);
@@ -291,9 +384,11 @@ function EmployeeDialog({
     setError("");
     setUploadingAvatar(true);
     try {
-      const url = await uploadEmployeeAvatar(file);
-      setAvatar(url);
+      const uploaded = await uploadEmployeeAvatar(file);
+      setAvatar(uploaded.value);
+      setAvatarPreviewUrl(uploaded.previewUrl);
       setAvatarLoadFailed(false);
+      setAvatarDirty(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "上传头像失败");
     } finally {
@@ -308,14 +403,23 @@ function EmployeeDialog({
     const phone = String(formData.get("phone") || "").trim();
     const status = String(formData.get("status") || "active");
 
-    const payload = {
+    const payload: {
+      name: string;
+      phone: string | null;
+      avatar?: string | null;
+      status: string;
+      tenant_department_id: string | null;
+      post_id: string | null;
+    } = {
       name,
       phone: phone || null,
-      avatar: avatar || null,
       status,
       tenant_department_id: tenantDepartmentId || null,
       post_id: postId || null,
     };
+    if (mode === "create" || avatarDirty) {
+      payload.avatar = avatar || null;
+    }
 
     setError("");
     startTransition(async () => {
@@ -356,9 +460,9 @@ function EmployeeDialog({
               <input type="hidden" name="avatar" value={avatar} />
               <div className="flex gap-3">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
-                  {avatar && !avatarLoadFailed ? (
+                  {avatarPreviewUrl && !avatarLoadFailed ? (
                     <img
-                      src={avatar}
+                      src={avatarPreviewUrl}
                       alt={`${defaults.name || "员工"}头像预览`}
                       className="size-full object-cover"
                       onError={() => setAvatarLoadFailed(true)}
@@ -387,7 +491,9 @@ function EmployeeDialog({
                         disabled={pending || uploadingAvatar}
                         onClick={() => {
                           setAvatar("");
+                          setAvatarPreviewUrl("");
                           setAvatarLoadFailed(false);
+                          setAvatarDirty(true);
                         }}
                       >
                         <X data-icon="inline-start" />

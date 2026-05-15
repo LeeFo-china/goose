@@ -42,7 +42,12 @@ const UploadImageFieldSchema = z.object({
   project_id: z.string().uuid("无效的项目ID").optional(),
 });
 
-const DIRECT_UPLOAD_SCENES = ["project_log", "project_log_comment"] as const;
+const DIRECT_UPLOAD_SCENES = [
+  "project_log",
+  "project_log_comment",
+  "employee_avatar",
+  "customer_avatar",
+] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 
 const DirectUploadInitSchema = z.object({
