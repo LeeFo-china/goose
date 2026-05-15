@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 范围：后端 API、微信小程序施工日志评论图片上传  
-结论：当前直传链路验收通过，可以进入补偿巡检和后续场景复用阶段。
+结论：单图 COS 直传链路验收通过；多图在微信小程序端多次 PUT COS 表现不稳定，当前稳定策略是单图直传、多图回退 `/uploads/images`。
 
 ## 1. 当前验收结果
 
@@ -23,6 +23,12 @@
 | put-cos | 400ms |
 | direct-complete-async | 不阻塞发布 |
 
+多图直传验证结果：
+
+- 2 张图并发 PUT COS 时，单张 PUT 从 400ms 级退化到 3.7s 左右。
+- 2 张图串行 PUT COS 时，单张 PUT 仍出现 8s-9s 波动。
+- 因此当前不把多图纳入小程序端 COS 直传路径。
+
 用户等待链路已经从“后端上传 + 保存”改为：
 
 ```text
@@ -30,6 +36,20 @@ direct-init -> read-local-file -> put-cos -> 返回 object_key -> 创建评论
 ```
 
 `direct-complete` 仍会执行，但已经改为小程序端 best-effort 异步调用，不再阻塞发布按钮。
+
+多图等待链路：
+
+```text
+file_count > 1 -> POST /uploads/images
+```
+
+小程序端会输出：
+
+```text
+[PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-skip-multiple-files
+```
+
+表示多图已进入旧上传回退链路。
 
 ## 2. 后端能力
 
@@ -102,6 +122,7 @@ POST /uploads/cos/direct-complete
 - 微信 OAuth 和业务身份强校验增加 10 秒成功短缓存。
 - 微信 OAuth 校验和业务身份校验并行执行。
 - 小程序端将 `direct-complete` 改为 best-effort 异步执行。
+- 小程序端限制 `file_count === 1` 才启用 COS 直传；多图回退 `/uploads/images`。
 
 ## 3. 补偿巡检脚本
 
@@ -213,6 +234,7 @@ bun run --cwd apps/api project-log-comments:cos:reconcile -- \
 - `complete` 可异步，但必须有后端补偿巡检脚本。
 - 每个场景必须定义 object key 前缀、大小限制、权限校验和补偿范围。
 - 图片读取统一走 `resolveStoredFileUrl` / `resolveStoredFileUrlList`。
+- 微信小程序端多图不要直接复用 `Taro.request PUT` 多次直传，需要单独验证；当前已验证该路径不稳定。
 
 建议迁移顺序：
 
