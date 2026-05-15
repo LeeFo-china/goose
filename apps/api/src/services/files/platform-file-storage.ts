@@ -52,6 +52,18 @@ type CompleteDirectUploadInput = DirectUploadInput & {
   etag?: string | null;
 };
 
+type RegisterExistingCosObjectInput = Omit<DirectUploadInput, "mimetype" | "sizeBytes"> & {
+  objectKey: string;
+  mimetype?: string;
+  sizeBytes?: number | null;
+  ownerType?: string;
+  ownerId?: string | null;
+  etag?: string | null;
+  verifyHead?: boolean;
+  failIfMissing?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
 type StorageUploadResult = {
   provider: PlatformFileProvider;
   bucket: string;
@@ -134,6 +146,19 @@ function getFileExtension(input: Pick<UploadImageInput, "filename" | "mimetype">
 
 function normalizeEtag(value: string | null | undefined) {
   return value?.trim().replace(/^"+|"+$/g, "") || null;
+}
+
+function getMimeTypeFromObjectKey(objectKey: string) {
+  const normalized = objectKey.split("?")[0]?.toLowerCase() || "";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".heic")) return "image/heic";
+  if (normalized.endsWith(".heif")) return "image/heif";
+  return "image/jpeg";
+}
+
+function getFilenameFromObjectKey(objectKey: string) {
+  return trimSlashes(objectKey).split("/").filter(Boolean).pop() || null;
 }
 
 class PlatformFileStorageService {
@@ -521,6 +546,17 @@ class PlatformFileStorageService {
   }
 
   async completeDirectUpload(input: CompleteDirectUploadInput) {
+    return this.registerExistingCosObject({
+      ...input,
+      verifyHead: this.shouldVerifyDirectUploadHead(),
+      failIfMissing: true,
+      metadata: {
+        direct_upload: true,
+      },
+    });
+  }
+
+  async registerExistingCosObject(input: RegisterExistingCosObjectInput) {
     const config = await this.getCosConfig();
     const cos = this.getCosClient(config);
     this.setCosAccessCache(config);
@@ -529,7 +565,7 @@ class PlatformFileStorageService {
       headers?: Record<string, string | number | undefined>;
       ETag?: string | null;
     } | null = null;
-    const verifyHeadObject = this.shouldVerifyDirectUploadHead();
+    const verifyHeadObject = Boolean(input.verifyHead);
     if (verifyHeadObject) {
       try {
         headObject = await cos.headObject({
@@ -538,6 +574,10 @@ class PlatformFileStorageService {
           Key: input.objectKey,
         });
       } catch (error) {
+        if (!input.failIfMissing) {
+          throw error;
+        }
+
         throw Errors.business(
           400,
           "直传文件不存在或尚未上传完成",
@@ -556,27 +596,31 @@ class PlatformFileStorageService {
     const accessUrl = publicUrl;
 
     const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
-    const contentLength = Number(headers["content-length"] ?? input.sizeBytes);
-    const contentType = String(headers["content-type"] || input.mimetype);
+    const fallbackSize = input.sizeBytes ?? 0;
+    const contentLength = Number(headers["content-length"] ?? fallbackSize);
+    const contentType = String(
+      headers["content-type"] || input.mimetype || getMimeTypeFromObjectKey(input.objectKey),
+    );
     const etag = normalizeEtag(input.etag) || normalizeEtag(headObject?.ETag);
     const fileObject = await platformFileObjectRepository.createOrFindByObjectKey({
       tenant_id: input.tenantId ?? null,
-      owner_type: input.scene,
+      owner_type: input.ownerType ?? input.scene,
+      owner_id: input.ownerId ?? null,
       scene: input.scene,
       provider: "tencent_cos",
       bucket: config.bucket,
       region: config.region,
       object_key: input.objectKey,
-      original_name: input.filename ?? null,
+      original_name: input.filename ?? getFilenameFromObjectKey(input.objectKey),
       mime_type: contentType,
-      size_bytes: Number.isFinite(contentLength) ? contentLength : input.sizeBytes,
+      size_bytes: Number.isFinite(contentLength) ? contentLength : fallbackSize,
       checksum: etag,
       visibility: "public",
       public_url: publicUrl,
       metadata: {
+        ...(input.metadata || {}),
         project_id: input.projectId ?? null,
         customer_id: input.customerId ?? null,
-        direct_upload: true,
         verified_head_object: verifyHeadObject,
         signed_url: false,
       },
