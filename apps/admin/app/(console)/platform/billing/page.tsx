@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { AlertCircle, BrainCircuit, Coins, CreditCard, Landmark, WalletCards } from "lucide-react";
 import { ManualRechargeButton, PricingRuleCreateButton, PricingRuleStatusButton, ShadowBillingRunButton } from "@/components/billing/billing-actions";
 import { BillingFilterCombobox } from "@/components/billing/billing-filter-combobox";
+import { FilterSelect } from "@/components/admin/filter-select";
 import type {
   BillingAiUsageFilterOptions,
   BillingAiUsageStats,
@@ -324,35 +325,6 @@ function FilterInput({
     <Field>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
       <Input id={name} name={name} type={type} defaultValue={defaultValue || ""} placeholder={placeholder} />
-    </Field>
-  );
-}
-
-function FilterSelect({
-  label,
-  name,
-  defaultValue,
-  options,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  options: Array<{ label: string; value: string }>;
-}) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <select
-        id={name}
-        name={name}
-        defaultValue={defaultValue || ""}
-        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-      >
-        <option value="">全部</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
     </Field>
   );
 }

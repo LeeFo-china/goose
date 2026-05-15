@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { Edit3, Loader2, Plus, Power, RotateCcw, Shield } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect, type SelectOption } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
@@ -421,16 +422,12 @@ export function PermissionRowActions({
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [statusAction, setStatusAction] = useState<"active" | "inactive" | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const disabled = pending;
 
   function setStatus(status: "active" | "inactive") {
-    const message = status === "inactive"
-      ? `确认停用权限「${permission.name || permission.code}」？`
-      : `确认恢复权限「${permission.name || permission.code}」？`;
-    if (!window.confirm(message)) return;
-
     setError("");
     startTransition(async () => {
       try {
@@ -443,6 +440,7 @@ export function PermissionRowActions({
             payload: { status: "active" },
           });
         }
+        setStatusAction(null);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "操作失败");
@@ -462,7 +460,7 @@ export function PermissionRowActions({
           variant="outline"
           size="sm"
           disabled={disabled}
-          onClick={() => setStatus("active")}
+          onClick={() => setStatusAction("active")}
         >
           {pending ? <Loader2 className="animate-spin" /> : <RotateCcw />}
           恢复
@@ -473,7 +471,7 @@ export function PermissionRowActions({
           variant="outline"
           size="sm"
           disabled={disabled}
-          onClick={() => setStatus("inactive")}
+          onClick={() => setStatusAction("inactive")}
         >
           {pending ? <Loader2 className="animate-spin" /> : <Power />}
           停用
@@ -484,6 +482,22 @@ export function PermissionRowActions({
         permission={permission}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <ConfirmActionDialog
+        open={statusAction !== null}
+        onOpenChange={(open) => setStatusAction(open ? statusAction : null)}
+        title={statusAction === "inactive" ? "停用权限" : "恢复权限"}
+        description={
+          statusAction === "inactive"
+            ? `确认停用权限「${permission.name || permission.code}」？`
+            : `确认恢复权限「${permission.name || permission.code}」？`
+        }
+        confirmLabel={statusAction === "inactive" ? "确认停用" : "确认恢复"}
+        destructive={statusAction === "inactive"}
+        pending={pending}
+        onConfirm={() => {
+          if (statusAction) setStatus(statusAction);
+        }}
       />
       {error ? (
         <div className="absolute right-5 mt-10 rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">

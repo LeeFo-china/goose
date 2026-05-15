@@ -15,10 +15,12 @@ import {
   Trash2,
   Video,
 } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +44,7 @@ import type {
   CameraRecord,
   TenantDeviceAsset,
 } from "@/components/cameras/camera-types";
+import { cn } from "@/lib/utils";
 
 type CameraMode = "create" | "edit";
 
@@ -722,13 +725,15 @@ function CameraDialog({
                       const selected = project.id === selectedProjectId;
                       const description = getProjectOptionDescription(project);
                       return (
-                        <button
+                        <Button
                           key={project.id}
                           type="button"
+                          variant="ghost"
                           disabled={pending}
-                          className={`flex w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left text-sm transition-colors ${
-                            selected ? "bg-accent text-accent-foreground" : "hover:bg-accent"
-                          }`}
+                          className={cn(
+                            "h-auto w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left font-normal",
+                            selected && "bg-accent text-accent-foreground",
+                          )}
                           onClick={() => {
                             setSelectedProjectId(project.id);
                             setSelectedProject(project);
@@ -739,7 +744,7 @@ function CameraDialog({
                           {description ? (
                             <span className="text-xs text-muted-foreground">{description}</span>
                           ) : null}
-                        </button>
+                        </Button>
                       );
                     })}
                     {!projectLoading && projectOptions.length === 0 ? (
@@ -904,11 +909,10 @@ function CameraDialog({
                     key={value}
                     className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selectedCapabilities.includes(value)}
                       disabled={pending}
-                      onChange={() => toggleCapability(value)}
+                      onCheckedChange={() => toggleCapability(value)}
                     />
                     {label}
                   </label>
@@ -1271,6 +1275,7 @@ export function CameraRowActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [playParams, setPlayParams] = useState<PlayParams | null>(null);
 
   function showPreview() {
@@ -1289,13 +1294,13 @@ export function CameraRowActions({
   }
 
   function deleteCamera() {
-    if (!window.confirm(`确认解绑摄像头「${camera.name}」？`)) return;
     startTransition(async () => {
       try {
         await requestCamera({
           path: `/projects/${projectId}/cameras/${camera.id}`,
           method: "DELETE",
         });
+        setDeleteOpen(false);
         router.refresh();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "解绑失败");
@@ -1313,7 +1318,7 @@ export function CameraRowActions({
         <Edit3 data-icon="inline-start" />
         编辑
       </Button>
-      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={deleteCamera}>
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setDeleteOpen(true)}>
         <Trash2 data-icon="inline-start" />
         解绑
       </Button>
@@ -1334,6 +1339,16 @@ export function CameraRowActions({
           onRefresh={showPreview}
         />
       ) : null}
+      <ConfirmActionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="解绑摄像头"
+        description={`确认解绑摄像头「${camera.name}」？`}
+        confirmLabel="确认解绑"
+        destructive
+        pending={pending}
+        onConfirm={deleteCamera}
+      />
     </div>
   );
 }

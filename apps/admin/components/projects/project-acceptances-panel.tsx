@@ -875,11 +875,12 @@ export function ProjectAcceptancesPanel({
                 ) : (
                   <div className="flex flex-col gap-1">
                     {acceptances.map((item) => (
-                      <button
+                      <Button
                         key={item.id}
                         type="button"
+                        variant="ghost"
                         className={cn(
-                          "rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                          "h-auto w-full justify-start rounded-md px-3 py-2.5 text-left font-normal transition-colors hover:bg-accent",
                           item.id === selectedId ? "bg-accent" : "bg-transparent",
                         )}
                         onClick={() => setSelectedId(item.id)}
@@ -896,7 +897,7 @@ export function ProjectAcceptancesPanel({
                           <span>{formatDateTime(item.updated_at || item.created_at)}</span>
                           <span>{item.items.length} 项</span>
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 )}

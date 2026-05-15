@@ -10,6 +10,7 @@ import type {
 } from "@/components/organization/organization-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -203,13 +204,12 @@ export function RolePostRulesClientShell({
                           : "hover:bg-muted/45",
                       )}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={checked}
                         disabled={saving}
-                        className="mt-1 size-4 rounded border border-input accent-primary"
-                        onChange={(event) =>
-                          togglePost(role.role_code, post.code, event.target.checked)
+                        className="mt-1"
+                        onCheckedChange={(value) =>
+                          togglePost(role.role_code, post.code, value === true)
                         }
                       />
                       <span className="min-w-0">

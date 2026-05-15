@@ -15,6 +15,7 @@ import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -375,14 +376,13 @@ function RolePermissionsDialog({
                           className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_180px]"
                         >
                           <label className="flex min-w-0 items-start gap-3">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={checked}
                               disabled={pending}
-                              onChange={(event) =>
-                                togglePermission(permission.id, event.target.checked)
+                              className="mt-1"
+                              onCheckedChange={(value) =>
+                                togglePermission(permission.id, value === true)
                               }
-                              className="mt-1 size-4 rounded border border-input accent-primary"
                             />
                             <span className="min-w-0">
                               <span className="block text-sm font-medium">

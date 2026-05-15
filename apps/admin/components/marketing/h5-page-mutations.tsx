@@ -828,10 +828,10 @@ function H5PageSettingsButton({
   return (
     <>
       {variant === "menu" ? (
-        <button type="button" className="flex w-full items-center gap-2" onClick={() => setOpen(true)}>
-          <Settings />
+        <Button type="button" variant="ghost" className="h-auto w-full justify-start p-0 font-normal" onClick={() => setOpen(true)}>
+          <Settings data-icon="inline-start" />
           配置
-        </button>
+        </Button>
       ) : (
         <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
           <Settings data-icon="inline-start" />

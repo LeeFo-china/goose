@@ -1124,10 +1124,10 @@ function FloatingPhonePreview({
   };
 
   return (
-    <button
+    <Button
       type="button"
       className={cn(
-        "absolute z-30 flex h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition-shadow",
+        "absolute z-30 h-11 rounded-full shadow-lg transition-shadow",
         "cursor-grab active:cursor-grabbing",
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
       )}
@@ -1159,9 +1159,9 @@ function FloatingPhonePreview({
         draggingRef.current = false;
       }}
     >
-      <Phone className="size-4" />
+      <Phone data-icon="inline-start" />
       <span>{props.text}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -2218,19 +2218,20 @@ export function H5PageEditor({
             {moduleTemplates.map((item) => {
               const Icon = item.icon;
               return (
-                <button
+                <Button
                   key={item.type}
                   type="button"
-                  className="flex w-full items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors hover:bg-accent"
+                  variant="outline"
+                  className="h-auto w-full items-start justify-start gap-3 p-3 text-left font-normal"
                   onClick={() => addBlock(item.type)}
                 >
-                  <Icon className="mt-0.5 size-4 text-muted-foreground" />
+                  <Icon className="mt-0.5 text-muted-foreground" data-icon="inline-start" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{item.label}</span>
                     <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
                   </span>
-                  <Plus className="ml-auto size-4 text-muted-foreground" />
-                </button>
+                  <Plus className="ml-auto text-muted-foreground" data-icon="inline-end" />
+                </Button>
               );
             })}
           </div>

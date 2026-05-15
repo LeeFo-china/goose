@@ -12,6 +12,7 @@ import type {
 } from "@/components/organization/organization-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -309,14 +310,11 @@ export function DepartmentPostRulesClientShell({
                       : "hover:bg-muted/45",
                   )}
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={checked}
                     disabled={pending || !activeDepartment}
-                    className="mt-1 size-4 rounded border border-input accent-primary"
-                    onChange={(event) =>
-                      togglePost(post.code, event.target.checked)
-                    }
+                    className="mt-1"
+                    onCheckedChange={(value) => togglePost(post.code, value === true)}
                   />
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">

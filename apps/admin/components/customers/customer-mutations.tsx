@@ -28,6 +28,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -211,8 +212,6 @@ const CustomerFormSchema = z.object({
 
 type CustomerFormValues = z.infer<typeof CustomerFormSchema>;
 
-const SELECT_CLASS_NAME =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = new Set([
   "image/jpeg",
@@ -801,21 +800,24 @@ function CustomerDialog({
               render={({ field, fieldState }) => (
                 <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor={`${mode}-customer-owner`}>负责人</FieldLabel>
-                  <select
+                  <FormSelect
                     id={`${mode}-customer-owner`}
-                    value={field.value}
+                    value={field.value || "__current_account__"}
                     disabled={pending || employees.loading}
-                    aria-invalid={fieldState.invalid}
-                    className={SELECT_CLASS_NAME}
-                    onChange={field.onChange}
-                  >
-                    <option value="">{employees.loading ? "负责人加载中" : "默认当前账号"}</option>
-                    {employees.options.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name || employee.phone || employee.id}
-                      </option>
-                    ))}
-                  </select>
+                    invalid={fieldState.invalid}
+                    placeholder={employees.loading ? "负责人加载中" : "默认当前账号"}
+                    options={[
+                      {
+                        value: "__current_account__",
+                        label: employees.loading ? "负责人加载中" : "默认当前账号",
+                      },
+                      ...employees.options.map((employee) => ({
+                        value: employee.id,
+                        label: employee.name || employee.phone || employee.id,
+                      })),
+                    ]}
+                    onChange={(value) => field.onChange(value === "__current_account__" ? "" : value)}
+                  />
                   <FieldError errors={[fieldState.error]} />
                 </Field>
               )}
@@ -1197,6 +1199,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [detail, setDetail] = useState<CustomerRecord | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const disabled = pending || customer.status === "invalid";
 
   function openDetail() {
@@ -1212,7 +1215,6 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
   }
 
   function deleteCustomer() {
-    if (!window.confirm(`确认作废客户「${customer.name || customer.phone_masked || customer.id}」？`)) return;
     setError("");
     startTransition(async () => {
       try {
@@ -1220,6 +1222,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
           path: `/customers/${customer.id}`,
           method: "DELETE",
         });
+        setDeleteOpen(false);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "作废失败");
@@ -1250,7 +1253,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
               <Edit3 />
               编辑
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={disabled} onSelect={deleteCustomer}>
+            <DropdownMenuItem disabled={disabled} onSelect={() => setDeleteOpen(true)}>
               <Trash2 />
               作废
             </DropdownMenuItem>
@@ -1264,6 +1267,16 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
         onOpenChange={setEditOpen}
       />
       {detail ? <CustomerDetailDialog customer={detail} onClose={() => setDetail(null)} /> : null}
+      <ConfirmActionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="作废客户"
+        description={`确认作废客户「${customer.name || customer.phone_masked || customer.id}」？`}
+        confirmLabel="确认作废"
+        destructive
+        pending={pending}
+        onConfirm={deleteCustomer}
+      />
       {error ? (
         <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}

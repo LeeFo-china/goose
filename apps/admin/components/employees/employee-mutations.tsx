@@ -11,10 +11,12 @@ import {
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Edit3, KeyRound, Loader2, Plus, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -730,12 +732,11 @@ function ManageEmployeeRolesButton({
                       key={role.id}
                       className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-muted/40"
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={checked}
                         disabled={pending}
-                        onChange={(event) => toggleRole(role.id, event.target.checked)}
-                        className="mt-1 size-4 rounded border border-input accent-primary"
+                        className="mt-1"
+                        onCheckedChange={(value) => toggleRole(role.id, value === true)}
                       />
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
@@ -814,15 +815,11 @@ export function EmployeeRowActions({
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, startDeleting] = useTransition();
   const [error, setError] = useState("");
 
   function remove() {
-    const confirmed = window.confirm(
-      `确认删除员工「${employee.name || "未命名员工"}」？该操作会将员工置为已离职并解绑登录账号。`,
-    );
-    if (!confirmed) return;
-
     setError("");
     startDeleting(async () => {
       try {
@@ -830,6 +827,7 @@ export function EmployeeRowActions({
           method: "DELETE",
           id: employee.id,
         });
+        setDeleteOpen(false);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "删除失败");
@@ -853,7 +851,7 @@ export function EmployeeRowActions({
         type="button"
         variant="outline"
         size="sm"
-        onClick={remove}
+        onClick={() => setDeleteOpen(true)}
         disabled={deleting || employee.status === "leaved"}
         title={employee.status === "leaved" ? "员工已离职" : "删除员工"}
       >
@@ -867,6 +865,16 @@ export function EmployeeRowActions({
         posts={posts}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <ConfirmActionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="删除员工"
+        description={`确认删除员工「${employee.name || "未命名员工"}」？该操作会将员工置为已离职并解绑登录账号。`}
+        confirmLabel="确认删除"
+        destructive
+        pending={deleting}
+        onConfirm={remove}
       />
       {error ? (
         <div className="absolute right-5 mt-10 rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">

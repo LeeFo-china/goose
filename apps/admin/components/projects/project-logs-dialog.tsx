@@ -280,10 +280,11 @@ export function ProjectLogsPanel({
                   {log.images.length > 0 ? (
                     <div className="mt-3 flex gap-2 overflow-x-auto">
                       {log.images.slice(0, 6).map((image, index) => (
-                        <button
+                        <Button
                           key={image}
                           type="button"
-                          className="block size-20 shrink-0 overflow-hidden rounded-md border bg-muted transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          variant="ghost"
+                          className="block size-20 shrink-0 overflow-hidden rounded-md border bg-muted p-0 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => setPreview({
                             images: log.images,
                             index,
@@ -291,12 +292,13 @@ export function ProjectLogsPanel({
                           })}
                         >
                           <img src={image} alt="施工日志图片" className="size-full object-cover" />
-                        </button>
+                        </Button>
                       ))}
                       {log.images.length > 6 ? (
-                        <button
+                        <Button
                           type="button"
-                          className="flex size-20 shrink-0 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          variant="ghost"
+                          className="flex size-20 shrink-0 items-center justify-center rounded-md border bg-muted p-0 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => setPreview({
                             images: log.images,
                             index: 6,
@@ -304,7 +306,7 @@ export function ProjectLogsPanel({
                           })}
                         >
                           +{log.images.length - 6}
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   ) : null}

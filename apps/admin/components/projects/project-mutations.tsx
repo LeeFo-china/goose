@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
 import { ProjectAcceptancesPanel } from "@/components/projects/project-acceptances-panel";
 import {
@@ -550,11 +552,11 @@ function ProjectDialog({
             </div>
             <div className="flex flex-col gap-2 md:col-span-2">
               <Label htmlFor={`${mode}-project-address`}>项目地址</Label>
-              <textarea
+              <Textarea
                 id={`${mode}-project-address`}
                 value={formState.address}
                 disabled={pending}
-                className="min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-[72px]"
                 onChange={(event) => setFormState((current) => ({
                   ...current,
                   address: event.target.value,
@@ -721,6 +723,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [detail, setDetail] = useState<{
     project: ProjectRecord;
     initialTab: ProjectDetailTab;
@@ -743,7 +746,6 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
   }
 
   function deleteProject() {
-    if (!window.confirm(`确认作废项目「${project.name}」？`)) return;
     setError("");
     startTransition(async () => {
       try {
@@ -751,6 +753,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
           path: `/projects/${project.id}`,
           method: "DELETE",
         });
+        setDeleteOpen(false);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "作废失败");
@@ -768,7 +771,7 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
         <Edit3 />
         编辑
       </Button>
-      <Button type="button" variant="outline" size="sm" onClick={deleteProject} disabled={disabled}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setDeleteOpen(true)} disabled={disabled}>
         <Trash2 />
         作废
       </Button>
@@ -785,6 +788,16 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
           onClose={() => setDetail(null)}
         />
       ) : null}
+      <ConfirmActionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="作废项目"
+        description={`确认作废项目「${project.name}」？`}
+        confirmLabel="确认作废"
+        destructive
+        pending={pending}
+        onConfirm={deleteProject}
+      />
       {error ? (
         <div className="absolute right-5 mt-10 max-w-[360px] rounded-md border border-destructive/50 bg-background px-3 py-2 text-xs text-destructive shadow-sm">
           {error}

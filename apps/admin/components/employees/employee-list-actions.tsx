@@ -9,7 +9,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { cn } from "@/lib/utils";
 
 type StatusOption = {
   label: string;
@@ -56,28 +55,21 @@ export function EmployeesStatusFilters({
       {options.map((item) => {
         const active = currentStatus === item.value;
         return (
-          <button
+          <Button
             key={item.value || "all"}
             type="button"
+            variant={active ? "default" : "outline"}
+            size="sm"
             disabled={pending}
             onClick={() => onNavigate(buildEmployeesHref({
               status: item.value,
               keyword,
             }))}
-            className="contents"
+            className="h-9"
           >
-            <span
-              className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-foreground hover:bg-accent",
-              )}
-            >
-              {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-              {item.label}
-            </span>
-          </button>
+            {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            {item.label}
+          </Button>
         );
       })}
     </div>

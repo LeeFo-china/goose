@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, Info, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { CopyValueButton } from "@/components/admin/copy-value-button";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -324,6 +325,7 @@ export function TencentDevicePasswordActions({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [result, setResult] = useState<TencentPasswordResult | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
 
   function queryPassword() {
     setError("");
@@ -346,9 +348,6 @@ export function TencentDevicePasswordActions({
   }
 
   function resetPassword() {
-    if (!window.confirm("重置后现场设备必须同步更新 SIP 认证密码，否则可能离线。确认继续？")) {
-      return;
-    }
     setError("");
     startTransition(async () => {
       try {
@@ -364,6 +363,7 @@ export function TencentDevicePasswordActions({
           sip_username: data.device_code || deviceCode || deviceId.split("_")[0],
           sip_transport_protocol: "TCP",
         });
+        setResetOpen(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "重置密码失败");
       }
@@ -377,7 +377,7 @@ export function TencentDevicePasswordActions({
           {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Eye data-icon="inline-start" />}
           查密码
         </Button>
-        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={resetPassword}>
+        <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => setResetOpen(true)}>
           <RefreshCw data-icon="inline-start" />
           重置
         </Button>
@@ -391,6 +391,15 @@ export function TencentDevicePasswordActions({
           onClose={() => setResult(null)}
         />
       ) : null}
+      <ConfirmActionDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="重置 SIP 认证密码"
+        description="重置后现场设备必须同步更新 SIP 认证密码，否则可能离线。确认继续？"
+        confirmLabel="确认重置"
+        pending={pending}
+        onConfirm={resetPassword}
+      />
     </div>
   );
 }
