@@ -34,6 +34,11 @@
   --goose-ink: #141414;
   --goose-brown: #4d3b00;
   --goose-surface-warm: #fffbec;
+  --workbench-glow: 255 212 73;
+  --workbench-glow-alpha: 0.24;
+  --workbench-bg-start: 46 100% 99%;
+  --workbench-bg-mid: 47 100% 95%;
+  --workbench-bg-end: 46 100% 99%;
   --font-sans: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -60,14 +65,24 @@ body {
 
 .console-grid {
   background-image:
-    radial-gradient(circle at 50% 18%, rgb(255 214 75 / 28%), transparent 36%),
-    linear-gradient(180deg, #fffdf6 0%, #fff5cf 54%, #f3b400 100%);
+    radial-gradient(circle at 50% 18%, rgb(var(--workbench-glow) / var(--workbench-glow-alpha)), transparent 36%),
+    linear-gradient(
+      180deg,
+      hsl(var(--workbench-bg-start)) 0%,
+      hsl(var(--workbench-bg-mid)) 54%,
+      hsl(var(--primary)) 100%
+    );
 }
 
 .goose-workbench-bg {
   background:
-    radial-gradient(circle at 18% 0%, rgb(255 212 73 / 24%), transparent 28%),
-    linear-gradient(180deg, #fffdf6 0%, #fff9e4 42%, #fffdf6 100%);
+    radial-gradient(circle at 18% 0%, rgb(var(--workbench-glow) / var(--workbench-glow-alpha)), transparent 28%),
+    linear-gradient(
+      180deg,
+      hsl(var(--workbench-bg-start)) 0%,
+      hsl(var(--workbench-bg-mid)) 42%,
+      hsl(var(--workbench-bg-end)) 100%
+    );
 }
 
 html[data-admin-compact="true"] main .gap-5 {

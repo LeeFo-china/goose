@@ -100,10 +100,10 @@ export function RotatableImagePreview({
               type="button"
               variant="ghost"
               size="sm"
-              aria-label="重置旋转"
+              aria-label={`当前旋转 ${normalizedRotation} 度，点击重置`}
               onClick={resetRotation}
             >
-              0°
+              {normalizedRotation}°
             </Button>
             <Button
               type="button"
