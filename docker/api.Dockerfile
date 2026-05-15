@@ -7,6 +7,7 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY packages/domain/package.json ./packages/domain/package.json
 
 RUN corepack enable && \
+  corepack prepare pnpm@10.33.0 --activate && \
   pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
 
 FROM oven/bun:1.3 AS builder

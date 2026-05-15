@@ -3,6 +3,7 @@
   "module": "apps/api/src/app.ts",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "workspaces": [
     "apps/*",
     "packages/*"

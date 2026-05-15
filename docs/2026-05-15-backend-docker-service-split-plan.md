@@ -451,12 +451,15 @@ API 镜像构建阶段可以使用 Node + pnpm 安装依赖：
 
 ```Dockerfile
 FROM node:22-bookworm-slim AS deps
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && \
+  corepack prepare pnpm@10.33.0 --activate && \
+  pnpm install --frozen-lockfile
 ```
 
 原因：
 
 - 当前 `pnpm-lock.yaml` 已完整覆盖 `apps/api` workspace 依赖。
+- 需要固定 `pnpm@10.33.0`，避免 Corepack 在 Docker build 中拉取新版 pnpm 后触发 `packageExtensionsChecksum` 不一致。
 - `bun.lock` 更偏向根后端运行依赖，曾在 Docker build 的 `bun install --frozen-lockfile` 阶段失败。
 - 最终运行阶段仍然是 Bun，不要求宿主机安装 pnpm、Node、nvm。
 
