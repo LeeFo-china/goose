@@ -21,7 +21,9 @@ type ProjectLogCommentRow = {
   created_at: string;
 };
 
-type ReconcileResult = {
+export type ProjectLogCommentCosReconcileOptions = CliOptions;
+
+export type ProjectLogCommentCosReconcileResult = {
   comment_id: string;
   tenant_id: string;
   log_id: string;
@@ -32,7 +34,7 @@ type ReconcileResult = {
   reason: string;
 };
 
-function parseArgs(argv: string[]): CliOptions {
+export function parseProjectLogCommentCosReconcileArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     limit: 200,
     outDir: "reports/project-log-comment-cos-reconcile",
@@ -95,7 +97,7 @@ function csvEscape(value: unknown) {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function toCsv(items: ReconcileResult[]) {
+function toCsv(items: ProjectLogCommentCosReconcileResult[]) {
   const headers = [
     "comment_id",
     "tenant_id",
@@ -166,7 +168,7 @@ async function getExistingFileObjectMap(objectKeys: string[]) {
   return map;
 }
 
-async function reconcile(options: CliOptions) {
+export async function reconcileProjectLogCommentCosObjects(options: CliOptions) {
   const comments = await listComments(options);
   const candidates = comments.flatMap((comment) =>
     normalizeImages(comment.images)
@@ -180,7 +182,7 @@ async function reconcile(options: CliOptions) {
   const existingMap = await getExistingFileObjectMap(
     candidates.map((item) => item.objectKey),
   );
-  const results: ReconcileResult[] = [];
+  const results: ProjectLogCommentCosReconcileResult[] = [];
 
   for (const item of candidates) {
     const existing = existingMap.get(item.objectKey);
@@ -247,18 +249,34 @@ async function reconcile(options: CliOptions) {
   return results;
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const results = await reconcile(options);
-  await mkdir(options.outDir, { recursive: true });
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outputPath = join(options.outDir, `${timestamp}.csv`);
-  await writeFile(outputPath, `${toCsv(results)}\n`, "utf8");
-
-  const summary = results.reduce<Record<string, number>>((acc, item) => {
+export function summarizeProjectLogCommentCosReconcile(
+  results: ProjectLogCommentCosReconcileResult[],
+) {
+  return results.reduce<Record<string, number>>((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
     return acc;
   }, {});
+}
+
+export async function writeProjectLogCommentCosReconcileReport(
+  results: ProjectLogCommentCosReconcileResult[],
+  outDir: string,
+) {
+  await mkdir(outDir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputPath = join(outDir, `${timestamp}.csv`);
+  await writeFile(outputPath, `${toCsv(results)}\n`, "utf8");
+  return outputPath;
+}
+
+async function main() {
+  const options = parseProjectLogCommentCosReconcileArgs(process.argv.slice(2));
+  const results = await reconcileProjectLogCommentCosObjects(options);
+  const outputPath = await writeProjectLogCommentCosReconcileReport(
+    results,
+    options.outDir,
+  );
+  const summary = summarizeProjectLogCommentCosReconcile(results);
   console.log(JSON.stringify({
     apply: options.apply,
     scanned: results.length,
@@ -267,7 +285,9 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

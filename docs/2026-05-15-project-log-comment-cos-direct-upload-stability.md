@@ -122,7 +122,7 @@ POST /uploads/cos/direct-complete
 - 微信 OAuth 和业务身份强校验增加 10 秒成功短缓存。
 - 微信 OAuth 校验和业务身份校验并行执行。
 - 小程序端将 `direct-complete` 改为 best-effort 异步执行。
-- 小程序端限制 `file_count === 1` 才启用 COS 直传；多图回退 `/uploads/images`。
+- 小程序端多图评论图片也走 COS 直传，并发限制为 2；失败时才回退 `/uploads/images`。
 
 ## 3. 补偿巡检脚本
 
@@ -205,15 +205,49 @@ PLATFORM_COS_PUBLIC_BASE_URL=...
 
 本地未注入 `SUPABASE_URL` 时，脚本会直接失败；应在服务器或 CI 运行环境执行。
 
-## 4. 建议运维策略
+## 4. 自动兜底 worker
 
-第一阶段建议人工执行：
+为避免依赖人工巡检，后端新增独立 PM2 worker：
+
+```text
+apps/api/src/workers/project-log-comment-cos-reconcile-worker.ts
+```
+
+package script：
+
+```bash
+bun run --cwd apps/api worker:project-log-comment-cos-reconcile
+```
+
+部署流程会启动：
+
+```text
+goose-project-log-comment-cos-reconcile-worker
+```
+
+默认策略：
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED` | `true` | 是否启用 worker |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY` | `true` | 缺失时是否自动补写 |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_INTERVAL_MS` | `600000` | 10 分钟执行一次 |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_LOOKBACK_MINUTES` | `1440` | 每次扫描最近 24 小时 |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_LIMIT` | `1000` | 单次最多扫描评论数 |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_TENANT_ID` | 空 | 空表示全租户 |
+| `PROJECT_LOG_COMMENT_COS_RECONCILE_OUT_DIR` | `reports/project-log-comment-cos-reconcile` | 异常/补写报告目录 |
+
+worker 只在出现 `reconciled`、`failed` 或 dry-run 缺失时写 CSV 报告；全部正常时只输出结构化日志。
+
+## 5. 建议运维策略
+
+worker 已自动兜底，但人工排查仍可以执行：
 
 - 每天或每次发布后执行 dry-run。
 - 如果 `dry_run_missing = 0`，无需 apply。
 - 如果出现缺失，先抽查 CSV，再执行 `--apply`。
 
-稳定 1 周后可以接入定时任务：
+如需手动执行最近 1 小时：
 
 ```bash
 bun run --cwd apps/api project-log-comments:cos:reconcile -- \
@@ -225,7 +259,7 @@ bun run --cwd apps/api project-log-comments:cos:reconcile -- \
 
 注意：Linux 环境 `date` 参数需要替换为 GNU date 写法。
 
-## 5. 后续复用规则
+## 6. 后续复用规则
 
 后续其它上传场景迁移直传时，必须同时满足：
 
@@ -234,7 +268,7 @@ bun run --cwd apps/api project-log-comments:cos:reconcile -- \
 - `complete` 可异步，但必须有后端补偿巡检脚本。
 - 每个场景必须定义 object key 前缀、大小限制、权限校验和补偿范围。
 - 图片读取统一走 `resolveStoredFileUrl` / `resolveStoredFileUrlList`。
-- 微信小程序端多图不要直接复用 `Taro.request PUT` 多次直传，需要单独验证；当前已验证该路径不稳定。
+- 微信小程序端多图直传必须限制并发并保留 fallback；当前评论图片并发 2 已验证稳定。
 
 建议迁移顺序：
 

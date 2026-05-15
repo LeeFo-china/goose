@@ -2,14 +2,14 @@
 
 日期：2026-05-15  
 适用端：微信小程序客户/员工施工日志评论  
-状态：已对接，单图直传 10 次人工验证通过；多图回退旧上传链路。
+状态：已对接，单图和多图直传均已人工验证通过；多图直传并发限制为 2。
 
 ## 1. 当前小程序流程
 
 小程序端评论图片上传流程：
 
 ```text
-选择 1 张图片
+选择图片
 -> prepareImagesForUpload
 -> POST /uploads/cos/direct-init
 -> Taro.request PUT upload_url
@@ -21,8 +21,10 @@
 
 ```text
 选择 2 张及以上图片
--> 打印 direct-skip-multiple-files
--> POST /uploads/images
+-> prepareImagesForUpload
+-> 并发 2 执行 direct-init/read-local-file/PUT COS
+-> 所有 PUT 成功后立即返回 storage_path/object_key 给评论发布流程
+-> 异步 POST /uploads/cos/direct-complete
 ```
 
 关键变化：
@@ -30,7 +32,7 @@
 - 评论发布不再等待 `direct-complete`。
 - `direct-complete` 失败只打 `direct-complete-async-failed` 日志，不阻塞用户。
 - 评论保存的 `images` 必须优先使用 `storage_path/object_key/path`，不能保存本地临时路径。
-- `file_count > 1` 不走 COS 直传，原因是微信小程序端多次 PUT COS 网络耗时不稳定。
+- 多图 PUT COS 必须限制并发，当前固定并发为 2；直传失败时再回退 `/uploads/images`。
 
 ## 2. 环境变量
 
@@ -46,7 +48,7 @@ TARO_APP_DIRECT_COS_UPLOAD=true
 POST /uploads/images
 ```
 
-即使开启该变量，多图也会强制回退 `/uploads/images`。
+开启后单图和多图都会优先走 COS 直传；直传失败时回退 `/uploads/images`。
 
 ## 3. 请求接口
 
@@ -165,10 +167,10 @@ storage_path || object_key || path || url
 [PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-complete-async
 ```
 
-多图回退日志：
+多图正常日志会出现：
 
 ```text
-[PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-skip-multiple-files
+[PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-upload-total
 ```
 
 示例：
@@ -176,9 +178,12 @@ storage_path || object_key || path || url
 ```json
 {
   "file_count": 2,
-  "reason": "multi_file_cos_put_unstable"
+  "concurrency": 2,
+  "total_size_bytes": 686867
 }
 ```
+
+只有直传整体失败时才会出现 `fallback-upload-*` 日志。
 
 异常日志：
 
@@ -197,7 +202,7 @@ storage_path || object_key || path || url
 本场景继续迭代前，必须满足：
 
 - 连续 10 次单图上传无 `direct-complete-async-failed`。
-- 多图上传走 `/uploads/images`，不丢图。
+- 多图上传优先走 COS 直传，`direct-upload-total` 稳定在可接受范围，不丢图。
 - 评论发布按钮不会因 `direct-complete` 转圈。
 - 评论列表和详情中的图片都能打开预览。
 - 后端补偿脚本 dry-run 可扫描出缺失项。

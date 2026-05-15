@@ -146,6 +146,22 @@ jobs:
           "$PM2_BIN" save
           "$PM2_BIN" status goose-social-video-worker
 
+          # Deploy project log comment COS reconcile worker.
+          echo "Deploying goose-project-log-comment-cos-reconcile-worker..."
+          RECONCILE_WORKER_CWD="$GITHUB_WORKSPACE/apps/api"
+          RECONCILE_WORKER_ENTRY="$RECONCILE_WORKER_CWD/src/workers/project-log-comment-cos-reconcile-worker.ts"
+          CURRENT_RECONCILE_WORKER_CWD=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose-project-log-comment-cos-reconcile-worker"); process.stdout.write(app?.pm2_env?.pm_cwd || ""); });')
+          CURRENT_RECONCILE_WORKER_ENTRY=$("$PM2_BIN" jlist | "$NODE_BIN" -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { const app = JSON.parse(s).find((item) => item.name === "goose-project-log-comment-cos-reconcile-worker"); process.stdout.write(app?.pm2_env?.pm_exec_path || ""); });')
+          if [ "$CURRENT_RECONCILE_WORKER_CWD" = "$RECONCILE_WORKER_CWD" ] && [ "$CURRENT_RECONCILE_WORKER_ENTRY" = "$RECONCILE_WORKER_ENTRY" ]; then
+            "$PM2_BIN" restart goose-project-log-comment-cos-reconcile-worker --update-env || "$PM2_BIN" reload goose-project-log-comment-cos-reconcile-worker --update-env
+          else
+            echo "Recreating goose-project-log-comment-cos-reconcile-worker PM2 process because its entry changed."
+            "$PM2_BIN" delete goose-project-log-comment-cos-reconcile-worker >/dev/null 2>&1 || true
+            "$PM2_BIN" start "$RECONCILE_WORKER_ENTRY" --interpreter "$BUN_BIN" --name goose-project-log-comment-cos-reconcile-worker --cwd "$RECONCILE_WORKER_CWD" --update-env
+          fi
+          "$PM2_BIN" save
+          "$PM2_BIN" status goose-project-log-comment-cos-reconcile-worker
+
           # The shared backend .env currently contains NODE_ENV=development.
           # Next.js production builds must run with NODE_ENV=production.
           touch apps/admin/.env.production
