@@ -71,7 +71,22 @@ export function RotatableImagePreview({
             <div className="truncate text-sm font-medium">{title || label || alt}</div>
             <div className="text-xs text-muted-foreground">旋转角度 {normalizedRotation}°</div>
           </div>
-          <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" aria-label="打开原图" asChild>
+            <a href={src} target="_blank" rel="noreferrer">
+              <ExternalLink data-icon="inline-start" />
+            </a>
+          </Button>
+        </div>
+        <div className="flex h-[min(70vh,560px)] w-full items-center justify-center overflow-auto rounded-sm bg-muted/30">
+          <img
+            src={src}
+            alt={`${alt}完整预览`}
+            className="max-h-full max-w-full object-contain transition-transform duration-200 motion-reduce:transition-none"
+            style={{ transform: `rotate(${rotation}deg)` }}
+          />
+        </div>
+        <div className="flex justify-center pt-2">
+          <div className="flex items-center gap-1 rounded-md border bg-background p-1">
             <Button
               type="button"
               variant="ghost"
@@ -84,7 +99,7 @@ export function RotatableImagePreview({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="sm"
               aria-label="重置旋转"
               onClick={resetRotation}
             >
@@ -99,20 +114,7 @@ export function RotatableImagePreview({
             >
               <RotateCw data-icon="inline-start" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="打开原图" asChild>
-              <a href={src} target="_blank" rel="noreferrer">
-                <ExternalLink data-icon="inline-start" />
-              </a>
-            </Button>
           </div>
-        </div>
-        <div className="flex h-[min(70vh,560px)] w-full items-center justify-center overflow-auto rounded-sm bg-muted/30">
-          <img
-            src={src}
-            alt={`${alt}完整预览`}
-            className="max-h-full max-w-full object-contain transition-transform duration-200 motion-reduce:transition-none"
-            style={{ transform: `rotate(${rotation}deg)` }}
-          />
         </div>
       </HoverCardContent>
     </HoverCard>
