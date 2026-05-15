@@ -3,10 +3,11 @@ name: Deploy
 on:
   push:
     branches: [main, feature/customer, feature/multi-tenant]
+  workflow_dispatch:
 
 concurrency:
   group: goose-prod-deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
