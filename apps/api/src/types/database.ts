@@ -992,6 +992,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          avatar: string | null
           claimed_at: string | null
           created_at: string | null
           customer_origin: string
@@ -1009,6 +1010,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          avatar?: string | null
           claimed_at?: string | null
           created_at?: string | null
           customer_origin?: string
@@ -1026,6 +1028,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          avatar?: string | null
           claimed_at?: string | null
           created_at?: string | null
           customer_origin?: string

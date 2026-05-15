@@ -43,7 +43,10 @@ import {
 } from "@/services/customer-sources";
 import { ErrorCodes } from "@/errors/error-codes";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
-import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
+import {
+  resolveStoredFileUrl,
+  resolveStoredFileUrlList,
+} from "@/services/files/file-url-resolver";
 
 type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
@@ -72,6 +75,7 @@ type CustomerRowForResponse = {
   owner_id: string | null;
   id: string;
   property_id?: string | null;
+  avatar?: string | null;
   source?: string | null;
   phone?: string | null;
   douyin_screenshot_images?: unknown;
@@ -265,6 +269,7 @@ class CustomerController extends BaseController<
     id?: string;
     owner?: unknown;
     owner_id: string | null;
+    avatar?: string | null;
     phone?: string | null;
     douyin_screenshot_images?: unknown;
   }>(
@@ -294,6 +299,7 @@ class CustomerController extends BaseController<
     return {
       ...row,
       ...phoneFields,
+      avatar: resolveStoredFileUrl(row.avatar ?? null),
       owner,
       owner_name: owner?.name ?? null,
       douyin_screenshot_images: resolveStoredFileUrlList(

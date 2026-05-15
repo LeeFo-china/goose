@@ -57,6 +57,7 @@ const SOURCE_CONFIGS: SourceConfig[] = [
   { table: "expense_request_settlements", field: "evidence_images", kind: "array", hasTenantId: true },
   { table: "project_referrals", field: "paid_evidence_images", kind: "array", hasTenantId: false },
   { table: "employees", field: "avatar", kind: "single", hasTenantId: true },
+  { table: "customers", field: "avatar", kind: "single", hasTenantId: true },
   { table: "marketing_pages", field: "cover_image", kind: "single", hasTenantId: true },
 ];
 
@@ -254,7 +255,7 @@ async function fetchSourceRow(table: string, id: string) {
     case "customers": {
       const { data, error } = await SupabaseDB.getAdminClient()
         .from("customers")
-        .select("id,tenant_id,douyin_screenshot_images")
+        .select("id,tenant_id,douyin_screenshot_images,avatar")
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;

@@ -96,6 +96,12 @@ export const CustomerSchema = z.object({
   // owner_id 通常关联用户表的 UUID
   owner_id: z.string().uuid("无效的所有者 ID").nullable().optional(),
 
+  // avatar 保存平台存储 object key、历史 URL 或兼容路径
+  avatar: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(1000, "头像路径过长").nullable().optional(),
+  ),
+
   // source 和 status 建议使用枚举（Enum）或者简单的字符串
   source: z.enum(CUSTOMER_SOURCE_VALUES, {
     message: "无效的客户来源",

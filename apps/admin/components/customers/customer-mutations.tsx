@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   CUSTOMER_SOURCE_VALUES,
@@ -13,7 +13,21 @@ import {
 import { useRouter } from "next/navigation";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
-import { CalendarClock, Edit3, Eye, Loader2, MessageSquareText, MoreHorizontal, Plus, Share2, Tags, Trash2 } from "lucide-react";
+import {
+  CalendarClock,
+  Edit3,
+  Eye,
+  Loader2,
+  MessageSquareText,
+  MoreHorizontal,
+  Plus,
+  Share2,
+  Tags,
+  Trash2,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +138,7 @@ export type CustomerFollowUpRecord = {
 export type CustomerRecord = {
   id: string;
   name: string | null;
+  avatar?: string | null;
   phone?: string | null;
   phone_masked?: string | null;
   can_view_phone?: boolean;
@@ -178,6 +193,7 @@ const sourceOptions = CUSTOMER_SOURCE_VALUES.map((value) => [
 
 const CustomerFormSchema = z.object({
   name: z.string().trim().min(1, "请输入客户姓名"),
+  avatar: z.string(),
   phone: z.string().trim().regex(/^1[3-9]\d{9}$/, "请输入有效手机号"),
   status: z.enum(CUSTOMER_STATUS_VALUES),
   source: z.enum(CUSTOMER_SOURCE_VALUES),
@@ -197,6 +213,14 @@ type CustomerFormValues = z.infer<typeof CustomerFormSchema>;
 
 const SELECT_CLASS_NAME =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -330,12 +354,48 @@ async function requestCustomer(input: {
   return payload.data;
 }
 
+async function uploadCustomerAvatar(file: File) {
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
+  }
+
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error("头像图片不能超过 2MB");
+  }
+
+  const formData = new FormData();
+  formData.append("scene", "customer_avatar");
+  formData.append("files", file);
+
+  const response = await fetch("/api/backend/uploads/images", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(getPayloadMessage(payload, "上传头像失败"));
+  }
+
+  const uploaded = payload.data?.list?.[0] || {};
+  const storageValue = uploaded.storage_path || uploaded.object_key || uploaded.path || uploaded.url;
+  const previewUrl = uploaded.url || storageValue;
+  if (typeof storageValue !== "string" || !storageValue) {
+    throw new Error("头像上传成功但未返回图片地址");
+  }
+
+  return {
+    value: storageValue,
+    previewUrl: typeof previewUrl === "string" ? previewUrl : storageValue,
+  };
+}
+
 function buildDefaults(customer?: CustomerRecord): CustomerFormValues {
   const primaryProperty = (customer?.properties || []).find((item) => item.is_primary) ||
     customer?.properties?.[0];
 
   return {
     name: customer?.name || "",
+    avatar: customer?.avatar || "",
     phone: customer?.phone || "",
     status: isCustomerStatusValue(customer?.status) ? customer.status : "potential",
     source: isCustomerSourceValue(customer?.source) ? customer.source : "walk_in",
@@ -414,6 +474,12 @@ function CustomerDialog({
   const defaults = useMemo(() => buildDefaults(customer), [customer]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [avatar, setAvatar] = useState(defaults.avatar);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(defaults.avatar);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [avatarDirty, setAvatarDirty] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const employees = useEmployeeOptions(open, customer);
   const form = useForm<CustomerFormValues>({
     resolver: zodResolver(CustomerFormSchema as never) as Resolver<CustomerFormValues>,
@@ -422,13 +488,39 @@ function CustomerDialog({
   const selectedSource = form.watch("source");
 
   useEffect(() => {
-    if (open) form.reset(defaults);
+    if (!open) return;
+    form.reset(defaults);
+    setAvatar(defaults.avatar);
+    setAvatarPreviewUrl(defaults.avatar);
+    setUploadingAvatar(false);
+    setAvatarLoadFailed(false);
+    setAvatarDirty(false);
   }, [open, defaults, form]);
 
   function close() {
-    if (pending) return;
+    if (pending || uploadingAvatar) return;
     setError("");
     onOpenChange(false);
+  }
+
+  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setError("");
+    setUploadingAvatar(true);
+    try {
+      const uploaded = await uploadCustomerAvatar(file);
+      setAvatar(uploaded.value);
+      setAvatarPreviewUrl(uploaded.previewUrl);
+      setAvatarLoadFailed(false);
+      setAvatarDirty(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "上传头像失败");
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   function submit(values: CustomerFormValues) {
@@ -442,7 +534,21 @@ function CustomerDialog({
         values.layout.trim() ||
         values.area,
     );
-    const payload = {
+    const payload: {
+      name: string;
+      avatar?: string | null;
+      phone: string;
+      status: CustomerFormValues["status"];
+      source: CustomerFormValues["source"];
+      owner_id: string | null;
+      douyin_screenshot_images: string[];
+      property: {
+        community: string;
+        building_info: string | null;
+        area: number | null;
+        layout: string | null;
+      } | null;
+    } = {
       name: values.name.trim(),
       phone: values.phone.trim(),
       status: values.status,
@@ -458,6 +564,9 @@ function CustomerDialog({
         }
         : null,
     };
+    if (mode === "create" || avatarDirty) {
+      payload.avatar = avatar || null;
+    }
 
     setError("");
     startTransition(async () => {
@@ -488,6 +597,71 @@ function CustomerDialog({
         </DialogHeader>
         <form className="flex max-h-[calc(88vh-82px)] flex-col gap-4 overflow-y-auto p-5" onSubmit={form.handleSubmit(submit)}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <Field className="md:col-span-2">
+              <FieldLabel htmlFor={`${mode}-customer-avatar-file`}>头像</FieldLabel>
+              <input type="hidden" name="avatar" value={avatar} />
+              <div className="flex gap-3">
+                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
+                  {avatarPreviewUrl && !avatarLoadFailed ? (
+                    <img
+                      src={avatarPreviewUrl}
+                      alt={`${defaults.name || "客户"}头像预览`}
+                      className="size-full object-cover"
+                      onError={() => setAvatarLoadFailed(true)}
+                    />
+                  ) : (
+                    <UserRound />
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={pending || uploadingAvatar}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {uploadingAvatar
+                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                        : <Upload data-icon="inline-start" />}
+                      上传头像
+                    </Button>
+                    {avatar ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={pending || uploadingAvatar}
+                        onClick={() => {
+                          setAvatar("");
+                          setAvatarPreviewUrl("");
+                          setAvatarLoadFailed(false);
+                          setAvatarDirty(true);
+                        }}
+                      >
+                        <X data-icon="inline-start" />
+                        清除
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Input
+                    id={`${mode}-customer-avatar-file`}
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    className="sr-only"
+                    disabled={pending || uploadingAvatar}
+                    onChange={handleAvatarChange}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {avatar
+                      ? avatarLoadFailed
+                        ? "头像图片加载失败，请重新上传"
+                        : "已上传头像"
+                      : "支持 JPG、PNG、WebP、HEIC，单张不超过 2MB"}
+                  </p>
+                </div>
+              </div>
+            </Field>
             <Controller
               name="name"
               control={form.control}
