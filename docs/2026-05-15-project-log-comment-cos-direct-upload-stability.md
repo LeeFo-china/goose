@@ -259,7 +259,7 @@ UPLOAD_TIMING_LOG_ENABLED=true
 如果只需要观察慢请求，建议同时配置：
 
 ```env
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 

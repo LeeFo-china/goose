@@ -24,7 +24,8 @@
 | 小程序施工日志图片 | COS 直传 | 已接入 | 由 reconcile worker 兜底补登记 |
 | Admin 员工头像 | COS 直传 | 已接入 | 直传失败直接报错，不静默回退慢链路 |
 | Admin 客户头像 | COS 直传 | 已接入 | 预览走 `/uploads/public-url` |
-| 费用/验收/H5 活动图片 | 先保持 `/uploads/images` 兼容 | 待逐步切换 | 后续按页面逐个改为直传 |
+| 工序验收图片 | COS 直传 | Admin 已接入，小程序待对接 | 场景 `project_acceptance` |
+| 费用/H5 活动图片 | 先保持 `/uploads/images` 兼容 | 待逐步切换 | 后续按页面逐个改为直传 |
 | 360 全景图 | COS 对象存储 | 规划中 | 原图、拼接图、瓦片都应走 COS |
 
 ## URL 有效期建议
@@ -63,7 +64,7 @@ PLATFORM_COS_SIGNED_URL_TTL_BY_SCENE
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 
@@ -78,7 +79,7 @@ UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_acceptance,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 
@@ -91,8 +92,8 @@ UPLOAD_TIMING_LOG_ENABLED=false
 ## 迁移推进顺序
 
 1. 已完成业务继续观察：评论图片、施工日志图片、员工头像、客户头像。
-2. 费用审批附件改为 COS 直传。
-3. 工序验收图片改为 COS 直传。
+2. 工序验收图片改为 COS 直传。
+3. 费用审批附件改为 COS 直传。
 4. H5 活动图片改为 COS 直传。
 5. 360 全景原图、拼接图、瓦片统一落 COS。
 6. 对旧 Supabase Storage 和历史 URL 做 dry-run、迁移、校验、只读兼容。
@@ -112,7 +113,7 @@ UPLOAD_TIMING_LOG_ENABLED=false
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 

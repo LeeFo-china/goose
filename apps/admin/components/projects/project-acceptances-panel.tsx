@@ -147,6 +147,27 @@ type NotifyCustomerResult = {
   expire_at: string;
 };
 
+type DirectUploadInitResult = {
+  provider: "tencent_cos";
+  bucket: string;
+  region: string | null;
+  object_key: string;
+  storage_path: string;
+  upload_url: string;
+  method?: "PUT";
+  headers?: Record<string, string>;
+  expires_in: number;
+  expires_at: string;
+};
+
+type DirectUploadCompleteResult = {
+  url?: string;
+  path?: string;
+  provider?: string;
+  object_key?: string;
+  storage_path?: string;
+};
+
 type EditableItem = {
   id: string;
   result: AcceptanceItemResult | null;
@@ -206,6 +227,58 @@ async function requestBackend<T>(
     throw new Error(getPayloadMessage(payload, "请求失败"));
   }
   return payload.data as T;
+}
+
+async function uploadAcceptanceImageDirect(file: File, projectId: string) {
+  const mimetype = file.type || "image/jpeg";
+  const init = await requestBackend<DirectUploadInitResult>("/uploads/cos/direct-init", {
+    method: "POST",
+    payload: {
+      scene: "project_acceptance",
+      project_id: projectId,
+      filename: file.name,
+      mimetype,
+      size_bytes: file.size,
+    },
+  });
+
+  const uploadResponse = await fetch(init.upload_url, {
+    method: init.method || "PUT",
+    headers: init.headers || { "content-type": mimetype },
+    body: file,
+  });
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "");
+    throw new Error(
+      `上传验收图片到 COS 失败(${uploadResponse.status})${
+        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
+      }`,
+    );
+  }
+
+  const completed = await requestBackend<DirectUploadCompleteResult>("/uploads/cos/direct-complete", {
+    method: "POST",
+    payload: {
+      scene: "project_acceptance",
+      project_id: projectId,
+      filename: file.name,
+      mimetype,
+      size_bytes: file.size,
+      object_key: init.object_key,
+      etag: uploadResponse.headers.get("etag") || undefined,
+    },
+  });
+
+  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
+    init.object_key;
+  if (!storageValue) {
+    throw new Error("验收图片上传成功但未返回图片地址");
+  }
+
+  return {
+    path: storageValue,
+    preview: completed.url || storageValue,
+  };
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -692,29 +765,9 @@ export function ProjectAcceptancesPanel({
     setUploadingItemId(`${itemId}:${target}`);
     setError("");
     try {
-      const formData = new FormData();
-      formData.append("scene", "project_acceptance");
-      formData.append("project_id", project.id);
-      files.forEach((file) => formData.append("files", file));
-      const response = await fetch("/api/backend/uploads/images", {
-        method: "POST",
-        body: formData,
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.success === false) {
-        throw new Error(getPayloadMessage(payload, "图片上传失败"));
-      }
-      const uploaded = ((payload.data?.list || []) as Array<{
-        path?: string;
-        url?: string;
-      }>)
-        .map((item) => ({
-          path: item.path,
-          preview: item.url || item.path,
-        }))
-        .filter((item): item is { path: string; preview: string } =>
-          Boolean(item.path && item.preview)
-        );
+      const uploaded = await Promise.all(
+        files.map((file) => uploadAcceptanceImageDirect(file, project.id)),
+      );
       const currentItem = editable.items[itemId];
       updateEditableItem(itemId, {
         [target]: [

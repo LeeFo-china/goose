@@ -48,6 +48,7 @@ const DIRECT_UPLOAD_SCENES = [
   "project_log_comment",
   "employee_avatar",
   "customer_avatar",
+  "project_acceptance",
 ] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 
