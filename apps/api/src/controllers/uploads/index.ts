@@ -110,11 +110,17 @@ type UploadActorContext = {
 
 const now = () => Date.now();
 
+function isUploadTimingLogEnabled() {
+  return process.env.UPLOAD_TIMING_LOG_ENABLED === "true";
+}
+
 function logUploadImagesTiming(
   stage: string,
   startedAt: number,
   extra: Record<string, unknown> = {},
 ) {
+  if (!isUploadTimingLogEnabled()) return;
+
   console.info(UPLOAD_IMAGES_TIMING_PREFIX, stage, {
     duration_ms: now() - startedAt,
     ...extra,

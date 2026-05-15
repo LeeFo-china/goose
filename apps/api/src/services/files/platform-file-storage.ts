@@ -153,11 +153,17 @@ function now() {
   return Date.now();
 }
 
+function isUploadTimingLogEnabled() {
+  return process.env.UPLOAD_TIMING_LOG_ENABLED === "true";
+}
+
 function logPlatformFileStorageTiming(
   stage: string,
   startedAt: number,
   extra: Record<string, unknown> = {},
 ) {
+  if (!isUploadTimingLogEnabled()) return;
+
   console.info(PLATFORM_FILE_STORAGE_TIMING_PREFIX, stage, {
     duration_ms: now() - startedAt,
     ...extra,

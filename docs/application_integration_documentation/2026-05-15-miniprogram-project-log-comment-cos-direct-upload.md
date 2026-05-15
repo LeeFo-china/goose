@@ -40,6 +40,7 @@
 
 ```env
 TARO_APP_DIRECT_COS_UPLOAD=true
+TARO_APP_UPLOAD_TIMING_LOG_ENABLED=false
 ```
 
 关闭时会回退到旧接口：
@@ -49,6 +50,12 @@ POST /uploads/images
 ```
 
 开启后单图和多图都会优先走 COS 直传；直传失败时回退 `/uploads/images`。
+
+`TARO_APP_UPLOAD_TIMING_LOG_ENABLED` 只控制排障日志，建议生产默认关闭。需要临时排查上传耗时时再改为：
+
+```env
+TARO_APP_UPLOAD_TIMING_LOG_ENABLED=true
+```
 
 ## 3. 请求接口
 
@@ -156,6 +163,8 @@ storage_path || object_key || path || url
 - 后端读取评论时会把 object key 解析为可预览 signed URL。
 
 ## 5. 日志判断
+
+生产默认不输出 timing 日志。只有 `TARO_APP_UPLOAD_TIMING_LOG_ENABLED=true` 时才会输出以下日志。
 
 正常日志：
 

@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 范围：后端 API、微信小程序施工日志评论图片上传  
-结论：单图 COS 直传链路验收通过；多图在微信小程序端多次 PUT COS 表现不稳定，当前稳定策略是单图直传、多图回退 `/uploads/images`。
+结论：单图 COS 直传链路验收通过；多图改为并发 2 直传后验收通过，当前稳定策略是评论图片优先 COS 直传，失败时回退 `/uploads/images`。
 
 ## 1. 当前验收结果
 
@@ -13,7 +13,7 @@
 - 评论发布后图片预览可打开。
 - 未出现评论图片丢失。
 
-最近一次链路耗时参考：
+单图链路耗时参考：
 
 | 阶段 | 耗时 |
 | --- | ---: |
@@ -25,9 +25,9 @@
 
 多图直传验证结果：
 
-- 2 张图并发 PUT COS 时，单张 PUT 从 400ms 级退化到 3.7s 左右。
-- 2 张图串行 PUT COS 时，单张 PUT 仍出现 8s-9s 波动。
-- 因此当前不把多图纳入小程序端 COS 直传路径。
+- 早期并发/串行策略出现过单张 PUT 3s-9s 波动。
+- 调整为小程序端多图直传并发 2 后，2 张图 `direct-upload-total` 约 1.4s。
+- `direct-complete` 保持异步，后端自动对账 worker 兜底。
 
 用户等待链路已经从“后端上传 + 保存”改为：
 
@@ -40,16 +40,16 @@ direct-init -> read-local-file -> put-cos -> 返回 object_key -> 创建评论
 多图等待链路：
 
 ```text
-file_count > 1 -> POST /uploads/images
+direct-init/read-local-file/put-cos 并发 2 -> 返回 object_key -> 创建评论
 ```
 
 小程序端会输出：
 
 ```text
-[PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-skip-multiple-files
+[PROJECT_LOG_COMMENT_UPLOAD_TIMING] direct-upload-total
 ```
 
-表示多图已进入旧上传回退链路。
+表示多图已完成 COS 直传；只有直传失败时才会输出 `fallback-upload-*`。
 
 ## 2. 后端能力
 
@@ -205,7 +205,48 @@ PLATFORM_COS_PUBLIC_BASE_URL=...
 
 本地未注入 `SUPABASE_URL` 时，脚本会直接失败；应在服务器或 CI 运行环境执行。
 
-## 4. 自动兜底 worker
+## 4. 上传 timing 日志开关
+
+上传链路稳定后，排障 timing 日志默认关闭，避免线上刷屏。
+
+后端 API：
+
+```env
+UPLOAD_TIMING_LOG_ENABLED=false
+```
+
+需要排查 `/uploads/images` 或后端代传 COS 时，临时改为：
+
+```env
+UPLOAD_TIMING_LOG_ENABLED=true
+```
+
+开启后会输出：
+
+```text
+[UPLOAD_IMAGES_TIMING]
+[PLATFORM_FILE_STORAGE_TIMING]
+```
+
+微信小程序：
+
+```env
+TARO_APP_UPLOAD_TIMING_LOG_ENABLED=false
+```
+
+需要排查评论图片直传时，临时改为：
+
+```env
+TARO_APP_UPLOAD_TIMING_LOG_ENABLED=true
+```
+
+开启后会输出：
+
+```text
+[PROJECT_LOG_COMMENT_UPLOAD_TIMING]
+```
+
+## 5. 自动兜底 worker
 
 为避免依赖人工巡检，后端新增独立 PM2 worker：
 
@@ -239,7 +280,7 @@ goose-project-log-comment-cos-reconcile-worker
 
 worker 只在出现 `reconciled`、`failed` 或 dry-run 缺失时写 CSV 报告；全部正常时只输出结构化日志。
 
-## 5. 建议运维策略
+## 6. 建议运维策略
 
 worker 已自动兜底，但人工排查仍可以执行：
 
@@ -259,7 +300,7 @@ bun run --cwd apps/api project-log-comments:cos:reconcile -- \
 
 注意：Linux 环境 `date` 参数需要替换为 GNU date 写法。
 
-## 6. 后续复用规则
+## 7. 后续复用规则
 
 后续其它上传场景迁移直传时，必须同时满足：
 
