@@ -1,0 +1,32 @@
+services:
+  gooes-admin:
+    image: ${GOOES_ADMIN_IMAGE:-ghcr.io/leefo-china/goose-admin:feature-multi-tenant}
+    container_name: gooes-admin
+    restart: unless-stopped
+    env_file:
+      - ${GOOES_ADMIN_ENV_FILE:-./.env.admin}
+    environment:
+      NODE_ENV: production
+      PORT: ${GOOES_ADMIN_PORT:-3010}
+      HOSTNAME: 0.0.0.0
+      GOOES_API_BASE_URL: ${GOOES_API_BASE_URL:-http://gooes-api:3000}
+    ports:
+      - "${GOOES_ADMIN_BIND_HOST:-127.0.0.1}:${GOOES_ADMIN_HOST_PORT:-3010}:${GOOES_ADMIN_PORT:-3010}"
+    depends_on:
+      gooes-api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3010') + '/login').then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
