@@ -96,6 +96,7 @@ type CosStorageConfig = {
   publicBaseUrl: string;
   signedUrlTtl: number;
   policyText: string;
+  uploadUseAccelerate: boolean;
 };
 
 function normalizeProvider(value: string | null | undefined): PlatformFileProvider {
@@ -218,7 +219,16 @@ class PlatformFileStorageService {
       return this.cosConfigCache.value;
     }
 
-    const [secretId, secretKey, bucket, region, publicBaseUrl, signedUrlTtl, policyText] =
+    const [
+      secretId,
+      secretKey,
+      bucket,
+      region,
+      publicBaseUrl,
+      signedUrlTtl,
+      policyText,
+      uploadUseAccelerate,
+    ] =
       await Promise.all([
         systemSettingsService.getSecretString("TENCENT_COS_SECRET_ID"),
         systemSettingsService.getSecretString("TENCENT_COS_SECRET_KEY"),
@@ -230,6 +240,7 @@ class PlatformFileStorageService {
           DEFAULT_COS_SIGNED_URL_TTL_SECONDS,
         ),
         systemSettingsService.getString("PLATFORM_FILE_ACCESS_POLICY", ""),
+        systemSettingsService.getBoolean("PLATFORM_COS_UPLOAD_USE_ACCELERATE", false),
       ]);
 
     if (!secretId || !secretKey || !bucket || !region) {
@@ -256,6 +267,7 @@ class PlatformFileStorageService {
       publicBaseUrl: publicBaseUrl.trim(),
       signedUrlTtl,
       policyText,
+      uploadUseAccelerate,
     };
 
     this.cosConfigCache = {
@@ -585,6 +597,7 @@ class PlatformFileStorageService {
       Method: "PUT",
       Sign: true,
       Expires: config.signedUrlTtl,
+      UseAccelerate: config.uploadUseAccelerate,
       Protocol: "https:",
     });
 
@@ -652,7 +665,7 @@ class PlatformFileStorageService {
       region: config.region,
       objectKey: input.objectKey,
     });
-    const accessUrl = publicUrl;
+    const accessUrl = resolveStoredFileUrl(input.objectKey) || publicUrl;
 
     const headers = (headObject?.headers || {}) as Record<string, string | number | undefined>;
     const fallbackSize = input.sizeBytes ?? 0;
@@ -681,7 +694,7 @@ class PlatformFileStorageService {
         project_id: input.projectId ?? null,
         customer_id: input.customerId ?? null,
         verified_head_object: verifyHeadObject,
-        signed_url: false,
+        signed_url: accessUrl !== publicUrl,
       },
       created_by_auth_user_id: input.authUserId ?? null,
       created_by_employee_id: input.employeeId ?? null,

@@ -177,7 +177,7 @@ async function uploadEmployeeAvatarDirect(file: File) {
 
   return {
     value: storageValue,
-    previewUrl: completed.url || buildAvatarPreviewUrl(storageValue),
+    previewUrl: buildAvatarPreviewUrl(storageValue),
   };
 }
 
@@ -204,7 +204,9 @@ async function uploadEmployeeAvatarFallback(file: File) {
 
   return {
     value: storageValue,
-    previewUrl: typeof previewUrl === "string" ? previewUrl : storageValue,
+    previewUrl: buildAvatarPreviewUrl(
+      typeof previewUrl === "string" ? previewUrl : storageValue,
+    ),
   };
 }
 

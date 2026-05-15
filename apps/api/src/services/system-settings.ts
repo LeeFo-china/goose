@@ -370,6 +370,15 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: "900",
   },
   {
+    key: "PLATFORM_COS_UPLOAD_USE_ACCELERATE",
+    groupCode: "storage",
+    name: "COS 上传使用全球加速",
+    description: "开启后直传上传 URL 使用腾讯云 COS 全球加速域名。需先在腾讯云 COS bucket 启用全球加速并配置 CORS。",
+    valueType: "boolean",
+    envNames: ["PLATFORM_COS_UPLOAD_USE_ACCELERATE"],
+    defaultValue: "false",
+  },
+  {
     key: "PLATFORM_FILE_ACCESS_POLICY",
     groupCode: "storage",
     name: "平台文件访问策略",

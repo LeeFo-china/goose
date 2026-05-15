@@ -401,7 +401,7 @@ async function uploadCustomerAvatarDirect(file: File) {
 
   return {
     value: storageValue,
-    previewUrl: completed.url || buildAvatarPreviewUrl(storageValue),
+    previewUrl: buildAvatarPreviewUrl(storageValue),
   };
 }
 
@@ -428,7 +428,9 @@ async function uploadCustomerAvatarFallback(file: File) {
 
   return {
     value: storageValue,
-    previewUrl: typeof previewUrl === "string" ? previewUrl : storageValue,
+    previewUrl: buildAvatarPreviewUrl(
+      typeof previewUrl === "string" ? previewUrl : storageValue,
+    ),
   };
 }
 
