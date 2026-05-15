@@ -14,6 +14,7 @@
     "storage:migration:verify": "bun src/scripts/storage-migration-verify.ts",
     "storage:migration:final-verify": "bun src/scripts/storage-migration-final-verify.ts",
     "storage:migration:output-smoke": "bun src/scripts/storage-migration-output-smoke.ts",
+    "project-logs:cos:reconcile": "bun src/scripts/project-log-cos-reconcile.ts",
     "project-logs:images:backfill": "bun src/scripts/project-logs-image-backfill.ts",
     "project-log-comments:images:backfill": "bun src/scripts/project-log-comments-image-backfill.ts",
     "project-log-comments:cos:reconcile": "bun src/scripts/project-log-comment-cos-reconcile.ts",

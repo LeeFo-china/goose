@@ -5,6 +5,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { SupabaseDB } from "@/utils/supabase";
@@ -41,7 +42,7 @@ const UploadImageFieldSchema = z.object({
   project_id: z.string().uuid("无效的项目ID").optional(),
 });
 
-const DIRECT_UPLOAD_SCENES = ["project_log_comment"] as const;
+const DIRECT_UPLOAD_SCENES = ["project_log", "project_log_comment"] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 
 const DirectUploadInitSchema = z.object({
@@ -275,6 +276,12 @@ class UploadController extends BaseController {
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
     const actorContext = await this.resolveUploadActorContext(request.user);
+    await this.assertDirectUploadProjectAccess(
+      request.user,
+      scene,
+      result.data.project_id,
+      actorContext,
+    );
     const directUpload = await platformFileStorageService.createDirectUpload({
       filename: result.data.filename,
       mimetype: result.data.mimetype,
@@ -304,6 +311,12 @@ class UploadController extends BaseController {
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
     const actorContext = await this.resolveUploadActorContext(request.user);
+    await this.assertDirectUploadProjectAccess(
+      request.user,
+      scene,
+      result.data.project_id,
+      actorContext,
+    );
     this.assertDirectObjectKeyBelongsToActor(
       result.data.object_key,
       scene,
@@ -378,6 +391,33 @@ class UploadController extends BaseController {
 
     if (!objectKey.startsWith(expectedPrefix)) {
       throw Errors.business(403, "上传对象不属于当前登录身份", ErrorCodes.FORBIDDEN);
+    }
+  }
+
+  private async assertDirectUploadProjectAccess(
+    user: JwtPayload,
+    scene: UploadScene,
+    projectId: string | undefined,
+    actorContext: UploadActorContext,
+  ) {
+    if (scene !== "project_log") return;
+
+    if (!projectId) {
+      throw Errors.badRequest("缺少项目ID");
+    }
+
+    if (!actorContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const authContext = await authorizationService.getRequiredAuthContext(user.sub);
+    const canWriteLog = await accessPolicyService.canAccessProject(
+      authContext,
+      projectId,
+      "project_log.create",
+    );
+    if (!canWriteLog) {
+      throw Errors.forbidden();
     }
   }
 

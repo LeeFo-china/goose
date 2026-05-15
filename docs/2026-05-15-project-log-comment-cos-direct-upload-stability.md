@@ -1,8 +1,8 @@
 # 施工日志评论图片 COS 直传稳定性收口
 
 日期：2026-05-15  
-范围：后端 API、微信小程序施工日志评论图片上传  
-结论：单图 COS 直传链路验收通过；多图改为并发 2 直传后验收通过，当前稳定策略是评论图片优先 COS 直传，失败时回退 `/uploads/images`。
+范围：后端 API、微信小程序施工日志图片和施工日志评论图片上传  
+结论：评论图片单图/多图 COS 直传链路验收通过；施工日志图片已按同样模式接入，待线上单图/多图验收。当前稳定策略是优先 COS 直传，失败时回退 `/uploads/images`。
 
 ## 1. 当前验收结果
 
@@ -59,16 +59,18 @@ direct-init/read-local-file/put-cos 并发 2 -> 返回 object_key -> 创建评�
 POST /uploads/cos/direct-init
 ```
 
-当前仅开放：
+当前开放：
 
 ```json
 {
-  "scene": "project_log_comment",
+  "scene": "project_log_comment | project_log",
   "filename": "a.jpg",
   "mimetype": "image/jpeg",
   "size_bytes": 366202
 }
 ```
+
+`scene = project_log` 时必须额外传 `project_id`，后端会强校验当前员工对项目有 `project_log.create` 权限。
 
 返回核心字段：
 
@@ -123,6 +125,7 @@ POST /uploads/cos/direct-complete
 - 微信 OAuth 校验和业务身份校验并行执行。
 - 小程序端将 `direct-complete` 改为 best-effort 异步执行。
 - 小程序端多图评论图片也走 COS 直传，并发限制为 2；失败时才回退 `/uploads/images`。
+- 施工日志图片 `project_log` 复用同一套直传流程，并要求 `project_id + project_log.create` 权限。
 
 ## 3. 补偿巡检脚本
 
@@ -130,12 +133,14 @@ POST /uploads/cos/direct-complete
 
 ```text
 apps/api/src/scripts/project-log-comment-cos-reconcile.ts
+apps/api/src/scripts/project-log-cos-reconcile.ts
 ```
 
 package script：
 
 ```bash
 bun run --cwd apps/api project-log-comments:cos:reconcile -- --limit 200
+bun run --cwd apps/api project-logs:cos:reconcile -- --limit 200
 ```
 
 ### 3.1 Dry-run
@@ -277,8 +282,9 @@ goose-project-log-comment-cos-reconcile-worker
 | `PROJECT_LOG_COMMENT_COS_RECONCILE_LIMIT` | `1000` | 单次最多扫描评论数 |
 | `PROJECT_LOG_COMMENT_COS_RECONCILE_TENANT_ID` | 空 | 空表示全租户 |
 | `PROJECT_LOG_COMMENT_COS_RECONCILE_OUT_DIR` | `reports/project-log-comment-cos-reconcile` | 异常/补写报告目录 |
+| `PROJECT_LOG_COS_RECONCILE_OUT_DIR` | `reports/project-log-cos-reconcile` | 施工日志图片异常/补写报告目录 |
 
-worker 只在出现 `reconciled`、`failed` 或 dry-run 缺失时写 CSV 报告；全部正常时只输出结构化日志。
+worker 会同时扫描 `project_logs.images` 和 `project_log_comments.images`。只在出现 `reconciled`、`failed` 或 dry-run 缺失时写 CSV 报告；全部正常时只输出结构化日志。
 
 ## 6. 建议运维策略
 

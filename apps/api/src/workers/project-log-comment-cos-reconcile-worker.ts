@@ -1,5 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import {
+  reconcileProjectLogCosObjects,
+  summarizeProjectLogCosReconcile,
+  writeProjectLogCosReconcileReport,
+} from "@/scripts/project-log-cos-reconcile";
+import {
   reconcileProjectLogCommentCosObjects,
   summarizeProjectLogCommentCosReconcile,
   writeProjectLogCommentCosReconcileReport,
@@ -62,8 +67,10 @@ function getWorkerConfig() {
     lookbackMinutes,
     limit: parseNumberEnv("PROJECT_LOG_COMMENT_COS_RECONCILE_LIMIT", 1000, 1, 5000),
     tenantId: process.env.PROJECT_LOG_COMMENT_COS_RECONCILE_TENANT_ID?.trim() || undefined,
-    outDir: process.env.PROJECT_LOG_COMMENT_COS_RECONCILE_OUT_DIR?.trim() ||
+    commentOutDir: process.env.PROJECT_LOG_COMMENT_COS_RECONCILE_OUT_DIR?.trim() ||
       "reports/project-log-comment-cos-reconcile",
+    logOutDir: process.env.PROJECT_LOG_COS_RECONCILE_OUT_DIR?.trim() ||
+      "reports/project-log-cos-reconcile",
   };
 }
 
@@ -92,17 +99,35 @@ async function tick() {
   const since = new Date(Date.now() - config.lookbackMinutes * 60 * 1000).toISOString();
 
   try {
-    const results = await reconcileProjectLogCommentCosObjects({
+    const baseOptions = {
       limit: config.limit,
-      outDir: config.outDir,
+      outDir: config.commentOutDir,
       apply: config.apply,
       tenantId: config.tenantId,
       since,
-    });
-    const summary = summarizeProjectLogCommentCosReconcile(results);
-    let outputPath: string | null = null;
-    if (shouldWriteReport(summary)) {
-      outputPath = await writeProjectLogCommentCosReconcileReport(results, config.outDir);
+    };
+    const [logResults, commentResults] = await Promise.all([
+      reconcileProjectLogCosObjects({
+        ...baseOptions,
+        outDir: config.logOutDir,
+      }),
+      reconcileProjectLogCommentCosObjects(baseOptions),
+    ]);
+    const logSummary = summarizeProjectLogCosReconcile(logResults);
+    const commentSummary = summarizeProjectLogCommentCosReconcile(commentResults);
+    let logOutputPath: string | null = null;
+    let commentOutputPath: string | null = null;
+    if (shouldWriteReport(logSummary)) {
+      logOutputPath = await writeProjectLogCosReconcileReport(
+        logResults,
+        config.logOutDir,
+      );
+    }
+    if (shouldWriteReport(commentSummary)) {
+      commentOutputPath = await writeProjectLogCommentCosReconcileReport(
+        commentResults,
+        config.commentOutDir,
+      );
     }
 
     log("info", "tick completed", {
@@ -110,9 +135,16 @@ async function tick() {
       apply: config.apply,
       tenant_id: config.tenantId || null,
       since,
-      scanned: results.length,
-      summary,
-      output_path: outputPath,
+      project_log: {
+        scanned: logResults.length,
+        summary: logSummary,
+        output_path: logOutputPath,
+      },
+      project_log_comment: {
+        scanned: commentResults.length,
+        summary: commentSummary,
+        output_path: commentOutputPath,
+      },
     });
   } catch (error) {
     log("error", "tick failed", {
