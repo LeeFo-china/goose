@@ -46,6 +46,7 @@ async function fetchBackendWithRetry(input: {
         headers: input.headers,
         body: input.body,
         cache: "no-store",
+        redirect: "manual",
       });
     } catch (error) {
       lastError = error;
@@ -104,13 +105,31 @@ async function proxyBackend(request: Request, context: RouteContext) {
       { status: 502 },
     );
   }
-  const payload = await response.text();
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    const redirectHeaders = new Headers();
+    if (location) {
+      redirectHeaders.set("location", location);
+    }
+
+    return new NextResponse(null, {
+      status: response.status,
+      headers: redirectHeaders,
+    });
+  }
+
+  const payload = response.status === 204 || response.status === 304
+    ? null
+    : await response.arrayBuffer();
+  const responseHeaders = new Headers();
+  const contentType = response.headers.get("content-type");
+  if (contentType) {
+    responseHeaders.set("content-type", contentType);
+  }
 
   return new NextResponse(payload, {
     status: response.status,
-    headers: {
-      "content-type": response.headers.get("content-type") || "application/json",
-    },
+    headers: responseHeaders,
   });
 }
 
