@@ -407,6 +407,7 @@ function DetailDialog({
   onClose: () => void;
 }) {
   const settlement = relationOne(expense.settlement);
+  const settlementEvidenceImages = settlement?.evidence_images || [];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -518,11 +519,46 @@ function DetailDialog({
           {settlement ? (
             <section>
               <h3 className="mb-3 text-sm font-semibold">打款记录</h3>
-              <div className="grid gap-3 rounded-md border p-4 md:grid-cols-4">
-                <InfoItem label="收款人" value={settlement.payee_name || "-"} />
-                <InfoItem label="方式" value={settlement.method} />
-                <InfoItem label="金额" value={`¥${formatMoney(settlement.paid_amount)}`} />
-                <InfoItem label="时间" value={formatDateTime(settlement.paid_at)} />
+              <div className="flex flex-col gap-4 rounded-md border p-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <InfoItem label="收款人" value={settlement.payee_name || "-"} />
+                  <InfoItem label="方式" value={settlement.method} />
+                  <InfoItem label="金额" value={`¥${formatMoney(settlement.paid_amount)}`} />
+                  <InfoItem label="时间" value={formatDateTime(settlement.paid_at)} />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs font-medium text-muted-foreground">打款凭证</div>
+                  {settlementEvidenceImages.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-3 md:grid-cols-4">
+                      {settlementEvidenceImages.map((image, index) => {
+                        const previewSrc = getEvidenceImagePreviewSrc(image);
+                        return (
+                          <a
+                            key={`${image}-${index}`}
+                            href={previewSrc}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group overflow-hidden rounded-md border bg-background transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <img
+                              src={previewSrc}
+                              alt={`打款凭证 ${index + 1}`}
+                              className="h-24 w-full object-cover"
+                            />
+                            <div className="truncate px-2 py-1.5 text-xs text-muted-foreground group-hover:text-foreground">
+                              凭证 {index + 1}
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                      暂无打款凭证
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
           ) : null}

@@ -48,6 +48,7 @@ windwill-1259348056.cos.accelerate.myqcloud.com
 - 登记打款时上传多张凭证成功。
 - 大图超过 `1.5MB` 时前端压缩后能上传。
 - 提交后费用详情里凭证图片能打开。
+- 财务通过并登记打款后，详情里同时可见费用明细、审批链、打款记录和打款凭证。
 - `platform_file_objects.scene = expense_request` 有记录。
 
 ### 工序验收图片

@@ -42,6 +42,7 @@ windwill-1259348056.cos.accelerate.myqcloud.com
 - 保留原有 shadcn `Input`、`Button`、`Field` 表单交互。
 - 保留原有图片压缩逻辑，单张超过 `1.5MB` 时先压缩。
 - 上传成功后保存 `storage_path`，预览通过 `/uploads/public-url` 解析。
+- 费用详情页在“打款记录”下展示 `settlement.evidence_images` 缩略图，点击可打开预览。
 - 正常路径不再调用 `POST /uploads/images`。
 
 ## 验收标准
@@ -49,5 +50,6 @@ windwill-1259348056.cos.accelerate.myqcloud.com
 - `platform_file_objects.scene = expense_request`。
 - 上传 URL host 为 COS 全球加速域名。
 - 打款凭证提交后，详情返回的 `evidence_images` 可以正常预览。
+- 财务通过并登记打款后，费用详情同时可见费用明细、审批链、打款记录和打款凭证。
 - 后端慢日志过滤包含 `expense_request`。
 - 上传失败时 Admin 显示明确错误，不让按钮一直 loading。
