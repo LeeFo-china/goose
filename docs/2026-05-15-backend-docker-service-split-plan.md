@@ -441,11 +441,24 @@ sudo usermod -aG docker ubuntu
 
 ### 容器内运行时
 
-API 镜像内部使用 Bun，不使用 nvm：
+API 运行镜像内部使用 Bun，不使用 nvm：
 
 ```Dockerfile
 FROM oven/bun:1.3
 ```
+
+API 镜像构建阶段可以使用 Node + pnpm 安装依赖：
+
+```Dockerfile
+FROM node:22-bookworm-slim AS deps
+RUN corepack enable && pnpm install --frozen-lockfile
+```
+
+原因：
+
+- 当前 `pnpm-lock.yaml` 已完整覆盖 `apps/api` workspace 依赖。
+- `bun.lock` 更偏向根后端运行依赖，曾在 Docker build 的 `bun install --frozen-lockfile` 阶段失败。
+- 最终运行阶段仍然是 Bun，不要求宿主机安装 pnpm、Node、nvm。
 
 Admin 镜像内部可以使用 Node + pnpm，不使用宿主机 nvm：
 
@@ -472,30 +485,50 @@ docker/api.Dockerfile
 建议思路：
 
 ```Dockerfile
-FROM oven/bun:1.3
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
-COPY packages ./packages
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
+COPY packages/domain/package.json ./packages/domain/package.json
 
-RUN bun install --frozen-lockfile
+RUN corepack enable && \
+  pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
 
+FROM oven/bun:1.3 AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api ./apps/api
+COPY packages/domain ./packages/domain
 
-WORKDIR /app/apps/api
+RUN cd packages/domain && bun run build
+
+FROM oven/bun:1.3 AS runner
+
+WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=builder /app/apps/api ./apps/api
+COPY --from=builder /app/packages/domain ./packages/domain
+
+WORKDIR /app/apps/api
 
 CMD ["bun", "src/app.ts"]
 ```
 
 注意：
 
-- 当前 `bun.lock` 只记录了根依赖，实际是否覆盖 workspace 的 `apps/api` 依赖需要专项验证。
-- 如果 `bun install --frozen-lockfile` 无法稳定安装 workspace 依赖，需要先修复 lockfile 管理，不能绕过锁文件部署。
+- 依赖安装使用 `pnpm-lock.yaml`，运行阶段仍使用 Bun。
+- `packages/domain` 必须在 builder 阶段构建，否则 API 运行时可能找不到 `@gooes/domain/dist`。
 
 ### Worker 复用同一镜像
 
@@ -730,10 +763,10 @@ services:
 
 第一版 GitHub Actions 可拆成四步：
 
-1. `bun install --frozen-lockfile`
-2. `bun --filter @gooes/api typecheck`
+1. checkout 代码。
+2. login GHCR。
 3. `docker build -f docker/api.Dockerfile -t ghcr.io/leefo-china/goose-api:feature-multi-tenant .`
-4. SSH 到服务器拉镜像并 `docker compose up -d`
+4. push 镜像。
 
 注意：
 
