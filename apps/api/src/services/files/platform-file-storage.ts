@@ -16,6 +16,7 @@ import {
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
 const DEFAULT_COS_SIGNED_URL_TTL_SECONDS = 900;
+const STORAGE_PROVIDER_CACHE_TTL_MS = 60_000;
 const COS_CONFIG_CACHE_TTL_MS = 60_000;
 
 export type PlatformUploadScene =
@@ -138,17 +139,31 @@ function normalizeEtag(value: string | null | undefined) {
 class PlatformFileStorageService {
   private cosClient: COS | null = null;
   private cosClientKey: string | null = null;
+  private storageProviderCache: {
+    expiresAt: number;
+    value: PlatformFileProvider;
+  } | null = null;
   private cosConfigCache: {
     expiresAt: number;
     value: CosStorageConfig;
   } | null = null;
 
   private async getStorageProvider() {
+    if (this.storageProviderCache && this.storageProviderCache.expiresAt > Date.now()) {
+      return this.storageProviderCache.value;
+    }
+
     const configured = await systemSettingsService.getString(
       "PLATFORM_STORAGE_PROVIDER",
       "",
     );
-    return normalizeProvider(configured);
+    const provider = normalizeProvider(configured);
+    this.storageProviderCache = {
+      expiresAt: Date.now() + STORAGE_PROVIDER_CACHE_TTL_MS,
+      value: provider,
+    };
+
+    return provider;
   }
 
   private async getCosConfig(): Promise<CosStorageConfig> {

@@ -382,8 +382,10 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
-    await assertWechatOauthCredential(payload);
-    await assertWechatBusinessBinding(payload);
+    await Promise.all([
+      assertWechatOauthCredential(payload),
+      assertWechatBusinessBinding(payload),
+    ]);
 
     request.user = payload;
   });
