@@ -18,6 +18,7 @@ const DEFAULT_COS_REGION = "ap-guangzhou";
 const DEFAULT_COS_SIGNED_URL_TTL_SECONDS = 900;
 const STORAGE_PROVIDER_CACHE_TTL_MS = 60_000;
 const COS_CONFIG_CACHE_TTL_MS = 60_000;
+const PLATFORM_FILE_STORAGE_TIMING_PREFIX = "[PLATFORM_FILE_STORAGE_TIMING]";
 
 export type PlatformUploadScene =
   | "project_log"
@@ -146,6 +147,21 @@ function getFileExtension(input: Pick<UploadImageInput, "filename" | "mimetype">
 
 function normalizeEtag(value: string | null | undefined) {
   return value?.trim().replace(/^"+|"+$/g, "") || null;
+}
+
+function now() {
+  return Date.now();
+}
+
+function logPlatformFileStorageTiming(
+  stage: string,
+  startedAt: number,
+  extra: Record<string, unknown> = {},
+) {
+  console.info(PLATFORM_FILE_STORAGE_TIMING_PREFIX, stage, {
+    duration_ms: now() - startedAt,
+    ...extra,
+  });
 }
 
 function getMimeTypeFromObjectKey(objectKey: string) {
@@ -309,11 +325,13 @@ class PlatformFileStorageService {
   }
 
   private async uploadToTencentCos(input: UploadImageInput): Promise<StorageUploadResult> {
+    const uploadStartedAt = now();
     const config = await this.getCosConfig();
     const objectKey = this.buildCosObjectKey(input);
     const cos = this.getCosClient(config);
 
     try {
+      const putStartedAt = now();
       await cos.putObject({
         Bucket: config.bucket,
         Region: config.region,
@@ -321,6 +339,12 @@ class PlatformFileStorageService {
         Body: input.buffer,
         ContentLength: input.buffer.length,
         ContentType: input.mimetype,
+      });
+      logPlatformFileStorageTiming("cos-put-object", putStartedAt, {
+        scene: input.scene,
+        tenant_id: input.tenantId ?? null,
+        size_bytes: input.buffer.length,
+        object_key: objectKey,
       });
     } catch (error) {
       throw Errors.business(
@@ -352,6 +376,12 @@ class PlatformFileStorageService {
       policyText: config.policyText,
     });
     const accessUrl = resolveStoredFileUrl(objectKey) || publicUrl;
+    logPlatformFileStorageTiming("cos-upload-total", uploadStartedAt, {
+      scene: input.scene,
+      tenant_id: input.tenantId ?? null,
+      size_bytes: input.buffer.length,
+      object_key: objectKey,
+    });
 
     return {
       provider: "tencent_cos",
@@ -464,11 +494,19 @@ class PlatformFileStorageService {
   }
 
   async uploadImage(input: UploadImageInput) {
+    const uploadStartedAt = now();
+    const providerStartedAt = now();
     const provider = await this.getStorageProvider();
+    logPlatformFileStorageTiming("provider-resolve", providerStartedAt, {
+      scene: input.scene,
+      tenant_id: input.tenantId ?? null,
+      provider,
+    });
     const uploaded = provider === "tencent_cos"
       ? await this.uploadToTencentCos(input)
       : await this.uploadToSupabase(input);
 
+    const dbStartedAt = now();
     const fileObject = await platformFileObjectRepository.create({
       tenant_id: input.tenantId ?? null,
       owner_type: input.scene,
@@ -490,6 +528,21 @@ class PlatformFileStorageService {
       },
       created_by_auth_user_id: input.authUserId ?? null,
       created_by_employee_id: input.employeeId ?? null,
+    });
+    logPlatformFileStorageTiming("file-object-create", dbStartedAt, {
+      scene: input.scene,
+      tenant_id: input.tenantId ?? null,
+      provider: uploaded.provider,
+      object_key: uploaded.objectKey,
+      file_id: fileObject.id,
+    });
+    logPlatformFileStorageTiming("upload-image-total", uploadStartedAt, {
+      scene: input.scene,
+      tenant_id: input.tenantId ?? null,
+      provider: uploaded.provider,
+      size_bytes: input.buffer.length,
+      object_key: uploaded.objectKey,
+      file_id: fileObject.id,
     });
 
     return this.toUploadResponse({

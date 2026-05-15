@@ -42,6 +42,7 @@ const UploadImageFieldSchema = z.object({
 });
 
 const DIRECT_UPLOAD_SCENES = ["project_log_comment"] as const;
+const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 
 const DirectUploadInitSchema = z.object({
   scene: z.enum(DIRECT_UPLOAD_SCENES, {
@@ -107,6 +108,19 @@ type UploadActorContext = {
   customerId: string | null;
 };
 
+const now = () => Date.now();
+
+function logUploadImagesTiming(
+  stage: string,
+  startedAt: number,
+  extra: Record<string, unknown> = {},
+) {
+  console.info(UPLOAD_IMAGES_TIMING_PREFIX, stage, {
+    duration_ms: now() - startedAt,
+    ...extra,
+  });
+}
+
 class UploadController extends BaseController {
   constructor() {
     super("uploads");
@@ -114,6 +128,7 @@ class UploadController extends BaseController {
 
   @Post("/uploads/images")
   async uploadImages(request: FastifyRequest, reply: FastifyReply) {
+    const requestStartedAt = now();
     if (!request.user?.sub) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
@@ -125,6 +140,7 @@ class UploadController extends BaseController {
     const fields: Record<string, string> = {};
     const files: PendingUploadFile[] = [];
     let fileCount = 0;
+    const multipartStartedAt = now();
 
     for await (const part of request.parts()) {
       if (part.type === "field") {
@@ -137,12 +153,26 @@ class UploadController extends BaseController {
         throw Errors.badRequest("最多上传9张图片");
       }
 
+      const readStartedAt = now();
+      const buffer = await part.toBuffer();
+      logUploadImagesTiming("multipart-file-read", readStartedAt, {
+        request_id: request.id,
+        file_index: fileCount,
+        size_bytes: buffer.length,
+        mimetype: part.mimetype,
+      });
       files.push({
-        buffer: await part.toBuffer(),
+        buffer,
         filename: part.filename,
         mimetype: part.mimetype,
       });
     }
+    logUploadImagesTiming("multipart-read-total", multipartStartedAt, {
+      request_id: request.id,
+      file_count: files.length,
+      total_size_bytes: files.reduce((sum, file) => sum + file.buffer.length, 0),
+      raw_scene: fields.scene || null,
+    });
 
     const fieldResult = UploadImageFieldSchema.safeParse(fields);
     if (!fieldResult.success) {
@@ -161,20 +191,45 @@ class UploadController extends BaseController {
       throw Errors.fromZod(fieldResult.error);
     }
 
+    const actorStartedAt = now();
     const actorContext = await this.resolveUploadActorContext(request.user);
+    logUploadImagesTiming("actor-context", actorStartedAt, {
+      request_id: request.id,
+      tenant_id: actorContext.tenantId,
+      employee_id: actorContext.employeeId,
+      customer_id: actorContext.customerId,
+    });
 
     const uploadedFiles = await Promise.all(
-      files.map((file) =>
-        this.uploadSingleFile(file, {
+      files.map(async (file, index) => {
+        const uploadStartedAt = now();
+        const uploaded = await this.uploadSingleFile(file, {
           authUserId: request.user?.sub,
           employeeId: actorContext.employeeId,
           customerId: actorContext.customerId,
           projectId: fieldResult.data.project_id,
           scene: fieldResult.data.scene ?? "project_log",
           tenantId: actorContext.tenantId,
-        })
-      ),
+        });
+        logUploadImagesTiming("file-upload", uploadStartedAt, {
+          request_id: request.id,
+          file_index: index + 1,
+          file_count: files.length,
+          size_bytes: file.buffer.length,
+          scene: fieldResult.data.scene ?? "project_log",
+          provider: uploaded.provider,
+          object_key: uploaded.object_key,
+        });
+        return uploaded;
+      }),
     );
+    logUploadImagesTiming("request-total", requestStartedAt, {
+      request_id: request.id,
+      file_count: files.length,
+      total_size_bytes: files.reduce((sum, file) => sum + file.buffer.length, 0),
+      scene: fieldResult.data.scene ?? "project_log",
+      tenant_id: actorContext.tenantId,
+    });
 
     return ResponseHandler.success({
       list: uploadedFiles,
