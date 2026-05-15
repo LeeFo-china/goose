@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 适用端：Admin 租户客户管理  
-状态：第一版已接入 Admin；Admin 已优先走 COS 直传，失败时回退 `/uploads/images`；微信小程序端不在本次改动范围。
+状态：Admin 已接入 COS 直传；当前生产口径为直传失败直接提示错误，不静默回退 `/uploads/images`；微信小程序端不在本次改动范围。
 
 ## 1. 后端变更
 
@@ -31,15 +31,18 @@ Admin 客户新增/编辑弹窗增加头像上传控件，优先直传 COS：
 -> POST/PATCH /customers 时写入 storage_path/object_key
 ```
 
-直传失败时回退兼容上传：
+兼容上传路径：
 
 ```text
+仅当代码显式关闭 DIRECT_COS_UPLOAD_ENABLED 时
 选择头像
 -> POST /uploads/images，scene=customer_avatar
 -> 后端写入 COS 和 platform_file_objects
 -> 返回 storage_path/object_key/path/url
 -> POST/PATCH /customers 时写入 avatar
 ```
+
+当前 `DIRECT_COS_UPLOAD_ENABLED=true`，正常生产路径不会自动进入兼容上传。
 
 上传限制：
 
@@ -90,18 +93,14 @@ PATCH /customers/:id
 - 不要在小程序端拼接 COS 域名或 Supabase 域名。
 - 头像为空时使用本地默认头像或姓名首字占位。
 
-如果后续小程序端需要上传客户头像：
-
-- 先复用后端上传口径：`POST /uploads/images`，`scene=customer_avatar`。
-- 上传成功后将返回的 `storage_path || object_key || path || url` 写入客户更新接口的 `avatar` 字段。
-- 后续如要改为 COS 直传，需要另行接入 `/uploads/cos/direct-init` 和 `/uploads/cos/direct-complete`，并由后端开放 `customer_avatar` 直传场景。
+如果后续小程序端需要上传客户头像，应另出小程序对接文档，由小程序团队接入 `/uploads/cos/direct-init` 和 `/uploads/cos/direct-complete`。
 
 ## 5. 验收标准
 
 - Admin 新增客户时可以上传头像，保存后列表/详情再次打开能显示头像。
 - Admin 编辑客户时可以替换头像。
 - Admin 编辑客户时可以清除头像。
-- 正常情况下后端 `/uploads/images` 不应再出现 `scene = customer_avatar` 的新头像上传请求；只有直传失败时才会回退。
+- 正常情况下后端 `/uploads/images` 不应再出现 `scene = customer_avatar` 的新头像上传请求。
 - `customers.avatar` 有值时，接口返回可访问 URL。
 - `platform_file_objects` 有 `scene = customer_avatar` 的记录。
 - 小程序端不需要为了本次后端/Admin 变更改代码。

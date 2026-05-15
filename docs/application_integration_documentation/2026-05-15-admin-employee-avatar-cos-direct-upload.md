@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 适用端：Admin 租户员工管理  
-状态：Admin 已优先走 COS 直传，失败时回退 `/uploads/images`。
+状态：Admin 已接入 COS 直传；当前生产口径为直传失败直接提示错误，不静默回退 `/uploads/images`。
 
 ## 1. 背景
 
@@ -26,14 +26,16 @@
 -> POST/PATCH /employees 时写入 storage_path/object_key
 ```
 
-兜底路径：
+兼容路径：
 
 ```text
-直传失败
+仅当代码显式关闭 DIRECT_COS_UPLOAD_ENABLED 时
 -> POST /uploads/images，scene=employee_avatar
 -> 后端中转上传 COS
 -> 返回 storage_path/object_key/path/url
 ```
+
+当前 `DIRECT_COS_UPLOAD_ENABLED=true`，正常生产路径不会自动进入兼容上传。
 
 ## 3. 字段口径
 
@@ -46,12 +48,12 @@
 
 - 格式：JPG、PNG、WebP、HEIC、HEIF。
 - 大小：单张不超过 2MB。
-- 直传失败自动回退中转上传。
+- 直传失败时停留在表单内提示错误，不自动回退中转上传。
 
 ## 5. 验收标准
 
 - Admin 新增员工时可以上传头像，保存后列表能显示头像。
 - Admin 编辑员工时可以替换头像。
 - Admin 编辑员工时可以清除头像。
-- 正常情况下后端 `/uploads/images` 不应再出现 `scene = employee_avatar` 的新头像上传请求；只有直传失败时才会回退。
+- 正常情况下后端 `/uploads/images` 不应再出现 `scene = employee_avatar` 的新头像上传请求。
 - `platform_file_objects` 有 `scene = employee_avatar` 的记录。
