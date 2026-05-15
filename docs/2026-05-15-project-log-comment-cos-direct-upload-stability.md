@@ -2,11 +2,13 @@
 
 日期：2026-05-15  
 范围：后端 API、微信小程序施工日志图片和施工日志评论图片上传  
-结论：评论图片单图/多图 COS 直传链路验收通过；施工日志图片已按同样模式接入，待线上单图/多图验收。当前稳定策略是优先 COS 直传，失败时回退 `/uploads/images`。
+结论：评论图片单图/多图 COS 直传链路验收通过；施工日志图片已按同样模式接入，并已完成线上单图/多图验收。当前稳定策略是优先 COS 直传，失败时回退 `/uploads/images`。
 
 ## 1. 当前验收结果
 
-已完成连续 10 次人工验证：
+### 1.1 施工日志评论图片
+
+评论图片已完成连续 10 次人工验证：
 
 - 未出现 `direct-complete-async-failed`。
 - 上传速度稳定。
@@ -50,6 +52,34 @@ direct-init/read-local-file/put-cos 并发 2 -> 返回 object_key -> 创建评�
 ```
 
 表示多图已完成 COS 直传；只有直传失败时才会输出 `fallback-upload-*`。
+
+### 1.2 员工施工日志图片
+
+2026-05-15 线上验收已完成：
+
+- 租户：`51111111-1111-4111-8111-111111111111`
+- 项目：`5aaaaaaa-0006-4aaa-8aaa-aaaaaaaaaaaa`
+- 员工：`5aaaaaaa-0004-4aaa-8aaa-aaaaaaaaaaaa`
+- 实际施工日志图片分布：`1、1、3、2、2`
+- 图片总数：`9`
+
+落库记录：
+
+| 日志 ID | 图片数 | 创建时间 UTC |
+| --- | ---: | --- |
+| `d6ae89b1-1fe7-497c-8ace-933c595f920b` | 1 | `2026-05-15T02:43:04.651181+00:00` |
+| `556985e2-9200-4d5d-b95e-f8421f353307` | 1 | `2026-05-15T02:41:55.745304+00:00` |
+| `1f9398f8-b0ce-4b34-b086-e20b5c28480b` | 3 | `2026-05-15T02:41:19.919465+00:00` |
+| `6d845492-35cb-41ce-ac7d-002285fd0519` | 2 | `2026-05-15T02:40:46.122805+00:00` |
+| `4719f406-fcfc-4464-9301-894057a2f0e5` | 2 | `2026-05-15T02:40:15.051818+00:00` |
+
+后端核查结果：
+
+- `platform_file_objects` 中 `scene = project_log` 的对应对象共 `9` 条，状态均为 `active`。
+- `goose-project-log-comment-cos-reconcile-worker` 最新扫描结果：`project_log.scanned = 9`，`project_log.summary.exists = 9`。
+- 最新这批员工施工日志请求未观察到 `/uploads/images` 回退。
+- `/uploads/cos/direct-init`、`/uploads/cos/direct-complete`、`/project-logs` 均返回 200。
+- 业务表 `project_logs.images` 保存稳定 COS object key，不保存短期 signed URL。
 
 ## 2. 后端能力
 
@@ -306,7 +336,47 @@ bun run --cwd apps/api project-log-comments:cos:reconcile -- \
 
 注意：Linux 环境 `date` 参数需要替换为 GNU date 写法。
 
-## 7. 后续复用规则
+## 7. 当前收口计划
+
+### 7.1 观察窗口
+
+施工日志图片和评论图片直传已具备上线收口条件。建议继续观察 1 天：
+
+- worker 日志中 `project_log.scanned` 持续等于 `project_log.summary.exists`。
+- worker 日志中 `project_log_comment.scanned` 持续等于 `project_log_comment.summary.exists`。
+- 不出现 `failed`。
+- 不出现非预期 `/uploads/images` 回退。
+
+### 7.2 日志开关
+
+验收结束后建议关闭高频 timing 日志：
+
+```env
+UPLOAD_TIMING_LOG_ENABLED=false
+```
+
+保留以下日志即可：
+
+- API 请求成功/失败日志。
+- `goose-project-log-comment-cos-reconcile-worker` tick 日志。
+- COS complete 异常日志。
+- 对账 `failed` 或补写报告。
+
+### 7.3 小程序协作边界
+
+后续小程序端由小程序团队对接。后端侧只维护接口能力和对接文档，不直接改小程序代码。
+
+### 7.4 下一阶段候选入口
+
+评论图片和施工日志图片收口后，平台存储 COS 化可继续梳理以下入口：
+
+1. 员工头像。
+2. 客户头像。
+3. 工序验收整改图片。
+4. 费用审批凭证。
+5. H5 活动封面和内容图片。
+
+## 8. 后续复用规则
 
 后续其它上传场景迁移直传时，必须同时满足：
 

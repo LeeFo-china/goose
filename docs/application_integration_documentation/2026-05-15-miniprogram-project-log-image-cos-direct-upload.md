@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 适用端：微信小程序员工发布施工日志  
-状态：已对接，待线上单图/多图验收。
+状态：已对接，线上单图/多图验收通过。
 
 ## 1. 流程
 
@@ -142,3 +142,30 @@ bun run --cwd apps/api project-logs:cos:reconcile -- \
 - 后端日志中 `project_log` 的 `direct-init/direct-complete` 均为 200。
 - 不出现新的 `/uploads/images` 兜底，除非主动模拟直传失败。
 - 对账 worker 无 `failed`，如出现 `reconciled` 应能解释为异步 complete 漏登记。
+
+## 7. 2026-05-15 线上验收记录
+
+验收范围：
+
+- 租户：`51111111-1111-4111-8111-111111111111`
+- 项目：`5aaaaaaa-0006-4aaa-8aaa-aaaaaaaaaaaa`
+- 员工：`5aaaaaaa-0004-4aaa-8aaa-aaaaaaaaaaaa`
+- 时间：2026-05-15 10:40-10:43 左右
+
+实际落库结果：
+
+| 日志 ID | 图片数 | 内容 | 阶段 |
+| --- | ---: | --- | --- |
+| `d6ae89b1-1fe7-497c-8ace-933c595f920b` | 1 | 小米 | `tiling` |
+| `556985e2-9200-4d5d-b95e-f8421f353307` | 1 | 固始 | `tiling` |
+| `1f9398f8-b0ce-4b34-b086-e20b5c28480b` | 3 | 固始 | `tiling` |
+| `6d845492-35cb-41ce-ac7d-002285fd0519` | 2 | 固始 | `tiling` |
+| `4719f406-fcfc-4464-9301-894057a2f0e5` | 2 | 固始 | `tiling` |
+
+验收结论：
+
+- 本次实际图片分布为 `1、1、3、2、2`，共 `9` 张。
+- `platform_file_objects` 中 `scene = project_log` 的对应对象共 `9` 条，状态均为 `active`。
+- 后端对账 worker 最新结果：`project_log.scanned = 9`，`summary.exists = 9`。
+- 最新这批员工施工日志未观察到 `/uploads/images` 回退，均走 `/uploads/cos/direct-init` 和 `/uploads/cos/direct-complete`。
+- `POST /project-logs` 均创建成功，业务表 `project_logs.images` 保存稳定 COS object key，不保存短期 signed URL。
