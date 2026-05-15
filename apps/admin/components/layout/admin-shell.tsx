@@ -23,7 +23,15 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 import { cn } from "@/lib/utils";
 
 type ContentWidth = "compact" | "wide" | "full";
-type ThemeTone = "goose" | "neutral" | "blue" | "green";
+type ThemeTone =
+  | "goose"
+  | "neutral"
+  | "blue"
+  | "green"
+  | "cyan"
+  | "indigo"
+  | "rose"
+  | "amber";
 
 type AdminPreferences = {
   sidebarCollapsed: boolean;
@@ -142,7 +150,111 @@ const themeTokens: Record<ThemeTone, Record<string, string>> = {
     "--workbench-bg-mid": "150 55% 95%",
     "--workbench-bg-end": "150 60% 99%",
   },
+  cyan: {
+    "--background": "186 65% 98%",
+    "--primary": "191 91% 30%",
+    "--ring": "191 91% 36%",
+    "--accent": "185 96% 90%",
+    "--accent-foreground": "193 82% 20%",
+    "--primary-foreground": "0 0% 100%",
+    "--secondary": "185 96% 92%",
+    "--secondary-foreground": "193 82% 20%",
+    "--muted": "186 55% 95%",
+    "--border": "186 35% 84%",
+    "--input": "186 35% 80%",
+    "--goose-yellow": "#0891b2",
+    "--goose-yellow-soft": "#a5f3fc",
+    "--goose-cream": "#ecfeff",
+    "--goose-cream-deep": "#cffafe",
+    "--goose-ink": "#0f172a",
+    "--goose-brown": "#155e75",
+    "--goose-surface-warm": "#f2feff",
+    "--workbench-glow": "34 211 238",
+    "--workbench-glow-alpha": "0.17",
+    "--workbench-bg-start": "186 65% 99%",
+    "--workbench-bg-mid": "186 65% 95%",
+    "--workbench-bg-end": "186 65% 99%",
+  },
+  indigo: {
+    "--background": "226 60% 98%",
+    "--primary": "239 84% 42%",
+    "--ring": "239 84% 48%",
+    "--accent": "226 100% 94%",
+    "--accent-foreground": "239 84% 20%",
+    "--primary-foreground": "0 0% 100%",
+    "--secondary": "226 100% 95%",
+    "--secondary-foreground": "239 84% 20%",
+    "--muted": "226 55% 96%",
+    "--border": "226 35% 86%",
+    "--input": "226 35% 82%",
+    "--goose-yellow": "#4338ca",
+    "--goose-yellow-soft": "#c7d2fe",
+    "--goose-cream": "#eef2ff",
+    "--goose-cream-deep": "#e0e7ff",
+    "--goose-ink": "#111827",
+    "--goose-brown": "#3730a3",
+    "--goose-surface-warm": "#f7f8ff",
+    "--workbench-glow": "129 140 248",
+    "--workbench-glow-alpha": "0.16",
+    "--workbench-bg-start": "226 60% 99%",
+    "--workbench-bg-mid": "226 60% 96%",
+    "--workbench-bg-end": "226 60% 99%",
+  },
+  rose: {
+    "--background": "340 65% 98%",
+    "--primary": "346 77% 42%",
+    "--ring": "346 77% 48%",
+    "--accent": "340 90% 94%",
+    "--accent-foreground": "346 77% 22%",
+    "--primary-foreground": "0 0% 100%",
+    "--secondary": "340 90% 95%",
+    "--secondary-foreground": "346 77% 22%",
+    "--muted": "340 50% 96%",
+    "--border": "340 35% 86%",
+    "--input": "340 35% 82%",
+    "--goose-yellow": "#be123c",
+    "--goose-yellow-soft": "#fecdd3",
+    "--goose-cream": "#fff1f2",
+    "--goose-cream-deep": "#ffe4e6",
+    "--goose-ink": "#191114",
+    "--goose-brown": "#9f1239",
+    "--goose-surface-warm": "#fff7f8",
+    "--workbench-glow": "251 113 133",
+    "--workbench-glow-alpha": "0.15",
+    "--workbench-bg-start": "340 65% 99%",
+    "--workbench-bg-mid": "340 65% 96%",
+    "--workbench-bg-end": "340 65% 99%",
+  },
+  amber: {
+    "--background": "38 70% 98%",
+    "--primary": "32 95% 34%",
+    "--ring": "32 95% 40%",
+    "--accent": "39 96% 88%",
+    "--accent-foreground": "28 80% 18%",
+    "--primary-foreground": "0 0% 100%",
+    "--secondary": "39 96% 91%",
+    "--secondary-foreground": "28 80% 18%",
+    "--muted": "39 55% 94%",
+    "--border": "39 35% 82%",
+    "--input": "39 35% 78%",
+    "--goose-yellow": "#b45309",
+    "--goose-yellow-soft": "#fde68a",
+    "--goose-cream": "#fffbeb",
+    "--goose-cream-deep": "#fef3c7",
+    "--goose-ink": "#1f1608",
+    "--goose-brown": "#92400e",
+    "--goose-surface-warm": "#fffaf0",
+    "--workbench-glow": "251 191 36",
+    "--workbench-glow-alpha": "0.18",
+    "--workbench-bg-start": "38 70% 99%",
+    "--workbench-bg-mid": "39 70% 95%",
+    "--workbench-bg-end": "38 70% 99%",
+  },
 };
+
+function isThemeTone(value: unknown): value is ThemeTone {
+  return typeof value === "string" && value in themeTokens;
+}
 
 function loadPreferences() {
   if (typeof window === "undefined") return defaultPreferences;
@@ -154,7 +266,7 @@ function loadPreferences() {
       ...defaultPreferences,
       ...parsed,
       contentWidth: parsed.contentWidth || defaultPreferences.contentWidth,
-      themeTone: parsed.themeTone || defaultPreferences.themeTone,
+      themeTone: isThemeTone(parsed.themeTone) ? parsed.themeTone : defaultPreferences.themeTone,
     };
   } catch {
     return defaultPreferences;
@@ -230,6 +342,10 @@ function AdminPreferencesMenu({
           <DropdownMenuRadioItem value="neutral">中性黑</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="blue">运营蓝</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="green">工程绿</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="cyan">湖蓝</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="indigo">靛蓝</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="rose">玫红</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="amber">琥珀</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
