@@ -45,6 +45,11 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -143,6 +148,7 @@ const settlementMethodOptions = EXPENSE_SETTLEMENT_METHOD_VALUES.map((value) => 
   value,
   ExpenseSettlementMethodConfig[value].label,
 ] as const);
+const settlementMethodLabel = Object.fromEntries(settlementMethodOptions);
 const settlementMethodSelectOptions = settlementMethodOptions.map(([value, label]) => ({
   value,
   label,
@@ -245,6 +251,11 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatSettlementMethod(value: string | null | undefined) {
+  if (!value) return "-";
+  return settlementMethodLabel[value] || value;
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -522,7 +533,7 @@ function DetailDialog({
               <div className="flex flex-col gap-4 rounded-md border p-4">
                 <div className="grid gap-3 md:grid-cols-4">
                   <InfoItem label="收款人" value={settlement.payee_name || "-"} />
-                  <InfoItem label="方式" value={settlement.method} />
+                  <InfoItem label="方式" value={formatSettlementMethod(settlement.method)} />
                   <InfoItem label="金额" value={`¥${formatMoney(settlement.paid_amount)}`} />
                   <InfoItem label="时间" value={formatDateTime(settlement.paid_at)} />
                 </div>
@@ -534,22 +545,37 @@ function DetailDialog({
                       {settlementEvidenceImages.map((image, index) => {
                         const previewSrc = getEvidenceImagePreviewSrc(image);
                         return (
-                          <a
-                            key={`${image}-${index}`}
-                            href={previewSrc}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="group overflow-hidden rounded-md border bg-background transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            <img
-                              src={previewSrc}
-                              alt={`打款凭证 ${index + 1}`}
-                              className="h-24 w-full object-cover"
-                            />
-                            <div className="truncate px-2 py-1.5 text-xs text-muted-foreground group-hover:text-foreground">
-                              凭证 {index + 1}
-                            </div>
-                          </a>
+                          <HoverCard key={`${image}-${index}`} openDelay={120} closeDelay={80}>
+                            <HoverCardTrigger asChild>
+                              <a
+                                href={previewSrc}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="group overflow-hidden rounded-md border bg-background transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                <img
+                                  src={previewSrc}
+                                  alt={`打款凭证 ${index + 1}`}
+                                  className="h-24 w-full object-cover"
+                                />
+                                <div className="truncate px-2 py-1.5 text-xs text-muted-foreground group-hover:text-foreground">
+                                  凭证 {index + 1}
+                                </div>
+                              </a>
+                            </HoverCardTrigger>
+                            <HoverCardContent
+                              side="top"
+                              align="center"
+                              sideOffset={10}
+                              className="w-[min(720px,calc(100vw-2rem))] p-2"
+                            >
+                              <img
+                                src={previewSrc}
+                                alt={`打款凭证完整预览 ${index + 1}`}
+                                className="max-h-[70vh] w-full rounded-sm object-contain"
+                              />
+                            </HoverCardContent>
+                          </HoverCard>
                         );
                       })}
                     </div>
