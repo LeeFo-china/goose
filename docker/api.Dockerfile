@@ -35,6 +35,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/tsconfig.base.json ./tsconfig.base.json
 COPY --from=builder /app/apps/api ./apps/api
 COPY --from=builder /app/packages/domain ./packages/domain
+COPY scripts ./scripts
 
 WORKDIR /app/apps/api
 

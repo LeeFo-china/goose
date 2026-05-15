@@ -2,9 +2,20 @@
 set -euo pipefail
 
 PM2_BIN="${PM2_BIN:-pm2}"
-PM2_JSON="$("$PM2_BIN" jlist)"
+JS_RUNTIME_BIN="${JS_RUNTIME_BIN:-}"
+if [ -z "$JS_RUNTIME_BIN" ]; then
+  if command -v node >/dev/null 2>&1; then
+    JS_RUNTIME_BIN="node"
+  else
+    JS_RUNTIME_BIN="bun"
+  fi
+fi
 
-PM2_JSON="$PM2_JSON" node <<'NODE'
+PM2_JSON="$("$PM2_BIN" jlist 2>/dev/null || echo "[]")"
+JS_RUNTIME_SCRIPT="$(mktemp /tmp/gooes-pm2-status.XXXXXX.js)"
+trap 'rm -f "$JS_RUNTIME_SCRIPT"' EXIT
+
+cat > "$JS_RUNTIME_SCRIPT" <<'NODE'
 try {
   const apps = JSON.parse(process.env.PM2_JSON || "[]");
   const targetNames = new Set(["goose", "goose-admin", "goose-social-video-worker"]);
@@ -37,3 +48,5 @@ try {
   process.exit(1);
 }
 NODE
+
+PM2_JSON="$PM2_JSON" "$JS_RUNTIME_BIN" "$JS_RUNTIME_SCRIPT"
