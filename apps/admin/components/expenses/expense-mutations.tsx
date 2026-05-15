@@ -164,6 +164,27 @@ const PayFormSchema = z.object({
 
 type PayFormValues = z.infer<typeof PayFormSchema>;
 
+type DirectUploadInitResult = {
+  provider: "tencent_cos";
+  bucket: string;
+  region: string | null;
+  object_key: string;
+  storage_path: string;
+  upload_url: string;
+  method?: "PUT";
+  headers?: Record<string, string>;
+  expires_in: number;
+  expires_at: string;
+};
+
+type DirectUploadCompleteResult = {
+  url?: string;
+  path?: string;
+  provider?: string;
+  object_key?: string;
+  storage_path?: string;
+};
+
 const EVIDENCE_COMPRESS_THRESHOLD = 1.5 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 9;
 
@@ -234,11 +255,11 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-async function requestExpense(input: {
+async function requestExpense<T = unknown>(input: {
   path: string;
   method?: "GET" | "POST";
   payload?: unknown;
-}) {
+}): Promise<T> {
   const response = await fetch(`/api/backend${input.path}`, {
     method: input.method || "GET",
     headers: input.payload ? { "content-type": "application/json" } : undefined,
@@ -248,7 +269,7 @@ async function requestExpense(input: {
   if (!response.ok || payload.success === false) {
     throw new Error(getPayloadMessage(payload, "操作失败"));
   }
-  return payload.data;
+  return payload.data as T;
 }
 
 function loadImage(file: File) {
@@ -316,28 +337,66 @@ async function compressImageIfNeeded(file: File) {
   throw new Error(`${file.name} 压缩后仍超过 1.5MB，请更换更小的图片`);
 }
 
-async function uploadEvidenceImages(files: File[]) {
-  const formData = new FormData();
-  formData.append("scene", "expense_request");
-
-  for (const file of files) {
-    const uploadFile = await compressImageIfNeeded(file);
-    formData.append("files", uploadFile);
+function getEvidenceImagePreviewSrc(image: string) {
+  if (!image) return "";
+  if (/^https?:\/\//i.test(image) || image.startsWith("blob:") || image.startsWith("data:")) {
+    return image;
   }
+  return `/api/backend/uploads/public-url?path=${encodeURIComponent(image)}`;
+}
 
-  const response = await fetch("/api/backend/uploads/images", {
+async function uploadEvidenceImageDirect(file: File) {
+  const uploadFile = await compressImageIfNeeded(file);
+  const mimetype = uploadFile.type || "image/jpeg";
+  const init = await requestExpense<DirectUploadInitResult>({
+    path: "/uploads/cos/direct-init",
     method: "POST",
-    body: formData,
+    payload: {
+      scene: "expense_request",
+      filename: uploadFile.name,
+      mimetype,
+      size_bytes: uploadFile.size,
+    },
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "上传打款凭证失败"));
+
+  const uploadResponse = await fetch(init.upload_url, {
+    method: init.method || "PUT",
+    headers: init.headers || { "content-type": mimetype },
+    body: uploadFile,
+  });
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "");
+    throw new Error(
+      `上传打款凭证到 COS 失败(${uploadResponse.status})${
+        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
+      }`,
+    );
   }
 
-  const list = Array.isArray(payload.data?.list) ? payload.data.list : [];
-  return list
-    .map((item: { url?: unknown }) => item.url)
-    .filter((url: unknown): url is string => typeof url === "string" && Boolean(url));
+  const completed = await requestExpense<DirectUploadCompleteResult>({
+    path: "/uploads/cos/direct-complete",
+    method: "POST",
+    payload: {
+      scene: "expense_request",
+      filename: uploadFile.name,
+      mimetype,
+      size_bytes: uploadFile.size,
+      object_key: init.object_key,
+      etag: uploadResponse.headers.get("etag") || undefined,
+    },
+  });
+
+  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
+    init.object_key;
+  if (!storageValue) {
+    throw new Error("打款凭证上传成功但未返回图片地址");
+  }
+
+  return storageValue;
+}
+
+async function uploadEvidenceImages(files: File[]) {
+  return Promise.all(files.map((file) => uploadEvidenceImageDirect(file)));
 }
 
 function DetailDialog({
@@ -725,7 +784,7 @@ function PayDialog({
                       {images.map((image, index) => (
                         <div key={image} className="overflow-hidden rounded-md border bg-background">
                           <img
-                            src={image}
+                            src={getEvidenceImagePreviewSrc(image)}
                             alt={`打款凭证 ${index + 1}`}
                             className="h-24 w-full object-cover"
                           />

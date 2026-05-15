@@ -25,7 +25,8 @@
 | Admin 员工头像 | COS 直传 | 已接入 | 直传失败直接报错，不静默回退慢链路 |
 | Admin 客户头像 | COS 直传 | 已接入 | 预览走 `/uploads/public-url` |
 | 工序验收图片 | COS 直传 | Admin 已接入，小程序待对接 | 场景 `project_acceptance` |
-| 费用/H5 活动图片 | 先保持 `/uploads/images` 兼容 | 待逐步切换 | 后续按页面逐个改为直传 |
+| 费用审批附件 | COS 直传 | Admin 已接入 | 场景 `expense_request` |
+| H5 活动图片 | 先保持 `/uploads/images` 兼容 | 待逐步切换 | 后续按页面逐个改为直传 |
 | 360 全景图 | COS 对象存储 | 规划中 | 原图、拼接图、瓦片都应走 COS |
 
 ## URL 有效期建议
@@ -64,7 +65,7 @@ PLATFORM_COS_SIGNED_URL_TTL_BY_SCENE
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,expense_request,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 
@@ -79,7 +80,7 @@ UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_acceptance,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_acceptance,expense_request,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 
@@ -113,7 +114,7 @@ UPLOAD_TIMING_LOG_ENABLED=false
 
 ```env
 UPLOAD_TIMING_LOG_ENABLED=true
-UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,project_acceptance,expense_request,employee_avatar,customer_avatar
 UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
 ```
 
