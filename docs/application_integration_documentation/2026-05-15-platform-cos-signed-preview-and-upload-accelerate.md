@@ -36,6 +36,20 @@ Admin 头像上传无需额外改接口：
 
 如果后端配置开启 `PLATFORM_COS_UPLOAD_USE_ACCELERATE=true`，小程序拿到的 `upload_url` 会自动变为腾讯云 COS 全球加速上传域名。
 
+## 当前生产配置
+
+- Bucket：`windwill-1259348056`
+- Region：`ap-nanjing`
+- 全球加速域名：`windwill-1259348056.cos.accelerate.myqcloud.com`
+- 系统开关：`PLATFORM_COS_UPLOAD_USE_ACCELERATE=true`
+- 直传 URL 验证结果：后端已生成 `https://windwill-1259348056.cos.accelerate.myqcloud.com/...` 上传地址。
+
+服务器端探测结果：
+
+- 普通 COS 上传：约 `911ms`
+- 全球加速 COS 上传：约 `1918ms`
+- 结论：腾讯云侧全球加速已开启，系统侧开关已打开。
+
 ## 腾讯云配置要求
 
 使用全球加速前，需要在腾讯云 COS bucket 开启全球加速。腾讯云官方说明：上传场景可使用 `<BucketName-APPID>.cos.accelerate.myqcloud.com`，适用于 `PUT Object`、`POST Object`、分块上传等写入场景。
@@ -65,3 +79,45 @@ Admin 头像上传无需额外改接口：
 - 员工头像预览请求最终跳转到可访问的签名 URL。
 - 小程序评论图片上传日志中 `direct-init` 到 `direct-complete` 的间隔明显下降。
 - 后端不再出现头像上传回退到 `/uploads/images` 的慢请求。
+
+## 小程序评论图片验收结果
+
+单图上传实测：
+
+- 图片大小：`155874B`
+- `compress`：`55ms`
+- `direct-init`：`511ms`
+- `read-local-file`：`10ms`
+- `put-cos`：`2668ms`
+- `direct-upload-total`：`3200ms`
+- `direct-complete-async`：`536ms`
+
+对比全球加速开启前：
+
+- 加速前 `put-cos`：`25803ms`
+- 加速后 `put-cos`：`2668ms`
+- 加速前 `direct-upload-total`：`27701ms`
+- 加速后 `direct-upload-total`：`3200ms`
+
+多图上传实测：
+
+- 图片数量：`3`
+- 总大小：`785945B`
+- 并发数：`2`
+- `direct-upload-total`：`8366ms`
+- 单张 `put-cos`：`3214ms`、`3018ms`、`4212ms`
+- `direct-complete-async`：`821ms` 到 `916ms`
+
+验收判断：
+
+- 单图 100-300KB 上传总耗时约 `3.2s`，通过。
+- 3 图约 768KB 上传总耗时约 `8.4s`，通过。
+- 本轮测试未出现 `/uploads/images` fallback。
+- 本轮测试未出现 `direct-complete-async-failed`。
+
+## 后续观察项
+
+- 继续抽样观察单图、2 图、3 图上传耗时，重点看 `put-cos` 和 `direct-upload-total`。
+- 如果 3 图以内持续稳定在 `10s` 内，可视为小程序评论图片上传链路验收通过。
+- 如果再次出现 `put-cos > 10s`，优先排查手机网络到 COS 全球加速域名的链路，不优先改后端。
+- 小程序端日志目前存在输出顺序乱序、同一 `direct-init` 偶发重复打印的问题，建议小程序团队后续整理日志打印，不影响当前上传链路。
