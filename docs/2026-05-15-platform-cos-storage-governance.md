@@ -105,3 +105,35 @@ UPLOAD_TIMING_LOG_ENABLED=false
 - 直传上传失败时前端明确报错，不静默回退到慢链路。
 - 图片预览通过后端签名 URL 或受控 CDN URL 打开。
 - 小程序侧如需改动，只提供对接文档，由小程序团队执行。
+
+## 2026-05-15 生产配置记录
+
+已在服务器 `/home/ubuntu/actions-runner/.env` 和当前 API 工作区 `.env` 写入：
+
+```env
+UPLOAD_TIMING_LOG_ENABLED=true
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
+```
+
+服务器当前部署版本：
+
+```text
+feature/multi-tenant @ 1aa43a9
+```
+
+API 进程已执行：
+
+```bash
+pm2 reload goose --update-env
+```
+
+后端 smoke test：
+
+- `GET https://api.goodcms.cn/` 返回 `200`，响应 `{"hello":"world"}`。
+- 本地调用 `POST http://127.0.0.1:3000/uploads/cos/direct-init` 返回 `200`。
+- 返回 `provider=tencent_cos`。
+- 返回 `bucket=windwill-1259348056`，`region=ap-nanjing`。
+- 返回上传域名为 `windwill-1259348056.cos.accelerate.myqcloud.com`。
+- 返回对象前缀为 `tenants/51111111-1111-4111-8111-111111111111/project-log-comment/unassigned`。
+- 本次 `direct-init` 请求耗时约 `6ms`，低于 `1000ms` 阈值，未输出 timing 慢日志，符合降噪预期。
