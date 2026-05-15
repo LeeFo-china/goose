@@ -69,3 +69,16 @@ body {
     radial-gradient(circle at 18% 0%, rgb(255 212 73 / 24%), transparent 28%),
     linear-gradient(180deg, #fffdf6 0%, #fff9e4 42%, #fffdf6 100%);
 }
+
+html[data-admin-compact="true"] main .gap-5 {
+  gap: 1rem;
+}
+
+html[data-admin-compact="true"] main .p-5 {
+  padding: 1rem;
+}
+
+html[data-admin-compact="true"] main .py-5 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}

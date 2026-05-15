@@ -30,7 +30,13 @@ function getVisibleGroups(session: AdminSession, groups: AdminMenuGroup[]) {
     .filter((group) => group.items.length > 0);
 }
 
-export function AdminNav({ session }: { session: AdminSession }) {
+export function AdminNav({
+  session,
+  collapsed = false,
+}: {
+  session: AdminSession;
+  collapsed?: boolean;
+}) {
   const pathname = usePathname();
   const rawGroups = isPlatformOnlySession(session)
     ? platformNavGroups
@@ -38,10 +44,10 @@ export function AdminNav({ session }: { session: AdminSession }) {
   const visibleGroups = getVisibleGroups(session, rawGroups);
 
   return (
-    <nav className="flex flex-col gap-4 p-3">
+    <nav className={cn("flex flex-col gap-4 p-3", collapsed && "items-center px-2")}>
       {visibleGroups.map((group) => (
-        <div key={group.label} className="flex flex-col gap-1">
-          <div className="px-3 text-[11px] font-semibold text-[#4d3b00]/60">
+        <div key={group.label} className="flex w-full flex-col gap-1">
+          <div className={cn("px-3 text-[11px] font-semibold text-[var(--goose-brown)] opacity-60", collapsed && "sr-only")}>
             {group.label}
           </div>
           {group.items.map((item) => {
@@ -52,25 +58,27 @@ export function AdminNav({ session }: { session: AdminSession }) {
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? item.label : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-[#4d3b00] transition-colors hover:bg-[#fff5cf] hover:text-[#141414]",
-                  active && "bg-[#141414] text-[#ffd449] shadow-sm hover:bg-[#141414] hover:text-[#ffd449]",
+                  "group relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-[var(--goose-brown)] transition-colors hover:bg-[var(--goose-cream-deep)] hover:text-[var(--goose-ink)]",
+                  collapsed && "justify-center px-0",
+                  active && "bg-[var(--goose-ink)] text-[var(--goose-yellow-soft)] shadow-sm hover:bg-[var(--goose-ink)] hover:text-[var(--goose-yellow-soft)]",
                 )}
               >
                 <span
                   className={cn(
                     "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-transparent transition-colors",
-                    active && "bg-[#ffd449]",
+                    active && "bg-[var(--goose-yellow-soft)]",
                   )}
                 />
                 <Icon
                   className={cn(
-                    "size-4 shrink-0 text-[#4d3b00]/70 transition-colors group-hover:text-[#141414]",
-                    active && "text-[#ffd449] group-hover:text-[#ffd449]",
+                    "size-4 shrink-0 text-[var(--goose-brown)] opacity-70 transition-colors group-hover:text-[var(--goose-ink)] group-hover:opacity-100",
+                    active && "text-[var(--goose-yellow-soft)] opacity-100 group-hover:text-[var(--goose-yellow-soft)]",
                   )}
                 />
-                <span className="truncate">{item.label}</span>
+                <span className={cn("truncate", collapsed && "sr-only")}>{item.label}</span>
               </Link>
             );
           })}
