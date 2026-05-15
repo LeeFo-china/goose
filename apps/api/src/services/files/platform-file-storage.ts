@@ -12,6 +12,7 @@ import {
   setPlatformCosAccessConfigCache,
   setPlatformCosPublicBaseUrlCache,
 } from "@/services/files/file-url-resolver";
+import { logUploadTiming } from "@/utils/upload-timing-logger";
 
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const DEFAULT_COS_REGION = "ap-guangzhou";
@@ -150,25 +151,16 @@ function normalizeEtag(value: string | null | undefined) {
   return value?.trim().replace(/^"+|"+$/g, "") || null;
 }
 
-function now() {
-  return Date.now();
-}
-
-function isUploadTimingLogEnabled() {
-  return process.env.UPLOAD_TIMING_LOG_ENABLED === "true";
-}
-
 function logPlatformFileStorageTiming(
   stage: string,
   startedAt: number,
   extra: Record<string, unknown> = {},
 ) {
-  if (!isUploadTimingLogEnabled()) return;
+  logUploadTiming(PLATFORM_FILE_STORAGE_TIMING_PREFIX, stage, startedAt, extra);
+}
 
-  console.info(PLATFORM_FILE_STORAGE_TIMING_PREFIX, stage, {
-    duration_ms: now() - startedAt,
-    ...extra,
-  });
+function now() {
+  return Date.now();
 }
 
 function getMimeTypeFromObjectKey(objectKey: string) {

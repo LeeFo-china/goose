@@ -10,6 +10,7 @@ import { platformFileStorageService } from "@/services/files/platform-file-stora
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { SupabaseDB } from "@/utils/supabase";
 import type { JwtPayload } from "@/utils/jwt";
+import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
 
 const MAX_UPLOAD_FILES = 9;
@@ -114,24 +115,15 @@ type UploadActorContext = {
   customerId: string | null;
 };
 
-const now = () => Date.now();
-
-function isUploadTimingLogEnabled() {
-  return process.env.UPLOAD_TIMING_LOG_ENABLED === "true";
-}
-
 function logUploadImagesTiming(
   stage: string,
   startedAt: number,
   extra: Record<string, unknown> = {},
 ) {
-  if (!isUploadTimingLogEnabled()) return;
-
-  console.info(UPLOAD_IMAGES_TIMING_PREFIX, stage, {
-    duration_ms: now() - startedAt,
-    ...extra,
-  });
+  logUploadTiming(UPLOAD_IMAGES_TIMING_PREFIX, stage, startedAt, extra);
 }
+
+const now = () => Date.now();
 
 class UploadController extends BaseController {
   constructor() {
@@ -269,6 +261,7 @@ class UploadController extends BaseController {
 
   @Post("/uploads/cos/direct-init")
   async initDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
+    const requestStartedAt = now();
     if (!request.user?.sub) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
@@ -298,12 +291,20 @@ class UploadController extends BaseController {
       employeeId: actorContext.employeeId,
       customerId: actorContext.customerId,
     });
+    logUploadImagesTiming("direct-init-total", requestStartedAt, {
+      request_id: request.id,
+      scene,
+      tenant_id: actorContext.tenantId,
+      size_bytes: result.data.size_bytes,
+      object_key: directUpload.object_key,
+    });
 
     return ResponseHandler.success(directUpload);
   }
 
   @Post("/uploads/cos/direct-complete")
   async completeDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
+    const requestStartedAt = now();
     if (!request.user?.sub) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
@@ -340,6 +341,15 @@ class UploadController extends BaseController {
       customerId: actorContext.customerId,
       objectKey: result.data.object_key,
       etag: result.data.etag,
+    });
+    logUploadImagesTiming("direct-complete-total", requestStartedAt, {
+      request_id: request.id,
+      scene,
+      tenant_id: actorContext.tenantId,
+      size_bytes: result.data.size_bytes,
+      object_key: result.data.object_key,
+      provider: uploaded.provider,
+      file_id: uploaded.file_id,
     });
 
     return ResponseHandler.success(uploaded);

@@ -256,6 +256,19 @@ UPLOAD_TIMING_LOG_ENABLED=false
 UPLOAD_TIMING_LOG_ENABLED=true
 ```
 
+如果只需要观察慢请求，建议同时配置：
+
+```env
+UPLOAD_TIMING_LOG_SCENES=project_log_comment,project_log,employee_avatar,customer_avatar
+UPLOAD_TIMING_LOG_MIN_DURATION_MS=1000
+```
+
+含义：
+
+- `UPLOAD_TIMING_LOG_SCENES`：只输出指定上传场景；为空表示不过滤场景。
+- `UPLOAD_TIMING_LOG_MIN_DURATION_MS`：只输出超过阈值的阶段；为空或 `0` 表示不过滤耗时。
+- 不配置这两个变量时，`UPLOAD_TIMING_LOG_ENABLED=true` 保持原全量输出行为。
+
 开启后会输出：
 
 ```text
