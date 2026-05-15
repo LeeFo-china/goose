@@ -12,7 +12,8 @@
 - Admin 头像预览统一走 `/uploads/public-url?path=...`，由后端按最新策略生成签名跳转 URL。
 - 新增平台配置 `PLATFORM_COS_UPLOAD_USE_ACCELERATE`：
   - `false`：默认使用 bucket 地域域名上传。
-  - `true`：直传上传 URL 使用腾讯云 COS 全球加速域名。
+  - `true`：直传上传 URL 和后端兜底中转上传都使用腾讯云 COS 全球加速域名。
+- Admin 员工/客户头像在直传开启时不再静默回退到 `/uploads/images`，避免直传失败时进入 10-40 秒级服务器中转慢链路；直传失败会直接展示 COS 返回状态，便于定位 CORS、签名或网络问题。
 
 ## Admin 对接
 
@@ -23,7 +24,7 @@ Admin 头像上传无需额外改接口：
 3. 调用 `/uploads/cos/direct-complete`。
 4. 预览图片使用 `/uploads/public-url?path=${storage_path}`。
 
-如果超管后台开启 `PLATFORM_COS_UPLOAD_USE_ACCELERATE=true`，Admin 会自动拿到加速上传 URL。
+如果超管后台开启 `PLATFORM_COS_UPLOAD_USE_ACCELERATE=true`，Admin 会自动拿到加速上传 URL。员工/客户头像直传失败时，不再自动回退到 `/uploads/images`。
 
 ## 微信小程序对接
 

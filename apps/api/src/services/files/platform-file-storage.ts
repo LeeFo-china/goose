@@ -278,12 +278,19 @@ class PlatformFileStorageService {
     return config;
   }
 
-  private getCosClient(config: { secretId: string; secretKey: string }) {
-    const clientKey = `${config.secretId}:${config.secretKey}`;
+  private getCosClient(config: {
+    secretId: string;
+    secretKey: string;
+    uploadUseAccelerate?: boolean;
+  }) {
+    const clientKey = `${config.secretId}:${config.secretKey}:${
+      config.uploadUseAccelerate ? "accelerate" : "standard"
+    }`;
     if (!this.cosClient || this.cosClientKey !== clientKey) {
       this.cosClient = new COS({
         SecretId: config.secretId,
         SecretKey: config.secretKey,
+        UseAccelerate: Boolean(config.uploadUseAccelerate),
       });
       this.cosClientKey = clientKey;
     }

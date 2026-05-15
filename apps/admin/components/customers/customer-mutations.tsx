@@ -377,7 +377,12 @@ async function uploadCustomerAvatarDirect(file: File) {
     body: file,
   });
   if (!uploadResponse.ok) {
-    throw new Error("上传头像到 COS 失败");
+    const detail = await uploadResponse.text().catch(() => "");
+    throw new Error(
+      `上传头像到 COS 失败(${uploadResponse.status})${
+        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
+      }`,
+    );
   }
 
   const completed = await requestCustomer({
@@ -444,11 +449,7 @@ async function uploadCustomerAvatar(file: File) {
   }
 
   if (DIRECT_COS_UPLOAD_ENABLED) {
-    try {
-      return await uploadCustomerAvatarDirect(file);
-    } catch {
-      return uploadCustomerAvatarFallback(file);
-    }
+    return uploadCustomerAvatarDirect(file);
   }
 
   return uploadCustomerAvatarFallback(file);
