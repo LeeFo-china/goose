@@ -30,11 +30,15 @@ FROM oven/bun:1.3-alpine AS runner
 
 WORKDIR /app
 
+ARG ALPINE_MIRROR=
+
 ENV NODE_ENV=production
 ENV SERVICE_NAME=gooes-social-video-worker
 ENV FFMPEG_BIN=/usr/bin/ffmpeg
 
-RUN sed -i 's#https://dl-cdn.alpinelinux.org/alpine#https://mirrors.tencent.com/alpine#g' /etc/apk/repositories && \
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+    sed -i "s#https://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
+  fi && \
   apk add --no-cache ffmpeg ca-certificates
 
 COPY --from=builder /app/dist/social-video-transcription-worker.js ./social-video-transcription-worker.js
