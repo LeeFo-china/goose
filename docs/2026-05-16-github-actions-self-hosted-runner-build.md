@@ -58,6 +58,15 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 ALPINE_MIRROR=https://mirrors.tencent.com/alpine
 ```
 
+每个镜像会同时推送两个 tag：
+
+```text
+feature-multi-tenant
+<GITHUB_SHA>
+```
+
+其中 `feature-multi-tenant` 用于日常发布，`<GITHUB_SHA>` 用于手动回滚。
+
 Docker 部署 workflow 支持 `workflow_call` 和手动触发。当前 `feature/multi-tenant` 分支中，统一镜像构建 workflow 会在 API、Admin、Worker 三个镜像全部构建成功后通过 `workflow_call` 调用一次部署，执行：
 
 ```bash

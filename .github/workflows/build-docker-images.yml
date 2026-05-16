@@ -109,17 +109,20 @@ jobs:
         run: |
           set -euo pipefail
           cd "${RUNNER_WORKSPACE}/source"
-          IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}:${IMAGE_TAG}"
+          IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
+          BRANCH_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
+          SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
 
           case "$SERVICE" in
             api)
-              docker build -f docker/api.Dockerfile -t "$IMAGE" .
+              docker build -f docker/api.Dockerfile -t "$BRANCH_IMAGE" -t "$SHA_IMAGE" .
               ;;
             social-video-worker)
               docker build \
                 -f docker/social-video-worker.Dockerfile \
                 --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
-                -t "$IMAGE" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
                 .
               ;;
             admin)
@@ -127,7 +130,8 @@ jobs:
                 -f docker/admin.Dockerfile \
                 --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
                 --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
-                -t "$IMAGE" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
                 .
               ;;
             *)
@@ -136,7 +140,8 @@ jobs:
               ;;
           esac
 
-          docker push "$IMAGE"
+          docker push "$BRANCH_IMAGE"
+          docker push "$SHA_IMAGE"
 
   deploy:
     needs: build

@@ -75,6 +75,20 @@ ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
 ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
 ```
 
+构建 workflow 会同时推送 commit SHA tag，用于回滚：
+
+```text
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:<commit-sha>
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:<commit-sha>
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:<commit-sha>
+```
+
+回滚文档：
+
+```text
+docs/2026-05-17-docker-release-sha-tag-rollback-plan.md
+```
+
 新服务器 `/opt/supabase/docker/.env` 中已经配置：
 
 ```text
@@ -195,4 +209,4 @@ curl -sS -o /dev/null -w 'admin %{http_code} %{time_total}\n' https://admin.good
 1. 观察 2-3 次正常业务发布，确认自动 deploy 稳定。
 2. 稳定后可以归档旧 PM2 deploy workflow。
 3. 运维页主监控口径切到 Docker 容器健康状态，PM2 入口只作为旧服务器兼容信息保留或隐藏。
-4. 后续如需减少重复 deploy，可再升级为“统一 build matrix + 单 deploy job”的发布结构。
+4. 后续可以增加手动 rollback workflow，输入 `rollback_sha` 自动切换三类镜像并重建容器。

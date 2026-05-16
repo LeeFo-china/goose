@@ -24,6 +24,7 @@
 - 三个镜像构建已合并为一个 matrix workflow：`.github/workflows/build-docker-images.yml`。
 - matrix 构建顺序为 API、视频转文本 Worker、Admin，并设置 `max-parallel: 1`，避免多个 job 并发覆盖 runner 本机持久源码目录。
 - 三个镜像全部构建成功后，只触发一次 Docker deploy。
+- 每个镜像会同时推送固定 tag `feature-multi-tenant` 和 commit SHA tag，SHA tag 用于手动回滚。
 - Worker 镜像构建时传入 `ALPINE_MIRROR=https://mirrors.tencent.com/alpine`。
 
 ## 服务器部署命令
