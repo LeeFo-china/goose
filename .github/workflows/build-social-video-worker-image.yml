@@ -42,6 +42,11 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+            export HTTPS_PROXY=socks5h://127.0.0.1:18080
+            export HTTP_PROXY=socks5h://127.0.0.1:18080
+            export ALL_PROXY=socks5h://127.0.0.1:18080
+          fi
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0=http.extraheader
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"

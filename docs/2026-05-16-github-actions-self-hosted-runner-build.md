@@ -48,6 +48,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 - 改为直接执行 `docker build` + `docker push`，复用服务器本机 Docker 缓存。
 - 移除 `actions/checkout`，避免下载 action 包超时；改为在 runner 本机持久目录执行 `git fetch/reset`。
 - 本机 `git fetch` 使用 GitHub token 的 `http.extraheader` 认证，不把 token 写入 remote URL，避免 token 出现在进程参数或本地 git 配置中。
+- checkout 步骤会检测 `127.0.0.1:18080` SOCKS 代理；可用时仅 GitHub 源码同步走代理，腾讯 CCR 登录、构建和推送不走代理。
 - workflow 会在构建前检查 Docker；如果 runner 缺少 Docker，会通过 `apt-get install docker.io` 安装并启动 Docker daemon。
 - `goose-social-video-worker` 构建时传入：
 
