@@ -27,6 +27,23 @@ feature-multi-tenant
 <image>:<GITHUB_SHA>
 ```
 
+验证通过的提交：
+
+```text
+e4afe351e44d177d0fbc430edefb01e78cb5cae5
+```
+
+该提交已验证：
+
+```text
+Build api: success
+Build social-video-worker: success
+Build admin: success
+deploy / deploy: success
+```
+
+服务器本地镜像中，三类镜像的 `feature-multi-tenant` 与上述 SHA tag 指向同一个 image id。
+
 三类镜像：
 
 ```text
