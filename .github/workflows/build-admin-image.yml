@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           SOURCE_DIR="${RUNNER_WORKSPACE}/source"
           export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_KEY_0=http.extraheader
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
           if [ ! -d "${SOURCE_DIR}/.git" ]; then
             rm -rf "${SOURCE_DIR}"
