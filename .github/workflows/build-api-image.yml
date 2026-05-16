@@ -47,9 +47,10 @@ jobs:
             export HTTP_PROXY=socks5h://127.0.0.1:18080
             export ALL_PROXY=socks5h://127.0.0.1:18080
           fi
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0=http.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
           if [ ! -d "${SOURCE_DIR}/.git" ]; then
             rm -rf "${SOURCE_DIR}"
             git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
