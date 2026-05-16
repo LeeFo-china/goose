@@ -47,6 +47,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 - 移除 `docker/setup-buildx-action` / `docker/build-push-action`，避免新服务器下载 GitHub action 包超时。
 - 改为直接执行 `docker build` + `docker push`，复用服务器本机 Docker 缓存。
 - 移除 `actions/checkout`，避免下载 action 包超时；改为在 runner 本机持久目录执行 `git fetch/reset`。
+- 本机 `git fetch` 使用 GitHub token 的 `http.extraheader` 认证，不把 token 写入 remote URL，避免 token 出现在进程参数或本地 git 配置中。
 - workflow 会在构建前检查 Docker；如果 runner 缺少 Docker，会通过 `apt-get install docker.io` 安装并启动 Docker daemon。
 - `goose-social-video-worker` 构建时传入：
 

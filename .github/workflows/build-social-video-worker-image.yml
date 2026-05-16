@@ -38,19 +38,21 @@ jobs:
     steps:
       - name: Checkout repository
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
           if [ ! -d "${SOURCE_DIR}/.git" ]; then
             rm -rf "${SOURCE_DIR}"
-            git clone --filter=blob:none "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+            git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
           fi
-          git -C "${SOURCE_DIR}" remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}"
           git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}"
           git -C "${SOURCE_DIR}" clean -fdx
-          git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Ensure Docker daemon
         run: |
