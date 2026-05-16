@@ -89,3 +89,8 @@ jobs:
           IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}:${IMAGE_TAG}"
           docker build -f docker/api.Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/deploy-docker-services.yml
+    secrets: inherit

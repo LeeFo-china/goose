@@ -93,3 +93,8 @@ jobs:
             -t "$IMAGE" \
             .
           docker push "$IMAGE"
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/deploy-docker-services.yml
+    secrets: inherit

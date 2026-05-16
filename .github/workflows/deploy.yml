@@ -1,8 +1,6 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main, feature/customer, feature/multi-tenant]
   workflow_dispatch:
 
 concurrency:

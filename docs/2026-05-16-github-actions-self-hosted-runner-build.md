@@ -38,6 +38,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 .github/workflows/build-api-image.yml
 .github/workflows/build-admin-image.yml
 .github/workflows/build-social-video-worker-image.yml
+.github/workflows/deploy-docker-services.yml
 ```
 
 调整内容：
@@ -55,6 +56,16 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 ```yaml
 ALPINE_MIRROR=https://mirrors.tencent.com/alpine
 ```
+
+Docker 部署 workflow 同时支持 `workflow_call`、`workflow_run` 和手动触发。当前 `feature/multi-tenant` 分支中，三个镜像构建 workflow 会在各自构建成功后通过 `workflow_call` 调用部署，执行：
+
+```bash
+cd /opt/supabase/docker
+docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull
+docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate ...
+```
+
+旧 PM2 部署 workflow `.github/workflows/deploy.yml` 已取消 push 自动触发，仅保留手动触发。
 
 ## 当前镜像目标
 

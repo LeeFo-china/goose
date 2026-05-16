@@ -53,6 +53,65 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml up -d --no-
 docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api gooes-social-video-worker gooes-cos-reconcile-worker
 ```
 
+## GitHub Actions 自动部署
+
+已新增 Docker 自动部署 workflow：
+
+```text
+.github/workflows/deploy-docker-services.yml
+```
+
+触发口径：
+
+- `Build API Image`
+- `Build Admin Image`
+- `Build Social Video Worker Image`
+
+当前 `feature/multi-tenant` 分支的自动部署由三个镜像构建 workflow 在构建成功后通过 `workflow_call` 直接调用：
+
+```text
+.github/workflows/build-api-image.yml
+.github/workflows/build-admin-image.yml
+.github/workflows/build-social-video-worker-image.yml
+```
+
+`workflow_run` 触发口径也保留，后续 workflow 文件进入默认分支后可以继续使用。
+
+多个镜像同时构建时，部署 workflow 使用 concurrency：
+
+```text
+deploy-docker-services-feature-multi-tenant
+```
+
+后完成的部署会取消前面还未完成的部署，最终以最后一次成功构建后的部署结果为准。
+
+部署步骤：
+
+1. 在新服务器 runner 上拉取当前提交的 `deploy/docker-compose.api.yml` 与 `deploy/docker-compose.admin.yml`。
+2. 同步 compose 片段到 `/opt/supabase/docker`，同步前保留 `*.bak.github-actions-<run_id>` 备份。
+3. 登录腾讯 CCR。
+4. 拉取最新镜像：
+   - `gooes-api`
+   - `gooes-admin`
+   - `gooes-social-video-worker`
+   - `gooes-cos-reconcile-worker`
+5. 按顺序重建容器：
+   - API
+   - Worker
+   - Admin
+6. 检查容器健康状态。
+7. 检查外部域名：
+   - `https://api.goodcms.cn/`
+   - `https://admin.goodcms.cn/login`
+
+旧 PM2 部署 workflow：
+
+```text
+.github/workflows/deploy.yml
+```
+
+已经从 push 自动触发中移除，仅保留 `workflow_dispatch` 手动触发，作为老服务器兼容和紧急回退入口。
+
 ## Nginx 动态解析
 
 问题背景：
@@ -117,6 +176,5 @@ docker exec supabase-nginx sh -lc \
 
 ## 后续建议
 
-- 等 GitHub Actions 三个镜像全部构建完成后，在服务器执行一次 `pull` 验证 GHCR 镜像是否可拉取。
-- 如果 GHCR 私有镜像仍有下载卡顿，下一步可增加腾讯云 TCR 作为镜像仓库，GitHub Actions 同时推送 GHCR 和 TCR。
+- 观察 2-3 次 push 发布，确认 Docker 自动部署稳定后，可归档旧 PM2 deploy workflow。
 - 运维页后续可以隐藏 PM2 脚本入口，保留为旧服务器兼容项，主入口切到 Docker 服务健康。

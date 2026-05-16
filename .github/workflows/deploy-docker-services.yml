@@ -1,0 +1,153 @@
+name: Deploy Docker Services
+
+# Pulls Tencent CCR images and recreates the production Docker services on the
+# Tencent Cloud self-hosted runner.
+
+on:
+  workflow_call:
+  workflow_run:
+    workflows:
+      - Build API Image
+      - Build Admin Image
+      - Build Social Video Worker Image
+    types:
+      - completed
+    branches:
+      - feature/multi-tenant
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker-services-feature-multi-tenant
+  cancel-in-progress: true
+
+env:
+  DEPLOY_DIR: /opt/supabase/docker
+  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
+
+    steps:
+      - name: Checkout compose files
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${RUNNER_WORKSPACE}/deploy-source"
+          if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+            export HTTPS_PROXY=socks5h://127.0.0.1:18080
+            export HTTP_PROXY=socks5h://127.0.0.1:18080
+            export ALL_PROXY=socks5h://127.0.0.1:18080
+          fi
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+          if [ ! -d "${SOURCE_DIR}/.git" ]; then
+            rm -rf "${SOURCE_DIR}"
+            git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+          fi
+          git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${SOURCE_SHA}"
+          git -C "${SOURCE_DIR}" checkout --force "${SOURCE_SHA}"
+          git -C "${SOURCE_DIR}" clean -fdx
+
+      - name: Ensure Docker daemon
+        run: |
+          set -euo pipefail
+          if ! command -v docker >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y docker.io docker-compose-plugin
+          fi
+          sudo systemctl enable --now docker
+          sudo chmod 666 /var/run/docker.sock
+          docker version
+          docker compose version
+
+      - name: Sync compose fragments
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_WORKSPACE}/deploy-source"
+          test -d "${DEPLOY_DIR}"
+          sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+          sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
+          sudo install -m 0644 deploy/docker-compose.api.yml "${DEPLOY_DIR}/docker-compose.api.yml"
+          sudo install -m 0644 deploy/docker-compose.admin.yml "${DEPLOY_DIR}/docker-compose.admin.yml"
+
+      - name: Login to Tencent CCR
+        env:
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
+              exit 0
+            fi
+            sleep $((i * 5))
+          done
+          exit 1
+
+      - name: Pull latest images
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull \
+            gooes-api \
+            gooes-admin \
+            gooes-social-video-worker \
+            gooes-cos-reconcile-worker
+
+      - name: Recreate services
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker gooes-cos-reconcile-worker
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+
+      - name: Check container health
+        run: |
+          set -euo pipefail
+          check_container() {
+            name="$1"
+            for _ in $(seq 1 60); do
+              state="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || true)"
+              health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null || true)"
+              if [ "$health" = "healthy" ] || { [ -z "$health" ] && [ "$state" = "running" ]; }; then
+                echo "$name is ${health:-$state}"
+                return 0
+              fi
+              if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+                break
+              fi
+              sleep 5
+            done
+            echo "$name failed health check"
+            docker inspect "$name" || true
+            docker logs --tail 120 "$name" || true
+            exit 1
+          }
+
+          check_container gooes-api
+          check_container gooes-social-video-worker
+          check_container gooes-cos-reconcile-worker
+          check_container gooes-admin
+
+      - name: Check public endpoints
+        run: |
+          set -euo pipefail
+          curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://api.goodcms.cn/
+          curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://admin.goodcms.cn/login
+
+      - name: Deployment summary
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep -E 'gooes-|NAMES'
