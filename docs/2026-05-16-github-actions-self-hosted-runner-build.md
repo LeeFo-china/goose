@@ -29,8 +29,10 @@ status: online
 三个镜像构建 workflow 统一使用：
 
 ```yaml
-runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
+runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 ```
+
+旧 runner `VM-0-11-ubuntu` 上误挂的 `gooes-build-tencent` 标签已移除。部署 workflow 也增加了 `RUNNER_NAME=gooes-prod-vm-0-3` 与 `/opt/supabase/docker` 存在性校验，避免落到旧服务器。
 
 ## 已调整 workflow
 

@@ -87,6 +87,14 @@ deploy-docker-services-feature-multi-tenant
 
 后完成的部署会取消前面还未完成的部署，最终以最后一次成功构建后的部署结果为准。
 
+runner 约束：
+
+```yaml
+runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+```
+
+旧 runner `VM-0-11-ubuntu` 上误挂的 `gooes-build-tencent` 标签已移除；部署 workflow 还会校验 `RUNNER_NAME=gooes-prod-vm-0-3` 和 `/opt/supabase/docker` 目录，避免部署落到旧服务器。
+
 部署步骤：
 
 1. 在新服务器 runner 上拉取当前提交的 `deploy/docker-compose.api.yml` 与 `deploy/docker-compose.admin.yml`。
