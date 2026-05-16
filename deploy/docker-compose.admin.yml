@@ -30,3 +30,8 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
+
+networks:
+  default:
+    name: supabase_default
+    external: true

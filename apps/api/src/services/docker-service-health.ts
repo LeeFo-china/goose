@@ -114,42 +114,41 @@ function formatPort(port: DockerContainerPort) {
   return `${host}${publicPort}->${privatePort}/${port.Type || "tcp"}`;
 }
 
-function decodeChunkedBody(value: string) {
+function decodeChunkedBody(value: Buffer) {
   let cursor = 0;
-  let output = "";
+  const chunks: Buffer[] = [];
 
   while (cursor < value.length) {
-    const lineEnd = value.indexOf("\r\n", cursor);
+    const lineEnd = value.indexOf("\r\n", cursor, "utf8");
     if (lineEnd === -1) break;
 
-    const sizeText = value.slice(cursor, lineEnd).split(";", 1)[0]?.trim() || "0";
+    const sizeText = value.toString("utf8", cursor, lineEnd).split(";", 1)[0]?.trim() || "0";
     const size = Number.parseInt(sizeText, 16);
     if (!Number.isFinite(size) || size <= 0) break;
 
     const chunkStart = lineEnd + 2;
-    output += value.slice(chunkStart, chunkStart + size);
+    chunks.push(value.subarray(chunkStart, chunkStart + size));
     cursor = chunkStart + size + 2;
   }
 
-  return output;
+  return Buffer.concat(chunks);
 }
 
 function parseDockerResponse(raw: Buffer) {
-  const responseText = raw.toString("utf8");
-  const headerEnd = responseText.indexOf("\r\n\r\n");
+  const headerEnd = raw.indexOf("\r\n\r\n", 0, "utf8");
   if (headerEnd < 0) {
     return { statusCode: 0, body: "", headers: "" };
   }
 
-  const headers = responseText.slice(0, headerEnd);
-  let body = responseText.slice(headerEnd + 4);
+  const headers = raw.toString("utf8", 0, headerEnd);
+  let body = raw.subarray(headerEnd + 4);
   const statusCode = Number(headers.match(/^HTTP\/\d\.\d\s+(\d+)/)?.[1] || 0);
 
   if (/transfer-encoding:\s*chunked/i.test(headers)) {
     body = decodeChunkedBody(body);
   }
 
-  return { statusCode, body, headers };
+  return { statusCode, body: body.toString("utf8"), headers };
 }
 
 function requestDocker(path: string): Promise<unknown> {

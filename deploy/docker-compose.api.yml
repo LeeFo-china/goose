@@ -89,3 +89,8 @@ services:
 
 volumes:
   gooes-api-reports:
+
+networks:
+  default:
+    name: supabase_default
+    external: true
