@@ -55,11 +55,17 @@ jobs:
           keep-state: true
 
       - name: Login to Tencent CCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.TENCENT_CCR_REGISTRY }}
-          username: ${{ secrets.TENCENT_CCR_USERNAME }}
-          password: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        env:
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
+              exit 0
+            fi
+            sleep $((i * 5))
+          done
+          exit 1
 
       - name: Build and push social video worker image to Tencent CCR
         uses: docker/build-push-action@v6
