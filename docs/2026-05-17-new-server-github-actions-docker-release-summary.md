@@ -120,6 +120,21 @@ Build Docker Images
   - deploy / deploy
 ```
 
+matrix 收敛验证通过的提交：
+
+```text
+0a10fb8 ci(deploy): consolidate docker image release workflow
+```
+
+GitHub Actions 验证结果：
+
+```text
+Build api: success
+Build social-video-worker: success
+Build admin: success
+deploy / deploy: success
+```
+
 说明：
 
 - 当前正常链路只触发一次 deploy。
