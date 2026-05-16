@@ -31,7 +31,6 @@ ENV SERVICE_NAME=gooes-social-video-worker
 ENV FFMPEG_BIN=/usr/bin/ffmpeg
 
 RUN set -eux; \
-  sed -i 's|http://deb.debian.org/debian|http://mirrors.tencentyun.com/debian|g; s|http://deb.debian.org/debian-security|http://mirrors.tencentyun.com/debian-security|g' /etc/apt/sources.list.d/debian.sources; \
   apt-get update; \
   apt-get install -y --no-install-recommends ffmpeg ca-certificates; \
   rm -rf /var/lib/apt/lists/*

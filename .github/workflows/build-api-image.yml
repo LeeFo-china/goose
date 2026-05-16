@@ -11,8 +11,10 @@ on:
       - "apps/api/**"
       - "packages/domain/**"
       - "package.json"
-      - "bun.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
+      - "deploy/docker-compose.api.yml"
   workflow_dispatch:
 
 permissions:
