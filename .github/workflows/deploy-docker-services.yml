@@ -39,7 +39,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SOURCE_DIR="${RUNNER_WORKSPACE}/deploy-source"
+          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
           if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
             export HTTPS_PROXY=socks5h://127.0.0.1:18080
             export HTTP_PROXY=socks5h://127.0.0.1:18080
@@ -73,7 +73,7 @@ jobs:
       - name: Sync compose fragments
         run: |
           set -euo pipefail
-          cd "${RUNNER_WORKSPACE}/deploy-source"
+          cd "${RUNNER_WORKSPACE}/source"
           test -d "${DEPLOY_DIR}"
           sudo cp "${DEPLOY_DIR}/docker-compose.api.yml" "${DEPLOY_DIR}/docker-compose.api.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
           sudo cp "${DEPLOY_DIR}/docker-compose.admin.yml" "${DEPLOY_DIR}/docker-compose.admin.yml.bak.github-actions-${GITHUB_RUN_ID}" 2>/dev/null || true
