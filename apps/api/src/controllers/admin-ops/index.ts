@@ -7,6 +7,7 @@ import {
 } from "@/schema/ops-scripts";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import { dockerServiceHealthService } from "@/services/docker-service-health";
 import { opsScriptService } from "@/services/ops-scripts";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -51,6 +52,15 @@ class AdminOpsController extends BaseController {
     this.assertOpsPermission(authContext, "system.ops.read");
 
     const data = await opsScriptService.getSystemMetrics();
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/service-health")
+  async getServiceHealth(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.ops.read");
+
+    const data = await dockerServiceHealthService.getSnapshot();
     return ResponseHandler.success(data);
   }
 

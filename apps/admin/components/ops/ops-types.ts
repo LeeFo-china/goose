@@ -62,3 +62,31 @@ export type OpsSystemMetrics = {
   }>;
   checked_at: string;
 };
+
+export type OpsServiceHealth = {
+  checked_at: string;
+  docker_socket_path: string;
+  summary: {
+    total: number;
+    running: number;
+    healthy: number;
+    unhealthy: number;
+    starting: number;
+    without_healthcheck: number;
+    exited: number;
+  };
+  containers: Array<{
+    id: string;
+    name: string;
+    image: string;
+    group: "business" | "supabase" | "infrastructure";
+    state: string;
+    health: "healthy" | "unhealthy" | "starting" | "none" | "exited" | "unknown";
+    status_text: string;
+    started_at: string | null;
+    ports: string[];
+    restart_count: number | null;
+    failing_streak: number | null;
+    last_health_output: string | null;
+  }>;
+};

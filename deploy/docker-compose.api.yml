@@ -12,6 +12,8 @@ services:
     command: ["bun", "src/app.ts"]
     ports:
       - "${GOOES_API_BIND_HOST:-127.0.0.1}:${GOOES_API_HOST_PORT:-3000}:${GOOES_API_PORT:-3000}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test:
         [
@@ -44,6 +46,12 @@ services:
     depends_on:
       gooes-api:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "${SOCIAL_VIDEO_FFMPEG_BIN:-/usr/bin/ffmpeg} -version >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:
@@ -67,6 +75,12 @@ services:
     depends_on:
       gooes-api:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:

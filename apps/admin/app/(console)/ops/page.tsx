@@ -3,6 +3,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
+import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
 import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
 import type {
   OpsScript,
@@ -103,6 +104,8 @@ export default async function OpsPage({
       </div>
 
       <SystemMetricsPanel />
+
+      <ServiceHealthPanel />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
