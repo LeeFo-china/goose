@@ -43,19 +43,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3010
 ENV HOSTNAME=0.0.0.0
 
-RUN corepack enable && \
-  corepack prepare pnpm@10.33.0 --activate
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder /app/tsconfig.base.json ./tsconfig.base.json
-COPY --from=builder /app/apps/admin ./apps/admin
-COPY --from=builder /app/packages/domain ./packages/domain
-
-WORKDIR /app/apps/admin
+COPY --from=builder /app/apps/admin/.next/standalone ./
+COPY --from=builder /app/apps/admin/.next/static ./apps/admin/.next/static
+COPY --from=builder /app/apps/admin/public ./apps/admin/public
 
 EXPOSE 3010
 
-CMD ["pnpm", "start"]
+CMD ["node", "apps/admin/server.js"]
