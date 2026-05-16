@@ -1,5 +1,8 @@
 name: Build Social Video Worker Image
 
+# Builds and publishes the social-video worker image to GHCR, and to Tencent CCR
+# when CCR repository variables/secrets are configured.
+
 on:
   push:
     branches:
