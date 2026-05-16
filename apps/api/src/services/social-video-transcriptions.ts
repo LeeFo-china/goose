@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -20,9 +19,6 @@ import type {
 import { systemSettingsService } from "@/services/system-settings";
 import { billingService } from "@/services/billing";
 import { tencentAsrGateway } from "@/services/tencent-asr";
-
-const require = createRequire(import.meta.url);
-const bundledFfmpegPath = require("ffmpeg-static") as string | null;
 
 type ApifyRunStatus = "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMED-OUT" | "ABORTED";
 
@@ -103,7 +99,7 @@ function getErrorMessage(input: unknown, fallback: string) {
 }
 
 function getFfmpegBinary() {
-  return process.env.SOCIAL_VIDEO_FFMPEG_BIN || process.env.FFMPEG_BIN || bundledFfmpegPath || "ffmpeg";
+  return process.env.SOCIAL_VIDEO_FFMPEG_BIN || process.env.FFMPEG_BIN || "ffmpeg";
 }
 
 function extractDouyinUrl(input: string) {

@@ -29,7 +29,7 @@ services:
         max-file: "5"
 
   gooes-social-video-worker:
-    image: ${GOOES_API_IMAGE:?set GOOES_API_IMAGE}
+    image: ${GOOES_SOCIAL_VIDEO_WORKER_IMAGE:-ghcr.io/leefo-china/goose-social-video-worker:feature-multi-tenant}
     container_name: gooes-social-video-worker
     restart: unless-stopped
     profiles:
@@ -39,6 +39,7 @@ services:
     environment:
       SERVICE_NAME: gooes-social-video-worker
       NODE_ENV: production
+      FFMPEG_BIN: ${SOCIAL_VIDEO_FFMPEG_BIN:-/usr/bin/ffmpeg}
     command: ["bun", "src/workers/social-video-transcription-worker.ts"]
     depends_on:
       gooes-api:

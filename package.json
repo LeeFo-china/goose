@@ -16,9 +16,6 @@
     "typescript": "^5"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "ffmpeg-static"
-    ],
     "packageExtensions": {
       "@alicloud/openapi-core@*": {
         "dependencies": {
