@@ -1,22 +1,27 @@
-name: Build Admin Image
+name: Build Docker Images
 
-# Builds and publishes the Admin image to Tencent CCR from the Tencent Cloud runner.
+# Builds all production business images on the Tencent Cloud self-hosted runner,
+# publishes them to Tencent CCR, then deploys once after every image succeeds.
 
 on:
   push:
     branches:
       - feature/multi-tenant
     paths:
-      - ".github/workflows/build-admin-image.yml"
+      - ".github/workflows/build-docker-images.yml"
       - ".github/workflows/deploy-docker-services.yml"
       - ".dockerignore"
+      - "docker/api.Dockerfile"
       - "docker/admin.Dockerfile"
+      - "docker/social-video-worker.Dockerfile"
+      - "apps/api/**"
       - "apps/admin/**"
       - "packages/domain/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
+      - "deploy/docker-compose.api.yml"
       - "deploy/docker-compose.admin.yml"
   workflow_dispatch:
 
@@ -24,17 +29,28 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-admin-image-feature-multi-tenant
+  group: build-docker-images-feature-multi-tenant
   cancel-in-progress: true
 
 env:
-  IMAGE_REPO: goose-admin
   IMAGE_TAG: feature-multi-tenant
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
 
 jobs:
   build:
+    name: Build ${{ matrix.service }}
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        include:
+          - service: api
+            image_repo: goose-api
+          - service: social-video-worker
+            image_repo: goose-social-video-worker
+          - service: admin
+            image_repo: goose-admin
 
     steps:
       - name: Checkout repository
@@ -63,6 +79,7 @@ jobs:
 
       - name: Ensure Docker daemon
         run: |
+          set -euo pipefail
           if ! command -v docker >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y docker.io
@@ -76,6 +93,7 @@ jobs:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
+          set -euo pipefail
           for i in 1 2 3 4 5; do
             if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
               exit 0
@@ -84,16 +102,40 @@ jobs:
           done
           exit 1
 
-      - name: Build and push Admin image to Tencent CCR
+      - name: Build and push image
+        env:
+          IMAGE_REPO: ${{ matrix.image_repo }}
+          SERVICE: ${{ matrix.service }}
         run: |
+          set -euo pipefail
           cd "${RUNNER_WORKSPACE}/source"
           IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}:${IMAGE_TAG}"
-          docker build \
-            -f docker/admin.Dockerfile \
-            --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
-            --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
-            -t "$IMAGE" \
-            .
+
+          case "$SERVICE" in
+            api)
+              docker build -f docker/api.Dockerfile -t "$IMAGE" .
+              ;;
+            social-video-worker)
+              docker build \
+                -f docker/social-video-worker.Dockerfile \
+                --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
+                -t "$IMAGE" \
+                .
+              ;;
+            admin)
+              docker build \
+                -f docker/admin.Dockerfile \
+                --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
+                --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
+                -t "$IMAGE" \
+                .
+              ;;
+            *)
+              echo "Unknown service: $SERVICE"
+              exit 1
+              ;;
+          esac
+
           docker push "$IMAGE"
 
   deploy:

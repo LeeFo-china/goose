@@ -27,9 +27,7 @@ push feature/multi-tenant
 镜像构建：
 
 ```text
-.github/workflows/build-api-image.yml
-.github/workflows/build-admin-image.yml
-.github/workflows/build-social-video-worker-image.yml
+.github/workflows/build-docker-images.yml
 ```
 
 Docker 部署：
@@ -106,30 +104,32 @@ gooes-cos-reconcile-worker
 
 ## 验证记录
 
-最终验证通过的提交：
+首次跑通验证提交：
 
 ```text
 50df0c7 ci(deploy): pin docker deploy runner
 ```
 
-GitHub Actions 最终有效结果：
+发布链路随后已收敛为单 workflow matrix，收敛后入口：
 
 ```text
-Build API Image: success
-deploy / deploy: success
+Build Docker Images
+  - Build api
+  - Build social-video-worker
+  - Build admin
+  - deploy / deploy
 ```
 
 说明：
 
-- 三个 build workflow 都会尝试触发 deploy。
-- deploy workflow 使用 concurrency：
+- 当前正常链路只触发一次 deploy。
+- deploy workflow 仍保留 concurrency：
 
 ```text
 deploy-docker-services-feature-multi-tenant
 ```
 
-- 因此前面的 deploy job 可能显示 `cancelled`。
-- 只要最后一次 deploy 成功，即为预期结果。
+- concurrency 主要用于手动重跑或异常重复触发时保护生产部署。
 
 新服务器容器状态验证：
 

@@ -5,15 +5,6 @@ name: Deploy Docker Services
 
 on:
   workflow_call:
-  workflow_run:
-    workflows:
-      - Build API Image
-      - Build Admin Image
-      - Build Social Video Worker Image
-    types:
-      - completed
-    branches:
-      - feature/multi-tenant
   workflow_dispatch:
 
 permissions:
@@ -26,11 +17,10 @@ concurrency:
 env:
   DEPLOY_DIR: /opt/supabase/docker
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
-  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  SOURCE_SHA: ${{ github.sha }}
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 
     steps:

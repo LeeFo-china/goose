@@ -15,16 +15,16 @@
 
 | 服务 | 镜像 | Dockerfile | 工作流 |
 | --- | --- | --- | --- |
-| API | `ghcr.io/leefo-china/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-api-image.yml` |
-| Admin | `ghcr.io/leefo-china/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-admin-image.yml` |
-| 视频转文本 Worker | `ghcr.io/leefo-china/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-social-video-worker-image.yml` |
+| API | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant` | `docker/api.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| Admin | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` | `docker/admin.Dockerfile` | `.github/workflows/build-docker-images.yml` |
+| 视频转文本 Worker | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant` | `docker/social-video-worker.Dockerfile` | `.github/workflows/build-docker-images.yml` |
 
 ### 调整点
 
-- API workflow 触发条件补齐 `pnpm-lock.yaml`、`pnpm-workspace.yaml` 和 `deploy/docker-compose.api.yml`。
-- Admin workflow 触发条件补齐 `deploy/docker-compose.admin.yml`。
-- Worker workflow 触发条件补齐 `deploy/docker-compose.api.yml`。
-- Worker 镜像保留 `apt-get install ffmpeg`，但不再在 Dockerfile 内强制替换为腾讯源，避免 GitHub Actions 构建环境拉源失败。
+- 三个镜像构建已合并为一个 matrix workflow：`.github/workflows/build-docker-images.yml`。
+- matrix 构建顺序为 API、视频转文本 Worker、Admin，并设置 `max-parallel: 1`，避免多个 job 并发覆盖 runner 本机持久源码目录。
+- 三个镜像全部构建成功后，只触发一次 Docker deploy。
+- Worker 镜像构建时传入 `ALPINE_MIRROR=https://mirrors.tencent.com/alpine`。
 
 ## 服务器部署命令
 
@@ -63,29 +63,23 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
 
 触发口径：
 
-- `Build API Image`
-- `Build Admin Image`
-- `Build Social Video Worker Image`
+- `Build Docker Images`
 
-当前 `feature/multi-tenant` 分支的自动部署由三个镜像构建 workflow 在构建成功后通过 `workflow_call` 直接调用：
+当前 `feature/multi-tenant` 分支的自动部署由统一镜像构建 workflow 在 matrix 全部成功后通过 `workflow_call` 直接调用：
 
 ```text
-.github/workflows/build-api-image.yml
-.github/workflows/build-admin-image.yml
-.github/workflows/build-social-video-worker-image.yml
+.github/workflows/build-docker-images.yml
 ```
 
-`workflow_run` 触发口径也保留，后续 workflow 文件进入默认分支后可以继续使用。
+构建 workflow 的 `paths` 包含 `.github/workflows/deploy-docker-services.yml`，因此部署脚本自身调整也会触发一次完整构建和部署验证。
 
-三个构建 workflow 的 `paths` 均包含 `.github/workflows/deploy-docker-services.yml`，因此部署脚本自身调整也会触发一次完整构建和部署验证。
-
-多个镜像同时构建时，部署 workflow 使用 concurrency：
+部署 workflow 保留 concurrency 防线：
 
 ```text
 deploy-docker-services-feature-multi-tenant
 ```
 
-后完成的部署会取消前面还未完成的部署，最终以最后一次成功构建后的部署结果为准。
+当前正常链路只会触发一次 deploy；concurrency 主要用于手动重跑或异常重复触发时保护生产部署。
 
 runner 约束：
 

@@ -26,7 +26,7 @@ labels: self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3, tencent
 status: online
 ```
 
-三个镜像构建 workflow 统一使用：
+统一镜像构建 workflow 使用：
 
 ```yaml
 runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
@@ -37,14 +37,13 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 ## 已调整 workflow
 
 ```text
-.github/workflows/build-api-image.yml
-.github/workflows/build-admin-image.yml
-.github/workflows/build-social-video-worker-image.yml
+.github/workflows/build-docker-images.yml
 .github/workflows/deploy-docker-services.yml
 ```
 
 调整内容：
 
+- 三个镜像构建从分散 workflow 收敛为 `.github/workflows/build-docker-images.yml` matrix。
 - 从 `ubuntu-latest` 切到 self-hosted runner。
 - 只推送腾讯 CCR，不再在该链路推 GHCR。
 - 移除 `docker/setup-buildx-action` / `docker/build-push-action`，避免新服务器下载 GitHub action 包超时。
@@ -59,7 +58,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 ALPINE_MIRROR=https://mirrors.tencent.com/alpine
 ```
 
-Docker 部署 workflow 同时支持 `workflow_call`、`workflow_run` 和手动触发。当前 `feature/multi-tenant` 分支中，三个镜像构建 workflow 会在各自构建成功后通过 `workflow_call` 调用部署，执行：
+Docker 部署 workflow 支持 `workflow_call` 和手动触发。当前 `feature/multi-tenant` 分支中，统一镜像构建 workflow 会在 API、Admin、Worker 三个镜像全部构建成功后通过 `workflow_call` 调用一次部署，执行：
 
 ```bash
 cd /opt/supabase/docker

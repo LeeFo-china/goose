@@ -99,13 +99,13 @@ https://api.goodcms.cn/        -> 200
 
 ## 仓库代码已完成
 
-已改造三个 GitHub Actions，使其同时推送 GHCR + 腾讯 CCR：
+当前 GitHub Actions 已收敛为统一 matrix workflow，并只推送腾讯 CCR：
 
-| Workflow | GHCR 镜像 | CCR 镜像 |
+| Workflow | 服务 | CCR 镜像 |
 | --- | --- | --- |
-| `.github/workflows/build-api-image.yml` | `ghcr.io/leefo-china/goose-api:feature-multi-tenant` | `ccr.ccs.tencentyun.com/<namespace>/goose-api:feature-multi-tenant` |
-| `.github/workflows/build-admin-image.yml` | `ghcr.io/leefo-china/goose-admin:feature-multi-tenant` | `ccr.ccs.tencentyun.com/<namespace>/goose-admin:feature-multi-tenant` |
-| `.github/workflows/build-social-video-worker-image.yml` | `ghcr.io/leefo-china/goose-social-video-worker:feature-multi-tenant` | `ccr.ccs.tencentyun.com/<namespace>/goose-social-video-worker:feature-multi-tenant` |
+| `.github/workflows/build-docker-images.yml` | API | `ccr.ccs.tencentyun.com/<namespace>/goose-api:feature-multi-tenant` |
+| `.github/workflows/build-docker-images.yml` | Admin | `ccr.ccs.tencentyun.com/<namespace>/goose-admin:feature-multi-tenant` |
+| `.github/workflows/build-docker-images.yml` | 视频转文本 Worker | `ccr.ccs.tencentyun.com/<namespace>/goose-social-video-worker:feature-multi-tenant` |
 
 当前 workflow 已要求 CCR 变量/密钥必须存在；未配置时会失败，避免发布链路表面成功但国内镜像未更新。
 

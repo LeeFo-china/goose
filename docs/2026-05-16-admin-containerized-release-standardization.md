@@ -7,7 +7,7 @@
 目标链路：
 
 ```text
-提交代码 -> GitHub Actions 构建 Admin 镜像 -> 推送 GHCR -> 服务器拉取镜像并重启 gooes-admin
+提交代码 -> GitHub Actions 构建 Admin 镜像 -> 推送腾讯 CCR -> Docker deploy 自动拉取镜像并重启 gooes-admin
 ```
 
 ## 2. 仓库新增内容
@@ -15,7 +15,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | `docker/admin.Dockerfile` | Admin 生产镜像构建定义 |
-| `.github/workflows/build-admin-image.yml` | GitHub Actions 自动构建并推送 Admin 镜像 |
+| `.github/workflows/build-docker-images.yml` | GitHub Actions matrix 自动构建并推送 API/Admin/Worker 镜像 |
 | `deploy/docker-compose.admin.yml` | 新服务器 Admin compose 片段 |
 | `deploy/.env.admin.example` | Admin 环境变量模板 |
 
@@ -24,7 +24,7 @@
 Admin 镜像：
 
 ```text
-ghcr.io/leefo-china/goose-admin:feature-multi-tenant
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
 ```
 
 构建阶段：
@@ -65,7 +65,7 @@ deploy/.env.admin.example
 
 | 变量 | 说明 | 推荐值 |
 | --- | --- | --- |
-| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `ghcr.io/leefo-china/goose-admin:feature-multi-tenant` |
+| `GOOES_ADMIN_IMAGE` | Admin 镜像 | `ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant` |
 | `GOOES_API_BASE_URL` | Admin 服务端访问 API 地址 | `http://gooes-api:3000` |
 | `NEXT_PUBLIC_GOOES_API_BASE_URL` | 浏览器侧 API 公网地址 | `https://api.goodcms.cn` |
 | `NEXT_PUBLIC_GOOES_H5_BASE_URL` | 浏览器侧 H5 公网地址 | `https://h5.goodcms.cn` |
@@ -82,7 +82,7 @@ deploy/.env.admin.example
 Workflow：
 
 ```text
-.github/workflows/build-admin-image.yml
+.github/workflows/build-docker-images.yml
 ```
 
 触发条件：
@@ -138,20 +138,19 @@ curl -I https://admin.goodcms.cn/login
 
 ## 7. 发布验收标准
 
-1. GitHub Actions `Build Admin Image` 成功。
-2. GHCR 出现 `goose-admin:feature-multi-tenant` 新镜像。
-3. 新服务器 `docker compose pull gooes-admin` 能成功拉取镜像。
+1. GitHub Actions `Build Docker Images` 成功。
+2. 腾讯 CCR 出现 `goose-admin:feature-multi-tenant` 新镜像。
+3. Docker deploy job 成功。
 4. `gooes-admin` 容器状态为 `healthy`。
 5. `https://admin.goodcms.cn/login` 返回非 5xx。
 6. 登录后能正常访问平台概览、租户后台常用页面。
 
 ## 8. 后续优化
 
-第一版先采用“自动构建镜像，服务器手动拉取重启”。
+当前已经采用“自动构建镜像，服务器自动拉取重启”。
 
 后续可继续推进：
 
-1. 增加服务器自动部署 workflow。
-2. Admin 镜像改为 Next standalone，进一步减小镜像体积。
-3. API 和 Admin 使用统一 release tag，而不是固定分支 tag。
-4. 增加镜像 SBOM 和漏洞扫描。
+1. API 和 Admin 使用统一 release tag，而不是固定分支 tag。
+2. 增加镜像 SBOM 和漏洞扫描。
+3. 观察 2-3 次发布后归档旧 PM2 workflow。
