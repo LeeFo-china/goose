@@ -42,7 +42,6 @@ services:
       SERVICE_NAME: gooes-social-video-worker
       NODE_ENV: production
       FFMPEG_BIN: ${SOCIAL_VIDEO_FFMPEG_BIN:-/usr/bin/ffmpeg}
-    command: ["bun", "src/workers/social-video-transcription-worker.ts"]
     depends_on:
       gooes-api:
         condition: service_started
