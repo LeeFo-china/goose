@@ -8,6 +8,7 @@ on:
       - feature/multi-tenant
     paths:
       - ".github/workflows/build-api-image.yml"
+      - ".github/workflows/deploy-docker-services.yml"
       - ".dockerignore"
       - "docker/api.Dockerfile"
       - "apps/api/**"

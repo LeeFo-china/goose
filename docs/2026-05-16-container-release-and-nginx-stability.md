@@ -77,6 +77,8 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
 
 `workflow_run` 触发口径也保留，后续 workflow 文件进入默认分支后可以继续使用。
 
+三个构建 workflow 的 `paths` 均包含 `.github/workflows/deploy-docker-services.yml`，因此部署脚本自身调整也会触发一次完整构建和部署验证。
+
 多个镜像同时构建时，部署 workflow 使用 concurrency：
 
 ```text
