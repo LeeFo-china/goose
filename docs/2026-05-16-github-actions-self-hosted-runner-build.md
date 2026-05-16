@@ -21,15 +21,15 @@ GitHub hosted runner 构建业务镜像后推送腾讯 CCR 时，跨境上传耗
 仓库当前可用 runner：
 
 ```text
-name: VM-0-11-ubuntu
-labels: self-hosted, Linux, X64, goose-prod
+name: gooes-prod-vm-0-3
+labels: self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3, tencent-cloud
 status: online
 ```
 
 三个镜像构建 workflow 统一使用：
 
 ```yaml
-runs-on: [self-hosted, Linux, X64, goose-prod]
+runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 ```
 
 ## 已调整 workflow
@@ -63,10 +63,16 @@ ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-ten
 
 ## 后续事项
 
-当前新业务服务器 `VM-0-3-ubuntu` 直连 GitHub 下载 actions runner 安装包较慢，尚未在该机器上注册专用 runner。
+新业务服务器 `VM-0-3-ubuntu` 已安装专用 runner，服务名：
 
-后续可继续补：
+```text
+actions.runner.LeeFo-china-goose.gooes-prod-vm-0-3.service
+```
 
-1. 将 actions runner 安装包通过稳定链路传到 `VM-0-3-ubuntu`。
-2. 注册专用标签，例如 `gooes-build-tencent`。
-3. 将 workflow 的 `runs-on` 从 `goose-prod` 改为专用标签，避免跑到其他 self-hosted runner。
+安装目录：
+
+```text
+/opt/actions-runner/gooes-build
+```
+
+runner 安装包通过加速下载后，使用 GitHub release asset 的官方 `sha256` digest 校验通过。

@@ -33,7 +33,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, Linux, X64, goose-prod]
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 
     steps:
       - name: Checkout
