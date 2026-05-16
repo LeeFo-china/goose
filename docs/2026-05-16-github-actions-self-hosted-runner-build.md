@@ -46,6 +46,7 @@ runs-on: [self-hosted, Linux, X64, goose-prod]
 - 只推送腾讯 CCR，不再在该链路推 GHCR。
 - 移除 `cache-to/cache-from: type=gha`，避免走 GitHub 跨境缓存。
 - `docker/setup-buildx-action` 开启 `keep-state: true`，让 self-hosted runner 复用本机 buildx 状态。
+- workflow 会在构建前检查 Docker；如果 runner 缺少 Docker，会通过 `apt-get install docker.io` 安装并启动 Docker daemon。
 - `goose-social-video-worker` 构建时传入：
 
 ```yaml
