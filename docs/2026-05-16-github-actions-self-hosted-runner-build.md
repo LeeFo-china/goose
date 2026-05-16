@@ -46,6 +46,7 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 - 只推送腾讯 CCR，不再在该链路推 GHCR。
 - 移除 `docker/setup-buildx-action` / `docker/build-push-action`，避免新服务器下载 GitHub action 包超时。
 - 改为直接执行 `docker build` + `docker push`，复用服务器本机 Docker 缓存。
+- 移除 `actions/checkout`，避免下载 action 包超时；改为在 runner 本机持久目录执行 `git fetch/reset`。
 - workflow 会在构建前检查 Docker；如果 runner 缺少 Docker，会通过 `apt-get install docker.io` 安装并启动 Docker daemon。
 - `goose-social-video-worker` 构建时传入：
 

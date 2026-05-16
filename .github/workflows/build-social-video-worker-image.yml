@@ -36,8 +36,21 @@ jobs:
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          if [ ! -d "${SOURCE_DIR}/.git" ]; then
+            rm -rf "${SOURCE_DIR}"
+            git clone --filter=blob:none "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+          fi
+          git -C "${SOURCE_DIR}" remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}"
+          git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}"
+          git -C "${SOURCE_DIR}" clean -fdx
+          git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Ensure Docker daemon
         run: |
@@ -64,6 +77,7 @@ jobs:
 
       - name: Build and push social video worker image to Tencent CCR
         run: |
+          cd "${RUNNER_WORKSPACE}/source"
           IMAGE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}:${IMAGE_TAG}"
           docker build \
             -f docker/social-video-worker.Dockerfile \
