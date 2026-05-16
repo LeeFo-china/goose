@@ -27,7 +27,12 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/leefo-china/goose-admin
+  IMAGE_REPO: goose-admin
   IMAGE_TAG: feature-multi-tenant
+  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  TENCENT_CCR_NAMESPACE: ${{ vars.TENCENT_CCR_NAMESPACE }}
+  TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+  TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
 
 jobs:
   build:
@@ -47,13 +52,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to Tencent CCR
+        if: ${{ env.TENCENT_CCR_NAMESPACE != '' && env.TENCENT_CCR_USERNAME != '' && env.TENCENT_CCR_PASSWORD != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.TENCENT_CCR_REGISTRY }}
+          username: ${{ env.TENCENT_CCR_USERNAME }}
+          password: ${{ env.TENCENT_CCR_PASSWORD }}
+
+      - name: Resolve image tags
+        id: image-tags
+        shell: bash
+        run: |
+          tags="${IMAGE_NAME}:${IMAGE_TAG}"
+          if [ -n "${TENCENT_CCR_NAMESPACE}" ] && [ -n "${TENCENT_CCR_USERNAME}" ] && [ -n "${TENCENT_CCR_PASSWORD}" ]; then
+            tags="${tags}"$'\n'"${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${IMAGE_REPO}:${IMAGE_TAG}"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Build and push Admin image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/admin.Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          tags: ${{ steps.image-tags.outputs.tags }}
           build-args: |
             NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn
             NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn
