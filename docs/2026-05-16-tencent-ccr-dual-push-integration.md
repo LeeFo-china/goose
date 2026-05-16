@@ -51,30 +51,55 @@ ccr.ccs.tencentyun.com
 
 当前 Docker 代理仍保留给 GHCR 使用，但 CCR 不走代理。
 
-### 3. 命名空间仍缺失或不匹配
+### 3. 命名空间已确认
 
 已尝试推送一个极小 probe 镜像：
 
 ```text
-ccr.ccs.tencentyun.com/gooes/gooes-probe:<timestamp>
-ccr.ccs.tencentyun.com/100010381037/gooes-probe:<timestamp>
+ccr.ccs.tencentyun.com/gooes-goodcms/gooes-probe:<timestamp>
 ```
 
-结果均失败：
+结果成功，当前有效命名空间为：
 
 ```text
-no permission! are you logined with another ccr account?
+gooes-goodcms
 ```
 
-判断：
+已验证 `gooes` / `100010381037` 不是当前可推送命名空间，不能作为正式镜像路径。
 
-- 账号登录有效。
-- 当前缺少可推送的 CCR namespace，或者 namespace 不是 `gooes` / `100010381037`。
-- 需要在腾讯云控制台创建或确认命名空间。
+### 4. 业务镜像已推送并可读取 manifest
+
+已在新服务器推送并验证：
+
+```text
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
+ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
+```
+
+三类镜像 `docker manifest inspect` 均通过。
+
+### 5. 新服务器业务容器已切换到 CCR 镜像
+
+当前运行口径：
+
+```text
+gooes-api                      ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
+gooes-admin                    ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
+gooes-social-video-worker      ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
+gooes-cos-reconcile-worker     ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
+```
+
+健康检查均为 `healthy`，域名验证：
+
+```text
+https://admin.goodcms.cn/login -> 200
+https://api.goodcms.cn/        -> 200
+```
 
 ## 仓库代码已完成
 
-已改造三个 GitHub Actions，使其支持 GHCR + 腾讯 CCR 条件双推：
+已改造三个 GitHub Actions，使其同时推送 GHCR + 腾讯 CCR：
 
 | Workflow | GHCR 镜像 | CCR 镜像 |
 | --- | --- | --- |
@@ -82,7 +107,7 @@ no permission! are you logined with another ccr account?
 | `.github/workflows/build-admin-image.yml` | `ghcr.io/leefo-china/goose-admin:feature-multi-tenant` | `ccr.ccs.tencentyun.com/<namespace>/goose-admin:feature-multi-tenant` |
 | `.github/workflows/build-social-video-worker-image.yml` | `ghcr.io/leefo-china/goose-social-video-worker:feature-multi-tenant` | `ccr.ccs.tencentyun.com/<namespace>/goose-social-video-worker:feature-multi-tenant` |
 
-如果 GitHub 未配置 CCR 变量/密钥，workflow 仍只推 GHCR，不会失败。
+当前 workflow 已要求 CCR 变量/密钥必须存在；未配置时会失败，避免发布链路表面成功但国内镜像未更新。
 
 ## GitHub 需要配置
 
@@ -99,54 +124,36 @@ TENCENT_CCR_USERNAME=100010381037
 TENCENT_CCR_PASSWORD=<腾讯云 CCR 登录密码>
 ```
 
-建议 namespace：
+当前 namespace：
 
 ```text
-gooes
+gooes-goodcms
 ```
 
-如果腾讯云控制台不允许 `gooes`，以控制台实际创建的 namespace 为准。
-
-## 腾讯云控制台需要操作
-
-进入：
+GitHub Repository Variables 需要配置为：
 
 ```text
-容器镜像服务 -> 个人版 -> 命名空间
+TENCENT_CCR_NAMESPACE=gooes-goodcms
 ```
 
-创建或确认命名空间，例如：
+GitHub Repository Secrets 需要配置：
 
 ```text
-gooes
+TENCENT_CCR_USERNAME=100010381037
+TENCENT_CCR_PASSWORD=<腾讯云 CCR 登录密码>
 ```
-
-创建后，在新服务器验证：
-
-```bash
-docker tag ghcr.io/leefo-china/goose-api:feature-multi-tenant \
-  ccr.ccs.tencentyun.com/gooes/goose-api:feature-multi-tenant
-
-docker push ccr.ccs.tencentyun.com/gooes/goose-api:feature-multi-tenant
-```
-
-如果 push 成功，再切 compose 镜像源。
 
 ## 服务器 compose 切换口径
 
-当前 `/opt/supabase/docker/.env` 里仍使用 GHCR：
+`/opt/supabase/docker/.env` 必须包含：
 
 ```text
-GOOES_API_IMAGE=ghcr.io/leefo-china/goose-api:feature-multi-tenant
+GOOES_API_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:feature-multi-tenant
+GOOES_ADMIN_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:feature-multi-tenant
+GOOES_SOCIAL_VIDEO_WORKER_IMAGE=ccr.ccs.tencentyun.com/gooes-goodcms/goose-social-video-worker:feature-multi-tenant
 ```
 
-命名空间确认并完成镜像推送后，切换为：
-
-```text
-GOOES_API_IMAGE=ccr.ccs.tencentyun.com/<namespace>/goose-api:feature-multi-tenant
-GOOES_ADMIN_IMAGE=ccr.ccs.tencentyun.com/<namespace>/goose-admin:feature-multi-tenant
-GOOES_SOCIAL_VIDEO_WORKER_IMAGE=ccr.ccs.tencentyun.com/<namespace>/goose-social-video-worker:feature-multi-tenant
-```
+注意：`GOOES_ADMIN_IMAGE` 不能只放在 `.env.admin`。`docker compose` 的 `image:` 字段插值默认读取 `.env`，服务内的 `env_file: .env.admin` 只会注入容器运行时环境变量，不参与 compose 文件插值。
 
 部署命令：
 
@@ -173,8 +180,14 @@ docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile w
    - `https://api.goodcms.cn/`
    - `https://admin.goodcms.cn/login`
 
-## 当前阻塞
+## 当前状态
 
-缺少已授权可推送的 CCR namespace。
+CCR 命名空间、服务器登录、镜像推送、manifest 验证、compose 切换、容器健康检查、外网域名访问均已通过。
 
-下一步需要先在腾讯云 CCR 个人版控制台创建或确认 namespace，然后把该 namespace 配到 GitHub Variable `TENCENT_CCR_NAMESPACE`。
+后续发布时，GitHub Actions 成功后新服务器可直接执行：
+
+```bash
+cd /opt/supabase/docker
+docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull
+docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api gooes-admin gooes-social-video-worker gooes-cos-reconcile-worker
+```

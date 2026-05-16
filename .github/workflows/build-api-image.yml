@@ -1,7 +1,6 @@
 name: Build API Image
 
-# Builds and publishes the API image to GHCR, and to Tencent CCR when CCR
-# repository variables/secrets are configured.
+# Builds and publishes the API image to both GHCR and Tencent CCR.
 
 on:
   push:

@@ -1,7 +1,6 @@
 name: Build Admin Image
 
-# Builds and publishes the Admin image to GHCR, and to Tencent CCR when CCR
-# repository variables/secrets are configured.
+# Builds and publishes the Admin image to both GHCR and Tencent CCR.
 
 on:
   push:
