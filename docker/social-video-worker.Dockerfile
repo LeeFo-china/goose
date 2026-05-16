@@ -21,8 +21,12 @@ COPY apps/api ./apps/api
 COPY packages/domain ./packages/domain
 
 RUN cd packages/domain && bun run build
+RUN cd apps/api && \
+  bun build src/workers/social-video-transcription-worker.ts \
+    --target bun \
+    --outdir /app/dist
 
-FROM oven/bun:1.3 AS runner
+FROM oven/bun:1.3-alpine AS runner
 
 WORKDIR /app
 
@@ -30,18 +34,9 @@ ENV NODE_ENV=production
 ENV SERVICE_NAME=gooes-social-video-worker
 ENV FFMPEG_BIN=/usr/bin/ffmpeg
 
-RUN set -eux; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends ffmpeg ca-certificates; \
-  rm -rf /var/lib/apt/lists/*
+RUN sed -i 's#https://dl-cdn.alpinelinux.org/alpine#https://mirrors.tencent.com/alpine#g' /etc/apk/repositories && \
+  apk add --no-cache ffmpeg ca-certificates
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/tsconfig.base.json ./tsconfig.base.json
-COPY --from=builder /app/apps/api ./apps/api
-COPY --from=builder /app/packages/domain ./packages/domain
+COPY --from=builder /app/dist/social-video-transcription-worker.js ./social-video-transcription-worker.js
 
-WORKDIR /app/apps/api
-
-CMD ["bun", "src/workers/social-video-transcription-worker.ts"]
+CMD ["bun", "/app/social-video-transcription-worker.js"]
