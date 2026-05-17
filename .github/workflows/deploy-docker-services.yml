@@ -249,3 +249,13 @@ jobs:
           set -euo pipefail
           cd "${DEPLOY_DIR}"
           docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep -E 'gooes-|NAMES'
+
+      - name: Cleanup unused Docker artifacts
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          docker container prune -f || true
+          docker image prune -a -f || true
+          docker builder prune -a -f --filter "until=24h" || true
+          df -h /
+          docker system df || true

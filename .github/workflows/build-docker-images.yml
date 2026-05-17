@@ -164,6 +164,16 @@ jobs:
           docker push "$BRANCH_IMAGE"
           docker push "$SHA_IMAGE"
 
+      - name: Cleanup build leftovers
+        if: ${{ always() && (github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api')) }}
+        run: |
+          set -euo pipefail
+          docker container prune -f || true
+          docker image prune -f || true
+          docker builder prune -f --filter "until=24h" || true
+          df -h /
+          docker system df || true
+
   deploy:
     needs: build
     uses: ./.github/workflows/deploy-docker-services.yml

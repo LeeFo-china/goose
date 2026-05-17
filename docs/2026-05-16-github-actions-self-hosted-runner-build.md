@@ -52,6 +52,11 @@ runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 - 本机 `git fetch` 使用 GitHub token 的 `http.extraheader` 认证，不把 token 写入 remote URL，避免 token 出现在进程参数或本地 git 配置中。
 - checkout 步骤默认直连 GitHub，直连 clone/fetch 设置 45 秒超时。若直连 GitHub 偶发超时，workflow 才会自动尝试 `127.0.0.1:18080` SOCKS 代理兜底一次；代理不再作为默认发布路径。
 - workflow 会在构建前检查 Docker；如果 runner 缺少 Docker，会通过 `apt-get install docker.io` 安装并启动 Docker daemon。
+- 构建 job 完成后会执行轻量清理：
+  - `docker container prune -f`
+  - `docker image prune -f`
+  - `docker builder prune -f --filter "until=24h"`
+  - 只清理已退出容器、dangling 镜像和 24 小时以上 build cache，不删除已打 tag 的回滚镜像。
 - `goose-social-video-worker` 构建时传入：
 
 ```yaml
@@ -74,6 +79,21 @@ cd /opt/supabase/docker
 docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull
 docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate ...
 ```
+
+部署 workflow 完成后会执行深度清理：
+
+```bash
+docker container prune -f
+docker image prune -a -f
+docker builder prune -a -f --filter "until=24h"
+```
+
+清理边界：
+
+- 不执行 `docker volume prune`，避免误删 Supabase / 业务数据卷。
+- 不影响正在运行的容器镜像。
+- 本地不长期保留旧 SHA 镜像，回滚时从腾讯 CCR 按 SHA tag 重新拉取。
+- 清理后输出 `df -h /` 与 `docker system df`，便于在 GitHub Actions 日志里观察磁盘趋势。
 
 旧 PM2 部署 workflow `.github/workflows/deploy.yml` 已取消 push 自动触发，仅保留手动触发。
 

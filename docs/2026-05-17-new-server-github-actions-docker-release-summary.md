@@ -116,6 +116,40 @@ gooes-cos-reconcile-worker
 3. gooes-admin
 ```
 
+## 磁盘清理策略
+
+生产构建和部署都运行在 `VM-0-3-ubuntu`，根盘为 50G。高频发布时，Docker / containerd 会保留大量 dangling 镜像和旧 SHA tag 镜像，曾导致根分区占用达到 99%-100%。
+
+已执行一次人工回收：
+
+```text
+清理前：/dev/vda2 50G 47G used 524M avail 99%
+保守清理后：/dev/vda2 50G 28G used 20G avail 60%
+深度清理后：/dev/vda2 50G 21G used 27G avail 44%
+```
+
+已固化到 workflow 的自动清理：
+
+| 阶段 | 清理命令 | 目的 |
+| --- | --- | --- |
+| 构建 job 结束 | `docker container prune -f` | 删除构建过程中残留的退出容器 |
+| 构建 job 结束 | `docker image prune -f` | 删除 dangling 镜像，不删除已打 tag 的镜像 |
+| 构建 job 结束 | `docker builder prune -f --filter "until=24h"` | 清理旧 build cache |
+| 部署 job 结束 | `docker image prune -a -f` | 删除未被运行容器引用的旧 tag 镜像 |
+| 部署 job 结束 | `docker builder prune -a -f --filter "until=24h"` | 深度清理旧 build cache |
+
+明确不做：
+
+- 不执行 `docker volume prune`。
+- 不删除运行中容器引用的镜像。
+- 不在服务器本地长期保留所有历史 SHA 镜像。
+
+回滚口径：
+
+- 历史 SHA 镜像仍保留在腾讯 CCR。
+- 需要回滚时，部署 workflow 通过目标 SHA tag 从腾讯 CCR 重新拉取。
+- 本地镜像缓存不作为回滚依赖。
+
 ## 验证记录
 
 首次跑通验证提交：
