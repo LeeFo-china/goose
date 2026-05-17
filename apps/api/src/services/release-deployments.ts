@@ -26,6 +26,23 @@ type GithubWorkflowRun = {
   run_started_at: string | null;
 };
 
+type NormalizedReleaseRun = {
+  id: string;
+  environment: ReleaseEnvironment;
+  workflow_id: string;
+  workflow_label: string;
+  title: string;
+  status: string | null;
+  conclusion: string | null;
+  event: string | null;
+  head_branch: string | null;
+  head_sha: string | null;
+  html_url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  run_started_at: string | null;
+};
+
 type GithubBranch = {
   name: string;
   commit?: {
@@ -171,6 +188,29 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun): NormalizedReleaseRun {
+  return {
+    id: String(run.id),
+    environment: workflow.environment,
+    workflow_id: workflow.workflowId,
+    workflow_label: workflow.label,
+    title: run.display_title || run.name || workflow.label,
+    status: run.status,
+    conclusion: run.conclusion,
+    event: run.event,
+    head_branch: run.head_branch,
+    head_sha: run.head_sha,
+    html_url: run.html_url,
+    created_at: run.created_at,
+    updated_at: run.updated_at,
+    run_started_at: run.run_started_at,
+  };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class ReleaseDeploymentService {
   getOptions() {
     let configured = true;
@@ -215,22 +255,7 @@ class ReleaseDeploymentService {
           `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=${pageSize}&page=${page}`,
         );
 
-        return (payload.workflow_runs || []).map((run) => ({
-          id: String(run.id),
-          environment: workflow.environment,
-          workflow_id: workflow.workflowId,
-          workflow_label: workflow.label,
-          title: run.display_title || run.name || workflow.label,
-          status: run.status,
-          conclusion: run.conclusion,
-          event: run.event,
-          head_branch: run.head_branch,
-          head_sha: run.head_sha,
-          html_url: run.html_url,
-          created_at: run.created_at,
-          updated_at: run.updated_at,
-          run_started_at: run.run_started_at,
-        }));
+        return (payload.workflow_runs || []).map((run) => normalizeWorkflowRun(workflow, run));
       }),
     );
 
@@ -331,11 +356,90 @@ class ReleaseDeploymentService {
     return { list };
   }
 
+  private async assertRefExists(input: ReleaseDispatchInput) {
+    if (input.ref_type === "branch") {
+      await githubRequest<GithubBranch>(`/branches/${encodeURIComponent(input.ref)}`);
+      return;
+    }
+
+    if (input.ref_type === "tag") {
+      const tags = await githubRequest<GithubTag[]>("/tags?per_page=100");
+      const matched = tags.some((item) => item.name === input.ref);
+      if (!matched) {
+        throw Errors.business(
+          404,
+          "发布 Tag 不存在，请重新选择",
+          ErrorCodes.RELEASE_REF_NOT_FOUND,
+          { ref: input.ref, ref_type: input.ref_type },
+        );
+      }
+      return;
+    }
+
+    await githubRequest<GithubCommit>(`/commits/${encodeURIComponent(input.ref)}`);
+  }
+
+  private async listActiveRuns(workflow: ReleaseWorkflow) {
+    const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+      `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=in_progress&per_page=10`,
+    );
+    const inProgress = payload.workflow_runs || [];
+    const queuedPayload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+      `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=queued&per_page=10`,
+    );
+    return [...inProgress, ...(queuedPayload.workflow_runs || [])];
+  }
+
+  private async assertWorkflowIdle(workflow: ReleaseWorkflow) {
+    const activeRuns = await this.listActiveRuns(workflow);
+    if (activeRuns.length === 0) return;
+
+    const latest = activeRuns[0];
+    throw Errors.business(
+      409,
+      `${workflow.label}已有发布任务正在执行，请等待完成后再提交`,
+      ErrorCodes.RELEASE_WORKFLOW_BUSY,
+      latest ? {
+        workflow_id: workflow.workflowId,
+        run_id: latest.id,
+        status: latest.status,
+        html_url: latest.html_url,
+      } : undefined,
+    );
+  }
+
+  private async findRecentRun(workflow: ReleaseWorkflow, input: ReleaseDispatchInput) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (attempt > 0) {
+        await sleep(1500);
+      }
+
+      const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+        `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=10`,
+      );
+      const run = (payload.workflow_runs || []).find((item) => {
+        if (input.ref_type === "commit") {
+          return item.head_sha?.toLowerCase() === input.ref.toLowerCase();
+        }
+        return item.head_branch === input.ref;
+      }) || payload.workflow_runs?.[0];
+
+      if (run) {
+        return normalizeWorkflowRun(workflow, run);
+      }
+    }
+
+    return null;
+  }
+
   async dispatch(authContext: AuthContext, input: ReleaseDispatchInput) {
     const workflow = RELEASE_WORKFLOWS[input.environment];
     if (!workflow.services.includes(input.service)) {
       throw Errors.badRequest("该环境不支持选择的服务");
     }
+
+    await this.assertWorkflowIdle(workflow);
+    await this.assertRefExists(input);
 
     const config = getGithubConfig();
     const inputs = input.environment === "production"
@@ -354,6 +458,7 @@ class ReleaseDeploymentService {
     );
 
     const workflowUrl = `${config.webBase}/actions/workflows/${workflow.workflowId}`;
+    const run = await this.findRecentRun(workflow, input);
 
     await platformAuditLogService.recordBestEffort({
       action: "platform_release_dispatch",
@@ -372,6 +477,8 @@ class ReleaseDeploymentService {
         reason: input.reason || null,
         workflow_id: workflow.workflowId,
         workflow_url: workflowUrl,
+        run_id: run?.id || null,
+        run_url: run?.html_url || null,
       },
     });
 
@@ -382,6 +489,7 @@ class ReleaseDeploymentService {
       ref: input.ref,
       workflow_id: workflow.workflowId,
       workflow_url: workflowUrl,
+      run,
       message: "已提交 GitHub Actions 发布任务，请在发布记录中查看状态。",
     };
   }

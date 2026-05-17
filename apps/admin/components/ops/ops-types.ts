@@ -135,3 +135,14 @@ export type ReleaseRunListData = {
   list: ReleaseRun[];
   pagination: Pagination;
 };
+
+export type ReleaseDispatchResult = {
+  environment: ReleaseEnvironment;
+  service: ReleaseService;
+  service_label: string;
+  ref: string;
+  workflow_id: string;
+  workflow_url: string;
+  run: ReleaseRun | null;
+  message: string;
+};

@@ -7,6 +7,7 @@ import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Roc
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
+  ReleaseDispatchResult,
   ReleaseEnvironment,
   ReleaseOptionsData,
   ReleaseRefOption,
@@ -65,11 +66,6 @@ type ReleaseDeploymentsPanelProps = {
   error?: string | null;
 };
 
-type DispatchResponse = {
-  message: string;
-  workflow_url: string;
-};
-
 const REF_TYPE_OPTIONS: Array<{
   value: ReleaseRefType;
   label: string;
@@ -105,7 +101,7 @@ async function dispatchRelease(payload: {
   if (!response.ok || data.success === false) {
     throw new Error(getPayloadMessage(data, "发布任务提交失败"));
   }
-  return data.data as DispatchResponse;
+  return data.data as ReleaseDispatchResult;
 }
 
 async function fetchReleaseRefs(input: {
@@ -278,6 +274,7 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
   const [ref, setRef] = useState("feature/multi-tenant");
   const [reason, setReason] = useState("");
   const [confirmText, setConfirmText] = useState("");
+  const [latestDispatch, setLatestDispatch] = useState<ReleaseDispatchResult | null>(null);
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -305,6 +302,7 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
           reason,
           confirm_text: environment === "production" ? confirmText : undefined,
         });
+        setLatestDispatch(data);
         toast.success(data.message || "发布任务已提交");
         router.refresh();
       } catch (err) {
@@ -336,6 +334,29 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
               <ShieldCheck data-icon="inline-start" />
               <AlertTitle>发布令牌未配置</AlertTitle>
               <AlertDescription>后端需要配置 GITHUB_RELEASE_TOKEN 后才能从后台发起发布。</AlertDescription>
+            </Alert>
+          ) : null}
+          {latestDispatch?.run?.html_url ? (
+            <Alert>
+              <Rocket data-icon="inline-start" />
+              <AlertTitle>发布任务已创建</AlertTitle>
+              <AlertDescription>
+                {latestDispatch.service_label} · {latestDispatch.ref}
+                <Button asChild variant="link" className="ml-2 h-auto p-0">
+                  <Link href={latestDispatch.run.html_url} target="_blank" rel="noreferrer">
+                    查看本次发布
+                  </Link>
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {production ? (
+            <Alert>
+              <ShieldCheck data-icon="inline-start" />
+              <AlertTitle>生产发布规则</AlertTitle>
+              <AlertDescription>
+                生产只允许 Tag 或 Commit；提交前会校验版本存在，并阻止并发生产发布。
+              </AlertDescription>
             </Alert>
           ) : null}
 
