@@ -40,14 +40,36 @@ jobs:
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0=http.extraheader
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
-          if [ ! -d "${SOURCE_DIR}/.git" ]; then
-            rm -rf "${SOURCE_DIR}"
-            git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+
+          checkout_attempt() {
+            mode="$1"
+            if [ "$mode" = "proxy" ]; then
+              export HTTPS_PROXY=socks5h://127.0.0.1:18080
+              export HTTP_PROXY=socks5h://127.0.0.1:18080
+              export ALL_PROXY=socks5h://127.0.0.1:18080
+            else
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY
+            fi
+
+            if [ ! -d "${SOURCE_DIR}/.git" ]; then
+              rm -rf "${SOURCE_DIR}" || return 1
+              git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+            fi
+            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
+            git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${SOURCE_SHA}" || return 1
+            git -C "${SOURCE_DIR}" checkout --force "${SOURCE_SHA}" || return 1
+            git -C "${SOURCE_DIR}" clean -fdx || return 1
+          }
+
+          if ! checkout_attempt direct; then
+            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+              checkout_attempt proxy
+            else
+              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
+              exit 1
+            fi
           fi
-          git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${SOURCE_SHA}"
-          git -C "${SOURCE_DIR}" checkout --force "${SOURCE_SHA}"
-          git -C "${SOURCE_DIR}" clean -fdx
 
       - name: Ensure Docker daemon
         run: |
