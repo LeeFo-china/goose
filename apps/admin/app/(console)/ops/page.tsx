@@ -99,7 +99,7 @@ export default async function OpsPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          仅允许执行后端白名单脚本，用于健康检查、PM2 状态、部署 trace 和通知测试。
+          仅允许执行后端白名单脚本，用于容器健康检查、系统资源、部署 trace 和通知测试。
         </p>
       </div>
 

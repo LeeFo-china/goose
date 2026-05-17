@@ -51,15 +51,6 @@ export type OpsSystemMetrics = {
     };
     load_average: number[];
   };
-  pm2: Array<{
-    name: string;
-    pid: number | null;
-    status: string;
-    cpu_percent: number;
-    memory_mb: number;
-    restarts: number;
-    uptime: string;
-  }>;
   checked_at: string;
 };
 

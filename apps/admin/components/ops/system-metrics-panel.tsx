@@ -36,10 +36,6 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function statusVariant(status: string) {
-  return status === "online" ? "success" : status === "stopped" ? "danger" : "warning";
-}
-
 async function requestMetrics() {
   const response = await fetch("/api/backend/admin/ops/system-metrics", {
     cache: "no-store",
@@ -267,39 +263,6 @@ export function SystemMetricsPanel() {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(metrics?.pm2 || []).map((process) => (
-            <div key={process.name} className="rounded-md border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="font-medium">{process.name}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    PID {process.pid ?? "-"} · uptime {process.uptime} · 重启 {process.restarts}
-                  </div>
-                </div>
-                <Badge variant={statusVariant(process.status)}>{process.status}</Badge>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <BarMetric
-                  label="CPU"
-                  value={process.cpu_percent}
-                  detail={`${process.cpu_percent.toFixed(1)}%`}
-                  icon={<Gauge className="size-4" />}
-                />
-                <div className="rounded-md border p-4">
-                  <div className="text-sm font-medium">内存</div>
-                  <div className="mt-2 text-xl font-semibold">{formatMb(process.memory_mb)}</div>
-                  <div className="mt-2 text-xs text-muted-foreground">PM2 进程占用</div>
-                </div>
-              </div>
-            </div>
-          ))}
-          {metrics && metrics.pm2.length === 0 ? (
-            <div className="rounded-md border p-4 text-sm text-muted-foreground">
-              未发现 goose PM2 进程
-            </div>
-          ) : null}
-        </div>
       </CardContent>
     </Card>
   );

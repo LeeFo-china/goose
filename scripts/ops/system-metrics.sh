@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PM2_BIN="${PM2_BIN:-pm2}"
 JS_RUNTIME_BIN="${JS_RUNTIME_BIN:-}"
 if [ -z "$JS_RUNTIME_BIN" ]; then
   if command -v node >/dev/null 2>&1; then
@@ -11,7 +10,6 @@ if [ -z "$JS_RUNTIME_BIN" ]; then
   fi
 fi
 
-PM2_JSON="$("$PM2_BIN" jlist 2>/dev/null || echo "[]")"
 JS_RUNTIME_SCRIPT="$(mktemp /tmp/gooes-system-metrics.XXXXXX.js)"
 trap 'rm -f "$JS_RUNTIME_SCRIPT"' EXIT
 
@@ -106,42 +104,6 @@ function getDisk() {
   }
 }
 
-function formatUptime(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "-";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
-function getPm2Processes() {
-  let apps = [];
-  try {
-    apps = JSON.parse(process.env.PM2_JSON || "[]");
-  } catch {
-    apps = [];
-  }
-
-  const targetNames = new Set(["goose", "goose-admin", "goose-social-video-worker"]);
-  return apps
-    .filter((app) => targetNames.has(app.name))
-    .map((app) => {
-      const memoryMb = app.monit?.memory ? app.monit.memory / 1024 / 1024 : 0;
-      return {
-        name: app.name,
-        pid: app.pid || null,
-        status: app.pm2_env?.status || "unknown",
-        cpu_percent: round(Number(app.monit?.cpu || 0)),
-        memory_mb: round(memoryMb),
-        restarts: Number(app.pm2_env?.restart_time || 0),
-        uptime: app.pm2_env?.pm_uptime ? formatUptime(Date.now() - app.pm2_env.pm_uptime) : "-",
-      };
-    });
-}
-
 (async () => {
   const cpuUsagePercent = await getCpuUsagePercent();
   const payload = {
@@ -151,7 +113,6 @@ function getPm2Processes() {
       disk: getDisk(),
       load_average: os.loadavg().map((value) => round(value, 2)),
     },
-    pm2: getPm2Processes(),
     checked_at: new Date().toISOString(),
   };
 
@@ -162,4 +123,4 @@ function getPm2Processes() {
 });
 NODE
 
-PM2_JSON="$PM2_JSON" "$JS_RUNTIME_BIN" "$JS_RUNTIME_SCRIPT"
+"$JS_RUNTIME_BIN" "$JS_RUNTIME_SCRIPT"
