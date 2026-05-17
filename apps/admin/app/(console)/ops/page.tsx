@@ -1,7 +1,7 @@
 import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
-import { RunOpsScriptButton } from "@/components/ops/ops-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
+import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
 import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
@@ -162,38 +162,7 @@ export default async function OpsPage({
         </TabsContent>
 
         <TabsContent value="scripts" className="mt-0 flex flex-col gap-3">
-          {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">白名单脚本</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                仅保留后端白名单命令，所有执行都会写入审计记录。
-              </p>
-            </div>
-            <Badge variant="outline">{scripts.length} 个脚本</Badge>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            {scripts.map((script) => (
-              <Card key={script.key}>
-                <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-                  <div>
-                    <CardTitle className="text-base">{script.label}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{script.description}</p>
-                  </div>
-                  <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
-                    {script.danger_level === "medium" ? "会发送通知" : "低风险"}
-                  </Badge>
-                </CardHeader>
-                <CardContent className="flex items-center justify-between gap-3">
-                  <div className="text-xs text-muted-foreground">
-                    超时限制 {Math.round(script.timeout_ms / 1000)} 秒
-                  </div>
-                  <RunOpsScriptButton script={script} />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <OpsScriptsPanel scripts={scripts} recentRuns={runs} error={error} />
         </TabsContent>
 
         <TabsContent value="runs" className="mt-0 flex flex-col gap-3">
