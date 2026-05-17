@@ -212,7 +212,8 @@ ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
 | 类型 | 值 |
 | --- | --- |
 | 租户 | 默认装修公司 |
-| 后台 dev 管理员手机号 | `19900000001` |
+| 平台超管手机号 | `19900000001` |
+| 租户管理员手机号 | `19900000002` |
 | 后台验证码 | dev 环境已开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，可免验证码登录 |
 | 客户 | `19900001001`、`19900001002` |
 | 积分账户 | `is_test=true`，初始测试积分 `1000000` |
@@ -227,7 +228,7 @@ ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
 | `https://admin-dev.goodcms.cn/login` | `200 OK` |
 | API dev 容器 | `gooes-api-dev` healthy |
 | Admin dev 容器 | `gooes-admin-dev` healthy |
-| 后台 dev 登录 | 手机号 `19900000001` 登录成功，角色 `system_admin`、`platform_admin`，权限数 53 |
+| 后台 dev 登录 | `19900000001` 平台超管登录成功；`19900000002` 租户管理员登录成功 |
 
 ## 12. Deploy Dev workflow
 

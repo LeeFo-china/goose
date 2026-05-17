@@ -8,6 +8,7 @@ DECLARE
   v_tenant_department_id uuid;
   v_post_id uuid;
   v_employee_id uuid;
+  v_tenant_admin_employee_id uuid;
   v_system_admin_role_id uuid;
   v_platform_admin_role_id uuid;
 BEGIN
@@ -98,6 +99,44 @@ BEGIN
     ON CONFLICT (employee_id, role_id) DO NOTHING;
   END IF;
 
+  INSERT INTO public.employees (
+    tenant_id,
+    name,
+    phone,
+    department_id,
+    tenant_department_id,
+    post_id,
+    status
+  )
+  VALUES (
+    v_tenant_id,
+    'Dev 租户管理员',
+    '19900000002',
+    v_department_id,
+    v_tenant_department_id,
+    v_post_id,
+    'active'
+  )
+  ON CONFLICT (tenant_id, phone)
+  WHERE tenant_id IS NOT NULL AND phone IS NOT NULL
+  DO UPDATE SET
+    name = EXCLUDED.name,
+    department_id = EXCLUDED.department_id,
+    tenant_department_id = EXCLUDED.tenant_department_id,
+    post_id = EXCLUDED.post_id,
+    status = EXCLUDED.status
+  RETURNING id INTO v_tenant_admin_employee_id;
+
+  INSERT INTO public.employee_roles (employee_id, role_id)
+  VALUES (v_tenant_admin_employee_id, v_system_admin_role_id)
+  ON CONFLICT (employee_id, role_id) DO NOTHING;
+
+  IF v_platform_admin_role_id IS NOT NULL THEN
+    DELETE FROM public.employee_roles
+    WHERE employee_id = v_tenant_admin_employee_id
+      AND role_id = v_platform_admin_role_id;
+  END IF;
+
   INSERT INTO public.customers (
     tenant_id,
     name,
@@ -172,16 +211,18 @@ END $$;
 
 SELECT
   tenant.name AS tenant_name,
-  employee.name AS dev_admin_name,
-  employee.phone AS dev_admin_phone,
-  count(customer.id) FILTER (
+  string_agg(
+    DISTINCT employee.name || ':' || employee.phone,
+    ', ' ORDER BY employee.name || ':' || employee.phone
+  ) AS dev_admin_accounts,
+  count(DISTINCT customer.id) FILTER (
     WHERE customer.phone IN ('19900001001', '19900001002')
   ) AS dev_customer_count
 FROM public.tenants AS tenant
 LEFT JOIN public.employees AS employee
   ON employee.tenant_id = tenant.id
-  AND employee.phone = '19900000001'
+  AND employee.phone IN ('19900000001', '19900000002')
 LEFT JOIN public.customers AS customer
   ON customer.tenant_id = tenant.id
 WHERE tenant.slug = 'gooes_default'
-GROUP BY tenant.name, employee.name, employee.phone;
+GROUP BY tenant.name;

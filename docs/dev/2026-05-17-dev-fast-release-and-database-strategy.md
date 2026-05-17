@@ -250,7 +250,8 @@ scripts/dev/seed-dev.sql
 | 数据 | 值 |
 | --- | --- |
 | 默认租户 | 默认装修公司 |
-| 后台 dev 管理员手机号 | `19900000001` |
+| 平台超管手机号 | `19900000001` |
+| 租户管理员手机号 | `19900000002` |
 | dev 客户手机号 | `19900001001`、`19900001002` |
 | dev 积分账户 | `is_test=true`，测试积分 `1000000` |
 
@@ -262,7 +263,7 @@ ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
   < scripts/dev/seed-dev.sql
 ```
 
-seed 已验证可重复执行。后台 dev 环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，首次用 `19900000001` 登录时 API 会自动创建后台登录用的 `auth.users`，不需要 seed 直接写入 Supabase Auth 表。
+seed 已验证可重复执行。后台 dev 环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，首次用 `19900000001` 或 `19900000002` 登录时 API 会自动创建后台登录用的 `auth.users`，不需要 seed 直接写入 Supabase Auth 表。
 
 后续扩展固定测试数据建议：
 
