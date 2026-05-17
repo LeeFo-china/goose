@@ -2,12 +2,16 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
+import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
 import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
 import type {
   OpsScript,
   OpsScriptRun,
   Pagination,
+  ReleaseOptionsData,
+  ReleaseRun,
+  ReleaseRunListData,
 } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,8 +57,11 @@ async function getOpsData(params: OpsPageSearchParams) {
     return {
       scripts: [] as OpsScript[],
       runs: [] as OpsScriptRun[],
+      releaseOptions: null as ReleaseOptionsData | null,
+      releaseRuns: [] as ReleaseRun[],
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
+      releaseError: "缺少登录凭证",
     };
   }
 
@@ -63,23 +70,41 @@ async function getOpsData(params: OpsPageSearchParams) {
       page: String(page),
       pageSize: String(OPS_RUNS_PAGE_SIZE),
     });
-    const [scriptData, runData] = await Promise.all([
+    const [scriptData, runData, releaseOptionsResult, releaseRunsResult] = await Promise.all([
       fetchBackendData<ScriptListData>(token, "/admin/ops/scripts"),
       fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`),
+      fetchBackendData<ReleaseOptionsData>(token, "/admin/ops/releases/options")
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null as ReleaseOptionsData | null,
+          error: error instanceof Error ? error.message : "发布配置加载失败",
+        })),
+      fetchBackendData<ReleaseRunListData>(token, "/admin/ops/releases/runs?page=1&pageSize=10")
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null as ReleaseRunListData | null,
+          error: error instanceof Error ? error.message : "发布记录加载失败",
+        })),
     ]);
 
     return {
       scripts: scriptData?.list || [],
       runs: runData?.list || [],
+      releaseOptions: releaseOptionsResult.data,
+      releaseRuns: releaseRunsResult.data?.list || [],
       pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: null,
+      releaseError: releaseOptionsResult.error || releaseRunsResult.error,
     };
   } catch (error) {
     return {
       scripts: [] as OpsScript[],
       runs: [] as OpsScriptRun[],
+      releaseOptions: null as ReleaseOptionsData | null,
+      releaseRuns: [] as ReleaseRun[],
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "运维脚本加载失败",
+      releaseError: error instanceof Error ? error.message : "发布信息加载失败",
     };
   }
 }
@@ -90,7 +115,7 @@ export default async function OpsPage({
   searchParams: Promise<OpsPageSearchParams>;
 }) {
   const params = await searchParams;
-  const { scripts, runs, pagination, error } = await getOpsData(params);
+  const { scripts, runs, releaseOptions, releaseRuns, pagination, error, releaseError } = await getOpsData(params);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
 
@@ -113,6 +138,10 @@ export default async function OpsPage({
           <TabsTrigger value="runs">
             执行记录
             <span className="ml-2 text-xs text-muted-foreground">{successCount}/{failedCount}</span>
+          </TabsTrigger>
+          <TabsTrigger value="releases">
+            版本发布
+            <span className="ml-2 text-xs text-muted-foreground">{releaseRuns.length}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -176,6 +205,14 @@ export default async function OpsPage({
             </div>
             <OpsRunsPagination pagination={pagination} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="releases" className="mt-0">
+          <ReleaseDeploymentsPanel
+            options={releaseOptions}
+            runs={releaseRuns}
+            error={releaseError}
+          />
         </TabsContent>
       </Tabs>
     </div>

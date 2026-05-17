@@ -5,7 +5,25 @@ name: Deploy Docker Services
 
 on:
   workflow_call:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: false
+        default: all
+        type: string
   workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - api
+          - admin
+          - social-video-worker
+          - cos-reconcile-worker
 
 permissions:
   contents: read
@@ -18,6 +36,7 @@ env:
   DEPLOY_DIR: /opt/supabase/docker
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
   SOURCE_SHA: ${{ github.sha }}
+  RELEASE_SERVICE: ${{ inputs.service || github.event.inputs.service || 'all' }}
 
 jobs:
   deploy:
@@ -116,19 +135,56 @@ jobs:
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull \
-            gooes-api \
-            gooes-admin \
-            gooes-social-video-worker \
-            gooes-cos-reconcile-worker
+          case "${RELEASE_SERVICE}" in
+            all)
+              services="gooes-api gooes-admin gooes-social-video-worker gooes-cos-reconcile-worker"
+              ;;
+            api)
+              services="gooes-api"
+              ;;
+            admin)
+              services="gooes-admin"
+              ;;
+            social-video-worker)
+              services="gooes-social-video-worker"
+              ;;
+            cos-reconcile-worker)
+              services="gooes-cos-reconcile-worker"
+              ;;
+            *)
+              echo "Unknown service: ${RELEASE_SERVICE}"
+              exit 1
+              ;;
+          esac
+          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers pull ${services}
 
       - name: Recreate services
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api
-          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker gooes-cos-reconcile-worker
-          docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+          case "${RELEASE_SERVICE}" in
+            all)
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker gooes-cos-reconcile-worker
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+              ;;
+            api)
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-api
+              ;;
+            admin)
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-admin
+              ;;
+            social-video-worker)
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-social-video-worker
+              ;;
+            cos-reconcile-worker)
+              docker compose -f docker-compose.api.yml -f docker-compose.admin.yml --profile workers up -d --no-deps --force-recreate gooes-cos-reconcile-worker
+              ;;
+            *)
+              echo "Unknown service: ${RELEASE_SERVICE}"
+              exit 1
+              ;;
+          esac
 
       - name: Check container health
         run: |
@@ -153,16 +209,40 @@ jobs:
             exit 1
           }
 
-          check_container gooes-api
-          check_container gooes-social-video-worker
-          check_container gooes-cos-reconcile-worker
-          check_container gooes-admin
+          case "${RELEASE_SERVICE}" in
+            all)
+              check_container gooes-api
+              check_container gooes-social-video-worker
+              check_container gooes-cos-reconcile-worker
+              check_container gooes-admin
+              ;;
+            api)
+              check_container gooes-api
+              ;;
+            admin)
+              check_container gooes-admin
+              ;;
+            social-video-worker)
+              check_container gooes-social-video-worker
+              ;;
+            cos-reconcile-worker)
+              check_container gooes-cos-reconcile-worker
+              ;;
+            *)
+              echo "Unknown service: ${RELEASE_SERVICE}"
+              exit 1
+              ;;
+          esac
 
       - name: Check public endpoints
         run: |
           set -euo pipefail
-          curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://api.goodcms.cn/
-          curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://admin.goodcms.cn/login
+          if [ "${RELEASE_SERVICE}" = "all" ] || [ "${RELEASE_SERVICE}" = "api" ]; then
+            curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://api.goodcms.cn/
+          fi
+          if [ "${RELEASE_SERVICE}" = "all" ] || [ "${RELEASE_SERVICE}" = "admin" ]; then
+            curl -fsS -o /dev/null --retry 5 --retry-delay 3 https://admin.goodcms.cn/login
+          fi
 
       - name: Deployment summary
         run: |

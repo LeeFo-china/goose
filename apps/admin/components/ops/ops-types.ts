@@ -81,3 +81,47 @@ export type OpsServiceHealth = {
     last_health_output: string | null;
   }>;
 };
+
+export type ReleaseEnvironment = "dev" | "production";
+
+export type ReleaseService = "api" | "admin" | "social-video-worker" | "cos-reconcile-worker" | "all";
+
+export type ReleaseOptionEnvironment = {
+  environment: ReleaseEnvironment;
+  label: string;
+  workflow_id: string;
+  default_ref: string;
+  workflow_url: string;
+  services: Array<{
+    value: ReleaseService;
+    label: string;
+  }>;
+};
+
+export type ReleaseOptionsData = {
+  configured: boolean;
+  repository: string;
+  environments: ReleaseOptionEnvironment[];
+};
+
+export type ReleaseRun = {
+  id: string;
+  environment: ReleaseEnvironment;
+  workflow_id: string;
+  workflow_label: string;
+  title: string;
+  status: string | null;
+  conclusion: string | null;
+  event: string | null;
+  head_branch: string | null;
+  head_sha: string | null;
+  html_url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  run_started_at: string | null;
+};
+
+export type ReleaseRunListData = {
+  list: ReleaseRun[];
+  pagination: Pagination;
+};

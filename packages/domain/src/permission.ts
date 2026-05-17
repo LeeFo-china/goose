@@ -74,6 +74,8 @@ export const PERMISSION_CODE_VALUES = [
   'social_video_transcription.manage',
   'system.ops.read',
   'system.ops.run',
+  'system.release.read',
+  'system.release.run',
   'system.settings.read',
   'system.settings.update',
   'system.settings.test',
@@ -283,6 +285,14 @@ export const PermissionCodeConfig: Record<
   },
   'system.ops.run': {
     label: '执行运维脚本',
+    module: 'system',
+  },
+  'system.release.read': {
+    label: '查看版本发布',
+    module: 'system',
+  },
+  'system.release.run': {
+    label: '发起版本发布',
     module: 'system',
   },
   'system.settings.read': {
