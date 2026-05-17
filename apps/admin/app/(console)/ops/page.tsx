@@ -1,4 +1,3 @@
-import { Activity, ShieldCheck, TerminalSquare } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { RunOpsScriptButton } from "@/components/ops/ops-actions";
@@ -12,6 +11,7 @@ import type {
 } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -99,92 +99,85 @@ export default async function OpsPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          仅允许执行后端白名单脚本，用于容器健康检查、系统资源、部署 trace 和通知测试。
+          聚合资源状态、微服务健康、白名单脚本和执行记录，平台运维动作保持可审计。
         </p>
       </div>
 
-      <SystemMetricsPanel />
+      <Tabs defaultValue="health" className="flex flex-col gap-3">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="health">健康监控</TabsTrigger>
+          <TabsTrigger value="scripts">
+            脚本执行
+            <span className="ml-2 text-xs text-muted-foreground">{scripts.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="runs">
+            执行记录
+            <span className="ml-2 text-xs text-muted-foreground">{successCount}/{failedCount}</span>
+          </TabsTrigger>
+        </TabsList>
 
-      <ServiceHealthPanel />
+        <TabsContent value="health" className="mt-0 flex flex-col gap-3">
+          <SystemMetricsPanel />
+          <ServiceHealthPanel />
+        </TabsContent>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <TerminalSquare className="size-5" />
-            </div>
+        <TabsContent value="scripts" className="mt-0 flex flex-col gap-3">
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm text-muted-foreground">白名单脚本</div>
-              <div className="text-xl font-semibold">{scripts.length}</div>
+              <h2 className="text-base font-semibold">白名单脚本</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                仅保留后端白名单命令，所有执行都会写入审计记录。
+              </p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ShieldCheck className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">最近成功</div>
-              <div className="text-xl font-semibold">{successCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-              <Activity className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">最近异常</div>
-              <div className="text-xl font-semibold">{failedCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Badge variant="outline">{scripts.length} 个脚本</Badge>
+          </div>
 
-      {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <div className="grid gap-3 lg:grid-cols-2">
+            {scripts.map((script) => (
+              <Card key={script.key}>
+                <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+                  <div>
+                    <CardTitle className="text-base">{script.label}</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">{script.description}</p>
+                  </div>
+                  <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
+                    {script.danger_level === "medium" ? "会发送通知" : "低风险"}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    超时限制 {Math.round(script.timeout_ms / 1000)} 秒
+                  </div>
+                  <RunOpsScriptButton script={script} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {scripts.map((script) => (
-          <Card key={script.key}>
-            <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-              <div>
-                <CardTitle className="text-base">{script.label}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">{script.description}</p>
-              </div>
-              <Badge variant={script.danger_level === "medium" ? "warning" : "outline"}>
-                {script.danger_level === "medium" ? "会发送通知" : "低风险"}
+        <TabsContent value="runs" className="mt-0 flex flex-col gap-3">
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+              <CardTitle>最近执行记录</CardTitle>
+              <Badge variant="outline">
+                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
               </Badge>
             </CardHeader>
-            <CardContent className="flex items-center justify-between gap-3">
-              <div className="text-xs text-muted-foreground">
-                超时限制 {Math.round(script.timeout_ms / 1000)} 秒
-              </div>
-              <RunOpsScriptButton script={script} />
+            <CardContent className="p-0">
+              <OpsRunsTable runs={runs} />
             </CardContent>
           </Card>
-        ))}
-      </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <CardTitle>最近执行记录</CardTitle>
-          <Badge variant="outline">
-            第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-          </Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <OpsRunsTable runs={runs} />
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          每页 {pagination.pageSize} 条，共 {pagination.total} 条
-        </div>
-        <OpsRunsPagination pagination={pagination} />
-      </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm text-muted-foreground">
+              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+            </div>
+            <OpsRunsPagination pagination={pagination} />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
