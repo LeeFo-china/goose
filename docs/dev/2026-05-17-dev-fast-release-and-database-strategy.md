@@ -4,7 +4,7 @@
 
 ## 1. 结论
 
-当前生产发布链路已经跑通：代码 push 后 GitHub Actions 在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
+当前生产发布链路已经跑通：GitHub Actions 可以在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
 
 但这条链路不适合高频开发验证。开发阶段要解决两个问题：
 
@@ -16,7 +16,7 @@
 | 环境 | 用途 | API/Admin | 数据库 | 发布方式 |
 | --- | --- | --- | --- | --- |
 | 本地开发 | 单人编码、自测 | 本机端口 | 本地 Supabase 或远程 dev DB | 本地启动 |
-| 共享开发环境 | 前后端、小程序联调 | `api-dev.goodcms.cn` / `admin-dev.goodcms.cn` | 独立 dev Supabase/Postgres | 手动快速部署 |
+| 共享开发环境 | 前后端、小程序联调 | `api-dev.goodcms.cn` / `admin-dev.goodcms.cn` | 独立 dev Supabase/Postgres | 代码 push 自动按服务部署，必要时手动部署 |
 | 生产环境 | 客户真实使用 | `api.goodcms.cn` / `admin.goodcms.cn` | 生产 Supabase/Postgres | 验收后完整发布 |
 
 第一阶段先做“共享开发环境”，这是收益最高的改造。
@@ -49,14 +49,14 @@
 | 动作 | 分支/触发 | 目标环境 | 是否自动 |
 | --- | --- | --- | --- |
 | 普通开发提交 | 任意功能分支 | 不发布 | 否 |
-| 开发环境验证 | `workflow_dispatch` 手动选择服务 | dev | 是，手动触发 |
+| 开发环境验证 | `push` 代码路径或 `workflow_dispatch` 手动选择服务 | dev | 代码路径自动；必要时手动 |
 | 生产发布 | 验收通过后手动触发或受保护分支 | prod | 需要确认 |
 
 短期不建议继续让所有开发 push 自动上生产。更合理的是：
 
-- 保留当前生产 workflow，但改成手动触发或受保护触发。
-- 新增一个 `Deploy Dev` workflow，支持选择发布服务。
-- 开发者修改 API 时，只发布 API；修改 admin 时，只发布 admin；修改 worker 时，只发布对应 worker。
+- 生产 workflow 改成手动触发，避免普通开发 push 影响生产。
+- `Deploy Dev` workflow 支持自动识别变更路径，也支持手动选择发布服务。
+- 开发者修改 API 时自动发布 dev API；修改 admin 时自动发布 dev Admin；修改 worker 时自动发布对应 dev worker。
 
 ### 3.2 开发环境域名
 
@@ -114,9 +114,22 @@ ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:<GITHUB_SHA>
 
 `dev` 用于快速覆盖，`<GITHUB_SHA>` 用于排查和临时回退。
 
-### 3.4 Dev workflow 输入
+### 3.4 Dev workflow 触发
 
-建议新增 `.github/workflows/deploy-dev.yml`，使用手动触发：
+已新增 `.github/workflows/deploy-dev.yml`。
+
+push 自动发布规则：
+
+| 变更路径 | 自动发布 dev 服务 |
+| --- | --- |
+| `apps/api/**`、`docker/api.Dockerfile` | `api` |
+| `apps/admin/**`、`docker/admin.Dockerfile` | `admin` |
+| `apps/api` 中短视频 worker 相关代码、`docker/social-video-worker.Dockerfile` | `social-video-worker` |
+| COS 对账 worker、上传/文件服务相关代码 | `cos-reconcile-worker` |
+| `packages/domain/**`、lockfile、workspace 配置、`.dockerignore`、`deploy/docker-compose.dev.yml` | 全部 dev 服务 |
+| `docs/**`、`scripts/dev/**`、`supabase/migrations/**` | 不自动部署 |
+
+手动触发仍保留，用于强制重发单个服务：
 
 ```yaml
 workflow_dispatch:
@@ -129,27 +142,24 @@ workflow_dispatch:
         - admin
         - social-video-worker
         - cos-reconcile-worker
-    run_migration:
-      description: "是否执行 dev 数据库 migration"
-      type: boolean
-      default: false
 ```
 
 行为：
 
 - `service=api`：只构建并重启 dev API。
 - `service=admin`：只构建并重启 dev admin。
-- `run_migration=true`：只允许执行 dev 数据库，不允许指向生产库。
+- `service=social-video-worker`：只构建并重启 dev 短视频 worker。
+- `service=cos-reconcile-worker`：复用 API 镜像并重启 dev COS 对账 worker。
 
-第一阶段不建议开放 `all`。开发验证应该明确选择单个服务，避免一次性全量重启导致排查边界变大。等 dev 链路稳定后，如果确实需要 `all`，再增加独立确认输入，例如 `confirm_all=yes`。不要用交互式 `read` 等待确认，GitHub Actions 手动 workflow 不适合等待终端输入。
+第一阶段不开放手动 `all`。开发验证应该明确选择单个服务，避免一次性全量重启导致排查边界变大。自动路径命中共享构建文件时才会发布全部 dev 服务。
 
 这样开发验证通常可以控制在：
 
 | 类型 | 预期耗时 |
 | --- | --- |
-| 只发 API | 30 秒到 1 分钟 |
-| 只发 Worker | 30 秒到 1 分钟 |
-| 只发 Admin | 1 到 2 分钟 |
+| 只发 API | 1 到 2 分钟 |
+| 只发 Worker | 1 到 2 分钟 |
+| 只发 Admin | 5 到 10 分钟 |
 
 ### 3.5 Dev 镜像更新规则
 
@@ -416,18 +426,20 @@ services:
 
 生产 compose 继续使用生产 env 文件。dev env 必须包含明确的环境标识，例如 `APP_ENV=development`、`NODE_ENV=development`、`BILLING_CHARGE_ENABLED=false`。
 
-### 阶段 2：新增手动 dev 发布 workflow
+### 阶段 2：新增 dev 发布 workflow
 
 目标：
 
 - 新增 `Deploy Dev` workflow。
-- 支持选择 `api/admin/worker`，第一阶段不开放 `all`。
+- 支持 push 自动按路径发布 `api/admin/worker`。
+- 支持手动选择 `api/admin/worker`，第一阶段不开放 `all`。
 - dev 镜像 tag 使用 `dev` + `GITHUB_SHA`。
 
 验收：
 
 - 只改 API 时，可以只发布 API。
 - 只改 admin 时，可以只发布 admin。
+- 只改 docs、seed、migration 时，不触发 dev 部署。
 - workflow 日志能看到部署的 commit sha。
 
 ### 阶段 3：数据库 migration dev 预演
@@ -454,7 +466,7 @@ services:
 
 验收：
 
-- 普通开发 push 不会自动影响生产。
+- 普通开发 push 不会自动影响生产，只会按代码路径影响 dev。
 - 生产发布有明确版本和回滚点。
 - 生产 DB 操作有备份和执行记录。
 
@@ -464,7 +476,7 @@ services:
 
 1. 先开 `api-dev.goodcms.cn` 和 `admin-dev.goodcms.cn`，让 admin、小程序、后端有稳定联调地址。
 2. 新增 dev 数据库，禁止开发调试直接写生产库。
-3. 新增手动 `Deploy Dev` workflow，支持按服务发布，生产 workflow 改为验收后触发。
+3. 新增 `Deploy Dev` workflow，支持按服务自动发布和手动补发，生产 workflow 改为验收后触发。
 
 这样开发速度会明显提升，同时不会牺牲生产稳定性。
 

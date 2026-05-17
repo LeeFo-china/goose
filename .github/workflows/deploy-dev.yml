@@ -1,7 +1,8 @@
 name: Deploy Dev
 
-# Manually builds one dev image, pushes it to Tencent CCR, then recreates the
-# matching service on VM-0-11-ubuntu.
+# Builds dev images, pushes them to Tencent CCR, then recreates the matching
+# service on VM-0-11-ubuntu. Push events auto-detect affected services; manual
+# runs deploy the selected service.
 
 on:
   push:
@@ -10,6 +11,17 @@ on:
     paths:
       - ".github/workflows/deploy-dev.yml"
       - "deploy/docker-compose.dev.yml"
+      - ".dockerignore"
+      - "docker/api.Dockerfile"
+      - "docker/admin.Dockerfile"
+      - "docker/social-video-worker.Dockerfile"
+      - "apps/api/**"
+      - "apps/admin/**"
+      - "packages/domain/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
   workflow_dispatch:
     inputs:
       service:
@@ -26,7 +38,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-dev-${{ github.event.inputs.service || 'api' }}
+  group: deploy-dev-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -39,7 +51,7 @@ env:
 
 jobs:
   deploy-dev:
-    name: Deploy dev ${{ github.event.inputs.service || 'api' }}
+    name: Deploy dev
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 
     steps:
@@ -48,6 +60,100 @@ jobs:
           set -euo pipefail
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
           test -r "${DEV_DEPLOY_KEY_PATH}"
+
+      - name: Resolve services
+        env:
+          INPUT_SERVICE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            SERVICES="${INPUT_SERVICE}"
+          else
+            SERVICES="$(
+              python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+          files = set()
+          for commit in event.get("commits", []):
+              for key in ("added", "modified", "removed"):
+                  files.update(commit.get(key, []))
+
+          services = []
+
+          def add(service):
+              if service not in services:
+                  services.append(service)
+
+          def touches(prefix):
+              return any(path.startswith(prefix) for path in files)
+
+          def exact(name):
+              return name in files
+
+          def any_exact(names):
+              return any(name in files for name in names)
+
+          def any_contains(*parts):
+              return any(all(part in path for part in parts) for path in files)
+
+          shared_build_files = {
+              ".dockerignore",
+              "package.json",
+              "pnpm-lock.yaml",
+              "pnpm-workspace.yaml",
+              "tsconfig.base.json",
+          }
+
+          if any_exact(shared_build_files) or touches("packages/domain/") or exact("deploy/docker-compose.dev.yml"):
+              add("api")
+              add("admin")
+              add("social-video-worker")
+              add("cos-reconcile-worker")
+
+          if exact(".github/workflows/deploy-dev.yml"):
+              add("api")
+
+          if touches("apps/admin/") or exact("docker/admin.Dockerfile"):
+              add("admin")
+
+          if touches("apps/api/") or exact("docker/api.Dockerfile"):
+              add("api")
+
+          if (
+              exact("docker/social-video-worker.Dockerfile")
+              or any_contains("apps/api/src/workers/", "social-video")
+              or any_contains("apps/api/src/services/", "social-video")
+              or any_contains("apps/api/src/repositories/", "social-video")
+              or any_contains("apps/api/src/controllers/", "social-video")
+              or any_contains("apps/api/src/schema/", "social-video")
+          ):
+              add("social-video-worker")
+
+          if (
+              exact("apps/api/src/workers/project-log-comment-cos-reconcile-worker.ts")
+              or any_contains("apps/api/src/services/", "files")
+              or any_contains("apps/api/src/services/", "uploads")
+              or any_contains("apps/api/src/controllers/", "uploads")
+          ):
+              add("cos-reconcile-worker")
+
+          print(" ".join(services))
+          PY
+            )"
+          fi
+
+          if [ -z "${SERVICES}" ]; then
+            echo "No dev service matched changed files; exiting."
+            echo "SERVICES=" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          echo "Resolved dev services: ${SERVICES}"
+          echo "SERVICES=${SERVICES}" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
         env:
@@ -116,93 +222,110 @@ jobs:
           done
           exit 1
 
-      - name: Build and push dev image
-        env:
-          SERVICE: ${{ github.event.inputs.service || 'api' }}
+      - name: Build and push dev images
         run: |
           set -euo pipefail
+          if [ -z "${SERVICES:-}" ]; then
+            echo "No dev services to build."
+            exit 0
+          fi
           cd "${RUNNER_WORKSPACE}/source"
 
-          case "$SERVICE" in
-            api|cos-reconcile-worker)
-              IMAGE_REPO=goose-api
-              DOCKERFILE=docker/api.Dockerfile
-              ;;
-            social-video-worker)
-              IMAGE_REPO=goose-social-video-worker
-              DOCKERFILE=docker/social-video-worker.Dockerfile
-              ;;
-            admin)
-              IMAGE_REPO=goose-admin
-              DOCKERFILE=docker/admin.Dockerfile
-              ;;
-            *)
-              echo "Unknown service: $SERVICE"
-              exit 1
-              ;;
-          esac
+          built_images=""
+          for SERVICE in ${SERVICES}; do
+            case "$SERVICE" in
+              api|cos-reconcile-worker)
+                IMAGE_REPO=goose-api
+                DOCKERFILE=docker/api.Dockerfile
+                ;;
+              social-video-worker)
+                IMAGE_REPO=goose-social-video-worker
+                DOCKERFILE=docker/social-video-worker.Dockerfile
+                ;;
+              admin)
+                IMAGE_REPO=goose-admin
+                DOCKERFILE=docker/admin.Dockerfile
+                ;;
+              *)
+                echo "Unknown service: $SERVICE"
+                exit 1
+                ;;
+            esac
 
-          IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
-          DEV_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
-          SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
+            if [[ " ${built_images} " == *" ${IMAGE_REPO} "* ]]; then
+              echo "Image ${IMAGE_REPO} already built for this run; skipping duplicate build."
+              continue
+            fi
 
-          case "$SERVICE" in
-            admin)
-              docker build \
-                -f "$DOCKERFILE" \
-                --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
-                --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn \
-                -t "$DEV_IMAGE" \
-                -t "$SHA_IMAGE" \
-                .
-              ;;
-            social-video-worker)
-              docker build \
-                -f "$DOCKERFILE" \
-                --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
-                -t "$DEV_IMAGE" \
-                -t "$SHA_IMAGE" \
-                .
-              ;;
-            *)
-              docker build -f "$DOCKERFILE" -t "$DEV_IMAGE" -t "$SHA_IMAGE" .
-              ;;
-          esac
+            IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
+            DEV_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
+            SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
 
-          docker push "$DEV_IMAGE"
-          docker push "$SHA_IMAGE"
+            case "$SERVICE" in
+              admin)
+                docker build \
+                  -f "$DOCKERFILE" \
+                  --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
+                  --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn \
+                  -t "$DEV_IMAGE" \
+                  -t "$SHA_IMAGE" \
+                  .
+                ;;
+              social-video-worker)
+                docker build \
+                  -f "$DOCKERFILE" \
+                  --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
+                  -t "$DEV_IMAGE" \
+                  -t "$SHA_IMAGE" \
+                  .
+                ;;
+              *)
+                docker build -f "$DOCKERFILE" -t "$DEV_IMAGE" -t "$SHA_IMAGE" .
+                ;;
+            esac
 
-      - name: Deploy dev service
+            docker push "$DEV_IMAGE"
+            docker push "$SHA_IMAGE"
+            built_images="${built_images} ${IMAGE_REPO}"
+          done
+
+      - name: Deploy dev services
         env:
-          SERVICE: ${{ github.event.inputs.service || 'api' }}
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
           set -euo pipefail
-
-          case "$SERVICE" in
-            api)
-              COMPOSE_SERVICE=gooes-api-dev
-              ;;
-            admin)
-              COMPOSE_SERVICE=gooes-admin-dev
-              ;;
-            social-video-worker)
-              COMPOSE_SERVICE=gooes-social-video-worker-dev
-              ;;
-            cos-reconcile-worker)
-              COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
-              ;;
-            *)
-              echo "Unknown service: $SERVICE"
-              exit 1
-              ;;
-          esac
+          if [ -z "${SERVICES:-}" ]; then
+            echo "No dev services to deploy."
+            exit 0
+          fi
 
           scp -i "${DEV_DEPLOY_KEY_PATH}" \
             -o StrictHostKeyChecking=no \
             "${RUNNER_WORKSPACE}/source/deploy/docker-compose.dev.yml" \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
+
+          COMPOSE_SERVICES=""
+          for SERVICE in ${SERVICES}; do
+            case "$SERVICE" in
+              api)
+                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-api-dev"
+                ;;
+              admin)
+                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-admin-dev"
+                ;;
+              social-video-worker)
+                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-social-video-worker-dev"
+                ;;
+              cos-reconcile-worker)
+                COMPOSE_SERVICES="${COMPOSE_SERVICES} gooes-cos-reconcile-worker-dev"
+                ;;
+              *)
+                echo "Unknown service: $SERVICE"
+                exit 1
+                ;;
+            esac
+          done
 
           ssh -i "${DEV_DEPLOY_KEY_PATH}" \
             -o StrictHostKeyChecking=no \
@@ -210,60 +333,64 @@ jobs:
             "set -euo pipefail
              cd '${DEV_DEPLOY_DIR}'
              printf '%s' '${TENCENT_CCR_PASSWORD}' | docker login '${TENCENT_CCR_REGISTRY}' -u '${TENCENT_CCR_USERNAME}' --password-stdin
-             docker compose -f docker-compose.dev.yml --profile workers pull '${COMPOSE_SERVICE}'
-             docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate '${COMPOSE_SERVICE}'"
+             docker compose -f docker-compose.dev.yml --profile workers pull ${COMPOSE_SERVICES}
+             docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate ${COMPOSE_SERVICES}"
 
-      - name: Check dev service
-        env:
-          SERVICE: ${{ github.event.inputs.service || 'api' }}
+      - name: Check dev services
         run: |
           set -euo pipefail
+          if [ -z "${SERVICES:-}" ]; then
+            echo "No dev services to check."
+            exit 0
+          fi
 
-          case "$SERVICE" in
-            api)
-              COMPOSE_SERVICE=gooes-api-dev
-              URL=https://api-dev.goodcms.cn/
-              ;;
-            admin)
-              COMPOSE_SERVICE=gooes-admin-dev
-              URL=https://admin-dev.goodcms.cn/login
-              ;;
-            social-video-worker)
-              COMPOSE_SERVICE=gooes-social-video-worker-dev
-              URL=
-              ;;
-            cos-reconcile-worker)
-              COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
-              URL=
-              ;;
-            *)
-              echo "Unknown service: $SERVICE"
-              exit 1
-              ;;
-          esac
+          for SERVICE in ${SERVICES}; do
+            case "$SERVICE" in
+              api)
+                COMPOSE_SERVICE=gooes-api-dev
+                URL=https://api-dev.goodcms.cn/
+                ;;
+              admin)
+                COMPOSE_SERVICE=gooes-admin-dev
+                URL=https://admin-dev.goodcms.cn/login
+                ;;
+              social-video-worker)
+                COMPOSE_SERVICE=gooes-social-video-worker-dev
+                URL=
+                ;;
+              cos-reconcile-worker)
+                COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
+                URL=
+                ;;
+              *)
+                echo "Unknown service: $SERVICE"
+                exit 1
+                ;;
+            esac
 
-          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
-            -o StrictHostKeyChecking=no \
-            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
-            "set -euo pipefail
-             for _ in \$(seq 1 60); do
+            ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+              -o StrictHostKeyChecking=no \
+              "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+              "set -euo pipefail
+               for _ in \$(seq 1 60); do
+                 state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+                 health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+                 if [ \"\$health\" = healthy ] || { [ -z \"\$health\" ] && [ \"\$state\" = running ]; }; then
+                   echo '${COMPOSE_SERVICE}' is \${health:-\$state}
+                   exit 0
+                 fi
+               if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
+                   break
+                 fi
+                 sleep 5
+               done
                state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
                health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-               if [ \"\$health\" = healthy ] || { [ -z \"\$health\" ] && [ \"\$state\" = running ]; }; then
-                 echo '${COMPOSE_SERVICE}' is \${health:-\$state}
-                 exit 0
-               fi
-             if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
-                 break
-               fi
-               sleep 5
-             done
-             state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-             health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
-             echo '${COMPOSE_SERVICE}' state=\$state health=\$health
-             docker logs --tail 120 '${COMPOSE_SERVICE}' || true
-             exit 1"
+               echo '${COMPOSE_SERVICE}' state=\$state health=\$health
+               docker logs --tail 120 '${COMPOSE_SERVICE}' || true
+               exit 1"
 
-          if [ -n "$URL" ]; then
-            curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
-          fi
+            if [ -n "$URL" ]; then
+              curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
+            fi
+          done

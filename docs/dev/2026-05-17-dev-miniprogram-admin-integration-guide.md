@@ -174,7 +174,9 @@ Admin 端开发要求：
 
 ### 5.3 发布 Admin dev
 
-通过 GitHub Actions 手动触发：
+日常开发时，push 修改 `apps/admin/**` 会自动发布 Admin dev。
+
+需要强制补发时，通过 GitHub Actions 手动触发：
 
 ```text
 Workflow: Deploy Dev
@@ -191,6 +193,12 @@ service: admin
 5. 检查 `https://admin-dev.goodcms.cn/login`。
 
 不要只在服务器上执行 `docker restart gooes-admin-dev`，这样不会拉取新镜像。
+
+说明：
+
+- 修改 `docs/**`、`scripts/dev/**` 不会自动发布 dev。
+- 修改数据库 migration 不会自动执行 dev migration，需要后端单独执行并验收。
+- 生产发布不会被普通开发 push 自动触发。
 
 ### 5.4 Admin 联调验收
 

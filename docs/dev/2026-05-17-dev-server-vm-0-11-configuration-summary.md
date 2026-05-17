@@ -180,7 +180,7 @@ user=postgres.<project-ref>
 ## 9. 当前未完成事项
 
 1. Worker dev 容器按需启动。
-2. 后续把 `Deploy Dev` workflow 合入 default branch 后，从 GitHub UI 手动选择服务发布。
+2. 生产发布继续保持手动触发，dev 发布由 `Deploy Dev` workflow 按代码路径自动触发，必要时可手动选择服务补发。
 
 ## 10. Dev DB migration 与 seed
 
@@ -238,15 +238,26 @@ ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
 .github/workflows/deploy-dev.yml
 ```
 
-当前已可通过 GitHub Actions 手动触发 `Deploy Dev`，并指定 `feature/multi-tenant` 分支与服务名。
+当前已可通过 GitHub Actions 自动或手动触发 `Deploy Dev`。
 
-为了在 `feature/multi-tenant` 分支立即验证链路，workflow 也临时支持：
+自动触发规则：
 
 ```text
-push feature/multi-tenant 且只修改 .github/workflows/deploy-dev.yml
+push feature/multi-tenant 且修改 apps/api、apps/admin、packages/domain、docker、workspace 配置或 deploy/docker-compose.dev.yml
 ```
 
-该 push 触发只部署 `api`，不会发布 Admin 或 worker。日常 dev 发布建议使用手动触发，并通过输入选择：
+workflow 会按变更路径解析需要发布的服务：
+
+| 变更 | 发布 |
+| --- | --- |
+| API 代码 | `api` |
+| Admin 代码 | `admin` |
+| 短视频 worker 相关代码 | `social-video-worker` |
+| COS 对账/上传文件相关代码 | `cos-reconcile-worker` |
+| 共享构建文件、domain 包、dev compose | 全部 dev 服务 |
+| docs、seed、migration | 不自动部署 |
+
+手动触发用于补发单个服务，通过输入选择：
 
 ```text
 api

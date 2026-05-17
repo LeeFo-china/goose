@@ -1,28 +1,10 @@
 name: Build Docker Images
 
-# Builds all production business images on the Tencent Cloud self-hosted runner,
-# publishes them to Tencent CCR, then deploys once after every image succeeds.
+# Manually builds all production business images on the Tencent Cloud
+# self-hosted runner, publishes them to Tencent CCR, then deploys once after
+# every image succeeds.
 
 on:
-  push:
-    branches:
-      - feature/multi-tenant
-    paths:
-      - ".github/workflows/build-docker-images.yml"
-      - ".github/workflows/deploy-docker-services.yml"
-      - ".dockerignore"
-      - "docker/api.Dockerfile"
-      - "docker/admin.Dockerfile"
-      - "docker/social-video-worker.Dockerfile"
-      - "apps/api/**"
-      - "apps/admin/**"
-      - "packages/domain/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
-      - "deploy/docker-compose.api.yml"
-      - "deploy/docker-compose.admin.yml"
   workflow_dispatch:
 
 permissions:
