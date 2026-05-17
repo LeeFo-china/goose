@@ -182,13 +182,18 @@ jobs:
           db_user="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select current_user;")"
           tenant_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.tenants;" 2>/dev/null || echo "unknown")"
           permission_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.permissions;" 2>/dev/null || echo "unknown")"
+          mapfile -t executed_versions < <(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select version from supabase_migrations.schema_migrations order by version;")
+
+          declare -A executed_version_map=()
+          for version in "${executed_versions[@]}"; do
+            executed_version_map["${version}"]=1
+          done
 
           pending_files=()
           while IFS= read -r file; do
             base="$(basename "${file}")"
             version="${base%%_*}"
-            exists="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select 1 from supabase_migrations.schema_migrations where version = '${version}' limit 1;")"
-            if [ "${exists}" != "1" ]; then
+            if [ -z "${executed_version_map[${version}]:-}" ]; then
               pending_files+=("${file}")
             fi
           done < <(find "${migrations_dir}" -maxdepth 1 -type f -name '*.sql' | sort)
