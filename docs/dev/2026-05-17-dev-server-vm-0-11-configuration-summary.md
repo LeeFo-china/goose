@@ -97,7 +97,7 @@ docker compose -f docker-compose.dev.yml up -d --no-deps --force-recreate <servi
 /etc/nginx/conf.d/gooes-dev.conf
 ```
 
-当前已配置 HTTP 反代：
+当前已配置 HTTP/HTTPS 反代：
 
 ```text
 api-dev.goodcms.cn   -> 127.0.0.1:13000
@@ -105,7 +105,15 @@ admin-dev.goodcms.cn -> 127.0.0.1:13010
 h5-dev.goodcms.cn    -> 127.0.0.1:13020
 ```
 
-当前只启用 HTTP。HTTPS 需要等 DNS 指向 `43.165.126.30` 后再申请证书。
+HTTPS 证书已申请成功：
+
+```text
+Certificate Name: api-dev.goodcms.cn
+Domains: api-dev.goodcms.cn admin-dev.goodcms.cn h5-dev.goodcms.cn
+Expiry Date: 2026-08-15
+```
+
+当前访问 dev 域名返回 `502` 属于预期状态，因为 dev 容器尚未启动；证书和 Nginx 已正常命中 dev 服务器。
 
 ## 6. DNS 当前状态
 
@@ -123,7 +131,7 @@ h5-dev.goodcms.cn    -> 43.165.126.30
 curl --noproxy '*' http://api-dev.goodcms.cn/
 ```
 
-当前 HTTP 返回 `502` 属于预期状态，因为 dev 容器尚未启动；它已经命中 dev 服务器上的 Nginx。
+当前 HTTPS 返回 `502` 属于预期状态，因为 dev 容器尚未启动；它已经命中 dev 服务器上的 Nginx。
 
 ## 7. Dev Supabase
 
@@ -171,8 +179,7 @@ user=postgres.<project-ref>
 
 ## 9. 当前未完成事项
 
-1. DNS 生效后申请 HTTPS 证书。
-2. 新增 GitHub Actions `Deploy Dev` workflow，构建并推送 `:dev` 镜像。
-3. 执行 dev DB migration。
-4. 写 dev seed 脚本并导入测试租户、员工、客户、项目。
-5. 启动 dev API/Admin/Worker 容器并完成 smoke test。
+1. 提交并推送 GitHub Actions `Deploy Dev` workflow。
+2. 执行 dev DB migration。
+3. 写 dev seed 脚本并导入测试租户、员工、客户、项目。
+4. 启动 dev API/Admin/Worker 容器并完成 smoke test。

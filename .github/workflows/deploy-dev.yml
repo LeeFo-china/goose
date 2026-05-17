@@ -1,0 +1,256 @@
+name: Deploy Dev
+
+# Manually builds one dev image, pushes it to Tencent CCR, then recreates the
+# matching service on VM-0-11-ubuntu.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        type: choice
+        options:
+          - api
+          - admin
+          - social-video-worker
+          - cos-reconcile-worker
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev-${{ inputs.service }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_TAG: dev
+  TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
+  DEV_DEPLOY_HOST: 43.165.126.30
+  DEV_DEPLOY_USER: ubuntu
+  DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
+  DEV_DEPLOY_DIR: /opt/gooes-dev/docker
+
+jobs:
+  deploy-dev:
+    name: Deploy dev ${{ inputs.service }}
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+
+    steps:
+      - name: Guard runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test -r "${DEV_DEPLOY_KEY_PATH}"
+
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+
+          checkout_attempt() {
+            mode="$1"
+            if [ "$mode" = "proxy" ]; then
+              export HTTPS_PROXY=socks5h://127.0.0.1:18080
+              export HTTP_PROXY=socks5h://127.0.0.1:18080
+              export ALL_PROXY=socks5h://127.0.0.1:18080
+              export https_proxy="$HTTPS_PROXY"
+              export http_proxy="$HTTP_PROXY"
+              export all_proxy="$ALL_PROXY"
+              git_timeout=180
+            else
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+              git_timeout=45
+            fi
+
+            if [ ! -d "${SOURCE_DIR}/.git" ]; then
+              rm -rf "${SOURCE_DIR}" || return 1
+              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+            fi
+            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
+            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" clean -fdx || return 1
+          }
+
+          if ! checkout_attempt direct; then
+            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+              checkout_attempt proxy
+            else
+              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
+              exit 1
+            fi
+          fi
+
+      - name: Ensure Docker daemon
+        run: |
+          set -euo pipefail
+          sudo systemctl enable --now docker
+          sudo chmod 666 /var/run/docker.sock
+          docker version
+
+      - name: Login to Tencent CCR
+        env:
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if printf '%s' "$TENCENT_CCR_PASSWORD" | docker login "$TENCENT_CCR_REGISTRY" -u "$TENCENT_CCR_USERNAME" --password-stdin; then
+              exit 0
+            fi
+            sleep $((i * 5))
+          done
+          exit 1
+
+      - name: Build and push dev image
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_WORKSPACE}/source"
+
+          case "$SERVICE" in
+            api|cos-reconcile-worker)
+              IMAGE_REPO=goose-api
+              DOCKERFILE=docker/api.Dockerfile
+              ;;
+            social-video-worker)
+              IMAGE_REPO=goose-social-video-worker
+              DOCKERFILE=docker/social-video-worker.Dockerfile
+              ;;
+            admin)
+              IMAGE_REPO=goose-admin
+              DOCKERFILE=docker/admin.Dockerfile
+              ;;
+            *)
+              echo "Unknown service: $SERVICE"
+              exit 1
+              ;;
+          esac
+
+          IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
+          DEV_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
+          SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
+
+          case "$SERVICE" in
+            admin)
+              docker build \
+                -f "$DOCKERFILE" \
+                --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
+                --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn \
+                -t "$DEV_IMAGE" \
+                -t "$SHA_IMAGE" \
+                .
+              ;;
+            social-video-worker)
+              docker build \
+                -f "$DOCKERFILE" \
+                --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
+                -t "$DEV_IMAGE" \
+                -t "$SHA_IMAGE" \
+                .
+              ;;
+            *)
+              docker build -f "$DOCKERFILE" -t "$DEV_IMAGE" -t "$SHA_IMAGE" .
+              ;;
+          esac
+
+          docker push "$DEV_IMAGE"
+          docker push "$SHA_IMAGE"
+
+      - name: Deploy dev service
+        env:
+          SERVICE: ${{ inputs.service }}
+          TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
+          TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          case "$SERVICE" in
+            api)
+              COMPOSE_SERVICE=gooes-api-dev
+              ;;
+            admin)
+              COMPOSE_SERVICE=gooes-admin-dev
+              ;;
+            social-video-worker)
+              COMPOSE_SERVICE=gooes-social-video-worker-dev
+              ;;
+            cos-reconcile-worker)
+              COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
+              ;;
+            *)
+              echo "Unknown service: $SERVICE"
+              exit 1
+              ;;
+          esac
+
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             cd '${DEV_DEPLOY_DIR}'
+             printf '%s' '${TENCENT_CCR_PASSWORD}' | docker login '${TENCENT_CCR_REGISTRY}' -u '${TENCENT_CCR_USERNAME}' --password-stdin
+             docker compose -f docker-compose.dev.yml --profile workers pull '${COMPOSE_SERVICE}'
+             docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate '${COMPOSE_SERVICE}'"
+
+      - name: Check dev service
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+
+          case "$SERVICE" in
+            api)
+              COMPOSE_SERVICE=gooes-api-dev
+              URL=https://api-dev.goodcms.cn/
+              ;;
+            admin)
+              COMPOSE_SERVICE=gooes-admin-dev
+              URL=https://admin-dev.goodcms.cn/login
+              ;;
+            social-video-worker)
+              COMPOSE_SERVICE=gooes-social-video-worker-dev
+              URL=
+              ;;
+            cos-reconcile-worker)
+              COMPOSE_SERVICE=gooes-cos-reconcile-worker-dev
+              URL=
+              ;;
+            *)
+              echo "Unknown service: $SERVICE"
+              exit 1
+              ;;
+          esac
+
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             for _ in \$(seq 1 60); do
+               state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+               health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+               if [ \"\$health\" = healthy ] || { [ -z \"\$health\" ] && [ \"\$state\" = running ]; }; then
+                 echo '${COMPOSE_SERVICE}' is \${health:-\$state}
+                 exit 0
+               fi
+               if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
+                 break
+               fi
+               sleep 5
+             done
+             docker inspect '${COMPOSE_SERVICE}' || true
+             docker logs --tail 120 '${COMPOSE_SERVICE}' || true
+             exit 1"
+
+          if [ -n "$URL" ]; then
+            curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
+          fi
