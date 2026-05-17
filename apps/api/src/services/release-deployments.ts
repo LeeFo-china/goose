@@ -221,7 +221,6 @@ class ReleaseDeploymentService {
       actorEmployeeId: authContext.employeeId,
       actorUserId: authContext.authUserId,
       resourceType: "github_actions_workflow",
-      resourceId: workflow.workflowId,
       resourceLabel: `${workflow.label} ${SERVICE_LABELS[input.service]}`,
       status: "success",
       summary: `发起${workflow.label}发布：${SERVICE_LABELS[input.service]}`,
