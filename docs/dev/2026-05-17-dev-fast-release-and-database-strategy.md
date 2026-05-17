@@ -444,6 +444,13 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 - 只改 docs、seed、migration 时，不触发 dev 部署。
 - workflow 日志能看到部署的 commit sha。
 
+清理策略：
+
+- dev 构建仍发生在 `gooes-prod-vm-0-3` runner，因此构建后必须清理退出容器、dangling 镜像和 24 小时以前的 build cache。
+- dev 服务器 `VM-0-11-ubuntu` 只负责运行和拉取镜像，每次部署验收后清理未被运行容器引用的旧镜像和旧 build cache。
+- 两端都不执行 `docker volume prune`，避免误删持久化数据。
+- dev 回滚如果需要旧 SHA 镜像，优先从腾讯 CCR 重新拉取，不依赖服务器本地长期保留镜像。
+
 ### 阶段 3：数据库 migration dev 预演
 
 目标：

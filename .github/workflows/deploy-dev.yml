@@ -324,6 +324,16 @@ jobs:
             built_images="${built_images} ${IMAGE_REPO}"
           done
 
+      - name: Cleanup dev build leftovers
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          docker container prune -f || true
+          docker image prune -f || true
+          docker builder prune -f --filter "until=24h" || true
+          df -h /
+          docker system df || true
+
       - name: Deploy dev services
         env:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
@@ -429,3 +439,22 @@ jobs:
               curl --noproxy '*' -fsS -o /dev/null --retry 8 --retry-delay 3 "$URL"
             fi
           done
+
+      - name: Cleanup dev server Docker artifacts
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [ ! -r "${DEV_DEPLOY_KEY_PATH}" ]; then
+            echo "Dev deploy key is unavailable; skipping remote Docker cleanup."
+            exit 0
+          fi
+
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "set -euo pipefail
+             docker container prune -f || true
+             docker image prune -a -f || true
+             docker builder prune -a -f --filter 'until=24h' || true
+             df -h /
+             docker system df || true"

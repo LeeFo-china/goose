@@ -268,3 +268,51 @@ admin
 social-video-worker
 cos-reconcile-worker
 ```
+
+## 13. Docker 清理策略
+
+Dev 发布链路有两层 Docker 清理。
+
+第一层在 GitHub Actions 构建 runner `gooes-prod-vm-0-3` 上执行。原因是 dev 镜像仍在生产 runner 构建并推送到腾讯 CCR，构建过程会在 `/var/lib/containerd` 累积 dangling 镜像和 build cache。
+
+清理动作：
+
+```bash
+docker container prune -f
+docker image prune -f
+docker builder prune -f --filter "until=24h"
+```
+
+这一步只删除退出容器、dangling 镜像和 24 小时以前的构建缓存，不删除已经打 tag 的 `:dev` 或 SHA 镜像。
+
+第二层在 `VM-0-11-ubuntu` dev 运行服务器上执行。每次 dev 部署和健康检查后，workflow 会通过 SSH 清理旧运行镜像：
+
+```bash
+docker container prune -f
+docker image prune -a -f
+docker builder prune -a -f --filter "until=24h"
+```
+
+这一步会删除未被当前容器引用的旧 dev 镜像。已运行容器引用的当前镜像不会被删除；如需回滚旧 SHA 镜像，服务器会从腾讯 CCR 重新拉取。
+
+明确不执行：
+
+```bash
+docker volume prune
+```
+
+原因是 volume 可能承载持久化数据、Nginx 配置、日志或后续扩展服务数据，不能放进自动清理。
+
+当前 dev 发布链路：
+
+```text
+GitHub push / manual dispatch
+  -> gooes-prod-vm-0-3 构建 dev 镜像
+  -> 推送腾讯 CCR
+  -> VM-0-11-ubuntu pull 镜像
+  -> docker compose up -d --force-recreate
+  -> 健康检查
+  -> VM-0-11-ubuntu 清理旧镜像和旧 build cache
+```
+
+后续如果要把 dev 构建迁移到 `VM-0-11-ubuntu`，需要先在 dev 服务器安装并注册独立 GitHub runner、配置 Docker 构建权限、腾讯 CCR 登录和同等清理策略。
