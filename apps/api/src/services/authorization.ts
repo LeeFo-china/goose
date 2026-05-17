@@ -147,12 +147,13 @@ class AuthorizationService {
     employee: NonNullable<EmployeePermissionContextRecord["employee"]> | null,
     roleCodes: string[],
   ) {
+    const tenantId = employee?.tenant_id ?? null;
     return {
-      tenantId: employee?.tenant_id ?? null,
+      tenantId,
       tenantName: this.getRelationValue(employee?.tenant, "name") as string | null,
       tenantSlug: this.getRelationValue(employee?.tenant, "slug") as string | null,
       tenantStatus: this.getRelationValue(employee?.tenant, "status") as string | null,
-      isPlatformAdmin: roleCodes.includes("platform_admin"),
+      isPlatformAdmin: roleCodes.includes("platform_admin") && !tenantId,
     };
   }
 

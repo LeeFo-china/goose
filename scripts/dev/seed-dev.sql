@@ -61,33 +61,44 @@ BEGIN
     RAISE EXCEPTION 'Dev seed requires tenant role code=system_admin';
   END IF;
 
-  INSERT INTO public.employees (
-    tenant_id,
-    name,
-    phone,
-    department_id,
-    tenant_department_id,
-    post_id,
-    status
-  )
-  VALUES (
-    v_tenant_id,
-    'Dev 超级管理员',
-    '19900000001',
-    v_department_id,
-    v_tenant_department_id,
-    v_post_id,
-    'active'
-  )
-  ON CONFLICT (tenant_id, phone)
-  WHERE tenant_id IS NOT NULL AND phone IS NOT NULL
-  DO UPDATE SET
-    name = EXCLUDED.name,
-    department_id = EXCLUDED.department_id,
-    tenant_department_id = EXCLUDED.tenant_department_id,
-    post_id = EXCLUDED.post_id,
-    status = EXCLUDED.status
-  RETURNING id INTO v_employee_id;
+  SELECT id
+  INTO v_employee_id
+  FROM public.employees
+  WHERE phone = '19900000001'
+  ORDER BY created_at ASC
+  LIMIT 1;
+
+  IF v_employee_id IS NULL THEN
+    INSERT INTO public.employees (
+      tenant_id,
+      name,
+      phone,
+      department_id,
+      tenant_department_id,
+      post_id,
+      status
+    )
+    VALUES (
+      NULL,
+      'Dev 超级管理员',
+      '19900000001',
+      NULL,
+      NULL,
+      NULL,
+      'active'
+    )
+    RETURNING id INTO v_employee_id;
+  ELSE
+    UPDATE public.employees
+    SET
+      tenant_id = NULL,
+      name = 'Dev 超级管理员',
+      department_id = NULL,
+      tenant_department_id = NULL,
+      post_id = NULL,
+      status = 'active'
+    WHERE id = v_employee_id;
+  END IF;
 
   INSERT INTO public.employee_roles (employee_id, role_id)
   VALUES (v_employee_id, v_system_admin_role_id)
@@ -154,7 +165,7 @@ BEGIN
       '19900001001',
       'referral',
       'potential',
-      v_employee_id,
+      v_tenant_admin_employee_id,
       '["dev"]'::jsonb,
       'employee_created'
     ),
@@ -164,7 +175,7 @@ BEGIN
       '19900001002',
       'referral',
       'potential',
-      v_employee_id,
+      v_tenant_admin_employee_id,
       '["dev"]'::jsonb,
       'employee_created'
     )
