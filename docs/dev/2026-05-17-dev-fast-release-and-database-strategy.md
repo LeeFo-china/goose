@@ -426,6 +426,8 @@ services:
 
 生产 compose 继续使用生产 env 文件。dev env 必须包含明确的环境标识，例如 `APP_ENV=development`、`NODE_ENV=development`、`BILLING_CHARGE_ENABLED=false`。
 
+API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管后台系统配置中的密钥类字段加密，必须在保存 WeChat、COS、短信、AI 等密钥前固定下来；如果已经存在密文配置，更换该变量会导致旧密文无法解密。
+
 ### 阶段 2：新增 dev 发布 workflow
 
 目标：

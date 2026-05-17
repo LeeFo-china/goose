@@ -148,6 +148,7 @@ SUPABASE_URL
 SUPABASE_PUBLISH
 SUPABASE_SERVICE_ROLE_KEY
 JWT_SECRET
+APP_CONFIG_ENCRYPTION_KEY
 AUTH_IDENTITY_SOURCE=membership
 BILLING_CHARGE_ENABLED=false
 SMS_CHARGE_ENABLED=false
@@ -155,6 +156,8 @@ SOCIAL_VIDEO_CHARGE_ENABLED=false
 ```
 
 注意：不要把这些密钥提交到仓库。
+
+`APP_CONFIG_ENCRYPTION_KEY` 用于加密和解密超管后台保存的密钥类系统配置。环境初始化时必须先配置；一旦已经保存过密文配置，不要随意更换，否则历史密文将无法解密。
 
 ## 8. 数据库连接状态
 
