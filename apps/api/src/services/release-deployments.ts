@@ -6,6 +6,7 @@ import type {
   ReleaseRefListQuery,
   ReleaseRefType,
   ReleaseRunListQuery,
+  ReleaseSuccessfulRefListQuery,
   ReleaseService,
 } from "@/schema/release-deployments";
 import type { AuthContext } from "@/services/authorization";
@@ -40,6 +41,23 @@ type NormalizedReleaseRun = {
   html_url: string | null;
   created_at: string | null;
   updated_at: string | null;
+  run_started_at: string | null;
+};
+
+type SuccessfulReleaseRef = {
+  id: string;
+  environment: ReleaseEnvironment;
+  workflow_id: string;
+  workflow_label: string;
+  title: string;
+  ref: string;
+  ref_type: "commit";
+  label: string;
+  description: string;
+  head_branch: string | null;
+  head_sha: string;
+  html_url: string | null;
+  created_at: string | null;
   run_started_at: string | null;
 };
 
@@ -268,6 +286,71 @@ class ReleaseDeploymentService {
       list,
       pagination: {
         page,
+        pageSize,
+        total: list.length,
+        totalPages: list.length > 0 ? 1 : 0,
+      },
+    };
+  }
+
+  async listSuccessfulRefs(query: ReleaseSuccessfulRefListQuery) {
+    const pageSize = Math.min(query.pageSize || 8, 20);
+    const environments = query.environment
+      ? [RELEASE_WORKFLOWS[query.environment]]
+      : Object.values(RELEASE_WORKFLOWS);
+
+    const results = await Promise.all(
+      environments.map(async (workflow) => {
+        const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+          `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=completed&per_page=50`,
+        );
+
+        return (payload.workflow_runs || [])
+          .filter((run) => run.conclusion === "success" && Boolean(run.head_sha))
+          .map((run): SuccessfulReleaseRef => {
+            const title = run.display_title || run.name || workflow.label;
+            const headSha = run.head_sha as string;
+
+            return {
+              id: String(run.id),
+              environment: workflow.environment,
+              workflow_id: workflow.workflowId,
+              workflow_label: workflow.label,
+              title,
+              ref: headSha,
+              ref_type: "commit",
+              label: `${headSha.slice(0, 7)} ${title}`,
+              description: [
+                workflow.label,
+                run.head_branch ? `来源 ${run.head_branch}` : "",
+                formatDateTime(run.created_at),
+              ].filter(Boolean).join(" · "),
+              head_branch: run.head_branch,
+              head_sha: headSha,
+              html_url: run.html_url,
+              created_at: run.created_at,
+              run_started_at: run.run_started_at,
+            };
+          });
+      }),
+    );
+
+    const deduped = new Map<string, SuccessfulReleaseRef>();
+    for (const item of results.flat()) {
+      const key = `${item.environment}:${item.head_sha.toLowerCase()}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, item);
+      }
+    }
+
+    const list = [...deduped.values()]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, pageSize);
+
+    return {
+      list,
+      pagination: {
+        page: 1,
         pageSize,
         total: list.length,
         totalPages: list.length > 0 ? 1 : 0,

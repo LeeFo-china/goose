@@ -50,6 +50,10 @@ export const ReleaseRunListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
 });
 
+export const ReleaseSuccessfulRefListQuerySchema = PaginationQuerySchema.extend({
+  environment: ReleaseEnvironmentSchema.optional(),
+});
+
 export const ReleaseRefListQuerySchema = z.object({
   type: ReleaseRefTypeSchema,
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
@@ -61,4 +65,5 @@ export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
 export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;
+export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;

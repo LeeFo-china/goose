@@ -136,6 +136,28 @@ export type ReleaseRunListData = {
   pagination: Pagination;
 };
 
+export type ReleaseSuccessfulRef = {
+  id: string;
+  environment: ReleaseEnvironment;
+  workflow_id: string;
+  workflow_label: string;
+  title: string;
+  ref: string;
+  ref_type: "commit";
+  label: string;
+  description: string;
+  head_branch: string | null;
+  head_sha: string;
+  html_url: string | null;
+  created_at: string | null;
+  run_started_at: string | null;
+};
+
+export type ReleaseSuccessfulRefListData = {
+  list: ReleaseSuccessfulRef[];
+  pagination: Pagination;
+};
+
 export type ReleaseDispatchResult = {
   environment: ReleaseEnvironment;
   service: ReleaseService;

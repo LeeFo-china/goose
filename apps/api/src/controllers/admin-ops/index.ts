@@ -9,6 +9,7 @@ import {
   ReleaseDispatchSchema,
   ReleaseRefListQuerySchema,
   ReleaseRunListQuerySchema,
+  ReleaseSuccessfulRefListQuerySchema,
 } from "@/schema/release-deployments";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService, type AuthContext } from "@/services/authorization";
@@ -90,6 +91,18 @@ class AdminOpsController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await releaseDeploymentService.listRuns(queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/releases/successful-refs")
+  async listSuccessfulReleaseRefs(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.release.read");
+
+    const queryResult = ReleaseSuccessfulRefListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await releaseDeploymentService.listSuccessfulRefs(queryResult.data);
     return ResponseHandler.success(data);
   }
 

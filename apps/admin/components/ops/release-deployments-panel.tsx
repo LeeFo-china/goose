@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, ShieldCheck, Tag } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, RotateCcw, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
@@ -14,6 +14,7 @@ import type {
   ReleaseRefType,
   ReleaseRun,
   ReleaseService,
+  ReleaseSuccessfulRef,
 } from "@/components/ops/ops-types";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -63,6 +64,7 @@ import { Textarea } from "@/components/ui/textarea";
 type ReleaseDeploymentsPanelProps = {
   options: ReleaseOptionsData | null;
   runs: ReleaseRun[];
+  successfulRefs: ReleaseSuccessfulRef[];
   error?: string | null;
 };
 
@@ -261,7 +263,7 @@ function ReleaseRefCombobox({
   );
 }
 
-export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploymentsPanelProps) {
+export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [environment, setEnvironment] = useState<ReleaseEnvironment>("dev");
@@ -291,6 +293,20 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
     setRef(value === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "");
   }
 
+  function applySuccessfulRef(item: ReleaseSuccessfulRef) {
+    const nextEnvironment = options?.environments.find((env) => env.environment === item.environment) || null;
+
+    setEnvironment(item.environment);
+    setRefType("commit");
+    setRef(item.ref);
+    if (!nextEnvironment?.services.some((option) => option.value === service)) {
+      setService(nextEnvironment?.services[0]?.value || "admin");
+    }
+    setConfirmText("");
+    setReason((value) => value.trim() || `按最近成功版本重新发布：${item.head_sha.slice(0, 7)}`);
+    toast.success("已填入最近成功 Commit，请确认服务后提交发布");
+  }
+
   function runDispatch() {
     startTransition(async () => {
       try {
@@ -317,6 +333,7 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(360px,420px)_1fr]">
+      <div className="flex flex-col gap-3">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -485,6 +502,56 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
           </AlertDialog>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <RotateCcw data-icon="inline-start" />
+              最近成功版本
+            </CardTitle>
+            <CardDescription>填入成功发布过的 Commit，用现有发布流程重新发布。</CardDescription>
+          </div>
+          <Badge variant="outline">{successfulRefs.length} 条</Badge>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {successfulRefs.length === 0 ? (
+            <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+              暂无成功发布版本
+            </div>
+          ) : successfulRefs.map((item) => (
+            <div
+              key={`${item.environment}-${item.id}`}
+              className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
+                  <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
+                </div>
+                <div className="mt-1 truncate text-xs text-muted-foreground">{item.title}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.description}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {item.html_url ? (
+                  <Button asChild variant="ghost" size="icon" title="查看发布记录">
+                    <Link href={item.html_url} target="_blank" rel="noreferrer">
+                      <ExternalLink data-icon="icon-only" />
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" size="sm" onClick={() => applySuccessfulRef(item)}>
+                  用此版本
+                </Button>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            该操作只填入 Commit，不会自动发布；生产环境仍需输入确认文本。
+          </p>
+        </CardContent>
+      </Card>
+      </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
