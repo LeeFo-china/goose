@@ -148,51 +148,37 @@ export default async function OpsPage({
   const activeTab = normalizeTab(params.tab);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          聚合资源状态、微服务健康、白名单脚本和执行记录，平台运维动作保持可审计。
-        </p>
-      </div>
-
-      <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="health" asChild>
-            <Link href={buildOpsTabHref("health")}>健康监控</Link>
-          </TabsTrigger>
-          <TabsTrigger value="scripts" asChild>
-            <Link href={buildOpsTabHref("scripts")}>
-              脚本执行
-              <span className="ml-2 text-xs text-muted-foreground">{scripts.length}</span>
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="runs" asChild>
-            <Link href={buildOpsTabHref("runs", pagination.page)}>
-              执行记录
-              <span className="ml-2 text-xs text-muted-foreground">{successCount}/{failedCount}</span>
-            </Link>
-          </TabsTrigger>
-          <TabsTrigger value="releases" asChild>
-            <Link href={buildOpsTabHref("releases")}>
-              版本发布
-              <span className="ml-2 text-xs text-muted-foreground">{releaseRuns.length}</span>
-            </Link>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="health" className="mt-0 flex flex-col gap-3">
+  const opsTabs = [
+    {
+      value: "health" as const,
+      label: "健康监控",
+      href: buildOpsTabHref("health"),
+      count: "",
+      content: (
+        <div className="flex flex-col gap-3">
           <SystemMetricsPanel />
           <ServiceHealthPanel />
-        </TabsContent>
-
-        <TabsContent value="scripts" className="mt-0 flex flex-col gap-3">
+        </div>
+      ),
+    },
+    {
+      value: "scripts" as const,
+      label: "脚本执行",
+      href: buildOpsTabHref("scripts"),
+      count: String(scripts.length),
+      content: (
+        <div className="flex flex-col gap-3">
           <OpsScriptsPanel scripts={scripts} recentRuns={runs} error={error} />
-        </TabsContent>
-
-        <TabsContent value="runs" className="mt-0 flex flex-col gap-3">
+        </div>
+      ),
+    },
+    {
+      value: "runs" as const,
+      label: "执行记录",
+      href: buildOpsTabHref("runs", pagination.page),
+      count: `${successCount}/${failedCount}`,
+      content: (
+        <div className="flex flex-col gap-3">
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
@@ -212,16 +198,51 @@ export default async function OpsPage({
             </div>
             <OpsRunsPagination pagination={pagination} />
           </div>
-        </TabsContent>
+        </div>
+      ),
+    },
+    {
+      value: "releases" as const,
+      label: "版本发布",
+      href: buildOpsTabHref("releases"),
+      count: String(releaseRuns.length),
+      content: (
+        <ReleaseDeploymentsPanel
+          options={releaseOptions}
+          runs={releaseRuns}
+          successfulRefs={releaseSuccessfulRefs}
+          error={releaseError}
+        />
+      ),
+    },
+  ];
 
-        <TabsContent value="releases" className="mt-0">
-          <ReleaseDeploymentsPanel
-            options={releaseOptions}
-            runs={releaseRuns}
-            successfulRefs={releaseSuccessfulRefs}
-            error={releaseError}
-          />
-        </TabsContent>
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-normal">运维脚本</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          聚合资源状态、微服务健康、白名单脚本和执行记录，平台运维动作保持可审计。
+        </p>
+      </div>
+
+      <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {opsTabs.map((item) => (
+            <TabsTrigger key={item.value} value={item.value} asChild>
+              <Link href={item.href}>
+                {item.label}
+                {item.count ? <span className="ml-2 text-xs text-muted-foreground">{item.count}</span> : null}
+              </Link>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {opsTabs.map((item) => (
+          <TabsContent key={item.value} value={item.value} className="mt-0">
+            {item.content}
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   );

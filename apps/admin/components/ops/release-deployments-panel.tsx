@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
 import type {
   ReleaseCreateTagResult,
   ReleaseDispatchResult,
@@ -317,42 +318,50 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tagPending, startTagTransition] = useTransition();
-  const [environment, setEnvironment] = useState<ReleaseEnvironment>("dev");
+  const {
+    environment,
+    service,
+    refType,
+    ref,
+    reason,
+    confirmText,
+    latestDispatch,
+    tagName,
+    tagSourceRef,
+    tagMessage,
+    auxiliaryTab,
+    rollbackPendingId,
+    setDraft,
+    resetEnvironment,
+    resetRefType,
+  } = useReleaseDeploymentStore();
   const currentEnvironment = useMemo(
     () => options?.environments.find((item) => item.environment === environment) || null,
     [environment, options],
   );
-  const [service, setService] = useState<ReleaseService>("admin");
-  const [refType, setRefType] = useState<ReleaseRefType>("branch");
-  const [ref, setRef] = useState("feature/multi-tenant");
-  const [reason, setReason] = useState("");
-  const [confirmText, setConfirmText] = useState("");
-  const [latestDispatch, setLatestDispatch] = useState<ReleaseDispatchResult | null>(null);
-  const [tagName, setTagName] = useState("");
-  const [tagSourceRef, setTagSourceRef] = useState("feature/multi-tenant");
-  const [tagMessage, setTagMessage] = useState("");
-  const [auxiliaryTab, setAuxiliaryTab] = useState("tag");
-  const [rollbackPendingId, setRollbackPendingId] = useState("");
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
-    setEnvironment(value);
-    const nextRefType = value === "production" ? "tag" : "branch";
-    setRefType(nextRefType);
-    setRef(nextRefType === "branch" ? nextEnvironment?.default_ref || "feature/multi-tenant" : "");
-    setService(nextEnvironment?.services[0]?.value || "admin");
-    setConfirmText("");
+    resetEnvironment({
+      environment: value,
+      defaultRef: nextEnvironment?.default_ref || "feature/multi-tenant",
+      service: nextEnvironment?.services[0]?.value || "admin",
+    });
   }
 
   function onRefTypeChange(value: ReleaseRefType) {
-    setRefType(value);
-    setRef(value === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "");
+    resetRefType({
+      refType: value,
+      defaultRef: currentEnvironment?.default_ref || "feature/multi-tenant",
+    });
   }
 
   function applySuccessfulRef(item: ReleaseSuccessfulRef) {
-    setAuxiliaryTab("tag");
-    setTagSourceRef(item.head_sha);
-    setTagMessage((value) => value.trim() || `release from ${item.head_sha.slice(0, 7)}`);
+    setDraft({
+      auxiliaryTab: "tag",
+      tagSourceRef: item.head_sha,
+      tagMessage: tagMessage.trim() || `release from ${item.head_sha.slice(0, 7)}`,
+    });
     toast.success("已填入创建 Tag 的来源 Commit，请先创建 Tag 后发布");
   }
 
@@ -364,13 +373,15 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
           source_ref: tagSourceRef,
           message: tagMessage,
         });
-        setEnvironment("production");
-        setRefType("tag");
-        setRef(data.tag);
-        setConfirmText("");
-        setReason((value) => value.trim() || `发布 ${data.tag}`);
-        setTagName("");
-        setTagMessage("");
+        setDraft({
+          environment: "production",
+          refType: "tag",
+          ref: data.tag,
+          confirmText: "",
+          reason: reason.trim() || `发布 ${data.tag}`,
+          tagName: "",
+          tagMessage: "",
+        });
         toast.success(data.message || "发布 Tag 已创建");
         router.refresh();
       } catch (err) {
@@ -380,27 +391,29 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   }
 
   async function runCreateRollbackTag(item: ReleaseSuccessfulRef) {
-    setRollbackPendingId(item.id);
+    setDraft({ rollbackPendingId: item.id });
     try {
       const data = await createRollbackTag({
         source_ref: item.head_sha,
         message: `rollback to ${item.head_sha.slice(0, 7)}`,
       });
-      setEnvironment("production");
-      setRefType("tag");
-      setRef(data.tag);
-      setConfirmText("");
-      setReason((value) => value.trim() || `回滚发布 ${data.tag}`);
-      setTagName("");
-      setTagSourceRef(data.target_sha);
-      setTagMessage("");
-      setAuxiliaryTab("successful");
+      setDraft({
+        environment: "production",
+        refType: "tag",
+        ref: data.tag,
+        confirmText: "",
+        reason: reason.trim() || `回滚发布 ${data.tag}`,
+        tagName: "",
+        tagSourceRef: data.target_sha,
+        tagMessage: "",
+        auxiliaryTab: "successful",
+      });
       toast.success(data.message || "回滚 Tag 已创建，请确认后发布生产");
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "回滚 Tag 创建失败");
     } finally {
-      setRollbackPendingId("");
+      setDraft({ rollbackPendingId: "" });
     }
   }
 
@@ -415,7 +428,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
           reason,
           confirm_text: environment === "production" ? confirmText : undefined,
         });
-        setLatestDispatch(data);
+        setDraft({ latestDispatch: data });
         toast.success(data.message || "发布任务已提交");
         router.refresh();
       } catch (err) {
@@ -497,7 +510,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
             <Field>
               <FieldLabel>服务</FieldLabel>
-              <Select value={service} onValueChange={(value) => setService(value as ReleaseService)}>
+              <Select value={service} onValueChange={(value) => setDraft({ service: value as ReleaseService })}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择服务" />
                 </SelectTrigger>
@@ -545,7 +558,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                 value={ref}
                 defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
                 disabled={!options?.configured}
-                onChange={setRef}
+                onChange={(value) => setDraft({ ref: value })}
               />
               <FieldDescription>
                 {production ? "生产环境只能选择 Tag。" : "开发环境默认使用 feature/multi-tenant，也可以选择 Tag。"}
@@ -557,7 +570,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               <Textarea
                 id="release-reason"
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => setDraft({ reason: event.target.value })}
                 rows={3}
                 placeholder="说明本次发布内容或关联事项"
               />
@@ -569,7 +582,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                 <Input
                   id="release-confirm"
                   value={confirmText}
-                  onChange={(event) => setConfirmText(event.target.value)}
+                  onChange={(event) => setDraft({ confirmText: event.target.value })}
                   placeholder="输入：确认发布生产"
                 />
                 <FieldDescription>生产发布会触发构建并重建对应生产容器。</FieldDescription>
@@ -610,7 +623,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
           <CardDescription>创建生产 Tag，或基于成功 Commit 生成回滚 Tag。</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={auxiliaryTab} onValueChange={setAuxiliaryTab} className="flex flex-col gap-4">
+          <Tabs
+            value={auxiliaryTab}
+            onValueChange={(value) => setDraft({ auxiliaryTab: value as "tag" | "successful" })}
+            className="flex flex-col gap-4"
+          >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="tag">创建 Tag</TabsTrigger>
               <TabsTrigger value="successful">
@@ -626,7 +643,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   <Input
                     id="release-tag-name"
                     value={tagName}
-                    onChange={(event) => setTagName(event.target.value)}
+                    onChange={(event) => setDraft({ tagName: event.target.value })}
                     placeholder={getTodayTagPlaceholder()}
                   />
                   <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 v2026.05.17.2。</FieldDescription>
@@ -637,7 +654,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   <Input
                     id="release-tag-source"
                     value={tagSourceRef}
-                    onChange={(event) => setTagSourceRef(event.target.value)}
+                    onChange={(event) => setDraft({ tagSourceRef: event.target.value })}
                     placeholder="Commit SHA、Tag 或分支名"
                   />
                   <FieldDescription>建议使用已验收通过的 Commit SHA。</FieldDescription>
@@ -648,7 +665,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   <Textarea
                     id="release-tag-message"
                     value={tagMessage}
-                    onChange={(event) => setTagMessage(event.target.value)}
+                    onChange={(event) => setDraft({ tagMessage: event.target.value })}
                     rows={3}
                     placeholder="说明这个生产版本包含的内容"
                   />
