@@ -62,6 +62,11 @@ export const ReleaseCreateTagSchema = z.object({
   message: z.string().trim().min(1, "Tag 说明不能为空").max(200, "Tag 说明不能超过 200 个字符"),
 });
 
+export const ReleaseCreateRollbackTagSchema = z.object({
+  source_ref: z.string().trim().min(1, "回滚来源版本不能为空").max(120, "回滚来源版本不能超过 120 个字符"),
+  message: z.string().trim().max(200, "回滚说明不能超过 200 个字符").optional(),
+});
+
 export const ReleaseRunListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
 });
@@ -81,6 +86,7 @@ export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
 export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
+export type ReleaseCreateRollbackTagInput = z.infer<typeof ReleaseCreateRollbackTagSchema>;
 export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;
 export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;

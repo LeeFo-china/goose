@@ -6,6 +6,7 @@ import {
   RunOpsScriptSchema,
 } from "@/schema/ops-scripts";
 import {
+  ReleaseCreateRollbackTagSchema,
   ReleaseCreateTagSchema,
   ReleaseDispatchSchema,
   ReleaseRefListQuerySchema,
@@ -128,6 +129,18 @@ class AdminOpsController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await releaseDeploymentService.createTag(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/ops/releases/rollback-tag")
+  async createReleaseRollbackTag(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.release.run");
+
+    const bodyResult = ReleaseCreateRollbackTagSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await releaseDeploymentService.createRollbackTag(authContext, bodyResult.data);
     return ResponseHandler.success(data);
   }
 

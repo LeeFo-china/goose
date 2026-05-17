@@ -166,6 +166,7 @@ export type ReleaseCreateTagResult = {
   tag_sha: string;
   html_url: string;
   message: string;
+  rollback?: boolean;
 };
 
 export type ReleaseDispatchResult = {

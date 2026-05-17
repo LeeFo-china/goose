@@ -124,6 +124,22 @@ async function createReleaseTag(payload: {
   return data.data as ReleaseCreateTagResult;
 }
 
+async function createRollbackTag(payload: {
+  source_ref: string;
+  message?: string;
+}) {
+  const response = await fetch("/api/backend/admin/ops/releases/rollback-tag", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "回滚 Tag 创建失败"));
+  }
+  return data.data as ReleaseCreateTagResult;
+}
+
 async function fetchReleaseRefs(input: {
   type: ReleaseRefType;
   keyword: string;
@@ -185,7 +201,7 @@ function getRefTypeIcon(type: ReleaseRefType) {
 function getRefEmptyMessage(type: ReleaseRefType, keyword: string, error: string) {
   if (error) return error;
   if (keyword.trim()) return "没有匹配的版本";
-  if (type === "tag") return "仓库暂无 Tag，请先创建生产版本 Tag，或切换为 Commit 发布。";
+  if (type === "tag") return "仓库暂无 Tag，请先创建生产版本 Tag。";
   if (type === "commit") return "暂无可选 Commit，请输入关键词后重试。";
   return "暂无可选分支";
 }
@@ -316,6 +332,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const [tagSourceRef, setTagSourceRef] = useState("feature/multi-tenant");
   const [tagMessage, setTagMessage] = useState("");
   const [auxiliaryTab, setAuxiliaryTab] = useState("tag");
+  const [rollbackPendingId, setRollbackPendingId] = useState("");
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -362,6 +379,31 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
     });
   }
 
+  async function runCreateRollbackTag(item: ReleaseSuccessfulRef) {
+    setRollbackPendingId(item.id);
+    try {
+      const data = await createRollbackTag({
+        source_ref: item.head_sha,
+        message: `rollback to ${item.head_sha.slice(0, 7)}`,
+      });
+      setEnvironment("production");
+      setRefType("tag");
+      setRef(data.tag);
+      setConfirmText("");
+      setReason((value) => value.trim() || `回滚发布 ${data.tag}`);
+      setTagName("");
+      setTagSourceRef(data.target_sha);
+      setTagMessage("");
+      setAuxiliaryTab("successful");
+      toast.success(data.message || "回滚 Tag 已创建，请确认后发布生产");
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "回滚 Tag 创建失败");
+    } finally {
+      setRollbackPendingId("");
+    }
+  }
+
   function runDispatch() {
     startTransition(async () => {
       try {
@@ -390,48 +432,48 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Rocket data-icon="inline-start" />
-            发起发布
-          </CardTitle>
-          <CardDescription>
-            后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {error ? <StatusAlert>{error}</StatusAlert> : null}
-          {!options?.configured ? (
-            <Alert variant="destructive">
-              <ShieldCheck data-icon="inline-start" />
-              <AlertTitle>发布令牌未配置</AlertTitle>
-              <AlertDescription>后端需要配置 GITHUB_RELEASE_TOKEN 后才能从后台发起发布。</AlertDescription>
-            </Alert>
-          ) : null}
-          {latestDispatch?.run?.html_url ? (
-            <Alert>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
               <Rocket data-icon="inline-start" />
-              <AlertTitle>发布任务已创建</AlertTitle>
-              <AlertDescription>
-                {latestDispatch.service_label} · {latestDispatch.ref}
-                <Button asChild variant="link" className="ml-2 h-auto p-0">
-                  <Link href={latestDispatch.run.html_url} target="_blank" rel="noreferrer">
-                    查看本次发布
-                  </Link>
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {production ? (
-            <Alert>
-              <ShieldCheck data-icon="inline-start" />
-              <AlertTitle>生产发布规则</AlertTitle>
-              <AlertDescription>
-                生产只允许 Tag；如需发布指定 Commit，请先在右侧创建 Tag。
-              </AlertDescription>
-            </Alert>
-          ) : null}
+              发起发布
+            </CardTitle>
+            <CardDescription>
+              后台只提交 GitHub Actions，构建、部署和日志仍由 CI/CD 执行。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {error ? <StatusAlert>{error}</StatusAlert> : null}
+            {!options?.configured ? (
+              <Alert variant="destructive">
+                <ShieldCheck data-icon="inline-start" />
+                <AlertTitle>发布令牌未配置</AlertTitle>
+                <AlertDescription>后端需要配置 GITHUB_RELEASE_TOKEN 后才能从后台发起发布。</AlertDescription>
+              </Alert>
+            ) : null}
+            {latestDispatch?.run?.html_url ? (
+              <Alert>
+                <Rocket data-icon="inline-start" />
+                <AlertTitle>发布任务已创建</AlertTitle>
+                <AlertDescription>
+                  {latestDispatch.service_label} · {latestDispatch.ref}
+                  <Button asChild variant="link" className="ml-2 h-auto p-0">
+                    <Link href={latestDispatch.run.html_url} target="_blank" rel="noreferrer">
+                      查看本次发布
+                    </Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {production ? (
+              <Alert>
+                <ShieldCheck data-icon="inline-start" />
+                <AlertTitle>生产发布规则</AlertTitle>
+                <AlertDescription>
+                  生产只允许 Tag；如需发布指定 Commit，请先在右侧创建 Tag。
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
           <FieldGroup>
             <Field>
@@ -565,7 +607,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <Tag data-icon="inline-start" />
             发布辅助
           </CardTitle>
-          <CardDescription>创建生产 Tag，或把成功 Commit 填入 Tag 来源。</CardDescription>
+          <CardDescription>创建生产 Tag，或基于成功 Commit 生成回滚 Tag。</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={auxiliaryTab} onValueChange={setAuxiliaryTab} className="flex flex-col gap-4">
@@ -645,14 +687,32 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                         </Link>
                       </Button>
                     ) : null}
-                    <Button type="button" variant="outline" size="sm" onClick={() => applySuccessfulRef(item)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applySuccessfulRef(item)}
+                    >
                       作为来源
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={Boolean(rollbackPendingId)}
+                      onClick={() => runCreateRollbackTag(item)}
+                    >
+                      {rollbackPendingId === item.id ? (
+                        <Loader2 className="animate-spin" data-icon="inline-start" />
+                      ) : (
+                        <Tag data-icon="inline-start" />
+                      )}
+                      回滚 Tag
                     </Button>
                   </div>
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                该操作只把 Commit 填入创建 Tag 表单，不会直接发布。
+                回滚 Tag 只会创建并填入生产发布版本，不会自动提交生产发布。
               </p>
             </TabsContent>
           </Tabs>

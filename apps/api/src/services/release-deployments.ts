@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { AppError } from "@/errors/app-error";
 import { ErrorCodes } from "@/errors/error-codes";
 import type {
+  ReleaseCreateRollbackTagInput,
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
@@ -223,6 +224,19 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getShanghaiReleaseTagPrefix(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((item) => item.type === "year")?.value || String(date.getFullYear());
+  const month = parts.find((item) => item.type === "month")?.value || String(date.getMonth() + 1).padStart(2, "0");
+  const day = parts.find((item) => item.type === "day")?.value || String(date.getDate()).padStart(2, "0");
+  return `v${year}.${month}.${day}`;
 }
 
 function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun): NormalizedReleaseRun {
@@ -494,6 +508,20 @@ class ReleaseDeploymentService {
     }
   }
 
+  private async generateNextReleaseTagName() {
+    const tags = await githubRequest<GithubTag[]>("/tags?per_page=100");
+    const prefix = getShanghaiReleaseTagPrefix();
+    const pattern = new RegExp(`^${prefix.replaceAll(".", "\\.")}\\.(\\d+)$`);
+    const maxNumber = tags.reduce((currentMax, item) => {
+      const matched = item.name.match(pattern);
+      if (!matched) return currentMax;
+      const value = Number(matched[1]);
+      return Number.isFinite(value) ? Math.max(currentMax, value) : currentMax;
+    }, 0);
+
+    return `${prefix}.${maxNumber + 1}`;
+  }
+
   private async resolveCommit(ref: string) {
     try {
       return await githubRequest<GithubCommit>(`/commits/${encodeURIComponent(ref)}`);
@@ -563,6 +591,23 @@ class ReleaseDeploymentService {
       tag_sha: tagObject.sha,
       html_url: htmlUrl,
       message: "发布 Tag 已创建，可以直接选择该 Tag 发起生产发布。",
+    };
+  }
+
+  async createRollbackTag(authContext: AuthContext, input: ReleaseCreateRollbackTagInput) {
+    const commit = await this.resolveCommit(input.source_ref);
+    const tag = await this.generateNextReleaseTagName();
+    const message = input.message?.trim() || `rollback to ${commit.sha.slice(0, 7)}`;
+    const result = await this.createTag(authContext, {
+      tag,
+      source_ref: commit.sha,
+      message,
+    });
+
+    return {
+      ...result,
+      rollback: true,
+      message: "回滚 Tag 已创建，请确认生产发布信息后再提交发布。",
     };
   }
 
