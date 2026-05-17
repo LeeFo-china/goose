@@ -34,7 +34,7 @@ env:
   DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
   DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
   DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
-  PROD_PROJECT_REF: unqhypivjkpwldhufpjc
+  BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
 
 jobs:
   migrate-dev:
@@ -127,7 +127,7 @@ jobs:
             "MIGRATE_MODE='${MIGRATE_MODE}' \
              CONFIRM_DEV_PROJECT_REF='${CONFIRM_DEV_PROJECT_REF}' \
              DEV_PROJECT_REF='${DEV_PROJECT_REF}' \
-             PROD_PROJECT_REF='${PROD_PROJECT_REF}' \
+             BLOCKED_PROJECT_REFS='${BLOCKED_PROJECT_REFS}' \
              DEV_DB_ENV_FILE='${DEV_DB_ENV_FILE}' \
              REMOTE_MIGRATIONS_ARCHIVE='${REMOTE_MIGRATIONS_ARCHIVE}' \
              bash -s" <<'REMOTE' | tee "${report_file}"
@@ -162,10 +162,13 @@ jobs:
             exit 1
           fi
 
-          if [[ "${SUPABASE_DB_URL}" == *"${PROD_PROJECT_REF}"* ]]; then
-            echo "error=supabase_db_url_points_to_prod"
-            exit 1
-          fi
+          for blocked_ref in ${BLOCKED_PROJECT_REFS:-}; do
+            if [[ "${SUPABASE_DB_URL}" == *"${blocked_ref}"* ]]; then
+              echo "error=supabase_db_url_points_to_blocked_project"
+              echo "blocked_project_ref=${blocked_ref}"
+              exit 1
+            fi
+          done
 
           workdir="$(mktemp -d /tmp/gooes-dev-migrations.XXXXXX)"
           cleanup() {
