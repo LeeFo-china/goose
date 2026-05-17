@@ -1,21 +1,32 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Loader2, Rocket, ShieldCheck } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
   ReleaseEnvironment,
   ReleaseOptionsData,
+  ReleaseRefOption,
+  ReleaseRefType,
   ReleaseRun,
   ReleaseService,
 } from "@/components/ops/ops-types";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -58,6 +70,16 @@ type DispatchResponse = {
   workflow_url: string;
 };
 
+const REF_TYPE_OPTIONS: Array<{
+  value: ReleaseRefType;
+  label: string;
+  description: string;
+}> = [
+  { value: "branch", label: "分支", description: "适合 dev 快速验证" },
+  { value: "tag", label: "Tag", description: "适合生产发布" },
+  { value: "commit", label: "Commit", description: "按固定提交发布" },
+];
+
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
@@ -69,6 +91,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
 async function dispatchRelease(payload: {
   environment: ReleaseEnvironment;
   service: ReleaseService;
+  ref_type: ReleaseRefType;
   ref: string;
   reason: string;
   confirm_text?: string;
@@ -83,6 +106,27 @@ async function dispatchRelease(payload: {
     throw new Error(getPayloadMessage(data, "发布任务提交失败"));
   }
   return data.data as DispatchResponse;
+}
+
+async function fetchReleaseRefs(input: {
+  type: ReleaseRefType;
+  keyword: string;
+  baseRef?: string;
+}) {
+  const query = new URLSearchParams({
+    type: input.type,
+  });
+  if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
+  if (input.baseRef?.trim()) query.set("base_ref", input.baseRef.trim());
+
+  const response = await fetch(`/api/backend/admin/ops/releases/refs?${query.toString()}`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "版本列表加载失败"));
+  }
+  return (data.data?.list || []) as ReleaseRefOption[];
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -116,6 +160,111 @@ function statusVariant(run: ReleaseRun) {
   return "outline" as const;
 }
 
+function getRefTypeIcon(type: ReleaseRefType) {
+  if (type === "tag") return Tag;
+  if (type === "commit") return GitCommit;
+  return GitBranch;
+}
+
+function ReleaseRefCombobox({
+  type,
+  value,
+  defaultRef,
+  disabled,
+  onChange,
+}: {
+  type: ReleaseRefType;
+  value: string;
+  defaultRef: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [options, setOptions] = useState<ReleaseRefOption[]>([]);
+  const Icon = getRefTypeIcon(type);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      fetchReleaseRefs({
+        type,
+        keyword,
+        baseRef: defaultRef,
+      })
+        .then((list) => setOptions(list))
+        .catch((err) => setError(err instanceof Error ? err.message : "版本列表加载失败"))
+        .finally(() => setLoading(false));
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [defaultRef, keyword, open, type]);
+
+  useEffect(() => {
+    setKeyword("");
+    setOptions([]);
+  }, [type]);
+
+  const selectedOption = options.find((item) => item.value === value);
+  const displayValue = selectedOption?.label || value || "选择版本";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Icon data-icon="inline-start" />
+            <span className="truncate">{displayValue}</span>
+          </span>
+          <ChevronsUpDown data-icon="inline-end" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={keyword}
+            onValueChange={setKeyword}
+            placeholder="搜索版本..."
+          />
+          <CommandList>
+            <CommandEmpty>{loading ? "加载中..." : error || "没有匹配的版本"}</CommandEmpty>
+            <CommandGroup>
+              {options.map((item) => (
+                <CommandItem
+                  key={`${item.type}-${item.value}`}
+                  value={item.value}
+                  onSelect={() => {
+                    onChange(item.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn(value === item.value ? "opacity-100" : "opacity-0")} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">{item.label}</div>
+                    <div className="truncate text-xs text-muted-foreground">{item.description}</div>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -125,6 +274,7 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
     [environment, options],
   );
   const [service, setService] = useState<ReleaseService>("admin");
+  const [refType, setRefType] = useState<ReleaseRefType>("branch");
   const [ref, setRef] = useState("feature/multi-tenant");
   const [reason, setReason] = useState("");
   const [confirmText, setConfirmText] = useState("");
@@ -132,9 +282,16 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
     setEnvironment(value);
-    setRef(nextEnvironment?.default_ref || "feature/multi-tenant");
+    const nextRefType = value === "production" ? "tag" : "branch";
+    setRefType(nextRefType);
+    setRef(nextRefType === "branch" ? nextEnvironment?.default_ref || "feature/multi-tenant" : "");
     setService(nextEnvironment?.services[0]?.value || "admin");
     setConfirmText("");
+  }
+
+  function onRefTypeChange(value: ReleaseRefType) {
+    setRefType(value);
+    setRef(value === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "");
   }
 
   function runDispatch() {
@@ -143,6 +300,7 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
         const data = await dispatchRelease({
           environment,
           service,
+          ref_type: refType,
           ref,
           reason,
           confirm_text: environment === "production" ? confirmText : undefined,
@@ -220,14 +378,42 @@ export function ReleaseDeploymentsPanel({ options, runs, error }: ReleaseDeploym
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="release-ref">版本</FieldLabel>
-              <Input
-                id="release-ref"
+              <FieldLabel>版本来源</FieldLabel>
+              <Select value={refType} onValueChange={(value) => onRefTypeChange(value as ReleaseRefType)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择版本来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {REF_TYPE_OPTIONS.map((item) => (
+                      <SelectItem
+                        key={item.value}
+                        value={item.value}
+                        disabled={production && item.value === "branch"}
+                      >
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                {REF_TYPE_OPTIONS.find((item) => item.value === refType)?.description}
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel>发布版本</FieldLabel>
+              <ReleaseRefCombobox
+                type={refType}
                 value={ref}
-                onChange={(event) => setRef(event.target.value)}
-                placeholder="branch / tag / commit sha"
+                defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                disabled={!options?.configured}
+                onChange={setRef}
               />
-              <FieldDescription>生产建议使用已验收的 tag 或 commit sha。</FieldDescription>
+              <FieldDescription>
+                {production ? "生产环境只能选择 Tag 或 Commit SHA。" : "开发环境默认使用 feature/multi-tenant，也可以选择最近提交。"}
+              </FieldDescription>
             </Field>
 
             <Field>

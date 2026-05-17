@@ -3,6 +3,8 @@ import { ErrorCodes } from "@/errors/error-codes";
 import type {
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseRefListQuery,
+  ReleaseRefType,
   ReleaseRunListQuery,
   ReleaseService,
 } from "@/schema/release-deployments";
@@ -22,6 +24,32 @@ type GithubWorkflowRun = {
   created_at: string | null;
   updated_at: string | null;
   run_started_at: string | null;
+};
+
+type GithubBranch = {
+  name: string;
+  commit?: {
+    sha?: string;
+  };
+};
+
+type GithubTag = {
+  name: string;
+  commit?: {
+    sha?: string;
+  };
+};
+
+type GithubCommit = {
+  sha: string;
+  commit?: {
+    message?: string;
+    author?: {
+      name?: string | null;
+      date?: string | null;
+    } | null;
+  };
+  html_url?: string | null;
 };
 
 type ReleaseWorkflow = {
@@ -55,6 +83,12 @@ const SERVICE_LABELS: Record<ReleaseService, string> = {
   admin: "Admin",
   "social-video-worker": "视频转文本 Worker",
   "cos-reconcile-worker": "COS 对账 Worker",
+};
+
+const REF_TYPE_LABELS: Record<ReleaseRefType, string> = {
+  branch: "分支",
+  tag: "Tag",
+  commit: "Commit",
 };
 
 function getGithubConfig() {
@@ -111,6 +145,30 @@ async function githubRequest<T>(path: string, init: RequestInit = {}) {
   }
 
   return payload as T;
+}
+
+function includesKeyword(value: string, keyword?: string) {
+  const normalizedKeyword = keyword?.trim().toLowerCase();
+  if (!normalizedKeyword) return true;
+  return value.toLowerCase().includes(normalizedKeyword);
+}
+
+function formatCommitTitle(commit: GithubCommit) {
+  const firstLine = commit.commit?.message?.split("\n")[0]?.trim();
+  return firstLine || commit.sha;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 class ReleaseDeploymentService {
@@ -192,6 +250,87 @@ class ReleaseDeploymentService {
     };
   }
 
+  async listRefs(query: ReleaseRefListQuery) {
+    if (query.type === "branch") {
+      return this.listBranchRefs(query);
+    }
+
+    if (query.type === "tag") {
+      return this.listTagRefs(query);
+    }
+
+    return this.listCommitRefs(query);
+  }
+
+  private async listBranchRefs(query: ReleaseRefListQuery) {
+    const keyword = query.keyword?.trim();
+    const branches = await githubRequest<GithubBranch[]>("/branches?per_page=50");
+    const list = branches
+      .filter((item) => includesKeyword(item.name, keyword))
+      .map((item) => ({
+        value: item.name,
+        label: item.name,
+        description: item.commit?.sha ? `最新提交 ${item.commit.sha.slice(0, 7)}` : "分支",
+        type: "branch" as const,
+      }));
+
+    const defaultRef = RELEASE_WORKFLOWS.dev.defaultRef;
+    if (includesKeyword(defaultRef, keyword) && !list.some((item) => item.value === defaultRef)) {
+      list.unshift({
+        value: defaultRef,
+        label: defaultRef,
+        description: "默认开发分支",
+        type: "branch" as const,
+      });
+    }
+
+    return {
+      list: list.slice(0, 30),
+    };
+  }
+
+  private async listTagRefs(query: ReleaseRefListQuery) {
+    const keyword = query.keyword?.trim();
+    const tags = await githubRequest<GithubTag[]>("/tags?per_page=50");
+    return {
+      list: tags
+        .filter((item) => includesKeyword(`${item.name} ${item.commit?.sha || ""}`, keyword))
+        .map((item) => ({
+          value: item.name,
+          label: item.name,
+          description: item.commit?.sha ? `提交 ${item.commit.sha.slice(0, 7)}` : "Tag",
+          type: "tag" as const,
+        }))
+        .slice(0, 30),
+    };
+  }
+
+  private async listCommitRefs(query: ReleaseRefListQuery) {
+    const keyword = query.keyword?.trim();
+    const baseRef = query.base_ref?.trim() || RELEASE_WORKFLOWS.dev.defaultRef;
+    const params = new URLSearchParams({
+      sha: baseRef,
+      per_page: "50",
+    });
+    const commits = await githubRequest<GithubCommit[]>(`/commits?${params.toString()}`);
+    const list = commits
+      .filter((item) => includesKeyword(`${item.sha} ${formatCommitTitle(item)}`, keyword))
+      .map((item) => ({
+        value: item.sha,
+        label: `${item.sha.slice(0, 7)} ${formatCommitTitle(item)}`,
+        description: [
+          baseRef,
+          item.commit?.author?.name,
+          formatDateTime(item.commit?.author?.date),
+        ].filter(Boolean).join(" · "),
+        type: "commit" as const,
+        url: item.html_url || null,
+      }))
+      .slice(0, 30);
+
+    return { list };
+  }
+
   async dispatch(authContext: AuthContext, input: ReleaseDispatchInput) {
     const workflow = RELEASE_WORKFLOWS[input.environment];
     if (!workflow.services.includes(input.service)) {
@@ -227,6 +366,8 @@ class ReleaseDeploymentService {
       metadata: {
         environment: input.environment,
         service: input.service,
+        ref_type: input.ref_type,
+        ref_type_label: REF_TYPE_LABELS[input.ref_type],
         ref: input.ref,
         reason: input.reason || null,
         workflow_id: workflow.workflowId,
