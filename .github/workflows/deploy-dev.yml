@@ -333,11 +333,15 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
-          disk_before="$(df -h / | awk 'NR==2 {print $3 \"/\" $2 \" used, \" $4 \" avail, \" $5}')"
+          disk_before_line="$(df -h / | sed -n '2p')"
+          read -r _ disk_size disk_used disk_avail disk_pct _ <<< "${disk_before_line}"
+          disk_before="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
           docker container prune -f || true
           docker image prune -f || true
           docker builder prune -f --filter "until=24h" || true
-          disk_after="$(df -h / | awk 'NR==2 {print $3 \"/\" $2 \" used, \" $4 \" avail, \" $5}')"
+          disk_after_line="$(df -h / | sed -n '2p')"
+          read -r _ disk_size disk_used disk_avail disk_pct _ <<< "${disk_after_line}"
+          disk_after="${disk_used}/${disk_size} used, ${disk_avail} avail, ${disk_pct}"
 
           {
             echo "### Dev build runner cleanup"
@@ -470,11 +474,15 @@ jobs:
             -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
             "set -euo pipefail
-             disk_before=\$(df -h / | awk 'NR==2 {print \$3 \"/\" \$2 \" used, \" \$4 \" avail, \" \$5}')
+             disk_before_line=\$(df -h / | sed -n '2p')
+             set -- \$disk_before_line
+             disk_before=\"\$3/\$2 used, \$4 avail, \$5\"
              docker container prune -f || true
              docker image prune -a -f || true
              docker builder prune -a -f --filter 'until=24h' || true
-             disk_after=\$(df -h / | awk 'NR==2 {print \$3 \"/\" \$2 \" used, \" \$4 \" avail, \" \$5}')
+             disk_after_line=\$(df -h / | sed -n '2p')
+             set -- \$disk_after_line
+             disk_after=\"\$3/\$2 used, \$4 avail, \$5\"
              printf 'before=%s\n' \"\$disk_before\"
              printf 'after=%s\n' \"\$disk_after\"
              df -h /
