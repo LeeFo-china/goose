@@ -221,6 +221,35 @@ ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
 | 客户 | `19900001001`、`19900001002` |
 | 积分账户 | `is_test=true`，初始测试积分 `1000000` |
 
+后续 dev migration 统一通过 GitHub Actions 手动 workflow 执行：
+
+```text
+.github/workflows/migrate-dev-database.yml
+```
+
+workflow 名称：
+
+```text
+Migrate Dev Database
+```
+
+执行模式：
+
+| 模式 | 作用 |
+| --- | --- |
+| `plan` | 只检查 dev 库当前版本和待执行 migration，不修改数据库 |
+| `apply` | 按 `supabase/migrations/*.sql` 顺序执行 dev 库缺失的 migration，并写入 `supabase_migrations.schema_migrations` |
+
+安全边界：
+
+- 必须手动触发。
+- 必须输入 dev Supabase project ref：`fclnkyatvfvmzgzdqlba`。
+- workflow 会检查 `SUPABASE_DB_URL` 必须指向 dev project ref。
+- workflow 会阻断已知生产 project ref：`unqhypivjkpwldhufpjc`。
+- 执行摘要会输出执行前后 migration 数量、最新版本、待执行版本、已执行版本、租户数和权限数。
+
+生产 migration 前必须先完成 dev `plan` 和 `apply` 验收。
+
 ## 11. Smoke test
 
 2026-05-17 已完成：

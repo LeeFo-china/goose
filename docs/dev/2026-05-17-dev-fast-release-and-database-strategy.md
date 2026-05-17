@@ -459,12 +459,16 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 - dev DB 可以执行 migration。
 - migration 执行不影响生产。
 - 建立 dev seed 数据。
+- 新增手动 workflow `Migrate Dev Database`，统一承载 dev migration 的计划、执行和验收摘要。
 
 验收：
 
 - 从空 dev DB 执行全部 migration 成功。
 - seed 后能登录 dev admin。
 - 小程序开发版能登录 dev API。
+- `plan` 模式能列出待执行 migration 且不改库。
+- `apply` 模式只执行 dev 库缺失的 migration，并写入 `supabase_migrations.schema_migrations`。
+- workflow 会校验 dev project ref，不能误连生产库。
 
 ### 阶段 4：生产发布收口
 

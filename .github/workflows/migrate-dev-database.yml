@@ -1,0 +1,288 @@
+name: Migrate Dev Database
+
+# Applies Supabase SQL migrations to the dev database only. This workflow is
+# intentionally manual because database changes must be reviewed before they
+# become part of a release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Migration mode"
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+      confirm_dev_project_ref:
+        description: "Type the dev Supabase project ref"
+        required: true
+        default: fclnkyatvfvmzgzdqlba
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-dev-database
+  cancel-in-progress: false
+
+env:
+  DEV_DEPLOY_HOST: 43.165.126.30
+  DEV_DEPLOY_USER: ubuntu
+  DEV_DEPLOY_KEY_PATH: /home/ubuntu/.ssh/goose-old-us.pem
+  DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
+  DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+  PROD_PROJECT_REF: unqhypivjkpwldhufpjc
+
+jobs:
+  migrate-dev:
+    name: Migrate dev database
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+
+    steps:
+      - name: Guard runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test -r "${DEV_DEPLOY_KEY_PATH}"
+
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+
+          checkout_attempt() {
+            mode="$1"
+            if [ "$mode" = "proxy" ]; then
+              export HTTPS_PROXY=socks5h://127.0.0.1:18080
+              export HTTP_PROXY=socks5h://127.0.0.1:18080
+              export ALL_PROXY=socks5h://127.0.0.1:18080
+              export https_proxy="$HTTPS_PROXY"
+              export http_proxy="$HTTP_PROXY"
+              export all_proxy="$ALL_PROXY"
+              git_timeout=180
+            else
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+              git_timeout=45
+            fi
+
+            if [ ! -d "${SOURCE_DIR}/.git" ]; then
+              rm -rf "${SOURCE_DIR}" || return 1
+              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+            fi
+            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
+            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" clean -fdx || return 1
+          }
+
+          if ! checkout_attempt direct; then
+            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+              checkout_attempt proxy
+            else
+              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
+              exit 1
+            fi
+          fi
+
+      - name: Package migrations
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_WORKSPACE}/source"
+          test -d supabase/migrations
+          archive="/tmp/gooes-dev-migrations-${GITHUB_RUN_ID}.tgz"
+          tar -czf "${archive}" supabase/migrations
+          echo "MIGRATIONS_ARCHIVE=${archive}" >> "${GITHUB_ENV}"
+
+      - name: Copy migrations to dev server
+        run: |
+          set -euo pipefail
+          remote_archive="/tmp/gooes-dev-migrations-${GITHUB_RUN_ID}.tgz"
+          scp -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${MIGRATIONS_ARCHIVE}" \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${remote_archive}"
+          echo "REMOTE_MIGRATIONS_ARCHIVE=${remote_archive}" >> "${GITHUB_ENV}"
+
+      - name: Run dev migration
+        env:
+          MIGRATE_MODE: ${{ inputs.mode }}
+          CONFIRM_DEV_PROJECT_REF: ${{ inputs.confirm_dev_project_ref }}
+        run: |
+          set -euo pipefail
+          report_file="/tmp/gooes-dev-migrate-report-${GITHUB_RUN_ID}.env"
+
+          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+            "MIGRATE_MODE='${MIGRATE_MODE}' \
+             CONFIRM_DEV_PROJECT_REF='${CONFIRM_DEV_PROJECT_REF}' \
+             DEV_PROJECT_REF='${DEV_PROJECT_REF}' \
+             PROD_PROJECT_REF='${PROD_PROJECT_REF}' \
+             DEV_DB_ENV_FILE='${DEV_DB_ENV_FILE}' \
+             REMOTE_MIGRATIONS_ARCHIVE='${REMOTE_MIGRATIONS_ARCHIVE}' \
+             bash -s" <<'REMOTE' | tee "${report_file}"
+          set -euo pipefail
+
+          if [ "${CONFIRM_DEV_PROJECT_REF}" != "${DEV_PROJECT_REF}" ]; then
+            echo "error=confirm_dev_project_ref_mismatch"
+            exit 1
+          fi
+
+          if [ "${MIGRATE_MODE}" != "plan" ] && [ "${MIGRATE_MODE}" != "apply" ]; then
+            echo "error=invalid_migrate_mode"
+            exit 1
+          fi
+
+          if [ ! -r "${DEV_DB_ENV_FILE}" ]; then
+            echo "error=dev_db_env_file_missing"
+            exit 1
+          fi
+
+          set -a
+          . "${DEV_DB_ENV_FILE}"
+          set +a
+
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "error=supabase_db_url_missing"
+            exit 1
+          fi
+
+          if [[ "${SUPABASE_DB_URL}" != *"${DEV_PROJECT_REF}"* ]]; then
+            echo "error=supabase_db_url_not_dev_project"
+            exit 1
+          fi
+
+          if [[ "${SUPABASE_DB_URL}" == *"${PROD_PROJECT_REF}"* ]]; then
+            echo "error=supabase_db_url_points_to_prod"
+            exit 1
+          fi
+
+          workdir="$(mktemp -d /tmp/gooes-dev-migrations.XXXXXX)"
+          cleanup() {
+            rm -rf "${workdir}" "${REMOTE_MIGRATIONS_ARCHIVE}"
+          }
+          trap cleanup EXIT
+
+          tar -xzf "${REMOTE_MIGRATIONS_ARCHIVE}" -C "${workdir}"
+          migrations_dir="${workdir}/supabase/migrations"
+
+          before_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from supabase_migrations.schema_migrations;")"
+          before_latest="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
+          db_name="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select current_database();")"
+          db_user="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select current_user;")"
+          tenant_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.tenants;" 2>/dev/null || echo "unknown")"
+          permission_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.permissions;" 2>/dev/null || echo "unknown")"
+
+          pending_files=()
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            version="${base%%_*}"
+            exists="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select 1 from supabase_migrations.schema_migrations where version = '${version}' limit 1;")"
+            if [ "${exists}" != "1" ]; then
+              pending_files+=("${file}")
+            fi
+          done < <(find "${migrations_dir}" -maxdepth 1 -type f -name '*.sql' | sort)
+
+          applied_versions=()
+          if [ "${MIGRATE_MODE}" = "apply" ]; then
+            for file in "${pending_files[@]}"; do
+              base="$(basename "${file}")"
+              version="${base%%_*}"
+              name="${base#${version}_}"
+              name="${name%.sql}"
+
+              sql_wrapper="${workdir}/apply-${version}.sql"
+              {
+                echo "begin;"
+                printf '\\i %s\n' "${file}"
+                echo "insert into supabase_migrations.schema_migrations(version, name, statements)"
+                echo "values ('${version}', '${name}', array['applied_by_migrate_dev_database_workflow'])"
+                echo "on conflict (version) do nothing;"
+                echo "commit;"
+              } > "${sql_wrapper}"
+
+              psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -f "${sql_wrapper}"
+              applied_versions+=("${version}")
+            done
+          fi
+
+          after_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from supabase_migrations.schema_migrations;")"
+          after_latest="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
+
+          pending_versions=()
+          for file in "${pending_files[@]}"; do
+            base="$(basename "${file}")"
+            pending_versions+=("${base%%_*}")
+          done
+
+          echo "mode=${MIGRATE_MODE}"
+          echo "db_name=${db_name}"
+          echo "db_user=${db_user}"
+          echo "before_count=${before_count}"
+          echo "before_latest=${before_latest}"
+          echo "after_count=${after_count}"
+          echo "after_latest=${after_latest}"
+          echo "pending_count=${#pending_files[@]}"
+          echo "pending_versions=${pending_versions[*]:-}"
+          echo "applied_count=${#applied_versions[@]}"
+          echo "applied_versions=${applied_versions[*]:-}"
+          echo "tenant_count=${tenant_count}"
+          echo "permission_count=${permission_count}"
+          REMOTE
+
+          {
+            echo "MIGRATE_MODE_RESULT=$(awk -F= '/^mode=/{print $2; exit}' "${report_file}")"
+            echo "DEV_DB_NAME=$(awk -F= '/^db_name=/{print $2; exit}' "${report_file}")"
+            echo "DEV_DB_USER=$(awk -F= '/^db_user=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_BEFORE_COUNT=$(awk -F= '/^before_count=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_BEFORE_LATEST=$(awk -F= '/^before_latest=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_AFTER_COUNT=$(awk -F= '/^after_count=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_AFTER_LATEST=$(awk -F= '/^after_latest=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_PENDING_COUNT=$(awk -F= '/^pending_count=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_PENDING_VERSIONS=$(awk -F= '/^pending_versions=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_APPLIED_COUNT=$(awk -F= '/^applied_count=/{print $2; exit}' "${report_file}")"
+            echo "MIGRATION_APPLIED_VERSIONS=$(awk -F= '/^applied_versions=/{print $2; exit}' "${report_file}")"
+            echo "DEV_TENANT_COUNT=$(awk -F= '/^tenant_count=/{print $2; exit}' "${report_file}")"
+            echo "DEV_PERMISSION_COUNT=$(awk -F= '/^permission_count=/{print $2; exit}' "${report_file}")"
+          } >> "${GITHUB_ENV}"
+
+      - name: Write migration summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Migrate Dev Database Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Result | ${{ job.status }} |"
+            echo "| Mode | \`${MIGRATE_MODE_RESULT:-${{ inputs.mode }}}\` |"
+            echo "| Commit | \`${GITHUB_SHA:0:12}\` |"
+            echo "| Dev project ref | \`${DEV_PROJECT_REF}\` |"
+            echo "| DB | \`${DEV_DB_NAME:-unknown}\` |"
+            echo "| DB user | \`${DEV_DB_USER:-unknown}\` |"
+            echo "| Before | count \`${MIGRATION_BEFORE_COUNT:-unknown}\`, latest \`${MIGRATION_BEFORE_LATEST:-unknown}\` |"
+            echo "| After | count \`${MIGRATION_AFTER_COUNT:-unknown}\`, latest \`${MIGRATION_AFTER_LATEST:-unknown}\` |"
+            echo "| Pending before run | \`${MIGRATION_PENDING_COUNT:-unknown}\` |"
+            echo "| Applied | \`${MIGRATION_APPLIED_COUNT:-unknown}\` |"
+            echo "| Tenants | \`${DEV_TENANT_COUNT:-unknown}\` |"
+            echo "| Permissions | \`${DEV_PERMISSION_COUNT:-unknown}\` |"
+            echo ""
+            echo "### Pending Versions Before Run"
+            echo ""
+            echo "\`${MIGRATION_PENDING_VERSIONS:-none}\`"
+            echo ""
+            echo "### Applied Versions"
+            echo ""
+            echo "\`${MIGRATION_APPLIED_VERSIONS:-none}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
