@@ -70,16 +70,21 @@ jobs:
               export HTTPS_PROXY=socks5h://127.0.0.1:18080
               export HTTP_PROXY=socks5h://127.0.0.1:18080
               export ALL_PROXY=socks5h://127.0.0.1:18080
+              export https_proxy="$HTTPS_PROXY"
+              export http_proxy="$HTTP_PROXY"
+              export all_proxy="$ALL_PROXY"
+              git_timeout=180
             else
-              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+              git_timeout=45
             fi
 
             if [ ! -d "${SOURCE_DIR}/.git" ]; then
               rm -rf "${SOURCE_DIR}" || return 1
-              git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
             fi
             git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
-            git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
+            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
             git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
             git -C "${SOURCE_DIR}" clean -fdx || return 1
           }
