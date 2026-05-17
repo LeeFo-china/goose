@@ -3,8 +3,8 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   DecorationQaRequestInput,
-  DecorationQaSuggestionQueryInput,
   DecorationQaStreamRequestInput,
+  DecorationQaSuggestionQueryInput,
 } from "@/schema/ai";
 import type { Tables } from "@/types/database";
 import { authorizationService } from "@/services/authorization";
@@ -12,13 +12,13 @@ import { aiGateway } from "@/services/ai-gateway";
 import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
 import { systemSettingsService } from "@/services/system-settings";
 import {
-  PROJECT_LOG_STAGE_CONFIG,
-  ProjectStatusConfig,
+  type AiMessageRole,
   isEmployeeOperableStatus,
   isProjectLogStageCode,
   isProjectStatus,
-  type AiMessageRole,
+  PROJECT_LOG_STAGE_CONFIG,
   type ProjectLogStageCode,
+  ProjectStatusConfig,
 } from "@gooes/domain";
 
 type DecorationQaResult = {
@@ -108,7 +108,8 @@ type OpenAiRequestBody = {
   };
 };
 
-const DEFAULT_SYSTEM_PROMPT = `你是一个专业的家装顾问，隶属于“河南蜜居装饰有限公司”。
+const DEFAULT_SYSTEM_PROMPT =
+  `你是一个专业的家装顾问，隶属于“字节跳动固始网络科技”。
 你的任务是解答用户关于装修预算、材料选择、工期安排、施工流程、家装避坑等问题。
 
 回答要求：
@@ -137,7 +138,8 @@ const STREAM_OUTPUT_PROMPT = `
 你必须直接输出自然语言答案正文，不要输出 JSON，不要输出 markdown 代码块，不要输出多余前缀。
 回答结束时不要再补“如需我继续”等收尾套话。`;
 
-const SUGGESTION_SYSTEM_PROMPT = `你是装修公司小程序里的装修知识问答推荐问题生成器。
+const SUGGESTION_SYSTEM_PROMPT =
+  `你是装修公司小程序里的装修知识问答推荐问题生成器。
 请生成 4 个用户可能会点击的问题。
 要求：
 1. 每个问题 8 到 22 个中文字符左右。
@@ -350,9 +352,11 @@ function requireAiEnv(names: string[], label: string) {
 }
 
 async function getAiEndpoint() {
-  const hasDeepSeekApiKey = Boolean(await systemSettingsService.getSecretString("DEEPSEEK_API_KEY"));
-  return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
-    || (hasDeepSeekApiKey
+  const hasDeepSeekApiKey = Boolean(
+    await systemSettingsService.getSecretString("DEEPSEEK_API_KEY"),
+  );
+  return (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL")) ||
+    (hasDeepSeekApiKey
       ? "https://api.deepseek.com/chat/completions"
       : "https://api.openai.com/v1/chat/completions");
 }
@@ -400,7 +404,10 @@ function getAiProviderCode(endpoint: string) {
 }
 
 async function getAiRequestTimeoutMs() {
-  const parsed = await systemSettingsService.getNumber("AI_REQUEST_TIMEOUT_MS", 60000);
+  const parsed = await systemSettingsService.getNumber(
+    "AI_REQUEST_TIMEOUT_MS",
+    60000,
+  );
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return 60000;
@@ -410,10 +417,10 @@ async function getAiRequestTimeoutMs() {
 }
 
 async function getBaseSystemPrompt() {
-  const customPrompt = await systemSettingsService.getString("DECORATION_QA_SYSTEM_PROMPT");
-  return customPrompt
-    ? `${customPrompt}\n\n${DEFAULT_SYSTEM_PROMPT}`
-    : DEFAULT_SYSTEM_PROMPT;
+  const customPrompt = await systemSettingsService.getString(
+    "DECORATION_QA_SYSTEM_PROMPT",
+  );
+  return customPrompt || DEFAULT_SYSTEM_PROMPT;
 }
 
 async function getSystemPrompt() {
@@ -424,7 +431,9 @@ async function getStreamingSystemPrompt() {
   return `${await getBaseSystemPrompt()}${STREAM_OUTPUT_PROMPT}`;
 }
 
-async function getOpenRouterHeaders(endpoint: string): Promise<Record<string, string>> {
+async function getOpenRouterHeaders(
+  endpoint: string,
+): Promise<Record<string, string>> {
   if (!endpoint.includes("openrouter.ai")) {
     return {};
   }
@@ -616,7 +625,10 @@ function parseQaResult(rawContent: string): DecorationQaResult {
   }
 }
 
-async function buildHeaders(apiKey: string, endpoint: string): Promise<Record<string, string>> {
+async function buildHeaders(
+  apiKey: string,
+  endpoint: string,
+): Promise<Record<string, string>> {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
@@ -646,13 +658,17 @@ function normalizeTotalTokens(input: {
   completionTokens?: number | null;
   totalTokens?: number | null;
 }) {
-  if (typeof input.totalTokens === "number" && Number.isFinite(input.totalTokens)) {
+  if (
+    typeof input.totalTokens === "number" && Number.isFinite(input.totalTokens)
+  ) {
     return Math.max(0, Math.floor(input.totalTokens));
   }
 
-  const promptTokens = typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)
-    ? Math.max(0, Math.floor(input.promptTokens))
-    : null;
+  const promptTokens =
+    typeof input.promptTokens === "number" &&
+      Number.isFinite(input.promptTokens)
+      ? Math.max(0, Math.floor(input.promptTokens))
+      : null;
   const completionTokens = typeof input.completionTokens === "number" &&
       Number.isFinite(input.completionTokens)
     ? Math.max(0, Math.floor(input.completionTokens))
@@ -725,7 +741,9 @@ async function findCustomerContextByAuthUserId(authUserId: string) {
   return list[0] ?? null;
 }
 
-function getSourceFromAuth(input: DecorationQaAuthInput): DecorationQaUsageSource {
+function getSourceFromAuth(
+  input: DecorationQaAuthInput,
+): DecorationQaUsageSource {
   if (input.roles?.includes("customer") || input.customerId) {
     return "customer_miniprogram";
   }
@@ -737,9 +755,11 @@ function getSourceFromAuth(input: DecorationQaAuthInput): DecorationQaUsageSourc
   return "visitor";
 }
 
-async function inferDecorationQaUsageContextFromAuth(input: DecorationQaAuthInput & {
-  projectId?: string | null;
-}): Promise<DecorationQaUsageContext | null> {
+async function inferDecorationQaUsageContextFromAuth(
+  input: DecorationQaAuthInput & {
+    projectId?: string | null;
+  },
+): Promise<DecorationQaUsageContext | null> {
   if (!input.authUserId) {
     return null;
   }
@@ -747,7 +767,10 @@ async function inferDecorationQaUsageContextFromAuth(input: DecorationQaAuthInpu
   const customer = await findCustomerContextByAuthUserId(input.authUserId);
   if (customer) {
     if (input.projectId) {
-      const context = await buildCustomerProjectQaContext(input.authUserId, input.projectId);
+      const context = await buildCustomerProjectQaContext(
+        input.authUserId,
+        input.projectId,
+      );
       if (!context.tenant_id) {
         return null;
       }
@@ -776,7 +799,9 @@ async function inferDecorationQaUsageContextFromAuth(input: DecorationQaAuthInpu
     }
   }
 
-  const employeeContext = await authorizationService.getAuthContextByAuthUserId(input.authUserId);
+  const employeeContext = await authorizationService.getAuthContextByAuthUserId(
+    input.authUserId,
+  );
   if (
     employeeContext.employeeId &&
     employeeContext.tenantId &&
@@ -796,10 +821,12 @@ async function inferDecorationQaUsageContextFromAuth(input: DecorationQaAuthInpu
   return null;
 }
 
-async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
-  role?: "visitor" | "customer" | "employee";
-  projectId?: string | null;
-}): Promise<DecorationQaUsageContext> {
+async function resolveDecorationQaUsageContext(
+  input: DecorationQaAuthInput & {
+    role?: "visitor" | "customer" | "employee";
+    projectId?: string | null;
+  },
+): Promise<DecorationQaUsageContext> {
   const source = input.role === "customer"
     ? "customer_miniprogram"
     : input.role === "employee"
@@ -829,9 +856,16 @@ async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
     }
 
     if (input.projectId) {
-      const context = await buildCustomerProjectQaContext(input.authUserId, input.projectId);
+      const context = await buildCustomerProjectQaContext(
+        input.authUserId,
+        input.projectId,
+      );
       if (!context.tenant_id) {
-        throw Errors.business(403, "当前项目缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+        throw Errors.business(
+          403,
+          "当前项目缺少装修公司上下文",
+          "AI_TENANT_CONTEXT_MISSING",
+        );
       }
 
       return {
@@ -859,7 +893,11 @@ async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
 
     const customer = await getCustomerContextByAuthUserId(input.authUserId);
     if (!customer.tenant_id) {
-      throw Errors.business(403, "当前客户缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+      throw Errors.business(
+        403,
+        "当前客户缺少装修公司上下文",
+        "AI_TENANT_CONTEXT_MISSING",
+      );
     }
 
     return {
@@ -874,7 +912,11 @@ async function resolveDecorationQaUsageContext(input: DecorationQaAuthInput & {
   }
 
   if (!input.tenantId) {
-    throw Errors.business(403, "当前员工缺少装修公司上下文", "AI_TENANT_CONTEXT_MISSING");
+    throw Errors.business(
+      403,
+      "当前员工缺少装修公司上下文",
+      "AI_TENANT_CONTEXT_MISSING",
+    );
   }
 
   return {
@@ -893,7 +935,8 @@ async function buildCustomerProjectQaContext(
   projectId: string,
 ): Promise<CustomerProjectQaContext> {
   const customer = await getCustomerContextByAuthUserId(authUserId);
-  const { data: projectData, error: projectError } = await SupabaseDB.getAdminClient()
+  const { data: projectData, error: projectError } = await SupabaseDB
+    .getAdminClient()
     .from("projects")
     .select(`
       id,
@@ -932,7 +975,10 @@ async function buildCustomerProjectQaContext(
     .from("project_logs")
     .select("stage_code, node_name, content, created_at")
     .eq("project_id", projectId)
-    .eq("tenant_id", (projectData as unknown as ProjectQaProjectRowWithTenant).tenant_id)
+    .eq(
+      "tenant_id",
+      (projectData as unknown as ProjectQaProjectRowWithTenant).tenant_id,
+    )
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -966,18 +1012,24 @@ async function buildCustomerProjectQaContext(
     address: project.address,
     start_date: project.start_date,
     style_tags: normalizeStringArray(project.style_tags),
-    property: property.community || property.building_info || property.layout || property.area
-      ? {
-        community: typeof property.community === "string" ? property.community : null,
-        building_info: typeof property.building_info === "string"
-          ? property.building_info
-          : null,
-        layout: typeof property.layout === "string" ? property.layout : null,
-        area: typeof property.area === "number" ? property.area : null,
-      }
-      : null,
+    property:
+      property.community || property.building_info || property.layout ||
+        property.area
+        ? {
+          community: typeof property.community === "string"
+            ? property.community
+            : null,
+          building_info: typeof property.building_info === "string"
+            ? property.building_info
+            : null,
+          layout: typeof property.layout === "string" ? property.layout : null,
+          area: typeof property.area === "number" ? property.area : null,
+        }
+        : null,
     designer_name: typeof designer.name === "string" ? designer.name : null,
-    supervisor_name: typeof supervisor.name === "string" ? supervisor.name : null,
+    supervisor_name: typeof supervisor.name === "string"
+      ? supervisor.name
+      : null,
     recent_logs: ((logsData || []) as ProjectQaLogRow[]).map((item) => {
       const stageCode = isProjectLogStageCode(item.stage_code)
         ? item.stage_code
@@ -985,7 +1037,9 @@ async function buildCustomerProjectQaContext(
 
       return {
         stage_code: stageCode,
-        stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+        stage_label: stageCode
+          ? PROJECT_LOG_STAGE_CONFIG[stageCode].label
+          : null,
         node_name: item.node_name,
         content: item.content,
         created_at: item.created_at,
@@ -995,10 +1049,14 @@ async function buildCustomerProjectQaContext(
 }
 
 function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
-  const latestLogWithStage = context.recent_logs.find((item) => item.stage_code);
+  const latestLogWithStage = context.recent_logs.find((item) =>
+    item.stage_code
+  );
   const reminderPrompts = latestLogWithStage?.stage_code
     ? (PROJECT_STAGE_REMINDER_PROMPTS[latestLogWithStage.stage_code] || [])
-    : (context.status ? (PROJECT_STATUS_REMINDER_PROMPTS[context.status] || []) : []);
+    : (context.status
+      ? (PROJECT_STATUS_REMINDER_PROMPTS[context.status] || [])
+      : []);
   const lines: string[] = [
     "以下是当前客户项目上下文，仅可基于这些已同步资料回答项目相关问题。",
     "如果上下文不足，请明确说明“根据当前已同步的项目资料，暂时无法确认更多细节”。",
@@ -1012,19 +1070,23 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
     `- 项目状态：${context.status_label || context.status || "未同步"}`,
     `- 项目地址：${context.address || "未同步"}`,
     `- 开工日期：${context.start_date || "未同步"}`,
-    `- 风格标签：${context.style_tags.length ? context.style_tags.join("、") : "未同步"}`,
+    `- 风格标签：${
+      context.style_tags.length ? context.style_tags.join("、") : "未同步"
+    }`,
     `- 主案设计：${context.designer_name || "未同步"}`,
     `- 施工管理：${context.supervisor_name || "未同步"}`,
   ];
 
   if (context.property) {
     lines.push(
-      `- 房产信息：${[
-        context.property.community,
-        context.property.building_info,
-        context.property.layout,
-        context.property.area ? `${context.property.area}㎡` : null,
-      ].filter(Boolean).join("，") || "未同步"}`,
+      `- 房产信息：${
+        [
+          context.property.community,
+          context.property.building_info,
+          context.property.layout,
+          context.property.area ? `${context.property.area}㎡` : null,
+        ].filter(Boolean).join("，") || "未同步"
+      }`,
     );
   } else {
     lines.push("- 房产信息：未同步");
@@ -1052,13 +1114,17 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
       lines.push(`  ${index + 1}. ${item}`);
     });
   } else {
-    lines.push("- 当前阶段温馨提醒参考：当前未同步到足够阶段信息，请谨慎提醒并说明依据有限");
+    lines.push(
+      "- 当前阶段温馨提醒参考：当前未同步到足够阶段信息，请谨慎提醒并说明依据有限",
+    );
   }
 
   return lines.join("\n");
 }
 
-function formatCustomerProjectSuggestionContext(context: CustomerProjectQaContext) {
+function formatCustomerProjectSuggestionContext(
+  context: CustomerProjectQaContext,
+) {
   const latestLog = context.recent_logs[0];
   const parts = [
     context.status_label || context.status
@@ -1068,18 +1134,22 @@ function formatCustomerProjectSuggestionContext(context: CustomerProjectQaContex
     context.property?.layout ? `户型：${context.property.layout}` : null,
     context.style_tags.length ? `风格：${context.style_tags.join("、")}` : null,
     latestLog
-      ? `最近施工节点：${[
-        latestLog.stage_label,
-        latestLog.node_name,
-      ].filter(Boolean).join(" - ") || "未同步"}`
+      ? `最近施工节点：${
+        [
+          latestLog.stage_label,
+          latestLog.node_name,
+        ].filter(Boolean).join(" - ") || "未同步"
+      }`
       : "最近施工节点：未同步",
     context.status === "acceptance" ||
-        latestLog?.stage_code === "completion"
+      latestLog?.stage_code === "completion"
       ? "当前可能临近验收"
       : null,
   ].filter(Boolean);
 
-  return parts.length ? parts.join("\n") : "当前项目摘要：暂未同步足够项目资料。";
+  return parts.length
+    ? parts.join("\n")
+    : "当前项目摘要：暂未同步足够项目资料。";
 }
 
 function getSuggestionDateKey(now: Date) {
@@ -1227,7 +1297,9 @@ export async function getDecorationQaSuggestions(input: {
 }): Promise<DecorationQaSuggestionResult> {
   const now = new Date();
   const scene = input.query.scene;
-  const projectId = scene === "customer" ? input.query.project_id ?? null : null;
+  const projectId = scene === "customer"
+    ? input.query.project_id ?? null
+    : null;
   const cacheKey = buildSuggestionCacheKey({ scene, projectId, now });
   const expiresAt = getSuggestionExpiresAt({ scene, projectId, now });
   const scenePrompt = await buildSuggestionScenePrompt({
@@ -1325,7 +1397,10 @@ async function requestQaResult(
   requestBody: OpenAiRequestBody,
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), await getAiRequestTimeoutMs());
+  const timeout = setTimeout(
+    () => controller.abort(),
+    await getAiRequestTimeoutMs(),
+  );
 
   try {
     const response = await fetch(endpoint, {
@@ -1434,7 +1509,11 @@ export async function askDecorationQa(
   input: DecorationQaRequestInput,
   options?: DecorationQaAuthInput,
 ): Promise<DecorationQaResult> {
-  const messages = buildMessages(input.question, input.history, await getSystemPrompt());
+  const messages = buildMessages(
+    input.question,
+    input.history,
+    await getSystemPrompt(),
+  );
   const usageContext = await resolveDecorationQaUsageContext({
     authUserId: options?.authUserId,
     tenantId: options?.tenantId,
@@ -1463,7 +1542,9 @@ export async function askDecorationQa(
       responseFormat: "json_object",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "大模型接口调用失败";
+    const message = error instanceof Error
+      ? error.message
+      : "大模型接口调用失败";
 
     if (!message.includes("response_format")) {
       throw error;
@@ -1527,8 +1608,8 @@ export async function streamDecorationQa(
     role: input.context?.role,
     projectId,
   });
-  const extraSystemMessages = options?.extraSystemMessages
-    || await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
+  const extraSystemMessages = options?.extraSystemMessages ||
+    await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
   const startedAt = Date.now();
 
   const decoder = new TextDecoder();
@@ -1549,7 +1630,12 @@ export async function streamDecorationQa(
     streamRequest = await requestQaStream(
       endpoint,
       apiKey,
-      await createStreamRequestBody(input, model, routeConfig.temperature, extraSystemMessages),
+      await createStreamRequestBody(
+        input,
+        model,
+        routeConfig.temperature,
+        extraSystemMessages,
+      ),
       routeConfig.timeoutMs,
       options?.signal,
     );
@@ -1600,7 +1686,8 @@ export async function streamDecorationQa(
           outputTokens = chunk.usage.completion_tokens;
           totalTokens = chunk.usage.total_tokens;
           cachedInputTokens = chunk.usage.prompt_tokens_details?.cached_tokens;
-          reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens;
+          reasoningTokens = chunk.usage.completion_tokens_details
+            ?.reasoning_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1623,7 +1710,8 @@ export async function streamDecorationQa(
           outputTokens = chunk.usage.completion_tokens;
           totalTokens = chunk.usage.total_tokens;
           cachedInputTokens = chunk.usage.prompt_tokens_details?.cached_tokens;
-          reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens;
+          reasoningTokens = chunk.usage.completion_tokens_details
+            ?.reasoning_tokens;
         }
 
         const delta = extractDeltaContent(chunk.choices);
@@ -1739,7 +1827,9 @@ export async function streamDecorationQa(
   }
 }
 
-export function serializeDecorationQaStreamEvent(event: DecorationQaStreamEvent) {
+export function serializeDecorationQaStreamEvent(
+  event: DecorationQaStreamEvent,
+) {
   return toNdjson(event);
 }
 
