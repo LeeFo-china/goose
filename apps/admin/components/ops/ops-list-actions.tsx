@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 
 function buildOpsHref(page: number) {
   const params = new URLSearchParams();
+  params.set("tab", "runs");
   if (page > 1) params.set("page", String(page));
-  const query = params.toString();
-  return query ? `/ops?${query}` : "/ops";
+  return `/ops?${params.toString()}`;
 }
 
 export function OpsRunsPagination({ pagination }: { pagination: Pagination }) {

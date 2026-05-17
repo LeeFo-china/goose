@@ -5,6 +5,7 @@ import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
 import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
+import Link from "next/link";
 import type {
   OpsScript,
   OpsScriptRun,
@@ -32,13 +33,30 @@ type RunListData = {
 
 type OpsPageSearchParams = {
   page?: string;
+  tab?: string;
 };
 
 const OPS_RUNS_PAGE_SIZE = 10;
+const OPS_TABS = ["health", "scripts", "runs", "releases"] as const;
+
+type OpsTab = typeof OPS_TABS[number];
 
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+function normalizeTab(value: string | undefined): OpsTab {
+  return OPS_TABS.includes(value as OpsTab) ? value as OpsTab : "health";
+}
+
+function buildOpsTabHref(tab: OpsTab, page?: number) {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  if (tab === "runs" && page && page > 1) {
+    params.set("page", String(page));
+  }
+  return `/ops?${params.toString()}`;
 }
 
 async function fetchBackendData<T>(token: string, path: string) {
@@ -127,6 +145,7 @@ export default async function OpsPage({
 }) {
   const params = await searchParams;
   const { scripts, runs, releaseOptions, releaseRuns, releaseSuccessfulRefs, pagination, error, releaseError } = await getOpsData(params);
+  const activeTab = normalizeTab(params.tab);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
 
@@ -139,20 +158,28 @@ export default async function OpsPage({
         </p>
       </div>
 
-      <Tabs defaultValue="health" className="flex flex-col gap-3">
+      <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
         <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="health">健康监控</TabsTrigger>
-          <TabsTrigger value="scripts">
-            脚本执行
-            <span className="ml-2 text-xs text-muted-foreground">{scripts.length}</span>
+          <TabsTrigger value="health" asChild>
+            <Link href={buildOpsTabHref("health")}>健康监控</Link>
           </TabsTrigger>
-          <TabsTrigger value="runs">
-            执行记录
-            <span className="ml-2 text-xs text-muted-foreground">{successCount}/{failedCount}</span>
+          <TabsTrigger value="scripts" asChild>
+            <Link href={buildOpsTabHref("scripts")}>
+              脚本执行
+              <span className="ml-2 text-xs text-muted-foreground">{scripts.length}</span>
+            </Link>
           </TabsTrigger>
-          <TabsTrigger value="releases">
-            版本发布
-            <span className="ml-2 text-xs text-muted-foreground">{releaseRuns.length}</span>
+          <TabsTrigger value="runs" asChild>
+            <Link href={buildOpsTabHref("runs", pagination.page)}>
+              执行记录
+              <span className="ml-2 text-xs text-muted-foreground">{successCount}/{failedCount}</span>
+            </Link>
+          </TabsTrigger>
+          <TabsTrigger value="releases" asChild>
+            <Link href={buildOpsTabHref("releases")}>
+              版本发布
+              <span className="ml-2 text-xs text-muted-foreground">{releaseRuns.length}</span>
+            </Link>
           </TabsTrigger>
         </TabsList>
 
