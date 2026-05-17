@@ -19,6 +19,7 @@ type ReleaseDeploymentState = {
   confirmText: string;
   latestDispatch: ReleaseDispatchResult | null;
   tagName: string;
+  tagSourceRefType: ReleaseRefType;
   tagSourceRef: string;
   tagMessage: string;
   auxiliaryTab: ReleaseAuxiliaryTab;
@@ -44,6 +45,7 @@ export const useReleaseDeploymentStore = create<ReleaseDeploymentState>((set) =>
   confirmText: "",
   latestDispatch: null,
   tagName: "",
+  tagSourceRefType: "branch",
   tagSourceRef: "feature/multi-tenant",
   tagMessage: "",
   auxiliaryTab: "tag",

@@ -327,6 +327,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
     confirmText,
     latestDispatch,
     tagName,
+    tagSourceRefType,
     tagSourceRef,
     tagMessage,
     auxiliaryTab,
@@ -359,6 +360,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   function applySuccessfulRef(item: ReleaseSuccessfulRef) {
     setDraft({
       auxiliaryTab: "tag",
+      tagSourceRefType: "commit",
       tagSourceRef: item.head_sha,
       tagMessage: tagMessage.trim() || `release from ${item.head_sha.slice(0, 7)}`,
     });
@@ -380,6 +382,8 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
           confirmText: "",
           reason: reason.trim() || `发布 ${data.tag}`,
           tagName: "",
+          tagSourceRefType: "branch",
+          tagSourceRef: currentEnvironment?.default_ref || "feature/multi-tenant",
           tagMessage: "",
         });
         toast.success(data.message || "发布 Tag 已创建");
@@ -404,6 +408,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         confirmText: "",
         reason: reason.trim() || `回滚发布 ${data.tag}`,
         tagName: "",
+        tagSourceRefType: "commit",
         tagSourceRef: data.target_sha,
         tagMessage: "",
         auxiliaryTab: "successful",
@@ -649,16 +654,48 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 v2026.05.17.2。</FieldDescription>
                 </Field>
 
-                <Field>
-                  <FieldLabel htmlFor="release-tag-source">来源版本</FieldLabel>
-                  <Input
-                    id="release-tag-source"
-                    value={tagSourceRef}
-                    onChange={(event) => setDraft({ tagSourceRef: event.target.value })}
-                    placeholder="Commit SHA、Tag 或分支名"
-                  />
-                  <FieldDescription>建议使用已验收通过的 Commit SHA。</FieldDescription>
-                </Field>
+                <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                  <Field>
+                    <FieldLabel>来源类型</FieldLabel>
+                    <Select
+                      value={tagSourceRefType}
+                      onValueChange={(value) => {
+                        const nextType = value as ReleaseRefType;
+                        setDraft({
+                          tagSourceRefType: nextType,
+                          tagSourceRef: nextType === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "",
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {REF_TYPE_OPTIONS.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="commit">Commit</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel>来源版本</FieldLabel>
+                    <ReleaseRefCombobox
+                      type={tagSourceRefType}
+                      value={tagSourceRef}
+                      defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                      disabled={!options?.configured}
+                      onChange={(value) => setDraft({ tagSourceRef: value })}
+                    />
+                    <FieldDescription>
+                      建议选择已验收通过的 Commit；也可以选择分支或已有 Tag 作为来源。
+                    </FieldDescription>
+                  </Field>
+                </div>
 
                 <Field>
                   <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
