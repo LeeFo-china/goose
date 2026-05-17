@@ -4,6 +4,11 @@ name: Deploy Dev
 # matching service on VM-0-11-ubuntu.
 
 on:
+  push:
+    branches:
+      - feature/multi-tenant
+    paths:
+      - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
     inputs:
       service:
@@ -20,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-dev-${{ inputs.service }}
+  group: deploy-dev-${{ github.event.inputs.service || 'api' }}
   cancel-in-progress: true
 
 env:
@@ -33,7 +38,7 @@ env:
 
 jobs:
   deploy-dev:
-    name: Deploy dev ${{ inputs.service }}
+    name: Deploy dev ${{ github.event.inputs.service || 'api' }}
     runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
 
     steps:
@@ -112,7 +117,7 @@ jobs:
 
       - name: Build and push dev image
         env:
-          SERVICE: ${{ inputs.service }}
+          SERVICE: ${{ github.event.inputs.service || 'api' }}
         run: |
           set -euo pipefail
           cd "${RUNNER_WORKSPACE}/source"
@@ -168,7 +173,7 @@ jobs:
 
       - name: Deploy dev service
         env:
-          SERVICE: ${{ inputs.service }}
+          SERVICE: ${{ github.event.inputs.service || 'api' }}
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
         run: |
@@ -204,7 +209,7 @@ jobs:
 
       - name: Check dev service
         env:
-          SERVICE: ${{ inputs.service }}
+          SERVICE: ${{ github.event.inputs.service || 'api' }}
         run: |
           set -euo pipefail
 

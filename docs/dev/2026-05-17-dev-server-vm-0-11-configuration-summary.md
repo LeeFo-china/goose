@@ -179,7 +179,31 @@ user=postgres.<project-ref>
 
 ## 9. 当前未完成事项
 
-1. 提交并推送 GitHub Actions `Deploy Dev` workflow。
-2. 执行 dev DB migration。
-3. 写 dev seed 脚本并导入测试租户、员工、客户、项目。
-4. 启动 dev API/Admin/Worker 容器并完成 smoke test。
+1. 执行 dev DB migration。
+2. 写 dev seed 脚本并导入测试租户、员工、客户、项目。
+3. 启动 dev API/Admin/Worker 容器并完成 smoke test。
+
+## 10. Deploy Dev workflow
+
+已新增：
+
+```text
+.github/workflows/deploy-dev.yml
+```
+
+当前 default branch 是 `main`，GitHub Actions 的手动 `workflow_dispatch` 入口需要 workflow 文件存在于 default branch 后才能从 UI/API 手动触发。
+
+为了在 `feature/multi-tenant` 分支立即验证链路，workflow 也临时支持：
+
+```text
+push feature/multi-tenant 且只修改 .github/workflows/deploy-dev.yml
+```
+
+该 push 触发只部署 `api`，不会发布 Admin 或 worker。正式使用前建议把 workflow 合入 default branch，之后通过手动输入选择：
+
+```text
+api
+admin
+social-video-worker
+cos-reconcile-worker
+```
