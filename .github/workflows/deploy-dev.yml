@@ -9,6 +9,7 @@ on:
       - feature/multi-tenant
     paths:
       - ".github/workflows/deploy-dev.yml"
+      - "deploy/docker-compose.dev.yml"
   workflow_dispatch:
     inputs:
       service:
@@ -198,6 +199,11 @@ jobs:
               ;;
           esac
 
+          scp -i "${DEV_DEPLOY_KEY_PATH}" \
+            -o StrictHostKeyChecking=no \
+            "${RUNNER_WORKSPACE}/source/deploy/docker-compose.dev.yml" \
+            "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}:${DEV_DEPLOY_DIR}/docker-compose.dev.yml"
+
           ssh -i "${DEV_DEPLOY_KEY_PATH}" \
             -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
@@ -247,12 +253,14 @@ jobs:
                  echo '${COMPOSE_SERVICE}' is \${health:-\$state}
                  exit 0
                fi
-               if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
+             if [ \"\$state\" = exited ] || [ \"\$state\" = dead ]; then
                  break
                fi
                sleep 5
              done
-             docker inspect '${COMPOSE_SERVICE}' || true
+             state=\$(docker inspect -f '{{.State.Status}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+             health=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' '${COMPOSE_SERVICE}' 2>/dev/null || true)
+             echo '${COMPOSE_SERVICE}' state=\$state health=\$health
              docker logs --tail 120 '${COMPOSE_SERVICE}' || true
              exit 1"
 
