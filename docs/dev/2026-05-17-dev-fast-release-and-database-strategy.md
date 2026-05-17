@@ -98,6 +98,13 @@ h5-dev.goodcms.cn
 | H5 | 3000 或静态服务 | 13020 | `h5-dev.goodcms.cn` |
 | Worker | 无公网 | 无 | 内部运行 |
 
+H5 dev 注意事项：
+
+- `h5-dev.goodcms.cn` 的页面服务端口 `13020` 是预留位。
+- 小程序开发版活动列表依赖 `https://h5-dev.goodcms.cn/public/marketing-pages?scene=home`。
+- 因此 dev Nginx 必须把 `h5-dev.goodcms.cn/public/marketing-pages*` 和 `h5-dev.goodcms.cn/public/tenants/*` 代理到 API dev：`127.0.0.1:13000`。
+- 不能只配置 `h5-dev.goodcms.cn -> 127.0.0.1:13020`，否则公开活动接口会返回 `502 Bad Gateway`。
+
 dev 镜像 tag 建议：
 
 ```text

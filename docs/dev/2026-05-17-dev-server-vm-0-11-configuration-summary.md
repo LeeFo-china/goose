@@ -105,6 +105,20 @@ admin-dev.goodcms.cn -> 127.0.0.1:13010
 h5-dev.goodcms.cn    -> 127.0.0.1:13020
 ```
 
+`h5-dev.goodcms.cn` 当前没有独立 H5 运行容器，默认页面 upstream `127.0.0.1:13020` 仍是预留位。但为了小程序开发版能按同源 H5 域名读取公开活动接口，Nginx 已按生产 H5 口径增加公开接口代理：
+
+```text
+h5-dev.goodcms.cn/public/marketing-pages    -> 127.0.0.1:13000
+h5-dev.goodcms.cn/public/marketing-pages/*  -> 127.0.0.1:13000
+h5-dev.goodcms.cn/public/tenants/*          -> 127.0.0.1:13000
+```
+
+2026-05-18 验证：
+
+```text
+https://h5-dev.goodcms.cn/public/marketing-pages?scene=home -> 200
+```
+
 HTTPS 证书已申请成功：
 
 ```text
