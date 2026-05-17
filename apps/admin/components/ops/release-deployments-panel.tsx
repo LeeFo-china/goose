@@ -164,6 +164,14 @@ function getRefTypeIcon(type: ReleaseRefType) {
   return GitBranch;
 }
 
+function getRefEmptyMessage(type: ReleaseRefType, keyword: string, error: string) {
+  if (error) return error;
+  if (keyword.trim()) return "没有匹配的版本";
+  if (type === "tag") return "仓库暂无 Tag，请先创建生产版本 Tag，或切换为 Commit 发布。";
+  if (type === "commit") return "暂无可选 Commit，请输入关键词后重试。";
+  return "暂无可选分支";
+}
+
 function ReleaseRefCombobox({
   type,
   value,
@@ -237,7 +245,7 @@ function ReleaseRefCombobox({
             placeholder="搜索版本..."
           />
           <CommandList>
-            <CommandEmpty>{loading ? "加载中..." : error || "没有匹配的版本"}</CommandEmpty>
+            <CommandEmpty>{loading ? "加载中..." : getRefEmptyMessage(type, keyword, error)}</CommandEmpty>
             <CommandGroup>
               {options.map((item) => (
                 <CommandItem
