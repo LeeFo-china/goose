@@ -64,6 +64,7 @@ jobs:
       - name: Resolve services
         env:
           INPUT_SERVICE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || '' }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -74,6 +75,8 @@ jobs:
               python3 - <<'PY'
           import json
           import os
+          import sys
+          import urllib.request
           from pathlib import Path
 
           event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
@@ -81,6 +84,30 @@ jobs:
           for commit in event.get("commits", []):
               for key in ("added", "modified", "removed"):
                   files.update(commit.get(key, []))
+          head_commit = event.get("head_commit") or {}
+          for key in ("added", "modified", "removed"):
+              files.update(head_commit.get(key, []))
+
+          if not files:
+              repo = os.environ.get("GITHUB_REPOSITORY")
+              sha = event.get("after") or os.environ.get("GITHUB_SHA")
+              token = os.environ.get("GITHUB_TOKEN")
+              if repo and sha and token:
+                  url = f"https://api.github.com/repos/{repo}/commits/{sha}"
+                  request = urllib.request.Request(
+                      url,
+                      headers={
+                          "Accept": "application/vnd.github+json",
+                          "Authorization": f"Bearer {token}",
+                          "X-GitHub-Api-Version": "2022-11-28",
+                      },
+                  )
+                  try:
+                      with urllib.request.urlopen(request, timeout=20) as response:
+                          payload = json.loads(response.read().decode("utf-8"))
+                      files.update(file.get("filename", "") for file in payload.get("files", []))
+                  except Exception as exc:
+                      print(f"::warning::Failed to load changed files from GitHub API: {exc}", file=sys.stderr)
 
           services = []
 
@@ -141,6 +168,14 @@ jobs:
           ):
               add("cos-reconcile-worker")
 
+          if not files:
+              print("::warning::No changed files were available for push event; deploying all dev services.", file=sys.stderr)
+              add("api")
+              add("admin")
+              add("social-video-worker")
+              add("cos-reconcile-worker")
+
+          print("Changed files:", " ".join(sorted(files)) or "(none)", file=sys.stderr)
           print(" ".join(services))
           PY
             )"
