@@ -443,6 +443,7 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 - 只改 admin 时，可以只发布 admin。
 - 只改 docs、seed、migration 时，不触发 dev 部署。
 - workflow 日志能看到部署的 commit sha。
+- GitHub Actions Summary 能看到本次服务、commit、镜像 tag、健康状态、部署耗时、磁盘清理前后空间。
 
 清理策略：
 

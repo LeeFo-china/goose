@@ -61,6 +61,11 @@ jobs:
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
           test -r "${DEV_DEPLOY_KEY_PATH}"
 
+      - name: Mark deployment start
+        run: |
+          set -euo pipefail
+          echo "DEPLOY_STARTED_AT=$(date +%s)" >> "${GITHUB_ENV}"
+
       - name: Resolve services
         env:
           INPUT_SERVICE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.service || '' }}
@@ -328,9 +333,21 @@ jobs:
         if: ${{ always() }}
         run: |
           set -euo pipefail
+          disk_before="$(df -h / | awk 'NR==2 {print $3 \"/\" $2 \" used, \" $4 \" avail, \" $5}')"
           docker container prune -f || true
           docker image prune -f || true
           docker builder prune -f --filter "until=24h" || true
+          disk_after="$(df -h / | awk 'NR==2 {print $3 \"/\" $2 \" used, \" $4 \" avail, \" $5}')"
+
+          {
+            echo "### Dev build runner cleanup"
+            echo ""
+            echo "| Host | Before | After | Policy |"
+            echo "| --- | --- | --- | --- |"
+            echo "| ${RUNNER_NAME} | ${disk_before} | ${disk_after} | containers + dangling images + build cache older than 24h |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+
           df -h /
           docker system df || true
 
@@ -449,12 +466,101 @@ jobs:
             exit 0
           fi
 
-          ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+          cleanup_report="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
             -o StrictHostKeyChecking=no \
             "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
             "set -euo pipefail
+             disk_before=\$(df -h / | awk 'NR==2 {print \$3 \"/\" \$2 \" used, \" \$4 \" avail, \" \$5}')
              docker container prune -f || true
              docker image prune -a -f || true
              docker builder prune -a -f --filter 'until=24h' || true
+             disk_after=\$(df -h / | awk 'NR==2 {print \$3 \"/\" \$2 \" used, \" \$4 \" avail, \" \$5}')
+             printf 'before=%s\n' \"\$disk_before\"
+             printf 'after=%s\n' \"\$disk_after\"
              df -h /
-             docker system df || true"
+             docker system df || true")"
+
+          disk_before="$(printf '%s\n' "${cleanup_report}" | awk -F= '/^before=/{print $2; exit}')"
+          disk_after="$(printf '%s\n' "${cleanup_report}" | awk -F= '/^after=/{print $2; exit}')"
+
+          {
+            echo "### Dev server cleanup"
+            echo ""
+            echo "| Host | Before | After | Policy |"
+            echo "| --- | --- | --- | --- |"
+            echo "| ${DEV_DEPLOY_HOST} | ${disk_before:-unknown} | ${disk_after:-unknown} | containers + unused images + build cache older than 24h; no volume prune |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          printf '%s\n' "${cleanup_report}"
+
+      - name: Write dev deployment summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          elapsed_seconds=$(( $(date +%s) - ${DEPLOY_STARTED_AT:-$(date +%s)} ))
+          short_sha="${GITHUB_SHA:0:12}"
+          namespace="${{ vars.TENCENT_CCR_NAMESPACE }}"
+
+          {
+            echo "## Deploy Dev Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Result | ${{ job.status }} |"
+            echo "| Event | ${GITHUB_EVENT_NAME} |"
+            echo "| Branch | ${GITHUB_REF_NAME} |"
+            echo "| Commit | \`${short_sha}\` |"
+            echo "| Services | \`${SERVICES:-none}\` |"
+            echo "| Duration | ${elapsed_seconds}s |"
+            echo ""
+            echo "### Service status"
+            echo ""
+            echo "| Service | Container | Image | Runtime status |"
+            echo "| --- | --- | --- | --- |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ -z "${SERVICES:-}" ]; then
+            echo "| none | - | - | no matched service |" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          for SERVICE in ${SERVICES}; do
+            case "$SERVICE" in
+              api)
+                container=gooes-api-dev
+                image_repo=goose-api
+                ;;
+              admin)
+                container=gooes-admin-dev
+                image_repo=goose-admin
+                ;;
+              social-video-worker)
+                container=gooes-social-video-worker-dev
+                image_repo=goose-social-video-worker
+                ;;
+              cos-reconcile-worker)
+                container=gooes-cos-reconcile-worker-dev
+                image_repo=goose-api
+                ;;
+              *)
+                container="$SERVICE"
+                image_repo="unknown"
+                ;;
+            esac
+
+            image="${TENCENT_CCR_REGISTRY}/${namespace}/${image_repo}:${IMAGE_TAG}"
+            if [ -r "${DEV_DEPLOY_KEY_PATH}" ]; then
+              runtime_status="$(ssh -i "${DEV_DEPLOY_KEY_PATH}" \
+                -o StrictHostKeyChecking=no \
+                "${DEV_DEPLOY_USER}@${DEV_DEPLOY_HOST}" \
+                "docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' '${container}' 2>/dev/null || true" | xargs || true)"
+            else
+              runtime_status="deploy key unavailable"
+            fi
+            if [ -z "${runtime_status}" ]; then
+              runtime_status="not found"
+            fi
+
+            echo "| ${SERVICE} | ${container} | \`${image}\` | ${runtime_status} |" >> "${GITHUB_STEP_SUMMARY}"
+          done

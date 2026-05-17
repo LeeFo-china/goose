@@ -269,6 +269,13 @@ social-video-worker
 cos-reconcile-worker
 ```
 
+每次 `Deploy Dev` 执行完成后，GitHub Actions Summary 会输出发布摘要：
+
+- 发布结果、触发事件、分支、commit、服务列表、总耗时。
+- 每个服务的容器名、镜像 tag 和运行状态。
+- 构建 runner 清理前后磁盘。
+- dev 服务器清理前后磁盘。
+
 ## 13. Docker 清理策略
 
 Dev 发布链路有两层 Docker 清理。
