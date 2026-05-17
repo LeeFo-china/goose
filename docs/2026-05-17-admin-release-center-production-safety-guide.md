@@ -19,9 +19,9 @@
 | --- | --- | --- |
 | 分支 | dev 快速验证，例如 `feature/multi-tenant` | 不允许 |
 | Tag | 生产标准发布 | 允许，推荐 |
-| Commit SHA | 精准发布或回滚验证 | 允许 |
+| Commit SHA | 创建 Tag 的来源版本 | 不允许直接发布 |
 
-生产发布不允许直接选择分支，避免分支继续变化导致发布内容不稳定。
+生产发布不允许直接选择分支或裸 Commit SHA。GitHub `workflow_dispatch` 的 `ref` 只能使用分支或 Tag；如果直接传 Commit SHA，会返回 `No ref found for:<sha>`。因此生产发布必须先创建 Tag，再用 Tag 发布。
 
 推荐生产 tag 格式：
 
@@ -57,9 +57,10 @@ git push origin v2026.05.17.1
 
 1. 校验服务是否被当前环境支持。
 2. 生产环境拒绝 `branch` 来源。
-3. 校验选择的 branch / tag / commit 是否真实存在。
-4. 检查目标环境 workflow 是否已有 `queued` 或 `in_progress` 发布。
-5. 如果已有发布运行中，返回 `RELEASE_WORKFLOW_BUSY`，不重复提交。
+3. 拒绝直接使用 `commit` 发起 workflow dispatch。
+4. 校验选择的 branch / tag 是否真实存在。
+5. 检查目标环境 workflow 是否已有 `queued` 或 `in_progress` 发布。
+6. 如果已有发布运行中，返回 `RELEASE_WORKFLOW_BUSY`，不重复提交。
 
 ## 发布后回查
 

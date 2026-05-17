@@ -33,7 +33,15 @@ export const ReleaseDispatchSchema = z.object({
     ctx.addIssue({
       code: "custom",
       path: ["ref_type"],
-      message: "生产发布不能直接选择分支，请选择 Tag 或 Commit SHA",
+      message: "生产发布不能直接选择分支，请先创建 Tag 后用 Tag 发布",
+    });
+  }
+
+  if (value.ref_type === "commit") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ref_type"],
+      message: "GitHub Actions 发布不能直接使用 Commit SHA，请先创建 Tag 后用 Tag 发布",
     });
   }
 

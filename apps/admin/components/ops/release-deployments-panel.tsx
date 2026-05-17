@@ -77,7 +77,6 @@ const REF_TYPE_OPTIONS: Array<{
 }> = [
   { value: "branch", label: "分支", description: "适合 dev 快速验证" },
   { value: "tag", label: "Tag", description: "适合生产发布" },
-  { value: "commit", label: "Commit", description: "按固定提交发布" },
 ];
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -316,6 +315,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const [tagName, setTagName] = useState("");
   const [tagSourceRef, setTagSourceRef] = useState("feature/multi-tenant");
   const [tagMessage, setTagMessage] = useState("");
+  const [auxiliaryTab, setAuxiliaryTab] = useState("tag");
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -333,18 +333,10 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   }
 
   function applySuccessfulRef(item: ReleaseSuccessfulRef) {
-    const nextEnvironment = options?.environments.find((env) => env.environment === item.environment) || null;
-
-    setEnvironment(item.environment);
-    setRefType("commit");
-    setRef(item.ref);
-    if (!nextEnvironment?.services.some((option) => option.value === service)) {
-      setService(nextEnvironment?.services[0]?.value || "admin");
-    }
-    setConfirmText("");
-    setReason((value) => value.trim() || `按最近成功版本重新发布：${item.head_sha.slice(0, 7)}`);
+    setAuxiliaryTab("tag");
     setTagSourceRef(item.head_sha);
-    toast.success("已填入最近成功 Commit，请确认服务后提交发布");
+    setTagMessage((value) => value.trim() || `release from ${item.head_sha.slice(0, 7)}`);
+    toast.success("已填入创建 Tag 的来源 Commit，请先创建 Tag 后发布");
   }
 
   function runCreateTag() {
@@ -436,7 +428,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               <ShieldCheck data-icon="inline-start" />
               <AlertTitle>生产发布规则</AlertTitle>
               <AlertDescription>
-                生产只允许 Tag 或 Commit；提交前会校验版本存在，并阻止并发生产发布。
+                生产只允许 Tag；如需发布指定 Commit，请先在右侧创建 Tag。
               </AlertDescription>
             </Alert>
           ) : null}
@@ -514,7 +506,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                 onChange={setRef}
               />
               <FieldDescription>
-                {production ? "生产环境只能选择 Tag 或 Commit SHA。" : "开发环境默认使用 feature/multi-tenant，也可以选择最近提交。"}
+                {production ? "生产环境只能选择 Tag。" : "开发环境默认使用 feature/multi-tenant，也可以选择 Tag。"}
               </FieldDescription>
             </Field>
 
@@ -573,14 +565,14 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <Tag data-icon="inline-start" />
             发布辅助
           </CardTitle>
-          <CardDescription>创建生产 Tag，或复用最近成功 Commit。</CardDescription>
+          <CardDescription>创建生产 Tag，或把成功 Commit 填入 Tag 来源。</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="tag" className="flex flex-col gap-4">
+          <Tabs value={auxiliaryTab} onValueChange={setAuxiliaryTab} className="flex flex-col gap-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="tag">创建 Tag</TabsTrigger>
               <TabsTrigger value="successful">
-                成功版本
+                成功 Commit
                 <span className="ml-2 text-xs text-muted-foreground">{successfulRefs.length}</span>
               </TabsTrigger>
             </TabsList>
@@ -654,13 +646,13 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                       </Button>
                     ) : null}
                     <Button type="button" variant="outline" size="sm" onClick={() => applySuccessfulRef(item)}>
-                      用此版本
+                      作为来源
                     </Button>
                   </div>
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                该操作只填入 Commit，不会自动发布；生产环境仍需输入确认文本。
+                该操作只把 Commit 填入创建 Tag 表单，不会直接发布。
               </p>
             </TabsContent>
           </Tabs>
