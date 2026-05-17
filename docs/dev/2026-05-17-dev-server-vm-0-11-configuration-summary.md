@@ -113,7 +113,7 @@ Domains: api-dev.goodcms.cn admin-dev.goodcms.cn h5-dev.goodcms.cn
 Expiry Date: 2026-08-15
 ```
 
-当前访问 dev 域名返回 `502` 属于预期状态，因为 dev 容器尚未启动；证书和 Nginx 已正常命中 dev 服务器。
+当前 `api-dev.goodcms.cn` 与 `admin-dev.goodcms.cn` 已由 dev 容器提供服务。
 
 ## 6. DNS 当前状态
 
@@ -131,7 +131,7 @@ h5-dev.goodcms.cn    -> 43.165.126.30
 curl --noproxy '*' http://api-dev.goodcms.cn/
 ```
 
-当前 HTTPS 返回 `502` 属于预期状态，因为 dev 容器尚未启动；它已经命中 dev 服务器上的 Nginx。
+当前 HTTPS 已正常命中 dev 服务器上的 Nginx，并转发到对应 dev 容器。
 
 ## 7. Dev Supabase
 
@@ -179,11 +179,57 @@ user=postgres.<project-ref>
 
 ## 9. 当前未完成事项
 
-1. 执行 dev DB migration。
-2. 写 dev seed 脚本并导入测试租户、员工、客户、项目。
-3. 启动 dev API/Admin/Worker 容器并完成 smoke test。
+1. Worker dev 容器按需启动。
+2. 后续把 `Deploy Dev` workflow 合入 default branch 后，从 GitHub UI 手动选择服务发布。
 
-## 10. Deploy Dev workflow
+## 10. Dev DB migration 与 seed
+
+Dev Supabase 已在 2026-05-17 执行完整 migration：
+
+```text
+supabase_migrations.schema_migrations: 140
+public.tenants: 1
+public.permissions: 53
+public.roles: 5
+```
+
+幂等 seed 脚本：
+
+```text
+scripts/dev/seed-dev.sql
+```
+
+执行方式：
+
+```bash
+ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
+  'set -a; . /opt/gooes-dev/docker/.env.dev.db; psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1' \
+  < scripts/dev/seed-dev.sql
+```
+
+当前 seed 数据：
+
+| 类型 | 值 |
+| --- | --- |
+| 租户 | 默认装修公司 |
+| 后台 dev 管理员手机号 | `19900000001` |
+| 后台验证码 | dev 环境已开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，可免验证码登录 |
+| 客户 | `19900001001`、`19900001002` |
+| 积分账户 | `is_test=true`，初始测试积分 `1000000` |
+
+## 11. Smoke test
+
+2026-05-17 已完成：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `https://api-dev.goodcms.cn/` | `200 OK`，返回 `{"hello":"world"}` |
+| `https://admin-dev.goodcms.cn/login` | `200 OK` |
+| API dev 容器 | `gooes-api-dev` healthy |
+| Admin dev 容器 | `gooes-admin-dev` healthy |
+| 后台 dev 登录 | 手机号 `19900000001` 登录成功，角色 `system_admin`、`platform_admin`，权限数 53 |
+
+## 12. Deploy Dev workflow
 
 已新增：
 
@@ -191,7 +237,7 @@ user=postgres.<project-ref>
 .github/workflows/deploy-dev.yml
 ```
 
-当前 default branch 是 `main`，GitHub Actions 的手动 `workflow_dispatch` 入口需要 workflow 文件存在于 default branch 后才能从 UI/API 手动触发。
+当前已可通过 GitHub Actions 手动触发 `Deploy Dev`，并指定 `feature/multi-tenant` 分支与服务名。
 
 为了在 `feature/multi-tenant` 分支立即验证链路，workflow 也临时支持：
 
@@ -199,7 +245,7 @@ user=postgres.<project-ref>
 push feature/multi-tenant 且只修改 .github/workflows/deploy-dev.yml
 ```
 
-该 push 触发只部署 `api`，不会发布 Admin 或 worker。正式使用前建议把 workflow 合入 default branch，之后通过手动输入选择：
+该 push 触发只部署 `api`，不会发布 Admin 或 worker。日常 dev 发布建议使用手动触发，并通过输入选择：
 
 ```text
 api

@@ -239,11 +239,36 @@ dev 数据库不建议长期直接复制完整生产数据，原因是：
 - 必要时从生产抽样数据，但必须脱敏。
 - seed 脚本必须可重复执行，不能因为重复插入导致失败。
 
-固定测试数据建议：
+当前已落地的 dev seed：
+
+```text
+scripts/dev/seed-dev.sql
+```
+
+固定登录与测试数据：
+
+| 数据 | 值 |
+| --- | --- |
+| 默认租户 | 默认装修公司 |
+| 后台 dev 管理员手机号 | `19900000001` |
+| dev 客户手机号 | `19900001001`、`19900001002` |
+| dev 积分账户 | `is_test=true`，测试积分 `1000000` |
+
+执行 seed：
+
+```bash
+ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
+  'set -a; . /opt/gooes-dev/docker/.env.dev.db; psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1' \
+  < scripts/dev/seed-dev.sql
+```
+
+seed 已验证可重复执行。后台 dev 环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，首次用 `19900000001` 登录时 API 会自动创建后台登录用的 `auth.users`，不需要 seed 直接写入 Supabase Auth 表。
+
+后续扩展固定测试数据建议：
 
 | 数据 | 建议 |
 | --- | --- |
-| 租户 | `dev_default`、`dev_decoration_a` |
+| 租户 | 第一版复用 migration 创建的 `gooes_default`；如需多租户联调，再增加 `dev_decoration_a` |
 | 员工手机号 | 使用 `190/191` 段内部测试号 |
 | 客户手机号 | 使用内部测试号，不使用真实客户手机号 |
 | 微信 openid | dev 环境单独绑定，不复用生产映射 |
