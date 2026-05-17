@@ -6,6 +6,7 @@ import {
   RunOpsScriptSchema,
 } from "@/schema/ops-scripts";
 import {
+  ReleaseCreateTagSchema,
   ReleaseDispatchSchema,
   ReleaseRefListQuerySchema,
   ReleaseRunListQuerySchema,
@@ -115,6 +116,18 @@ class AdminOpsController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await releaseDeploymentService.listRefs(queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/ops/releases/tags")
+  async createReleaseTag(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.release.run");
+
+    const bodyResult = ReleaseCreateTagSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await releaseDeploymentService.createTag(authContext, bodyResult.data);
     return ResponseHandler.success(data);
   }
 

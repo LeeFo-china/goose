@@ -1,6 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import { AppError } from "@/errors/app-error";
 import { ErrorCodes } from "@/errors/error-codes";
 import type {
+  ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
   ReleaseRefListQuery,
@@ -85,6 +87,23 @@ type GithubCommit = {
     } | null;
   };
   html_url?: string | null;
+};
+
+type GithubAnnotatedTag = {
+  sha: string;
+  tag: string;
+  message: string;
+  url: string;
+};
+
+type GithubRef = {
+  ref: string;
+  url: string;
+  object?: {
+    sha?: string;
+    type?: string;
+    url?: string;
+  };
 };
 
 type ReleaseWorkflow = {
@@ -460,6 +479,91 @@ class ReleaseDeploymentService {
     }
 
     await githubRequest<GithubCommit>(`/commits/${encodeURIComponent(input.ref)}`);
+  }
+
+  private async assertTagNotExists(tag: string) {
+    const tags = await githubRequest<GithubTag[]>("/tags?per_page=100");
+    const matched = tags.some((item) => item.name === tag);
+    if (matched) {
+      throw Errors.business(
+        409,
+        "发布 Tag 已存在，请使用新的版本号",
+        ErrorCodes.RELEASE_TAG_ALREADY_EXISTS,
+        { tag },
+      );
+    }
+  }
+
+  private async resolveCommit(ref: string) {
+    try {
+      return await githubRequest<GithubCommit>(`/commits/${encodeURIComponent(ref)}`);
+    } catch (error) {
+      if (error instanceof AppError && error.statusCode !== 404) {
+        throw error;
+      }
+
+      throw Errors.business(
+        404,
+        "来源版本不存在，请选择有效的 Commit、Tag 或分支",
+        ErrorCodes.RELEASE_REF_NOT_FOUND,
+        { ref },
+      );
+    }
+  }
+
+  async createTag(authContext: AuthContext, input: ReleaseCreateTagInput) {
+    await this.assertTagNotExists(input.tag);
+
+    const config = getGithubConfig();
+    const commit = await this.resolveCommit(input.source_ref);
+    const tagObject = await githubRequest<GithubAnnotatedTag>("/git/tags", {
+      method: "POST",
+      body: JSON.stringify({
+        tag: input.tag,
+        message: input.message,
+        object: commit.sha,
+        type: "commit",
+      }),
+    });
+
+    const ref = await githubRequest<GithubRef>("/git/refs", {
+      method: "POST",
+      body: JSON.stringify({
+        ref: `refs/tags/${input.tag}`,
+        sha: tagObject.sha,
+      }),
+    });
+
+    const htmlUrl = `${config.webBase}/tree/${encodeURIComponent(input.tag)}`;
+
+    await platformAuditLogService.recordBestEffort({
+      action: "platform_release_tag_create",
+      actorEmployeeId: authContext.employeeId,
+      actorUserId: authContext.authUserId,
+      resourceType: "github_release_tag",
+      resourceLabel: input.tag,
+      status: "success",
+      summary: `创建生产发布 Tag：${input.tag}`,
+      metadata: {
+        tag: input.tag,
+        message: input.message,
+        source_ref: input.source_ref,
+        target_sha: commit.sha,
+        tag_sha: tagObject.sha,
+        ref: ref.ref,
+        html_url: htmlUrl,
+      },
+    });
+
+    return {
+      tag: input.tag,
+      ref_type: "tag" as const,
+      source_ref: input.source_ref,
+      target_sha: commit.sha,
+      tag_sha: tagObject.sha,
+      html_url: htmlUrl,
+      message: "发布 Tag 已创建，可以直接选择该 Tag 发起生产发布。",
+    };
   }
 
   private async listActiveRuns(workflow: ReleaseWorkflow) {

@@ -158,6 +158,16 @@ export type ReleaseSuccessfulRefListData = {
   pagination: Pagination;
 };
 
+export type ReleaseCreateTagResult = {
+  tag: string;
+  ref_type: "tag";
+  source_ref: string;
+  target_sha: string;
+  tag_sha: string;
+  html_url: string;
+  message: string;
+};
+
 export type ReleaseDispatchResult = {
   environment: ReleaseEnvironment;
   service: ReleaseService;

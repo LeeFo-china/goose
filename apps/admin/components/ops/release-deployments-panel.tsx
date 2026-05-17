@@ -7,6 +7,7 @@ import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Roc
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
+  ReleaseCreateTagResult,
   ReleaseDispatchResult,
   ReleaseEnvironment,
   ReleaseOptionsData,
@@ -106,6 +107,23 @@ async function dispatchRelease(payload: {
   return data.data as ReleaseDispatchResult;
 }
 
+async function createReleaseTag(payload: {
+  tag: string;
+  source_ref: string;
+  message: string;
+}) {
+  const response = await fetch("/api/backend/admin/ops/releases/tags", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "发布 Tag 创建失败"));
+  }
+  return data.data as ReleaseCreateTagResult;
+}
+
 async function fetchReleaseRefs(input: {
   type: ReleaseRefType;
   keyword: string;
@@ -170,6 +188,14 @@ function getRefEmptyMessage(type: ReleaseRefType, keyword: string, error: string
   if (type === "tag") return "仓库暂无 Tag，请先创建生产版本 Tag，或切换为 Commit 发布。";
   if (type === "commit") return "暂无可选 Commit，请输入关键词后重试。";
   return "暂无可选分支";
+}
+
+function getTodayTagPlaceholder() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `v${year}.${month}.${day}.1`;
 }
 
 function ReleaseRefCombobox({
@@ -274,6 +300,7 @@ function ReleaseRefCombobox({
 export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [tagPending, startTagTransition] = useTransition();
   const [environment, setEnvironment] = useState<ReleaseEnvironment>("dev");
   const currentEnvironment = useMemo(
     () => options?.environments.find((item) => item.environment === environment) || null,
@@ -285,6 +312,9 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const [reason, setReason] = useState("");
   const [confirmText, setConfirmText] = useState("");
   const [latestDispatch, setLatestDispatch] = useState<ReleaseDispatchResult | null>(null);
+  const [tagName, setTagName] = useState("");
+  const [tagSourceRef, setTagSourceRef] = useState("feature/multi-tenant");
+  const [tagMessage, setTagMessage] = useState("");
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -312,7 +342,31 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
     }
     setConfirmText("");
     setReason((value) => value.trim() || `按最近成功版本重新发布：${item.head_sha.slice(0, 7)}`);
+    setTagSourceRef(item.head_sha);
     toast.success("已填入最近成功 Commit，请确认服务后提交发布");
+  }
+
+  function runCreateTag() {
+    startTagTransition(async () => {
+      try {
+        const data = await createReleaseTag({
+          tag: tagName,
+          source_ref: tagSourceRef,
+          message: tagMessage,
+        });
+        setEnvironment("production");
+        setRefType("tag");
+        setRef(data.tag);
+        setConfirmText("");
+        setReason((value) => value.trim() || `发布 ${data.tag}`);
+        setTagName("");
+        setTagMessage("");
+        toast.success(data.message || "发布 Tag 已创建");
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "发布 Tag 创建失败");
+      }
+    });
   }
 
   function runDispatch() {
@@ -338,6 +392,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const serviceOptions = currentEnvironment?.services || [];
   const production = environment === "production";
   const disabled = pending || !options?.configured || !currentEnvironment || !ref.trim() || (production && confirmText !== "确认发布生产");
+  const createTagDisabled = tagPending || !options?.configured || !tagName.trim() || !tagSourceRef.trim() || !tagMessage.trim();
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(360px,420px)_1fr]">
@@ -508,6 +563,57 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Tag data-icon="inline-start" />
+            创建发布 Tag
+          </CardTitle>
+          <CardDescription>只允许新增 vYYYY.MM.DD.N，不覆盖已有 tag。</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="release-tag-name">Tag 名称</FieldLabel>
+              <Input
+                id="release-tag-name"
+                value={tagName}
+                onChange={(event) => setTagName(event.target.value)}
+                placeholder={getTodayTagPlaceholder()}
+              />
+              <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 v2026.05.17.2。</FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="release-tag-source">来源版本</FieldLabel>
+              <Input
+                id="release-tag-source"
+                value={tagSourceRef}
+                onChange={(event) => setTagSourceRef(event.target.value)}
+                placeholder="Commit SHA、Tag 或分支名"
+              />
+              <FieldDescription>建议使用已验收通过的 Commit SHA，创建后会自动填入发布表单。</FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
+              <Textarea
+                id="release-tag-message"
+                value={tagMessage}
+                onChange={(event) => setTagMessage(event.target.value)}
+                rows={2}
+                placeholder="说明这个生产版本包含的内容"
+              />
+            </Field>
+          </FieldGroup>
+
+          <Button type="button" variant="outline" disabled={createTagDisabled} onClick={runCreateTag}>
+            {tagPending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Tag data-icon="inline-start" />}
+            创建并填入 Tag
+          </Button>
         </CardContent>
       </Card>
 

@@ -36,7 +36,15 @@ v2026.05.17.1
 v2026.05.17.2
 ```
 
-如果发布中心选择 Tag 后列表为空，通常代表 GitHub 仓库还没有创建任何 tag。先在代码仓库创建并推送一个生产版本 tag：
+发布中心支持在超管后台创建生产 Tag：
+
+- 输入 `vYYYY.MM.DD.N` 格式的 Tag 名称。
+- 输入来源版本，支持 Commit SHA、已有 Tag 或分支名。
+- 后端会解析来源版本到 commit，再创建 GitHub annotated tag 和 `refs/tags/*`。
+- 后端会拒绝已存在的 Tag，不允许覆盖历史发布版本。
+- 创建成功后 Admin 会自动切换到生产 Tag 发布，并填入刚创建的 Tag。
+
+如果需要用命令行兜底，也可以在代码仓库创建并推送生产版本 tag：
 
 ```bash
 git tag -a v2026.05.17.1 -m "release: v2026.05.17.1"
@@ -86,6 +94,17 @@ Admin 会在提交后展示「查看本次发布」链接。若 GitHub run 尚�
 - `metadata.workflow_url`
 - `metadata.run_id`
 - `metadata.run_url`
+
+后台创建 Tag 也会写入审计：
+
+- `action`: `platform_release_tag_create`
+- `resource_type`: `github_release_tag`
+- `resource_label`: Tag 名称
+- `metadata.tag`
+- `metadata.source_ref`
+- `metadata.target_sha`
+- `metadata.tag_sha`
+- `metadata.html_url`
 
 ## 回滚第一版
 

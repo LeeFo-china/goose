@@ -46,6 +46,14 @@ export const ReleaseDispatchSchema = z.object({
   }
 });
 
+export const ReleaseCreateTagSchema = z.object({
+  tag: z.string()
+    .trim()
+    .regex(/^v\d{4}\.\d{2}\.\d{2}\.\d+$/, "Tag 格式必须为 vYYYY.MM.DD.N，例如 v2026.05.17.1"),
+  source_ref: z.string().trim().min(1, "来源版本不能为空").max(120, "来源版本不能超过 120 个字符"),
+  message: z.string().trim().min(1, "Tag 说明不能为空").max(200, "Tag 说明不能超过 200 个字符"),
+});
+
 export const ReleaseRunListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
 });
@@ -64,6 +72,7 @@ export type ReleaseEnvironment = z.infer<typeof ReleaseEnvironmentSchema>;
 export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
+export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
 export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;
 export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;
