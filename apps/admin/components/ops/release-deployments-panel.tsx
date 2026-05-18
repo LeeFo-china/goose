@@ -62,7 +62,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type ReleaseDeploymentsPanelProps = {
@@ -411,7 +410,6 @@ function ReleaseServiceMultiSelect({
 export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [tagPending, startTagTransition] = useTransition();
   const {
     environment,
     service,
@@ -421,11 +419,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
     reason,
     confirmText,
     latestDispatch,
+    productionVersionMode,
     tagName,
     tagSourceRefType,
     tagSourceRef,
     tagMessage,
-    auxiliaryTab,
     rollbackPendingId,
     setDraft,
     resetEnvironment,
@@ -457,39 +455,14 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
   function applySuccessfulRef(item: ReleaseSuccessfulRef) {
     setDraft({
-      auxiliaryTab: "tag",
+      environment: "production",
+      refType: "tag",
+      productionVersionMode: "new_tag",
       tagSourceRefType: "commit",
       tagSourceRef: item.head_sha,
       tagMessage: tagMessage.trim() || `release from ${item.head_sha.slice(0, 7)}`,
     });
-    toast.success("已填入创建 Tag 的来源 Commit，请先创建 Tag 后发布");
-  }
-
-  function runCreateTag() {
-    startTagTransition(async () => {
-      try {
-        const data = await createReleaseTag({
-          tag: tagName,
-          source_ref: tagSourceRef,
-          message: tagMessage,
-        });
-        setDraft({
-          environment: "production",
-          refType: "tag",
-          ref: data.tag,
-          confirmText: "",
-          reason: reason.trim() || `发布 ${data.tag}`,
-          tagName: "",
-          tagSourceRefType: "branch",
-          tagSourceRef: currentEnvironment?.default_ref || "feature/multi-tenant",
-          tagMessage: "",
-        });
-        toast.success(data.message || "发布 Tag 已创建");
-        router.refresh();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "发布 Tag 创建失败");
-      }
-    });
+    toast.success("已填入生产发布来源，请在左侧补充 Tag 名称后提交");
   }
 
   async function runCreateRollbackTag(item: ReleaseSuccessfulRef) {
@@ -509,7 +482,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         tagSourceRefType: "commit",
         tagSourceRef: data.target_sha,
         tagMessage: "",
-        auxiliaryTab: "successful",
+        productionVersionMode: "existing_tag",
       });
       toast.success(data.message || "回滚 Tag 已创建，请确认后发布生产");
       router.refresh();
@@ -523,20 +496,46 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   function runDispatch() {
     const selectedServices = services;
     startTransition(async () => {
+      let createdTag = "";
       try {
+        let releaseRef = ref;
+        if (environment === "production" && productionVersionMode === "new_tag") {
+          const tagData = await createReleaseTag({
+            tag: tagName,
+            source_ref: tagSourceRef,
+            message: tagMessage,
+          });
+          releaseRef = tagData.tag;
+          createdTag = tagData.tag;
+          setDraft({
+            ref: tagData.tag,
+            productionVersionMode: "existing_tag",
+            reason: reason.trim() || `发布 ${tagData.tag}`,
+            tagName: "",
+            tagSourceRefType: "branch",
+            tagSourceRef: currentEnvironment?.default_ref || "feature/multi-tenant",
+            tagMessage: "",
+          });
+          toast.success(tagData.message || "发布 Tag 已创建");
+        }
+
         const data = await dispatchRelease({
           environment,
           service: selectedServices.includes("all") ? "all" : selectedServices[0] || service,
           services: selectedServices,
           ref_type: refType,
-          ref,
-          reason,
+          ref: releaseRef,
+          reason: reason || (environment === "production" && productionVersionMode === "new_tag" ? `发布 ${releaseRef}` : ""),
           confirm_text: environment === "production" ? confirmText : undefined,
         });
         setDraft({ latestDispatch: data });
         toast.success(data.message || "发布任务已提交");
         router.refresh();
       } catch (err) {
+        if (createdTag) {
+          toast.error(`Tag ${createdTag} 已创建，但发布任务提交失败：${err instanceof Error ? err.message : "未知错误"}`);
+          return;
+        }
         toast.error(err instanceof Error ? err.message : "发布任务提交失败");
       }
     });
@@ -544,15 +543,19 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
   const serviceOptions = currentEnvironment?.services || [];
   const selectedServices = services;
+  const production = environment === "production";
+  const creatingProductionTag = production && productionVersionMode === "new_tag";
   const selectedServiceLabel = selectedServices.includes("all")
     ? "全部服务"
     : serviceOptions
       .filter((item) => selectedServices.includes(item.value))
       .map((item) => item.label)
       .join("、");
-  const production = environment === "production";
-  const disabled = pending || !options?.configured || !currentEnvironment || selectedServices.length === 0 || !ref.trim() || (production && confirmText !== "确认发布生产");
-  const createTagDisabled = tagPending || !options?.configured || !tagName.trim() || !tagSourceRef.trim() || !tagMessage.trim();
+  const releaseRefReady = creatingProductionTag
+    ? Boolean(tagName.trim() && tagSourceRef.trim() && tagMessage.trim())
+    : Boolean(ref.trim());
+  const confirmRefLabel = creatingProductionTag ? tagName || "新 Tag" : ref || "-";
+  const disabled = pending || !options?.configured || !currentEnvironment || selectedServices.length === 0 || !releaseRefReady || (production && confirmText !== "确认发布生产");
 
   return (
     <div className="flex flex-col gap-3">
@@ -595,7 +598,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                 <ShieldCheck data-icon="inline-start" />
                 <AlertTitle>生产发布规则</AlertTitle>
                 <AlertDescription>
-                  生产只允许 Tag；如需发布指定 Commit，请先在右侧创建 Tag。
+                  生产只允许发布 Tag；可以选择已有 Tag，也可以在本表单中创建新 Tag 后自动发起发布。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -638,44 +641,155 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               </FieldDescription>
             </Field>
 
-            <Field>
-              <FieldLabel>版本来源</FieldLabel>
-              <Select value={refType} onValueChange={(value) => onRefTypeChange(value as ReleaseRefType)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择版本来源" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {REF_TYPE_OPTIONS.map((item) => (
-                      <SelectItem
-                        key={item.value}
-                        value={item.value}
-                        disabled={production && item.value === "branch"}
-                      >
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                {REF_TYPE_OPTIONS.find((item) => item.value === refType)?.description}
-              </FieldDescription>
-            </Field>
+            {production ? (
+              <>
+                <Field>
+                  <FieldLabel>生产版本</FieldLabel>
+                  <Select
+                    value={productionVersionMode}
+                    onValueChange={(value) => {
+                      const nextMode = value as "existing_tag" | "new_tag";
+                      setDraft({
+                        productionVersionMode: nextMode,
+                        refType: "tag",
+                        ref: nextMode === "new_tag" ? "" : ref,
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择生产版本方式" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="existing_tag">选择已有 Tag</SelectItem>
+                        <SelectItem value="new_tag">创建新 Tag 并发布</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    {productionVersionMode === "new_tag"
+                      ? "提交时会先创建 Tag，再用这个 Tag 发起生产发布。"
+                      : "适合发布已经创建并确认过的生产 Tag。"}
+                  </FieldDescription>
+                </Field>
 
-            <Field>
-              <FieldLabel>发布版本</FieldLabel>
-              <ReleaseRefCombobox
-                type={refType}
-                value={ref}
-                defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
-                disabled={!options?.configured}
-                onChange={(value) => setDraft({ ref: value })}
-              />
-              <FieldDescription>
-                {production ? "生产环境只能选择 Tag。" : "开发环境默认使用 feature/multi-tenant，也可以选择 Tag。"}
-              </FieldDescription>
-            </Field>
+                {productionVersionMode === "existing_tag" ? (
+                  <Field>
+                    <FieldLabel>发布 Tag</FieldLabel>
+                    <ReleaseRefCombobox
+                      type="tag"
+                      value={ref}
+                      defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                      disabled={!options?.configured}
+                      onChange={(value) => setDraft({ ref: value, refType: "tag" })}
+                    />
+                    <FieldDescription>生产环境只允许选择 Tag 发布。</FieldDescription>
+                  </Field>
+                ) : (
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="release-tag-name">Tag 名称</FieldLabel>
+                      <Input
+                        id="release-tag-name"
+                        value={tagName}
+                        onChange={(event) => setDraft({ tagName: event.target.value })}
+                        placeholder={getTodayTagPlaceholder()}
+                      />
+                      <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 {getTodayTagPlaceholder()}。</FieldDescription>
+                    </Field>
+
+                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                      <Field>
+                        <FieldLabel>来源类型</FieldLabel>
+                        <Select
+                          value={tagSourceRefType}
+                          onValueChange={(value) => {
+                            const nextType = value as ReleaseRefType;
+                            setDraft({
+                              tagSourceRefType: nextType,
+                              tagSourceRef: nextType === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "",
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择类型" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {REF_TYPE_OPTIONS.map((item) => (
+                                <SelectItem key={item.value} value={item.value}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="commit">Commit</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field>
+                        <FieldLabel>来源版本</FieldLabel>
+                        <ReleaseRefCombobox
+                          type={tagSourceRefType}
+                          value={tagSourceRef}
+                          defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                          disabled={!options?.configured}
+                          onChange={(value) => setDraft({ tagSourceRef: value })}
+                        />
+                        <FieldDescription>
+                          建议选择已验收通过的 Commit；也可以选择分支或已有 Tag 作为来源。
+                        </FieldDescription>
+                      </Field>
+                    </div>
+
+                    <Field>
+                      <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
+                      <Textarea
+                        id="release-tag-message"
+                        value={tagMessage}
+                        onChange={(event) => setDraft({ tagMessage: event.target.value })}
+                        rows={3}
+                        placeholder="说明这个生产版本包含的内容"
+                      />
+                    </Field>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <Field>
+                  <FieldLabel>版本来源</FieldLabel>
+                  <Select value={refType} onValueChange={(value) => onRefTypeChange(value as ReleaseRefType)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择版本来源" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {REF_TYPE_OPTIONS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    {REF_TYPE_OPTIONS.find((item) => item.value === refType)?.description}
+                  </FieldDescription>
+                </Field>
+
+                <Field>
+                  <FieldLabel>发布版本</FieldLabel>
+                  <ReleaseRefCombobox
+                    type={refType}
+                    value={ref}
+                    defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                    disabled={!options?.configured}
+                    onChange={(value) => setDraft({ ref: value })}
+                  />
+                  <FieldDescription>开发环境默认使用 feature/multi-tenant，也可以选择 Tag。</FieldDescription>
+                </Field>
+              </>
+            )}
 
             <Field>
               <FieldLabel htmlFor="release-reason">发布说明</FieldLabel>
@@ -706,14 +820,15 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <AlertDialogTrigger asChild>
               <Button type="button" disabled={disabled}>
                 {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Rocket data-icon="inline-start" />}
-                提交发布
+                {creatingProductionTag ? "创建 Tag 并提交发布" : "提交发布"}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>{production ? "确认发布生产版本" : "确认发布开发环境"}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  将提交 {currentEnvironment?.label || "-"} 的 {selectedServiceLabel || "-"} 发布任务，版本为 {ref || "-"}。
+                  将提交 {currentEnvironment?.label || "-"} 的 {selectedServiceLabel || "-"} 发布任务，版本为 {confirmRefLabel}。
+                  {creatingProductionTag ? " 系统会先创建这个 Tag，再发起生产发布。" : ""}
                   任务提交后请在 GitHub Actions 或发布记录中查看执行状态。
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -732,151 +847,65 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <Tag data-icon="inline-start" />
             发布辅助
           </CardTitle>
-          <CardDescription>创建生产 Tag，或基于成功 Commit 生成回滚 Tag。</CardDescription>
+          <CardDescription>从成功 Commit 选择生产来源，或生成回滚 Tag。</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Tabs
-            value={auxiliaryTab}
-            onValueChange={(value) => setDraft({ auxiliaryTab: value as "tag" | "successful" })}
-            className="flex flex-col gap-4"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="tag">创建 Tag</TabsTrigger>
-              <TabsTrigger value="successful">
-                成功 Commit
-                <span className="ml-2 text-xs text-muted-foreground">{successfulRefs.length}</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="tag" className="mt-0 flex flex-col gap-4">
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="release-tag-name">Tag 名称</FieldLabel>
-                  <Input
-                    id="release-tag-name"
-                    value={tagName}
-                    onChange={(event) => setDraft({ tagName: event.target.value })}
-                    placeholder={getTodayTagPlaceholder()}
-                  />
-                  <FieldDescription>格式固定为 vYYYY.MM.DD.N，例如 v2026.05.17.2。</FieldDescription>
-                </Field>
-
-                <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
-                  <Field>
-                    <FieldLabel>来源类型</FieldLabel>
-                    <Select
-                      value={tagSourceRefType}
-                      onValueChange={(value) => {
-                        const nextType = value as ReleaseRefType;
-                        setDraft({
-                          tagSourceRefType: nextType,
-                          tagSourceRef: nextType === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "",
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择类型" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {REF_TYPE_OPTIONS.map((item) => (
-                            <SelectItem key={item.value} value={item.value}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="commit">Commit</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel>来源版本</FieldLabel>
-                    <ReleaseRefCombobox
-                      type={tagSourceRefType}
-                      value={tagSourceRef}
-                      defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
-                      disabled={!options?.configured}
-                      onChange={(value) => setDraft({ tagSourceRef: value })}
-                    />
-                    <FieldDescription>
-                      建议选择已验收通过的 Commit；也可以选择分支或已有 Tag 作为来源。
-                    </FieldDescription>
-                  </Field>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium">成功 Commit</div>
+            <Badge variant="outline">{successfulRefs.length}</Badge>
+          </div>
+          {successfulRefs.length === 0 ? (
+            <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+              暂无成功发布版本
+            </div>
+          ) : successfulRefs.map((item) => (
+            <div
+              key={`${item.environment}-${item.id}`}
+              className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
+                  <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
                 </div>
-
-                <Field>
-                  <FieldLabel htmlFor="release-tag-message">Tag 说明</FieldLabel>
-                  <Textarea
-                    id="release-tag-message"
-                    value={tagMessage}
-                    onChange={(event) => setDraft({ tagMessage: event.target.value })}
-                    rows={3}
-                    placeholder="说明这个生产版本包含的内容"
-                  />
-                </Field>
-              </FieldGroup>
-
-              <Button type="button" variant="outline" disabled={createTagDisabled} onClick={runCreateTag}>
-                {tagPending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Tag data-icon="inline-start" />}
-                创建并填入 Tag
-              </Button>
-            </TabsContent>
-
-            <TabsContent value="successful" className="mt-0 flex flex-col gap-2">
-              {successfulRefs.length === 0 ? (
-                <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
-                  暂无成功发布版本
-                </div>
-              ) : successfulRefs.map((item) => (
-                <div
-                  key={`${item.environment}-${item.id}`}
-                  className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
+                <div className="mt-1 truncate text-xs text-muted-foreground">{item.title}</div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.description}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {item.html_url ? (
+                  <Button asChild variant="ghost" size="icon" title="查看发布记录">
+                    <Link href={item.html_url} target="_blank" rel="noreferrer">
+                      <ExternalLink data-icon="icon-only" />
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applySuccessfulRef(item)}
                 >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
-                      <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
-                    </div>
-                    <div className="mt-1 truncate text-xs text-muted-foreground">{item.title}</div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.description}</div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {item.html_url ? (
-                      <Button asChild variant="ghost" size="icon" title="查看发布记录">
-                        <Link href={item.html_url} target="_blank" rel="noreferrer">
-                          <ExternalLink data-icon="icon-only" />
-                        </Link>
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => applySuccessfulRef(item)}
-                    >
-                      作为来源
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={Boolean(rollbackPendingId)}
-                      onClick={() => runCreateRollbackTag(item)}
-                    >
-                      {rollbackPendingId === item.id ? (
-                        <Loader2 className="animate-spin" data-icon="inline-start" />
-                      ) : (
-                        <Tag data-icon="inline-start" />
-                      )}
-                      回滚 Tag
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <p className="text-xs text-muted-foreground">
-                回滚 Tag 只会创建并填入生产发布版本，不会自动提交生产发布。
-              </p>
-            </TabsContent>
-          </Tabs>
+                  作为来源
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={Boolean(rollbackPendingId)}
+                  onClick={() => runCreateRollbackTag(item)}
+                >
+                  {rollbackPendingId === item.id ? (
+                    <Loader2 className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Tag data-icon="inline-start" />
+                  )}
+                  回滚 Tag
+                </Button>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            “作为来源”会把 Commit 填入左侧创建新 Tag 流程；回滚 Tag 只会创建并填入发布版本，不会自动提交生产发布。
+          </p>
         </CardContent>
       </Card>
       </div>

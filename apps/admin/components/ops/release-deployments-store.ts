@@ -8,7 +8,7 @@ import type {
   ReleaseService,
 } from "@/components/ops/ops-types";
 
-type ReleaseAuxiliaryTab = "tag" | "successful";
+type ProductionVersionMode = "existing_tag" | "new_tag";
 
 type ReleaseDeploymentState = {
   environment: ReleaseEnvironment;
@@ -19,11 +19,11 @@ type ReleaseDeploymentState = {
   reason: string;
   confirmText: string;
   latestDispatch: ReleaseDispatchResult | null;
+  productionVersionMode: ProductionVersionMode;
   tagName: string;
   tagSourceRefType: ReleaseRefType;
   tagSourceRef: string;
   tagMessage: string;
-  auxiliaryTab: ReleaseAuxiliaryTab;
   rollbackPendingId: string;
   setDraft: (draft: Partial<Omit<ReleaseDeploymentState, "setDraft" | "resetEnvironment" | "resetRefType">>) => void;
   resetEnvironment: (input: {
@@ -46,11 +46,11 @@ export const useReleaseDeploymentStore = create<ReleaseDeploymentState>((set) =>
   reason: "",
   confirmText: "",
   latestDispatch: null,
+  productionVersionMode: "existing_tag",
   tagName: "",
   tagSourceRefType: "branch",
   tagSourceRef: "feature/multi-tenant",
   tagMessage: "",
-  auxiliaryTab: "tag",
   rollbackPendingId: "",
   setDraft: (draft) => set(draft),
   resetEnvironment: ({ environment, defaultRef, service }) => {
@@ -62,6 +62,7 @@ export const useReleaseDeploymentStore = create<ReleaseDeploymentState>((set) =>
       service,
       services: [service],
       confirmText: "",
+      productionVersionMode: "existing_tag",
     });
   },
   resetRefType: ({ refType, defaultRef }) => {
