@@ -100,13 +100,13 @@ async function getOpsData(params: OpsPageSearchParams) {
           data: null as ReleaseOptionsData | null,
           error: error instanceof Error ? error.message : "发布配置加载失败",
         })),
-      fetchBackendData<ReleaseRunListData>(token, "/admin/ops/releases/runs?page=1&pageSize=10")
+      fetchBackendData<ReleaseRunListData>(token, "/admin/ops/releases/runs?page=1&pageSize=5")
         .then((data) => ({ data, error: null as string | null }))
         .catch((error) => ({
           data: null as ReleaseRunListData | null,
           error: error instanceof Error ? error.message : "发布记录加载失败",
         })),
-      fetchBackendData<ReleaseSuccessfulRefListData>(token, "/admin/ops/releases/successful-refs?pageSize=6")
+      fetchBackendData<ReleaseSuccessfulRefListData>(token, "/admin/ops/releases/successful-refs?pageSize=5")
         .then((data) => ({ data, error: null as string | null }))
         .catch((error) => ({
           data: null as ReleaseSuccessfulRefListData | null,
