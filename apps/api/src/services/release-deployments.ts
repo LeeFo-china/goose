@@ -64,6 +64,8 @@ type ReleaseRunAudit = {
   actor_user_id: string | null;
   actor_employee: EmployeeLite | null;
   reason: string | null;
+  operation: string | null;
+  operation_label: string | null;
   ref: string | null;
   ref_type_label: string | null;
   workflow_url: string | null;
@@ -169,6 +171,11 @@ const REF_TYPE_LABELS: Record<ReleaseRefType, string> = {
   tag: "Tag",
   commit: "Commit",
 };
+
+const RELEASE_OPERATION_LABELS = {
+  release: "发布",
+  rollback: "回滚",
+} as const;
 
 function getGithubConfig() {
   const token = process.env.GITHUB_RELEASE_TOKEN || process.env.GITHUB_TOKEN || "";
@@ -324,6 +331,8 @@ function normalizeRunAudit(record: PlatformReleaseDispatchAuditRecord): ReleaseR
     actor_user_id: record.actor_user_id,
     actor_employee: record.actor_employee,
     reason: getMetadataValue(record.metadata, "reason"),
+    operation: getMetadataValue(record.metadata, "operation"),
+    operation_label: getMetadataValue(record.metadata, "operation_label"),
     ref: getMetadataValue(record.metadata, "ref"),
     ref_type_label: getMetadataValue(record.metadata, "ref_type_label"),
     workflow_url: getMetadataValue(record.metadata, "workflow_url"),
@@ -814,6 +823,8 @@ class ReleaseDeploymentService {
     const config = getGithubConfig();
     const releaseServiceInput = services.includes("all") ? "all" : services.join(",");
     const serviceLabel = formatServiceLabels(services);
+    const operation = input.operation || "release";
+    const operationLabel = RELEASE_OPERATION_LABELS[operation];
     const inputs = { service: releaseServiceInput };
 
     await githubRequest<null>(
@@ -837,9 +848,11 @@ class ReleaseDeploymentService {
       resourceType: "github_actions_workflow",
       resourceLabel: `${workflow.label} ${serviceLabel}`,
       status: "success",
-      summary: `发起${workflow.label}发布：${serviceLabel}`,
+      summary: `发起${workflow.label}${operationLabel}：${serviceLabel}`,
       metadata: {
         environment: input.environment,
+        operation,
+        operation_label: operationLabel,
         service: services.includes("all") ? "all" : services[0],
         services,
         ref_type: input.ref_type,

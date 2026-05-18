@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, ShieldCheck, Tag } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, RotateCcw, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
@@ -11,6 +11,7 @@ import type {
   ReleaseCreateTagResult,
   ReleaseDispatchResult,
   ReleaseEnvironment,
+  ReleaseOperation,
   ReleaseOptionsData,
   ReleaseRefOption,
   ReleaseRefType,
@@ -103,6 +104,7 @@ async function dispatchRelease(payload: {
   services?: ReleaseService[];
   ref_type: ReleaseRefType;
   ref: string;
+  operation?: ReleaseOperation;
   reason: string;
   confirm_text?: string;
 }) {
@@ -245,6 +247,7 @@ function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <ReleaseRunDetailItem label="环境" value={run.workflow_label} />
+            <ReleaseRunDetailItem label="类型" value={run.audit?.operation_label || "发布"} />
             <ReleaseRunDetailItem label="服务" value={run.service_label} />
             <ReleaseRunDetailItem label="版本" value={getRunRefLabel(run)} />
             <ReleaseRunDetailItem label="GitHub Run ID" value={run.audit?.run_id || run.id} />
@@ -510,6 +513,7 @@ function ReleaseServiceMultiSelect({
 export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [rollbackConfirmText, setRollbackConfirmText] = useState("");
   const {
     environment,
     service,
@@ -588,6 +592,49 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "回滚 Tag 创建失败");
+    } finally {
+      setDraft({ rollbackPendingId: "" });
+    }
+  }
+
+  async function runRollbackDispatch(item: ReleaseSuccessfulRef) {
+    setDraft({ rollbackPendingId: item.id });
+    const fallbackReason = `生产回滚到 ${item.head_sha.slice(0, 7)}：${item.title}`;
+    try {
+      const tagData = await createRollbackTag({
+        source_ref: item.head_sha,
+        message: `rollback to ${item.head_sha.slice(0, 7)}`,
+      });
+      const data = await dispatchRelease({
+        environment: "production",
+        service: "all",
+        services: ["all"],
+        ref_type: "tag",
+        ref: tagData.tag,
+        operation: "rollback",
+        reason: reason.trim() || fallbackReason,
+        confirm_text: "确认回滚生产",
+      });
+      setDraft({
+        environment: "production",
+        service: "all",
+        services: ["all"],
+        refType: "tag",
+        ref: tagData.tag,
+        confirmText: "",
+        reason: reason.trim() || fallbackReason,
+        tagName: "",
+        tagSourceRefType: "commit",
+        tagSourceRef: tagData.target_sha,
+        tagMessage: "",
+        latestDispatch: data,
+        productionVersionMode: "existing_tag",
+      });
+      setRollbackConfirmText("");
+      toast.success(data.message || `已提交生产回滚：${tagData.tag}`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "生产回滚提交失败");
     } finally {
       setDraft({ rollbackPendingId: "" });
     }
@@ -1000,11 +1047,55 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   )}
                   回滚 Tag
                 </Button>
+                <AlertDialog onOpenChange={(open) => {
+                  if (open) setRollbackConfirmText("");
+                }}>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="destructive" size="sm" disabled={Boolean(rollbackPendingId)}>
+                      <RotateCcw data-icon="inline-start" />
+                      回滚发布
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认回滚生产环境</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        将基于 {item.head_sha.slice(0, 7)} 创建回滚 Tag，并发布生产环境全部服务。该操作会重建生产容器。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <FieldGroup>
+                      <Field>
+                        <FieldLabel htmlFor={`rollback-confirm-${item.id}`}>确认文本</FieldLabel>
+                        <Input
+                          id={`rollback-confirm-${item.id}`}
+                          value={rollbackConfirmText}
+                          onChange={(event) => setRollbackConfirmText(event.target.value)}
+                          placeholder="输入：确认回滚生产"
+                        />
+                        <FieldDescription>输入确认文本后才能提交生产回滚。</FieldDescription>
+                      </Field>
+                    </FieldGroup>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={rollbackConfirmText !== "确认回滚生产" || Boolean(rollbackPendingId)}
+                        onClick={() => runRollbackDispatch(item)}
+                      >
+                        {rollbackPendingId === item.id ? (
+                          <Loader2 className="animate-spin" data-icon="inline-start" />
+                        ) : (
+                          <RotateCcw data-icon="inline-start" />
+                        )}
+                        确认回滚
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           ))}
           <p className="text-xs text-muted-foreground">
-            “作为来源”会把 Commit 填入左侧创建新 Tag 流程；回滚 Tag 只会创建并填入发布版本，不会自动提交生产发布。
+            “作为来源”会把 Commit 填入左侧创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。
           </p>
         </CardContent>
       </Card>

@@ -12,6 +12,7 @@ export const ReleaseServiceSchema = z.enum([
 ]);
 
 export const ReleaseRefTypeSchema = z.enum(["branch", "tag", "commit"]);
+export const ReleaseOperationSchema = z.enum(["release", "rollback"]);
 
 export const ReleaseDispatchSchema = z.object({
   environment: ReleaseEnvironmentSchema,
@@ -19,10 +20,12 @@ export const ReleaseDispatchSchema = z.object({
   services: z.array(ReleaseServiceSchema).min(1, "请选择发布服务").max(5, "发布服务不能超过 5 个").optional(),
   ref_type: ReleaseRefTypeSchema.default("branch"),
   ref: z.string().trim().min(1, "版本不能为空").max(120, "版本不能超过 120 个字符"),
+  operation: ReleaseOperationSchema.default("release"),
   reason: z.string().trim().max(200, "发布原因不能超过 200 个字符").optional(),
   confirm_text: z.string().trim().max(40, "确认文本不能超过 40 个字符").optional(),
 }).superRefine((value, ctx) => {
   const selectedServices = value.services?.length ? value.services : [value.service];
+  const productionConfirmText = value.operation === "rollback" ? "确认回滚生产" : "确认发布生产";
 
   if (selectedServices.includes("all") && selectedServices.length > 1) {
     ctx.addIssue({
@@ -56,11 +59,19 @@ export const ReleaseDispatchSchema = z.object({
     });
   }
 
-  if (value.environment === "production" && value.confirm_text !== "确认发布生产") {
+  if (value.operation === "rollback" && value.environment !== "production") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["operation"],
+      message: "回滚只支持生产环境",
+    });
+  }
+
+  if (value.environment === "production" && value.confirm_text !== productionConfirmText) {
     ctx.addIssue({
       code: "custom",
       path: ["confirm_text"],
-      message: "生产发布需要输入：确认发布生产",
+      message: `生产${value.operation === "rollback" ? "回滚" : "发布"}需要输入：${productionConfirmText}`,
     });
   }
 });
@@ -95,6 +106,7 @@ export const ReleaseRefListQuerySchema = z.object({
 export type ReleaseEnvironment = z.infer<typeof ReleaseEnvironmentSchema>;
 export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
+export type ReleaseOperation = z.infer<typeof ReleaseOperationSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
 export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
 export type ReleaseCreateRollbackTagInput = z.infer<typeof ReleaseCreateRollbackTagSchema>;

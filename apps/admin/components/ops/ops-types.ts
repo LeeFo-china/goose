@@ -87,6 +87,7 @@ export type ReleaseEnvironment = "dev" | "production";
 export type ReleaseService = "api" | "admin" | "social-video-worker" | "cos-reconcile-worker" | "all";
 
 export type ReleaseRefType = "branch" | "tag" | "commit";
+export type ReleaseOperation = "release" | "rollback";
 
 export type ReleaseRefOption = {
   value: string;
@@ -134,6 +135,8 @@ export type ReleaseRun = {
       phone: string | null;
     } | null;
     reason: string | null;
+    operation: string | null;
+    operation_label: string | null;
     ref: string | null;
     ref_type_label: string | null;
     workflow_url: string | null;
