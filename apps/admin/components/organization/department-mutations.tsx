@@ -7,9 +7,19 @@ import {
   type DepartmentCode,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
-import { Building2, Check, Edit3, Loader2, Plus } from "lucide-react";
+import { Building2, Check, Edit3, Loader2, Plus, PowerOff } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,19 +67,49 @@ async function mutateDepartment(input: {
   id?: string;
   payload: unknown;
 }) {
-  const response = await fetch(
-    input.id ? `/api/backend/departments/${input.id}` : "/api/backend/departments",
-    {
+  return requestDepartmentMutation({
+    path: input.id ? `/api/backend/departments/${input.id}` : "/api/backend/departments",
+    method: input.method,
+    payload: input.payload,
+  });
+}
+
+async function enableDepartmentsBatch(payload: unknown) {
+  return requestDepartmentMutation({
+    path: "/api/backend/departments/enable-batch",
+    method: "POST",
+    payload,
+  });
+}
+
+async function requestDepartmentMutation(input: {
+  path: string;
+  method: "POST" | "PATCH";
+  payload: unknown;
+}) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
+
+  try {
+    const response = await fetch(input.path, {
       method: input.method,
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input.payload),
-    },
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false) {
+      throw new Error(getPayloadMessage(payload, "操作失败"));
+    }
+    return payload;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("请求超时，请稍后重试");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  return payload;
 }
 
 function toDepartmentCode(value: string | null | undefined): DepartmentCode {
@@ -230,10 +270,12 @@ function EnableDepartmentsDialog({
   enabledDepartmentCodes,
   open,
   onOpenChange,
+  onEnabled,
 }: {
   enabledDepartmentCodes: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEnabled?: (codes: string[]) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -289,20 +331,18 @@ function EnableDepartmentsDialog({
     setError("");
     startTransition(async () => {
       try {
-        await Promise.all(
-          selectedCodes.map((code) => {
+        await enableDepartmentsBatch({
+          departments: selectedCodes.map((code) => {
             const option = availableOptions.find((item) => item.code === code);
-            return mutateDepartment({
-              method: "POST",
-              payload: {
-                code,
-                name: DepartmentConfig[code].label,
-                enabled: true,
-                sort: option?.sort ?? 0,
-              },
-            });
+            return {
+              code,
+              name: DepartmentConfig[code].label,
+              enabled: true,
+              sort: option?.sort ?? 0,
+            };
           }),
-        );
+        });
+        onEnabled?.(selectedCodes);
         onOpenChange(false);
         router.refresh();
       } catch (err) {
@@ -406,8 +446,10 @@ function EnableDepartmentsDialog({
 
 export function EnableDepartmentButton({
   enabledDepartmentCodes,
+  onEnabled,
 }: {
   enabledDepartmentCodes: string[];
+  onEnabled?: (codes: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -421,6 +463,7 @@ export function EnableDepartmentButton({
         enabledDepartmentCodes={enabledDepartmentCodes}
         open={open}
         onOpenChange={setOpen}
+        onEnabled={onEnabled}
       />
     </>
   );
@@ -428,22 +471,103 @@ export function EnableDepartmentButton({
 
 export function DepartmentRowActions({
   department,
+  onDisabled,
 }: {
   department: DepartmentRecord;
+  onDisabled?: (code: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  function closeDisableDialog() {
+    if (pending) return;
+    setError("");
+    setDisableOpen(false);
+  }
+
+  function disableDepartment() {
+    setError("");
+    startTransition(async () => {
+      try {
+        await mutateDepartment({
+          method: "PATCH",
+          id: department.id,
+          payload: { enabled: false },
+        });
+        if (department.code) {
+          onDisabled?.(department.code);
+        }
+        setDisableOpen(false);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "停用部门失败");
+      }
+    });
+  }
 
   return (
-    <div className="flex justify-end">
-      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}>
+    <div className="flex justify-end gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        onClick={() => setOpen(true)}
+      >
         <Edit3 data-icon="inline-start" />
         编辑
       </Button>
+      {department.enabled === false ? null : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => setDisableOpen(true)}
+        >
+          {pending ? (
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <PowerOff data-icon="inline-start" />
+          )}
+          停用
+        </Button>
+      )}
       <DepartmentDialog
         department={department}
         open={open}
         onOpenChange={setOpen}
       />
+      <AlertDialog
+        open={disableOpen}
+        onOpenChange={(nextOpen) => (nextOpen ? setDisableOpen(true) : closeDisableDialog())}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>停用部门</AlertDialogTitle>
+            <AlertDialogDescription>
+              停用后，{department.name || "该部门"} 将从部门列表、员工和岗位新增候选中移除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                disableDepartment();
+              }}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认停用
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

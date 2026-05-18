@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   DepartmentConfig,
@@ -98,12 +99,27 @@ const columns: ColumnDef<DepartmentRecord>[] = [
 
 export function DepartmentsTable({
   departments,
+  onDepartmentDisabled,
 }: {
   departments: DepartmentRecord[];
+  onDepartmentDisabled?: (code: string) => void;
 }) {
+  const tableColumns = useMemo<ColumnDef<DepartmentRecord>[]>(() => columns.map((column) => {
+    if (column.id !== "actions") return column;
+    return {
+      ...column,
+      cell: ({ row }) => (
+        <DepartmentRowActions
+          department={row.original}
+          onDisabled={onDepartmentDisabled}
+        />
+      ),
+    };
+  }), [onDepartmentDisabled]);
+
   return (
     <DataTable
-      columns={columns}
+      columns={tableColumns}
       data={departments}
       emptyText="没有符合条件的部门"
       minWidth="min-w-[900px]"

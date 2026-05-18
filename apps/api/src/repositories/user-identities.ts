@@ -138,7 +138,7 @@ class UserIdentityRepository {
       query = query.eq("openid", input.openid);
     }
 
-    const { error } = await query;
+    const { error } = await query.select("id");
 
     if (error) {
       throw Errors.dbError("解绑用户登录凭证失败", error);
@@ -291,7 +291,8 @@ class UserIdentityRepository {
       .eq("user_id", input.userId)
       .eq("identity_type", input.identityType)
       .eq("status", "active")
-      .neq("identity_id", input.keepIdentityId);
+      .neq("identity_id", input.keepIdentityId)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("清理用户旧业务身份失败", error);
@@ -313,7 +314,8 @@ class UserIdentityRepository {
       .eq("tenant_id", input.tenantId)
       .eq("identity_type", input.identityType)
       .eq("identity_id", input.identityId)
-      .eq("status", "active");
+      .eq("status", "active")
+      .select("id");
 
     if (error) {
       throw Errors.dbError("解绑用户业务身份失败", error);

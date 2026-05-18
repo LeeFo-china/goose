@@ -215,12 +215,8 @@ class PlatformTenantRepository {
     operatorEmployeeId?: string | null;
     admin?: NonNullable<CreatePlatformTenantInput["admin"]>;
   }): Promise<PlatformTenantInitializationResult> {
-    const defaultEnabledDepartmentCodes = [
-      input.admin?.department_code ?? "ADMIN",
-    ];
     const departments = await this.upsertDefaultDepartments(
       input.tenantId,
-      defaultEnabledDepartmentCodes,
     );
     const posts = await this.upsertDefaultPosts(input.tenantId);
     const roles = await this.upsertDefaultRoles(input.tenantId);
@@ -461,7 +457,7 @@ class PlatformTenantRepository {
 
   private async upsertDefaultDepartments(
     tenantId: string,
-    enabledCodes: string[] = ["ADMIN"],
+    enabledCodes: string[] = [],
   ) {
     const rows = DEPARTMENT_CODE_VALUES.map((code) => ({
       tenant_id: tenantId,
@@ -523,7 +519,7 @@ class PlatformTenantRepository {
       ((existingTenantDepartments || []) as Array<{ code: string; enabled: boolean }>)
         .map((department) => [department.code, department.enabled]),
     );
-    const enabledCodeSet = new Set(input.enabledCodes?.length ? input.enabledCodes : ["ADMIN"]);
+    const enabledCodeSet = new Set(input.enabledCodes ?? []);
     const rows = input.departments
       .map((department) => {
         const template = templateMap.get(department.code);

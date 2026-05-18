@@ -3,7 +3,7 @@ import {
   CreateDepartmentSchema,
   UpdateDepartmentSchema,
 } from "@/schema/departments";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { DEPARTMENT_CODE_VALUES } from "@gooes/domain";
 import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
@@ -22,6 +22,13 @@ const DepartmentListQuerySchema = z.object({
     z.literal("false").transform(() => false),
     z.boolean(),
   ]).default(true),
+});
+
+const EnableDepartmentsBatchSchema = z.object({
+  departments: z
+    .array(CreateDepartmentSchema)
+    .min(1, "请选择需要启用的部门")
+    .max(DEPARTMENT_CODE_VALUES.length, "启用部门数量超出限制"),
 });
 
 type DepartmentTemplateRow = {
@@ -96,6 +103,68 @@ class DepartmentController extends BaseController<
     return data as DepartmentTemplateRow;
   }
 
+  private async findDepartmentTemplates(codes: string[]) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("department_templates")
+      .select("id, code, default_name, sort")
+      .in("code", codes)
+      .eq("enabled", true);
+
+    if (error) throw Errors.dbError("查询部门模板失败", error);
+    const templates = (data || []) as DepartmentTemplateRow[];
+    const templateMap = new Map(templates.map((template) => [template.code, template]));
+    const missingCode = codes.find((code) => !templateMap.has(code));
+    if (missingCode) throw Errors.badRequest(`部门模板不存在或已停用：${missingCode}`);
+    return templateMap;
+  }
+
+  private async ensureLegacyDepartments(input: {
+    tenantId: string;
+    departments: Array<{ code: string; name: string }>;
+  }) {
+    const adminClient = SupabaseDB.getAdminClient();
+    const codes = Array.from(new Set(input.departments.map((department) => department.code)));
+    const { data: existingData, error: existingError } = await adminClient
+      .from("departments")
+      .select("id, code, name, created_at")
+      .eq("tenant_id", input.tenantId)
+      .in("code", codes);
+
+    if (existingError) throw Errors.dbError("查询兼容部门失败", existingError);
+
+    const existingDepartments = (existingData || []) as Array<{
+      id: string;
+      code: string;
+      name: string;
+      created_at: string | null;
+    }>;
+    const departmentMap = new Map(existingDepartments.map((department) => [
+      department.code,
+      department,
+    ]));
+    const missingRows = input.departments
+      .filter((department) => !departmentMap.has(department.code))
+      .map((department) => ({
+        tenant_id: input.tenantId,
+        code: department.code,
+        name: department.name,
+      }));
+
+    if (missingRows.length > 0) {
+      const { data: insertedData, error: insertedError } = await adminClient
+        .from("departments")
+        .insert(missingRows)
+        .select("id, code, name, created_at");
+
+      if (insertedError) throw Errors.dbError("创建兼容部门失败", insertedError);
+      for (const department of (insertedData || []) as typeof existingDepartments) {
+        departmentMap.set(department.code, department);
+      }
+    }
+
+    return departmentMap;
+  }
+
   private async ensureLegacyDepartment(input: {
     tenantId: string;
     code: string;
@@ -135,47 +204,95 @@ class DepartmentController extends BaseController<
 
   private async syncTenantDepartmentConfig(input: {
     tenantId: string;
+    template: DepartmentTemplateRow;
     department: { id: string; code: string; name: string };
+    aliasName?: string;
     enabled?: boolean;
     sort?: number | null;
   }) {
     const adminClient = SupabaseDB.getAdminClient();
-    const template = await this.findDepartmentTemplate(input.department.code);
     const payload = {
       tenant_id: input.tenantId,
-      template_id: template.id,
+      template_id: input.template.id,
       code: input.department.code,
-      alias_name: input.department.name,
+      alias_name: input.aliasName ?? input.department.name,
       enabled: input.enabled ?? true,
-      sort: input.sort ?? template.sort ?? 0,
+      sort: input.sort ?? input.template.sort ?? 0,
       legacy_department_id: input.department.id,
     };
-    const { data: existing, error: existingError } = await adminClient
+
+    const { data, error } = await adminClient
       .from("tenant_departments")
-      .select("id")
-      .eq("tenant_id", input.tenantId)
-      .eq("legacy_department_id", input.department.id)
+      .upsert(payload, { onConflict: "tenant_id,code" })
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `)
       .maybeSingle();
 
-    if (existingError) {
-      throw Errors.dbError("查询租户部门配置失败", existingError);
-    }
-
-    if (existing?.id) {
-      const { error } = await adminClient
-        .from("tenant_departments")
-        .update(payload)
-        .eq("id", existing.id);
-
-      if (error) throw Errors.dbError("同步租户部门配置失败", error);
-      return;
-    }
-
-    const { error } = await adminClient
-      .from("tenant_departments")
-      .upsert(payload, { onConflict: "tenant_id,code" });
-
     if (error) throw Errors.dbError("同步租户部门配置失败", error);
+    if (!data) throw Errors.badRequest("部门启用失败");
+    return data as TenantDepartmentRow;
+  }
+
+  private async syncTenantDepartmentConfigs(input: {
+    tenantId: string;
+    departments: Array<{
+      template: DepartmentTemplateRow;
+      department: { id: string; code: string; name: string };
+      aliasName: string;
+      enabled?: boolean;
+      sort?: number | null;
+    }>;
+  }) {
+    const rows = input.departments.map((item) => ({
+      tenant_id: input.tenantId,
+      template_id: item.template.id,
+      code: item.department.code,
+      alias_name: item.aliasName,
+      enabled: item.enabled ?? true,
+      sort: item.sort ?? item.template.sort ?? 0,
+      legacy_department_id: item.department.id,
+    }));
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .upsert(rows, { onConflict: "tenant_id,code" })
+      .select(`
+        id,
+        tenant_id,
+        template_id,
+        code,
+        alias_name,
+        enabled,
+        sort,
+        legacy_department_id,
+        created_at,
+        updated_at,
+        department_templates (
+          id,
+          code,
+          default_name,
+          sort
+        )
+      `);
+
+    if (error) throw Errors.dbError("批量同步租户部门配置失败", error);
+    return (data || []) as TenantDepartmentRow[];
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -300,41 +417,66 @@ class DepartmentController extends BaseController<
       name: aliasName,
     });
 
-    await this.syncTenantDepartmentConfig({
+    const department = await this.syncTenantDepartmentConfig({
       tenantId,
+      template,
       department: legacyDepartment,
+      aliasName,
       enabled: result.data.enabled ?? true,
       sort: result.data.sort ?? template.sort ?? 0,
     });
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("tenant_departments")
-      .select(`
-        id,
-        tenant_id,
-        template_id,
-        code,
-        alias_name,
-        enabled,
-        sort,
-        legacy_department_id,
-        created_at,
-        updated_at,
-        department_templates (
-          id,
-          code,
-          default_name,
-          sort
-        )
-      `)
-      .eq("tenant_id", tenantId)
-      .eq("code", template.code)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询部门失败", error);
-    if (!data) throw Errors.badRequest("部门启用失败");
     return ResponseHandler.success(
-      this.serializeTenantDepartment(data as TenantDepartmentRow),
+      this.serializeTenantDepartment(department),
     );
+  };
+
+  enableBatch = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = await this.getRequiredAuthContext(request);
+    const tenantId = accessPolicyService.assertTenantContext(
+      authContext,
+      "组织架构必须在租户上下文中操作",
+    );
+    const result = EnableDepartmentsBatchSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const departmentMap = new Map(result.data.departments.map((department) => [
+      department.code,
+      department,
+    ]));
+    const departments = Array.from(departmentMap.values());
+    const codes = departments.map((department) => department.code);
+    const templateMap = await this.findDepartmentTemplates(codes);
+    const legacyDepartmentMap = await this.ensureLegacyDepartments({
+      tenantId,
+      departments: departments.map((department) => ({
+        code: department.code,
+        name: department.name || templateMap.get(department.code)?.default_name || department.code,
+      })),
+    });
+
+    const rows = departments.map((department) => {
+      const template = templateMap.get(department.code);
+      const legacyDepartment = legacyDepartmentMap.get(department.code);
+      if (!template || !legacyDepartment) {
+        throw Errors.badRequest(`部门启用失败：${department.code}`);
+      }
+      return {
+        template,
+        department: legacyDepartment,
+        aliasName: department.name || template.default_name,
+        enabled: department.enabled ?? true,
+        sort: department.sort ?? template.sort ?? 0,
+      };
+    });
+
+    const syncedDepartments = await this.syncTenantDepartmentConfigs({
+      tenantId,
+      departments: rows,
+    });
+
+    return ResponseHandler.success({
+      list: syncedDepartments.map((department) => this.serializeTenantDepartment(department)),
+    });
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -408,6 +550,13 @@ class DepartmentController extends BaseController<
     return ResponseHandler.success(
       this.serializeTenantDepartment(data as TenantDepartmentRow),
     );
+  };
+
+  public override registerExtraRoutes = (
+    fastify: FastifyInstance,
+    resourceName = "departments",
+  ) => {
+    fastify.post(`/${resourceName}/enable-batch`, this.enableBatch);
   };
 }
 
