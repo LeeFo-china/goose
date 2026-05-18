@@ -138,6 +138,52 @@ class DepartmentPostRuleRepository {
     return (data || []) as DepartmentPostRulePostOptionRecord[];
   }
 
+  async findDepartmentByCode(input: {
+    tenantId: string;
+    departmentCode: DepartmentCode;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("tenant_departments")
+      .select("id, legacy_department_id, code, alias_name")
+      .eq("tenant_id", input.tenantId)
+      .eq("code", input.departmentCode)
+      .eq("enabled", true)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询部门失败", error);
+    if (!data) return null;
+
+    const row = data as {
+      id: string;
+      legacy_department_id: string;
+      code: DepartmentCode;
+      alias_name: string;
+    };
+
+    return {
+      id: row.legacy_department_id,
+      tenant_department_id: row.id,
+      code: row.code,
+      name: row.alias_name,
+    } as DepartmentPostRuleDepartmentRecord;
+  }
+
+  async listExistingPostCodes(input: {
+    tenantId: string;
+    postCodes: string[];
+  }) {
+    if (input.postCodes.length === 0) return [];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("posts")
+      .select("code")
+      .eq("tenant_id", input.tenantId)
+      .in("code", input.postCodes);
+
+    if (error) throw Errors.dbError("查询岗位编码失败", error);
+    return ((data || []) as Array<{ code: EmployeePostCode }>).map((item) => item.code);
+  }
+
   async replaceDepartmentRules(input: {
     tenantDepartmentId: string;
     departmentCode: DepartmentCode;
@@ -156,7 +202,7 @@ class DepartmentPostRuleRepository {
       disableQuery = disableQuery.eq("tenant_id", input.tenantId);
     }
 
-    const disabledResult = await disableQuery;
+    const disabledResult = await disableQuery.select("id");
 
     if (disabledResult.error) {
       throw Errors.dbError("停用部门岗位映射失败", disabledResult.error);
@@ -179,7 +225,8 @@ class DepartmentPostRuleRepository {
       .from("department_post_rules")
       .upsert(payload, {
         onConflict: "tenant_id,tenant_department_id,post_code",
-      });
+      })
+      .select("id");
 
     if (error) throw Errors.dbError("保存部门岗位映射失败", error);
   }
@@ -202,7 +249,8 @@ class DepartmentPostRuleRepository {
         updated_at: now,
       }, {
         onConflict: "tenant_id,tenant_department_id,post_code",
-      });
+      })
+      .select("id");
 
     if (error) throw Errors.dbError("保存部门岗位映射失败", error);
   }

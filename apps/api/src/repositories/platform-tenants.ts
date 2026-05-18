@@ -544,7 +544,8 @@ class PlatformTenantRepository {
     }
 
     const { error } = await this.from("tenant_departments")
-      .upsert(rows, { onConflict: "tenant_id,code" });
+      .upsert(rows, { onConflict: "tenant_id,code" })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("初始化租户部门配置失败", error);
@@ -635,7 +636,8 @@ class PlatformTenantRepository {
     }
 
     const { error } = await this.from("role_permissions")
-      .upsert(rows, { onConflict: "role_id,permission_id" });
+      .upsert(rows, { onConflict: "role_id,permission_id" })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("初始化租户管理员权限失败", error);
@@ -676,7 +678,8 @@ class PlatformTenantRepository {
       .upsert({
         employee_id: employeeId,
         role_id: roleId,
-      }, { onConflict: "employee_id,role_id" });
+      }, { onConflict: "employee_id,role_id" })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("绑定租户管理员角色失败", error);

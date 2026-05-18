@@ -53,8 +53,17 @@ class DepartmentPostRuleService {
   ) {
     const scopedTenantId = this.requireTenantId(tenantId);
     const uniquePostCodes = Array.from(new Set(postCodes));
-    const postOptions = await departmentPostRuleRepository.listPostOptions(scopedTenantId);
-    const postCodeSet = new Set(postOptions.map((item) => item.code));
+    const [department, existingPostCodes] = await Promise.all([
+      departmentPostRuleRepository.findDepartmentByCode({
+        tenantId: scopedTenantId,
+        departmentCode,
+      }),
+      departmentPostRuleRepository.listExistingPostCodes({
+        tenantId: scopedTenantId,
+        postCodes: uniquePostCodes,
+      }),
+    ]);
+    const postCodeSet = new Set(existingPostCodes);
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !postCodeSet.has(postCode as EmployeePostCode),
     );
@@ -63,8 +72,6 @@ class DepartmentPostRuleService {
       throw Errors.badRequest(`岗位编码不存在：${invalidPostCodes.join(", ")}`);
     }
 
-    const departments = await departmentPostRuleRepository.listDepartments(scopedTenantId);
-    const department = departments.find((item) => item.code === departmentCode);
     if (!department?.tenant_department_id) {
       throw Errors.badRequest("部门不存在或未启用");
     }
@@ -76,7 +83,11 @@ class DepartmentPostRuleService {
       tenantId: scopedTenantId,
     });
 
-    return this.getConfig(scopedTenantId);
+    return {
+      department_code: departmentCode,
+      tenant_department_id: department.tenant_department_id,
+      selected_post_codes: uniquePostCodes,
+    };
   }
 
   async enablePostForDepartment(input: {

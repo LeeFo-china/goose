@@ -34,24 +34,37 @@ async function saveDepartmentPostCodes(
   departmentCode: string,
   postCodes: string[],
 ) {
-  const response = await fetch(
-    `/api/backend/department-post-rules/${encodeURIComponent(departmentCode)}`,
-    {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        post_codes: postCodes,
-      }),
-    },
-  );
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.message || payload?.error || "保存部门岗位规则失败");
+  try {
+    const response = await fetch(
+      `/api/backend/department-post-rules/${encodeURIComponent(departmentCode)}`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          post_codes: postCodes,
+        }),
+        signal: controller.signal,
+      },
+    );
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.message || payload?.error || "保存部门岗位规则失败");
+    }
+    return payload;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("请求超时，请稍后重试");
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  return payload;
 }
 
 function sortCodes(values: string[]) {

@@ -156,9 +156,12 @@ class ProjectMemberRolePostRuleService {
       throw Errors.badRequest("至少选择一个岗位");
     }
 
-    const postOptions =
-      await projectMemberRolePostRuleRepository.listActivePostOptions(scopedTenantId);
-    const activePostCodeSet = new Set(postOptions.map((item) => item.code));
+    const activePostCodes =
+      await projectMemberRolePostRuleRepository.listExistingActivePostCodes({
+        tenantId: scopedTenantId,
+        postCodes: uniquePostCodes,
+      });
+    const activePostCodeSet = new Set(activePostCodes);
     const invalidPostCodes = uniquePostCodes.filter(
       (postCode) => !isEmployeePostCode(postCode) && !activePostCodeSet.has(postCode as EmployeePostCode),
     );
@@ -179,7 +182,10 @@ class ProjectMemberRolePostRuleService {
       tenantId: scopedTenantId,
     });
 
-    return this.getConfig(scopedTenantId);
+    return {
+      role_code: roleCode,
+      selected_post_codes: uniquePostCodes,
+    };
   }
 }
 

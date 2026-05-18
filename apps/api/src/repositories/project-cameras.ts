@@ -694,7 +694,8 @@ class ProjectCameraRepository {
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.cameraId)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("更新摄像头状态失败", error);

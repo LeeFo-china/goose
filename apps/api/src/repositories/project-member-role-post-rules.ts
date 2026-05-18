@@ -90,6 +90,26 @@ class ProjectMemberRolePostRuleRepository {
     return (data || []) as ProjectMemberRolePostOptionRecord[];
   }
 
+  async listExistingActivePostCodes(input: {
+    tenantId: string;
+    postCodes: string[];
+  }) {
+    if (input.postCodes.length === 0) return [];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("posts")
+      .select("code")
+      .eq("tenant_id", input.tenantId)
+      .eq("status", 1)
+      .in("code", input.postCodes);
+
+    if (error) {
+      throw Errors.dbError("查询可选岗位编码失败", error);
+    }
+
+    return ((data || []) as Array<{ code: EmployeePostCode }>).map((item) => item.code);
+  }
+
   async replaceRoleRules(input: {
     roleCode: ProjectMemberRoleCode;
     postCodes: EmployeePostCode[];
@@ -107,7 +127,7 @@ class ProjectMemberRolePostRuleRepository {
       disableQuery = disableQuery.eq("tenant_id", input.tenantId);
     }
 
-    const disabledResult = await disableQuery;
+    const disabledResult = await disableQuery.select("id");
 
     if (disabledResult.error) {
       throw Errors.dbError("停用项目角色岗位映射失败", disabledResult.error);
@@ -128,7 +148,8 @@ class ProjectMemberRolePostRuleRepository {
         onConflict: input.tenantId
           ? "tenant_id,role_code,post_code"
           : "role_code,post_code",
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("保存项目角色岗位映射失败", error);
