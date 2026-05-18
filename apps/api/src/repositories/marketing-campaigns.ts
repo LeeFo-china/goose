@@ -242,7 +242,7 @@ class MarketingCampaignRepository {
       deleteRequest = deleteRequest.eq("tenant_id", tenantId);
     }
 
-    const { error: deleteError } = await deleteRequest;
+    const { error: deleteError } = await deleteRequest.select("id");
     if (deleteError) {
       throw Errors.dbError("清空营销活动范围失败", deleteError);
     }

@@ -210,7 +210,8 @@ class ProjectMemberRepository {
       })
       .eq("project_id", projectId)
       .eq("role_code", roleCode)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("更新项目成员主标记失败", error);
@@ -252,7 +253,8 @@ class ProjectMemberRepository {
       .eq("project_id", projectId)
       .eq("role_code", roleCode)
       .eq("is_primary", true)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("删除项目主成员失败", error);

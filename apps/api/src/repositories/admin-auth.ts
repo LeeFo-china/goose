@@ -118,7 +118,8 @@ class AdminAuthRepository {
         status: "pending",
         expired_at: input.expired_at,
         request_ip: input.request_ip || null,
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("保存验证码失败", error);
@@ -136,7 +137,8 @@ class AdminAuthRepository {
       .eq("phone", input.phone)
       .eq("scene", input.scene)
       .eq("code", input.code)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id");
 
     if (error) {
       throw Errors.dbError("清理验证码失败", error);
@@ -254,7 +256,8 @@ class AdminAuthRepository {
       .from("employees")
       .update({ user_id: null })
       .eq("user_id", input.authUserId)
-      .neq("id", input.employeeId);
+      .neq("id", input.employeeId)
+      .select("id");
 
     if (cleanupError) {
       throw Errors.dbError("清理历史员工绑定失败", cleanupError);
@@ -263,7 +266,8 @@ class AdminAuthRepository {
     const { error } = await this.adminClient
       .from("employees")
       .update({ user_id: input.authUserId })
-      .eq("id", input.employeeId);
+      .eq("id", input.employeeId)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("绑定员工后台账号失败", error);

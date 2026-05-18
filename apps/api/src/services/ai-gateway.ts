@@ -356,7 +356,8 @@ class AiGateway {
 
     const { error } = await (this.client as unknown as { from: (table: string) => any })
       .from("ai_call_logs")
-      .insert(payload);
+      .insert(payload)
+      .select("id");
 
     // AI 日志不能影响主业务链路。
     if (error) return;

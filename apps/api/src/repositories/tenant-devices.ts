@@ -548,7 +548,8 @@ class TenantDeviceRepository {
         updated_at: new Date().toISOString(),
       })
       .eq("bound_camera_id", cameraId)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("更新设备资产解绑状态失败", error);
@@ -569,7 +570,8 @@ class TenantDeviceRepository {
         updated_at: new Date().toISOString(),
       })
       .eq("bound_camera_id", input.cameraId)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("更新设备资产状态失败", error);

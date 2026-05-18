@@ -92,7 +92,8 @@ class WechatRebindRequestService {
         status: "verified",
         verified_at: new Date().toISOString(),
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("更新验证码状态失败", error);
