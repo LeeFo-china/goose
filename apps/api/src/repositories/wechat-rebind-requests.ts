@@ -150,7 +150,8 @@ class WechatRebindRequestRepository {
   async deleteWechatIdentity(authUserId: string) {
     const { error } = await this.from("wechat_identities")
       .delete()
-      .eq("auth_user_id", authUserId);
+      .eq("auth_user_id", authUserId)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("删除微信身份映射失败", error);

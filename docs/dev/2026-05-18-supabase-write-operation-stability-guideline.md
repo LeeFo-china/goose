@@ -95,7 +95,7 @@ admin 中保存类请求必须有超时兜底，避免后端异常时按钮无�
 
 ## 后续建议
 
-1. 增加 lint 或脚本扫描裸 Supabase 写操作。
+1. 已新增本地扫描脚本：`bun run audit:supabase-writes`，详见 `docs/dev/2026-05-18-supabase-write-audit-tooling.md`。
 2. 分模块清理历史裸写点，不和业务重构混在一起。
 3. 高频多步骤保存改成 RPC，把多次网络往返收敛到一次数据库调用。
 4. 对慢接口记录服务端耗时日志，区分网络、PostgREST、数据库查询和业务代码耗时。

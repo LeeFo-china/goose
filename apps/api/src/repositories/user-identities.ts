@@ -362,7 +362,8 @@ class UserIdentityRepository {
         openid_hash: input.openidHash ?? null,
         operator_user_id: input.operatorUserId ?? null,
         metadata: input.metadata ?? {},
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("记录用户身份事件失败", error);

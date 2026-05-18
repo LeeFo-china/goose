@@ -711,7 +711,8 @@ class ExpenseRequestRepository {
         paid_by: payload.paid_by,
         evidence_images: payload.evidence_images,
         remark: payload.remark ?? null,
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("登记费用打款失败", error);

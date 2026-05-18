@@ -709,7 +709,8 @@ class PlatformTenantRepository {
         template_version: "2026.05.10",
         applied_by_employee_id: input.operatorEmployeeId,
         result: input.result,
-      }, { onConflict: "tenant_id,template_code,template_version" });
+      }, { onConflict: "tenant_id,template_code,template_version" })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("记录租户模板初始化结果失败", error);

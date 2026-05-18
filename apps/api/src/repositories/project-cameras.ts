@@ -760,7 +760,8 @@ class ProjectCameraRepository {
         error_message: input.error_message || null,
         ip: input.ip || null,
         user_agent: input.user_agent || null,
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("记录摄像头访问日志失败", error);

@@ -837,6 +837,7 @@ class PermissionRepository {
           .delete()
           .eq("employee_id", employeeId)
           .in("role_id", roleIdsToDelete)
+          .select("id")
       );
 
       if (deleteError) {
@@ -856,6 +857,7 @@ class PermissionRepository {
           .upsert(payload, {
             onConflict: "employee_id,role_id",
           })
+          .select("id")
       );
 
       if (upsertError) {
@@ -872,7 +874,8 @@ class PermissionRepository {
     const { error: deleteError } = await this.adminClient
       .from("role_permissions")
       .delete()
-      .eq("role_id", roleId);
+      .eq("role_id", roleId)
+      .select("id");
 
     if (deleteError) {
       throw Errors.dbError("更新角色权限失败", deleteError);
@@ -890,7 +893,8 @@ class PermissionRepository {
 
     const { error: insertError } = await this.adminClient
       .from("role_permissions")
-      .insert(payload);
+      .insert(payload)
+      .select("id");
 
     if (insertError) {
       throw Errors.dbError("更新角色权限失败", insertError);
@@ -915,7 +919,8 @@ class PermissionRepository {
       .from("employee_permission_overrides")
       .upsert(payload, {
         onConflict: "employee_id,permission_id",
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("保存员工权限覆盖失败", error);
@@ -929,7 +934,8 @@ class PermissionRepository {
       .from("employee_permission_overrides")
       .delete()
       .eq("employee_id", employeeId)
-      .eq("permission_id", permissionId);
+      .eq("permission_id", permissionId)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("删除员工权限覆盖失败", error);
