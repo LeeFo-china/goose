@@ -215,7 +215,13 @@ class PlatformTenantRepository {
     operatorEmployeeId?: string | null;
     admin?: NonNullable<CreatePlatformTenantInput["admin"]>;
   }): Promise<PlatformTenantInitializationResult> {
-    const departments = await this.upsertDefaultDepartments(input.tenantId);
+    const defaultEnabledDepartmentCodes = [
+      input.admin?.department_code ?? "ADMIN",
+    ];
+    const departments = await this.upsertDefaultDepartments(
+      input.tenantId,
+      defaultEnabledDepartmentCodes,
+    );
     const posts = await this.upsertDefaultPosts(input.tenantId);
     const roles = await this.upsertDefaultRoles(input.tenantId);
     const systemAdminRole = roles.find((item) => item.code === "system_admin") ?? null;
@@ -453,7 +459,10 @@ class PlatformTenantRepository {
     return (data || []) as PlatformTenantRoleLite[];
   }
 
-  private async upsertDefaultDepartments(tenantId: string) {
+  private async upsertDefaultDepartments(
+    tenantId: string,
+    enabledCodes: string[] = ["ADMIN"],
+  ) {
     const rows = DEPARTMENT_CODE_VALUES.map((code) => ({
       tenant_id: tenantId,
       code,
@@ -472,6 +481,7 @@ class PlatformTenantRepository {
     await this.upsertTenantDepartmentConfigs({
       tenantId,
       departments,
+      enabledCodes,
     });
 
     return departments;
@@ -480,6 +490,7 @@ class PlatformTenantRepository {
   private async upsertTenantDepartmentConfigs(input: {
     tenantId: string;
     departments: Array<{ id: string; code: string; name: string }>;
+    enabledCodes?: string[];
   }) {
     if (input.departments.length === 0) {
       return;
@@ -498,6 +509,21 @@ class PlatformTenantRepository {
       ((templates || []) as Array<{ id: string; code: string; sort: number | null }>)
         .map((template) => [template.code, template]),
     );
+    const { data: existingTenantDepartments, error: existingTenantDepartmentsError } =
+      await this.from("tenant_departments")
+        .select("code, enabled")
+        .eq("tenant_id", input.tenantId)
+        .in("code", codes);
+
+    if (existingTenantDepartmentsError) {
+      throw Errors.dbError("查询租户部门配置失败", existingTenantDepartmentsError);
+    }
+
+    const existingEnabledMap = new Map(
+      ((existingTenantDepartments || []) as Array<{ code: string; enabled: boolean }>)
+        .map((department) => [department.code, department.enabled]),
+    );
+    const enabledCodeSet = new Set(input.enabledCodes?.length ? input.enabledCodes : ["ADMIN"]);
     const rows = input.departments
       .map((department) => {
         const template = templateMap.get(department.code);
@@ -510,7 +536,7 @@ class PlatformTenantRepository {
           template_id: template.id,
           code: department.code,
           alias_name: department.name,
-          enabled: true,
+          enabled: existingEnabledMap.get(department.code) ?? enabledCodeSet.has(department.code),
           sort: template.sort ?? 0,
           legacy_department_id: department.id,
         };

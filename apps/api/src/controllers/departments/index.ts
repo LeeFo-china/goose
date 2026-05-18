@@ -21,7 +21,7 @@ const DepartmentListQuerySchema = z.object({
     z.literal("true").transform(() => true),
     z.literal("false").transform(() => false),
     z.boolean(),
-  ]).optional(),
+  ]).default(true),
 });
 
 type DepartmentTemplateRow = {

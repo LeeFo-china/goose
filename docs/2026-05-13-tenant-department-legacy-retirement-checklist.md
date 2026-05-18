@@ -219,6 +219,14 @@
 - `enabled_tenant_department_missing_legacy`：0
 - 当前只代表本次巡检通过，不代表可以立即删除旧字段
 
+2026-05-18 复核结果：
+
+- 执行 `scripts/audit-tenant-department-retirement.sh`：通过
+- 所有 `blocker` 巡检项：0
+- `enabled_tenant_department_missing_legacy`：0
+- 当前进入阶段 10 观察和退场准备期
+- 阶段 10 方案见：`docs/2026-05-18-tenant-department-compatibility-retirement-stage10-plan.md`
+
 ## 删除旧表前置条件
 
 删除旧 `departments` 前必须同时满足：

@@ -19,7 +19,6 @@ type OrganizationSearchParams = {
   departmentPage?: string;
   departmentCode?: string;
   departmentKeyword?: string;
-  departmentEnabled?: string;
   postPage?: string;
   postStatus?: string;
   postSalaryType?: string;
@@ -168,10 +167,8 @@ function buildDepartmentQuery(params: OrganizationSearchParams) {
   });
   const keyword = params.departmentKeyword?.trim() || "";
   const code = params.departmentCode?.trim() || "";
-  const enabled = params.departmentEnabled?.trim() || "";
   if (keyword) query.set("keyword", keyword);
   if (code) query.set("code", code);
-  if (enabled === "true" || enabled === "false") query.set("enabled", enabled);
   return query;
 }
 
@@ -281,7 +278,6 @@ export default async function OrganizationPage({
         departmentPostRuleConfig={departmentPostRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
-        departmentEnabled={params.departmentEnabled?.trim() || ""}
         postStatus={params.postStatus?.trim() || ""}
         postSalaryType={params.postSalaryType?.trim() || ""}
         postKeyword={params.postKeyword?.trim() || ""}

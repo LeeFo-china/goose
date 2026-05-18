@@ -22,14 +22,14 @@ export function DepartmentsClientShell({
   pagination,
   code,
   keyword,
-  enabled,
+  enabledDepartmentCodes,
   error,
 }: {
   departments: DepartmentRecord[];
   pagination: Pagination;
   code: string;
   keyword: string;
-  enabled: string;
+  enabledDepartmentCodes: string[];
   error: string | null;
 }) {
   const router = useRouter();
@@ -73,11 +73,10 @@ export function DepartmentsClientShell({
           <DepartmentFilters
             code={code}
             keyword={keyword}
-            enabled={enabled}
             pending={pending}
             onNavigate={navigate}
           />
-          <EnableDepartmentButton />
+          <EnableDepartmentButton enabledDepartmentCodes={enabledDepartmentCodes} />
         </div>
       </div>
       <div className="relative flex flex-col gap-4">
@@ -98,7 +97,6 @@ export function DepartmentsClientShell({
             pagination={pagination}
             code={code}
             keyword={keyword}
-            enabled={enabled}
             pending={pending}
             onNavigate={navigate}
           />

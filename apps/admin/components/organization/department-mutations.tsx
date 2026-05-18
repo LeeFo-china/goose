@@ -7,11 +7,20 @@ import {
   type DepartmentCode,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
-import { Building2, Edit3, Loader2, Plus } from "lucide-react";
+import { Building2, Check, Edit3, Loader2, Plus } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -28,15 +37,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DepartmentRecord } from "@/components/organization/organization-types";
-
-type DepartmentMode = "create" | "edit";
-
-const departmentCodeOptions = [
-  ...DEPARTMENT_CODE_VALUES.map((value) => ({
-    value,
-    label: `${DepartmentConfig[value].label} · ${value}`,
-  })),
-];
+import { cn } from "@/lib/utils";
 
 const enabledOptions = [
   { value: "true", label: "启用" },
@@ -78,12 +79,10 @@ function toDepartmentCode(value: string | null | undefined): DepartmentCode {
 }
 
 function DepartmentDialog({
-  mode,
   department,
   open,
   onOpenChange,
 }: {
-  mode: DepartmentMode;
   department?: DepartmentRecord;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -97,13 +96,12 @@ function DepartmentDialog({
     enabled: department?.enabled === false ? "false" : "true",
     sort: department?.sort != null ? String(department.sort) : "0",
   }), [department]);
-  const [code, setCode] = useState<DepartmentCode>(defaults.code);
+  const code = defaults.code;
   const [enabled, setEnabled] = useState(defaults.enabled);
   const [name, setName] = useState(defaults.name || DepartmentConfig[defaults.code].label);
 
   useEffect(() => {
     if (!open) return;
-    setCode(defaults.code);
     setEnabled(defaults.enabled);
     setName(defaults.name || DepartmentConfig[defaults.code].label);
     setError("");
@@ -122,7 +120,6 @@ function DepartmentDialog({
     const sortValue = String(formData.get("sort") || "").trim();
     const payload = {
       name: nameValue,
-      ...(mode === "create" ? { code } : {}),
       enabled: enabled === "true",
       sort: sortValue ? Number(sortValue) : 0,
     };
@@ -131,7 +128,7 @@ function DepartmentDialog({
     startTransition(async () => {
       try {
         await mutateDepartment({
-          method: mode === "create" ? "POST" : "PATCH",
+          method: "PATCH",
           id: department?.id,
           payload,
         });
@@ -152,11 +149,9 @@ function DepartmentDialog({
               <Building2 className="size-4" />
             </div>
             <div>
-              <DialogTitle>{mode === "create" ? "启用部门" : "部门配置"}</DialogTitle>
+              <DialogTitle>部门配置</DialogTitle>
               <DialogDescription>
-                {mode === "create"
-                  ? "从平台标准部门中选择启用，并设置租户侧显示名称。"
-                  : "标准部门编码不可修改，可调整租户侧显示名称、启停和排序。"}
+                标准部门编码不可修改，可调整租户侧显示名称、启停和排序。
               </DialogDescription>
             </div>
           </div>
@@ -164,9 +159,9 @@ function DepartmentDialog({
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor={`${mode}-department-name`}>显示名称</FieldLabel>
+              <FieldLabel htmlFor="edit-department-name">显示名称</FieldLabel>
               <Input
-                id={`${mode}-department-name`}
+                id="edit-department-name"
                 name="name"
                 value={name}
                 placeholder={DepartmentConfig[code].label}
@@ -180,29 +175,19 @@ function DepartmentDialog({
               </FieldDescription>
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${mode}-department-code`}>标准部门</FieldLabel>
-              {mode === "create" ? (
-                <FormSelect
-                  id={`${mode}-department-code`}
-                  value={code}
-                  options={departmentCodeOptions}
-                  disabled={pending}
-                  onChange={(nextCode) => {
-                    setCode(nextCode as DepartmentCode);
-                    setName(DepartmentConfig[nextCode as DepartmentCode].label);
-                  }}
-                />
-              ) : (
-                <div className="flex min-h-9 items-center gap-2 rounded-md border bg-muted/35 px-3 text-sm">
-                  <span className="font-medium">{DepartmentConfig[code].label}</span>
-                  <Badge variant="outline">{code}</Badge>
-                </div>
-              )}
+              <FieldLabel htmlFor="edit-department-code">标准部门</FieldLabel>
+              <div
+                id="edit-department-code"
+                className="flex min-h-9 items-center gap-2 rounded-md border bg-muted/35 px-3 text-sm"
+              >
+                <span className="font-medium">{DepartmentConfig[code].label}</span>
+                <Badge variant="outline">{code}</Badge>
+              </div>
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${mode}-department-enabled`}>状态</FieldLabel>
+              <FieldLabel htmlFor="edit-department-enabled">状态</FieldLabel>
               <FormSelect
-                id={`${mode}-department-enabled`}
+                id="edit-department-enabled"
                 value={enabled}
                 options={enabledOptions}
                 disabled={pending}
@@ -213,9 +198,9 @@ function DepartmentDialog({
               </FieldDescription>
             </Field>
             <Field>
-              <FieldLabel htmlFor={`${mode}-department-sort`}>排序</FieldLabel>
+              <FieldLabel htmlFor="edit-department-sort">排序</FieldLabel>
               <Input
-                id={`${mode}-department-sort`}
+                id="edit-department-sort"
                 name="sort"
                 type="number"
                 min="0"
@@ -241,7 +226,189 @@ function DepartmentDialog({
   );
 }
 
-export function EnableDepartmentButton() {
+function EnableDepartmentsDialog({
+  enabledDepartmentCodes,
+  open,
+  onOpenChange,
+}: {
+  enabledDepartmentCodes: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [selectedCodes, setSelectedCodes] = useState<DepartmentCode[]>([]);
+  const [error, setError] = useState("");
+  const enabledCodeSet = useMemo(
+    () => new Set(enabledDepartmentCodes.filter(Boolean)),
+    [enabledDepartmentCodes],
+  );
+  const availableOptions = useMemo(
+    () =>
+      DEPARTMENT_CODE_VALUES
+        .filter((code) => !enabledCodeSet.has(code))
+        .map((code, index) => ({
+          code,
+          label: DepartmentConfig[code].label,
+          sort: index + 1,
+        })),
+    [enabledCodeSet],
+  );
+  const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedCodes([]);
+    setError("");
+  }, [open]);
+
+  function close() {
+    if (pending) return;
+    setError("");
+    onOpenChange(false);
+  }
+
+  function toggleCode(code: DepartmentCode) {
+    if (selectedSet.has(code)) {
+      setSelectedCodes((current) => current.filter((item) => item !== code));
+      return;
+    }
+    setSelectedCodes((current) => [...current, code]);
+  }
+
+  function selectAll() {
+    setSelectedCodes(availableOptions.map((item) => item.code));
+  }
+
+  function submit() {
+    if (selectedCodes.length === 0) {
+      setError("请选择需要启用的部门");
+      return;
+    }
+
+    setError("");
+    startTransition(async () => {
+      try {
+        await Promise.all(
+          selectedCodes.map((code) => {
+            const option = availableOptions.find((item) => item.code === code);
+            return mutateDepartment({
+              method: "POST",
+              payload: {
+                code,
+                name: DepartmentConfig[code].label,
+                enabled: true,
+                sort: option?.sort ?? 0,
+              },
+            });
+          }),
+        );
+        onOpenChange(false);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "启用部门失败");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+      <DialogContent className="max-w-[640px]">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <Building2 />
+            </div>
+            <div>
+              <DialogTitle>启用部门</DialogTitle>
+              <DialogDescription>
+                从平台标准部门中搜索并多选，启用后才会进入租户部门列表。
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              已选择 {selectedCodes.length} 个，尚可启用 {availableOptions.length} 个
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending || availableOptions.length === 0}
+                onClick={selectAll}
+              >
+                全选
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={pending || selectedCodes.length === 0}
+                onClick={() => setSelectedCodes([])}
+              >
+                清空
+              </Button>
+            </div>
+          </div>
+
+          <Command className="rounded-md border">
+            <CommandInput placeholder="搜索标准部门名称或编码" />
+            <CommandList className="max-h-[360px]">
+              <CommandEmpty>
+                {availableOptions.length === 0 ? "标准部门已全部启用" : "没有匹配的部门"}
+              </CommandEmpty>
+              <CommandGroup>
+                {availableOptions.map((item) => {
+                  const checked = selectedSet.has(item.code);
+
+                  return (
+                    <CommandItem
+                      key={item.code}
+                      value={`${item.label} ${item.code}`}
+                      onSelect={() => toggleCode(item.code)}
+                    >
+                      <Checkbox checked={checked} aria-label={item.label} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{item.label}</div>
+                        <div className="truncate text-xs text-muted-foreground">{item.code}</div>
+                      </div>
+                      <Check className={cn("opacity-0", checked && "opacity-100")} />
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={close} disabled={pending}>
+            取消
+          </Button>
+          <Button
+            type="button"
+            disabled={pending || availableOptions.length === 0}
+            onClick={submit}
+          >
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            启用选中部门
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EnableDepartmentButton({
+  enabledDepartmentCodes,
+}: {
+  enabledDepartmentCodes: string[];
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -250,7 +417,11 @@ export function EnableDepartmentButton() {
         <Plus data-icon="inline-start" />
         启用部门
       </Button>
-      <DepartmentDialog mode="create" open={open} onOpenChange={setOpen} />
+      <EnableDepartmentsDialog
+        enabledDepartmentCodes={enabledDepartmentCodes}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   );
 }
@@ -269,7 +440,6 @@ export function DepartmentRowActions({
         编辑
       </Button>
       <DepartmentDialog
-        mode="edit"
         department={department}
         open={open}
         onOpenChange={setOpen}

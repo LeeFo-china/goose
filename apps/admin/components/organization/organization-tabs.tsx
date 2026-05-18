@@ -59,7 +59,6 @@ export function OrganizationTabs({
   departmentPostRuleConfig,
   departmentCode,
   departmentKeyword,
-  departmentEnabled,
   postStatus,
   postSalaryType,
   postKeyword,
@@ -71,7 +70,6 @@ export function OrganizationTabs({
   departmentPostRuleConfig: DepartmentPostRuleConfig & { error: string | null };
   departmentCode: string;
   departmentKeyword: string;
-  departmentEnabled: string;
   postStatus: string;
   postSalaryType: string;
   postKeyword: string;
@@ -79,6 +77,12 @@ export function OrganizationTabs({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const enabledDepartmentCodes = Array.from(new Set([
+    ...departmentPostRuleConfig.departments.map((item) => item.code),
+    ...departments.list
+      .filter((item) => item.enabled !== false && item.code)
+      .map((item) => item.code as string),
+  ]));
 
   function switchTab(tab: OrganizationTab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -136,7 +140,7 @@ export function OrganizationTabs({
             pagination={departments.pagination}
             code={departmentCode}
             keyword={departmentKeyword}
-            enabled={departmentEnabled}
+            enabledDepartmentCodes={enabledDepartmentCodes}
             error={departments.error}
           />
         ) : activeTab === "posts" ? (
