@@ -8,16 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: "Service to build and deploy"
+        description: "Service(s) to build and deploy. Use all or comma-separated values like api,admin"
         required: true
         default: all
-        type: choice
-        options:
-          - all
-          - api
-          - admin
-          - social-video-worker
-          - cos-reconcile-worker
+        type: string
 
 permissions:
   contents: read
@@ -49,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api') }}
+        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -96,7 +90,7 @@ jobs:
           fi
 
       - name: Ensure Docker daemon
-        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api') }}
+        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
         run: |
           set -euo pipefail
           if ! command -v docker >/dev/null 2>&1; then
@@ -108,7 +102,7 @@ jobs:
           docker version
 
       - name: Login to Tencent CCR
-        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api') }}
+        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
         env:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
           TENCENT_CCR_PASSWORD: ${{ secrets.TENCENT_CCR_PASSWORD }}
@@ -123,7 +117,7 @@ jobs:
           exit 1
 
       - name: Build and push image
-        if: ${{ github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api') }}
+        if: ${{ github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api') }}
         env:
           IMAGE_REPO: ${{ matrix.image_repo }}
           SERVICE: ${{ matrix.service }}
@@ -165,7 +159,7 @@ jobs:
           docker push "$SHA_IMAGE"
 
       - name: Cleanup build leftovers
-        if: ${{ always() && (github.event.inputs.service == 'all' || github.event.inputs.service == matrix.service || (github.event.inputs.service == 'cos-reconcile-worker' && matrix.service == 'api')) }}
+        if: ${{ always() && (github.event.inputs.service == 'all' || contains(format(',{0},', github.event.inputs.service), format(',{0},', matrix.service)) || (contains(format(',{0},', github.event.inputs.service), ',cos-reconcile-worker,') && matrix.service == 'api')) }}
         run: |
           set -euo pipefail
           docker container prune -f || true

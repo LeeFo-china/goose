@@ -262,6 +262,18 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeDispatchServices(input: ReleaseDispatchInput) {
+  const selected = input.services?.length ? input.services : [input.service];
+  const unique = Array.from(new Set(selected));
+  if (unique.includes("all")) return ["all"] as ReleaseService[];
+  return unique;
+}
+
+function formatServiceLabels(services: ReleaseService[]) {
+  if (services.includes("all")) return SERVICE_LABELS.all;
+  return services.map((service) => SERVICE_LABELS[service]).join("、");
+}
+
 class ReleaseDeploymentService {
   getOptions() {
     let configured = true;
@@ -666,7 +678,8 @@ class ReleaseDeploymentService {
 
   async dispatch(authContext: AuthContext, input: ReleaseDispatchInput) {
     const workflow = RELEASE_WORKFLOWS[input.environment];
-    if (!workflow.services.includes(input.service)) {
+    const services = normalizeDispatchServices(input);
+    if (services.some((service) => !workflow.services.includes(service))) {
       throw Errors.badRequest("该环境不支持选择的服务");
     }
 
@@ -674,9 +687,9 @@ class ReleaseDeploymentService {
     await this.assertRefExists(input);
 
     const config = getGithubConfig();
-    const inputs = input.environment === "production"
-      ? { service: input.service }
-      : { service: input.service };
+    const releaseServiceInput = services.includes("all") ? "all" : services.join(",");
+    const serviceLabel = formatServiceLabels(services);
+    const inputs = { service: releaseServiceInput };
 
     await githubRequest<null>(
       `/actions/workflows/${workflow.workflowId}/dispatches`,
@@ -697,12 +710,13 @@ class ReleaseDeploymentService {
       actorEmployeeId: authContext.employeeId,
       actorUserId: authContext.authUserId,
       resourceType: "github_actions_workflow",
-      resourceLabel: `${workflow.label} ${SERVICE_LABELS[input.service]}`,
+      resourceLabel: `${workflow.label} ${serviceLabel}`,
       status: "success",
-      summary: `发起${workflow.label}发布：${SERVICE_LABELS[input.service]}`,
+      summary: `发起${workflow.label}发布：${serviceLabel}`,
       metadata: {
         environment: input.environment,
-        service: input.service,
+        service: services.includes("all") ? "all" : services[0],
+        services,
         ref_type: input.ref_type,
         ref_type_label: REF_TYPE_LABELS[input.ref_type],
         ref: input.ref,
@@ -716,8 +730,9 @@ class ReleaseDeploymentService {
 
     return {
       environment: input.environment,
-      service: input.service,
-      service_label: SERVICE_LABELS[input.service],
+      service: services.includes("all") ? "all" : services[0],
+      services,
+      service_label: serviceLabel,
       ref: input.ref,
       workflow_id: workflow.workflowId,
       workflow_url: workflowUrl,

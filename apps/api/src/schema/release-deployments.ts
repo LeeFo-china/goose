@@ -16,15 +16,26 @@ export const ReleaseRefTypeSchema = z.enum(["branch", "tag", "commit"]);
 export const ReleaseDispatchSchema = z.object({
   environment: ReleaseEnvironmentSchema,
   service: ReleaseServiceSchema,
+  services: z.array(ReleaseServiceSchema).min(1, "请选择发布服务").max(5, "发布服务不能超过 5 个").optional(),
   ref_type: ReleaseRefTypeSchema.default("branch"),
   ref: z.string().trim().min(1, "版本不能为空").max(120, "版本不能超过 120 个字符"),
   reason: z.string().trim().max(200, "发布原因不能超过 200 个字符").optional(),
   confirm_text: z.string().trim().max(40, "确认文本不能超过 40 个字符").optional(),
 }).superRefine((value, ctx) => {
-  if (value.environment === "dev" && value.service === "all") {
+  const selectedServices = value.services?.length ? value.services : [value.service];
+
+  if (selectedServices.includes("all") && selectedServices.length > 1) {
     ctx.addIssue({
       code: "custom",
-      path: ["service"],
+      path: ["services"],
+      message: "选择全部服务时不能再选择其他服务",
+    });
+  }
+
+  if (value.environment === "dev" && selectedServices.includes("all")) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["services"],
       message: "开发环境暂不支持 all，请选择单个服务",
     });
   }

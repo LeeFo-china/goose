@@ -172,6 +172,7 @@ export type ReleaseCreateTagResult = {
 export type ReleaseDispatchResult = {
   environment: ReleaseEnvironment;
   service: ReleaseService;
+  services?: ReleaseService[];
   service_label: string;
   ref: string;
   workflow_id: string;

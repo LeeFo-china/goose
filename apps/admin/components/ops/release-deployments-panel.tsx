@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Command,
@@ -91,6 +92,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
 async function dispatchRelease(payload: {
   environment: ReleaseEnvironment;
   service: ReleaseService;
+  services?: ReleaseService[];
   ref_type: ReleaseRefType;
   ref: string;
   reason: string;
@@ -314,6 +316,98 @@ function ReleaseRefCombobox({
   );
 }
 
+function ReleaseServiceMultiSelect({
+  options,
+  value,
+  disabled,
+  onChange,
+}: {
+  options: Array<{ value: ReleaseService; label: string }>;
+  value: ReleaseService[];
+  disabled?: boolean;
+  onChange: (value: ReleaseService[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value.length ? value : [];
+  const selectedSet = new Set(selected);
+  const selectedLabels = selected.includes("all")
+    ? "全部服务"
+    : options
+      .filter((item) => selectedSet.has(item.value))
+      .map((item) => item.label);
+  const displayValue = Array.isArray(selectedLabels)
+    ? selectedLabels.length ? selectedLabels.join("、") : "选择服务"
+    : selectedLabels;
+
+  function toggleService(nextValue: ReleaseService) {
+    if (nextValue === "all") {
+      onChange(selectedSet.has("all") ? [] : ["all"]);
+      return;
+    }
+
+    const next = selected.filter((item) => item !== "all");
+    if (selectedSet.has(nextValue)) {
+      onChange(next.filter((item) => item !== nextValue));
+      return;
+    }
+    onChange([...next, nextValue]);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between"
+        >
+          <span className="truncate">{displayValue}</span>
+          <ChevronsUpDown data-icon="inline-end" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder="搜索服务..." />
+          <CommandList>
+            <CommandEmpty>没有匹配的服务</CommandEmpty>
+            <CommandGroup>
+              {options.map((item) => {
+                const checked = selectedSet.has(item.value);
+                const allSelected = selectedSet.has("all");
+                const disabledByAll = allSelected && item.value !== "all";
+
+                return (
+                  <CommandItem
+                    key={item.value}
+                    value={`${item.label} ${item.value}`}
+                    onSelect={() => toggleService(item.value)}
+                    disabled={disabledByAll}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={disabledByAll}
+                      aria-label={item.label}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">{item.label}</div>
+                      {item.value === "all" ? (
+                        <div className="truncate text-xs text-muted-foreground">构建并发布当前环境的全部业务服务</div>
+                      ) : null}
+                    </div>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -321,6 +415,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   const {
     environment,
     service,
+    services,
     refType,
     ref,
     reason,
@@ -343,10 +438,13 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
+    const nextService = nextEnvironment?.services.find((item) => item.value !== "all")?.value
+      || nextEnvironment?.services[0]?.value
+      || "admin";
     resetEnvironment({
       environment: value,
       defaultRef: nextEnvironment?.default_ref || "feature/multi-tenant",
-      service: nextEnvironment?.services[0]?.value || "admin",
+      service: nextService,
     });
   }
 
@@ -423,11 +521,13 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   }
 
   function runDispatch() {
+    const selectedServices = services;
     startTransition(async () => {
       try {
         const data = await dispatchRelease({
           environment,
-          service,
+          service: selectedServices.includes("all") ? "all" : selectedServices[0] || service,
+          services: selectedServices,
           ref_type: refType,
           ref,
           reason,
@@ -443,8 +543,15 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
   }
 
   const serviceOptions = currentEnvironment?.services || [];
+  const selectedServices = services;
+  const selectedServiceLabel = selectedServices.includes("all")
+    ? "全部服务"
+    : serviceOptions
+      .filter((item) => selectedServices.includes(item.value))
+      .map((item) => item.label)
+      .join("、");
   const production = environment === "production";
-  const disabled = pending || !options?.configured || !currentEnvironment || !ref.trim() || (production && confirmText !== "确认发布生产");
+  const disabled = pending || !options?.configured || !currentEnvironment || selectedServices.length === 0 || !ref.trim() || (production && confirmText !== "确认发布生产");
   const createTagDisabled = tagPending || !options?.configured || !tagName.trim() || !tagSourceRef.trim() || !tagMessage.trim();
 
   return (
@@ -515,20 +622,20 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
             <Field>
               <FieldLabel>服务</FieldLabel>
-              <Select value={service} onValueChange={(value) => setDraft({ service: value as ReleaseService })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择服务" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {serviceOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <ReleaseServiceMultiSelect
+                options={serviceOptions}
+                value={selectedServices}
+                disabled={!options?.configured}
+                onChange={(value) => {
+                  const nextService = value.includes("all")
+                    ? "all"
+                    : value[0] || serviceOptions.find((item) => item.value !== "all")?.value || serviceOptions[0]?.value || "admin";
+                  setDraft({ service: nextService, services: value });
+                }}
+              />
+              <FieldDescription>
+                {production ? "生产支持选择全部服务，也支持一次选择多个服务。" : "开发环境按需选择要验证的服务。"}
+              </FieldDescription>
             </Field>
 
             <Field>
@@ -606,7 +713,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               <AlertDialogHeader>
                 <AlertDialogTitle>{production ? "确认发布生产版本" : "确认发布开发环境"}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  将提交 {currentEnvironment?.label || "-"} 的 {service} 发布任务，版本为 {ref || "-"}。
+                  将提交 {currentEnvironment?.label || "-"} 的 {selectedServiceLabel || "-"} 发布任务，版本为 {ref || "-"}。
                   任务提交后请在 GitHub Actions 或发布记录中查看执行状态。
                 </AlertDialogDescription>
               </AlertDialogHeader>

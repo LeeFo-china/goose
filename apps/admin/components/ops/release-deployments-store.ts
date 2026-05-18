@@ -13,6 +13,7 @@ type ReleaseAuxiliaryTab = "tag" | "successful";
 type ReleaseDeploymentState = {
   environment: ReleaseEnvironment;
   service: ReleaseService;
+  services: ReleaseService[];
   refType: ReleaseRefType;
   ref: string;
   reason: string;
@@ -39,6 +40,7 @@ type ReleaseDeploymentState = {
 export const useReleaseDeploymentStore = create<ReleaseDeploymentState>((set) => ({
   environment: "dev",
   service: "admin",
+  services: ["admin"],
   refType: "branch",
   ref: "feature/multi-tenant",
   reason: "",
@@ -58,6 +60,7 @@ export const useReleaseDeploymentStore = create<ReleaseDeploymentState>((set) =>
       refType,
       ref: refType === "branch" ? defaultRef : "",
       service,
+      services: [service],
       confirmText: "",
     });
   },
