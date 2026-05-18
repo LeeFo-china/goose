@@ -9,8 +9,13 @@ import type {
   UpdatePostInput,
 } from "@/schema/post";
 import { departmentPostRuleService } from "@/services/department-post-rules";
+import { randomUUID } from "node:crypto";
 
 class PostsService {
+  private generatePostCode() {
+    return `POST_${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+  }
+
   private requireTenantId(tenantId?: string | null) {
     if (!tenantId) {
       throw Errors.business(
@@ -50,6 +55,16 @@ class PostsService {
     }
   }
 
+  private async generateUniquePostCode(tenantId: string) {
+    for (let index = 0; index < 5; index += 1) {
+      const code = this.generatePostCode();
+      const existing = await postsRepository.findByCode(code, tenantId);
+      if (!existing) return code;
+    }
+
+    throw Errors.badRequest("岗位编码生成失败，请重试");
+  }
+
   async listPosts(query: PostListQuery, tenantId?: string | null) {
     const scopedTenantId = this.requireTenantId(tenantId);
     return postsRepository.list({
@@ -72,10 +87,7 @@ class PostsService {
 
   async createPost(input: CreateTenantPostInput, tenantId?: string | null) {
     const scopedTenantId = this.requireTenantId(tenantId);
-    const code = this.normalizeCode(input.code);
-    if (!code) {
-      throw Errors.badRequest("岗位编码不能为空");
-    }
+    const code = await this.generateUniquePostCode(scopedTenantId);
     const departmentId = input.tenant_department_id || input.department_id;
     if (!departmentId) {
       throw Errors.badRequest("请先选择部门");
@@ -91,7 +103,6 @@ class PostsService {
       code,
       name: this.normalizeName(postInput.name) || postInput.name,
     };
-    await this.ensureCodeUnique(normalized.code, scopedTenantId);
     const post = await postsRepository.create({
       ...normalized,
       tenant_id: scopedTenantId,
@@ -122,7 +133,10 @@ class PostsService {
       if (!code) {
         throw Errors.badRequest("岗位编码不能为空");
       }
-      normalized.code = code;
+      if (code !== existing.code) {
+        throw Errors.badRequest("岗位编码由系统生成，不能修改");
+      }
+      delete normalized.code;
     }
 
     await this.ensureCodeUnique(normalized.code, scopedTenantId, existing.id);

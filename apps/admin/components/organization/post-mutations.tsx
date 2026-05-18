@@ -2,8 +2,6 @@
 
 import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
-  EMPLOYEE_POST_CODE_VALUES,
-  EmployeePostConfig,
   SALARY_TYPE_VALUES,
   PostStatusConfig,
   SalaryTypeConfig,
@@ -123,7 +121,6 @@ function PostDialog({
     description: post?.description || "",
     departmentId: defaultDepartmentId,
   }), [defaultDepartmentId, post]);
-  const [code, setCode] = useState(defaults.code);
   const [salaryType, setSalaryType] = useState(defaults.salaryType);
   const [status, setStatus] = useState(defaults.status);
   const [departmentId, setDepartmentId] = useState(defaults.departmentId);
@@ -139,12 +136,11 @@ function PostDialog({
 
   useEffect(() => {
     if (!open) return;
-    setCode(defaults.code);
     setSalaryType(defaults.salaryType);
     setStatus(defaults.status);
     setDepartmentId(defaults.departmentId);
     setError("");
-  }, [defaults.code, defaults.departmentId, defaults.salaryType, defaults.status, open]);
+  }, [defaults.departmentId, defaults.salaryType, defaults.status, open]);
 
   function close() {
     if (pending) return;
@@ -158,7 +154,6 @@ function PostDialog({
     const baseSalaryValue = String(formData.get("base_salary") || "").trim();
     const sortValue = String(formData.get("sort") || "").trim();
     const description = String(formData.get("description") || "").trim();
-    const codeValue = code.trim().toUpperCase();
     const normalizedDepartmentId = departmentId === EMPTY_DEPARTMENT_VALUE
       ? ""
       : departmentId;
@@ -170,7 +165,6 @@ function PostDialog({
 
     const payload = {
       name: String(formData.get("name") || "").trim(),
-      code: codeValue,
       base_salary: baseSalaryValue ? Number(baseSalaryValue) : null,
       salary_type: salaryType === "__none" ? null : salaryType,
       sort: sortValue ? Number(sortValue) : 0,
@@ -207,8 +201,8 @@ function PostDialog({
               <DialogTitle>{mode === "create" ? "新增岗位" : "编辑岗位"}</DialogTitle>
               <DialogDescription>
                 {mode === "create"
-                  ? "先确定部门，再在部门下新增岗位，保存后自动写入部门岗位规则。"
-                  : "岗位用于员工职责标识、薪资类型和业务角色管理。"}
+                  ? "先确定部门，再在部门下新增岗位，岗位编码由系统自动生成。"
+                  : "岗位编码由系统维护，其他信息可按业务需要调整。"}
               </DialogDescription>
             </div>
           </div>
@@ -246,24 +240,12 @@ function PostDialog({
               <FieldLabel htmlFor={`${mode}-post-code`}>岗位编码</FieldLabel>
               <Input
                 id={`${mode}-post-code`}
-                name="code"
-                value={code}
-                list={`${mode}-post-code-suggestions`}
-                placeholder="例如 CUSTOMER_SERVICE"
-                maxLength={64}
-                required
-                disabled={pending}
-                onChange={(event) => setCode(event.target.value.toUpperCase())}
+                value={mode === "create" ? "保存后自动生成" : defaults.code}
+                readOnly
+                disabled
               />
-              <datalist id={`${mode}-post-code-suggestions`}>
-                {EMPLOYEE_POST_CODE_VALUES.map((value) => (
-                  <option key={value} value={value}>
-                    {EmployeePostConfig[value].label}
-                  </option>
-                ))}
-              </datalist>
               <FieldDescription>
-                使用大写字母、数字、下划线，且以大写字母开头；会用于项目角色匹配。
+                编码用于系统规则匹配，创建后不可手工修改。
               </FieldDescription>
             </Field>
             <Field>
