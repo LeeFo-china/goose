@@ -33,6 +33,14 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -54,6 +62,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -192,6 +201,97 @@ function statusVariant(run: ReleaseRun) {
   if (run.status === "completed" && run.conclusion) return "danger" as const;
   if (run.status === "in_progress" || run.status === "queued") return "warning" as const;
   return "outline" as const;
+}
+
+function getRunActorLabel(run: ReleaseRun) {
+  const employee = run.audit?.actor_employee;
+  if (employee?.name && employee.phone) return `${employee.name} · ${employee.phone}`;
+  if (employee?.name) return employee.name;
+  if (employee?.phone) return employee.phone;
+  if (run.audit?.actor_user_id) return run.audit.actor_user_id;
+  return "未记录";
+}
+
+function getRunRefLabel(run: ReleaseRun) {
+  if (run.audit?.ref) {
+    return `${run.audit.ref_type_label || "版本"} · ${run.audit.ref}`;
+  }
+  return `${run.head_branch || "-"} · ${run.head_sha?.slice(0, 7) || "-"}`;
+}
+
+function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
+  const githubUrl = run.audit?.run_url || run.html_url;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          详情
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>发布详情</DialogTitle>
+          <DialogDescription>
+            {run.workflow_label} · {run.service_label}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={statusVariant(run)}>{statusLabel(run)}</Badge>
+            <Badge variant="outline">{run.service_label}</Badge>
+            <Badge variant="secondary">{run.event || "unknown"}</Badge>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ReleaseRunDetailItem label="环境" value={run.workflow_label} />
+            <ReleaseRunDetailItem label="服务" value={run.service_label} />
+            <ReleaseRunDetailItem label="版本" value={getRunRefLabel(run)} />
+            <ReleaseRunDetailItem label="GitHub Run ID" value={run.audit?.run_id || run.id} />
+            <ReleaseRunDetailItem label="发起人" value={getRunActorLabel(run)} />
+            <ReleaseRunDetailItem label="发布时间" value={formatDateTime(run.audit?.created_at || run.created_at)} />
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-col gap-2">
+            <div className="text-sm font-medium">发布说明</div>
+            <div className="min-h-16 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              {run.audit?.reason || run.audit?.summary || "未记录"}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            {run.audit?.workflow_url ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={run.audit.workflow_url} target="_blank" rel="noreferrer">
+                  <ExternalLink data-icon="inline-start" />
+                  Workflow
+                </Link>
+              </Button>
+            ) : null}
+            {githubUrl ? (
+              <Button asChild size="sm">
+                <Link href={githubUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink data-icon="inline-start" />
+                  GitHub 日志
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReleaseRunDetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 break-all text-sm font-medium">{value || "-"}</div>
+    </div>
+  );
 }
 
 function getRefTypeIcon(type: ReleaseRefType) {
@@ -927,7 +1027,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                 <TableHead>服务</TableHead>
                 <TableHead>版本</TableHead>
                 <TableHead>时间</TableHead>
-                <TableHead className="text-right">日志</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -961,14 +1061,17 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                     {formatDateTime(run.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {run.html_url ? (
-                      <Button asChild variant="ghost" size="sm">
-                        <Link href={run.html_url} target="_blank" rel="noreferrer">
-                          <ExternalLink data-icon="inline-start" />
-                          查看
-                        </Link>
-                      </Button>
-                    ) : "-"}
+                    <div className="flex justify-end gap-2">
+                      <ReleaseRunDetailsDialog run={run} />
+                      {run.html_url ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={run.html_url} target="_blank" rel="noreferrer">
+                            <ExternalLink data-icon="inline-start" />
+                            日志
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

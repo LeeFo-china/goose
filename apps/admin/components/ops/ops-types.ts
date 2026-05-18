@@ -121,6 +121,25 @@ export type ReleaseRun = {
   workflow_label: string;
   services: ReleaseService[] | null;
   service_label: string;
+  audit: {
+    id: string;
+    summary: string | null;
+    status: string | null;
+    created_at: string;
+    actor_employee_id: string | null;
+    actor_user_id: string | null;
+    actor_employee: {
+      id: string;
+      name: string | null;
+      phone: string | null;
+    } | null;
+    reason: string | null;
+    ref: string | null;
+    ref_type_label: string | null;
+    workflow_url: string | null;
+    run_id: string | null;
+    run_url: string | null;
+  } | null;
   title: string;
   status: string | null;
   conclusion: string | null;

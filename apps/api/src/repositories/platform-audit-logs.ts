@@ -13,7 +13,7 @@ type TenantLite = {
   status: string | null;
 };
 
-type EmployeeLite = {
+export type EmployeeLite = {
   id: string;
   name: string | null;
   phone: string | null;
@@ -45,6 +45,13 @@ export type PlatformAuditLogCreateInput = {
   status?: PlatformAuditLogStatus;
   summary?: string | null;
   metadata?: Record<string, unknown>;
+};
+
+export type PlatformReleaseDispatchAuditRecord = Pick<
+  PlatformAuditLogRecord,
+  "id" | "actor_employee_id" | "actor_user_id" | "resource_label" | "status" | "summary" | "metadata" | "created_at"
+> & {
+  actor_employee: EmployeeLite | null;
 };
 
 class PlatformAuditLogRepository {
@@ -131,9 +138,9 @@ class PlatformAuditLogRepository {
     };
   }
 
-  async listRecentReleaseDispatches(limit = 100) {
+  async listRecentReleaseDispatches(limit = 100): Promise<PlatformReleaseDispatchAuditRecord[]> {
     const { data, error } = await this.from("platform_audit_logs")
-      .select("id,resource_label,summary,metadata,created_at")
+      .select("id,actor_employee_id,actor_user_id,resource_label,status,summary,metadata,created_at")
       .eq("action", "platform_release_dispatch")
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -142,7 +149,15 @@ class PlatformAuditLogRepository {
       throw Errors.dbError("查询发布审计日志失败", error);
     }
 
-    return (data || []) as Array<Pick<PlatformAuditLogRecord, "id" | "resource_label" | "summary" | "metadata" | "created_at">>;
+    const records = (data || []) as Array<Omit<PlatformReleaseDispatchAuditRecord, "actor_employee">>;
+    const employees = await this.findEmployees(unique(records.map((item) => item.actor_employee_id)));
+
+    return records.map((item): PlatformReleaseDispatchAuditRecord => ({
+      ...item,
+      actor_employee: item.actor_employee_id
+        ? (employees.get(item.actor_employee_id) as EmployeeLite | undefined) ?? null
+        : null,
+    }));
   }
 
   private async hydrate(records: PlatformAuditLogRecord[]) {

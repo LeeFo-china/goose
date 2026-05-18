@@ -14,7 +14,11 @@ import type {
 } from "@/schema/release-deployments";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
-import { platformAuditLogRepository } from "@/repositories/platform-audit-logs";
+import {
+  platformAuditLogRepository,
+  type EmployeeLite,
+  type PlatformReleaseDispatchAuditRecord,
+} from "@/repositories/platform-audit-logs";
 
 type GithubWorkflowRun = {
   id: number;
@@ -38,6 +42,7 @@ type NormalizedReleaseRun = {
   workflow_label: string;
   services: ReleaseService[] | null;
   service_label: string;
+  audit: ReleaseRunAudit | null;
   title: string;
   status: string | null;
   conclusion: string | null;
@@ -48,6 +53,22 @@ type NormalizedReleaseRun = {
   created_at: string | null;
   updated_at: string | null;
   run_started_at: string | null;
+};
+
+type ReleaseRunAudit = {
+  id: string;
+  summary: string | null;
+  status: string | null;
+  created_at: string;
+  actor_employee_id: string | null;
+  actor_user_id: string | null;
+  actor_employee: EmployeeLite | null;
+  reason: string | null;
+  ref: string | null;
+  ref_type_label: string | null;
+  workflow_url: string | null;
+  run_id: string | null;
+  run_url: string | null;
 };
 
 type SuccessfulReleaseRef = {
@@ -251,6 +272,7 @@ function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun)
     workflow_label: workflow.label,
     services,
     service_label: services ? formatServiceLabels(services) : inferFallbackServiceLabel(workflow, run),
+    audit: null,
     title: run.display_title || run.name || workflow.label,
     status: run.status,
     conclusion: run.conclusion,
@@ -264,26 +286,22 @@ function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun)
   };
 }
 
-type ReleaseDispatchAuditRecord = {
-  id: string;
-  resource_label: string | null;
-  summary: string | null;
-  metadata: unknown;
-  created_at: string;
-};
+function getMetadataValue(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+}
 
-function getAuditRunId(record: ReleaseDispatchAuditRecord) {
+function getAuditRunId(record: PlatformReleaseDispatchAuditRecord) {
   const metadata = record.metadata;
-  if (!metadata || typeof metadata !== "object") return "";
-  const runId = (metadata as { run_id?: unknown }).run_id;
-  return typeof runId === "string" || typeof runId === "number" ? String(runId) : "";
+  return getMetadataValue(metadata, "run_id") || "";
 }
 
 function isReleaseService(value: unknown): value is ReleaseService {
   return typeof value === "string" && value in SERVICE_LABELS;
 }
 
-function getAuditServices(record: ReleaseDispatchAuditRecord) {
+function getAuditServices(record: PlatformReleaseDispatchAuditRecord) {
   const metadata = record.metadata;
   if (!metadata || typeof metadata !== "object") return null;
   const value = (metadata as { services?: unknown; service?: unknown }).services;
@@ -294,6 +312,24 @@ function getAuditServices(record: ReleaseDispatchAuditRecord) {
   const service = (metadata as { service?: unknown }).service;
   if (isReleaseService(service)) return [service];
   return null;
+}
+
+function normalizeRunAudit(record: PlatformReleaseDispatchAuditRecord): ReleaseRunAudit {
+  return {
+    id: record.id,
+    summary: record.summary,
+    status: record.status,
+    created_at: record.created_at,
+    actor_employee_id: record.actor_employee_id,
+    actor_user_id: record.actor_user_id,
+    actor_employee: record.actor_employee,
+    reason: getMetadataValue(record.metadata, "reason"),
+    ref: getMetadataValue(record.metadata, "ref"),
+    ref_type_label: getMetadataValue(record.metadata, "ref_type_label"),
+    workflow_url: getMetadataValue(record.metadata, "workflow_url"),
+    run_id: getMetadataValue(record.metadata, "run_id"),
+    run_url: getMetadataValue(record.metadata, "run_url"),
+  };
 }
 
 function parseServicesFromText(value: string | null | undefined) {
@@ -403,7 +439,7 @@ class ReleaseDeploymentService {
 
     try {
       const records = await platformAuditLogRepository.listRecentReleaseDispatches(120);
-      const byRunId = new Map<string, ReleaseDispatchAuditRecord>();
+      const byRunId = new Map<string, PlatformReleaseDispatchAuditRecord>();
       for (const record of records) {
         const runId = getAuditRunId(record);
         if (runId && !byRunId.has(runId)) {
@@ -414,11 +450,12 @@ class ReleaseDeploymentService {
       return list.map((run) => {
         const record = byRunId.get(run.id);
         const services = record ? getAuditServices(record) : null;
-        if (!services?.length) return run;
+        if (!record) return run;
         return {
           ...run,
-          services,
-          service_label: formatServiceLabels(services),
+          services: services?.length ? services : run.services,
+          service_label: services?.length ? formatServiceLabels(services) : run.service_label,
+          audit: normalizeRunAudit(record),
         };
       });
     } catch {
