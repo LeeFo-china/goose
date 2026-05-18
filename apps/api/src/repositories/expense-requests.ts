@@ -368,7 +368,7 @@ class ExpenseRequestRepository {
       deleteQuery = deleteQuery.eq("tenant_id", tenantId);
     }
 
-    const { error: deleteError } = await deleteQuery;
+    const { error: deleteError } = await deleteQuery.select("id");
 
     if (deleteError) {
       throw Errors.dbError("清理费用明细失败", deleteError);
@@ -393,7 +393,8 @@ class ExpenseRequestRepository {
 
     const { error } = await SupabaseDB.getAdminClient()
       .from("expense_request_items")
-      .insert(payload);
+      .insert(payload)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("保存费用明细失败", error);
@@ -410,7 +411,8 @@ class ExpenseRequestRepository {
         action: payload.action,
         approver_id: payload.approver_id ?? null,
         comment: payload.comment ?? null,
-      });
+      })
+      .select("id");
 
     if (error) {
       throw Errors.dbError("写入费用审批记录失败", error);
@@ -431,7 +433,7 @@ class ExpenseRequestRepository {
       deleteQuery = deleteQuery.eq("tenant_id", tenantId);
     }
 
-    const { error: deleteError } = await deleteQuery;
+    const { error: deleteError } = await deleteQuery.select("id");
 
     if (deleteError) {
       throw Errors.dbError("清理费用审批链失败", deleteError);
@@ -443,7 +445,8 @@ class ExpenseRequestRepository {
 
     const { error } = await SupabaseDB.getAdminClient()
       .from("expense_request_approval_chains")
-      .insert(items);
+      .insert(items)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("保存费用审批链失败", error);
@@ -518,7 +521,7 @@ class ExpenseRequestRepository {
       query = query.eq("tenant_id", tenantId);
     }
 
-    const { error } = await query;
+    const { error } = await query.select("id");
 
     if (error) {
       throw Errors.dbError("更新费用审批链失败", error);

@@ -343,7 +343,7 @@ export class WeChatController extends BaseController {
       status: "pending",
       expired_at: expiredAt,
       request_ip: requestIp,
-    });
+    }).select("id");
 
     if (error) {
       throw Errors.dbError("保存验证码失败", error);
@@ -358,7 +358,8 @@ export class WeChatController extends BaseController {
         .eq("phone", phone)
         .eq("scene", scene)
         .eq("code", code)
-        .eq("status", "pending");
+        .eq("status", "pending")
+        .select("id");
 
       throw Errors.dbError("发送验证码失败", smsError);
     }
@@ -676,7 +677,8 @@ export class WeChatController extends BaseController {
           .from("wechat_identities")
           .delete()
           .eq("auth_user_id", existingIdentity.auth_user_id)
-          .eq("openid", openid);
+          .eq("openid", openid)
+          .select("id");
 
         if (staleIdentityError) {
           throw Errors.dbError("清理已解绑微信身份映射失败", staleIdentityError);
@@ -756,7 +758,7 @@ export class WeChatController extends BaseController {
           auth_user_id: legacyUser.id,
           openid,
           unionid: unionid || legacyUser.unionid || null,
-        });
+        }).select("id");
 
         if (identityError) {
           throw Errors.dbError("补建微信身份映射失败", identityError);
@@ -792,7 +794,7 @@ export class WeChatController extends BaseController {
       auth_user_id: data.user.id,
       openid,
       unionid: unionid || null,
-    });
+    }).select("id");
 
     if (identityError) {
       throw Errors.dbError("创建微信身份映射失败", identityError);
@@ -856,7 +858,7 @@ export class WeChatController extends BaseController {
       auth_user_id: data.user.id,
       openid: input.openid,
       unionid: input.unionid || null,
-    });
+    }).select("id");
 
     if (identityError) {
       throw Errors.dbError("创建微信身份映射失败", identityError);
@@ -912,7 +914,8 @@ export class WeChatController extends BaseController {
       const { error: deleteError } = await adminClient
         .from("wechat_identities")
         .delete()
-        .eq("openid", input.openid);
+        .eq("openid", input.openid)
+        .select("id");
 
       if (deleteError) {
         throw Errors.dbError("清理旧微信身份映射失败", deleteError);
@@ -923,7 +926,7 @@ export class WeChatController extends BaseController {
       auth_user_id: input.authUserId,
       openid: input.openid,
       unionid: input.unionid ?? null,
-    });
+    }).select("id");
 
     if (error) {
       throw Errors.dbError("同步微信身份映射失败", error);
@@ -988,7 +991,8 @@ export class WeChatController extends BaseController {
           status: "verified",
           verified_at: new Date().toISOString(),
         })
-        .eq("id", verificationCodeId);
+        .eq("id", verificationCodeId)
+        .select("id");
 
       if (!error) {
         return;
@@ -1396,7 +1400,8 @@ export class WeChatController extends BaseController {
       .from("customers")
       .update(updatePayload)
       .eq("id", customer.id)
-      .eq("tenant_id", customer.tenant_id);
+      .eq("tenant_id", customer.tenant_id)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("绑定客户身份失败", error);
@@ -1651,7 +1656,8 @@ export class WeChatController extends BaseController {
           user_id: authUserId,
           customer_origin: "visitor_self_registered",
           self_registered_at: now,
-        });
+        })
+        .select("id");
 
       if (insertError) {
         throw Errors.dbError("自助创建客户失败", insertError);
@@ -1687,7 +1693,8 @@ export class WeChatController extends BaseController {
     const { error: updateError } = await adminClient
       .from("customers")
       .update(updatePayload)
-      .eq("id", customer.id);
+      .eq("id", customer.id)
+      .select("id");
 
     if (updateError) {
       throw Errors.dbError("绑定客户身份失败", updateError);
@@ -1767,7 +1774,8 @@ export class WeChatController extends BaseController {
         const { error: updateMembershipEmployeeError } = await adminClient
           .from("employees")
           .update({ user_id: authUserId })
-          .eq("id", employee.id);
+          .eq("id", employee.id)
+          .select("id");
 
         if (updateMembershipEmployeeError) {
           throw Errors.dbError("同步员工身份绑定失败", updateMembershipEmployeeError);
@@ -1824,7 +1832,8 @@ export class WeChatController extends BaseController {
       .from("employees")
       .update({ user_id: null })
       .eq("user_id", authUserId)
-      .neq("id", employee.id);
+      .neq("id", employee.id)
+      .select("id");
 
     if (cleanupError) {
       throw Errors.dbError("清理历史员工绑定失败", cleanupError);
@@ -1833,7 +1842,8 @@ export class WeChatController extends BaseController {
     const { error: updateError } = await adminClient
       .from("employees")
       .update({ user_id: authUserId })
-      .eq("id", employee.id);
+      .eq("id", employee.id)
+      .select("id");
 
     if (updateError) {
       throw Errors.dbError("绑定员工身份失败", updateError);
@@ -1903,7 +1913,8 @@ export class WeChatController extends BaseController {
         .from("wechat_identities")
         .update({ auth_user_id: input.toAuthUserId })
         .eq("auth_user_id", input.fromAuthUserId)
-        .eq("openid", input.openid);
+        .eq("openid", input.openid)
+        .select("id");
 
       if (error) {
         throw Errors.dbError("更新微信身份映射失败", error);
@@ -1914,7 +1925,7 @@ export class WeChatController extends BaseController {
     const { error } = await adminClient.from("wechat_identities").upsert({
       auth_user_id: input.toAuthUserId,
       openid: input.openid,
-    });
+    }).select("id");
 
     if (error) {
       throw Errors.dbError("创建微信身份映射失败", error);

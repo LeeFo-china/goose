@@ -398,7 +398,7 @@ class ProjectAcceptanceRepository {
       query = query.eq("tenant_id", tenantId);
     }
 
-    const { error } = await query;
+    const { error } = await query.select("id");
 
     if (error) throw Errors.dbError("删除项目验收草稿失败", error);
   }

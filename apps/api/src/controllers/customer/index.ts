@@ -703,7 +703,8 @@ class CustomerController extends BaseController<
         .from("properties")
         .update(propertyPayload)
         .eq("id", primaryProperty.id)
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .select("id");
 
       if (error) {
         throw Errors.dbError("更新客户主房产失败", error);
@@ -716,7 +717,8 @@ class CustomerController extends BaseController<
           customer_id: customerId,
           tenant_id: tenantId ?? null,
           ...propertyPayload,
-        });
+        })
+        .select("id");
 
       if (error) {
         throw Errors.dbError("创建客户主房产失败", error);
@@ -865,7 +867,8 @@ class CustomerController extends BaseController<
         .from("customers")
         .update({ property_id: property.id })
         .eq("id", customer.id)
-        .eq("tenant_id", authContext.tenantId);
+        .eq("tenant_id", authContext.tenantId)
+        .select("id");
 
       if (updateError) {
         throw Errors.dbError("设置主房产失败", updateError);
@@ -911,7 +914,8 @@ class CustomerController extends BaseController<
       .from("customers")
       .update({ property_id: paramsResult.data.propertyId })
       .eq("id", customer.id)
-      .eq("tenant_id", authContext.tenantId);
+      .eq("tenant_id", authContext.tenantId)
+      .select("id");
 
     if (error) {
       throw Errors.dbError("设置主房产失败", error);
@@ -1718,7 +1722,8 @@ class CustomerController extends BaseController<
         .from("customers")
         .update({ owner_id: payload.owner_id })
         .in("id", successCustomerIds)
-        .eq("tenant_id", authContext.tenantId);
+        .eq("tenant_id", authContext.tenantId)
+        .select("id");
 
       if (updateError) {
         throw Errors.dbError("批量分配负责人失败", updateError);
