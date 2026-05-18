@@ -228,9 +228,15 @@ export function ServiceHealthPanel() {
           <Badge variant={snapshot?.summary.unhealthy || snapshot?.summary.exited ? "danger" : "success"}>
             {snapshot?.summary.unhealthy || snapshot?.summary.exited ? "存在异常" : "状态正常"}
           </Badge>
-          <Button type="button" onClick={() => void loadHealth(true)} disabled={pending}>
-            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
-            刷新
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => void loadHealth(true)}
+            disabled={pending}
+            aria-label="刷新微服务健康"
+            title="刷新微服务健康"
+          >
+            {pending ? <Loader2 className="animate-spin" data-icon="icon-only" /> : <RefreshCw data-icon="icon-only" />}
           </Button>
         </div>
       </CardHeader>

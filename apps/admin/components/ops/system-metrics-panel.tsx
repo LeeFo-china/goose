@@ -224,9 +224,15 @@ export function SystemMetricsPanel() {
             {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
             {autoRefresh ? "暂停" : "继续"}
           </Button>
-          <Button type="button" onClick={() => void loadMetrics({ manual: true })} disabled={manualPending}>
-            {manualPending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
-            刷新
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => void loadMetrics({ manual: true })}
+            disabled={manualPending}
+            aria-label="刷新资源状态"
+            title="刷新资源状态"
+          >
+            {manualPending ? <Loader2 className="animate-spin" data-icon="icon-only" /> : <RefreshCw data-icon="icon-only" />}
           </Button>
         </div>
       </CardHeader>
