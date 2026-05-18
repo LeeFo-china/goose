@@ -13,6 +13,7 @@ import type {
   ReleaseEnvironment,
   ReleaseOperation,
   ReleaseOptionsData,
+  Pagination,
   ReleaseRefOption,
   ReleaseRefType,
   ReleaseRuntimeServiceVersion,
@@ -82,11 +83,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 type ReleaseDeploymentsPanelProps = {
   options: ReleaseOptionsData | null;
   runs: ReleaseRun[];
+  runsPagination: Pagination;
   successfulRefs: ReleaseSuccessfulRef[];
+  successfulRefsPagination: Pagination;
   runtimeVersions: ReleaseRuntimeVersionData | null;
   runtimeError?: string | null;
   error?: string | null;
 };
+
+type ReleaseSearchEnvironment = ReleaseEnvironment | "all";
 
 const REF_TYPE_OPTIONS: Array<{
   value: ReleaseRefType;
@@ -183,26 +188,42 @@ async function fetchReleaseRefs(input: {
   return (data.data?.list || []) as ReleaseRefOption[];
 }
 
-async function fetchReleaseRuns() {
-  const response = await fetch("/api/backend/admin/ops/releases/runs?page=1&pageSize=5", {
+async function fetchReleaseRuns(input: { page: number; pageSize?: number }) {
+  const query = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize || 5),
+  });
+  const response = await fetch(`/api/backend/admin/ops/releases/runs?${query.toString()}`, {
     cache: "no-store",
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.success === false) {
     throw new Error(getPayloadMessage(data, "最近发布记录刷新失败"));
   }
-  return (data.data?.list || []) as ReleaseRunListData["list"];
+  return data.data as ReleaseRunListData;
 }
 
-async function fetchSuccessfulRefs() {
-  const response = await fetch("/api/backend/admin/ops/releases/successful-refs?pageSize=5", {
+async function fetchSuccessfulRefs(input: {
+  page: number;
+  pageSize?: number;
+  environment: ReleaseSearchEnvironment;
+  keyword: string;
+}) {
+  const query = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize || 5),
+  });
+  if (input.environment !== "all") query.set("environment", input.environment);
+  if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
+
+  const response = await fetch(`/api/backend/admin/ops/releases/successful-refs?${query.toString()}`, {
     cache: "no-store",
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.success === false) {
     throw new Error(getPayloadMessage(data, "发布辅助刷新失败"));
   }
-  return (data.data?.list || []) as ReleaseSuccessfulRefListData["list"];
+  return data.data as ReleaseSuccessfulRefListData;
 }
 
 async function fetchReleaseRuntimeVersions() {
@@ -722,17 +743,80 @@ function ReleaseServiceMultiSelect({
   );
 }
 
-export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtimeVersions, runtimeError, error }: ReleaseDeploymentsPanelProps) {
+function CompactPagination({
+  pagination,
+  pending,
+  onPageChange,
+}: {
+  pagination: Pagination;
+  pending?: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(pagination.totalPages || 0, 1);
+  const page = Math.min(Math.max(pagination.page || 1, 1), totalPages);
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
+      <div className="text-xs text-muted-foreground">
+        第 {page} / {totalPages} 页，共 {pagination.total} 条
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          上一页
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function successfulRefEnvironmentLabel(value: ReleaseSearchEnvironment) {
+  if (value === "production") return "生产";
+  if (value === "dev") return "开发";
+  return "全部";
+}
+
+export function ReleaseDeploymentsPanel({
+  options,
+  runs,
+  runsPagination,
+  successfulRefs,
+  successfulRefsPagination,
+  runtimeVersions,
+  runtimeError,
+  error,
+}: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [rollbackConfirmText, setRollbackConfirmText] = useState("");
   const [currentRuns, setCurrentRuns] = useState(runs);
+  const [currentRunsPagination, setCurrentRunsPagination] = useState(runsPagination);
   const [currentSuccessfulRefs, setCurrentSuccessfulRefs] = useState(successfulRefs);
+  const [currentSuccessfulRefsPagination, setCurrentSuccessfulRefsPagination] = useState(successfulRefsPagination);
   const [currentRuntimeVersions, setCurrentRuntimeVersions] = useState(runtimeVersions);
   const [runsRefreshing, setRunsRefreshing] = useState(false);
+  const [successfulRefsRefreshing, setSuccessfulRefsRefreshing] = useState(false);
   const [runsPollError, setRunsPollError] = useState("");
   const [lastRunsRefreshedAt, setLastRunsRefreshedAt] = useState<string | null>(null);
   const [forcePollUntil, setForcePollUntil] = useState(0);
+  const [runsPage, setRunsPage] = useState(runsPagination.page || 1);
+  const [successfulRefsPage, setSuccessfulRefsPage] = useState(successfulRefsPagination.page || 1);
+  const [successfulRefEnvironment, setSuccessfulRefEnvironment] = useState<ReleaseSearchEnvironment>("all");
+  const [successfulRefKeyword, setSuccessfulRefKeyword] = useState("");
   const {
     environment,
     service,
@@ -764,23 +848,55 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
   }, [runs]);
 
   useEffect(() => {
+    setCurrentRunsPagination(runsPagination);
+    setRunsPage(runsPagination.page || 1);
+  }, [runsPagination]);
+
+  useEffect(() => {
     setCurrentSuccessfulRefs(successfulRefs);
   }, [successfulRefs]);
+
+  useEffect(() => {
+    setCurrentSuccessfulRefsPagination(successfulRefsPagination);
+    setSuccessfulRefsPage(successfulRefsPagination.page || 1);
+  }, [successfulRefsPagination]);
 
   useEffect(() => {
     setCurrentRuntimeVersions(runtimeVersions);
   }, [runtimeVersions]);
 
-  const refreshReleaseSnapshots = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+  const refreshReleaseSnapshots = useCallback(async ({
+    silent = false,
+    nextRunsPage = runsPage,
+    nextSuccessfulRefsPage = successfulRefsPage,
+    nextSuccessfulRefEnvironment = successfulRefEnvironment,
+    nextSuccessfulRefKeyword = successfulRefKeyword,
+  }: {
+    silent?: boolean;
+    nextRunsPage?: number;
+    nextSuccessfulRefsPage?: number;
+    nextSuccessfulRefEnvironment?: ReleaseSearchEnvironment;
+    nextSuccessfulRefKeyword?: string;
+  } = {}) => {
     if (!silent) setRunsRefreshing(true);
+    if (!silent) setSuccessfulRefsRefreshing(true);
     try {
       const [nextRuns, nextSuccessfulRefs, nextRuntimeVersions] = await Promise.all([
-        fetchReleaseRuns(),
-        fetchSuccessfulRefs(),
+        fetchReleaseRuns({ page: nextRunsPage, pageSize: 5 }),
+        fetchSuccessfulRefs({
+          page: nextSuccessfulRefsPage,
+          pageSize: 5,
+          environment: nextSuccessfulRefEnvironment,
+          keyword: nextSuccessfulRefKeyword,
+        }),
         fetchReleaseRuntimeVersions(),
       ]);
-      setCurrentRuns(nextRuns);
-      setCurrentSuccessfulRefs(nextSuccessfulRefs);
+      setCurrentRuns(nextRuns.list || []);
+      setCurrentRunsPagination(nextRuns.pagination);
+      setRunsPage(nextRuns.pagination.page || nextRunsPage);
+      setCurrentSuccessfulRefs(nextSuccessfulRefs.list || []);
+      setCurrentSuccessfulRefsPagination(nextSuccessfulRefs.pagination);
+      setSuccessfulRefsPage(nextSuccessfulRefs.pagination.page || nextSuccessfulRefsPage);
       setCurrentRuntimeVersions(nextRuntimeVersions);
       setLastRunsRefreshedAt(new Date().toISOString());
       setRunsPollError("");
@@ -790,8 +906,9 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
       if (!silent) toast.error(message);
     } finally {
       if (!silent) setRunsRefreshing(false);
+      if (!silent) setSuccessfulRefsRefreshing(false);
     }
-  }, []);
+  }, [runsPage, successfulRefEnvironment, successfulRefKeyword, successfulRefsPage]);
 
   useEffect(() => {
     if (!shouldPollRuns) return undefined;
@@ -802,13 +919,20 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
       setRunsRefreshing(true);
       try {
         const [nextRuns, nextSuccessfulRefs, nextRuntimeVersions] = await Promise.all([
-          fetchReleaseRuns(),
-          fetchSuccessfulRefs(),
+          fetchReleaseRuns({ page: runsPage, pageSize: 5 }),
+          fetchSuccessfulRefs({
+            page: successfulRefsPage,
+            pageSize: 5,
+            environment: successfulRefEnvironment,
+            keyword: successfulRefKeyword,
+          }),
           fetchReleaseRuntimeVersions(),
         ]);
         if (cancelled) return;
-        setCurrentRuns(nextRuns);
-        setCurrentSuccessfulRefs(nextSuccessfulRefs);
+        setCurrentRuns(nextRuns.list || []);
+        setCurrentRunsPagination(nextRuns.pagination);
+        setCurrentSuccessfulRefs(nextSuccessfulRefs.list || []);
+        setCurrentSuccessfulRefsPagination(nextSuccessfulRefs.pagination);
         setCurrentRuntimeVersions(nextRuntimeVersions);
         setLastRunsRefreshedAt(new Date().toISOString());
         setRunsPollError("");
@@ -826,7 +950,38 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [shouldPollRuns]);
+  }, [runsPage, shouldPollRuns, successfulRefEnvironment, successfulRefKeyword, successfulRefsPage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setSuccessfulRefsPage(1);
+      setSuccessfulRefsRefreshing(true);
+      fetchSuccessfulRefs({
+        page: 1,
+        pageSize: 5,
+        environment: successfulRefEnvironment,
+        keyword: successfulRefKeyword,
+      })
+        .then((data) => {
+          if (cancelled) return;
+          setCurrentSuccessfulRefs(data.list || []);
+          setCurrentSuccessfulRefsPagination(data.pagination);
+          setSuccessfulRefsPage(data.pagination.page || 1);
+        })
+        .catch((err) => {
+          if (!cancelled) setRunsPollError(err instanceof Error ? err.message : "发布辅助刷新失败");
+        })
+        .finally(() => {
+          if (!cancelled) setSuccessfulRefsRefreshing(false);
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [successfulRefEnvironment, successfulRefKeyword]);
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -845,6 +1000,18 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
       refType: value,
       defaultRef: currentEnvironment?.default_ref || "feature/multi-tenant",
     });
+  }
+
+  function changeRunsPage(nextPage: number) {
+    const normalized = Math.max(1, Math.min(nextPage, Math.max(currentRunsPagination.totalPages, 1)));
+    setRunsPage(normalized);
+    void refreshReleaseSnapshots({ nextRunsPage: normalized });
+  }
+
+  function changeSuccessfulRefsPage(nextPage: number) {
+    const normalized = Math.max(1, Math.min(nextPage, Math.max(currentSuccessfulRefsPagination.totalPages, 1)));
+    setSuccessfulRefsPage(normalized);
+    void refreshReleaseSnapshots({ nextSuccessfulRefsPage: normalized });
   }
 
   function applySuccessfulRef(item: ReleaseSuccessfulRef) {
@@ -1298,13 +1465,40 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
           <CardDescription>从成功 Commit 选择生产来源，或生成回滚 Tag。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-medium">成功 Commit</div>
-            <Badge variant="outline">{currentSuccessfulRefs.length}</Badge>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">成功 Commit</div>
+              <Badge variant="outline">
+                {successfulRefEnvironmentLabel(successfulRefEnvironment)} · {currentSuccessfulRefsPagination.total}
+              </Badge>
+              {successfulRefsRefreshing ? <Loader2 className="animate-spin text-muted-foreground" data-icon="inline-start" /> : null}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[120px_minmax(220px,1fr)] lg:w-[420px]">
+              <Select
+                value={successfulRefEnvironment}
+                onValueChange={(value) => setSuccessfulRefEnvironment(value as ReleaseSearchEnvironment)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="环境" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="production">生产</SelectItem>
+                    <SelectItem value="dev">开发</SelectItem>
+                    <SelectItem value="all">全部</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Input
+                value={successfulRefKeyword}
+                onChange={(event) => setSuccessfulRefKeyword(event.target.value)}
+                placeholder="搜索 SHA / 标题 / 分支"
+              />
+            </div>
           </div>
           {currentSuccessfulRefs.length === 0 ? (
             <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
-              暂无成功发布版本
+              {successfulRefKeyword.trim() ? "未找到匹配发布版本" : "暂无成功发布版本"}
             </div>
           ) : (
             <TooltipProvider delayDuration={200}>
@@ -1408,6 +1602,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
           <p className="text-xs text-muted-foreground">
             “作为来源”会把 Commit 填入左侧创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。
           </p>
+          <CompactPagination
+            pagination={currentSuccessfulRefsPagination}
+            pending={successfulRefsRefreshing}
+            onPageChange={changeSuccessfulRefsPage}
+          />
         </CardContent>
       </Card>
       </div>
@@ -1426,7 +1625,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
             <Badge variant={hasActiveRuns ? "warning" : "outline"}>
               {hasActiveRuns ? "自动刷新中" : "状态已稳定"}
             </Badge>
-            <Badge variant="outline">{currentRuns.length} 条</Badge>
+            <Badge variant="outline">{currentRunsPagination.total} 条</Badge>
             <Button
               type="button"
               variant="outline"
@@ -1500,6 +1699,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtime
               ))}
             </TableBody>
           </Table>
+          <CompactPagination
+            pagination={currentRunsPagination}
+            pending={runsRefreshing}
+            onPageChange={changeRunsPage}
+          />
         </CardContent>
       </Card>
     </div>

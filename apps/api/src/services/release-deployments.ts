@@ -458,6 +458,19 @@ function getLatestSuccessfulRunFromPayload(workflow: ReleaseWorkflow, runs: Gith
   };
 }
 
+function matchesSuccessfulRefKeyword(item: SuccessfulReleaseRef, keyword?: string) {
+  const normalized = keyword?.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    item.head_sha,
+    item.head_sha.slice(0, 12),
+    item.head_sha.slice(0, 7),
+    item.title,
+    item.head_branch,
+    item.workflow_label,
+  ].some((value) => value?.toLowerCase().includes(normalized));
+}
+
 async function compareRuntimeWithDev(runtimeSha: string | null, latestDevSha: string | null) {
   if (!isFullSha(runtimeSha) || !isFullSha(latestDevSha)) {
     return { status: "unknown" as const, label: "缺少可比对的 Commit SHA" };
@@ -598,17 +611,18 @@ class ReleaseDeploymentService {
     const results = await Promise.all(
       environments.map(async (workflow) => {
         const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-          `/actions/workflows/${workflow.workflowId}/runs?per_page=${pageSize}&page=${page}`,
+          `/actions/workflows/${workflow.workflowId}/runs?per_page=100&page=1`,
         );
 
         return (payload.workflow_runs || []).map((run) => normalizeWorkflowRun(workflow, run));
       }),
     );
 
-    const list = results
+    const mergedList = results
       .flat()
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, pageSize);
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    const total = mergedList.length;
+    const list = mergedList.slice((page - 1) * pageSize, page * pageSize);
     const hydratedList = await this.hydrateRunServiceLabels(list);
 
     return {
@@ -616,8 +630,8 @@ class ReleaseDeploymentService {
       pagination: {
         page,
         pageSize,
-        total: hydratedList.length,
-        totalPages: hydratedList.length > 0 ? 1 : 0,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
       },
     };
   }
@@ -652,6 +666,7 @@ class ReleaseDeploymentService {
   }
 
   async listSuccessfulRefs(query: ReleaseSuccessfulRefListQuery) {
+    const page = query.page || 1;
     const pageSize = Math.min(query.pageSize || 8, 20);
     const environments = query.environment
       ? [RELEASE_WORKFLOWS[query.environment]]
@@ -660,7 +675,7 @@ class ReleaseDeploymentService {
     const results = await Promise.all(
       environments.map(async (workflow) => {
         const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-          `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=50`,
+          `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=100`,
         );
 
         return (payload.workflow_runs || [])
@@ -701,17 +716,19 @@ class ReleaseDeploymentService {
       }
     }
 
-    const list = [...deduped.values()]
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, pageSize);
+    const mergedList = [...deduped.values()]
+      .filter((item) => matchesSuccessfulRefKeyword(item, query.keyword))
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    const total = mergedList.length;
+    const list = mergedList.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       list,
       pagination: {
-        page: 1,
+        page,
         pageSize,
-        total: list.length,
-        totalPages: list.length > 0 ? 1 : 0,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
       },
     };
   }

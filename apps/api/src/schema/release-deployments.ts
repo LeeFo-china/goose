@@ -95,6 +95,7 @@ export const ReleaseRunListQuerySchema = PaginationQuerySchema.extend({
 
 export const ReleaseSuccessfulRefListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
+  keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
 });
 
 export const ReleaseRefListQuerySchema = z.object({

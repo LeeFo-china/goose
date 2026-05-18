@@ -80,7 +80,9 @@ async function getOpsData(params: OpsPageSearchParams) {
       runs: [] as OpsScriptRun[],
       releaseOptions: null as ReleaseOptionsData | null,
       releaseRuns: [] as ReleaseRun[],
+      releaseRunsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
+      releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
@@ -128,7 +130,9 @@ async function getOpsData(params: OpsPageSearchParams) {
       runs: runData?.list || [],
       releaseOptions: releaseOptionsResult.data,
       releaseRuns: releaseRunsResult.data?.list || [],
+      releaseRunsPagination: releaseRunsResult.data?.pagination || { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseSuccessfulRefs: releaseSuccessfulRefsResult.data?.list || [],
+      releaseSuccessfulRefsPagination: releaseSuccessfulRefsResult.data?.pagination || { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: releaseRuntimeVersionsResult.data,
       pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: null,
@@ -141,7 +145,9 @@ async function getOpsData(params: OpsPageSearchParams) {
       runs: [] as OpsScriptRun[],
       releaseOptions: null as ReleaseOptionsData | null,
       releaseRuns: [] as ReleaseRun[],
+      releaseRunsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
+      releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "运维脚本加载失败",
@@ -157,7 +163,20 @@ export default async function OpsPage({
   searchParams: Promise<OpsPageSearchParams>;
 }) {
   const params = await searchParams;
-  const { scripts, runs, releaseOptions, releaseRuns, releaseSuccessfulRefs, releaseRuntimeVersions, pagination, error, releaseError, releaseRuntimeError } = await getOpsData(params);
+  const {
+    scripts,
+    runs,
+    releaseOptions,
+    releaseRuns,
+    releaseRunsPagination,
+    releaseSuccessfulRefs,
+    releaseSuccessfulRefsPagination,
+    releaseRuntimeVersions,
+    pagination,
+    error,
+    releaseError,
+    releaseRuntimeError,
+  } = await getOpsData(params);
   const activeTab = normalizeTab(params.tab);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
@@ -223,7 +242,9 @@ export default async function OpsPage({
         <ReleaseDeploymentsPanel
           options={releaseOptions}
           runs={releaseRuns}
+          runsPagination={releaseRunsPagination}
           successfulRefs={releaseSuccessfulRefs}
+          successfulRefsPagination={releaseSuccessfulRefsPagination}
           runtimeVersions={releaseRuntimeVersions}
           runtimeError={releaseRuntimeError}
           error={releaseError}
