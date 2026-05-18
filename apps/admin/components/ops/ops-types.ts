@@ -219,6 +219,30 @@ export type ReleaseRuntimeVersionData = {
   services: ReleaseRuntimeServiceVersion[];
 };
 
+export type ReleaseRunFailureSummary = {
+  run_id: string;
+  total_jobs: number;
+  has_failure: boolean;
+  summary: string;
+  failed_jobs: Array<{
+    id: string;
+    name: string;
+    status: string | null;
+    conclusion: string | null;
+    html_url: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    failed_steps: Array<{
+      name: string;
+      number: number | null;
+      status: string | null;
+      conclusion: string | null;
+      started_at: string | null;
+      completed_at: string | null;
+    }>;
+  }>;
+};
+
 export type ReleaseCreateTagResult = {
   tag: string;
   ref_type: "tag";

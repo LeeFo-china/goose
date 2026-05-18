@@ -10,6 +10,7 @@ import {
   ReleaseCreateTagSchema,
   ReleaseDispatchSchema,
   ReleaseRefListQuerySchema,
+  ReleaseRunFailureSummaryParamsSchema,
   ReleaseRunListQuerySchema,
   ReleaseSuccessfulRefListQuerySchema,
 } from "@/schema/release-deployments";
@@ -102,6 +103,18 @@ class AdminOpsController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await releaseDeploymentService.listRuns(queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/releases/runs/:runId/failure-summary")
+  async getReleaseRunFailureSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.ops.read");
+
+    const paramsResult = ReleaseRunFailureSummaryParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await releaseDeploymentService.getRunFailureSummary(paramsResult.data.runId);
     return ResponseHandler.success(data);
   }
 

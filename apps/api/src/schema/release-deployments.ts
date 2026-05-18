@@ -93,6 +93,10 @@ export const ReleaseRunListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
 });
 
+export const ReleaseRunFailureSummaryParamsSchema = z.object({
+  runId: z.string().trim().regex(/^\d+$/, "GitHub Run ID 必须是数字"),
+});
+
 export const ReleaseSuccessfulRefListQuerySchema = PaginationQuerySchema.extend({
   environment: ReleaseEnvironmentSchema.optional(),
   keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
@@ -112,5 +116,6 @@ export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
 export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
 export type ReleaseCreateRollbackTagInput = z.infer<typeof ReleaseCreateRollbackTagSchema>;
 export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;
+export type ReleaseRunFailureSummaryParams = z.infer<typeof ReleaseRunFailureSummaryParamsSchema>;
 export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;

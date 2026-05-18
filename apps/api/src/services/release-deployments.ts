@@ -36,6 +36,27 @@ type GithubWorkflowRun = {
   run_started_at: string | null;
 };
 
+type GithubWorkflowJobStep = {
+  name: string | null;
+  number: number | null;
+  status: string | null;
+  conclusion: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+type GithubWorkflowJob = {
+  id: number;
+  run_id: number;
+  name: string | null;
+  status: string | null;
+  conclusion: string | null;
+  html_url: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  steps?: GithubWorkflowJobStep[];
+};
+
 type NormalizedReleaseRun = {
   id: string;
   environment: ReleaseEnvironment;
@@ -112,6 +133,24 @@ type ReleaseRuntimeServiceVersion = {
   latest_successful_prod_sha: string | null;
   diff_status: "same_as_dev" | "behind_dev" | "ahead_of_dev" | "unknown";
   diff_label: string;
+};
+
+type ReleaseRunFailureJobSummary = {
+  id: string;
+  name: string;
+  status: string | null;
+  conclusion: string | null;
+  html_url: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_steps: Array<{
+    name: string;
+    number: number | null;
+    status: string | null;
+    conclusion: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+  }>;
 };
 
 type GithubBranch = {
@@ -471,6 +510,36 @@ function matchesSuccessfulRefKeyword(item: SuccessfulReleaseRef, keyword?: strin
   ].some((value) => value?.toLowerCase().includes(normalized));
 }
 
+function isProblemConclusion(value: string | null | undefined) {
+  return value === "failure" || value === "timed_out" || value === "cancelled" || value === "action_required";
+}
+
+function summarizeFailureJob(job: GithubWorkflowJob): ReleaseRunFailureJobSummary | null {
+  const failedSteps = (job.steps || [])
+    .filter((step) => isProblemConclusion(step.conclusion))
+    .map((step) => ({
+      name: step.name || `Step ${step.number || "-"}`,
+      number: step.number,
+      status: step.status,
+      conclusion: step.conclusion,
+      started_at: step.started_at,
+      completed_at: step.completed_at,
+    }));
+
+  if (!isProblemConclusion(job.conclusion) && failedSteps.length === 0) return null;
+
+  return {
+    id: String(job.id),
+    name: job.name || `Job ${job.id}`,
+    status: job.status,
+    conclusion: job.conclusion,
+    html_url: job.html_url,
+    started_at: job.started_at,
+    completed_at: job.completed_at,
+    failed_steps: failedSteps,
+  };
+}
+
 async function compareRuntimeWithDev(runtimeSha: string | null, latestDevSha: string | null) {
   if (!isFullSha(runtimeSha) || !isFullSha(latestDevSha)) {
     return { status: "unknown" as const, label: "缺少可比对的 Commit SHA" };
@@ -633,6 +702,24 @@ class ReleaseDeploymentService {
         total,
         totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
       },
+    };
+  }
+
+  async getRunFailureSummary(runId: string) {
+    const payload = await githubRequest<{ total_count?: number; jobs?: GithubWorkflowJob[] }>(
+      `/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`,
+    );
+    const jobs = payload.jobs || [];
+    const failedJobs = jobs.map(summarizeFailureJob).filter((item): item is ReleaseRunFailureJobSummary => Boolean(item));
+
+    return {
+      run_id: runId,
+      total_jobs: payload.total_count ?? jobs.length,
+      failed_jobs: failedJobs,
+      has_failure: failedJobs.length > 0,
+      summary: failedJobs.length
+        ? `${failedJobs.length} 个 Job 异常`
+        : "未发现失败 Job 或失败步骤",
     };
   }
 

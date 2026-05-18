@@ -19,6 +19,7 @@ import type {
   ReleaseRuntimeServiceVersion,
   ReleaseRuntimeVersionData,
   ReleaseRun,
+  ReleaseRunFailureSummary,
   ReleaseRunListData,
   ReleaseService,
   ReleaseSuccessfulRef,
@@ -237,6 +238,17 @@ async function fetchReleaseRuntimeVersions() {
   return data.data as ReleaseRuntimeVersionData;
 }
 
+async function fetchReleaseRunFailureSummary(runId: string) {
+  const response = await fetch(`/api/backend/admin/ops/releases/runs/${encodeURIComponent(runId)}/failure-summary`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "失败摘要加载失败"));
+  }
+  return data.data as ReleaseRunFailureSummary;
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -274,6 +286,10 @@ function statusVariant(run: ReleaseRun) {
 function isReleaseRunActive(run: ReleaseRun) {
   if (run.status === "queued" || run.status === "in_progress") return true;
   return run.status !== "completed" && !run.conclusion;
+}
+
+function shouldShowFailureSummary(run: ReleaseRun) {
+  return run.status === "completed" && Boolean(run.conclusion) && run.conclusion !== "success";
 }
 
 function getRunActorLabel(run: ReleaseRun) {
@@ -329,11 +345,129 @@ function shortenImageId(value: string | null | undefined) {
   return value.replace(/^sha256:/, "").slice(0, 12);
 }
 
-function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
-  const githubUrl = run.audit?.run_url || run.html_url;
+function conclusionLabel(value: string | null | undefined) {
+  if (value === "failure") return "失败";
+  if (value === "timed_out") return "超时";
+  if (value === "cancelled") return "已取消";
+  if (value === "action_required") return "需要处理";
+  return value || "-";
+}
+
+function FailureSummaryPanel({
+  summary,
+  pending,
+  error,
+}: {
+  summary: ReleaseRunFailureSummary | null;
+  pending: boolean;
+  error: string;
+}) {
+  if (pending) {
+    return (
+      <Alert>
+        <Loader2 className="animate-spin" data-icon="inline-start" />
+        <AlertTitle>正在读取失败摘要</AlertTitle>
+        <AlertDescription>正在从 GitHub Actions 拉取失败 Job 和 Step。</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (error) {
+    return <StatusAlert>{error}</StatusAlert>;
+  }
+
+  if (!summary) return null;
+
+  if (!summary.has_failure) {
+    return (
+      <Alert>
+        <AlertTitle>未发现失败步骤</AlertTitle>
+        <AlertDescription>{summary.summary}</AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
-    <Dialog>
+    <div className="flex flex-col gap-3">
+      <div className="text-sm font-medium">失败摘要</div>
+      {summary.failed_jobs.map((job) => (
+        <div key={job.id} className="rounded-md border bg-background p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{job.name}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {formatDateTime(job.started_at)} - {formatDateTime(job.completed_at)}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant="danger">{conclusionLabel(job.conclusion)}</Badge>
+              {job.html_url ? (
+                <Button asChild variant="ghost" size="sm">
+                  <Link href={job.html_url} target="_blank" rel="noreferrer">
+                    <ExternalLink data-icon="inline-start" />
+                    Job
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          {job.failed_steps.length ? (
+            <div className="mt-3 flex flex-col gap-2">
+              {job.failed_steps.map((step) => (
+                <div key={`${job.id}-${step.number}-${step.name}`} className="rounded-md bg-muted/40 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="truncate text-sm">{step.name}</div>
+                    <Badge variant="danger">{conclusionLabel(step.conclusion)}</Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Step {step.number || "-"} · {formatDateTime(step.started_at)} - {formatDateTime(step.completed_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              GitHub 未返回失败 Step，建议打开 Job 日志查看完整输出。
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
+  const githubUrl = run.audit?.run_url || run.html_url;
+  const [open, setOpen] = useState(false);
+  const [failureSummary, setFailureSummary] = useState<ReleaseRunFailureSummary | null>(null);
+  const [failureSummaryPending, setFailureSummaryPending] = useState(false);
+  const [failureSummaryError, setFailureSummaryError] = useState("");
+
+  useEffect(() => {
+    if (!open || !shouldShowFailureSummary(run)) return;
+
+    let cancelled = false;
+    setFailureSummaryPending(true);
+    setFailureSummaryError("");
+    fetchReleaseRunFailureSummary(run.id)
+      .then((data) => {
+        if (!cancelled) setFailureSummary(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setFailureSummaryError(err instanceof Error ? err.message : "失败摘要加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setFailureSummaryPending(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, run]);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           详情
@@ -364,6 +498,17 @@ function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
           </div>
 
           <Separator />
+
+          {shouldShowFailureSummary(run) ? (
+            <>
+              <FailureSummaryPanel
+                summary={failureSummary}
+                pending={failureSummaryPending}
+                error={failureSummaryError}
+              />
+              <Separator />
+            </>
+          ) : null}
 
           <div className="flex flex-col gap-2">
             <div className="text-sm font-medium">发布说明</div>
