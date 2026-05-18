@@ -14,6 +14,7 @@ import type {
 } from "@/schema/release-deployments";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuditLogRepository } from "@/repositories/platform-audit-logs";
 
 type GithubWorkflowRun = {
   id: number;
@@ -35,6 +36,8 @@ type NormalizedReleaseRun = {
   environment: ReleaseEnvironment;
   workflow_id: string;
   workflow_label: string;
+  services: ReleaseService[] | null;
+  service_label: string;
   title: string;
   status: string | null;
   conclusion: string | null;
@@ -240,11 +243,14 @@ function getShanghaiReleaseTagPrefix(date = new Date()) {
 }
 
 function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun): NormalizedReleaseRun {
+  const services = inferRunServices(workflow, run);
   return {
     id: String(run.id),
     environment: workflow.environment,
     workflow_id: workflow.workflowId,
     workflow_label: workflow.label,
+    services,
+    service_label: services ? formatServiceLabels(services) : inferFallbackServiceLabel(workflow, run),
     title: run.display_title || run.name || workflow.label,
     status: run.status,
     conclusion: run.conclusion,
@@ -256,6 +262,59 @@ function normalizeWorkflowRun(workflow: ReleaseWorkflow, run: GithubWorkflowRun)
     updated_at: run.updated_at,
     run_started_at: run.run_started_at,
   };
+}
+
+type ReleaseDispatchAuditRecord = {
+  id: string;
+  resource_label: string | null;
+  summary: string | null;
+  metadata: unknown;
+  created_at: string;
+};
+
+function getAuditRunId(record: ReleaseDispatchAuditRecord) {
+  const metadata = record.metadata;
+  if (!metadata || typeof metadata !== "object") return "";
+  const runId = (metadata as { run_id?: unknown }).run_id;
+  return typeof runId === "string" || typeof runId === "number" ? String(runId) : "";
+}
+
+function isReleaseService(value: unknown): value is ReleaseService {
+  return typeof value === "string" && value in SERVICE_LABELS;
+}
+
+function getAuditServices(record: ReleaseDispatchAuditRecord) {
+  const metadata = record.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as { services?: unknown; service?: unknown }).services;
+  if (Array.isArray(value)) {
+    const services = value.filter(isReleaseService);
+    if (services.length) return services;
+  }
+  const service = (metadata as { service?: unknown }).service;
+  if (isReleaseService(service)) return [service];
+  return null;
+}
+
+function parseServicesFromText(value: string | null | undefined) {
+  const text = value?.trim();
+  if (!text) return null;
+  const match = text.match(/\b(?:Dev|Production)\s+deploy\s+(.+)$/i);
+  if (!match?.[1]) return null;
+  const raw = match[1].split(",").map((item) => item.trim()).filter(Boolean);
+  if (raw.includes("all")) return ["all"] as ReleaseService[];
+  const services = raw.filter(isReleaseService);
+  return services.length ? services : null;
+}
+
+function inferRunServices(_workflow: ReleaseWorkflow, run: GithubWorkflowRun) {
+  return parseServicesFromText(run.display_title)
+    || parseServicesFromText(run.name);
+}
+
+function inferFallbackServiceLabel(workflow: ReleaseWorkflow, run: GithubWorkflowRun) {
+  if (workflow.environment === "dev" && run.event === "push") return "自动识别";
+  return "未记录";
 }
 
 function sleep(ms: number) {
@@ -326,16 +385,45 @@ class ReleaseDeploymentService {
       .flat()
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
       .slice(0, pageSize);
+    const hydratedList = await this.hydrateRunServiceLabels(list);
 
     return {
-      list,
+      list: hydratedList,
       pagination: {
         page,
         pageSize,
-        total: list.length,
-        totalPages: list.length > 0 ? 1 : 0,
+        total: hydratedList.length,
+        totalPages: hydratedList.length > 0 ? 1 : 0,
       },
     };
+  }
+
+  private async hydrateRunServiceLabels(list: NormalizedReleaseRun[]) {
+    if (list.length === 0) return list;
+
+    try {
+      const records = await platformAuditLogRepository.listRecentReleaseDispatches(120);
+      const byRunId = new Map<string, ReleaseDispatchAuditRecord>();
+      for (const record of records) {
+        const runId = getAuditRunId(record);
+        if (runId && !byRunId.has(runId)) {
+          byRunId.set(runId, record);
+        }
+      }
+
+      return list.map((run) => {
+        const record = byRunId.get(run.id);
+        const services = record ? getAuditServices(record) : null;
+        if (!services?.length) return run;
+        return {
+          ...run,
+          services,
+          service_label: formatServiceLabels(services),
+        };
+      });
+    } catch {
+      return list;
+    }
   }
 
   async listSuccessfulRefs(query: ReleaseSuccessfulRefListQuery) {

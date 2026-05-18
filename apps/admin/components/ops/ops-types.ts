@@ -119,6 +119,8 @@ export type ReleaseRun = {
   environment: ReleaseEnvironment;
   workflow_id: string;
   workflow_label: string;
+  services: ReleaseService[] | null;
+  service_label: string;
   title: string;
   status: string | null;
   conclusion: string | null;

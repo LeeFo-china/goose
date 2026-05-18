@@ -131,6 +131,20 @@ class PlatformAuditLogRepository {
     };
   }
 
+  async listRecentReleaseDispatches(limit = 100) {
+    const { data, error } = await this.from("platform_audit_logs")
+      .select("id,resource_label,summary,metadata,created_at")
+      .eq("action", "platform_release_dispatch")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw Errors.dbError("查询发布审计日志失败", error);
+    }
+
+    return (data || []) as Array<Pick<PlatformAuditLogRecord, "id" | "resource_label" | "summary" | "metadata" | "created_at">>;
+  }
+
   private async hydrate(records: PlatformAuditLogRecord[]) {
     if (records.length === 0) return [];
 

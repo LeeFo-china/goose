@@ -1,4 +1,5 @@
 name: Deploy Dev
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Dev deploy {0}', github.event.inputs.service) || github.event.head_commit.message }}
 
 # Builds dev images, pushes them to Tencent CCR, then recreates the matching
 # service on VM-0-11-ubuntu. Push events auto-detect affected services; manual

@@ -924,6 +924,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               <TableRow>
                 <TableHead>环境</TableHead>
                 <TableHead>状态</TableHead>
+                <TableHead>服务</TableHead>
                 <TableHead>版本</TableHead>
                 <TableHead>时间</TableHead>
                 <TableHead className="text-right">日志</TableHead>
@@ -932,7 +933,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <TableBody>
               {runs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
                     暂无发布记录
                   </TableCell>
                 </TableRow>
@@ -944,6 +945,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(run)}>{statusLabel(run)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={run.service_label === "未记录" ? "secondary" : "outline"}>
+                      {run.service_label}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="max-w-[260px] truncate text-sm">{run.title}</div>

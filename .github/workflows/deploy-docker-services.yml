@@ -1,4 +1,5 @@
 name: Deploy Docker Services
+run-name: Production service deploy ${{ inputs.service || github.event.inputs.service || 'all' }}
 
 # Pulls Tencent CCR images and recreates the production Docker services on the
 # Tencent Cloud self-hosted runner.

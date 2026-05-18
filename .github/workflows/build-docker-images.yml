@@ -1,4 +1,5 @@
 name: Build Docker Images
+run-name: Production deploy ${{ github.event.inputs.service || 'all' }}
 
 # Manually builds all production business images on the Tencent Cloud
 # self-hosted runner, publishes them to Tencent CCR, then deploys once after
