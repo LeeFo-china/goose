@@ -171,10 +171,10 @@ export default async function PlatformTenantsPage({
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
               <CardTitle>租户列表</CardTitle>
-              <CardDescription>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 当前筛选：
                 {status ? <Badge variant={getPlatformTenantStatusMeta(status).variant}>{getPlatformTenantStatusMeta(status).label}</Badge> : <Badge variant="outline">全部状态</Badge>}
-              </CardDescription>
+              </div>
             </div>
             <Badge variant="outline">共 {pagination.total} 个</Badge>
           </div>

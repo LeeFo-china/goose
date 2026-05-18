@@ -231,6 +231,7 @@ export function ServiceHealthPanel() {
           <Button
             type="button"
             size="icon"
+            className="size-6 rounded-md"
             onClick={() => void loadHealth(true)}
             disabled={pending}
             aria-label="刷新微服务健康"

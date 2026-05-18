@@ -224,6 +224,7 @@ export function SystemMetricsPanel() {
             type="button"
             variant="outline"
             size="icon"
+            className="size-6 rounded-md"
             onClick={() => setAutoRefresh((value) => !value)}
             aria-label={autoRefresh ? "暂停自动刷新" : "继续自动刷新"}
             title={autoRefresh ? "暂停自动刷新" : "继续自动刷新"}
@@ -233,6 +234,7 @@ export function SystemMetricsPanel() {
           <Button
             type="button"
             size="icon"
+            className="size-6 rounded-md"
             onClick={() => void loadMetrics({ manual: true })}
             disabled={manualPending}
             aria-label="刷新资源状态"

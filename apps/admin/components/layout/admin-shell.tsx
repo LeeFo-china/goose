@@ -34,6 +34,7 @@ type ThemeTone =
   | "amber";
 
 type AdminPreferences = {
+  preferenceVersion: number;
   sidebarCollapsed: boolean;
   compact: boolean;
   contentWidth: ContentWidth;
@@ -41,11 +42,13 @@ type AdminPreferences = {
 };
 
 const STORAGE_KEY = "goose-admin-preferences";
+const PREFERENCES_VERSION = 2;
 
 const defaultPreferences: AdminPreferences = {
+  preferenceVersion: PREFERENCES_VERSION,
   sidebarCollapsed: false,
   compact: false,
-  contentWidth: "wide",
+  contentWidth: "full",
   themeTone: "goose",
 };
 
@@ -262,10 +265,18 @@ function loadPreferences() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultPreferences;
     const parsed = JSON.parse(raw) as Partial<AdminPreferences>;
+    const isCurrentVersion = parsed.preferenceVersion === PREFERENCES_VERSION;
+    const contentWidth = isCurrentVersion
+      ? parsed.contentWidth || defaultPreferences.contentWidth
+      : parsed.contentWidth === "compact"
+        ? "compact"
+        : defaultPreferences.contentWidth;
+
     return {
       ...defaultPreferences,
       ...parsed,
-      contentWidth: parsed.contentWidth || defaultPreferences.contentWidth,
+      preferenceVersion: PREFERENCES_VERSION,
+      contentWidth,
       themeTone: isThemeTone(parsed.themeTone) ? parsed.themeTone : defaultPreferences.themeTone,
     };
   } catch {
