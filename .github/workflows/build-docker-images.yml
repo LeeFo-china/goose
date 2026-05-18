@@ -128,15 +128,28 @@ jobs:
           IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
           BRANCH_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
           SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
+          BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           case "$SERVICE" in
             api)
-              docker build -f docker/api.Dockerfile -t "$BRANCH_IMAGE" -t "$SHA_IMAGE" .
+              docker build \
+                -f docker/api.Dockerfile \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
+                .
               ;;
             social-video-worker)
               docker build \
                 -f docker/social-video-worker.Dockerfile \
                 --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
                 .
@@ -146,6 +159,10 @@ jobs:
                 -f docker/admin.Dockerfile \
                 --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api.goodcms.cn \
                 --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5.goodcms.cn \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                 -t "$BRANCH_IMAGE" \
                 -t "$SHA_IMAGE" \
                 .

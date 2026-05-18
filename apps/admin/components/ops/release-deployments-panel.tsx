@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, Rocket, RotateCcw, ShieldCheck, Tag } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, GitBranch, GitCommit, Loader2, RefreshCw, Rocket, RotateCcw, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
@@ -15,9 +15,13 @@ import type {
   ReleaseOptionsData,
   ReleaseRefOption,
   ReleaseRefType,
+  ReleaseRuntimeServiceVersion,
+  ReleaseRuntimeVersionData,
   ReleaseRun,
+  ReleaseRunListData,
   ReleaseService,
   ReleaseSuccessfulRef,
+  ReleaseSuccessfulRefListData,
 } from "@/components/ops/ops-types";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -79,6 +83,8 @@ type ReleaseDeploymentsPanelProps = {
   options: ReleaseOptionsData | null;
   runs: ReleaseRun[];
   successfulRefs: ReleaseSuccessfulRef[];
+  runtimeVersions: ReleaseRuntimeVersionData | null;
+  runtimeError?: string | null;
   error?: string | null;
 };
 
@@ -90,6 +96,8 @@ const REF_TYPE_OPTIONS: Array<{
   { value: "branch", label: "分支", description: "适合 dev 快速验证" },
   { value: "tag", label: "Tag", description: "适合生产发布" },
 ];
+const RELEASE_RUN_POLL_MS = 15_000;
+const RELEASE_RUN_FORCE_POLL_MS = 10 * 60_000;
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -175,6 +183,39 @@ async function fetchReleaseRefs(input: {
   return (data.data?.list || []) as ReleaseRefOption[];
 }
 
+async function fetchReleaseRuns() {
+  const response = await fetch("/api/backend/admin/ops/releases/runs?page=1&pageSize=5", {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "最近发布记录刷新失败"));
+  }
+  return (data.data?.list || []) as ReleaseRunListData["list"];
+}
+
+async function fetchSuccessfulRefs() {
+  const response = await fetch("/api/backend/admin/ops/releases/successful-refs?pageSize=5", {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "发布辅助刷新失败"));
+  }
+  return (data.data?.list || []) as ReleaseSuccessfulRefListData["list"];
+}
+
+async function fetchReleaseRuntimeVersions() {
+  const response = await fetch("/api/backend/admin/ops/releases/runtime-versions", {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "运行版本刷新失败"));
+  }
+  return data.data as ReleaseRuntimeVersionData;
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -209,6 +250,11 @@ function statusVariant(run: ReleaseRun) {
   return "outline" as const;
 }
 
+function isReleaseRunActive(run: ReleaseRun) {
+  if (run.status === "queued" || run.status === "in_progress") return true;
+  return run.status !== "completed" && !run.conclusion;
+}
+
 function getRunActorLabel(run: ReleaseRun) {
   const employee = run.audit?.actor_employee;
   if (employee?.name && employee.phone) return `${employee.name} · ${employee.phone}`;
@@ -231,6 +277,35 @@ function getSuccessfulRefDescription(item: ReleaseSuccessfulRef) {
     item.head_branch ? `来源 ${item.head_branch}` : "",
     `发布时间 ${formatDateTime(item.created_at)}`,
   ].filter(Boolean).join(" · ");
+}
+
+function environmentLabel(environment: ReleaseEnvironment) {
+  return environment === "production" ? "生产环境" : "开发环境";
+}
+
+function runtimeHealthVariant(item: ReleaseRuntimeServiceVersion) {
+  if (item.health === "healthy") return "success" as const;
+  if (item.health === "starting" || item.state === "running") return "warning" as const;
+  if (item.health === "unhealthy" || item.health === "exited" || item.state !== "running") return "danger" as const;
+  return "outline" as const;
+}
+
+function diffVariant(item: ReleaseRuntimeServiceVersion) {
+  if (item.diff_status === "same_as_dev") return "success" as const;
+  if (item.diff_status === "behind_dev") return "warning" as const;
+  if (item.diff_status === "ahead_of_dev") return "danger" as const;
+  return "secondary" as const;
+}
+
+function runtimeVersionLabel(item: ReleaseRuntimeServiceVersion) {
+  if (item.revision_short) return item.revision_short;
+  if (item.image_tag) return item.image_tag;
+  return "等待新版镜像";
+}
+
+function shortenImageId(value: string | null | undefined) {
+  if (!value) return "-";
+  return value.replace(/^sha256:/, "").slice(0, 12);
 }
 
 function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
@@ -319,6 +394,118 @@ function TruncatedTooltipText({ value, className }: { value: string; className?:
         {value || "-"}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function RuntimeVersionsPanel({
+  data,
+  error,
+  refreshing,
+  onRefresh,
+}: {
+  data: ReleaseRuntimeVersionData | null;
+  error?: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const services = data?.services || [];
+  const latestDevSha = data?.latest_successful.dev?.head_sha || null;
+  const latestProdSha = data?.latest_successful.production?.head_sha || null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <div>
+          <CardTitle className="text-base">当前部署版本</CardTitle>
+          <CardDescription>
+            从 Docker 容器读取实际运行镜像；新版镜像会显示 Commit，旧镜像会显示 tag 或提示等待新版镜像。
+          </CardDescription>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="outline">
+            dev {latestDevSha ? latestDevSha.slice(0, 7) : "未知"}
+          </Badge>
+          <Badge variant="outline">
+            prod {latestProdSha ? latestProdSha.slice(0, 7) : "未知"}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-7 rounded-md"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label="刷新部署版本"
+            title="刷新部署版本"
+          >
+            <RefreshCw className={cn(refreshing && "animate-spin")} data-icon="icon-only" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {error ? (
+          <div className="px-5 pb-4">
+            <StatusAlert>{error}</StatusAlert>
+          </div>
+        ) : null}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>环境</TableHead>
+              <TableHead>服务</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>运行版本</TableHead>
+              <TableHead>镜像</TableHead>
+              <TableHead>Dev 差异</TableHead>
+              <TableHead>启动时间</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {services.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                  暂无运行版本信息
+                </TableCell>
+              </TableRow>
+            ) : services.map((item) => (
+              <TableRow key={`${item.environment}-${item.service}-${item.container_name}`}>
+                <TableCell>
+                  <Badge variant={item.environment === "production" ? "default" : "outline"}>
+                    {environmentLabel(item.environment)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="font-medium">{item.service_label}</div>
+                  <div className="text-xs text-muted-foreground">{item.container_name}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={runtimeHealthVariant(item)}>
+                    {item.health === "none" ? item.state : item.health}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <TruncatedTooltipText
+                    value={item.revision || item.image_tag || "等待新版镜像 labels"}
+                    className="max-w-[180px] text-sm font-medium"
+                  />
+                  <div className="text-xs text-muted-foreground">{runtimeVersionLabel(item)}</div>
+                </TableCell>
+                <TableCell>
+                  <TruncatedTooltipText value={item.image} className="max-w-[260px] text-sm" />
+                  <div className="text-xs text-muted-foreground">ID {shortenImageId(item.image_id)}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={diffVariant(item)}>{item.diff_label}</Badge>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                  {formatDateTime(item.started_at)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -535,10 +722,17 @@ function ReleaseServiceMultiSelect({
   );
 }
 
-export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }: ReleaseDeploymentsPanelProps) {
+export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, runtimeVersions, runtimeError, error }: ReleaseDeploymentsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [rollbackConfirmText, setRollbackConfirmText] = useState("");
+  const [currentRuns, setCurrentRuns] = useState(runs);
+  const [currentSuccessfulRefs, setCurrentSuccessfulRefs] = useState(successfulRefs);
+  const [currentRuntimeVersions, setCurrentRuntimeVersions] = useState(runtimeVersions);
+  const [runsRefreshing, setRunsRefreshing] = useState(false);
+  const [runsPollError, setRunsPollError] = useState("");
+  const [lastRunsRefreshedAt, setLastRunsRefreshedAt] = useState<string | null>(null);
+  const [forcePollUntil, setForcePollUntil] = useState(0);
   const {
     environment,
     service,
@@ -562,6 +756,77 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
     () => options?.environments.find((item) => item.environment === environment) || null,
     [environment, options],
   );
+  const hasActiveRuns = useMemo(() => currentRuns.some(isReleaseRunActive), [currentRuns]);
+  const shouldPollRuns = hasActiveRuns || Date.now() < forcePollUntil;
+
+  useEffect(() => {
+    setCurrentRuns(runs);
+  }, [runs]);
+
+  useEffect(() => {
+    setCurrentSuccessfulRefs(successfulRefs);
+  }, [successfulRefs]);
+
+  useEffect(() => {
+    setCurrentRuntimeVersions(runtimeVersions);
+  }, [runtimeVersions]);
+
+  const refreshReleaseSnapshots = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setRunsRefreshing(true);
+    try {
+      const [nextRuns, nextSuccessfulRefs, nextRuntimeVersions] = await Promise.all([
+        fetchReleaseRuns(),
+        fetchSuccessfulRefs(),
+        fetchReleaseRuntimeVersions(),
+      ]);
+      setCurrentRuns(nextRuns);
+      setCurrentSuccessfulRefs(nextSuccessfulRefs);
+      setCurrentRuntimeVersions(nextRuntimeVersions);
+      setLastRunsRefreshedAt(new Date().toISOString());
+      setRunsPollError("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "发布状态刷新失败";
+      setRunsPollError(message);
+      if (!silent) toast.error(message);
+    } finally {
+      if (!silent) setRunsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!shouldPollRuns) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      setRunsRefreshing(true);
+      try {
+        const [nextRuns, nextSuccessfulRefs, nextRuntimeVersions] = await Promise.all([
+          fetchReleaseRuns(),
+          fetchSuccessfulRefs(),
+          fetchReleaseRuntimeVersions(),
+        ]);
+        if (cancelled) return;
+        setCurrentRuns(nextRuns);
+        setCurrentSuccessfulRefs(nextSuccessfulRefs);
+        setCurrentRuntimeVersions(nextRuntimeVersions);
+        setLastRunsRefreshedAt(new Date().toISOString());
+        setRunsPollError("");
+      } catch (err) {
+        if (!cancelled) setRunsPollError(err instanceof Error ? err.message : "发布状态刷新失败");
+      } finally {
+        if (!cancelled) setRunsRefreshing(false);
+      }
+    };
+
+    const timer = window.setInterval(tick, RELEASE_RUN_POLL_MS);
+    void tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [shouldPollRuns]);
 
   function onEnvironmentChange(value: ReleaseEnvironment) {
     const nextEnvironment = options?.environments.find((item) => item.environment === value) || null;
@@ -658,6 +923,8 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
       setRollbackConfirmText("");
       toast.success(data.message || `已提交生产回滚：${tagData.tag}`);
       router.refresh();
+      setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+      void refreshReleaseSnapshots({ silent: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "生产回滚提交失败");
     } finally {
@@ -703,6 +970,8 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         setDraft({ latestDispatch: data });
         toast.success(data.message || "发布任务已提交");
         router.refresh();
+        setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+        void refreshReleaseSnapshots({ silent: true });
       } catch (err) {
         if (createdTag) {
           toast.error(`Tag ${createdTag} 已创建，但发布任务提交失败：${err instanceof Error ? err.message : "未知错误"}`);
@@ -731,6 +1000,13 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
   return (
     <div className="flex flex-col gap-3">
+      <RuntimeVersionsPanel
+        data={currentRuntimeVersions}
+        error={runtimeError}
+        refreshing={runsRefreshing}
+        onRefresh={() => void refreshReleaseSnapshots()}
+      />
+
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
         <Card>
           <CardHeader>
@@ -1024,15 +1300,15 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-medium">成功 Commit</div>
-            <Badge variant="outline">{successfulRefs.length}</Badge>
+            <Badge variant="outline">{currentSuccessfulRefs.length}</Badge>
           </div>
-          {successfulRefs.length === 0 ? (
+          {currentSuccessfulRefs.length === 0 ? (
             <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
               暂无成功发布版本
             </div>
           ) : (
             <TooltipProvider delayDuration={200}>
-              {successfulRefs.map((item) => (
+              {currentSuccessfulRefs.map((item) => (
                 <div
                   key={`${item.environment}-${item.id}`}
                   className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
@@ -1140,9 +1416,30 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">最近发布记录</CardTitle>
-            <CardDescription>读取 GitHub Actions 最近运行记录，包含手动发布和 dev 自动发布。</CardDescription>
+            <CardDescription>
+              读取 GitHub Actions 最近运行记录，包含手动发布和 dev 自动发布。
+              {lastRunsRefreshedAt ? ` 最近刷新 ${formatDateTime(lastRunsRefreshedAt)}` : ""}
+              {runsPollError ? ` ${runsPollError}` : ""}
+            </CardDescription>
           </div>
-          <Badge variant="outline">{runs.length} 条</Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant={hasActiveRuns ? "warning" : "outline"}>
+              {hasActiveRuns ? "自动刷新中" : "状态已稳定"}
+            </Badge>
+            <Badge variant="outline">{currentRuns.length} 条</Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-7 rounded-md"
+              onClick={() => void refreshReleaseSnapshots()}
+              disabled={runsRefreshing}
+              aria-label="刷新发布记录"
+              title="刷新发布记录"
+            >
+              <RefreshCw className={cn(runsRefreshing && "animate-spin")} data-icon="icon-only" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -1157,13 +1454,13 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.length === 0 ? (
+              {currentRuns.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
                     暂无发布记录
                   </TableCell>
                 </TableRow>
-              ) : runs.map((run) => (
+              ) : currentRuns.map((run) => (
                 <TableRow key={`${run.environment}-${run.id}`}>
                   <TableCell>
                     <div className="font-medium">{run.workflow_label}</div>

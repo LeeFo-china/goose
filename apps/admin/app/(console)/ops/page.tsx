@@ -11,6 +11,7 @@ import type {
   OpsScriptRun,
   Pagination,
   ReleaseOptionsData,
+  ReleaseRuntimeVersionData,
   ReleaseRun,
   ReleaseRunListData,
   ReleaseSuccessfulRef,
@@ -80,9 +81,11 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseOptions: null as ReleaseOptionsData | null,
       releaseRuns: [] as ReleaseRun[],
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
+      releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
       releaseError: "缺少登录凭证",
+      releaseRuntimeError: "缺少登录凭证",
     };
   }
 
@@ -91,7 +94,7 @@ async function getOpsData(params: OpsPageSearchParams) {
       page: String(page),
       pageSize: String(OPS_RUNS_PAGE_SIZE),
     });
-    const [scriptData, runData, releaseOptionsResult, releaseRunsResult, releaseSuccessfulRefsResult] = await Promise.all([
+    const [scriptData, runData, releaseOptionsResult, releaseRunsResult, releaseSuccessfulRefsResult, releaseRuntimeVersionsResult] = await Promise.all([
       fetchBackendData<ScriptListData>(token, "/admin/ops/scripts"),
       fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`),
       fetchBackendData<ReleaseOptionsData>(token, "/admin/ops/releases/options")
@@ -112,6 +115,12 @@ async function getOpsData(params: OpsPageSearchParams) {
           data: null as ReleaseSuccessfulRefListData | null,
           error: error instanceof Error ? error.message : "成功版本加载失败",
         })),
+      fetchBackendData<ReleaseRuntimeVersionData>(token, "/admin/ops/releases/runtime-versions")
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null as ReleaseRuntimeVersionData | null,
+          error: error instanceof Error ? error.message : "运行版本加载失败",
+        })),
     ]);
 
     return {
@@ -120,9 +129,11 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseOptions: releaseOptionsResult.data,
       releaseRuns: releaseRunsResult.data?.list || [],
       releaseSuccessfulRefs: releaseSuccessfulRefsResult.data?.list || [],
+      releaseRuntimeVersions: releaseRuntimeVersionsResult.data,
       pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: null,
       releaseError: releaseOptionsResult.error || releaseRunsResult.error || releaseSuccessfulRefsResult.error,
+      releaseRuntimeError: releaseRuntimeVersionsResult.error,
     };
   } catch (error) {
     return {
@@ -131,9 +142,11 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseOptions: null as ReleaseOptionsData | null,
       releaseRuns: [] as ReleaseRun[],
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
+      releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "运维脚本加载失败",
       releaseError: error instanceof Error ? error.message : "发布信息加载失败",
+      releaseRuntimeError: error instanceof Error ? error.message : "运行版本加载失败",
     };
   }
 }
@@ -144,7 +157,7 @@ export default async function OpsPage({
   searchParams: Promise<OpsPageSearchParams>;
 }) {
   const params = await searchParams;
-  const { scripts, runs, releaseOptions, releaseRuns, releaseSuccessfulRefs, pagination, error, releaseError } = await getOpsData(params);
+  const { scripts, runs, releaseOptions, releaseRuns, releaseSuccessfulRefs, releaseRuntimeVersions, pagination, error, releaseError, releaseRuntimeError } = await getOpsData(params);
   const activeTab = normalizeTab(params.tab);
   const successCount = runs.filter((item) => item.status === "success").length;
   const failedCount = runs.filter((item) => item.status === "failed" || item.status === "timeout").length;
@@ -211,6 +224,8 @@ export default async function OpsPage({
           options={releaseOptions}
           runs={releaseRuns}
           successfulRefs={releaseSuccessfulRefs}
+          runtimeVersions={releaseRuntimeVersions}
+          runtimeError={releaseRuntimeError}
           error={releaseError}
         />
       ),

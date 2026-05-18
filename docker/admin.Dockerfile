@@ -38,6 +38,18 @@ FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
+ARG BUILD_SHA=unknown
+ARG BUILD_REF=unknown
+ARG BUILD_RUN_ID=unknown
+ARG BUILD_CREATED=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/LeeFo-china/goose" \
+  org.opencontainers.image.revision="${BUILD_SHA}" \
+  org.opencontainers.image.ref.name="${BUILD_REF}" \
+  org.opencontainers.image.created="${BUILD_CREATED}" \
+  com.goodcms.service="admin" \
+  com.goodcms.github.run_id="${BUILD_RUN_ID}"
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3010

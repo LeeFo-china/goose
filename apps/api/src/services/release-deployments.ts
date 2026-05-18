@@ -14,6 +14,7 @@ import type {
 } from "@/schema/release-deployments";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { dockerServiceHealthService, type ServiceHealthContainer } from "@/services/docker-service-health";
 import {
   platformAuditLogRepository,
   type EmployeeLite,
@@ -88,6 +89,29 @@ type SuccessfulReleaseRef = {
   html_url: string | null;
   created_at: string | null;
   run_started_at: string | null;
+};
+
+type ReleaseRuntimeServiceVersion = {
+  environment: ReleaseEnvironment;
+  service: Exclude<ReleaseService, "all">;
+  service_label: string;
+  container_name: string;
+  image: string;
+  image_tag: string | null;
+  image_id: string | null;
+  revision: string | null;
+  revision_short: string | null;
+  build_ref: string | null;
+  build_run_id: string | null;
+  build_created_at: string | null;
+  image_created_at: string | null;
+  state: string;
+  health: ServiceHealthContainer["health"];
+  started_at: string | null;
+  latest_successful_dev_sha: string | null;
+  latest_successful_prod_sha: string | null;
+  diff_status: "same_as_dev" | "behind_dev" | "ahead_of_dev" | "unknown";
+  diff_label: string;
 };
 
 type GithubBranch = {
@@ -380,6 +404,81 @@ function formatServiceLabels(services: ReleaseService[]) {
   return services.map((service) => SERVICE_LABELS[service]).join("、");
 }
 
+function getRuntimeService(name: string): Exclude<ReleaseService, "all"> | null {
+  if (name === "gooes-api" || name === "gooes-api-dev") return "api";
+  if (name === "gooes-admin" || name === "gooes-admin-dev") return "admin";
+  if (name === "gooes-social-video-worker" || name === "gooes-social-video-worker-dev") return "social-video-worker";
+  if (name === "gooes-cos-reconcile-worker" || name === "gooes-cos-reconcile-worker-dev") return "cos-reconcile-worker";
+  return null;
+}
+
+function getRuntimeEnvironment(name: string): ReleaseEnvironment {
+  return name.endsWith("-dev") ? "dev" : "production";
+}
+
+function getReleaseEnvironmentOrder(environment: ReleaseEnvironment) {
+  return environment === "production" ? 0 : 1;
+}
+
+function getReleaseServiceOrder(service: Exclude<ReleaseService, "all">) {
+  return ["api", "admin", "social-video-worker", "cos-reconcile-worker"].indexOf(service);
+}
+
+function shortSha(value: string | null | undefined) {
+  return value ? value.slice(0, 12) : null;
+}
+
+function isFullSha(value: string | null | undefined) {
+  return Boolean(value && /^[0-9a-f]{40}$/i.test(value));
+}
+
+function getLatestSuccessfulRunFromPayload(workflow: ReleaseWorkflow, runs: GithubWorkflowRun[]) {
+  const run = runs.find((item) => item.conclusion === "success" && Boolean(item.head_sha));
+  if (!run?.head_sha) return null;
+  const title = run.display_title || run.name || workflow.label;
+  return {
+    id: String(run.id),
+    environment: workflow.environment,
+    workflow_id: workflow.workflowId,
+    workflow_label: workflow.label,
+    title,
+    ref: run.head_sha,
+    ref_type: "commit" as const,
+    label: `${run.head_sha.slice(0, 7)} ${title}`,
+    description: [
+      workflow.label,
+      run.head_branch ? `来源 ${run.head_branch}` : "",
+      formatDateTime(run.created_at),
+    ].filter(Boolean).join(" · "),
+    head_branch: run.head_branch,
+    head_sha: run.head_sha,
+    html_url: run.html_url,
+    created_at: run.created_at,
+    run_started_at: run.run_started_at,
+  };
+}
+
+async function compareRuntimeWithDev(runtimeSha: string | null, latestDevSha: string | null) {
+  if (!isFullSha(runtimeSha) || !isFullSha(latestDevSha)) {
+    return { status: "unknown" as const, label: "缺少可比对的 Commit SHA" };
+  }
+  if (runtimeSha?.toLowerCase() === latestDevSha?.toLowerCase()) {
+    return { status: "same_as_dev" as const, label: "与最新 dev 成功版本一致" };
+  }
+
+  try {
+    const payload = await githubRequest<{ status?: string }>(
+      `/compare/${encodeURIComponent(runtimeSha as string)}...${encodeURIComponent(latestDevSha as string)}`,
+    );
+    if (payload.status === "ahead") return { status: "behind_dev" as const, label: "落后最新 dev 成功版本" };
+    if (payload.status === "behind") return { status: "ahead_of_dev" as const, label: "领先于最新 dev 或发布链路不一致" };
+    if (payload.status === "identical") return { status: "same_as_dev" as const, label: "与最新 dev 成功版本一致" };
+    return { status: "unknown" as const, label: "与最新 dev 分支存在分叉" };
+  } catch {
+    return { status: "unknown" as const, label: "Commit 差异比对失败" };
+  }
+}
+
 class ReleaseDeploymentService {
   getOptions() {
     let configured = true;
@@ -408,6 +507,84 @@ class ReleaseDeploymentService {
           label: SERVICE_LABELS[service],
         })),
       })),
+    };
+  }
+
+  private async getLatestSuccessfulRefsByEnvironment() {
+    const entries = await Promise.all(
+      Object.values(RELEASE_WORKFLOWS).map(async (workflow) => {
+        const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
+          `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=20`,
+        );
+        return [workflow.environment, getLatestSuccessfulRunFromPayload(workflow, payload.workflow_runs || [])] as const;
+      }),
+    );
+
+    return Object.fromEntries(entries) as Record<ReleaseEnvironment, SuccessfulReleaseRef | null>;
+  }
+
+  async getRuntimeVersions() {
+    const snapshot = await dockerServiceHealthService.getSnapshot();
+    let latestSuccessful: Record<ReleaseEnvironment, SuccessfulReleaseRef | null> = {
+      dev: null,
+      production: null,
+    };
+
+    try {
+      latestSuccessful = await this.getLatestSuccessfulRefsByEnvironment();
+    } catch {
+      latestSuccessful = { dev: null, production: null };
+    }
+
+    const latestDevSha = latestSuccessful.dev?.head_sha || null;
+    const latestProdSha = latestSuccessful.production?.head_sha || null;
+    const compareCache = new Map<string, Awaited<ReturnType<typeof compareRuntimeWithDev>>>();
+
+    const services: ReleaseRuntimeServiceVersion[] = [];
+    for (const container of snapshot.containers) {
+      const service = getRuntimeService(container.name);
+      if (!service) continue;
+
+      const revision = container.revision || (isFullSha(container.image_tag) ? container.image_tag : null);
+      const cacheKey = `${revision || ""}:${latestDevSha || ""}`;
+      let comparison = compareCache.get(cacheKey);
+      if (!comparison) {
+        comparison = await compareRuntimeWithDev(revision, latestDevSha);
+        compareCache.set(cacheKey, comparison);
+      }
+
+      services.push({
+        environment: getRuntimeEnvironment(container.name),
+        service,
+        service_label: SERVICE_LABELS[service],
+        container_name: container.name,
+        image: container.image,
+        image_tag: container.image_tag,
+        image_id: container.image_id,
+        revision,
+        revision_short: shortSha(revision),
+        build_ref: container.build_ref,
+        build_run_id: container.build_run_id,
+        build_created_at: container.build_created_at,
+        image_created_at: container.image_created_at,
+        state: container.state,
+        health: container.health,
+        started_at: container.started_at,
+        latest_successful_dev_sha: latestDevSha,
+        latest_successful_prod_sha: latestProdSha,
+        diff_status: comparison.status,
+        diff_label: comparison.label,
+      });
+    }
+
+    return {
+      checked_at: new Date().toISOString(),
+      latest_successful: latestSuccessful,
+      services: services.sort((left, right) => {
+        const envOrder = getReleaseEnvironmentOrder(left.environment) - getReleaseEnvironmentOrder(right.environment);
+        if (envOrder !== 0) return envOrder;
+        return getReleaseServiceOrder(left.service) - getReleaseServiceOrder(right.service);
+      }),
     };
   }
 

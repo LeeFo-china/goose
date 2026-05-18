@@ -84,6 +84,15 @@ class AdminOpsController extends BaseController {
     return ResponseHandler.success(releaseDeploymentService.getOptions());
   }
 
+  @Get("/admin/ops/releases/runtime-versions")
+  async getReleaseRuntimeVersions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    this.assertOpsPermission(authContext, "system.ops.read");
+
+    const data = await releaseDeploymentService.getRuntimeVersions();
+    return ResponseHandler.success(data);
+  }
+
   @Get("/admin/ops/releases/runs")
   async listReleaseRuns(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);

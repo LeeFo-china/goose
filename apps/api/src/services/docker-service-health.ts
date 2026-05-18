@@ -46,6 +46,8 @@ type DockerInspectState = {
 
 type DockerInspectResult = {
   Id?: string;
+  Image?: string;
+  Created?: string;
   Name?: string;
   Config?: {
     Image?: string;
@@ -58,6 +60,14 @@ export type ServiceHealthContainer = {
   id: string;
   name: string;
   image: string;
+  image_id: string | null;
+  image_tag: string | null;
+  labels: Record<string, string>;
+  revision: string | null;
+  build_ref: string | null;
+  build_run_id: string | null;
+  build_created_at: string | null;
+  image_created_at: string | null;
   group: "business" | "supabase" | "infrastructure";
   state: string;
   health: "healthy" | "unhealthy" | "starting" | "none" | "exited" | "unknown";
@@ -112,6 +122,23 @@ function formatPort(port: DockerContainerPort) {
   if (!publicPort) return `${privatePort}/${port.Type || "tcp"}`;
   const host = port.IP && port.IP !== "0.0.0.0" ? `${port.IP}:` : "";
   return `${host}${publicPort}->${privatePort}/${port.Type || "tcp"}`;
+}
+
+function getLabel(labels: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const value = labels[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function parseImageTag(image: string | undefined) {
+  const value = image?.trim();
+  if (!value || value === "-") return null;
+  const lastSegment = value.split("/").pop() || value;
+  const tagIndex = lastSegment.lastIndexOf(":");
+  if (tagIndex <= 0) return null;
+  return lastSegment.slice(tagIndex + 1) || null;
 }
 
 function decodeChunkedBody(value: Buffer) {
@@ -229,11 +256,32 @@ function toContainerHealth(
   const healthLog = inspect.State?.Health?.Log || [];
   const latestHealthLog = healthLog[healthLog.length - 1];
   const healthOutput = latestHealthLog?.Output?.trim() || null;
+  const labels = inspect.Config?.Labels || summary.Labels || {};
+  const image = inspect.Config?.Image || summary.Image || "-";
 
   return {
     id: (summary.Id || inspect.Id || "").slice(0, 12),
     name,
-    image: inspect.Config?.Image || summary.Image || "-",
+    image,
+    image_id: inspect.Image || summary.ImageID || null,
+    image_tag: parseImageTag(image),
+    labels,
+    revision: getLabel(labels, [
+      "org.opencontainers.image.revision",
+      "com.goodcms.build.sha",
+    ]),
+    build_ref: getLabel(labels, [
+      "org.opencontainers.image.ref.name",
+      "com.goodcms.build.ref",
+    ]),
+    build_run_id: getLabel(labels, [
+      "com.goodcms.github.run_id",
+    ]),
+    build_created_at: getLabel(labels, [
+      "org.opencontainers.image.created",
+      "com.goodcms.build.created",
+    ]),
+    image_created_at: inspect.Created || null,
     group: classifyContainer(name),
     state: inspect.State?.Status || summary.State || "unknown",
     health: getHealthStatus(summary, inspect),

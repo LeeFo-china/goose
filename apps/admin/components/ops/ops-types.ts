@@ -70,6 +70,14 @@ export type OpsServiceHealth = {
     id: string;
     name: string;
     image: string;
+    image_id: string | null;
+    image_tag: string | null;
+    labels: Record<string, string>;
+    revision: string | null;
+    build_ref: string | null;
+    build_run_id: string | null;
+    build_created_at: string | null;
+    image_created_at: string | null;
     group: "business" | "supabase" | "infrastructure";
     state: string;
     health: "healthy" | "unhealthy" | "starting" | "none" | "exited" | "unknown";
@@ -180,6 +188,35 @@ export type ReleaseSuccessfulRef = {
 export type ReleaseSuccessfulRefListData = {
   list: ReleaseSuccessfulRef[];
   pagination: Pagination;
+};
+
+export type ReleaseRuntimeServiceVersion = {
+  environment: ReleaseEnvironment;
+  service: Exclude<ReleaseService, "all">;
+  service_label: string;
+  container_name: string;
+  image: string;
+  image_tag: string | null;
+  image_id: string | null;
+  revision: string | null;
+  revision_short: string | null;
+  build_ref: string | null;
+  build_run_id: string | null;
+  build_created_at: string | null;
+  image_created_at: string | null;
+  state: string;
+  health: OpsServiceHealth["containers"][number]["health"];
+  started_at: string | null;
+  latest_successful_dev_sha: string | null;
+  latest_successful_prod_sha: string | null;
+  diff_status: "same_as_dev" | "behind_dev" | "ahead_of_dev" | "unknown";
+  diff_label: string;
+};
+
+export type ReleaseRuntimeVersionData = {
+  checked_at: string;
+  latest_successful: Record<ReleaseEnvironment, ReleaseSuccessfulRef | null>;
+  services: ReleaseRuntimeServiceVersion[];
 };
 
 export type ReleaseCreateTagResult = {

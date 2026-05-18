@@ -301,6 +301,7 @@ jobs:
             IMAGE_BASE="${TENCENT_CCR_REGISTRY}/${{ vars.TENCENT_CCR_NAMESPACE }}/${IMAGE_REPO}"
             DEV_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
             SHA_IMAGE="${IMAGE_BASE}:${GITHUB_SHA}"
+            BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
             case "$SERVICE" in
               admin)
@@ -308,6 +309,10 @@ jobs:
                   -f "$DOCKERFILE" \
                   --build-arg NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
                   --build-arg NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn \
+                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                   -t "$DEV_IMAGE" \
                   -t "$SHA_IMAGE" \
                   .
@@ -316,12 +321,24 @@ jobs:
                 docker build \
                   -f "$DOCKERFILE" \
                   --build-arg ALPINE_MIRROR=https://mirrors.tencent.com/alpine \
+                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
                   -t "$DEV_IMAGE" \
                   -t "$SHA_IMAGE" \
                   .
                 ;;
               *)
-                docker build -f "$DOCKERFILE" -t "$DEV_IMAGE" -t "$SHA_IMAGE" .
+                docker build \
+                  -f "$DOCKERFILE" \
+                  --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                  --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                  --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                  --build-arg BUILD_CREATED="${BUILD_CREATED}" \
+                  -t "$DEV_IMAGE" \
+                  -t "$SHA_IMAGE" \
+                  .
                 ;;
             esac
 
