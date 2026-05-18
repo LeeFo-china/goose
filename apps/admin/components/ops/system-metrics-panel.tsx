@@ -220,9 +220,15 @@ export function SystemMetricsPanel() {
           <Badge variant={lastAutoFailed ? "warning" : "outline"}>
             {lastAutoFailed ? "8 秒重试" : "2 秒刷新"}
           </Badge>
-          <Button type="button" variant="outline" onClick={() => setAutoRefresh((value) => !value)}>
-            {autoRefresh ? <Pause data-icon="inline-start" /> : <Play data-icon="inline-start" />}
-            {autoRefresh ? "暂停" : "继续"}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setAutoRefresh((value) => !value)}
+            aria-label={autoRefresh ? "暂停自动刷新" : "继续自动刷新"}
+            title={autoRefresh ? "暂停自动刷新" : "继续自动刷新"}
+          >
+            {autoRefresh ? <Pause data-icon="icon-only" /> : <Play data-icon="icon-only" />}
           </Button>
           <Button
             type="button"
