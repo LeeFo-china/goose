@@ -73,6 +73,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ReleaseDeploymentsPanelProps = {
   options: ReleaseOptionsData | null;
@@ -294,6 +295,19 @@ function ReleaseRunDetailItem({ label, value }: { label: string; value: string }
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 break-all text-sm font-medium">{value || "-"}</div>
     </div>
+  );
+}
+
+function TruncatedTooltipText({ value, className }: { value: string; className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={cn("truncate", className)}>{value || "-"}</div>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-[360px] leading-5">
+        {value || "-"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -706,7 +720,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -1005,20 +1019,28 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
             <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
               暂无成功发布版本
             </div>
-          ) : successfulRefs.map((item) => (
-            <div
-              key={`${item.environment}-${item.id}`}
-              className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
-            >
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
-                  <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
-                </div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">{item.title}</div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.description}</div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
+          ) : (
+            <TooltipProvider delayDuration={200}>
+              {successfulRefs.map((item) => (
+                <div
+                  key={`${item.environment}-${item.id}`}
+                  className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Badge variant="outline" className="shrink-0">{item.workflow_label}</Badge>
+                      <span className="truncate text-sm font-medium">{item.head_sha.slice(0, 7)}</span>
+                    </div>
+                    <TruncatedTooltipText
+                      value={item.title}
+                      className="mt-1 text-xs text-muted-foreground"
+                    />
+                    <TruncatedTooltipText
+                      value={item.description}
+                      className="mt-0.5 text-xs text-muted-foreground"
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
                 {item.html_url ? (
                   <Button asChild variant="ghost" size="icon" title="查看发布记录">
                     <Link href={item.html_url} target="_blank" rel="noreferrer">
@@ -1091,9 +1113,11 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              </div>
-            </div>
-          ))}
+                  </div>
+                </div>
+              ))}
+            </TooltipProvider>
+          )}
           <p className="text-xs text-muted-foreground">
             “作为来源”会把 Commit 填入左侧创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“回滚发布”会创建 Tag 并提交生产全部服务回滚。
           </p>
