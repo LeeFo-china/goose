@@ -303,7 +303,7 @@ class ReleaseDeploymentService {
     const results = await Promise.all(
       environments.map(async (workflow) => {
         const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-          `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=${pageSize}&page=${page}`,
+          `/actions/workflows/${workflow.workflowId}/runs?per_page=${pageSize}&page=${page}`,
         );
 
         return (payload.workflow_runs || []).map((run) => normalizeWorkflowRun(workflow, run));
@@ -335,7 +335,7 @@ class ReleaseDeploymentService {
     const results = await Promise.all(
       environments.map(async (workflow) => {
         const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-          `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=completed&per_page=50`,
+          `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=50`,
         );
 
         return (payload.workflow_runs || [])

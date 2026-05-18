@@ -778,7 +778,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">最近发布记录</CardTitle>
-            <CardDescription>读取 GitHub Actions workflow_dispatch 记录。</CardDescription>
+            <CardDescription>读取 GitHub Actions 最近运行记录，包含手动发布和 dev 自动发布。</CardDescription>
           </div>
           <Badge variant="outline">{runs.length} 条</Badge>
         </CardHeader>
