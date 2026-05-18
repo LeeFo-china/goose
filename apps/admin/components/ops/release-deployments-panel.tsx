@@ -180,10 +180,13 @@ function formatDateTime(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -222,6 +225,14 @@ function getRunRefLabel(run: ReleaseRun) {
   return `${run.head_branch || "-"} · ${run.head_sha?.slice(0, 7) || "-"}`;
 }
 
+function getSuccessfulRefDescription(item: ReleaseSuccessfulRef) {
+  return [
+    item.workflow_label,
+    item.head_branch ? `来源 ${item.head_branch}` : "",
+    `发布时间 ${formatDateTime(item.created_at)}`,
+  ].filter(Boolean).join(" · ");
+}
+
 function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
   const githubUrl = run.audit?.run_url || run.html_url;
 
@@ -253,7 +264,7 @@ function ReleaseRunDetailsDialog({ run }: { run: ReleaseRun }) {
             <ReleaseRunDetailItem label="版本" value={getRunRefLabel(run)} />
             <ReleaseRunDetailItem label="GitHub Run ID" value={run.audit?.run_id || run.id} />
             <ReleaseRunDetailItem label="发起人" value={getRunActorLabel(run)} />
-            <ReleaseRunDetailItem label="发布时间" value={formatDateTime(run.audit?.created_at || run.created_at)} />
+            <ReleaseRunDetailItem label="发布时间" value={formatDateTime(run.created_at)} />
           </div>
 
           <Separator />
@@ -1036,7 +1047,7 @@ export function ReleaseDeploymentsPanel({ options, runs, successfulRefs, error }
                       className="mt-1 text-xs text-muted-foreground"
                     />
                     <TruncatedTooltipText
-                      value={item.description}
+                      value={getSuccessfulRefDescription(item)}
                       className="mt-0.5 text-xs text-muted-foreground"
                     />
                   </div>
