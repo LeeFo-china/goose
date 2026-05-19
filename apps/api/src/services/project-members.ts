@@ -54,6 +54,9 @@ const LEGACY_PROJECT_MEMBER_ROLE_CODES: ProjectMemberRoleCode[] = [
   "supervisor",
 ];
 
+const DIRECT_PROJECT_MEMBER_FALLBACK_ROLE_CODE: ProjectMemberRoleCode =
+  "construction_manager";
+
 class ProjectMemberService {
   private normalizeEmployee(value: unknown): ProjectMemberEmployee | null {
     if (Array.isArray(value)) {
@@ -193,31 +196,43 @@ class ProjectMemberService {
     await this.assertProjectExists(projectId);
     await this.assertEmployeeOperable(input.employee_id);
 
-    if (input.role_code === "customer_owner") {
+    const roleCode = input.role_code ?? DIRECT_PROJECT_MEMBER_FALLBACK_ROLE_CODE;
+
+    if (roleCode === "customer_owner") {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接新增");
     }
 
-    const roleName = this.getResolvedRoleName(input.role_code, input.role_name);
-    const sortOrder = this.getResolvedSortOrder(input.role_code, input.sort_order);
+    if (!input.role_code) {
+      const existing = await projectMemberRepository.findActiveByProjectEmployee(
+        projectId,
+        input.employee_id,
+      );
+      if (existing) {
+        throw Errors.badRequest("该员工已在项目成员中");
+      }
+    }
+
+    const roleName = this.getResolvedRoleName(roleCode, input.role_name);
+    const sortOrder = this.getResolvedSortOrder(roleCode, input.sort_order);
 
     if (input.is_primary) {
       await projectMemberRepository.setRoleMembersNonPrimary(
         projectId,
-        input.role_code,
+        roleCode,
       );
     }
 
     const row = await projectMemberRepository.create({
       project_id: projectId,
       employee_id: input.employee_id,
-      role_code: input.role_code,
+      role_code: roleCode,
       role_name: roleName,
       is_primary: input.is_primary ?? false,
       sort_order: sortOrder,
     });
 
     if (input.is_primary) {
-      await this.syncLegacyProjectColumn(projectId, input.role_code, input.employee_id);
+      await this.syncLegacyProjectColumn(projectId, roleCode, input.employee_id);
     }
 
     return this.serializeMember(row);

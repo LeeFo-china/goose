@@ -2,22 +2,18 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Building2, BriefcaseBusiness, Loader2, Workflow } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
 import { DepartmentsClientShell } from "@/components/organization/departments-client-shell";
-import { PostsClientShell } from "@/components/organization/posts-client-shell";
-import { RolePostRulesClientShell } from "@/components/organization/role-post-rules-client-shell";
 import type {
   DepartmentRecord,
   DepartmentPostRuleConfig,
   Pagination,
-  ProjectMemberRolePostRuleConfig,
-  PostRecord,
 } from "@/components/organization/organization-types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type OrganizationTab = "departments" | "posts" | "role-rules";
+type OrganizationTab = "departments";
 
 type ListData<T> = {
   list: T[];
@@ -31,40 +27,20 @@ const tabs = [
     label: "部门",
     icon: Building2,
   },
-  {
-    value: "posts" as const,
-    label: "岗位",
-    icon: BriefcaseBusiness,
-  },
-  {
-    value: "role-rules" as const,
-    label: "候选规则",
-    icon: Workflow,
-  },
 ];
 
 export function OrganizationTabs({
   activeTab,
   departments,
-  posts,
-  roleRuleConfig,
   departmentPostRuleConfig,
   departmentCode,
   departmentKeyword,
-  postStatus,
-  postSalaryType,
-  postKeyword,
 }: {
   activeTab: OrganizationTab;
   departments: ListData<DepartmentRecord>;
-  posts: ListData<PostRecord>;
-  roleRuleConfig: ProjectMemberRolePostRuleConfig & { error: string | null };
   departmentPostRuleConfig: DepartmentPostRuleConfig & { error: string | null };
   departmentCode: string;
   departmentKeyword: string;
-  postStatus: string;
-  postSalaryType: string;
-  postKeyword: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -143,24 +119,6 @@ export function OrganizationTabs({
             error={departments.error}
             onDepartmentPostRuleConfigChange={updateDepartmentPostConfig}
           />
-        ) : activeTab === "posts" ? (
-          <PostsClientShell
-            posts={posts.list}
-            pagination={posts.pagination}
-            status={postStatus}
-            salaryType={postSalaryType}
-            keyword={postKeyword}
-            error={posts.error}
-            departments={localDepartmentPostRuleConfig.departments}
-          />
-        ) : activeTab === "role-rules" ? (
-          <div className="border-t p-4">
-            <RolePostRulesClientShell
-              roles={roleRuleConfig.roles}
-              postOptions={roleRuleConfig.post_options}
-              error={roleRuleConfig.error}
-            />
-          </div>
         ) : null}
       </CardContent>
     </Card>

@@ -239,6 +239,23 @@ class ProjectMemberRepository {
     return (data || null) as { id: string } | null;
   }
 
+  async findActiveByProjectEmployee(projectId: string, employeeId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_members")
+      .select("id, role_code")
+      .eq("project_id", projectId)
+      .eq("employee_id", employeeId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目成员失败", error);
+    }
+
+    return (data || null) as { id: string; role_code: string } | null;
+  }
+
   async softDeletePrimaryRoleMembers(
     projectId: string,
     roleCode: ProjectMemberRoleCode,

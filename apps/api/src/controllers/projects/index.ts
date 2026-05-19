@@ -1541,21 +1541,13 @@ class ProjectController extends BaseController<
     const queryResult = ProjectMemberCandidateQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword, role_code } = queryResult.data;
+    const { page, pageSize, keyword } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes = role_code
-      ? await projectMemberRolePostRuleService.listCandidatePostCodesByRole(
-        role_code,
-        authContext.tenantId,
-      )
-      : [];
-    const postIds = await this.getPostIdsByCodes(postCodes, authContext.tenantId);
     const result = await this.queryProjectCreateEmployees({
       from,
       to,
       keyword,
-      postIds: postIds.length > 0 ? postIds : undefined,
       tenantId: authContext.tenantId,
     });
 

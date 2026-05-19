@@ -4,14 +4,12 @@ import type {
   DepartmentRecord,
   DepartmentPostRuleConfig,
   Pagination,
-  ProjectMemberRolePostRuleConfig,
-  PostRecord,
 } from "@/components/organization/organization-types";
 import { ORGANIZATION_PAGE_SIZE_OPTIONS } from "@/components/organization/organization-types";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
-type OrganizationTab = "departments" | "posts" | "role-rules";
+type OrganizationTab = "departments";
 
 type OrganizationSearchParams = {
   tab?: string;
@@ -19,11 +17,6 @@ type OrganizationSearchParams = {
   departmentPageSize?: string;
   departmentCode?: string;
   departmentKeyword?: string;
-  postPage?: string;
-  postPageSize?: string;
-  postStatus?: string;
-  postSalaryType?: string;
-  postKeyword?: string;
 };
 
 type ListData<T> = {
@@ -54,14 +47,13 @@ function normalizePageSize(value: string | undefined) {
     : emptyPagination.pageSize;
 }
 
-function normalizeTab(value: string | undefined): OrganizationTab {
-  if (value === "role-rules") return "role-rules";
-  return value === "posts" ? "posts" : "departments";
+function normalizeTab(_value: string | undefined): OrganizationTab {
+  return "departments";
 }
 
 async function getList<T>(input: {
   token: string | null;
-  resource: "departments" | "posts";
+  resource: "departments";
   query: URLSearchParams;
   fallbackMessage: string;
 }): Promise<ListResult<T>> {
@@ -93,41 +85,6 @@ async function getList<T>(input: {
       list: [],
       pagination: emptyPagination,
       error: error instanceof Error ? error.message : input.fallbackMessage,
-    };
-  }
-}
-
-async function getRoleRuleConfig(input: {
-  token: string | null;
-}): Promise<ProjectMemberRolePostRuleConfig & { error: string | null }> {
-  if (!input.token) {
-    return {
-      roles: [],
-      post_options: [],
-      error: "缺少登录凭证",
-    };
-  }
-
-  try {
-    const response = await fetch(buildBackendUrl("/project-member-role-post-rules"), {
-      headers: {
-        authorization: `Bearer ${input.token}`,
-      },
-      cache: "no-store",
-    });
-    const payload = await parseBackendJson<ProjectMemberRolePostRuleConfig>(response);
-    return {
-      ...(payload.data || {
-        roles: [],
-        post_options: [],
-      }),
-      error: null,
-    };
-  } catch (error) {
-    return {
-      roles: [],
-      post_options: [],
-      error: error instanceof Error ? error.message : "候选规则加载失败",
     };
   }
 }
@@ -179,20 +136,6 @@ function buildDepartmentQuery(params: OrganizationSearchParams) {
   return query;
 }
 
-function buildPostQuery(params: OrganizationSearchParams) {
-  const query = new URLSearchParams({
-    page: String(normalizePage(params.postPage)),
-    pageSize: String(normalizePageSize(params.postPageSize)),
-  });
-  const keyword = params.postKeyword?.trim() || "";
-  const status = params.postStatus?.trim() || "";
-  const salaryType = params.postSalaryType?.trim() || "";
-  if (keyword) query.set("keyword", keyword);
-  if (status) query.set("status", status);
-  if (salaryType) query.set("salary_type", salaryType);
-  return query;
-}
-
 export default async function OrganizationPage({
   searchParams,
 }: {
@@ -204,20 +147,13 @@ export default async function OrganizationPage({
   const params = await searchParams;
   const activeTab = normalizeTab(params.tab);
   const token = await getAdminToken();
-  const [departments, posts, roleRuleConfig, departmentPostRuleConfig] = await Promise.all([
+  const [departments, departmentPostRuleConfig] = await Promise.all([
     getList<DepartmentRecord>({
       token,
       resource: "departments",
       query: buildDepartmentQuery(params),
       fallbackMessage: "部门列表加载失败",
     }),
-    getList<PostRecord>({
-      token,
-      resource: "posts",
-      query: buildPostQuery(params),
-      fallbackMessage: "岗位列表加载失败",
-    }),
-    getRoleRuleConfig({ token }),
     getDepartmentPostRuleConfig({ token }),
   ]);
 
@@ -226,14 +162,9 @@ export default async function OrganizationPage({
       <OrganizationTabs
         activeTab={activeTab}
         departments={departments}
-        posts={posts}
-        roleRuleConfig={roleRuleConfig}
         departmentPostRuleConfig={departmentPostRuleConfig}
         departmentCode={params.departmentCode?.trim() || ""}
         departmentKeyword={params.departmentKeyword?.trim() || ""}
-        postStatus={params.postStatus?.trim() || ""}
-        postSalaryType={params.postSalaryType?.trim() || ""}
-        postKeyword={params.postKeyword?.trim() || ""}
       />
     </div>
   );

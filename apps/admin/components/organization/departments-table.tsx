@@ -211,14 +211,16 @@ export function DepartmentsTable({
                             {post.missing ? <Badge variant="danger">缺失</Badge> : null}
                           </span>
                           {department.code ? (
-                            <DepartmentPostAliasDialog
-                              departmentCode={department.code}
-                              departmentName={department.name}
-                              postCode={post.code}
-                              postName={post.name}
-                              aliasName={post.alias_name}
-                              onSaved={onDepartmentPostsSaved}
-                            />
+                            <div className="flex shrink-0 items-center gap-1">
+                              <DepartmentPostAliasDialog
+                                departmentCode={department.code}
+                                departmentName={department.name}
+                                postCode={post.code}
+                                postName={post.name}
+                                aliasName={post.alias_name}
+                                onSaved={onDepartmentPostsSaved}
+                              />
+                            </div>
                           ) : null}
                         </div>
                       ))}

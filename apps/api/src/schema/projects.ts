@@ -169,6 +169,10 @@ export const ProjectMemberBaseSchema = z.object({
 export const CreateProjectMemberSchema = ProjectMemberBaseSchema.omit({
   id: true,
   project_id: true,
+}).extend({
+  role_code: z.enum(PROJECT_MEMBER_ROLE_CODE_VALUES, {
+    message: "无效的项目成员角色",
+  }).optional(),
 });
 
 export const UpdateProjectMemberSchema = z.object({
