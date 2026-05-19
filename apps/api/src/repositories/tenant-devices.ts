@@ -60,6 +60,12 @@ export type PlatformTenantDeviceRow = TenantDeviceRow & {
   bound_camera: TenantDeviceCameraLite | null;
 };
 
+type TenantDeviceFilterableQuery<T> = {
+  eq(column: string, value: unknown): T;
+  is(column: string, value: unknown): T;
+  or(filters: string): T;
+};
+
 class TenantDeviceRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -68,36 +74,18 @@ class TenantDeviceRepository {
     const pageSize = input.pageSize;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const keyword = input.keyword?.trim();
 
-    let query = this.adminClient
-      .from("tenant_devices")
-      .select("*", { count: "exact" })
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false });
+    let query = this.applyListFilters(
+      this.adminClient
+        .from("tenant_devices")
+        .select("*", { count: "exact" })
+        .is("deleted_at", null)
+        .order("updated_at", { ascending: false }),
+      input,
+    );
 
     if (input.tenantId) {
       query = query.eq("tenant_id", input.tenantId);
-    }
-    if (input.vendor) {
-      query = query.eq("vendor", input.vendor);
-    }
-    if (input.status) {
-      query = query.eq("status", input.status);
-    }
-    if (input.only_unbound) {
-      query = query.is("bound_camera_id", null);
-    }
-    if (keyword) {
-      const safeKeyword = keyword.replace(/[%,()]/g, " ").replace(/\s+/g, " ");
-      query = query.or([
-        `vendor_device_serial.ilike.%${safeKeyword}%`,
-        `vendor_device_code.ilike.%${safeKeyword}%`,
-        `vendor_device_name.ilike.%${safeKeyword}%`,
-        `vendor_channel_id.ilike.%${safeKeyword}%`,
-        `vendor_channel_code.ilike.%${safeKeyword}%`,
-        `vendor_channel_name.ilike.%${safeKeyword}%`,
-      ].join(","));
     }
 
     const { data, error, count } = await query.range(from, to);
@@ -387,7 +375,10 @@ class TenantDeviceRepository {
     return { device: data as TenantDeviceRow, created: true };
   }
 
-  private applyListFilters(query: any, input: TenantDeviceListQueryInput) {
+  private applyListFilters<T extends TenantDeviceFilterableQuery<T>>(
+    query: T,
+    input: TenantDeviceListQueryInput,
+  ) {
     const keyword = input.keyword?.trim();
     let request = query;
 
