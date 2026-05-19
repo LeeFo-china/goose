@@ -5,6 +5,7 @@
 - [API Supabase Client 权限边界规范](./2026-05-19-api-supabase-client-permission-boundary.md)
 - [BaseController 默认 CRUD 权限审计](./2026-05-19-base-controller-default-crud-audit.md)
 - [BaseController 退役前检查](./2026-05-19-base-controller-retirement-check.md)
+- [权限线基础整改闭环验收](./2026-05-19-permission-boundary-closure-acceptance.md)
 
 ## 核心结论
 
@@ -27,6 +28,7 @@ SupabaseDB.getAdminClient()
 - `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
 - `BaseController` 默认 CRUD 已运行时禁用，误调用会返回 `BASE_CONTROLLER_CRUD_DISABLED`。
 - `SupabaseDB.from()` 兼容方法已删除。
+- 本轮权限线基础整改已完成闭环验收。
 
 ## 快速排查命令
 
