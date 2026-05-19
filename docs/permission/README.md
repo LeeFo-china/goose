@@ -9,6 +9,7 @@
 - [Controller 基类拆分规划](./2026-05-19-controller-base-class-refactor-plan.md)
 - [System Settings 权限边界核查](./2026-05-19-system-settings-boundary-audit.md)
 - [Roles / Employee Permissions 权限模型核查](./2026-05-19-roles-employee-permissions-boundary-audit.md)
+- [Roles / Employee Permissions 权限边界重构闭环摘要](./2026-05-19-roles-employee-permissions-boundary-refactor-closure-summary.md)
 - [Expense Requests 权限边界核查](./2026-05-19-expense-requests-boundary-audit.md)
 - [Employee 权限边界核查 Phase 1](./2026-05-19-employee-boundary-audit-phase1.md)
 - [Employee 权限边界核查 Phase 2](./2026-05-19-employee-boundary-audit-phase2.md)
