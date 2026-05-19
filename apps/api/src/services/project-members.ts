@@ -137,8 +137,8 @@ class ProjectMemberService {
     };
   }
 
-  private async assertProjectExists(projectId: string) {
-    const project = await projectRepository.findById(projectId);
+  private async assertProjectExists(projectId: string, tenantId?: string | null) {
+    const project = await projectRepository.findById(projectId, tenantId);
     if (!project) {
       throw Errors.badRequest("项目不存在");
     }
@@ -146,10 +146,14 @@ class ProjectMemberService {
     return project;
   }
 
-  private async assertEmployeeOperable(employeeId: string) {
+  private async assertEmployeeOperable(employeeId: string, tenantId?: string | null) {
     const employee = await permissionRepository.findEmployeeById(employeeId);
     if (!employee) {
       throw Errors.badRequest("员工不存在");
+    }
+
+    if (tenantId && employee.tenant_id !== tenantId) {
+      throw Errors.badRequest("员工不存在或不属于当前租户");
     }
 
     if (!isEmployeeOperableStatus(employee.status)) {
@@ -177,6 +181,7 @@ class ProjectMemberService {
     projectId: string,
     roleCode: ProjectMemberRoleCode,
     employeeId: string | null,
+    tenantId?: string | null,
   ) {
     if (!LEGACY_PROJECT_MEMBER_ROLE_CODES.includes(roleCode)) {
       return;
@@ -187,7 +192,7 @@ class ProjectMemberService {
         ? { designer_id: employeeId }
         : { supervisor_id: employeeId };
 
-    await projectRepository.update(projectId, patch);
+    await projectRepository.update(projectId, patch, tenantId);
   }
 
   async listProjectMembers(projectId: string) {
@@ -220,9 +225,13 @@ class ProjectMemberService {
     };
   }
 
-  async createProjectMember(projectId: string, input: CreateProjectMemberInput) {
-    await this.assertProjectExists(projectId);
-    await this.assertEmployeeOperable(input.employee_id);
+  async createProjectMember(
+    projectId: string,
+    input: CreateProjectMemberInput,
+    tenantId?: string | null,
+  ) {
+    await this.assertProjectExists(projectId, tenantId);
+    await this.assertEmployeeOperable(input.employee_id, tenantId);
 
     const roleCode = input.role_code ?? DIRECT_PROJECT_MEMBER_FALLBACK_ROLE_CODE;
 
@@ -260,7 +269,12 @@ class ProjectMemberService {
     });
 
     if (input.is_primary) {
-      await this.syncLegacyProjectColumn(projectId, roleCode, input.employee_id);
+      await this.syncLegacyProjectColumn(
+        projectId,
+        roleCode,
+        input.employee_id,
+        tenantId,
+      );
     }
 
     return this.serializeMember(row);
@@ -270,7 +284,9 @@ class ProjectMemberService {
     projectId: string,
     memberId: string,
     input: UpdateProjectMemberInput,
+    tenantId?: string | null,
   ) {
+    await this.assertProjectExists(projectId, tenantId);
     const existing = await projectMemberRepository.getById(projectId, memberId);
     if (!existing) {
       throw Errors.badRequest("项目成员不存在");
@@ -285,7 +301,7 @@ class ProjectMemberService {
     const nextRoleCode = input.role_code ?? serializedExisting.role_code;
     const isRoleCodeChanged = nextRoleCode !== serializedExisting.role_code;
     const nextEmployeeId = input.employee_id ?? serializedExisting.employee_id;
-    await this.assertEmployeeOperable(nextEmployeeId);
+    await this.assertEmployeeOperable(nextEmployeeId, tenantId);
     if (nextRoleCode === "customer_owner") {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接修改");
     }
@@ -328,6 +344,7 @@ class ProjectMemberService {
         projectId,
         serializedExisting.role_code,
         null,
+        tenantId,
       );
     }
 
@@ -337,16 +354,27 @@ class ProjectMemberService {
           projectId,
           serialized.role_code,
           serialized.employee_id,
+          tenantId,
         );
       } else if (serializedExisting.is_primary) {
-        await this.syncLegacyProjectColumn(projectId, serialized.role_code, null);
+        await this.syncLegacyProjectColumn(
+          projectId,
+          serialized.role_code,
+          null,
+          tenantId,
+        );
       }
     }
 
     return serialized;
   }
 
-  async deleteProjectMember(projectId: string, memberId: string) {
+  async deleteProjectMember(
+    projectId: string,
+    memberId: string,
+    tenantId?: string | null,
+  ) {
+    await this.assertProjectExists(projectId, tenantId);
     const existing = await projectMemberRepository.getById(projectId, memberId);
     if (!existing) {
       throw Errors.badRequest("项目成员不存在");
@@ -367,16 +395,28 @@ class ProjectMemberService {
       (serialized.role_code === "designer" || serialized.role_code === "supervisor") &&
       serialized.is_primary
     ) {
-      await this.syncLegacyProjectColumn(projectId, serialized.role_code, null);
+      await this.syncLegacyProjectColumn(
+        projectId,
+        serialized.role_code,
+        null,
+        tenantId,
+      );
     }
   }
 
   async syncLegacyProjectMembers(projectId: string, input: {
     designer_id?: string | null;
     supervisor_id?: string | null;
-  }) {
+  }, tenantId?: string | null) {
+    await this.assertProjectExists(projectId, tenantId);
+
     if (input.designer_id !== undefined) {
-      await this.syncPrimaryMemberByLegacyRole(projectId, "designer", input.designer_id);
+      await this.syncPrimaryMemberByLegacyRole(
+        projectId,
+        "designer",
+        input.designer_id,
+        tenantId,
+      );
     }
 
     if (input.supervisor_id !== undefined) {
@@ -384,6 +424,7 @@ class ProjectMemberService {
         projectId,
         "supervisor",
         input.supervisor_id,
+        tenantId,
       );
     }
   }
@@ -391,7 +432,9 @@ class ProjectMemberService {
   async createInitialLegacyProjectMembers(projectId: string, input: {
     designer_id?: string | null;
     supervisor_id?: string | null;
-  }) {
+  }, tenantId?: string | null) {
+    await this.assertProjectExists(projectId, tenantId);
+
     const rows: Array<{
       project_id: string;
       employee_id: string;
@@ -402,6 +445,7 @@ class ProjectMemberService {
     }> = [];
 
     if (input.designer_id) {
+      await this.assertEmployeeOperable(input.designer_id, tenantId);
       rows.push({
         project_id: projectId,
         employee_id: input.designer_id,
@@ -413,6 +457,7 @@ class ProjectMemberService {
     }
 
     if (input.supervisor_id) {
+      await this.assertEmployeeOperable(input.supervisor_id, tenantId);
       rows.push({
         project_id: projectId,
         employee_id: input.supervisor_id,
@@ -430,11 +475,14 @@ class ProjectMemberService {
     projectId: string,
     roleCode: "designer" | "supervisor",
     employeeId: string | null,
+    tenantId?: string | null,
   ) {
     if (!employeeId) {
       await projectMemberRepository.softDeletePrimaryRoleMembers(projectId, roleCode);
       return;
     }
+
+    await this.assertEmployeeOperable(employeeId, tenantId);
 
     const roleName = this.getResolvedRoleName(roleCode, null);
     const sortOrder = this.getResolvedSortOrder(roleCode, null);

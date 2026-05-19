@@ -744,3 +744,31 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续迁移 `projects` 前先做专项边界核查，重点关注项目成员、客户、工地日志、验收、设备等关联资源。
+
+### 2026-05-19 Projects 权限边界核查与迁移
+
+已完成：
+
+- 核查项目 controller、service、repository、项目成员 service、项目成员 repository、schema。
+- 形成独立核查文档：[Projects 权限边界核查](./2026-05-19-projects-boundary-audit.md)。
+- 迁移 `projects` 到 `TenantBaseController`。
+- 后台租户项目接口统一使用 `getRequiredTenantContext()`。
+- 公开项目展示接口保持公开口径，不新增后台登录要求。
+- 项目列表、详情、创建、更新、删除、项目成员、创建项目候选客户和员工接口保留原有权限点判断。
+- `projectMemberService` 补项目和员工同租户校验，防止跨租户绑定项目成员。
+- 设计师、工程负责人同步到 `project_members` 时带入租户校验。
+
+特别说明：
+
+- `projects` controller 当前仍包含较多 Supabase 查询和序列化逻辑，后续可以拆到 service / repository，但本次只做权限边界收紧。
+- 公开项目接口仍依赖 `visibility_status` 和项目状态控制展示，不属于后台租户接口。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `project-logs`，以项目 `tenant_id` 和 `project.read` / `project.update` 作为核心边界。

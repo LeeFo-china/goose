@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { CreateProjectSchema, UpdateProjectSchema } from "@/schema/projects";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
@@ -29,7 +29,7 @@ import {
   type ProjectLogStageCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
-import { authorizationService } from "@/services/authorization";
+import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectMemberService } from "@/services/project-members";
 import {
@@ -155,7 +155,7 @@ type PublicProjectLogSummary = {
   created_at: string | null;
 };
 
-class ProjectController extends BaseController<
+class ProjectController extends TenantBaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
 > {
@@ -286,14 +286,6 @@ class ProjectController extends BaseController<
     super("projects", CreateProjectSchema, UpdateProjectSchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   private applyProjectIdsFilter(query: any, visibleProjectIds: string[] | null) {
     if (visibleProjectIds === null) {
       return query;
@@ -308,7 +300,7 @@ class ProjectController extends BaseController<
 
   private applyProjectListFilters(
     query: any,
-    tenantId: string | null,
+    tenantId: string,
     visibleProjectIds: string[] | null,
     status?: string,
     keyword?: string,
@@ -454,11 +446,11 @@ class ProjectController extends BaseController<
   }
 
   private async getProjectListVisibleIds(
-    request: FastifyRequest,
+    authContext: AuthContext,
     ownership?: "self" | "all",
   ) {
     return accessPolicyService.getVisibleProjectIdsByOwnership(
-      await this.getRequiredAuthContext(request),
+      authContext,
       "project.read",
       ownership,
     );
@@ -887,9 +879,9 @@ class ProjectController extends BaseController<
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const visibleProjectIds = await this.getProjectListVisibleIds(
-      request,
+      authContext,
       queryResult.data.ownership,
     );
 
@@ -952,7 +944,7 @@ class ProjectController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -983,7 +975,7 @@ class ProjectController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "project.create");
 
     if (!this.createSchema) {
@@ -1008,12 +1000,12 @@ class ProjectController extends BaseController<
     await projectMemberService.createInitialLegacyProjectMembers(data.id, {
       designer_id: result.data.designer_id,
       supervisor_id: result.data.supervisor_id,
-    });
+    }, authContext.tenantId);
     return ResponseHandler.success(data);
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1042,13 +1034,13 @@ class ProjectController extends BaseController<
     await projectMemberService.syncLegacyProjectMembers(idVerify.data.id, {
       designer_id: result.data.designer_id,
       supervisor_id: result.data.supervisor_id,
-    });
+    }, authContext.tenantId);
     return ResponseHandler.success(data);
   };
 
   @Delete("/projects/:id")
   async deleteProject(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1067,7 +1059,7 @@ class ProjectController extends BaseController<
 
   @Get("/projects/:id/members")
   async getProjectMembers(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1098,7 +1090,7 @@ class ProjectController extends BaseController<
 
   @Get("/projects/member-roles")
   async getProjectMemberRoles(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
 
     const list: ProjectMemberRoleOption[] = Object.entries(
@@ -1119,7 +1111,7 @@ class ProjectController extends BaseController<
 
   @Post("/projects/:id/members")
   async createProjectMember(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1138,6 +1130,7 @@ class ProjectController extends BaseController<
     const data = await projectMemberService.createProjectMember(
       idVerify.data.id,
       result.data,
+      authContext.tenantId,
     );
 
     return ResponseHandler.success(this.serializeProjectMember(data));
@@ -1145,7 +1138,7 @@ class ProjectController extends BaseController<
 
   @Patch("/projects/:id/members/:memberId")
   async updateProjectMember(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = ProjectMemberParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -1165,6 +1158,7 @@ class ProjectController extends BaseController<
       paramsResult.data.id,
       paramsResult.data.memberId,
       result.data,
+      authContext.tenantId,
     );
 
     return ResponseHandler.success(this.serializeProjectMember(data));
@@ -1172,7 +1166,7 @@ class ProjectController extends BaseController<
 
   @Delete("/projects/:id/members/:memberId")
   async deleteProjectMember(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = ProjectMemberParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -1188,6 +1182,7 @@ class ProjectController extends BaseController<
     await projectMemberService.deleteProjectMember(
       paramsResult.data.id,
       paramsResult.data.memberId,
+      authContext.tenantId,
     );
 
     return ResponseHandler.success({ success: true });
@@ -1290,9 +1285,9 @@ class ProjectController extends BaseController<
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const visibleProjectIds = await this.getProjectListVisibleIds(
-      request,
+      authContext,
       queryResult.data.ownership,
     );
     const { page, pageSize, status, keyword, work_scope: workScope } = queryResult.data;
@@ -1397,7 +1392,7 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "project.create");
 
     const queryResult = ProjectCreateSelectCustomerQuerySchema.safeParse(
@@ -1455,7 +1450,7 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "project.create");
 
     const queryResult = ProjectCreateSelectEmployeeQuerySchema.safeParse(
@@ -1525,7 +1520,7 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1602,7 +1597,7 @@ class ProjectController extends BaseController<
     to: number;
     keyword?: string;
     postIds?: string[];
-    tenantId: string | null;
+    tenantId: string;
   }) {
     let query = SupabaseDB.getAdminClient()
       .from("employees")
