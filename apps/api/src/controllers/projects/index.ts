@@ -138,43 +138,6 @@ class ProjectController extends TenantBaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
 > {
-  private projectDetailSelect = `
-    *,
-    customer:customers!projects_customer_id_fkey(
-      id,
-      name,
-      phone,
-      owner_id,
-      owner:employees!customers_owner_id_fkey(
-        id,
-        name,
-        avatar,
-        phone
-      )
-    ),
-    property:properties!projects_property_id_fkey(
-      id,
-      community,
-      building_info,
-      layout,
-      area,
-      latitude,
-      longitude
-    ),
-    designer:employees!projects_designer_id_fkey(
-      id,
-      name,
-      avatar,
-      phone
-    ),
-    supervisor:employees!projects_supervisor_id_fkey(
-      id,
-      name,
-      avatar,
-      phone
-    )
-  `;
-
   constructor() {
     super("projects", CreateProjectSchema, UpdateProjectSchema);
   }
