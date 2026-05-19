@@ -71,13 +71,6 @@ const CustomerPhoneActionBodySchema = z.object({
   reason: z.string().trim().max(200, "原因过长").optional(),
 });
 
-function escapeSupabaseOrValue(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/[%_]/g, "\\$&")
-    .replace(/,/g, "\\,");
-}
-
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
     page,
@@ -92,15 +85,6 @@ class CustomerController extends TenantBaseController<
   typeof CreateCustomerSchema,
   typeof UpdateCustomerSchema
 > {
-  private customerSelect = `
-    *,
-    owner:employees!customers_owner_id_fkey(
-      id,
-      name,
-      phone
-    )
-  `;
-
   constructor() {
     super("customers", CreateCustomerSchema, UpdateCustomerSchema);
   }
@@ -306,46 +290,6 @@ class CustomerController extends TenantBaseController<
     };
   }
 
-  private getFollowUpState(nextFollowAt: string | null | undefined) {
-    if (!nextFollowAt) {
-      return "none";
-    }
-
-    const nextTime = new Date(nextFollowAt).getTime();
-    if (Number.isNaN(nextTime)) {
-      return "none";
-    }
-
-    const now = new Date();
-    const todayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    ).getTime();
-
-    if (nextTime < todayStart) {
-      return "overdue";
-    }
-
-    if (nextTime <= now.getTime()) {
-      return "due";
-    }
-
-    return "upcoming";
-  }
-
-  private matchesFollowFilter(
-    summary: CustomerFollowUpSummary | undefined,
-    followFilter: CustomerFollowFilter,
-  ) {
-    const state = this.getFollowUpState(summary?.next_follow_at);
-    if (followFilter === "overdue") {
-      return state === "overdue";
-    }
-
-    return state === "due" || state === "overdue";
-  }
-
   private attachFollowUpSummary<T extends CustomerRowForResponse>(
     customer: T,
     followUpMap: Map<string, CustomerFollowUpSummary>,
@@ -358,7 +302,7 @@ class CustomerController extends TenantBaseController<
       latest_follow_up: serialized,
       last_follow_at: latest?.created_at ?? null,
       next_follow_at: latest?.next_follow_at ?? null,
-      follow_up_state: this.getFollowUpState(latest?.next_follow_at),
+      follow_up_state: customerCoreService.getFollowUpState(latest?.next_follow_at),
     };
   }
 
@@ -501,235 +445,32 @@ class CustomerController extends TenantBaseController<
     };
   }
 
-  private applyCustomerListFilters(
-    query: any,
-    tenantId: string | null,
-    visibleOwnerIds: string[] | null,
-    status?: string,
-    source?: string,
-    customerOrigin?: string,
-    keyword?: string,
-    customerIds?: string[] | null,
-  ) {
-    let filteredQuery = query;
-
-    if (tenantId) {
-      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
-    }
-
-    if (visibleOwnerIds !== null) {
-      if (visibleOwnerIds.length === 0) {
-        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
-      } else {
-        filteredQuery = filteredQuery.in("owner_id", visibleOwnerIds);
-      }
-    }
-
-    if (status) {
-      filteredQuery = filteredQuery.eq("status", status);
-    }
-
-    if (source) {
-      filteredQuery = filteredQuery.eq("source", source);
-    }
-
-    if (customerOrigin) {
-      filteredQuery = filteredQuery.eq("customer_origin", customerOrigin);
-    }
-
-    if (keyword) {
-      const escapedKeyword = escapeSupabaseOrValue(keyword);
-      filteredQuery = filteredQuery.or(
-        [
-          `name.ilike.%${escapedKeyword}%`,
-          `phone.ilike.%${escapedKeyword}%`,
-          `source.ilike.%${escapedKeyword}%`,
-        ].join(","),
-      );
-    }
-
-    if (customerIds !== undefined && customerIds !== null) {
-      if (customerIds.length === 0) {
-        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
-      } else {
-        filteredQuery = filteredQuery.in("id", customerIds);
-      }
-    }
-
-    return filteredQuery;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredTenantContext(request);
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const {
-      page,
-      pageSize,
-      status,
-      source,
-      customer_origin: customerOrigin,
-      keyword,
-      follow,
-      work_scope: workScope,
-    } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    const visibleOwnerIds = await accessPolicyService.getVisibleCustomerOwnerIds(
+    const listResult = await customerCoreService.listCustomers({
       authContext,
-      "customer.read",
-    );
-
-    const normalizedKeyword = keyword?.trim();
-    const todayCustomerIds = workScope === "today"
-      ? await customerFollowUpService.getTodayWorkCustomerIds(authContext.tenantId)
-      : null;
-    if (follow) {
-      let idQuery = SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .order("created_at", { ascending: false });
-      idQuery = this.applyCustomerListFilters(
-        idQuery,
-        authContext.tenantId,
-        visibleOwnerIds,
-        status,
-        source,
-        customerOrigin,
-        normalizedKeyword,
-        todayCustomerIds,
-      );
-      const { data: idRows, error: idError } = await idQuery;
-      if (idError) throw Errors.dbError("列表查询失败", idError);
-
-      const customerIds = (((idRows || []) as unknown) as Array<{ id: string }>)
-        .map((item) => item.id)
-        .filter(Boolean);
-      const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
-        customerIds,
-        tenantId: authContext.tenantId,
-      });
-      const filteredCustomerIds = customerIds.filter((id) =>
-        this.matchesFollowFilter(followUpMap.get(id), follow)
-      );
-      const total = filteredCustomerIds.length;
-      const pageCustomerIds = filteredCustomerIds.slice(from, to + 1);
-
-      if (pageCustomerIds.length === 0) {
-        return ResponseHandler.success({
-          list: [],
-          pagination: buildPagination(page, pageSize, total),
-        });
-      }
-
-      const { data, error } = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .select(this.customerSelect)
-        .in("id", pageCustomerIds)
-        .eq("tenant_id", authContext.tenantId);
-
-      if (error) throw Errors.dbError("列表查询失败", error);
-
-      const customerOrder = new Map(pageCustomerIds.map((id, index) => [id, index]));
-      const rows = (((data || []) as unknown) as CustomerRowForResponse[])
-        .sort((a, b) =>
-          (customerOrder.get(a.id) ?? 0) - (customerOrder.get(b.id) ?? 0)
-        );
-      const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
-        authContext,
-      );
-      const propertyMap = await customerPropertyService.getCustomerPropertySummaryMap(
-        rows.map((item) => item.id),
-        authContext.tenantId,
-      );
-      const sourceSummaryMap = await customerSourceService.getCustomerSourceSummaryMap({
-        authContext,
-        customerIds: rows.map((item) => item.id),
-      });
-
-      return ResponseHandler.success({
-        list: rows.map((item) =>
-          this.serializeCustomer(
-            this.attachSourceSummary(
-              this.attachPropertySummary(
-                this.attachFollowUpSummary(item, followUpMap),
-                propertyMap,
-              ),
-              sourceSummaryMap,
-            ),
-            phonePrivacyContext,
-          )
-        ),
-        pagination: buildPagination(page, pageSize, total),
-      });
-    }
-
-    let countQuery = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id", { count: "exact", head: true });
-    countQuery = this.applyCustomerListFilters(
-      countQuery,
-      authContext.tenantId,
-      visibleOwnerIds,
-      status,
-      source,
-      customerOrigin,
-      normalizedKeyword,
-      todayCustomerIds,
-    );
-
-    const { error: countError, count } = await countQuery;
-    if (countError) throw Errors.dbError("列表查询失败", countError);
-
-    const total = count ?? 0;
-    if (from >= total) {
-      return ResponseHandler.success({
-        list: [],
-        pagination: buildPagination(page, pageSize, total),
-      });
-    }
-
-    let query = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(this.customerSelect)
-      .order("created_at", { ascending: false });
-    query = this.applyCustomerListFilters(
-      query,
-      authContext.tenantId,
-      visibleOwnerIds,
-      status,
-      source,
-      customerOrigin,
-      normalizedKeyword,
-      todayCustomerIds,
-    );
-    const { data, error } = await query.range(from, to);
-
-    if (error) throw Errors.dbError("列表查询失败", error);
-    const rows = (((data || []) as unknown) as CustomerRowForResponse[]);
-    const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
-      customerIds: rows.map((item) => item.id),
-      tenantId: authContext.tenantId,
+      query: queryResult.data,
     });
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
     const propertyMap = await customerPropertyService.getCustomerPropertySummaryMap(
-      rows.map((item) => item.id),
+      listResult.rows.map((item) => item.id),
       authContext.tenantId,
     );
     const sourceSummaryMap = await customerSourceService.getCustomerSourceSummaryMap({
       authContext,
-      customerIds: rows.map((item) => item.id),
+      customerIds: listResult.rows.map((item) => item.id),
     });
     return ResponseHandler.success({
-      list: rows.map((item) =>
+      list: listResult.rows.map((item) =>
         this.serializeCustomer(
           this.attachSourceSummary(
             this.attachPropertySummary(
-              this.attachFollowUpSummary(item, followUpMap),
+              this.attachFollowUpSummary(item, listResult.followUpMap),
               propertyMap,
             ),
             sourceSummaryMap,
@@ -737,7 +478,11 @@ class CustomerController extends TenantBaseController<
           phonePrivacyContext,
         )
       ),
-      pagination: buildPagination(page, pageSize, total),
+      pagination: buildPagination(
+        listResult.page,
+        listResult.pageSize,
+        listResult.total,
+      ),
     });
   };
 
