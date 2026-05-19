@@ -426,6 +426,7 @@ class ProjectCameraService {
       );
     }
 
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
     const hasAccess = await accessPolicyService.canAccessProject(
       authContext,
       input.projectId,
@@ -440,7 +441,6 @@ class ProjectCameraService {
       );
     }
 
-    const tenantId = accessPolicyService.assertTenantId(authContext);
     await this.assertProjectExists(input.projectId, tenantId);
 
     return {
@@ -521,11 +521,11 @@ class ProjectCameraService {
       );
     }
 
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.update",
     );
-    const tenantId = accessPolicyService.assertTenantId(authContext);
 
     return projectCameraRepository.listCameraBindProjectOptions({
       ...input.query,
@@ -553,11 +553,11 @@ class ProjectCameraService {
       );
     }
 
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project.read",
     );
-    const tenantId = accessPolicyService.assertTenantId(authContext);
     const result = await projectCameraRepository.listCameraProjectGroups({
       ...input.query,
       tenantId,

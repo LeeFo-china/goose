@@ -854,3 +854,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `project-cameras`，设备和项目归属应以项目租户、设备租户和摄像头绑定关系作为核心边界。
+
+### 2026-05-19 Project Cameras 权限边界核查与迁移
+
+已完成：
+
+- 核查项目摄像头 controller、service、repository、租户设备 repository、schema。
+- 形成独立核查文档：[Project Cameras 权限边界核查](./2026-05-19-project-cameras-boundary-audit.md)。
+- 迁移 `project-cameras` 到 `TenantBaseController`。
+- 员工侧 `resolveActor()` 改为必须具备租户上下文。
+- 绑定项目选项和项目摄像头分组接口先要求租户上下文，再计算项目可见范围。
+- 客户查看摄像头和客户获取播放参数接口保持客户身份口径。
+
+特别说明：
+
+- `project-cameras` 是员工和客户混合入口，不能整体强制租户员工上下文。
+- 平台设备运维能力应继续走平台设备接口，不应复用租户项目摄像头接口。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `tenant-share-links` 或 `tenant-devices`。如果优先项目相关链路，建议先处理 `tenant-share-links`；如果优先设备资产链路，建议先处理 `tenant-devices`。

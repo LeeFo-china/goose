@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
@@ -19,7 +19,7 @@ import {
 } from "@/schema/project-cameras";
 import { projectCameraService } from "@/services/project-cameras";
 
-class ProjectCameraController extends BaseController {
+class ProjectCameraController extends TenantBaseController {
   constructor() {
     super("project_cameras");
   }

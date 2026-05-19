@@ -14,6 +14,7 @@
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
 - [Project Acceptances 权限边界核查](./2026-05-19-project-acceptances-boundary-audit.md)
+- [Project Cameras 权限边界核查](./2026-05-19-project-cameras-boundary-audit.md)
 
 ## 核心结论
 
