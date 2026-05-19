@@ -26,6 +26,20 @@ export type CustomerCoreRow = CustomerCoreAccessRow & {
 };
 
 class CustomerCoreRepository {
+  async create(payload: Record<string, unknown>) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .insert(payload)
+      .select(CUSTOMER_SELECT)
+      .single();
+
+    if (error) {
+      throw Errors.dbError("创建失败", error);
+    }
+
+    return data as unknown as CustomerCoreRow;
+  }
+
   async findById(input: { customerId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")

@@ -8,6 +8,10 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
 class CustomerCoreService {
+  async createCustomer(payload: Record<string, unknown>) {
+    return customerCoreRepository.create(payload);
+  }
+
   async getRequiredCustomerAccess(input: {
     authContext: AuthContext;
     customerId: string;

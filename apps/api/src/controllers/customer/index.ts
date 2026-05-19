@@ -807,14 +807,7 @@ class CustomerController extends TenantBaseController<
       });
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .insert(payload)
-      .select(this.customerSelect)
-      .single();
-
-    if (error) throw Errors.dbError("创建失败", error);
-    const customer = (data as unknown) as CustomerRowForResponse;
+    const customer = await customerCoreService.createCustomer(payload);
     const primaryProperty = await customerPropertyService.upsertCustomerPrimaryProperty({
       customerId: customer.id,
       propertyPayload,
