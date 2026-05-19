@@ -460,3 +460,29 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 迁移 `admin-ops`。
 - `admin-ops` 涉及运维脚本、微服务健康、版本发布，需要先确认现有平台管理员校验是否每个入口都一致。
+
+### 2026-05-19 运维入口迁移
+
+已完成：
+
+- 迁移 `admin-ops` 到 `PlatformBaseController`。
+- 统一使用 `getRequiredPlatformAdminContext()` 获取平台管理员上下文。
+- 删除 `assertOpsPermission()`，不再允许非平台管理员通过 `system.ops.*` 或 `system.release.*` 权限点访问运维发布入口。
+- 保持运维脚本、微服务健康、版本发布、创建 tag、回滚 tag、发布 dispatch 的请求体验证和 service 调用不变。
+
+特别说明：
+
+- `admin-ops` 已明确为纯平台管理员入口。
+- 运维脚本、微服务健康、版本发布、创建 tag、回滚 tag、发布 dispatch 都属于平台级高危能力，不下放给租户权限点体系。
+- `system.ops.*` 和 `system.release.*` 后续如果仍保留，应只用于前端旧菜单兼容或未来独立的低危运维读权限，不再作为当前 `/admin/ops/*` API 的准入依据。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `system-settings`。
+- `system-settings` 同时支持平台配置和租户配置，需要先确认平台配置与租户覆盖配置的边界，不能直接套纯平台管理员口径。
