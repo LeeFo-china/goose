@@ -16,7 +16,6 @@ import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type {
-  BatchAssignCustomerOwnerInput,
   CreateCustomerSchemaType,
   FollowUpInsert,
   UpdateCustomerSchemaType,
@@ -48,6 +47,7 @@ import {
   type CustomerPrimaryPropertySummary,
   type NormalizedCustomerPropertyPayload,
 } from "@/services/customer-properties";
+import { customerOwnerAssignmentService } from "@/services/customer-owner-assignments";
 import { ErrorCodes } from "@/errors/error-codes";
 import {
   resolveStoredFileUrl,
@@ -1103,137 +1103,17 @@ class CustomerController extends TenantBaseController<
   @Post("/customers/assign-owner/batch")
   async batchAssignOwner(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
-    if (!accessPolicyService.hasPermission(authContext, "customer.assign_owner")) {
-      throw Errors.business(403, "无权批量分配客户负责人", "FORBIDDEN");
-    }
-
     const result = BatchAssignCustomerOwnerSchema.safeParse(request.body);
     if (!result.success) {
       throw Errors.fromZod(result.error);
     }
 
-    const payload: BatchAssignCustomerOwnerInput = result.data;
-    const targetEmployee = await this.getAssignableTargetEmployee(
-      payload.owner_id,
-      authContext.tenantId,
-    );
-
-    if (!targetEmployee) {
-      throw Errors.badRequest("目标负责人不存在或不可用");
-    }
-
-    if (targetEmployee.status !== "active") {
-      throw Errors.badRequest("目标负责人不存在或不可用");
-    }
-
-    if (!accessPolicyService.canAssignCustomerOwnerTarget(authContext, targetEmployee)) {
-      throw Errors.badRequest("目标负责人不在你的可分配范围内");
-    }
-
-    const customerIds = Array.from(new Set(payload.customer_ids));
-    const { data: customers, error: customerQueryError } = await SupabaseDB
-      .getAdminClient()
-      .from("customers")
-      .select("id, owner_id, tenant_id")
-      .in("id", customerIds)
-      .eq("tenant_id", authContext.tenantId);
-
-    if (customerQueryError) {
-      throw Errors.dbError("查询客户失败", customerQueryError);
-    }
-
-    const customerMap = new Map(
-      (((customers || []) as Array<{ id: string; owner_id: string | null }>)).map((item) => [
-        item.id,
-        item,
-      ]),
-    );
-
-    const failedItems: Array<{
-      customer_id: string;
-      reason:
-        | "out_of_scope"
-        | "customer_not_found"
-        | "customer_already_assigned"
-        | "target_owner_not_found"
-        | "target_owner_inactive"
-        | "target_owner_out_of_scope";
-      message: string;
-    }> = [];
-    const successCustomerIds: string[] = [];
-
-    for (const customerId of customerIds) {
-      const customer = customerMap.get(customerId);
-      if (!customer) {
-        failedItems.push({
-          customer_id: customerId,
-          reason: "customer_not_found",
-          message: "客户不存在",
-        });
-        continue;
-      }
-
-      const canAssign = await accessPolicyService.canAssignCustomerOwner(
+    return ResponseHandler.success(
+      await customerOwnerAssignmentService.batchAssignOwner({
         authContext,
-        customer,
-        targetEmployee,
-      );
-      if (!canAssign) {
-        failedItems.push({
-          customer_id: customerId,
-          reason: "out_of_scope",
-          message: "当前客户不在你的可分配范围内",
-        });
-        continue;
-      }
-
-      if (
-        payload.mode === "only_unassigned" &&
-        customer.owner_id &&
-        customer.owner_id !== payload.owner_id
-      ) {
-        failedItems.push({
-          customer_id: customerId,
-          reason: "customer_already_assigned",
-          message: "当前客户已分配负责人",
-        });
-        continue;
-      }
-
-      if (customer.owner_id === payload.owner_id) {
-        failedItems.push({
-          customer_id: customerId,
-          reason: "customer_already_assigned",
-          message: "当前客户已分配给该负责人",
-        });
-        continue;
-      }
-
-      successCustomerIds.push(customerId);
-    }
-
-    if (successCustomerIds.length > 0) {
-      const { error: updateError } = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .update({ owner_id: payload.owner_id })
-        .in("id", successCustomerIds)
-        .eq("tenant_id", authContext.tenantId)
-        .select("id");
-
-      if (updateError) {
-        throw Errors.dbError("批量分配负责人失败", updateError);
-      }
-    }
-
-    return ResponseHandler.success({
-      success_count: successCustomerIds.length,
-      failed_count: failedItems.length,
-      target_owner: {
-        id: targetEmployee.id,
-        name: targetEmployee.name ?? null,
-      },
-      failed_items: failedItems,
-    });
+        payload: result.data,
+      }),
+    );
   }
 
   @Get("/customers/:id/detail")
