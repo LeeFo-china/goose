@@ -17,6 +17,7 @@
 - 部门仍支持启用、停用、岗位配置、岗位别名。
 - `POST /projects/:id/members` 已支持只传 `employee_id`。
 - `GET /projects/:id/member-candidates` 不再按项目角色过滤员工候选，即使旧端传 `role_code` 也按员工列表返回。
+- `GET /projects/create/employees` 保留 `scene` 参数兼容旧端，但不再按项目角色 / 岗位规则过滤员工候选。
 - 后端 `project_member_role_post_rules`、`projects/member-roles` 等旧能力暂时保留，避免影响现有项目成员、验收、施工负责人等兼容链路。
 - 小程序端本阶段可以开始按“直接选员工”改造，但不要新增项目角色配置入口。
 
@@ -78,6 +79,18 @@ GET /projects/:id/member-candidates?page=1&pageSize=20&keyword=张
 
 - `role_code` 参数已不再用于过滤员工。
 - 小程序端可以不再传 `role_code`。
+
+项目创建员工候选接口：
+
+```http
+GET /projects/create/employees?scene=project_designer&page=1&pageSize=80
+GET /projects/create/employees?scene=project_supervisor&page=1&pageSize=80
+```
+
+说明：
+
+- `scene` 参数保留，避免旧端请求报错。
+- 返回口径已改为租户在职员工列表，不再依赖项目角色岗位规则。
 
 ## Admin 对接口径
 

@@ -26,14 +26,12 @@ import {
   ProjectStatusConfig,
   isProjectLogStageCode,
   isProjectStatus,
-  type EmployeePostCode,
   type ProjectLogStageCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectMemberService } from "@/services/project-members";
-import { projectMemberRolePostRuleService } from "@/services/project-member-role-post-rules";
 import {
   customerPhonePrivacyService,
   type CustomerPhonePrivacyContext,
@@ -1404,7 +1402,8 @@ class ProjectController extends BaseController<
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let query = SupabaseDB.from("customers")
+    let query = SupabaseDB.getAdminClient()
+      .from("customers")
       .select("id, name, phone, owner_id", { count: "exact" })
       .eq("tenant_id", authContext.tenantId)
       .order("created_at", { ascending: false });
@@ -1456,21 +1455,14 @@ class ProjectController extends BaseController<
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword, scene }:
+    const { page, pageSize, keyword }:
       ProjectCreateSelectEmployeeQueryType = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const postCodes =
-      await projectMemberRolePostRuleService.listCandidatePostCodesByScene(
-        scene,
-        authContext.tenantId,
-      );
-    const postIds = await this.getPostIdsByCodes(postCodes, authContext.tenantId);
     const result = await this.queryProjectCreateEmployees({
       from,
       to,
       keyword,
-      postIds,
       tenantId: authContext.tenantId,
     });
 
@@ -1597,25 +1589,6 @@ class ProjectController extends BaseController<
     });
   }
 
-  private async getPostIdsByCodes(codes: EmployeePostCode[], tenantId?: string | null) {
-    if (codes.length === 0) {
-      return [];
-    }
-
-    const { data, error } = await SupabaseDB.from("posts")
-      .select("id")
-      .in("code", codes)
-      .eq("tenant_id", tenantId);
-
-    if (error) {
-      throw Errors.dbError("查询项目创建员工筛选岗位失败", error);
-    }
-
-    return ((data || []) as Array<Pick<Tables<"posts">, "id">>).map(
-      (item) => item.id,
-    );
-  }
-
   private async queryProjectCreateEmployees(params: {
     from: number;
     to: number;
@@ -1623,7 +1596,8 @@ class ProjectController extends BaseController<
     postIds?: string[];
     tenantId: string | null;
   }) {
-    let query = SupabaseDB.from("employees")
+    let query = SupabaseDB.getAdminClient()
+      .from("employees")
       .select(
         `
         id,
