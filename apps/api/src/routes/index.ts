@@ -83,6 +83,13 @@ const projectLogCrudRoutes = {
   update: true,
 } satisfies ResourceCrudRouteConfig;
 
+const projectAcceptanceCrudRoutes = {
+  list: true,
+  getById: true,
+  create: true,
+  update: true,
+} satisfies ResourceCrudRouteConfig;
+
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
   app.get("/", async (request, reply) => {
@@ -130,7 +137,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("external-referrers", ExternalReferrersController, fullCrudRoutes));
   app.register(createResourceRoutes("project-referrals", ProjectReferralsController, fullCrudRoutes));
   app.register(createResourceRoutes("project-logs", ProjectLogController, projectLogCrudRoutes));
-  app.register(createResourceRoutes("project-acceptances", ProjectAcceptancesController, fullCrudRoutes));
+  app.register(createResourceRoutes("project-acceptances", ProjectAcceptancesController, projectAcceptanceCrudRoutes));
   app.register(createResourceRoutes("posts", PostsController, fullCrudRoutes));
   app.register(createResourceRoutes("properties", PropertyControlle, fullCrudRoutes));
 };
