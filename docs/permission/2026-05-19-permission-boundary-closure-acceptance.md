@@ -90,6 +90,13 @@ bun run check:permission-boundaries
 
 结果：通过。
 
+CI 接入：
+
+- `.github/workflows/deploy-dev.yml`
+- `.github/workflows/build-docker-images.yml`
+
+执行位置：checkout 后、镜像构建前。
+
 ## 当前架构口径
 
 ### 后端业务接口
@@ -136,9 +143,8 @@ BASE_CONTROLLER_CRUD_DISABLED
 
 建议顺序：
 
-1. 将 `check:permission-boundaries` 接入 CI。
-2. 拆分更明确的基类：
+1. 拆分更明确的基类：
    - `TenantBaseController`
    - `PlatformBaseController`
    - `PublicBaseController`
-3. 继续把遗留 controller 内直接访问数据库的逻辑迁移到 service/repository。
+2. 继续把遗留 controller 内直接访问数据库的逻辑迁移到 service/repository。

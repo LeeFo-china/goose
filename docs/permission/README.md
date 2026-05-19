@@ -29,6 +29,7 @@ SupabaseDB.getAdminClient()
 - `BaseController` 默认 CRUD 已运行时禁用，误调用会返回 `BASE_CONTROLLER_CRUD_DISABLED`。
 - `SupabaseDB.from()` 兼容方法已删除。
 - 本轮权限线基础整改已完成闭环验收。
+- `check:permission-boundaries` 已接入 dev 和生产镜像构建 workflow。
 
 ## 快速排查命令
 

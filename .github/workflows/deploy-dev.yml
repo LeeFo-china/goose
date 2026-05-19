@@ -249,6 +249,19 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           docker version
 
+      - name: Check permission boundaries
+        if: ${{ env.SERVICES != '' }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_WORKSPACE}/source"
+          if command -v bun >/dev/null 2>&1; then
+            bun scripts/check-permission-boundaries.ts
+          elif [ -x "${HOME}/.bun/bin/bun" ]; then
+            "${HOME}/.bun/bin/bun" scripts/check-permission-boundaries.ts
+          else
+            docker run --rm -v "$PWD:/repo" -w /repo oven/bun:1.2.23-alpine bun scripts/check-permission-boundaries.ts
+          fi
+
       - name: Login to Tencent CCR
         env:
           TENCENT_CCR_USERNAME: ${{ secrets.TENCENT_CCR_USERNAME }}
