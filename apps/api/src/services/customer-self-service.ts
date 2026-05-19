@@ -1,7 +1,10 @@
 import {
   customerSelfServiceRepository,
   type CustomerSelfServiceCustomerContextRow,
+  type CustomerSelfServiceProjectLogCommentAggregateRow,
+  type CustomerSelfServiceProjectLogRow,
   type CustomerSelfServiceProjectListItem,
+  type CustomerSelfServiceRecentLogSummaryRow,
   type CustomerSelfServiceUserProfileRow,
 } from "@/repositories/customer-self-service";
 import type { AuthMeProfileUpdateInput } from "@/schema/user-profile";
@@ -72,10 +75,46 @@ class CustomerSelfServiceService {
   }) {
     return customerSelfServiceRepository.findOwnedProject(input);
   }
+
+  listRecentLogSummariesForProjects(input: {
+    customerId: string;
+    projectIds: string[];
+    perProject: number;
+  }) {
+    return customerSelfServiceRepository.listRecentLogSummariesForProjects(input);
+  }
+
+  findOwnedProjectLog(input: {
+    logId: string;
+    projectId: string;
+    tenantId?: string | null;
+  }) {
+    return customerSelfServiceRepository.findOwnedProjectLog(input);
+  }
+
+  listProjectLogs(input: {
+    projectId: string;
+    tenantId: string | null;
+    from: number;
+    to: number;
+  }) {
+    return customerSelfServiceRepository.listProjectLogs(input);
+  }
+
+  listProjectLogCommentAggregates(input: {
+    logIds: string[];
+    tenantId: string | null;
+  }) {
+    return customerSelfServiceRepository.listProjectLogCommentAggregates(input);
+  }
 }
 
 export type CustomerContextRow = CustomerSelfServiceCustomerContextRow;
+export type CustomerProjectLogCommentAggregateRow =
+  CustomerSelfServiceProjectLogCommentAggregateRow;
+export type CustomerProjectLogRow = CustomerSelfServiceProjectLogRow;
 export type CustomerProjectListItem = CustomerSelfServiceProjectListItem;
+export type CustomerProjectRecentLogSummaryRow = CustomerSelfServiceRecentLogSummaryRow;
 export type UserProfileRow = CustomerSelfServiceUserProfileRow;
 
 export const customerSelfServiceService = new CustomerSelfServiceService();

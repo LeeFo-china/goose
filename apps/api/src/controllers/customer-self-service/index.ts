@@ -6,7 +6,10 @@ import { projectAcceptanceService } from "@/services/project-acceptances";
 import {
   customerSelfServiceService,
   type CustomerContextRow,
+  type CustomerProjectLogCommentAggregateRow,
+  type CustomerProjectLogRow,
   type CustomerProjectListItem,
+  type CustomerProjectRecentLogSummaryRow,
   type UserProfileRow,
 } from "@/services/customer-self-service";
 import {
@@ -38,55 +41,6 @@ import type { Tables } from "@/types/database";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
-
-type CustomerProjectLogRow = {
-  id: string;
-  project_id: string;
-  employee_id: string | null;
-  stage_code: string | null;
-  node_name: string | null;
-  content: string | null;
-  images: unknown;
-  created_at: string | null;
-  employee:
-    | {
-      id: string | null;
-      name: string | null;
-      avatar?: string | null;
-    }
-    | {
-      id: string | null;
-      name: string | null;
-      avatar?: string | null;
-    }[]
-    | null;
-};
-
-type CustomerProjectRecentLogSummaryRow = {
-  project_id: string;
-  id: string;
-  employee_id: string | null;
-  employee_name: string | null;
-  employee_avatar: string | null;
-  stage_code: string | null;
-  node_name: string | null;
-  created_at: string | null;
-  image_count: number | null;
-  cover_image_path: string | null;
-  comment_count: number | null;
-  rating_count: number | null;
-  average_rating: number | null;
-};
-
-type ProjectLogCommentAggregateRow = {
-  id: string;
-  log_id: string;
-  parent_id: string | null;
-  author_type: string;
-  author_id: string;
-  rating: number | null;
-  created_at: string | null;
-};
 
 type CustomerProjectLogCommentRow = {
   id: string;
@@ -572,7 +526,7 @@ class CustomerSelfServiceController extends BaseController {
   }
 
   private buildProjectLogAggregates(
-    rows: ProjectLogCommentAggregateRow[],
+    rows: CustomerProjectLogCommentAggregateRow[],
     customerId: string,
   ) {
     const aggregates = new Map<string, {
@@ -629,25 +583,18 @@ class CustomerSelfServiceController extends BaseController {
       return new Map<string, ReturnType<typeof this.serializeCustomerProjectRecentLog>[]>();
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient().rpc(
-      "get_customer_project_recent_log_summaries",
-      {
-        p_customer_id: customerId,
-        p_project_ids: projectIds,
-        p_per_project: 2,
-      },
-    );
-
-    if (error) {
-      throw Errors.dbError("查询客户项目最近日志摘要失败", error);
-    }
+    const rows = await customerSelfServiceService.listRecentLogSummariesForProjects({
+      customerId,
+      projectIds,
+      perProject: 2,
+    });
 
     const recentLogMap = new Map<
       string,
       ReturnType<typeof this.serializeCustomerProjectRecentLog>[]
     >();
 
-    for (const row of (data || []) as CustomerProjectRecentLogSummaryRow[]) {
+    for (const row of rows) {
       const list = recentLogMap.get(row.project_id) || [];
       if (list.length < 2) {
         list.push(this.serializeCustomerProjectRecentLog(row));
@@ -663,27 +610,16 @@ class CustomerSelfServiceController extends BaseController {
     projectId: string,
     tenantId?: string | null,
   ) {
-    let query = SupabaseDB.getAdminClient()
-      .from("project_logs")
-      .select("id, project_id")
-      .eq("id", logId)
-      .eq("project_id", projectId);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.maybeSingle<{ id: string; project_id: string }>();
-
-    if (error) {
-      throw Errors.dbError("查询客户项目日志失败", error);
-    }
-
-    if (!data?.id) {
+    const log = await customerSelfServiceService.findOwnedProjectLog({
+      logId,
+      projectId,
+      tenantId,
+    });
+    if (!log?.id) {
       throw Errors.notFound("项目日志不存在");
     }
 
-    return data;
+    return log;
   }
 
   private async attachCustomerProjectLogCommentAuthors(
@@ -1033,34 +969,14 @@ class CustomerSelfServiceController extends BaseController {
     const { page, pageSize } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    const projectTenantId = project.tenant_id ?? null;
 
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("project_logs")
-      .select(`
-        id,
-        project_id,
-        employee_id,
-        stage_code,
-        node_name,
-        content,
-        images,
-        created_at,
-        employee:employees!project_logs_employee_id_fkey(
-          id,
-          name,
-          avatar
-        )
-      `, { count: "exact" })
-      .eq("project_id", idVerify.data.id)
-      .eq("tenant_id", project.tenant_id)
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      throw Errors.dbError("查询客户项目日志失败", error);
-    }
-
-    const logs = (data || []) as unknown as CustomerProjectLogRow[];
+    const { list: logs, count } = await customerSelfServiceService.listProjectLogs({
+      projectId: idVerify.data.id,
+      tenantId: projectTenantId,
+      from,
+      to,
+    });
     const logIds = logs.map((item) => item.id);
     let aggregateMap = new Map<string, {
       comment_count: number;
@@ -1070,23 +986,13 @@ class CustomerSelfServiceController extends BaseController {
       my_rating_created_at: string | null;
     }>();
 
-    if (logIds.length > 0) {
-      const { data: comments, error: commentsError } = await SupabaseDB.getAdminClient()
-        .from("project_log_comments")
-        .select("id, log_id, parent_id, author_type, author_id, rating, created_at")
-        .in("log_id", logIds)
-        .eq("tenant_id", project.tenant_id)
-        .is("deleted_at", null);
-
-      if (commentsError) {
-        throw Errors.dbError("查询日志评论聚合失败", commentsError);
-      }
-
-      aggregateMap = this.buildProjectLogAggregates(
-        (comments || []) as ProjectLogCommentAggregateRow[],
-        customer!.id,
-      );
-    }
+    aggregateMap = this.buildProjectLogAggregates(
+      await customerSelfServiceService.listProjectLogCommentAggregates({
+        logIds,
+        tenantId: projectTenantId,
+      }),
+      customer!.id,
+    );
 
     return ResponseHandler.success({
       list: logs.map((item) => {

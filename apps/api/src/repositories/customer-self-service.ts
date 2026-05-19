@@ -69,6 +69,55 @@ export type CustomerSelfServiceProjectListItem = {
   }[] | null;
 };
 
+export type CustomerSelfServiceProjectLogRow = {
+  id: string;
+  project_id: string;
+  employee_id: string | null;
+  stage_code: string | null;
+  node_name: string | null;
+  content: string | null;
+  images: unknown;
+  created_at: string | null;
+  employee:
+    | {
+      id: string | null;
+      name: string | null;
+      avatar?: string | null;
+    }
+    | {
+      id: string | null;
+      name: string | null;
+      avatar?: string | null;
+    }[]
+    | null;
+};
+
+export type CustomerSelfServiceRecentLogSummaryRow = {
+  project_id: string;
+  id: string;
+  employee_id: string | null;
+  employee_name: string | null;
+  employee_avatar: string | null;
+  stage_code: string | null;
+  node_name: string | null;
+  created_at: string | null;
+  image_count: number | null;
+  cover_image_path: string | null;
+  comment_count: number | null;
+  rating_count: number | null;
+  average_rating: number | null;
+};
+
+export type CustomerSelfServiceProjectLogCommentAggregateRow = {
+  id: string;
+  log_id: string;
+  parent_id: string | null;
+  author_type: string;
+  author_id: string;
+  rating: number | null;
+  created_at: string | null;
+};
+
 class CustomerSelfServiceRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -243,6 +292,128 @@ class CustomerSelfServiceRepository {
     }
 
     return (data as unknown as CustomerSelfServiceProjectListItem | null) ?? null;
+  }
+
+  async listRecentLogSummariesForProjects(input: {
+    customerId: string;
+    projectIds: string[];
+    perProject: number;
+  }) {
+    if (input.projectIds.length === 0) {
+      return [] as CustomerSelfServiceRecentLogSummaryRow[];
+    }
+
+    const { data, error } = await this.adminClient.rpc(
+      "get_customer_project_recent_log_summaries",
+      {
+        p_customer_id: input.customerId,
+        p_project_ids: input.projectIds,
+        p_per_project: input.perProject,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("查询客户项目最近日志摘要失败", error);
+    }
+
+    return (data || []) as CustomerSelfServiceRecentLogSummaryRow[];
+  }
+
+  async findOwnedProjectLog(input: {
+    logId: string;
+    projectId: string;
+    tenantId?: string | null;
+  }) {
+    let query = this.adminClient
+      .from("project_logs")
+      .select("id, project_id")
+      .eq("id", input.logId)
+      .eq("project_id", input.projectId);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle<{
+      id: string;
+      project_id: string;
+    }>();
+
+    if (error) {
+      throw Errors.dbError("查询客户项目日志失败", error);
+    }
+
+    return data ?? null;
+  }
+
+  async listProjectLogs(input: {
+    projectId: string;
+    tenantId: string | null;
+    from: number;
+    to: number;
+  }) {
+    let query = this.adminClient
+      .from("project_logs")
+      .select(`
+        id,
+        project_id,
+        employee_id,
+        stage_code,
+        node_name,
+        content,
+        images,
+        created_at,
+        employee:employees!project_logs_employee_id_fkey(
+          id,
+          name,
+          avatar
+        )
+      `, { count: "exact" })
+      .eq("project_id", input.projectId)
+      .order("created_at", { ascending: false })
+      .range(input.from, input.to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询客户项目日志失败", error);
+    }
+
+    return {
+      list: (data || []) as unknown as CustomerSelfServiceProjectLogRow[],
+      count: count || 0,
+    };
+  }
+
+  async listProjectLogCommentAggregates(input: {
+    logIds: string[];
+    tenantId: string | null;
+  }) {
+    if (input.logIds.length === 0) {
+      return [] as CustomerSelfServiceProjectLogCommentAggregateRow[];
+    }
+
+    let query = this.adminClient
+      .from("project_log_comments")
+      .select("id, log_id, parent_id, author_type, author_id, rating, created_at")
+      .in("log_id", input.logIds)
+      .is("deleted_at", null);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询日志评论聚合失败", error);
+    }
+
+    return (data || []) as CustomerSelfServiceProjectLogCommentAggregateRow[];
   }
 }
 
