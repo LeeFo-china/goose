@@ -4,7 +4,8 @@ import type { UpdateProjectInput } from "@/schema/projects";
 
 class ProjectRepository {
   async findById(id: string, tenantId?: string | null) {
-    let query = SupabaseDB.from("projects")
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
       .select("*")
       .eq("id", id);
 
@@ -22,7 +23,8 @@ class ProjectRepository {
   }
 
   async update(id: string, input: UpdateProjectInput, tenantId?: string | null) {
-    let query = SupabaseDB.from("projects")
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
       .update(input)
       .eq("id", id);
 

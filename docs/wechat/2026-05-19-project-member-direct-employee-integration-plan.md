@@ -18,7 +18,7 @@
 - `POST /projects/:id/members` 已支持只传 `employee_id`。
 - `GET /projects/:id/member-candidates` 不再按项目角色过滤员工候选，即使旧端传 `role_code` 也按员工列表返回。
 - `GET /projects/create/employees` 保留 `scene` 参数兼容旧端，但不再按项目角色 / 岗位规则过滤员工候选。
-- 后端 `project_member_role_post_rules`、`projects/member-roles` 等旧能力暂时保留，避免影响现有项目成员、验收、施工负责人等兼容链路。
+- 后端已下线 `/project-member-role-post-rules` 配置接口；`projects/member-roles` 和项目成员角色字段暂时保留，避免影响现有项目成员、验收、施工负责人等兼容链路。
 - 小程序端本阶段可以开始按“直接选员工”改造，但不要新增项目角色配置入口。
 
 ## 小程序对接口径

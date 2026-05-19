@@ -39,7 +39,6 @@ import AdminAuthController from "@/controllers/admin-auth";
 import AdminOpsController from "@/controllers/admin-ops";
 import SystemSettingsController from "@/controllers/system-settings";
 import MarketingPagesController from "@/controllers/marketing-pages";
-import ProjectMemberRolePostRulesController from "@/controllers/project-member-role-post-rules";
 import DepartmentPostRulesController from "@/controllers/department-post-rules";
 import SocialVideoController from "@/controllers/social-video";
 import PlatformLeadsController from "@/controllers/platform-leads";
@@ -76,7 +75,6 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   IdentityDiagnosticsController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
-  ProjectMemberRolePostRulesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);
   AiController.registerExtraRoutes(app);
   UploadController.registerExtraRoutes(app);
