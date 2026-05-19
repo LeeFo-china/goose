@@ -26,6 +26,7 @@
 - [Project Logs 权限边界核查 Phase 1](./2026-05-19-project-logs-boundary-audit-phase1.md)
 - [Project Logs 权限边界重构闭环摘要](./2026-05-19-project-logs-boundary-refactor-closure-summary.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
+- [Project Log Comments 权限边界重构闭环摘要](./2026-05-19-project-log-comments-boundary-refactor-closure-summary.md)
 - [Project Acceptances 权限边界核查](./2026-05-19-project-acceptances-boundary-audit.md)
 - [Project Cameras 权限边界核查](./2026-05-19-project-cameras-boundary-audit.md)
 - [Tenant Share Links 权限边界核查](./2026-05-19-tenant-share-links-boundary-audit.md)
