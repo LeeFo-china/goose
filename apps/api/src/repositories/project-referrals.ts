@@ -37,6 +37,19 @@ class ProjectReferralRepository {
     paid_operator:employees!project_referrals_paid_by_fkey(id, name, phone)
   `;
 
+  async recalculateByProjectId(projectId: string) {
+    const { error } = await SupabaseDB.getAdminClient().rpc(
+      "recalculate_project_referral",
+      {
+        p_project_id: projectId,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("计算项目介绍费失败", error);
+    }
+  }
+
   async findById(id: string): Promise<ProjectReferralRecord | null> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_referrals")

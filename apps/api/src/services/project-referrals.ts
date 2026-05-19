@@ -9,7 +9,6 @@ import type {
   ProjectReferralListQueryType,
   UpdateProjectReferralInput,
 } from "@/schema/project-referrals";
-import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
@@ -127,17 +126,7 @@ class ProjectReferralService {
   }
 
   async calculateOnProjectSigned(projectId: string) {
-    const { error } = await SupabaseDB.getAdminClient().rpc(
-      "recalculate_project_referral",
-      {
-        p_project_id: projectId,
-      },
-    );
-
-    if (error) {
-      throw Errors.dbError("计算项目介绍费失败", error);
-    }
-
+    await projectReferralRepository.recalculateByProjectId(projectId);
     return this.serializeReferral(
       await projectReferralRepository.findByProjectId(projectId),
     );
