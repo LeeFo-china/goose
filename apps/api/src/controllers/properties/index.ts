@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreatePropertySchema,
   PropertyListQuerySchema,
@@ -8,11 +8,10 @@ import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { propertySer } from "@/services/properties";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { authorizationService } from "@/services/authorization";
 import { SupabaseDB } from "@/utils/supabase/index";
 // import type { Tables, Inserts, Updates } from "@/types/db";
 
-class PropertyController extends BaseController<
+class PropertyController extends TenantBaseController<
   typeof CreatePropertySchema,
   typeof UpdatePropertySchema
 > {
@@ -20,28 +19,20 @@ class PropertyController extends BaseController<
     super("properties", CreatePropertySchema, UpdatePropertySchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const queryResult = PropertyListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const data = await propertySer.listProperties(
       queryResult.data,
-      authContext.tenantId,
+      tenantId,
     );
     return ResponseHandler.success(data);
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -49,7 +40,7 @@ class PropertyController extends BaseController<
       .from("properties")
       .select("*")
       .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询房产失败", error);
@@ -58,7 +49,7 @@ class PropertyController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const result = CreatePropertySchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -67,7 +58,7 @@ class PropertyController extends BaseController<
         .from("customers")
         .select("id")
         .eq("id", result.data.customer_id)
-        .eq("tenant_id", authContext.tenantId)
+        .eq("tenant_id", tenantId)
         .maybeSingle();
       if (customer.error) throw Errors.dbError("校验房产客户失败", customer.error);
       if (!customer.data) throw Errors.badRequest("客户不存在或不属于当前租户");
@@ -77,7 +68,7 @@ class PropertyController extends BaseController<
       .from("properties")
       .insert({
         ...result.data,
-        tenant_id: authContext.tenantId ?? null,
+        tenant_id: tenantId,
       })
       .select("*")
       .single();
@@ -87,7 +78,7 @@ class PropertyController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -100,7 +91,7 @@ class PropertyController extends BaseController<
         .from("customers")
         .select("id")
         .eq("id", payload.customer_id)
-        .eq("tenant_id", authContext.tenantId)
+        .eq("tenant_id", tenantId)
         .maybeSingle();
       if (customer.error) throw Errors.dbError("校验房产客户失败", customer.error);
       if (!customer.data) throw Errors.badRequest("客户不存在或不属于当前租户");
@@ -110,7 +101,7 @@ class PropertyController extends BaseController<
       .from("properties")
       .update(payload)
       .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
+      .eq("tenant_id", tenantId)
       .select("*")
       .maybeSingle();
 

@@ -965,3 +965,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查 `properties` 或 `customer`。如果按基础资料链路推进，建议先处理 `properties`。
+
+### 2026-05-19 Properties 权限边界核查与迁移
+
+已完成：
+
+- 核查房产 controller、service 和 schema。
+- 形成独立核查文档：[Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)。
+- 迁移 `properties` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 房产列表、详情、创建、更新统一使用 `getRequiredTenantContext()`。
+- 创建房产时写入确定的 `tenant_id`，不再允许空租户写入。
+
+特别说明：
+
+- `properties` 当前仍有部分 Supabase 访问在 controller 内，后续可以继续拆 service / repository。
+- 客户详情下的房产接口在 `customer` controller 中，后续处理客户模块时需要一起核查。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查 `project-referrals` 或 `customer-follow-up-comments`。如果继续按客户基础资料链路推进，建议先处理 `project-referrals`。
