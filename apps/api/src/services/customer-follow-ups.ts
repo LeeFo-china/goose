@@ -8,6 +8,11 @@ import type { FollowUpInsert } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
+import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
+
+export type CustomerFollowUpSummary = CustomerFollowUpRow & {
+  customer_id: string;
+};
 
 class CustomerFollowUpService {
   private normalizeEmployee(employee: unknown) {
@@ -131,6 +136,88 @@ class CustomerFollowUpService {
 
     return this.serializeFollowUp(
       await customerFollowUpRepository.create(followUpPayload),
+    );
+  }
+
+  async getLatestFollowUpMap(input: {
+    customerIds: string[];
+    tenantId: string;
+  }) {
+    const uniqueCustomerIds = Array.from(new Set(input.customerIds.filter(Boolean)));
+    if (uniqueCustomerIds.length === 0) {
+      return new Map<string, CustomerFollowUpSummary>();
+    }
+
+    const tenantCustomerIds = await customerFollowUpRepository.listTenantCustomerIds({
+      customerIds: uniqueCustomerIds,
+      tenantId: input.tenantId,
+    });
+    if (tenantCustomerIds.length === 0) {
+      return new Map<string, CustomerFollowUpSummary>();
+    }
+
+    const rows = await customerFollowUpRepository.listLatestByCustomerIds(
+      tenantCustomerIds,
+    );
+    const summaryMap = new Map<string, CustomerFollowUpSummary>();
+    for (const item of rows) {
+      if (!item.customer_id || summaryMap.has(item.customer_id)) {
+        continue;
+      }
+
+      summaryMap.set(item.customer_id, item as CustomerFollowUpSummary);
+    }
+
+    return summaryMap;
+  }
+
+  async getTodayWorkCustomerIds(tenantId: string) {
+    const { startIso, endIso } = getAsiaShanghaiTodayRange();
+    const [
+      createdCustomerIds,
+      updatedCustomerIds,
+      createdFollowUpCustomerIds,
+      plannedFollowUpCustomerIds,
+    ] = await Promise.all([
+      customerFollowUpRepository.listCustomerIdsByDateField({
+        tenantId,
+        field: "created_at",
+        startIso,
+        endIso,
+      }),
+      customerFollowUpRepository.listCustomerIdsByDateField({
+        tenantId,
+        field: "updated_at",
+        startIso,
+        endIso,
+      }),
+      customerFollowUpRepository.listFollowUpCustomerIdsByDateField({
+        field: "created_at",
+        startIso,
+        endIso,
+      }),
+      customerFollowUpRepository.listFollowUpCustomerIdsByDateField({
+        field: "next_follow_at",
+        startIso,
+        endIso,
+      }),
+    ]);
+
+    const tenantFollowUpCustomerIds = await customerFollowUpRepository
+      .listTenantCustomerIds({
+        customerIds: [
+          ...createdFollowUpCustomerIds,
+          ...plannedFollowUpCustomerIds,
+        ],
+        tenantId,
+      });
+
+    return Array.from(
+      new Set([
+        ...createdCustomerIds,
+        ...updatedCustomerIds,
+        ...tenantFollowUpCustomerIds,
+      ]),
     );
   }
 

@@ -28,6 +28,7 @@
 - [Customer 权限边界核查 Phase 5](./2026-05-19-customer-boundary-audit-phase5.md)
 - [Customer 权限边界核查 Phase 6](./2026-05-19-customer-boundary-audit-phase6.md)
 - [Customer 权限边界核查 Phase 7](./2026-05-19-customer-boundary-audit-phase7.md)
+- [Customer 权限边界核查 Phase 8](./2026-05-19-customer-boundary-audit-phase8.md)
 
 ## 核心结论
 

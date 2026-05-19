@@ -36,13 +36,15 @@ import {
   type CustomerPhoneAction,
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
-import { customerFollowUpService } from "@/services/customer-follow-ups";
+import {
+  customerFollowUpService,
+  type CustomerFollowUpSummary,
+} from "@/services/customer-follow-ups";
 import {
   customerSourceService,
   type CustomerSourceSummary,
 } from "@/services/customer-sources";
 import { ErrorCodes } from "@/errors/error-codes";
-import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 import {
   resolveStoredFileUrl,
   resolveStoredFileUrlList,
@@ -102,16 +104,6 @@ type CustomerPropertySummaryBundle = {
   area: number | null;
 };
 
-type CustomerFollowUpSummary = {
-  id: string;
-  customer_id: string;
-  content: string;
-  next_follow_at: string | null;
-  created_at: string;
-  employee?: unknown;
-  employee_id: string | null;
-};
-
 type CustomerFollowFilter = "due" | "overdue";
 
 const CustomerPhoneActionBodySchema = z.object({
@@ -157,16 +149,6 @@ class CustomerController extends TenantBaseController<
       id,
       name,
       phone
-    )
-  `;
-
-  private followUpSelect = `
-    *,
-    employee:employees!customer_follow_ups_employee_id_fkey(
-      id,
-      name,
-      phone,
-      avatar
     )
   `;
 
@@ -610,57 +592,6 @@ class CustomerController extends TenantBaseController<
     return state === "due" || state === "overdue";
   }
 
-  private async getTenantCustomerIdSet(customerIds: string[], tenantId: string) {
-    const uniqueCustomerIds = Array.from(new Set(customerIds.filter(Boolean)));
-    if (uniqueCustomerIds.length === 0) {
-      return new Set<string>();
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id")
-      .in("id", uniqueCustomerIds)
-      .eq("tenant_id", tenantId);
-
-    if (error) {
-      throw Errors.dbError("校验客户租户边界失败", error);
-    }
-
-    return new Set(((data || []) as Array<{ id: string }>).map((item) => item.id));
-  }
-
-  private async getLatestFollowUpMap(customerIds: string[], tenantId: string) {
-    if (customerIds.length === 0) {
-      return new Map<string, CustomerFollowUpSummary>();
-    }
-
-    const tenantCustomerIds = await this.getTenantCustomerIdSet(customerIds, tenantId);
-    if (tenantCustomerIds.size === 0) {
-      return new Map<string, CustomerFollowUpSummary>();
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customer_follow_ups")
-      .select(this.followUpSelect)
-      .in("customer_id", Array.from(tenantCustomerIds))
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw Errors.dbError("查询客户跟进摘要失败", error);
-    }
-
-    const summaryMap = new Map<string, CustomerFollowUpSummary>();
-    for (const item of ((data || []) as unknown as CustomerFollowUpSummary[])) {
-      if (!item.customer_id || summaryMap.has(item.customer_id)) {
-        continue;
-      }
-
-      summaryMap.set(item.customer_id, item);
-    }
-
-    return summaryMap;
-  }
-
   private attachFollowUpSummary<T extends CustomerRowForResponse>(
     customer: T,
     followUpMap: Map<string, CustomerFollowUpSummary>,
@@ -738,7 +669,10 @@ class CustomerController extends TenantBaseController<
     const properties = options.includeProperties
       ? await this.getCustomerPropertySummaries(customer.id, tenantId)
       : undefined;
-    const followUpMap = await this.getLatestFollowUpMap([customer.id], tenantId);
+    const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
+      customerIds: [customer.id],
+      tenantId,
+    });
     const sourceSummaryMap = options.phonePrivacyContext
       ? await customerSourceService.getCustomerSourceSummaryMap({
         authContext: options.phonePrivacyContext.authContext,
@@ -1060,87 +994,6 @@ class CustomerController extends TenantBaseController<
     return filteredQuery;
   }
 
-  private async getTodayWorkCustomerIds(tenantId: string) {
-    const { startIso, endIso } = getAsiaShanghaiTodayRange();
-    const ids = new Set<string>();
-
-    const addCustomerRows = (rows: Array<{ id?: string | null }> | null) => {
-      (rows || []).forEach((item) => {
-        if (item.id) ids.add(item.id);
-      });
-    };
-    const addFollowUpRows = (
-      rows: Array<{ customer_id?: string | null }> | null,
-    ) => {
-      (rows || []).forEach((item) => {
-        if (item.customer_id) ids.add(item.customer_id);
-      });
-    };
-
-    const [
-      createdCustomers,
-      updatedCustomers,
-      createdFollowUps,
-      plannedFollowUps,
-    ] = await Promise.all([
-      SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .gte("created_at", startIso)
-        .lt("created_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .gte("updated_at", startIso)
-        .lt("updated_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("customer_follow_ups")
-        .select("customer_id")
-        .gte("created_at", startIso)
-        .lt("created_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("customer_follow_ups")
-        .select("customer_id")
-        .gte("next_follow_at", startIso)
-        .lt("next_follow_at", endIso),
-    ]);
-
-    if (createdCustomers.error) {
-      throw Errors.dbError("查询今日新增客户失败", createdCustomers.error);
-    }
-    if (updatedCustomers.error) {
-      throw Errors.dbError("查询今日更新客户失败", updatedCustomers.error);
-    }
-    if (createdFollowUps.error) {
-      throw Errors.dbError("查询今日客户跟进失败", createdFollowUps.error);
-    }
-    if (plannedFollowUps.error) {
-      throw Errors.dbError("查询今日计划跟进失败", plannedFollowUps.error);
-    }
-
-    addCustomerRows(createdCustomers.data as Array<{ id: string }> | null);
-    addCustomerRows(updatedCustomers.data as Array<{ id: string }> | null);
-    const followUpCustomerIds = [
-      ...((createdFollowUps.data || []) as Array<{ customer_id: string | null }>)
-        .map((item) => item.customer_id),
-      ...((plannedFollowUps.data || []) as Array<{ customer_id: string | null }>)
-        .map((item) => item.customer_id),
-    ].filter((item): item is string => Boolean(item));
-    const tenantFollowUpCustomerIds = await this.getTenantCustomerIdSet(
-      followUpCustomerIds,
-      tenantId,
-    );
-    addFollowUpRows(
-      Array.from(tenantFollowUpCustomerIds).map((customerId) => ({
-        customer_id: customerId,
-      })),
-    );
-
-    return Array.from(ids);
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredTenantContext(request);
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
@@ -1166,7 +1019,7 @@ class CustomerController extends TenantBaseController<
 
     const normalizedKeyword = keyword?.trim();
     const todayCustomerIds = workScope === "today"
-      ? await this.getTodayWorkCustomerIds(authContext.tenantId)
+      ? await customerFollowUpService.getTodayWorkCustomerIds(authContext.tenantId)
       : null;
     if (follow) {
       let idQuery = SupabaseDB.getAdminClient()
@@ -1189,10 +1042,10 @@ class CustomerController extends TenantBaseController<
       const customerIds = (((idRows || []) as unknown) as Array<{ id: string }>)
         .map((item) => item.id)
         .filter(Boolean);
-      const followUpMap = await this.getLatestFollowUpMap(
+      const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
         customerIds,
-        authContext.tenantId,
-      );
+        tenantId: authContext.tenantId,
+      });
       const filteredCustomerIds = customerIds.filter((id) =>
         this.matchesFollowFilter(followUpMap.get(id), follow)
       );
@@ -1291,10 +1144,10 @@ class CustomerController extends TenantBaseController<
 
     if (error) throw Errors.dbError("列表查询失败", error);
     const rows = (((data || []) as unknown) as CustomerRowForResponse[]);
-    const followUpMap = await this.getLatestFollowUpMap(
-      rows.map((item) => item.id),
-      authContext.tenantId,
-    );
+    const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
+      customerIds: rows.map((item) => item.id),
+      tenantId: authContext.tenantId,
+    });
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );

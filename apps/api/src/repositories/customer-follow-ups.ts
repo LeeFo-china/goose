@@ -27,9 +27,15 @@ export type CustomerFollowUpEmployee = {
 export type CustomerFollowUpRow = {
   id: string;
   customer_id: string | null;
+  content: string;
+  next_follow_at: string | null;
+  created_at: string;
   employee?: unknown;
   employee_id: string | null;
 };
+
+type CustomerDateField = "created_at" | "updated_at";
+type FollowUpDateField = "created_at" | "next_follow_at";
 
 class CustomerFollowUpRepository {
   async findCustomerAccess(input: { customerId: string; tenantId: string }) {
@@ -82,6 +88,85 @@ class CustomerFollowUpRepository {
       list: (data || []) as unknown as CustomerFollowUpRow[],
       count: count || 0,
     };
+  }
+
+  async listLatestByCustomerIds(customerIds: string[]) {
+    if (customerIds.length === 0) {
+      return [] as CustomerFollowUpRow[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_follow_ups")
+      .select(CUSTOMER_FOLLOW_UP_SELECT)
+      .in("customer_id", customerIds)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户跟进摘要失败", error);
+    }
+
+    return (data || []) as unknown as CustomerFollowUpRow[];
+  }
+
+  async listTenantCustomerIds(input: {
+    customerIds: string[];
+    tenantId: string;
+  }) {
+    if (input.customerIds.length === 0) {
+      return [] as string[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id")
+      .in("id", input.customerIds)
+      .eq("tenant_id", input.tenantId);
+
+    if (error) {
+      throw Errors.dbError("校验客户租户边界失败", error);
+    }
+
+    return ((data || []) as Array<{ id: string }>).map((item) => item.id);
+  }
+
+  async listCustomerIdsByDateField(input: {
+    tenantId: string;
+    field: CustomerDateField;
+    startIso: string;
+    endIso: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .gte(input.field, input.startIso)
+      .lt(input.field, input.endIso);
+
+    if (error) {
+      throw Errors.dbError("查询今日客户失败", error);
+    }
+
+    return ((data || []) as Array<{ id: string }>).map((item) => item.id);
+  }
+
+  async listFollowUpCustomerIdsByDateField(input: {
+    field: FollowUpDateField;
+    startIso: string;
+    endIso: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_follow_ups")
+      .select("customer_id")
+      .gte(input.field, input.startIso)
+      .lt(input.field, input.endIso);
+
+    if (error) {
+      throw Errors.dbError("查询今日客户跟进失败", error);
+    }
+
+    return ((data || []) as Array<{ customer_id: string | null }>)
+      .map((item) => item.customer_id)
+      .filter((item): item is string => Boolean(item));
   }
 
   async create(input: FollowUpInsert & { customer_id: string }) {
