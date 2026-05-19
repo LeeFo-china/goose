@@ -16,6 +16,7 @@
 - [Employee 权限边界核查 Phase 4](./2026-05-19-employee-boundary-audit-phase4.md)
 - [Employee 权限边界重构闭环摘要](./2026-05-19-employee-boundary-refactor-closure-summary.md)
 - [Projects 权限边界核查](./2026-05-19-projects-boundary-audit.md)
+- [Projects 权限边界核查 Phase 1](./2026-05-19-projects-boundary-audit-phase1.md)
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
 - [Project Acceptances 权限边界核查](./2026-05-19-project-acceptances-boundary-audit.md)

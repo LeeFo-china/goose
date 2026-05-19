@@ -308,9 +308,7 @@ class ProjectController extends TenantBaseController<
   ) {
     let filteredQuery = this.applyProjectIdsFilter(query, visibleProjectIds);
 
-    if (tenantId) {
-      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
-    }
+    filteredQuery = filteredQuery.eq("tenant_id", tenantId);
 
     if (status) {
       filteredQuery = filteredQuery.eq("status", status);
@@ -334,7 +332,7 @@ class ProjectController extends TenantBaseController<
     return filteredQuery;
   }
 
-  private async getTodayWorkProjectIds(tenantId: string | null) {
+  private async getTodayWorkProjectIds(tenantId: string) {
     const { startIso, endIso } = getAsiaShanghaiTodayRange();
     const ids = new Set<string>();
 
@@ -776,7 +774,7 @@ class ProjectController extends TenantBaseController<
       designer_id?: string | null;
       supervisor_id?: string | null;
     },
-    tenantId: string | null,
+    tenantId: string,
   ) {
     if (input.customer_id) {
       const { data, error } = await SupabaseDB.getAdminClient()
@@ -991,7 +989,7 @@ class ProjectController extends TenantBaseController<
       .from(this.tableName)
       .insert({
         ...result.data,
-        tenant_id: authContext.tenantId ?? null,
+        tenant_id: authContext.tenantId,
       })
       .select()
       .single();

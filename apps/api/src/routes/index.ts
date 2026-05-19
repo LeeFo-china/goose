@@ -69,6 +69,13 @@ const employeeCrudRoutes = {
   update: true,
 } satisfies ResourceCrudRouteConfig;
 
+const projectCrudRoutes = {
+  list: true,
+  getById: true,
+  create: true,
+  update: true,
+} satisfies ResourceCrudRouteConfig;
+
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
   app.get("/", async (request, reply) => {
@@ -110,7 +117,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("payments", PaymentController, fullCrudRoutes));
   app.register(createResourceRoutes("expense-requests", ExpenseRequestsController, fullCrudRoutes));
   app.register(createResourceRoutes("expense-request-categories", ExpenseRequestCategoriesController, fullCrudRoutes));
-  app.register(createResourceRoutes("projects", ProjectController, fullCrudRoutes));
+  app.register(createResourceRoutes("projects", ProjectController, projectCrudRoutes));
   app.register(createResourceRoutes("roles", RolesController, fullCrudRoutes));
   app.register(createResourceRoutes("permissions", PermissionsController, fullCrudRoutes));
   app.register(createResourceRoutes("external-referrers", ExternalReferrersController, fullCrudRoutes));

@@ -78,7 +78,7 @@ class ProjectService {
     async searchProjectsByName() {
     }
 
-    async updateProject(id: string, input: UpdateProjectInput, tenantId?: string | null) {
+    async updateProject(id: string, input: UpdateProjectInput, tenantId: string) {
         const existing = await projectRepository.findById(id, tenantId);
 
         if (!existing) {
@@ -97,7 +97,7 @@ class ProjectService {
         return projectRepository.update(id, input, tenantId);
     }
 
-    async deleteProject(id: string, tenantId?: string | null) {
+    async deleteProject(id: string, tenantId: string) {
         const existing = await projectRepository.findById(id, tenantId);
 
         if (!existing) {
