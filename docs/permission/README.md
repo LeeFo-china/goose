@@ -19,6 +19,7 @@
 - [Tenant Devices 权限边界核查](./2026-05-19-tenant-devices-boundary-audit.md)
 - [Departments / Department Post Rules 权限边界核查](./2026-05-19-departments-boundary-audit.md)
 - [Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)
+- [Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)
 
 ## 核心结论
 

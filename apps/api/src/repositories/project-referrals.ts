@@ -175,18 +175,24 @@ class ProjectReferralRepository {
   async list(
     params: ProjectReferralListQueryType,
     visibleProjectIds?: string[] | null,
+    tenantId?: string | null,
   ) {
     const { page, pageSize, status, project_id } = params;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+
+    let scopedVisibleProjectIds = visibleProjectIds;
+    if (tenantId && scopedVisibleProjectIds == null) {
+      scopedVisibleProjectIds = await this.listProjectIdsByTenant(tenantId);
+    }
 
     let query = SupabaseDB.getAdminClient()
       .from("project_referrals")
       .select(this.referralSelect, { count: "exact" })
       .order("created_at", { ascending: false });
 
-    if (visibleProjectIds) {
-      if (visibleProjectIds.length === 0) {
+    if (scopedVisibleProjectIds) {
+      if (scopedVisibleProjectIds.length === 0) {
         return {
           list: [],
           pagination: {
@@ -198,7 +204,7 @@ class ProjectReferralRepository {
         };
       }
 
-      query = query.in("project_id", visibleProjectIds);
+      query = query.in("project_id", scopedVisibleProjectIds);
     }
 
     if (status) {
@@ -224,6 +230,19 @@ class ProjectReferralRepository {
         totalPages: count ? Math.ceil(count / pageSize) : 0,
       },
     };
+  }
+
+  private async listProjectIdsByTenant(tenantId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id")
+      .eq("tenant_id", tenantId);
+
+    if (error) {
+      throw Errors.dbError("查询租户项目范围失败", error);
+    }
+
+    return ((data || []) as Array<{ id: string }>).map((item) => item.id);
   }
 }
 

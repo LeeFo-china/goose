@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateProjectReferralSchema,
@@ -11,9 +11,8 @@ import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { projectReferralService } from "@/services/project-referrals";
-import { authorizationService } from "@/services/authorization";
 
-class ProjectReferralsController extends BaseController<
+class ProjectReferralsController extends TenantBaseController<
   typeof CreateProjectReferralSchema,
   typeof UpdateProjectReferralSchema
 > {
@@ -25,16 +24,8 @@ class ProjectReferralsController extends BaseController<
     );
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ProjectReferralListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -46,7 +37,7 @@ class ProjectReferralsController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -58,7 +49,7 @@ class ProjectReferralsController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
     }
@@ -74,7 +65,7 @@ class ProjectReferralsController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -96,7 +87,7 @@ class ProjectReferralsController extends BaseController<
 
   @Get("/project-referrals/project")
   async getByProject(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ProjectReferralProjectQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -109,7 +100,7 @@ class ProjectReferralsController extends BaseController<
 
   @Post("/project-referrals/:id/pay")
   async markPaid(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 

@@ -47,6 +47,10 @@ class ProjectReferralService {
     }
   }
 
+  private requireTenantId(authContext: AuthContext) {
+    return accessPolicyService.assertTenantContext(authContext);
+  }
+
   private async ensureReferrerInCurrentTenant(
     authContext: AuthContext,
     referrerId: string,
@@ -67,8 +71,9 @@ class ProjectReferralService {
     authContext: AuthContext,
     input: CreateProjectReferralInput,
   ) {
+    const tenantId = this.requireTenantId(authContext);
     accessPolicyService.assertPermission(authContext, "project_referral.manage");
-    const project = await projectRepository.findById(input.project_id);
+    const project = await projectRepository.findById(input.project_id, tenantId);
     if (!project) {
       throw Errors.badRequest("项目不存在");
     }
@@ -93,6 +98,7 @@ class ProjectReferralService {
     id: string,
     input: UpdateProjectReferralInput,
   ) {
+    this.requireTenantId(authContext);
     accessPolicyService.assertPermission(authContext, "project_referral.manage");
     const existing = await projectReferralRepository.findById(id);
     if (!existing) {
@@ -143,12 +149,21 @@ class ProjectReferralService {
     input: MarkProjectReferralPaidInput,
   ) {
     this.ensureCurrentEmployee(authContext, input.paid_by, "project_referral.manage");
+    this.requireTenantId(authContext);
     const existing = await projectReferralRepository.findById(id);
     if (!existing) {
       throw Errors.badRequest("项目介绍费不存在");
     }
 
     accessPolicyService.assertPermission(authContext, "project_referral.manage");
+    const canAccessProject = await accessPolicyService.canAccessProject(
+      authContext,
+      existing.project_id,
+      "project_referral.manage",
+    );
+    if (!canAccessProject) {
+      throw Errors.forbidden();
+    }
 
     if (existing.status !== "calculated") {
       throw Errors.badRequest("只有已计算的项目介绍费才能标记支付");
@@ -158,6 +173,7 @@ class ProjectReferralService {
   }
 
   async getProjectReferral(authContext: AuthContext, projectId: string) {
+    this.requireTenantId(authContext);
     accessPolicyService.assertPermission(authContext, "project_referral.read");
     const canAccessProject = await accessPolicyService.canAccessProject(
       authContext,
@@ -177,11 +193,16 @@ class ProjectReferralService {
     authContext: AuthContext,
     params: ProjectReferralListQueryType,
   ) {
+    const tenantId = this.requireTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project_referral.read",
     );
-    const result = await projectReferralRepository.list(params, visibleProjectIds);
+    const result = await projectReferralRepository.list(
+      params,
+      visibleProjectIds,
+      tenantId,
+    );
     return {
       ...result,
       list: (result.list as unknown as ProjectReferralRecord[]).map((item) =>
@@ -191,6 +212,7 @@ class ProjectReferralService {
   }
 
   async getProjectReferralById(authContext: AuthContext, id: string) {
+    this.requireTenantId(authContext);
     const data = await projectReferralRepository.findById(id);
     if (!data) {
       throw Errors.badRequest("项目介绍费不存在");

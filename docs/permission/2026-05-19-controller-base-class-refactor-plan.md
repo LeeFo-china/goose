@@ -992,3 +992,31 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查 `project-referrals` 或 `customer-follow-up-comments`。如果继续按客户基础资料链路推进，建议先处理 `project-referrals`。
+
+### 2026-05-19 Project Referrals 权限边界核查与迁移
+
+已完成：
+
+- 核查项目介绍费 controller、service、repository 和 schema。
+- 形成独立核查文档：[Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)。
+- 迁移 `project-referrals` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 列表、详情、创建、更新、按项目查询、登记支付统一使用 `getRequiredTenantContext()`。
+- service 新增 `requireTenantId()`，不再允许平台管理员无租户上下文进入租户介绍费业务。
+- 列表在 `project_referral.read` scope 为 `all` 时，先收敛到当前租户项目 ID。
+- 登记支付补充项目可访问范围校验。
+
+特别说明：
+
+- `project_referrals` 表当前没有冗余 `tenant_id`，租户边界依赖项目归属。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查 `customer-follow-up-comments`，它和客户跟进、客户归属边界相关，范围比完整 `customer` controller 更小。
