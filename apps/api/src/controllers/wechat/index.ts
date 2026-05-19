@@ -957,26 +957,10 @@ export class WeChatController extends BaseController {
       });
     }
 
-    const updatePayload: {
-      user_id: string;
-      claimed_at?: string;
-    } = {
-      user_id: authUserId,
-    };
-    if (!customer.claimed_at) {
-      updatePayload.claimed_at = new Date().toISOString();
-    }
-
-    const { error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .update(updatePayload)
-      .eq("id", customer.id)
-      .eq("tenant_id", customer.tenant_id)
-      .select("id");
-
-    if (error) {
-      throw Errors.dbError("绑定客户身份失败", error);
-    }
+    await wechatCustomerIdentityService.bindCustomerAuthUser({
+      authUserId,
+      customer,
+    });
 
     authorizationService.invalidateAuthContext({
       authUserId,
@@ -1175,108 +1159,11 @@ export class WeChatController extends BaseController {
       customerOrigin?: string | null;
     },
   ) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const [{ data, error }, { data: boundCustomers, error: boundError }] = await Promise.all([
-      adminClient
-        .from("customers")
-        .select("id, phone, user_id, tenant_id, customer_origin, claimed_at")
-        .eq("phone", phone),
-      adminClient
-        .from("customers")
-        .select("id, phone, user_id, tenant_id")
-        .eq("user_id", authUserId)
-        .limit(2),
-    ]);
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    if (boundError) {
-      throw Errors.dbError("查询当前账号客户绑定失败", boundError);
-    }
-
-    const currentBindings = (boundCustomers || []) as CustomerIdentityRow[];
-    if (currentBindings.length > 1) {
-      throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
-    }
-    const currentBinding = currentBindings[0] || null;
-
-    if (!data || data.length === 0) {
-      if (!options?.createIfMissing) {
-        throw Errors.badRequest("该手机号未绑定客户身份");
-      }
-
-      if (currentBinding) {
-        throw Errors.badRequest("当前微信已绑定其他客户，请联系工作人员");
-      }
-
-      const customerOrigin = options.customerOrigin || "visitor_self_registered";
-      if (customerOrigin !== "visitor_self_registered") {
-        throw Errors.badRequest("当前客户创建渠道不支持自助注册");
-      }
-
-      const now = new Date().toISOString();
-      const { error: insertError } = await adminClient
-        .from("customers")
-        .insert({
-          phone,
-          name: `客户${phone.slice(-4)}`,
-          status: "potential",
-          source: null,
-          user_id: authUserId,
-          customer_origin: "visitor_self_registered",
-          self_registered_at: now,
-        })
-        .select("id");
-
-      if (insertError) {
-        throw Errors.dbError("自助创建客户失败", insertError);
-      }
-
-      return;
-    }
-
-    if (data.length > 1) {
-      throw Errors.badRequest("该手机号绑定了多个客户档案，请联系管理员处理");
-    }
-
-    const customer = data[0] as CustomerIdentityRow | undefined;
-    if (!customer) {
-      throw Errors.badRequest("该手机号未绑定客户身份");
-    }
-
-    if (currentBinding && currentBinding.id !== customer.id) {
-      throw Errors.badRequest("当前微信已绑定其他客户，请联系工作人员");
-    }
-
-    await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
-
-    const updatePayload: {
-      user_id: string;
-      claimed_at?: string;
-    } = {
-      user_id: authUserId,
-    };
-    if (!customer.claimed_at) {
-      updatePayload.claimed_at = new Date().toISOString();
-    }
-    const { error: updateError } = await adminClient
-      .from("customers")
-      .update(updatePayload)
-      .eq("id", customer.id)
-      .select("id");
-
-    if (updateError) {
-      throw Errors.dbError("绑定客户身份失败", updateError);
-    }
-
-    await userIdentityService.syncBusinessMembershipBestEffort({
-      userId: authUserId,
-      tenantId: customer.tenant_id,
-      identityType: "customer",
-      identityId: customer.id,
-      source: "customer_verify_role_bind",
+    await wechatCustomerIdentityService.bindCustomerRole({
+      authUserId,
+      phone,
+      createIfMissing: options?.createIfMissing,
+      customerOrigin: options?.customerOrigin,
     });
   }
 

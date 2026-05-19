@@ -66,6 +66,38 @@ class WechatCustomerIdentityRepository {
     return (data || []) as unknown as WechatCustomerTenantOption[];
   }
 
+  async listCustomerIdentitiesByPhone(phone: string) {
+    const { data, error } = await this.adminClient
+      .from("customers")
+      .select("id, phone, user_id, tenant_id, customer_origin, claimed_at")
+      .eq("phone", phone);
+
+    if (error) {
+      throw Errors.dbError("查询客户身份失败", error);
+    }
+
+    return (data || []) as WechatCustomerIdentityRow[];
+  }
+
+  async listCustomerIdentitiesByAuthUserId(authUserId: string, limit?: number) {
+    let query = this.adminClient
+      .from("customers")
+      .select("id, phone, user_id, tenant_id")
+      .eq("user_id", authUserId);
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询当前账号客户绑定失败", error);
+    }
+
+    return (data || []) as WechatCustomerIdentityRow[];
+  }
+
   async listCustomerTenantOptionsByAuthUserId(authUserId: string) {
     const { data, error } = await this.adminClient
       .from("customers")
@@ -127,6 +159,62 @@ class WechatCustomerIdentityRepository {
     }
 
     return (data || []) as WechatCustomerProjectSummaryRow[];
+  }
+
+  async createSelfRegisteredCustomer(input: {
+    phone: string;
+    authUserId: string;
+    registeredAt: string;
+  }) {
+    const { error } = await this.adminClient
+      .from("customers")
+      .insert({
+        phone: input.phone,
+        name: `客户${input.phone.slice(-4)}`,
+        status: "potential",
+        source: null,
+        user_id: input.authUserId,
+        customer_origin: "visitor_self_registered",
+        self_registered_at: input.registeredAt,
+      })
+      .select("id");
+
+    if (error) {
+      throw Errors.dbError("自助创建客户失败", error);
+    }
+  }
+
+  async bindCustomerAuthUser(input: {
+    customerId: string;
+    authUserId: string;
+    tenantId?: string | null;
+    claimedAt?: string | null;
+  }) {
+    const updatePayload: {
+      user_id: string;
+      claimed_at?: string;
+    } = {
+      user_id: input.authUserId,
+    };
+
+    if (input.claimedAt) {
+      updatePayload.claimed_at = input.claimedAt;
+    }
+
+    let query = this.adminClient
+      .from("customers")
+      .update(updatePayload)
+      .eq("id", input.customerId);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { error } = await query.select("id");
+
+    if (error) {
+      throw Errors.dbError("绑定客户身份失败", error);
+    }
   }
 }
 
