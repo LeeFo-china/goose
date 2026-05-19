@@ -42,6 +42,7 @@
 - [Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)
 - [Project Referrals 权限边界重构闭环摘要](./2026-05-19-project-referrals-boundary-refactor-closure-summary.md)
 - [Customer Follow Up Comments 权限边界核查](./2026-05-19-customer-follow-up-comments-boundary-audit.md)
+- [Customer Follow Up Comments 权限边界重构闭环摘要](./2026-05-19-customer-follow-up-comments-boundary-refactor-closure-summary.md)
 - [Customer 权限边界核查 Phase 1](./2026-05-19-customer-boundary-audit-phase1.md)
 - [Customer 权限边界核查 Phase 2](./2026-05-19-customer-boundary-audit-phase2.md)
 - [Customer 权限边界核查 Phase 3](./2026-05-19-customer-boundary-audit-phase3.md)
