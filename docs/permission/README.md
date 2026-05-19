@@ -36,6 +36,7 @@
 - [Tenant Devices 权限边界核查](./2026-05-19-tenant-devices-boundary-audit.md)
 - [Tenant Devices 权限边界重构闭环摘要](./2026-05-19-tenant-devices-boundary-refactor-closure-summary.md)
 - [Departments / Department Post Rules 权限边界核查](./2026-05-19-departments-boundary-audit.md)
+- [Departments / Department Post Rules 权限边界重构闭环摘要](./2026-05-19-departments-boundary-refactor-closure-summary.md)
 - [Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)
 - [Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)
 - [Customer Follow Up Comments 权限边界核查](./2026-05-19-customer-follow-up-comments-boundary-audit.md)
