@@ -7,6 +7,7 @@
 - [BaseController 退役前检查](./2026-05-19-base-controller-retirement-check.md)
 - [权限线基础整改闭环验收](./2026-05-19-permission-boundary-closure-acceptance.md)
 - [Controller 基类拆分规划](./2026-05-19-controller-base-class-refactor-plan.md)
+- [System Settings 权限边界核查](./2026-05-19-system-settings-boundary-audit.md)
 
 ## 核心结论
 

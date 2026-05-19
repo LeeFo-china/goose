@@ -486,3 +486,23 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 迁移 `system-settings`。
 - `system-settings` 同时支持平台配置和租户配置，需要先确认平台配置与租户覆盖配置的边界，不能直接套纯平台管理员口径。
+
+### 2026-05-19 System Settings 边界核查
+
+已完成：
+
+- 核查 `system-settings` controller、service、repository、migration 和 admin 页面调用方式。
+- 确认 `system-settings` 是平台配置与租户短信覆盖配置的混合入口。
+- 形成独立核查文档：[System Settings 权限边界核查](./2026-05-19-system-settings-boundary-audit.md)。
+
+结论：
+
+- 暂不建议直接把 `system-settings` 改成纯 `getRequiredPlatformAdminContext()`。
+- 直接收紧会导致租户侧“自有短信通道”配置无法读取和保存。
+- 后续应先补 `TenantBaseController`，再拆 `/platform/system-settings` 和 `/tenant/system-settings`。
+
+下一步建议：
+
+- 先实现 `TenantBaseController`。
+- 用 `expense-request-categories` 或 `posts` 做低风险租户 controller 试点。
+- Tenant 基类稳定后，再回头拆 `system-settings`。
