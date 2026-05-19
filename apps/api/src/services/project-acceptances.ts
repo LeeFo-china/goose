@@ -947,6 +947,8 @@ class ProjectAcceptanceService {
       return { valid: false as const, reason: "acceptance_mismatch" as const };
     }
 
+    await this.assertTenantAvailableById(ticket.tenant_id);
+
     if (ticket.status === "revoked") {
       return { valid: false as const, reason: "revoked" as const };
     }
@@ -1134,8 +1136,6 @@ class ProjectAcceptanceService {
     id: string;
     ticketQuery?: CustomerProjectAcceptanceOpenTicketQuery;
   }) {
-    const row = await this.getRequiredAcceptance(input.id);
-
     if (input.authUserId) {
       const customer = await this.getCustomerByAuthUserId(
         input.authUserId,
@@ -1144,8 +1144,15 @@ class ProjectAcceptanceService {
           customerId: input.customerId,
         },
       );
+      const row = customer?.tenant_id
+        ? await projectAcceptanceRepository.getAcceptanceById(
+          input.id,
+          customer.tenant_id,
+        )
+        : null;
       if (
         customer &&
+        row &&
         row.customer_id === customer.id &&
         row.tenant_id === customer.tenant_id
       ) {
@@ -1155,14 +1162,13 @@ class ProjectAcceptanceService {
     }
 
     if (input.ticketQuery?.ticket && input.ticketQuery.project_id) {
-      await this.assertTenantAvailableById(row.tenant_id);
       const result = await this.verifyOpenTicketRow({
         ticket: input.ticketQuery.ticket,
-        acceptance_id: row.id,
+        acceptance_id: input.id,
         project_id: input.ticketQuery.project_id,
       });
       if (result.valid) {
-        return this.buildDetail(row);
+        return this.buildDetail(result.row);
       }
 
       throw Errors.business(403, "验收短信访问票据无效或已失效", "FORBIDDEN", {
@@ -1182,7 +1188,6 @@ class ProjectAcceptanceService {
     if (!result.valid) {
       return result;
     }
-    await this.assertTenantAvailableById(result.row.tenant_id);
 
     return {
       valid: true,
@@ -1221,7 +1226,6 @@ class ProjectAcceptanceService {
     }
 
     if (input.ticket && input.projectId) {
-      await this.assertTenantAvailableById(input.row.tenant_id);
       const result = await this.verifyOpenTicketRow({
         ticket: input.ticket,
         acceptance_id: input.row.id,

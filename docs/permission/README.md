@@ -67,6 +67,7 @@
 - [Customer Self Service 权限边界核查 Phase 2](./2026-05-19-customer-self-service-boundary-audit-phase2.md)
 - [Customer Self Service 权限边界核查 Phase 3](./2026-05-19-customer-self-service-boundary-audit-phase3.md)
 - [Customer Self Service 权限边界核查 Phase 4](./2026-05-19-customer-self-service-boundary-audit-phase4.md)
+- [Customer Self Service 权限边界核查 Phase 5](./2026-05-19-customer-self-service-boundary-audit-phase5.md)
 
 ## 核心结论
 
