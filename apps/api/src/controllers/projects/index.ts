@@ -1005,7 +1005,7 @@ class ProjectController extends BaseController<
       .single();
 
     if (error) throw Errors.dbError("创建失败", error);
-    await projectMemberService.syncLegacyProjectMembers(data.id, {
+    await projectMemberService.createInitialLegacyProjectMembers(data.id, {
       designer_id: result.data.designer_id,
       supervisor_id: result.data.supervisor_id,
     });

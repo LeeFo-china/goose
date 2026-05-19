@@ -388,6 +388,44 @@ class ProjectMemberService {
     }
   }
 
+  async createInitialLegacyProjectMembers(projectId: string, input: {
+    designer_id?: string | null;
+    supervisor_id?: string | null;
+  }) {
+    const rows: Array<{
+      project_id: string;
+      employee_id: string;
+      role_code: ProjectMemberRoleCode;
+      role_name: string;
+      is_primary: boolean;
+      sort_order: number;
+    }> = [];
+
+    if (input.designer_id) {
+      rows.push({
+        project_id: projectId,
+        employee_id: input.designer_id,
+        role_code: "designer",
+        role_name: this.getResolvedRoleName("designer", null),
+        is_primary: true,
+        sort_order: this.getResolvedSortOrder("designer", null),
+      });
+    }
+
+    if (input.supervisor_id) {
+      rows.push({
+        project_id: projectId,
+        employee_id: input.supervisor_id,
+        role_code: "supervisor",
+        role_name: this.getResolvedRoleName("supervisor", null),
+        is_primary: true,
+        sort_order: this.getResolvedSortOrder("supervisor", null),
+      });
+    }
+
+    await projectMemberRepository.createMany(rows);
+  }
+
   private async syncPrimaryMemberByLegacyRole(
     projectId: string,
     roleCode: "designer" | "supervisor",

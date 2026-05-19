@@ -114,6 +114,27 @@ class ProjectMemberRepository {
     return data as unknown as ProjectMemberRow;
   }
 
+  async createMany(input: Array<{
+    project_id: string;
+    employee_id: string;
+    role_code: ProjectMemberRoleCode;
+    role_name: string | null;
+    is_primary: boolean;
+    sort_order: number | null;
+  }>) {
+    if (input.length === 0) {
+      return;
+    }
+
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("project_members")
+      .insert(input);
+
+    if (error) {
+      throw Errors.dbError("创建项目成员失败", error);
+    }
+  }
+
   async getById(projectId: string, memberId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
