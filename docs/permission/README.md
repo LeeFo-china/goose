@@ -21,7 +21,7 @@ SupabaseDB.getAdminClient()
 
 ## 当前遗留风险
 
-- `get_project_create_page_data` 是旧 public/RLS RPC，当前没有 app auth context，后续需要先定义调用边界再决定是否升权。
+- `get_project_create_page_data` 已改为后台鉴权接口，要求 `project.create` 后使用 admin client 调 RPC。
 - `payments` 已覆盖默认 CRUD，当前通过项目归属做租户边界。
 - `external-referrers` 已覆盖默认 CRUD，当前按租户私有模型隔离。
 - `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
@@ -37,4 +37,5 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
 rg -n "createResourceRoutes\\(" apps/api/src/routes/index.ts
 rg -n "override (list|getById|create|update) =" apps/api/src/controllers -S
+bun run check:permission-boundaries
 ```

@@ -16,10 +16,11 @@
 - `external-referrers` 已脱离默认 CRUD，并改为租户私有模型。
 - 当前业务鉴权后的 Supabase 访问已显式使用 `getAdminClient()`。
 
-仍保留：
+旧 public RPC 清理：
 
-- `get_project_create_page_data` 旧 public/RLS RPC 仍使用 `SupabaseDB.getClient()`。
-- 该路由当前没有 app auth context，不能直接升权到 admin client；后续需要先定义调用边界。
+- `get_project_create_page_data` 已改为后台鉴权接口。
+- 调用前要求后台登录态和 `project.create` 权限。
+- RPC 调用已改为 `SupabaseDB.getAdminClient()`。
 
 ## 验收命令
 
@@ -53,13 +54,7 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
 ```
 
-结果：
-
-```text
-apps/api/src/controllers/common/rpc/get_project_create_page_data/index.ts:23
-```
-
-说明：该调用是旧 public/RLS RPC，已在代码中标注 legacy public/RLS RPC。
+结果：无业务调用点。
 
 ### `createResourceRoutes()` 扫描
 
@@ -86,6 +81,14 @@ rg -n "createResourceRoutes\\(" apps/api/src/routes/index.ts
 - `project-acceptances`
 - `posts`
 - `properties`
+
+### 权限边界脚本
+
+```bash
+bun run check:permission-boundaries
+```
+
+结果：通过。
 
 ## 当前架构口径
 
@@ -133,10 +136,9 @@ BASE_CONTROLLER_CRUD_DISABLED
 
 建议顺序：
 
-1. 清理或重构 `get_project_create_page_data` 旧 public RPC。
-2. 增加 CI 权限扫描脚本，防止再次引入 `SupabaseDB.from()` 或未显式声明的资源路由。
-3. 拆分更明确的基类：
+1. 将 `check:permission-boundaries` 接入 CI。
+2. 拆分更明确的基类：
    - `TenantBaseController`
    - `PlatformBaseController`
    - `PublicBaseController`
-4. 继续把遗留 controller 内直接访问数据库的逻辑迁移到 service/repository。
+3. 继续把遗留 controller 内直接访问数据库的逻辑迁移到 service/repository。

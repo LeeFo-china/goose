@@ -33,6 +33,7 @@
     "api:worker:social-video": "cd apps/api && bun src/workers/social-video-transcription-worker.ts",
     "api:build": "cd apps/api && bun build src/app.ts --outdir dist --target node",
     "api:typecheck": "pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit",
+    "check:permission-boundaries": "bun scripts/check-permission-boundaries.ts",
     "audit:supabase-writes": "bun scripts/audit-supabase-writes.ts",
     "seed:tenant:phase3": "bun scripts/seed-phase3-tenant-verification.ts",
     "verify:tenant:phase3": "bun scripts/verify-phase3-tenant-isolation.ts",
