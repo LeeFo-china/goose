@@ -30,6 +30,40 @@ class CustomerCoreService {
     return customer;
   }
 
+  async getRequiredCustomerForUpdate(input: {
+    authContext: AuthContext;
+    customerId: string;
+  }) {
+    const customer = await this.getRequiredCustomerAccess(input);
+    return customer;
+  }
+
+  async updateCustomer(input: {
+    authContext: AuthContext;
+    customerId: string;
+    payload: Record<string, unknown>;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    if (Object.keys(input.payload).length === 0) {
+      const customer = await customerCoreRepository.findById({
+        customerId: input.customerId,
+        tenantId,
+      });
+
+      if (!customer) {
+        throw Errors.badRequest("客户不存在");
+      }
+
+      return customer;
+    }
+
+    return customerCoreRepository.updateById({
+      customerId: input.customerId,
+      tenantId,
+      payload: input.payload,
+    });
+  }
+
   async getCustomerDetail(input: {
     authContext: AuthContext;
     customerId: string;

@@ -15,6 +15,8 @@ export type CustomerCoreAccessRow = {
   owner_id: string | null;
   property_id?: string | null;
   tenant_id?: string | null;
+  source?: string | null;
+  douyin_screenshot_images?: unknown;
 };
 
 export type CustomerCoreRow = CustomerCoreAccessRow & {
@@ -58,7 +60,7 @@ class CustomerCoreRepository {
   async findAccessById(input: { customerId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id, property_id, tenant_id")
+      .select("id, owner_id, property_id, tenant_id, source, douyin_screenshot_images")
       .eq("id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
@@ -68,6 +70,26 @@ class CustomerCoreRepository {
     }
 
     return (data as CustomerCoreAccessRow | null) ?? null;
+  }
+
+  async updateById(input: {
+    customerId: string;
+    tenantId: string;
+    payload: Record<string, unknown>;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .update(input.payload)
+      .eq("id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .select(CUSTOMER_SELECT)
+      .single();
+
+    if (error) {
+      throw Errors.dbError("更新失败", error);
+    }
+
+    return data as unknown as CustomerCoreRow;
   }
 
   async markInvalid(input: { customerId: string; tenantId: string }) {

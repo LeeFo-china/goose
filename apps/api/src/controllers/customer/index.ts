@@ -836,20 +836,10 @@ class CustomerController extends TenantBaseController<
     const result = this.updateSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    const existing = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, owner_id, source, douyin_screenshot_images, tenant_id")
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (existing.error) {
-      throw Errors.dbError("查询客户失败", existing.error);
-    }
-
-    if (!existing.data) {
-      throw Errors.badRequest("客户不存在");
-    }
+    const existing = await customerCoreService.getRequiredCustomerForUpdate({
+      authContext,
+      customerId: idVerify.data.id,
+    });
 
     const { customerPayload, propertyPayload } = this.splitCustomerPayload(result.data);
     const payload = customerPayload;
@@ -860,14 +850,13 @@ class CustomerController extends TenantBaseController<
     );
     const nextSource = sourceTouched
       ? payload.source ?? null
-      : ((existing.data as { source?: string | null }).source ?? null);
+      : existing.source ?? null;
     const nextDouyinScreenshotImages = screenshotTouched
       ? this.validateDouyinScreenshotImagesInput(
         payload.douyin_screenshot_images,
       )
       : this.normalizeStoredDouyinScreenshotImages(
-        ((existing.data as unknown) as { douyin_screenshot_images?: unknown })
-          .douyin_screenshot_images,
+        existing.douyin_screenshot_images,
       );
 
     if (nextSource === "douyin") {
@@ -884,13 +873,13 @@ class CustomerController extends TenantBaseController<
 
     const hasPropertyUpdate = propertyPayload !== undefined;
     const hasOwnerUpdate = payload.owner_id !== undefined;
-    const ownerChanged = hasOwnerUpdate && payload.owner_id !== existing.data.owner_id;
+    const ownerChanged = hasOwnerUpdate && payload.owner_id !== existing.owner_id;
     const hasNonOwnerUpdates = Object.keys(payload).some((key) => key !== "owner_id");
 
     if (hasNonOwnerUpdates || hasPropertyUpdate) {
       const canAccess = await accessPolicyService.canAccessCustomer(
         authContext,
-        (existing.data as unknown) as { owner_id: string | null },
+        existing,
         "customer.update",
       );
       if (!canAccess) {
@@ -905,40 +894,16 @@ class CustomerController extends TenantBaseController<
 
       await customerOwnerAssignmentService.assertCanAssignSingleOwner({
         authContext,
-        customer: (existing.data as unknown) as {
-          id: string;
-          owner_id: string | null;
-          tenant_id?: string | null;
-        },
+        customer: existing,
         ownerId: payload.owner_id,
       });
     }
 
-    let customer: CustomerRowForResponse | null = null;
-
-    if (Object.keys(payload).length > 0) {
-      const { data, error } = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .update(payload)
-        .eq("id", idVerify.data.id)
-        .eq("tenant_id", authContext.tenantId)
-        .select(this.customerSelect)
-        .single();
-
-      if (error) throw Errors.dbError("更新失败", error);
-      customer = (data as unknown) as CustomerRowForResponse;
-    } else {
-      const current = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .select(this.customerSelect)
-        .eq("id", idVerify.data.id)
-        .eq("tenant_id", authContext.tenantId)
-        .maybeSingle();
-
-      if (current.error) throw Errors.dbError("查询客户失败", current.error);
-      if (!current.data) throw Errors.badRequest("客户不存在");
-      customer = (current.data as unknown) as CustomerRowForResponse;
-    }
+    const customer = await customerCoreService.updateCustomer({
+      authContext,
+      customerId: idVerify.data.id,
+      payload,
+    });
 
     const primaryProperty = await customerPropertyService.upsertCustomerPrimaryProperty({
       customerId: customer.id,
