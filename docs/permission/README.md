@@ -63,6 +63,7 @@
 - [Customer 权限边界核查 Phase 14](./2026-05-19-customer-boundary-audit-phase14.md)
 - [Customer 权限边界核查 Phase 15](./2026-05-19-customer-boundary-audit-phase15.md)
 - [Customer 权限边界重构闭环摘要](./2026-05-19-customer-boundary-refactor-closure-summary.md)
+- [Customer Self Service 权限边界核查 Phase 1](./2026-05-19-customer-self-service-boundary-audit-phase1.md)
 
 ## 核心结论
 

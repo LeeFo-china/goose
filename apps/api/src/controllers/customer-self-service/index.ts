@@ -4,6 +4,11 @@ import { Errors } from "@/errors/error-factory";
 import { projectMemberService } from "@/services/project-members";
 import { projectAcceptanceService } from "@/services/project-acceptances";
 import {
+  customerSelfServiceService,
+  type CustomerContextRow,
+  type UserProfileRow,
+} from "@/services/customer-self-service";
+import {
   CustomerProjectAcceptanceOpenTicketQuerySchema,
   VerifyProjectAcceptanceOpenTicketSchema,
 } from "@/schema/project-acceptances";
@@ -31,38 +36,7 @@ import {
 import type { Tables } from "@/types/database";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
-type CustomerContextRow = {
-  id: string;
-  name: string | null;
-  phone: string | null;
-  user_id: string | null;
-  tenant_id: string | null;
-  tenant:
-    | {
-      id: string | null;
-      name: string | null;
-      slug: string | null;
-      status: string | null;
-    }
-    | Array<{
-      id: string | null;
-      name: string | null;
-      slug: string | null;
-      status: string | null;
-    }>
-    | null;
-};
-
 type AuthIdentitySource = "legacy" | "dual" | "membership";
-
-type UserProfileRow = {
-  auth_user_id: string;
-  nickname: string | null;
-  avatar_path: string | null;
-  profile_completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
 
 type CustomerProjectListItem = {
   id: string;
@@ -340,38 +314,10 @@ class CustomerSelfServiceController extends BaseController {
       return this.getCustomerProfileByMembership(authUserId, options);
     }
 
-    let query = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .eq("user_id", authUserId);
-
-    if (options?.tenantId) {
-      query = query.eq("tenant_id", options.tenantId);
-    }
-
-    if (options?.customerId) {
-      query = query.eq("id", options.customerId);
-    }
-
-    const { data, error } = await query.limit(2);
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    let list = (data || []) as CustomerContextRow[];
+    let list = await customerSelfServiceService.listLegacyCustomerProfilesByAuthUserId(
+      authUserId,
+      options,
+    );
     if (identitySource === "dual") {
       const membershipCustomers = await this.listCustomerProfilesByMembership(
         authUserId,
@@ -437,32 +383,15 @@ class CustomerSelfServiceController extends BaseController {
       return [] as CustomerContextRow[];
     }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .in("id", customerIds);
-
-    if (error) {
-      throw Errors.dbError("查询客户业务身份失败", error);
-    }
+    const customers = await customerSelfServiceService.listCustomerProfilesByIds(
+      customerIds,
+    );
 
     const membershipTenantMap = new Map(
       memberships.map((item) => [item.identity_id, item.tenant_id]),
     );
 
-    return ((data || []) as CustomerContextRow[]).filter((item) => {
+    return customers.filter((item) => {
       const membershipTenantId = membershipTenantMap.get(item.id);
       return (
         item.tenant_id &&
@@ -513,17 +442,7 @@ class CustomerSelfServiceController extends BaseController {
   }
 
   private async getUserProfileByAuthUserId(authUserId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("user_profiles")
-      .select("auth_user_id, nickname, avatar_path, profile_completed_at, created_at, updated_at")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询用户资料失败", error);
-    }
-
-    return (data as UserProfileRow | null) || null;
+    return customerSelfServiceService.getUserProfileByAuthUserId(authUserId);
   }
 
   private serializeAuthProfile(
@@ -563,40 +482,7 @@ class CustomerSelfServiceController extends BaseController {
     authUserId: string,
     input: AuthMeProfileUpdateInput,
   ) {
-    const current = await this.getUserProfileByAuthUserId(authUserId);
-    const nickname = input.nickname !== undefined
-      ? input.nickname
-      : current?.nickname ?? null;
-    const avatarPath = input.avatar_path !== undefined
-      ? input.avatar_path
-      : current?.avatar_path ?? null;
-    const shouldMarkCompleted = Boolean(nickname || avatarPath);
-    const profileCompletedAt = shouldMarkCompleted
-      ? current?.profile_completed_at ?? new Date().toISOString()
-      : null;
-
-    if (!current && !shouldMarkCompleted) {
-      return null;
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("user_profiles")
-      .upsert({
-        auth_user_id: authUserId,
-        nickname,
-        avatar_path: avatarPath,
-        profile_completed_at: profileCompletedAt,
-      }, {
-        onConflict: "auth_user_id",
-      })
-      .select("auth_user_id, nickname, avatar_path, profile_completed_at, created_at, updated_at")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("保存用户资料失败", error);
-    }
-
-    return data as UserProfileRow;
+    return customerSelfServiceService.saveAuthUserProfile(authUserId, input);
   }
 
   private serializeCustomerProjectListItem(row: CustomerProjectListItem) {
