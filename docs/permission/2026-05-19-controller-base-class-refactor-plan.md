@@ -772,3 +772,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `project-logs`，以项目 `tenant_id` 和 `project.read` / `project.update` 作为核心边界。
+
+### 2026-05-19 Project Logs 权限边界核查与迁移
+
+已完成：
+
+- 核查项目日志 controller 和 schema。
+- 形成独立核查文档：[Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)。
+- 迁移 `project-logs` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 项目日志列表、详情、创建、更新、按项目查询、日历查询统一使用 `getRequiredTenantContext()`。
+- 项目查询和项目日志查询必须带当前租户 `tenantId`。
+- 保留 `project.read` 和 `project_log.create` 权限判断。
+
+特别说明：
+
+- `project-logs` 当前仍未拆 service / repository，本次只收紧权限边界。
+- 公开项目日志展示不在该 controller 中，本次不改变公开项目接口。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `project-log-comments`，评论应以日志、项目和租户三者归属为核心边界。

@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateProjectLogSchema,
   type CreateProjectLogInput,
@@ -14,7 +14,6 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { ResponseHandler } from "@/utils/response";
 import { ProjectLogQuerySchema } from "@/schema/project-logs";
-import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 import {
@@ -43,7 +42,7 @@ type ProjectRecord = {
   tenant_id: string | null;
 };
 
-class ProjectLogController extends BaseController<
+class ProjectLogController extends TenantBaseController<
   typeof CreateProjectLogSchema,
   typeof UpdateProjectLogSchema
 > {
@@ -51,23 +50,13 @@ class ProjectLogController extends BaseController<
     super("project_logs", CreateProjectLogSchema, UpdateProjectLogSchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
-  private async getProject(projectId: string, tenantId?: string | null) {
+  private async getProject(projectId: string, tenantId: string) {
     let query = SupabaseDB.getAdminClient()
       .from("projects")
       .select("id, tenant_id")
       .eq("id", projectId);
 
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
+    query = query.eq("tenant_id", tenantId);
 
     const { data, error } = await query.maybeSingle();
 
@@ -82,7 +71,7 @@ class ProjectLogController extends BaseController<
     return data as ProjectRecord;
   }
 
-  private async getProjectLogById(id: string, tenantId?: string | null) {
+  private async getProjectLogById(id: string, tenantId: string) {
     let query = SupabaseDB.getAdminClient()
       .from(this.tableName)
       .select(`
@@ -91,9 +80,7 @@ class ProjectLogController extends BaseController<
       `)
       .eq("id", id);
 
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
+    query = query.eq("tenant_id", tenantId);
 
     const { data, error } = await query.maybeSingle();
 
@@ -129,8 +116,8 @@ class ProjectLogController extends BaseController<
   }
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
+    const tenantId = authContext.tenantId;
 
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
@@ -178,8 +165,8 @@ class ProjectLogController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
+    const tenantId = authContext.tenantId;
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -198,8 +185,8 @@ class ProjectLogController extends BaseController<
   };
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
+    const tenantId = authContext.tenantId;
     const queryResult = this.paginationQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -230,9 +217,7 @@ class ProjectLogController extends BaseController<
       `, { count: "exact" })
       .order("created_at", { ascending: false });
 
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
+    query = query.eq("tenant_id", tenantId);
 
     if (Array.isArray(visibleProjectIds)) {
       query = query.in("project_id", visibleProjectIds);
@@ -258,8 +243,8 @@ class ProjectLogController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
+    const tenantId = authContext.tenantId;
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -302,9 +287,7 @@ class ProjectLogController extends BaseController<
       .update(payload)
       .eq("id", idVerify.data.id);
 
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
+    query = query.eq("tenant_id", tenantId);
 
     const { data, error } = await query
       .select(`
@@ -324,8 +307,8 @@ class ProjectLogController extends BaseController<
 
   @Get("/project_logs/projects")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
+    const tenantId = authContext.tenantId;
     const verify = ProjectLogQuerySchema.safeParse(request.query);
     if (!verify.success) throw Errors.fromZod(verify.error);
     const { page, pageSize, project_id }: ProjectLogQueryType = verify.data;
@@ -349,9 +332,7 @@ class ProjectLogController extends BaseController<
       )
       .eq("project_id", project_id);
 
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
+    query = query.eq("tenant_id", tenantId);
 
     const { data, error, count } = await query
       .order("created_at", { ascending: false })
@@ -376,8 +357,7 @@ class ProjectLogController extends BaseController<
 
   @Get("/project_logs/projects/calendar")
   async getCalendar(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    accessPolicyService.assertTenantId(authContext);
+    const authContext = await this.getRequiredTenantContext(request);
     const verify = ProjectLogCalendarQuerySchema.safeParse(request.query);
     if (!verify.success) throw Errors.fromZod(verify.error);
 
