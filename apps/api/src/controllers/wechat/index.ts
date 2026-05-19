@@ -21,6 +21,7 @@ import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
+import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -36,19 +37,6 @@ type WeChatSessionResponse = {
   unionid?: string;
   errcode?: number;
   errmsg?: string;
-};
-
-type WechatIdentityRow = {
-  auth_user_id: string;
-  openid: string;
-  unionid: string | null;
-};
-
-type LegacyAuthUser = {
-  id: string;
-  email?: string | null;
-  openid?: string | null;
-  unionid?: string | null;
 };
 
 type CustomerIdentityRow = {
@@ -563,7 +551,6 @@ export class WeChatController extends BaseController {
     openid: string,
     unionid?: string,
   ) {
-    const adminClient = SupabaseDB.getAdminClient();
     request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
     const identitySource = this.getAuthIdentitySource();
     if (identitySource !== "legacy") {
@@ -618,16 +605,10 @@ export class WeChatController extends BaseController {
       });
 
       if (existingOauthUnbound) {
-        const { error: staleIdentityError } = await adminClient
-          .from("wechat_identities")
-          .delete()
-          .eq("auth_user_id", existingIdentity.auth_user_id)
-          .eq("openid", openid)
-          .select("id");
-
-        if (staleIdentityError) {
-          throw Errors.dbError("清理已解绑微信身份映射失败", staleIdentityError);
-        }
+        await wechatAuthIdentityService.deleteIdentityByAuthUserOpenId({
+          authUserId: existingIdentity.auth_user_id,
+          openid,
+        });
 
         request.log.info(
           { requestId: request.id, openid, userId: existingIdentity.auth_user_id },
@@ -659,15 +640,9 @@ export class WeChatController extends BaseController {
 
     request.log.info({ requestId: request.id, openid }, "[auth] create visitor user start");
 
-    const { data, error } = await adminClient.auth.admin.createUser({
-      email: `${openid}@wechat.local`,
-      password: crypto.randomUUID(),
-      email_confirm: true,
-      user_metadata: {
-        openid,
-        unionid: unionid || null,
-        source: "wechat_miniprogram",
-      },
+    const { data, error } = await wechatAuthIdentityService.createWechatAuthUser({
+      openid,
+      unionid: unionid || null,
     });
 
     if (error) {
@@ -699,15 +674,12 @@ export class WeChatController extends BaseController {
           });
         }
 
-        const { error: identityError } = await adminClient.from("wechat_identities").upsert({
-          auth_user_id: legacyUser.id,
+        await wechatAuthIdentityService.upsertIdentity({
+          authUserId: legacyUser.id,
           openid,
           unionid: unionid || legacyUser.unionid || null,
-        }).select("id");
-
-        if (identityError) {
-          throw Errors.dbError("补建微信身份映射失败", identityError);
-        }
+          errorMessage: "补建微信身份映射失败",
+        });
 
         request.log.info(
           { requestId: request.id, openid, userId: legacyUser.id },
@@ -735,15 +707,12 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败");
     }
 
-    const { error: identityError } = await adminClient.from("wechat_identities").upsert({
-      auth_user_id: data.user.id,
+    await wechatAuthIdentityService.upsertIdentity({
+      authUserId: data.user.id,
       openid,
       unionid: unionid || null,
-    }).select("id");
-
-    if (identityError) {
-      throw Errors.dbError("创建微信身份映射失败", identityError);
-    }
+      errorMessage: "创建微信身份映射失败",
+    });
 
     await userIdentityService.syncOauthIdentityBestEffort({
       userId: data.user.id,
@@ -768,19 +737,10 @@ export class WeChatController extends BaseController {
     uniqueEmail?: boolean;
     source: string;
   }) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const emailLocalPart = input.uniqueEmail
-      ? `${input.openid}.${crypto.randomUUID()}`
-      : input.openid;
-    const { data, error } = await adminClient.auth.admin.createUser({
-      email: `${emailLocalPart}@wechat.local`,
-      password: crypto.randomUUID(),
-      email_confirm: true,
-      user_metadata: {
-        openid: input.openid,
-        unionid: input.unionid || null,
-        source: "wechat_miniprogram",
-      },
+    const { data, error } = await wechatAuthIdentityService.createWechatAuthUser({
+      openid: input.openid,
+      unionid: input.unionid || null,
+      uniqueEmail: input.uniqueEmail,
     });
 
     if (error) {
@@ -799,15 +759,12 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败");
     }
 
-    const { error: identityError } = await adminClient.from("wechat_identities").upsert({
-      auth_user_id: data.user.id,
+    await wechatAuthIdentityService.upsertIdentity({
+      authUserId: data.user.id,
       openid: input.openid,
       unionid: input.unionid || null,
-    }).select("id");
-
-    if (identityError) {
-      throw Errors.dbError("创建微信身份映射失败", identityError);
-    }
+      errorMessage: "创建微信身份映射失败",
+    });
 
     await userIdentityService.syncOauthIdentityBestEffort({
       userId: data.user.id,
@@ -829,23 +786,7 @@ export class WeChatController extends BaseController {
   }
 
   private async findIdentityByOpenId(openid: string) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const { data, error } = await adminClient
-      .from("wechat_identities")
-      .select("auth_user_id, openid, unionid")
-      .eq("openid", openid)
-      .maybeSingle<WechatIdentityRow>();
-
-    if (error) {
-      throw Errors.dbError("查询微信用户失败", {
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        message: error.message,
-      });
-    }
-
-    return data;
+    return wechatAuthIdentityService.findIdentityByOpenId(openid);
   }
 
   private async syncLegacyWechatIdentityMapping(input: {
@@ -853,48 +794,21 @@ export class WeChatController extends BaseController {
     openid: string;
     unionid?: string | null;
   }) {
-    const adminClient = SupabaseDB.getAdminClient();
     const currentIdentity = await this.findIdentityByOpenId(input.openid);
     if (currentIdentity && currentIdentity.auth_user_id !== input.authUserId) {
-      const { error: deleteError } = await adminClient
-        .from("wechat_identities")
-        .delete()
-        .eq("openid", input.openid)
-        .select("id");
-
-      if (deleteError) {
-        throw Errors.dbError("清理旧微信身份映射失败", deleteError);
-      }
+      await wechatAuthIdentityService.deleteIdentityByOpenId(input.openid);
     }
 
-    const { error } = await adminClient.from("wechat_identities").upsert({
-      auth_user_id: input.authUserId,
+    await wechatAuthIdentityService.upsertIdentity({
+      authUserId: input.authUserId,
       openid: input.openid,
       unionid: input.unionid ?? null,
-    }).select("id");
-
-    if (error) {
-      throw Errors.dbError("同步微信身份映射失败", error);
-    }
+      errorMessage: "同步微信身份映射失败",
+    });
   }
 
   private async findLegacyAuthUser(openid: string) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const { data, error } = await adminClient.rpc("find_auth_user_by_openid", {
-      p_openid: openid,
-    });
-
-    if (error) {
-      throw Errors.dbError("查询历史微信用户失败", {
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        message: error.message,
-      });
-    }
-
-    const rows = Array.isArray(data) ? (data as LegacyAuthUser[]) : [];
-    return rows[0] || null;
+    return wechatAuthIdentityService.findLegacyAuthUserByOpenId(openid);
   }
 
   private normalizeTenantRelation(value: CustomerTenantOption["tenant"]) {
@@ -1733,17 +1647,7 @@ export class WeChatController extends BaseController {
   }
 
   private async findOpenIdByAuthUserId(authUserId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("wechat_identities")
-      .select("openid")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle<{ openid: string }>();
-
-    if (error) {
-      throw Errors.dbError("查询微信身份失败", error);
-    }
-
-    return data?.openid ?? null;
+    return wechatAuthIdentityService.findOpenIdByAuthUserId(authUserId);
   }
 
   private async bindWechatOpenIdToExistingAuthUser(input: {
@@ -1752,7 +1656,6 @@ export class WeChatController extends BaseController {
     toAuthUserId: string;
     targetRole?: "customer" | "employee";
   }) {
-    const adminClient = SupabaseDB.getAdminClient();
     const targetOpenid = await this.findOpenIdByAuthUserId(input.toAuthUserId);
     if (targetOpenid && targetOpenid !== input.openid) {
       throw Errors.business(
@@ -1780,46 +1683,23 @@ export class WeChatController extends BaseController {
     }
 
     if (currentIdentity) {
-      const { error } = await adminClient
-        .from("wechat_identities")
-        .update({ auth_user_id: input.toAuthUserId })
-        .eq("auth_user_id", input.fromAuthUserId)
-        .eq("openid", input.openid)
-        .select("id");
-
-      if (error) {
-        throw Errors.dbError("更新微信身份映射失败", error);
-      }
+      await wechatAuthIdentityService.updateIdentityAuthUser({
+        fromAuthUserId: input.fromAuthUserId,
+        toAuthUserId: input.toAuthUserId,
+        openid: input.openid,
+      });
       return;
     }
 
-    const { error } = await adminClient.from("wechat_identities").upsert({
-      auth_user_id: input.toAuthUserId,
+    await wechatAuthIdentityService.upsertIdentity({
+      authUserId: input.toAuthUserId,
       openid: input.openid,
-    }).select("id");
-
-    if (error) {
-      throw Errors.dbError("创建微信身份映射失败", error);
-    }
+      errorMessage: "创建微信身份映射失败",
+    });
   }
 
   private async getOpenIdByAuthUserId(authUserId: string) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const { data, error } = await adminClient
-      .from("wechat_identities")
-      .select("openid")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle<{ openid: string }>();
-
-    if (error) {
-      throw Errors.dbError("查询微信身份失败", error);
-    }
-
-    if (!data?.openid) {
-      throw Errors.badRequest("当前账号未绑定微信身份");
-    }
-
-    return data.openid;
+    return wechatAuthIdentityService.getRequiredOpenIdByAuthUserId(authUserId);
   }
 
   private async getUserRoles(userId: string) {
