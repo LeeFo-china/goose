@@ -8,7 +8,7 @@ import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
-import { SupabaseDB } from "@/utils/supabase";
+import { uploadService } from "@/services/uploads";
 import type { JwtPayload } from "@/utils/jwt";
 import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
@@ -469,7 +469,7 @@ class UploadController extends BaseController {
       };
     }
 
-    const membership = await this.findCustomerMembership(authUserId);
+    const membership = await uploadService.findDefaultActiveCustomerMembership(authUserId);
     if (membership) {
       return {
         tenantId: membership.tenant_id,
@@ -486,46 +486,8 @@ class UploadController extends BaseController {
     };
   }
 
-  private async findCustomerMembership(authUserId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("user_business_memberships")
-      .select("tenant_id, identity_id, is_default, created_at")
-      .eq("user_id", authUserId)
-      .eq("identity_type", "customer")
-      .eq("status", "active")
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<{
-        tenant_id: string | null;
-        identity_id: string;
-        is_default: boolean;
-        created_at: string;
-      }>();
-
-    if (error) {
-      throw Errors.dbError("查询客户上传身份失败", error);
-    }
-
-    return data ?? null;
-  }
-
   private async findLegacyCustomerBinding(authUserId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, tenant_id")
-      .eq("user_id", authUserId)
-      .limit(1)
-      .maybeSingle<{
-        id: string;
-        tenant_id: string | null;
-      }>();
-
-    if (error) {
-      throw Errors.dbError("查询客户上传身份失败", error);
-    }
-
-    return data ?? null;
+    return uploadService.findLegacyCustomerBinding(authUserId);
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {
