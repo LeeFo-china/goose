@@ -597,3 +597,27 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 迁移 `roles` 和 `employee-permissions` 前先核查权限模型。
 - 或先迁移较独立的 `notifications`、`task-center`，继续扩大低风险样本。
+
+### 2026-05-19 Notifications 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `notifications` 到 `TenantBaseController`。
+- 删除 controller 内直接 `authorizationService` 依赖。
+- 通知列表、未读汇总、标记已读接口统一使用 `getRequiredTenantContext()`。
+- 保持 `notificationService` 内按当前 `employeeId` 查询和标记本人通知的逻辑不变。
+
+特别说明：
+
+- `notifications` 虽然 service 当前以 `employeeId` 为主边界，但接口属于租户后台个人通知能力。
+- controller 层要求租户上下文后，平台超管无租户身份不能直接访问租户通知接口。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `task-center`。

@@ -1,23 +1,22 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   NotificationListQuerySchema,
   NotificationMarkReadBodySchema,
 } from "@/schema/notifications";
-import { authorizationService } from "@/services/authorization";
 import { notificationService } from "@/services/notifications";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class NotificationsController extends BaseController {
+class NotificationsController extends TenantBaseController {
   constructor() {
     super("notifications");
   }
 
   @Get("/notifications")
   async listMine(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantContext(request);
     const queryResult = NotificationListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -27,14 +26,14 @@ class NotificationsController extends BaseController {
 
   @Get("/notifications/summary")
   async getSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantContext(request);
     const data = await notificationService.getMySummary(authContext);
     return ResponseHandler.success(data);
   }
 
   @Post("/notifications/read")
   async markRead(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantContext(request);
     const bodyResult = NotificationMarkReadBodySchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
