@@ -136,6 +136,17 @@ export type ProjectCoreListFilters = {
   projectIds?: string[] | null;
 };
 
+export type ProjectCreateCustomerFilters = {
+  tenantId: string;
+  keyword?: string;
+};
+
+export type ProjectCreateEmployeeFilters = {
+  tenantId: string;
+  keyword?: string;
+  postIds?: string[];
+};
+
 function escapeSupabaseOrValue(value: string) {
   return value
     .replace(/\\/g, "\\\\")
@@ -490,6 +501,86 @@ class ProjectRepository {
     }
 
     return (data || []).length;
+  }
+
+  async listCreateCustomers(input: {
+    filters: ProjectCreateCustomerFilters;
+    from: number;
+    to: number;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, name, phone, owner_id", { count: "exact" })
+      .eq("tenant_id", input.filters.tenantId)
+      .order("created_at", { ascending: false });
+
+    const normalizedKeyword = input.filters.keyword?.trim();
+    if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
+      query = query.or(
+        `name.ilike.%${escapedKeyword}%,phone.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    const { data, error, count } = await query.range(input.from, input.to);
+
+    if (error) {
+      throw Errors.dbError("查询项目创建客户选择项失败", error);
+    }
+
+    return {
+      rows: (data || []) as unknown as Array<Record<string, unknown>>,
+      total: count ?? 0,
+    };
+  }
+
+  async listCreateEmployees(input: {
+    filters: ProjectCreateEmployeeFilters;
+    from: number;
+    to: number;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("employees")
+      .select(
+        `
+        id,
+        name,
+        avatar,
+        phone,
+        department_id,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
+        department:departments!employees_department_id_fkey(id, name, code),
+        post:posts!employees_post_id_fkey(id, name, code)
+      `,
+        { count: "exact" },
+      )
+      .eq("status", "active")
+      .eq("tenant_id", input.filters.tenantId)
+      .order("created_at", { ascending: false });
+
+    if (input.filters.postIds && input.filters.postIds.length > 0) {
+      query = query.in("post_id", input.filters.postIds);
+    }
+
+    const normalizedKeyword = input.filters.keyword?.trim();
+    if (normalizedKeyword) {
+      const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
+      query = query.or(
+        `name.ilike.%${escapedKeyword}%,phone.ilike.%${escapedKeyword}%`,
+      );
+    }
+
+    const { data, error, count } = await query.range(input.from, input.to);
+
+    if (error) {
+      throw Errors.dbError("查询项目创建员工选择项失败", error);
+    }
+
+    return {
+      rows: (data || []) as unknown as Array<Record<string, unknown>>,
+      total: count ?? 0,
+    };
   }
 
   async update(id: string, input: UpdateProjectInput, tenantId?: string | null) {

@@ -20,6 +20,7 @@
 - [Projects 权限边界核查 Phase 2](./2026-05-19-projects-boundary-audit-phase2.md)
 - [Projects 权限边界核查 Phase 3](./2026-05-19-projects-boundary-audit-phase3.md)
 - [Projects 权限边界核查 Phase 4](./2026-05-19-projects-boundary-audit-phase4.md)
+- [Projects 权限边界核查 Phase 5](./2026-05-19-projects-boundary-audit-phase5.md)
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
 - [Project Acceptances 权限边界核查](./2026-05-19-project-acceptances-boundary-audit.md)

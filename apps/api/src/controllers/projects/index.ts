@@ -1,6 +1,5 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { CreateProjectSchema, UpdateProjectSchema } from "@/schema/projects";
-import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -14,10 +13,8 @@ import {
 import { projectSer } from "@/services/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
-  type ProjectCreateSelectCustomerQueryType,
   ProjectMemberCandidateQuerySchema,
   ProjectCreateSelectEmployeeQuerySchema,
-  type ProjectCreateSelectEmployeeQueryType,
 } from "@/schema/project-create-select";
 import type { Tables } from "@/types/database";
 import {
@@ -803,39 +800,19 @@ class ProjectController extends TenantBaseController<
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    accessPolicyService.assertPermission(authContext, "project.create");
 
     const queryResult = ProjectCreateSelectCustomerQuerySchema.safeParse(
       request.query,
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword }: ProjectCreateSelectCustomerQueryType =
-      queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    let query = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, name, phone, owner_id", { count: "exact" })
-      .eq("tenant_id", authContext.tenantId)
-      .order("created_at", { ascending: false });
-
-    const normalizedKeyword = keyword?.trim();
-    if (normalizedKeyword) {
-      query = query.or(
-        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
-      );
-    }
-
-    const { data, error, count } = await query.range(from, to);
-
-    if (error) {
-      throw Errors.dbError("查询项目创建客户选择项失败", error);
-    }
+    const result = await projectSer.listProjectCreateCustomers({
+      authContext,
+      query: queryResult.data,
+    });
 
     const list: ProjectCreateCustomerOption[] =
-      ((data || []) as ProjectCreateSelectCustomerRow[])
+      (result.rows as unknown as ProjectCreateSelectCustomerRow[])
         .map((item) => ({
           id: item.id,
           name: item.name,
@@ -846,12 +823,7 @@ class ProjectController extends TenantBaseController<
 
     return ResponseHandler.success({
       list,
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
+      pagination: result.pagination,
     });
   }
 
@@ -861,26 +833,19 @@ class ProjectController extends TenantBaseController<
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    accessPolicyService.assertPermission(authContext, "project.create");
 
     const queryResult = ProjectCreateSelectEmployeeQuerySchema.safeParse(
       request.query,
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword }:
-      ProjectCreateSelectEmployeeQueryType = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const result = await this.queryProjectCreateEmployees({
-      from,
-      to,
-      keyword,
-      tenantId: authContext.tenantId,
+    const result = await projectSer.listProjectCreateEmployees({
+      authContext,
+      query: queryResult.data,
     });
 
     const list: ProjectCreateEmployeeOption[] =
-      ((result.data || []) as ProjectCreateSelectEmployeeRow[])
+      (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
         .map((item) => {
           const department = Array.isArray(item.department)
             ? (item.department[0] ?? null)
@@ -916,12 +881,7 @@ class ProjectController extends TenantBaseController<
 
     return ResponseHandler.success({
       list,
-      pagination: {
-        page,
-        pageSize,
-        total: result.count || 0,
-        totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
-      },
+      pagination: result.pagination,
     });
   }
 
@@ -934,30 +894,17 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const hasAccess = await accessPolicyService.canAccessProject(
-      authContext,
-      idVerify.data.id,
-      "project.update",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
     const queryResult = ProjectMemberCandidateQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, keyword } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const result = await this.queryProjectCreateEmployees({
-      from,
-      to,
-      keyword,
-      tenantId: authContext.tenantId,
+    const result = await projectSer.listProjectMemberCandidates({
+      authContext,
+      projectId: idVerify.data.id,
+      query: queryResult.data,
     });
 
     const list: ProjectCreateEmployeeOption[] =
-      ((result.data || []) as ProjectCreateSelectEmployeeRow[])
+      (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
         .map((item) => {
           const department = Array.isArray(item.department)
             ? (item.department[0] ?? null)
@@ -993,63 +940,8 @@ class ProjectController extends TenantBaseController<
 
     return ResponseHandler.success({
       list,
-      pagination: {
-        page,
-        pageSize,
-        total: result.count || 0,
-        totalPages: result.count ? Math.ceil(result.count / pageSize) : 0,
-      },
+      pagination: result.pagination,
     });
-  }
-
-  private async queryProjectCreateEmployees(params: {
-    from: number;
-    to: number;
-    keyword?: string;
-    postIds?: string[];
-    tenantId: string;
-  }) {
-    let query = SupabaseDB.getAdminClient()
-      .from("employees")
-      .select(
-        `
-        id,
-        name,
-        avatar,
-        phone,
-        department_id,
-        tenant_department_id,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
-        department:departments!employees_department_id_fkey(id, name, code),
-        post:posts!employees_post_id_fkey(id, name, code)
-      `,
-        { count: "exact" },
-      )
-      .eq("status", "active")
-      .eq("tenant_id", params.tenantId)
-      .order("created_at", { ascending: false });
-
-    if (params.postIds && params.postIds.length > 0) {
-      query = query.in("post_id", params.postIds);
-    }
-
-    const normalizedKeyword = params.keyword?.trim();
-    if (normalizedKeyword) {
-      query = query.or(
-        `name.ilike.%${normalizedKeyword}%,phone.ilike.%${normalizedKeyword}%`,
-      );
-    }
-
-    const { data, error, count } = await query.range(params.from, params.to);
-
-    if (error) {
-      throw Errors.dbError("查询项目创建员工选择项失败", error);
-    }
-
-    return {
-      data,
-      count,
-    };
   }
 }
 

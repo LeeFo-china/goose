@@ -3,6 +3,11 @@ import {
     type ProjectListQuery,
     type UpdateProjectInput,
 } from "@/schema/projects";
+import type {
+    ProjectCreateSelectCustomerQueryType,
+    ProjectCreateSelectEmployeeQueryType,
+    ProjectMemberCandidateQueryType,
+} from "@/schema/project-create-select";
 import { Errors } from "@/errors/error-factory";
 import { projectRepository } from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
@@ -100,6 +105,68 @@ class ProjectService {
     async listPublicProjectLogs(projectId: string) {
         await this.getRequiredPublicProjectVisibility(projectId);
         return projectRepository.listPublicProjectLogs(projectId);
+    }
+
+    async listProjectCreateCustomers(input: {
+        authContext: AuthContext;
+        query: ProjectCreateSelectCustomerQueryType;
+    }) {
+        const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        accessPolicyService.assertPermission(input.authContext, "project.create");
+        const { page, pageSize, keyword } = input.query;
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const result = await projectRepository.listCreateCustomers({
+            filters: {
+                tenantId,
+                keyword,
+            },
+            from,
+            to,
+        });
+
+        return {
+            rows: result.rows,
+            pagination: {
+                page,
+                pageSize,
+                total: result.total,
+                totalPages: result.total ? Math.ceil(result.total / pageSize) : 0,
+            },
+        };
+    }
+
+    async listProjectCreateEmployees(input: {
+        authContext: AuthContext;
+        query: ProjectCreateSelectEmployeeQueryType;
+    }) {
+        const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        accessPolicyService.assertPermission(input.authContext, "project.create");
+        return this.listEmployeeCandidates({
+            tenantId,
+            query: input.query,
+        });
+    }
+
+    async listProjectMemberCandidates(input: {
+        authContext: AuthContext;
+        projectId: string;
+        query: ProjectMemberCandidateQueryType;
+    }) {
+        const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        const hasAccess = await accessPolicyService.canAccessProject(
+            input.authContext,
+            input.projectId,
+            "project.update",
+        );
+        if (!hasAccess) {
+            throw Errors.forbidden();
+        }
+
+        return this.listEmployeeCandidates({
+            tenantId,
+            query: input.query,
+        });
     }
 
     async getProjectDetail(input: {
@@ -268,6 +335,33 @@ class ProjectService {
         if (employeeCount !== uniqueEmployeeIds.length) {
             throw Errors.badRequest("设计师或监理不存在或不属于当前租户");
         }
+    }
+
+    private async listEmployeeCandidates(input: {
+        tenantId: string;
+        query: ProjectCreateSelectEmployeeQueryType | ProjectMemberCandidateQueryType;
+    }) {
+        const { page, pageSize, keyword } = input.query;
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const result = await projectRepository.listCreateEmployees({
+            filters: {
+                tenantId: input.tenantId,
+                keyword,
+            },
+            from,
+            to,
+        });
+
+        return {
+            rows: result.rows,
+            pagination: {
+                page,
+                pageSize,
+                total: result.total,
+                totalPages: result.total ? Math.ceil(result.total / pageSize) : 0,
+            },
+        };
     }
 }
 
