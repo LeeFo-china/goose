@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateCustomerFollowUpCommentSchema,
@@ -9,20 +9,11 @@ import {
 } from "@/schema/customer-follow-up-comments";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import { authorizationService } from "@/services/authorization";
 import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
 
-class CustomerFollowUpCommentsController extends BaseController {
+class CustomerFollowUpCommentsController extends TenantBaseController {
   constructor() {
     super("customer_follow_up_comments");
-  }
-
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
   }
 
   @Get("/customer_follow_ups/:followUpId/comments")
@@ -33,7 +24,7 @@ class CustomerFollowUpCommentsController extends BaseController {
     }>,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const queryResult = CustomerFollowUpCommentsListQuerySchema.safeParse(
       request.query,
     );
@@ -61,7 +52,7 @@ class CustomerFollowUpCommentsController extends BaseController {
     }>,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = CreateCustomerFollowUpCommentSchema.safeParse(request.body);
     if (!result.success) {
       throw Errors.fromZod(result.error);

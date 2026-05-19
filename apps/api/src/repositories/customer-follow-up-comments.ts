@@ -10,6 +10,7 @@ export type CustomerFollowUpAccessRow = {
   customer: {
     id: string;
     owner_id: string | null;
+    tenant_id: string | null;
   } | null;
 };
 
@@ -37,7 +38,8 @@ class CustomerFollowUpCommentRepository {
         customer_id,
         customer:customers!customer_follow_ups_customer_id_fkey(
           id,
-          owner_id
+          owner_id,
+          tenant_id
         )
       `)
       .eq("id", followUpId)

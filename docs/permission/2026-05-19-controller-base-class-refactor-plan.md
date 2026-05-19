@@ -1020,3 +1020,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查 `customer-follow-up-comments`，它和客户跟进、客户归属边界相关，范围比完整 `customer` controller 更小。
+
+### 2026-05-19 Customer Follow Up Comments 权限边界核查与迁移
+
+已完成：
+
+- 核查客户跟进评论 controller、service、repository 和 schema。
+- 形成独立核查文档：[Customer Follow Up Comments 权限边界核查](./2026-05-19-customer-follow-up-comments-boundary-audit.md)。
+- 迁移 `customer-follow-up-comments` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 评论列表和创建评论统一使用 `getRequiredTenantContext()`。
+- service 在跟进记录访问校验前要求租户上下文。
+- repository 查询跟进记录访问信息时补充客户 `tenant_id`，确保客户访问权限能做租户匹配。
+
+特别说明：
+
+- `customer_follow_up_comments` 表当前没有冗余 `tenant_id`，租户边界依赖客户归属。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查 `customer` controller。该 controller 范围较大，建议分段处理客户列表 / 客户详情 / 房产 / 跟进记录。

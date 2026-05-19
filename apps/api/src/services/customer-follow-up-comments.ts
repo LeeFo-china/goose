@@ -20,6 +20,7 @@ type FollowUpSummaryInput = {
 
 type FollowUpAccessTarget = {
   owner_id: string | null;
+  tenant_id?: string | null;
 };
 
 class CustomerFollowUpCommentService {
@@ -76,6 +77,7 @@ class CustomerFollowUpCommentService {
     followUpId: string,
     permissionCode: "customer.read" | "customer.update",
   ) {
+    accessPolicyService.assertTenantContext(authContext);
     const followUp = await customerFollowUpCommentRepository.findFollowUpAccessById(
       followUpId,
     );

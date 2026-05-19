@@ -20,6 +20,7 @@
 - [Departments / Department Post Rules 权限边界核查](./2026-05-19-departments-boundary-audit.md)
 - [Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)
 - [Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)
+- [Customer Follow Up Comments 权限边界核查](./2026-05-19-customer-follow-up-comments-boundary-audit.md)
 
 ## 核心结论
 
