@@ -118,6 +118,29 @@ export type CustomerSelfServiceProjectLogCommentAggregateRow = {
   created_at: string | null;
 };
 
+export type CustomerSelfServiceProjectLogCommentRow = {
+  id: string;
+  log_id: string;
+  parent_id: string | null;
+  author_type: string;
+  author_id: string;
+  content: string;
+  rating: number | null;
+  images: unknown;
+  created_at: string | null;
+};
+
+export type CustomerSelfServiceProjectLogCommentAuthorEmployee = {
+  id: string;
+  name: string | null;
+  avatar: string | null;
+};
+
+export type CustomerSelfServiceProjectLogCommentAuthorCustomer = {
+  id: string;
+  name: string | null;
+};
+
 class CustomerSelfServiceRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -414,6 +437,73 @@ class CustomerSelfServiceRepository {
     }
 
     return (data || []) as CustomerSelfServiceProjectLogCommentAggregateRow[];
+  }
+
+  async listProjectLogComments(input: {
+    logId: string;
+    tenantId: string | null;
+    from: number;
+    to: number;
+  }) {
+    let query = this.adminClient
+      .from("project_log_comments")
+      .select(
+        "id, log_id, parent_id, author_type, author_id, content, rating, images, created_at",
+        { count: "exact" },
+      )
+      .eq("log_id", input.logId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .range(input.from, input.to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询日志评论失败", error);
+    }
+
+    return {
+      list: (data || []) as unknown as CustomerSelfServiceProjectLogCommentRow[],
+      count: count || 0,
+    };
+  }
+
+  async listCommentAuthorEmployees(employeeIds: string[]) {
+    if (employeeIds.length === 0) {
+      return [] as CustomerSelfServiceProjectLogCommentAuthorEmployee[];
+    }
+
+    const { data, error } = await this.adminClient
+      .from("employees")
+      .select("id, name, avatar")
+      .in("id", employeeIds);
+
+    if (error) {
+      throw Errors.dbError("查询评论员工作者失败", error);
+    }
+
+    return (data || []) as CustomerSelfServiceProjectLogCommentAuthorEmployee[];
+  }
+
+  async listCommentAuthorCustomers(customerIds: string[]) {
+    if (customerIds.length === 0) {
+      return [] as CustomerSelfServiceProjectLogCommentAuthorCustomer[];
+    }
+
+    const { data, error } = await this.adminClient
+      .from("customers")
+      .select("id, name")
+      .in("id", customerIds);
+
+    if (error) {
+      throw Errors.dbError("查询评论客户作者失败", error);
+    }
+
+    return (data || []) as CustomerSelfServiceProjectLogCommentAuthorCustomer[];
   }
 }
 

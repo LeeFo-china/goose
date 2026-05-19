@@ -2,6 +2,9 @@ import {
   customerSelfServiceRepository,
   type CustomerSelfServiceCustomerContextRow,
   type CustomerSelfServiceProjectLogCommentAggregateRow,
+  type CustomerSelfServiceProjectLogCommentAuthorCustomer,
+  type CustomerSelfServiceProjectLogCommentAuthorEmployee,
+  type CustomerSelfServiceProjectLogCommentRow,
   type CustomerSelfServiceProjectLogRow,
   type CustomerSelfServiceProjectListItem,
   type CustomerSelfServiceRecentLogSummaryRow,
@@ -107,11 +110,33 @@ class CustomerSelfServiceService {
   }) {
     return customerSelfServiceRepository.listProjectLogCommentAggregates(input);
   }
+
+  listProjectLogComments(input: {
+    logId: string;
+    tenantId: string | null;
+    from: number;
+    to: number;
+  }) {
+    return customerSelfServiceRepository.listProjectLogComments(input);
+  }
+
+  listCommentAuthorEmployees(employeeIds: string[]) {
+    return customerSelfServiceRepository.listCommentAuthorEmployees(employeeIds);
+  }
+
+  listCommentAuthorCustomers(customerIds: string[]) {
+    return customerSelfServiceRepository.listCommentAuthorCustomers(customerIds);
+  }
 }
 
 export type CustomerContextRow = CustomerSelfServiceCustomerContextRow;
 export type CustomerProjectLogCommentAggregateRow =
   CustomerSelfServiceProjectLogCommentAggregateRow;
+export type CustomerProjectLogCommentAuthorCustomer =
+  CustomerSelfServiceProjectLogCommentAuthorCustomer;
+export type CustomerProjectLogCommentAuthorEmployee =
+  CustomerSelfServiceProjectLogCommentAuthorEmployee;
+export type CustomerProjectLogCommentRow = CustomerSelfServiceProjectLogCommentRow;
 export type CustomerProjectLogRow = CustomerSelfServiceProjectLogRow;
 export type CustomerProjectListItem = CustomerSelfServiceProjectListItem;
 export type CustomerProjectRecentLogSummaryRow = CustomerSelfServiceRecentLogSummaryRow;

@@ -7,6 +7,9 @@ import {
   customerSelfServiceService,
   type CustomerContextRow,
   type CustomerProjectLogCommentAggregateRow,
+  type CustomerProjectLogCommentAuthorCustomer,
+  type CustomerProjectLogCommentAuthorEmployee,
+  type CustomerProjectLogCommentRow,
   type CustomerProjectLogRow,
   type CustomerProjectListItem,
   type CustomerProjectRecentLogSummaryRow,
@@ -18,7 +21,6 @@ import {
 } from "@/schema/project-acceptances";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import { SupabaseDB } from "@/utils/supabase";
 import { userIdentityService } from "@/services/user-identities";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { IdParamSchema, PaginationQuerySchema } from "@/schema/request";
@@ -37,22 +39,9 @@ import {
   type ProjectLogStageCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
-import type { Tables } from "@/types/database";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
-
-type CustomerProjectLogCommentRow = {
-  id: string;
-  log_id: string;
-  parent_id: string | null;
-  author_type: string;
-  author_id: string;
-  content: string;
-  rating: number | null;
-  images: unknown;
-  created_at: string | null;
-};
 
 type CustomerProjectLogCommentAuthor = {
   id: string;
@@ -640,22 +629,13 @@ class CustomerSelfServiceController extends BaseController {
         .map((item) => item.author_id),
     ));
 
-    const adminClient = SupabaseDB.getAdminClient();
-    const [{ data: employees }, { data: customers }] = await Promise.all([
-      employeeIds.length > 0
-        ? adminClient.from("employees").select("id, name, avatar").in("id", employeeIds)
-        : Promise.resolve({
-          data: [] as Array<Pick<Tables<"employees">, "id" | "name" | "avatar">>,
-        }),
-      customerIds.length > 0
-        ? adminClient.from("customers").select("id, name").in("id", customerIds)
-        : Promise.resolve({
-          data: [] as Array<Pick<Tables<"customers">, "id" | "name">>,
-        }),
+    const [employees, customers] = await Promise.all([
+      customerSelfServiceService.listCommentAuthorEmployees(employeeIds),
+      customerSelfServiceService.listCommentAuthorCustomers(customerIds),
     ]);
 
     const employeeMap = new Map<string, CustomerProjectLogCommentAuthor>(
-      (employees || []).map((item) => [
+      employees.map((item: CustomerProjectLogCommentAuthorEmployee) => [
         item.id,
         {
           id: item.id,
@@ -665,7 +645,7 @@ class CustomerSelfServiceController extends BaseController {
       ]),
     );
     const customerMap = new Map<string, CustomerProjectLogCommentAuthor>(
-      (customers || []).map((item) => [
+      customers.map((item: CustomerProjectLogCommentAuthorCustomer) => [
         item.id,
         {
           id: item.id,
@@ -1047,26 +1027,15 @@ class CustomerSelfServiceController extends BaseController {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("project_log_comments")
-      .select(
-        "id, log_id, parent_id, author_type, author_id, content, rating, images, created_at",
-        { count: "exact" },
-      )
-      .eq("log_id", paramsResult.data.logId)
-      .eq("tenant_id", project.tenant_id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .range(from, to);
-
-    if (error) {
-      throw Errors.dbError("查询日志评论失败", error);
-    }
+    const { list, count } = await customerSelfServiceService.listProjectLogComments({
+      logId: paramsResult.data.logId,
+      tenantId: project.tenant_id ?? null,
+      from,
+      to,
+    });
 
     return ResponseHandler.success({
-      list: await this.attachCustomerProjectLogCommentAuthors(
-        (data || []) as unknown as CustomerProjectLogCommentRow[],
-      ),
+      list: await this.attachCustomerProjectLogCommentAuthors(list),
       pagination: {
         page,
         pageSize,
