@@ -5,7 +5,10 @@ import type {
   FastifyPluginAsync,
   FastifyReply,
 } from "fastify";
-import { createResourceRoutes } from "./factory";
+import {
+  createResourceRoutes,
+  type ResourceCrudRouteConfig,
+} from "./factory";
 
 import PaymentController from "@/controllers/payment";
 import ProjectController from "@/controllers/projects";
@@ -52,6 +55,13 @@ import BillingController from "@/controllers/billing";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
 
+const fullCrudRoutes = {
+  list: true,
+  getById: true,
+  create: true,
+  update: true,
+} satisfies ResourceCrudRouteConfig;
+
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
   app.get("/", async (request, reply) => {
@@ -87,21 +97,21 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   ProjectCameraController.registerExtraRoutes(app);
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
-  app.register(createResourceRoutes("customers", CustomerController));
-  app.register(createResourceRoutes("employees", EmployeeController));
-  app.register(createResourceRoutes("departments", DepartmentController));
-  app.register(createResourceRoutes("payments", PaymentController));
-  app.register(createResourceRoutes("expense-requests", ExpenseRequestsController));
-  app.register(createResourceRoutes("expense-request-categories", ExpenseRequestCategoriesController));
-  app.register(createResourceRoutes("projects", ProjectController));
-  app.register(createResourceRoutes("roles", RolesController));
-  app.register(createResourceRoutes("permissions", PermissionsController));
-  app.register(createResourceRoutes("external-referrers", ExternalReferrersController));
-  app.register(createResourceRoutes("project-referrals", ProjectReferralsController));
-  app.register(createResourceRoutes("project-logs", ProjectLogController));
-  app.register(createResourceRoutes("project-acceptances", ProjectAcceptancesController));
-  app.register(createResourceRoutes("posts", PostsController));
-  app.register(createResourceRoutes("properties", PropertyControlle));
+  app.register(createResourceRoutes("customers", CustomerController, fullCrudRoutes));
+  app.register(createResourceRoutes("employees", EmployeeController, fullCrudRoutes));
+  app.register(createResourceRoutes("departments", DepartmentController, fullCrudRoutes));
+  app.register(createResourceRoutes("payments", PaymentController, fullCrudRoutes));
+  app.register(createResourceRoutes("expense-requests", ExpenseRequestsController, fullCrudRoutes));
+  app.register(createResourceRoutes("expense-request-categories", ExpenseRequestCategoriesController, fullCrudRoutes));
+  app.register(createResourceRoutes("projects", ProjectController, fullCrudRoutes));
+  app.register(createResourceRoutes("roles", RolesController, fullCrudRoutes));
+  app.register(createResourceRoutes("permissions", PermissionsController, fullCrudRoutes));
+  app.register(createResourceRoutes("external-referrers", ExternalReferrersController, fullCrudRoutes));
+  app.register(createResourceRoutes("project-referrals", ProjectReferralsController, fullCrudRoutes));
+  app.register(createResourceRoutes("project-logs", ProjectLogController, fullCrudRoutes));
+  app.register(createResourceRoutes("project-acceptances", ProjectAcceptancesController, fullCrudRoutes));
+  app.register(createResourceRoutes("posts", PostsController, fullCrudRoutes));
+  app.register(createResourceRoutes("properties", PropertyControlle, fullCrudRoutes));
 };
 
 export default indexRoutes;

@@ -1,35 +1,42 @@
-import type {
-  FastifyPluginAsync,
-  RouteHandlerMethod,
-  FastifyInstance,
-} from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
+
+export type ResourceCrudRouteConfig = {
+  list: boolean;
+  getById: boolean;
+  create: boolean;
+  update: boolean;
+};
 
 /**
  * 资源路由工厂
  * @param resourceName 资源路径名称 (如 'department')
  * @param controller 必须继承自 BaseController 的实例
+ * @param routes 必须显式声明要暴露的 CRUD，避免默认挂载裸 BaseController 方法
  */
 export const createResourceRoutes = (
   resourceName: string,
   // 核心修复：这里不再用 any，而是约束为 BaseController 的子类实例
   controller: BaseController<any, any>,
+  routes: ResourceCrudRouteConfig,
 ): FastifyPluginAsync => {
   return async (fastify) => {
-    // 列表查询: GET /department
-    fastify.get(`/${resourceName}`, controller.list);
+    if (routes.list) {
+      fastify.get(`/${resourceName}`, controller.list);
+    }
 
-    // 单条查询: GET /department/:id
-    fastify.get(`/${resourceName}/:id`, controller.getById);
+    if (routes.getById) {
+      fastify.get(`/${resourceName}/:id`, controller.getById);
+    }
 
-    // 创建记录: POST /department
-    fastify.post(`/${resourceName}`, controller.create);
+    if (routes.create) {
+      fastify.post(`/${resourceName}`, controller.create);
+    }
 
-    // 更新记录: PATCH /department/:id (推荐用 PATCH 处理局部更新)
-    fastify.patch(`/${resourceName}/:id`, controller.update);
-
-    // 兼容旧习惯的 PUT
-    fastify.put(`/${resourceName}/:id`, controller.update);
+    if (routes.update) {
+      fastify.patch(`/${resourceName}/:id`, controller.update);
+      fastify.put(`/${resourceName}/:id`, controller.update);
+    }
 
     await controller.registerExtraRoutes(fastify, resourceName);
   };

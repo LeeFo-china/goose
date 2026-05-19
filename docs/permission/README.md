@@ -24,10 +24,12 @@ SupabaseDB.getAdminClient()
 - `payments` 已覆盖默认 CRUD，当前通过项目归属做租户边界。
 - `external-referrers` 已覆盖默认 CRUD，当前按租户私有模型隔离。
 - `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
+- `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
 
 ## 快速排查命令
 
 ```bash
 rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
+rg -n "createResourceRoutes\\(" apps/api/src/routes/index.ts
 ```

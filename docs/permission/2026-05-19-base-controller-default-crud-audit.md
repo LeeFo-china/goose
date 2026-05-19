@@ -4,7 +4,7 @@
 
 ## 背景
 
-`createResourceRoutes()` 会为资源自动注册：
+历史上 `createResourceRoutes()` 会为资源自动注册：
 
 - `GET /:resource`
 - `GET /:resource/:id`
@@ -15,6 +15,8 @@
 这些路由默认绑定 `BaseController.list/getById/create/update`。默认实现直接使用 `SupabaseDB.from(this.tableName)`，没有后台登录校验、没有权限点校验，也没有租户边界过滤。
 
 因此后续禁止新增依赖 `BaseController` 默认 CRUD 的资源。已经存在的资源必须逐个迁移为显式 controller + service + repository。
+
+当前已完成路由工厂止血：`createResourceRoutes()` 第三个参数必须显式声明要暴露的 CRUD。新增资源如果不传配置，会在 TypeScript 检查阶段失败。
 
 ## 本次审计范围
 
@@ -117,6 +119,7 @@
 目标：不再新增默认 CRUD 风险。
 
 - 在 `docs/permission` 明确规范。
+- `createResourceRoutes()` 必须显式声明 CRUD 注册配置。
 - 新增资源不得只继承 `BaseController` 后交给 `createResourceRoutes()`。
 - 代码评审中看到没有 `override list/getById/create/update` 的资源 controller，直接退回。
 
@@ -151,12 +154,13 @@
 
 1. 删除或限制 `BaseController.list/getById/create/update`。
 2. 删除 `SupabaseDB.from()` 兼容方法。
-3. 将 `createResourceRoutes()` 改成只注册显式传入的 handler。
+3. 将 `createResourceRoutes()` 从“按配置挂载 controller 方法”进一步改为“只注册显式传入的 handler”。
 
 ## 验收命令
 
 ```bash
 rg -n "createResourceRoutes\\(" apps/api/src/routes/index.ts
+rg -n "createResourceRoutes\\([^\\n]*\\)\\);" apps/api/src/routes/index.ts
 rg -n "override (list|getById|create|update) =" apps/api/src/controllers -S
 rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 ```
@@ -166,4 +170,5 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 - `payments` 默认 CRUD 风险已整改，当前通过项目归属做租户边界。
 - `external-referrers` 默认 CRUD 风险已整改，当前按租户私有模型隔离。
 - `permissions` 平台权限字典鉴权缺口已整改。
+- `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
 - 其它资源已显式覆盖默认 CRUD，但后续仍建议迁移到更清晰的基类结构。
