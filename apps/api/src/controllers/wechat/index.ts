@@ -15,12 +15,12 @@ import {
   WechatRebindRequestParamsSchema,
   WechatRebindRequestSchema,
 } from "@/schema/wechat";
-import { sendSmsCode } from "@/services/sms";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { userIdentityService } from "@/services/user-identities";
+import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -28,7 +28,6 @@ import {
   isEmployeeOperableStatus,
   type AuthTargetRole,
   type SmsScene,
-  type SmsVerificationStatus,
 } from "@gooes/domain";
 
 type WeChatSessionResponse = {
@@ -50,18 +49,6 @@ type LegacyAuthUser = {
   email?: string | null;
   openid?: string | null;
   unionid?: string | null;
-};
-
-type SmsVerificationCodeRow = {
-  id: string;
-  phone: string;
-  scene: SmsScene;
-  code: string;
-  status: SmsVerificationStatus;
-  expired_at: string;
-  verified_at: string | null;
-  created_at: string;
-  request_ip: string | null;
 };
 
 type CustomerIdentityRow = {
@@ -310,59 +297,12 @@ export class WeChatController extends BaseController {
       throw Errors.fromZod(bodyResult.error);
     }
 
-    const adminClient = SupabaseDB.getAdminClient();
     const { phone, scene } = bodyResult.data;
-    const recentBoundary = new Date(Date.now() - 60 * 1000).toISOString();
-
-    const { data: recentCode, error: recentError } = await adminClient
-      .from("sms_verification_codes")
-      .select("id, created_at")
-      .eq("phone", phone)
-      .eq("scene", scene)
-      .gte("created_at", recentBoundary)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (recentError) {
-      throw Errors.dbError("查询验证码发送记录失败", recentError);
-    }
-
-    if (recentCode) {
-      throw Errors.badRequest("验证码发送过于频繁，请稍后再试");
-    }
-
-    const code = this.generateVerificationCode();
-    const expiredAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    const requestIp = request.ip || null;
-
-    const { error } = await adminClient.from("sms_verification_codes").insert({
+    await smsVerificationCodeService.sendCode({
       phone,
       scene,
-      code,
-      status: "pending",
-      expired_at: expiredAt,
-      request_ip: requestIp,
-    }).select("id");
-
-    if (error) {
-      throw Errors.dbError("保存验证码失败", error);
-    }
-
-    try {
-      await sendSmsCode(phone, code, scene);
-    } catch (smsError) {
-      await adminClient
-        .from("sms_verification_codes")
-        .delete()
-        .eq("phone", phone)
-        .eq("scene", scene)
-        .eq("code", code)
-        .eq("status", "pending")
-        .select("id");
-
-      throw Errors.dbError("发送验证码失败", smsError);
-    }
+      requestIp: request.ip || null,
+    });
 
     request.log.info(
       { requestId: request.id, hasPhone: Boolean(phone), scene },
@@ -383,7 +323,6 @@ export class WeChatController extends BaseController {
       throw Errors.fromZod(bodyResult.error);
     }
 
-    const adminClient = SupabaseDB.getAdminClient();
     const { phone, code } = bodyResult.data;
     const target_role: AuthTargetRole = bodyResult.data.target_role;
     const scene: SmsScene = target_role === "customer"
@@ -392,14 +331,20 @@ export class WeChatController extends BaseController {
 
     const skipCodeVerification = isPhoneLoginWithoutCodeEnabled();
     const normalizedCode = code?.trim() || "";
-    let verificationRecord: SmsVerificationCodeRow | null = null;
+    let verificationRecord: Awaited<
+      ReturnType<typeof smsVerificationCodeService.findValidPending>
+    > | null = null;
 
     if (!skipCodeVerification) {
       if (!normalizedCode) {
         throw Errors.badRequest("请输入验证码");
       }
 
-      verificationRecord = await this.getValidVerificationCode(phone, scene, normalizedCode);
+      verificationRecord = await smsVerificationCodeService.findValidPending({
+        phone,
+        scene,
+        code: normalizedCode,
+      });
       if (!verificationRecord) {
         throw Errors.badRequest("验证码错误或已过期");
       }
@@ -422,7 +367,7 @@ export class WeChatController extends BaseController {
       }
 
       if (verificationRecord) {
-        await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+        await smsVerificationCodeService.markVerified(verificationRecord.id);
       }
 
       const openid = await this.getOpenIdByAuthUserId(employeeAuthUserId);
@@ -455,7 +400,7 @@ export class WeChatController extends BaseController {
     );
 
     if (verificationRecord) {
-      await this.markVerificationCodeVerified(adminClient, verificationRecord.id);
+      await smsVerificationCodeService.markVerified(verificationRecord.id);
     }
 
     return ResponseHandler.success(customerLogin, "身份验证成功");
@@ -950,80 +895,6 @@ export class WeChatController extends BaseController {
 
     const rows = Array.isArray(data) ? (data as LegacyAuthUser[]) : [];
     return rows[0] || null;
-  }
-
-  private async getValidVerificationCode(
-    phone: string,
-    scene: SmsScene,
-    code: string,
-  ) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const now = new Date().toISOString();
-    const { data, error } = await adminClient
-      .from("sms_verification_codes")
-      .select("id, phone, scene, code, status, expired_at, verified_at, created_at, request_ip")
-      .eq("phone", phone)
-      .eq("scene", scene)
-      .eq("code", code)
-      .eq("status", "pending")
-      .gt("expired_at", now)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<SmsVerificationCodeRow>();
-
-    if (error) {
-      throw Errors.dbError("查询验证码失败", error);
-    }
-
-    return data;
-  }
-
-  private async markVerificationCodeVerified(
-    adminClient: ReturnType<typeof SupabaseDB.getAdminClient>,
-    verificationCodeId: string,
-  ) {
-    let lastError: unknown = null;
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const { error } = await adminClient
-        .from("sms_verification_codes")
-        .update({
-          status: "verified",
-          verified_at: new Date().toISOString(),
-        })
-        .eq("id", verificationCodeId)
-        .select("id");
-
-      if (!error) {
-        return;
-      }
-
-      lastError = error;
-      if (!this.isRetryableSupabaseError(error) || attempt === 2) {
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
-    }
-
-    throw Errors.dbError("更新验证码状态失败", lastError);
-  }
-
-  private isRetryableSupabaseError(error: unknown) {
-    if (!error || typeof error !== "object") {
-      return false;
-    }
-
-    const message = "message" in error && typeof error.message === "string"
-      ? error.message
-      : "";
-
-    return (
-      message.includes("TimeoutError") ||
-      message.includes("timed out") ||
-      message.includes("fetch failed") ||
-      message.includes("network")
-    );
   }
 
   private normalizeTenantRelation(value: CustomerTenantOption["tenant"]) {
@@ -1949,10 +1820,6 @@ export class WeChatController extends BaseController {
     }
 
     return data.openid;
-  }
-
-  private generateVerificationCode() {
-    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   private async getUserRoles(userId: string) {

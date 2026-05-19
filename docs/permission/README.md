@@ -69,6 +69,7 @@
 - [Customer Self Service 权限边界核查 Phase 4](./2026-05-19-customer-self-service-boundary-audit-phase4.md)
 - [Customer Self Service 权限边界核查 Phase 5](./2026-05-19-customer-self-service-boundary-audit-phase5.md)
 - [Customer Self Service 权限边界核查 Phase 6](./2026-05-19-customer-self-service-boundary-audit-phase6.md)
+- [WeChat 权限边界核查 Phase 1](./2026-05-19-wechat-boundary-audit-phase1.md)
 
 ## 核心结论
 
