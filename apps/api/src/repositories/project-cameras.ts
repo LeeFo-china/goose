@@ -98,6 +98,10 @@ export type ProjectCameraProjectGroupRow = {
   cameras: ProjectCameraRow[];
 };
 
+export type CustomerOwnedProjectTenantRow = {
+  tenant_id: string | null;
+};
+
 type ProjectCameraWithProjectRow = ProjectCameraRow & {
   project?: ProjectCameraBindProjectRow | ProjectCameraBindProjectRow[] | null;
 };
@@ -159,6 +163,63 @@ function serializeBindProjectOption(row: ProjectCameraBindProjectRow) {
 
 class ProjectCameraRepository {
   private adminClient = SupabaseDB.getAdminClient();
+
+  async getCustomerOwnedProjectTenant(input: {
+    authUserId: string;
+    projectId: string;
+  }) {
+    const { data: customers, error: customerError } = await this.adminClient
+      .from("customers")
+      .select("id, tenant_id")
+      .eq("user_id", input.authUserId);
+
+    if (customerError) {
+      throw Errors.dbError("查询客户项目权限失败", customerError);
+    }
+
+    const customerRows = (customers || []) as Array<{
+      id?: string | null;
+      tenant_id?: string | null;
+    }>;
+    const customerIds = customerRows
+      .map((customer) => customer.id)
+      .filter((id): id is string => Boolean(id));
+    if (!customerIds.length) {
+      return null;
+    }
+
+    const { data: project, error: projectError } = await this.adminClient
+      .from("projects")
+      .select("id, tenant_id, customer_id, status")
+      .eq("id", input.projectId)
+      .in("customer_id", customerIds)
+      .maybeSingle();
+
+    if (projectError) {
+      throw Errors.dbError("查询客户项目权限失败", projectError);
+    }
+
+    const projectRow = project as {
+      tenant_id?: string | null;
+      customer_id?: string | null;
+      status?: string | null;
+    } | null;
+    const customer = customerRows.find((item) =>
+      item.id === projectRow?.customer_id && item.tenant_id === projectRow?.tenant_id
+    );
+    if (!projectRow || !customer) {
+      return null;
+    }
+
+    const status = projectRow.status;
+    if (status === "completed" || status === "invalid") {
+      return null;
+    }
+
+    return {
+      tenant_id: projectRow.tenant_id || null,
+    } satisfies CustomerOwnedProjectTenantRow;
+  }
 
   async getProject(projectId: string, tenantId?: string | null) {
     let query = this.adminClient
