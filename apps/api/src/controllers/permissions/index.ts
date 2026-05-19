@@ -1,17 +1,16 @@
-import { BaseController } from "@/controllers/BaseController";
+import { PlatformBaseController } from "@/controllers/PlatformBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreatePermissionSchema,
   PermissionListQuerySchema,
   UpdatePermissionSchema,
 } from "@/schema/permissions";
-import { authorizationService, type AuthContext } from "@/services/authorization";
 import { permissionService } from "@/services/permissions";
 import { Delete } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class PermissionsController extends BaseController<
+class PermissionsController extends PlatformBaseController<
   typeof CreatePermissionSchema,
   typeof UpdatePermissionSchema
 > {
@@ -19,23 +18,8 @@ class PermissionsController extends BaseController<
     super("permissions", CreatePermissionSchema, UpdatePermissionSchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
-    }
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
+    await this.getRequiredPlatformAdminContext(request);
 
     const result = PermissionListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
@@ -45,8 +29,7 @@ class PermissionsController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
+    await this.getRequiredPlatformAdminContext(request);
 
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
@@ -56,8 +39,7 @@ class PermissionsController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
+    await this.getRequiredPlatformAdminContext(request);
 
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
@@ -71,8 +53,7 @@ class PermissionsController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
+    await this.getRequiredPlatformAdminContext(request);
 
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
@@ -93,8 +74,7 @@ class PermissionsController extends BaseController<
 
   @Delete("/permissions/:id")
   async deletePermission(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
+    await this.getRequiredPlatformAdminContext(request);
 
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);

@@ -399,3 +399,24 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 - 继续迁移 `identity-diagnostics`。
 - 再迁移 `user-auth-events`。
 - 两个只读平台排查类 controller 完成后，再迁移 `permissions`。
+
+### 2026-05-19 阶段 1 收口
+
+已完成：
+
+- 迁移 `identity-diagnostics` 到 `PlatformBaseController`。
+- 迁移 `user-auth-events` 到 `PlatformBaseController`。
+- 迁移 `permissions` 到 `PlatformBaseController`。
+- 删除 `permissions` controller 内重复的局部 `getRequiredAuthContext()` 和 `assertPlatformAdmin()`。
+- `permissions` 保留显式 CRUD override，不恢复 `BaseController` 默认 CRUD。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 进入平台写操作类 controller：`platform-tenants`、`ai-config`。
+- 这两类会修改平台配置或租户状态，迁移时需要逐接口确认请求体校验和审计记录不变。
