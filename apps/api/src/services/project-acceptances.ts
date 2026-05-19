@@ -131,6 +131,10 @@ class ProjectAcceptanceWorkflowService {
 const projectAcceptanceWorkflowService = new ProjectAcceptanceWorkflowService();
 
 class ProjectAcceptanceService {
+  private requireTenantId(authContext: AuthContext) {
+    return accessPolicyService.assertTenantContext(authContext);
+  }
+
   private getAuthIdentitySource(): AuthIdentitySource {
     const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
     if (value === "legacy" || value === "membership") {
@@ -1021,7 +1025,7 @@ class ProjectAcceptanceService {
     authContext: AuthContext,
     query: ProjectAcceptanceListQuery,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
       authContext,
       "project_acceptance.read",
@@ -1044,7 +1048,7 @@ class ProjectAcceptanceService {
   }
 
   async getAcceptance(authContext: AuthContext, id: string) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     await this.assertCanRead(authContext, row);
     return this.buildDetail(row);
@@ -1284,7 +1288,7 @@ class ProjectAcceptanceService {
     input: CreateProjectAcceptanceInput,
   ) {
     const employeeId = this.assertCurrentEmployee(authContext);
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     await this.assertCanCreate(authContext, input.project_id);
 
     const project = await projectAcceptanceRepository.getProject(
@@ -1407,7 +1411,7 @@ class ProjectAcceptanceService {
     id: string,
     input: UpdateProjectAcceptanceInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
@@ -1429,7 +1433,7 @@ class ProjectAcceptanceService {
   }
 
   async deleteDraftAcceptance(authContext: AuthContext, id: string) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     if (row.status !== "draft") {
       throw Errors.business(
@@ -1513,7 +1517,7 @@ class ProjectAcceptanceService {
     id: string,
     input: SubmitProjectAcceptanceInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     let row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
@@ -1588,7 +1592,7 @@ class ProjectAcceptanceService {
     id: string,
     input: ApproveProjectAcceptanceInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
@@ -1629,7 +1633,7 @@ class ProjectAcceptanceService {
     id: string,
     input: NotifyProjectAcceptanceCustomerInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     this.assertCanReview(authContext, row);
 
@@ -1645,7 +1649,7 @@ class ProjectAcceptanceService {
     id: string,
     input: RejectProjectAcceptanceInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,
@@ -1783,7 +1787,7 @@ class ProjectAcceptanceService {
     id: string,
     input: CancelProjectAcceptanceInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const row = await this.getRequiredAcceptance(id, tenantId);
     projectAcceptanceWorkflowService.assertTransition({
       currentStatus: row.status,

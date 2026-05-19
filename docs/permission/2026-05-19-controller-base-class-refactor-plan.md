@@ -826,3 +826,31 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `project-acceptances`，该模块同时涉及员工、客户、整改回复和验收状态流转，需要先做专项边界核查。
+
+### 2026-05-19 Project Acceptances 权限边界核查与迁移
+
+已完成：
+
+- 核查工序验收 controller、service、repository、open ticket repository、schema。
+- 形成独立核查文档：[Project Acceptances 权限边界核查](./2026-05-19-project-acceptances-boundary-audit.md)。
+- 迁移 `project-acceptances` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 员工后台验收接口统一使用 `getRequiredTenantContext()`。
+- 模板读取也要求租户上下文，避免平台登录态直接访问租户业务入口。
+- 客户确认 / 疑问接口保持客户身份和 open ticket 口径。
+- `projectAcceptanceService` 新增 `requireTenantId()`，员工操作不再使用平台管理员无租户兼容口径。
+
+特别说明：
+
+- `project-acceptances` 是员工和客户混合入口，不能整体强制租户员工上下文。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `project-cameras`，设备和项目归属应以项目租户、设备租户和摄像头绑定关系作为核心边界。

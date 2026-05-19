@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   ApproveProjectAcceptanceSchema,
@@ -13,13 +13,12 @@ import {
   SubmitProjectAcceptanceSchema,
   UpdateProjectAcceptanceSchema,
 } from "@/schema/project-acceptances";
-import { authorizationService } from "@/services/authorization";
 import { projectAcceptanceService } from "@/services/project-acceptances";
 import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class ProjectAcceptancesController extends BaseController<
+class ProjectAcceptancesController extends TenantBaseController<
   typeof CreateProjectAcceptanceSchema,
   typeof UpdateProjectAcceptanceSchema
 > {
@@ -31,16 +30,8 @@ class ProjectAcceptancesController extends BaseController<
     );
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ProjectAcceptanceListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -52,7 +43,7 @@ class ProjectAcceptancesController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -64,7 +55,7 @@ class ProjectAcceptancesController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = CreateProjectAcceptanceSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -76,7 +67,7 @@ class ProjectAcceptancesController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = UpdateProjectAcceptanceSchema.safeParse(request.body);
@@ -92,7 +83,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Delete("/project-acceptances/:id")
   async deleteDraft(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -105,7 +96,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Get("/project-acceptance-templates")
   async listTemplates(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredAuthContext(request);
+    await this.getRequiredTenantContext(request);
     const result = ProjectAcceptanceTemplateListQuerySchema.safeParse(
       request.query,
     );
@@ -117,7 +108,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Get("/project-acceptance-templates/:id")
   async getTemplate(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredAuthContext(request);
+    await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -127,7 +118,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/submit")
   async submit(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = SubmitProjectAcceptanceSchema.safeParse(request.body);
@@ -143,7 +134,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/approve")
   async approve(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = ApproveProjectAcceptanceSchema.safeParse(request.body);
@@ -159,7 +150,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/notify-customer")
   async notifyCustomer(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = NotifyProjectAcceptanceCustomerSchema.safeParse(
@@ -177,7 +168,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/reject")
   async reject(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = RejectProjectAcceptanceSchema.safeParse(request.body);
@@ -235,7 +226,7 @@ class ProjectAcceptancesController extends BaseController<
 
   @Post("/project-acceptances/:id/cancel")
   async cancel(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const result = CancelProjectAcceptanceSchema.safeParse(request.body);
