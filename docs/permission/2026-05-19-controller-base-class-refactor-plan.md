@@ -621,3 +621,29 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 迁移 `task-center`。
+
+### 2026-05-19 Task Center 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `task-center` 到 `TenantBaseController`。
+- 删除 controller 内直接 `authorizationService` 依赖。
+- 待办列表、待办汇总接口统一使用 `getRequiredTenantContext()`。
+- 保留 `task_center.read` 或 `dashboard.read` 的入口权限判断。
+- 保持 `taskCenterService` 内按租户、员工、业务权限点构建客户跟进、施工日志、费用申请、工序验收待办的逻辑不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+阶段结论：
+
+- 个人通知和待办中心两个低风险租户入口已完成迁移。
+- 下一组涉及权限模型，不建议直接迁移。
+
+下一步建议：
+
+- 先核查 `roles` / `employee-permissions` 权限模型并形成文档。
+- 确认角色、权限点、员工权限覆盖的租户边界后，再迁移 controller。
