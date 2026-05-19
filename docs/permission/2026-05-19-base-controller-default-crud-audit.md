@@ -18,6 +18,8 @@
 
 当前已完成路由工厂止血：`createResourceRoutes()` 第三个参数必须显式声明要暴露的 CRUD。新增资源如果不传配置，会在 TypeScript 检查阶段失败。
 
+当前已完成运行时保护：`BaseController` 默认 `list/getById/create/update` 已禁用。如果误调用，会返回 `BASE_CONTROLLER_CRUD_DISABLED`。
+
 ## 本次审计范围
 
 来源文件：
@@ -171,4 +173,5 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 - `external-referrers` 默认 CRUD 风险已整改，当前按租户私有模型隔离。
 - `permissions` 平台权限字典鉴权缺口已整改。
 - `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
+- `BaseController` 默认 CRUD 已运行时禁用。
 - 其它资源已显式覆盖默认 CRUD，但后续仍建议迁移到更清晰的基类结构。

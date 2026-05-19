@@ -1,10 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { RouteHandlerMethod } from "fastify";
 import { Errors } from "@/errors/error-factory";
-import { SupabaseDB } from "@/utils/supabase/index";
 import { z } from "zod";
 import { registerRoutes } from "@/utils/decorators/route";
-import { ResponseHandler } from "@/utils/response";
 import { PaginationQuerySchema } from "@/schema/request";
 
 export abstract class BaseController<
@@ -28,94 +26,32 @@ export abstract class BaseController<
     this.updateSchema = updateSchema;
   }
 
-  getById: RouteHandlerMethod = async (request, reply) => {
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const { data, error } = await SupabaseDB.from(this.tableName)
-      .select()
-      .eq("id", idVerify.data.id)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询失败", error);
-    if (!data) throw Errors.dbError("查询记录不存在", error);
-
-    return ResponseHandler.success<T>(data);
-  };
-
-  /**
-   * 获取列表
-   */
-  list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const queryResult = this.paginationQuerySchema.safeParse(request.query);
-    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-
-    const { page, pageSize } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    const { data, error, count } = await SupabaseDB.from(this.tableName)
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw Errors.dbError("列表查询失败", error);
-    return ResponseHandler.success({
-      list: data || [],
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
+  private throwDefaultCrudDisabled(method: string): never {
+    throw Errors.business(
+      500,
+      "BaseController 默认 CRUD 已禁用，请在具体 controller 中显式覆盖该方法",
+      "BASE_CONTROLLER_CRUD_DISABLED",
+      {
+        tableName: this.tableName,
+        method,
       },
-    });
+    );
+  }
+
+  getById: RouteHandlerMethod = async () => {
+    this.throwDefaultCrudDisabled("getById");
   };
 
-  /**
-   * 创建记录
-   */
-  create = async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!this.createSchema) {
-      throw Errors.badRequest("缺少参数类型：createSchema");
-    }
-
-    const result = this.createSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
-
-    const { data, error } = await SupabaseDB.from(this.tableName)
-      .insert(result.data)
-      .select()
-      .single();
-
-    if (error) throw Errors.dbError("创建失败", error);
-    return ResponseHandler.success<T>(data);
+  list: RouteHandlerMethod = async () => {
+    this.throwDefaultCrudDisabled("list");
   };
 
-  /**
-   * 更新记录
-   */
-  update = async (request: FastifyRequest, reply: FastifyReply) => {
-    // 1. 校验 ID
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+  create: RouteHandlerMethod = async () => {
+    this.throwDefaultCrudDisabled("create");
+  };
 
-    // 2. 校验 Body
-
-    if (!this.updateSchema) {
-      throw Errors.badRequest("缺少参数类型：updateSchema");
-    }
-
-    const result = this.updateSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
-
-    const { data, error } = await SupabaseDB.from(this.tableName)
-      .update(result.data)
-      .eq("id", idVerify.data.id)
-      .select()
-      .single();
-
-    if (error) throw Errors.dbError("更新失败", error);
-    return ResponseHandler.success<T>(data);
+  update: RouteHandlerMethod = async () => {
+    this.throwDefaultCrudDisabled("update");
   };
 
   public registerExtraRoutes = (
