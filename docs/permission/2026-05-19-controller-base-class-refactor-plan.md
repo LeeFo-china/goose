@@ -1,0 +1,378 @@
+# Controller 基类拆分规划
+
+日期：2026-05-19
+
+## 背景
+
+本轮权限线基础整改已经完成：
+
+- `SupabaseDB.from()` 兼容方法已删除。
+- `BaseController` 默认 CRUD 已禁用。
+- `createResourceRoutes()` 已要求显式声明 CRUD 注册配置。
+- 高风险默认 CRUD 资源已整改。
+- `check:permission-boundaries` 已接入 dev 和生产镜像构建 workflow。
+
+下一步不再是堵权限漏洞，而是降低 controller 里重复的鉴权代码，并让新增接口天然选择正确边界。
+
+## 目标
+
+拆分三个更明确的 controller 基类：
+
+- `TenantBaseController`
+- `PlatformBaseController`
+- `PublicBaseController`
+
+这三个基类只提供上下文和边界工具，不恢复默认 CRUD。
+
+## 基类职责
+
+### TenantBaseController
+
+适用场景：
+
+- 租户后台业务接口
+- 员工端接口
+- 需要 `tenantId` 的业务接口
+
+能力：
+
+- `getRequiredAuthContext(request)`
+- `getRequiredTenantContext(request)`
+- `assertPermission(authContext, permissionCode)`
+- 常用 `idParamSchema`
+- 继续支持 `registerExtraRoutes()`
+
+硬性规则：
+
+- 必须有登录态。
+- 必须有租户上下文。
+- 访问租户数据必须显式带 `tenant_id`，或先通过业务访问策略校验。
+
+不做的事：
+
+- 不提供默认 CRUD。
+- 不替 service/repository 做业务判断。
+
+### PlatformBaseController
+
+适用场景：
+
+- 超管平台接口
+- 平台租户管理
+- 平台计费中心
+- 平台运维、发布、审计
+- 平台 AI 配置
+
+能力：
+
+- `getRequiredAuthContext(request)`
+- `getRequiredPlatformAdminContext(request)`
+- 常用 `idParamSchema`
+- 继续支持 `registerExtraRoutes()`
+
+硬性规则：
+
+- 必须有登录态。
+- 必须满足 `authContext.isPlatformAdmin === true`。
+- 平台接口不能隐式落到租户上下文。
+
+不做的事：
+
+- 不提供默认 CRUD。
+- 不允许普通租户角色绕过 service 访问平台数据。
+
+### PublicBaseController
+
+适用场景：
+
+- H5 公开页面
+- 公开线索提交
+- 分享页、助力页、公开二维码
+- 微信登录入口等未登录入口
+
+能力：
+
+- `getOptionalAuthContext(request)`，仅在确实需要时提供。
+- share token / ticket / tenant slug 等公开访问边界工具。
+- 继续支持 `registerExtraRoutes()`
+
+硬性规则：
+
+- 默认没有登录态。
+- 不允许直接访问租户私有数据。
+- 访问租户数据必须通过公开 token、share token、ticket、tenant slug + published 状态等边界。
+
+不做的事：
+
+- 不使用 `getAdminClient()` 查询私有数据，除非 service 已完成公开边界校验。
+
+## Controller 分类清单
+
+### 租户业务类
+
+优先迁移到 `TenantBaseController`：
+
+- `customer`
+- `employee`
+- `departments`
+- `payment`
+- `expense-requests`
+- `expense-request-categories`
+- `projects`
+- `roles`
+- `external-referrers`
+- `project-referrals`
+- `project-logs`
+- `project-log-comments`
+- `project-acceptances`
+- `posts`
+- `properties`
+- `department-post-rules`
+- `employee-permissions`
+- `task-center`
+- `project-cameras`
+- `tenant-share-links` 的租户侧接口
+- `notifications`
+- `usage` 的租户侧接口
+- `billing` 的租户侧接口
+- `social-video` 的租户侧接口
+- `ai` 装修问答接口
+- `uploads`
+- `customer-follow-up-comments`
+
+### 平台业务类
+
+优先迁移到 `PlatformBaseController`：
+
+- `platform-tenants`
+- `platform-leads` 的平台管理接口
+- `platform-audit-logs`
+- `admin-ops`
+- `ai-config`
+- `permissions`
+- `identity-diagnostics`
+- `user-auth-events`
+- `tenant-devices` 的平台接口
+- `usage` 的平台接口
+- `billing` 的平台接口
+- `marketing-pages` 的平台接口
+- `system-settings`
+
+### 公开/混合入口类
+
+需要谨慎拆分，部分接口可能需要拆 controller：
+
+- `wechat`
+- `admin-auth`
+- `customer-self-service`
+- `customer-project-log-shares`
+- `marketing-pages`
+- `platform-leads` 的公开线索提交接口
+- `tenant-share-links` 的公开 token 查询接口
+- `projects` 的 `/front/projects` 公开项目接口
+- `customer-project-log-shares` 的 `/share-campaigns/*` 公开接口
+- `customer-project-log-shares` 的公开 voucher/qrcode 接口
+
+建议这类 controller 不要直接整体迁移到单一基类，先按路由边界拆文件或拆 class。
+
+## 混合 Controller 拆分原则
+
+混合 controller 是后续最容易再次产生权限边界误判的地方，不建议整体迁移到某一个基类。
+
+拆分时按路由前缀和访问身份先拆 class，再决定继承哪个基类：
+
+| 当前 controller | 当前混合点 | 建议拆分 |
+| --- | --- | --- |
+| `marketing-pages` | `/platform/marketing-pages`、`/marketing-pages`、`/public/marketing-pages` 混在一起 | 拆成 `PlatformMarketingPagesController`、`TenantMarketingPagesController`、`PublicMarketingPagesController` |
+| `billing` | 租户账单和平台计费中心混在一起 | 拆成 `TenantBillingController`、`PlatformBillingController` |
+| `usage` | 租户用量和平台用量混在一起 | 拆成 `TenantUsageController`、`PlatformUsageController` |
+| `tenant-devices` | 租户设备资产和平台腾讯云设备管理混在一起 | 拆成 `TenantDevicesController`、`PlatformDevicesController` |
+| `platform-leads` | 公开线索提交和平台线索管理混在一起 | 拆成 `PublicPlatformLeadsController`、`PlatformLeadsController` |
+| `tenant-share-links` | 租户生成链接和公开 token 查询混在一起 | 拆成 `TenantShareLinksController`、`PublicTenantShareLinksController` |
+| `customer-project-log-shares` | 客户、员工、公开分享、营销中心接口混在一起 | 先按 `customer` / `employee` / `public` 三组拆，再评估营销中心是否单独拆 |
+| `projects` | 后台项目 CRUD、项目成员、`/front/projects` 公开接口混在一起 | 公开项目接口单独拆到 `PublicProjectsController` |
+| `uploads` | 后台上传、公开 URL、COS 直传确认混在一起 | 按上传场景保留显式权限和 scene 校验，暂不急于整体继承单一基类 |
+| `wechat` | 登录入口、解绑、换绑审批、H5 session 混在一起 | 先维持现状，后续按多端登录重构文档拆 `AuthEntryController` 和员工审批接口 |
+
+拆分后的 controller 命名必须表达边界，不使用只有业务名但无法识别身份边界的名字。
+
+## 迁移优先级
+
+### 阶段 1：平台低风险试点
+
+目标：验证 `PlatformBaseController` 形态。
+
+建议顺序：
+
+1. `platform-audit-logs`
+2. `identity-diagnostics`
+3. `user-auth-events`
+4. `permissions`
+
+原因：
+
+- 都是平台管理员接口。
+- 租户上下文较少。
+- 风险边界清晰。
+
+验收：
+
+- 接口路径和响应结构不变。
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `PlatformBaseController` 内只提供鉴权辅助，不接触 Supabase。
+- 每个迁移 controller 至少有一个平台管理员上下文入口，例如 `getRequiredPlatformAdminContext(request)`。
+
+### 阶段 2：租户低风险试点
+
+目标：验证 `TenantBaseController` 形态。
+
+建议顺序：
+
+1. `expense-request-categories`
+2. `posts`
+3. `external-referrers`
+4. `payment`
+
+原因：
+
+- 已经完成显式权限边界。
+- controller 相对小。
+- 适合抽取通用租户上下文方法。
+
+验收：
+
+- 必须要求租户上下文。
+- 权限点和 service 逻辑不变。
+- 路径和响应结构不变。
+- `TenantBaseController` 不替 service 拼业务查询，只提供 `tenantId`、权限和参数校验辅助。
+- controller 内不能新增 `tenant_id` 以外的隐式越权查询条件。
+
+### 阶段 3：拆混合 controller
+
+目标：把公开接口和后台接口分开。
+
+候选：
+
+- `marketing-pages`
+- `customer-project-log-shares`
+- `tenant-share-links`
+- `platform-leads`
+- `projects` 的公开项目接口
+
+建议：
+
+- 不直接把混合 controller 继承某个基类。
+- 先按路由边界拆成 public/platform/tenant controller。
+- 拆完后再继承对应基类。
+
+验收：
+
+- 公开接口只继承 `PublicBaseController`。
+- 后台接口不再和公开接口共享 controller-level helper。
+- 公开接口的 service 方法名必须显式带 public/open/share/token 等语义，避免误用后台 service。
+
+### 阶段 4：迁移租户大 controller
+
+目标：把大型租户 controller 迁移到 `TenantBaseController`，同时保持业务行为不变。
+
+建议顺序：
+
+1. `project-referrals`
+2. `project-logs`
+3. `project-log-comments`
+4. `project-acceptances`
+5. `projects`
+6. `customer`
+7. `employee`
+
+注意：
+
+- 大型 controller 不要一次性重构 service/repository。
+- 每次只迁移一个 controller 的基类和上下文 helper。
+- 涉及项目归属、客户归属、员工身份的接口必须保留现有访问策略。
+
+验收：
+
+- 现有 admin 页面和接口响应结构不变。
+- 租户 A 不能访问租户 B 数据。
+- 客户/员工身份接口不因迁移混用后台员工权限。
+
+### 阶段 5：收敛 BaseController
+
+当迁移完成后：
+
+1. `BaseController` 只保留公共 schema 和 `registerExtraRoutes()`。
+2. 或改名为 `ControllerBase`，避免误解为 CRUD 基类。
+3. 删除旧的 `createSchema/updateSchema` 泛型，如果没有 controller 再依赖。
+
+验收：
+
+- 新增 controller 不再直接继承旧 `BaseController`。
+- `BaseController` 内没有任何默认 CRUD 方法。
+- `createResourceRoutes()` 后续可按资源显式绑定 controller 方法，不再暗示继承 CRUD。
+
+## 第一批迁移清单
+
+| 优先级 | Controller | 建议基类 | 原因 | 验收重点 |
+| --- | --- | --- | --- | --- |
+| P0 | `platform-audit-logs` | `PlatformBaseController` | 平台只读接口，边界最清晰 | 平台管理员校验不变 |
+| P0 | `identity-diagnostics` | `PlatformBaseController` | 只给超管排查身份数据 | 普通租户无法访问 |
+| P0 | `user-auth-events` | `PlatformBaseController` | 平台审计类接口 | 查询条件和分页不变 |
+| P0 | `permissions` | `PlatformBaseController` | 已完成平台强校验 | 默认 CRUD 不恢复 |
+| P1 | `expense-request-categories` | `TenantBaseController` | 租户基础配置，体量小 | tenant scope 不变 |
+| P1 | `posts` | `TenantBaseController` | 已完成部门岗位重构相关整改 | tenant scope 不变 |
+| P1 | `external-referrers` | `TenantBaseController` | 已修复租户私有边界 | 不能跨租户读写 |
+| P1 | `payment` | `TenantBaseController` | 已用项目归属约束租户边界 | 项目访问策略不变 |
+| P2 | `billing` | 拆分后迁移 | 平台和租户混合 | 先拆 controller |
+| P2 | `usage` | 拆分后迁移 | 平台和租户混合 | 先拆 controller |
+| P2 | `marketing-pages` | 拆分后迁移 | 平台、租户、公开混合 | 公开接口不能混后台 helper |
+| P2 | `tenant-devices` | 拆分后迁移 | 平台设备和租户设备混合 | 腾讯云平台能力单独隔离 |
+
+## 新增接口规则
+
+后续新增 controller 必须先回答三个问题：
+
+1. 这是租户接口、平台接口，还是公开接口？
+2. 数据边界来自 `tenantId`、`isPlatformAdmin`，还是公开 token/ticket？
+3. 是否需要新增权限点，还是复用已有权限点？
+
+禁止：
+
+- 新 controller 直接继承 `BaseController` 后暴露默认 CRUD。
+- controller 内直接依赖 Supabase RLS 判断后台业务权限。
+- 公开接口直接查询租户私有数据。
+
+## 验收命令
+
+每次迁移一个 controller 后至少执行：
+
+```bash
+bun run api:typecheck
+bun run check:permission-boundaries
+git diff --check
+```
+
+如果涉及数据库访问方式，还要执行：
+
+```bash
+rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
+rg -n "SupabaseDB\\.from\\(" apps/api/src -S
+```
+
+## CI 卡点
+
+当前已有 `check:permission-boundaries` 接入 dev 和生产镜像构建 workflow。后续拆基类时，CI 必须继续卡住以下问题：
+
+- 新增 `SupabaseDB.from()`。
+- 新增 `SupabaseDB.getClient()`。
+- 新增未显式传入第三个参数的 `createResourceRoutes()`。
+- 恢复 `BaseController` 默认 CRUD。
+
+如果阶段迁移过程中发现 CI 没有覆盖某类权限线问题，优先增强 `scripts/check-permission-boundaries.ts`，再继续迁移业务 controller。
+
+## 第一批建议
+
+下一步建议先实现 `PlatformBaseController`，并迁移 `platform-audit-logs` 作为最小试点。
+
+试点完成后，再迁移 `identity-diagnostics` 和 `user-auth-events`。这三个完成后，再决定是否继续批量迁移平台接口。
