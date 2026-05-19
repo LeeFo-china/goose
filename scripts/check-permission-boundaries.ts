@@ -72,47 +72,71 @@ function checkSupabaseGetClient(file: string, content: string) {
   }
 }
 
-function checkControllerSupabaseAccess(file: string, content: string) {
-  if (!relative(ROOT, file).startsWith(CONTROLLERS_SRC)) return;
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  const directPatterns: Array<[RegExp, string]> = [
-    [
-      /\bSupabaseDB\b/g,
-      "controller 禁止直接依赖 SupabaseDB；请下沉到 service/repository",
-    ],
-    [
-      /\bgetAdminClient\s*\(/g,
-      "controller 禁止直接调用 getAdminClient()；请下沉到 service/repository",
-    ],
-    [
-      /\bgetClient\s*\(/g,
-      "controller 禁止直接调用 getClient()；请下沉到明确 public/RLS service/repository",
-    ],
-    [
-      /\.rpc\s*\(/g,
-      "controller 禁止直接调用 Supabase RPC；请下沉到 service/repository",
-    ],
-  ];
-
-  for (const [pattern, message] of directPatterns) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(content)) !== null) {
-      addFinding(file, lineNumberAt(content, match.index), message);
-    }
-  }
-
-  const fromPattern = /\.from\s*\(/g;
+function getControllerSupabaseIdentifiers(content: string) {
+  const identifiers = new Set<string>(["SupabaseDB"]);
+  const importPattern =
+    /import\s+(?:type\s+)?(?:(?<named>\{[^}]*\})|(?<namespace>\*\s+as\s+[A-Za-z_$][\w$]*)|(?<default>[A-Za-z_$][\w$]*))\s+from\s+["'](?<source>[^"']+)["']/g;
   let match: RegExpExecArray | null;
-  while ((match = fromPattern.exec(content)) !== null) {
-    const prefix = content.slice(Math.max(0, match.index - 5), match.index);
-    if (prefix === "Array") {
+
+  while ((match = importPattern.exec(content)) !== null) {
+    const source = match.groups?.source ?? "";
+    if (!source.includes("/utils/supabase") && source !== "@supabase/supabase-js") {
       continue;
     }
 
+    const named = match.groups?.named;
+    if (named) {
+      for (const part of named.replace(/[{}]/g, "").split(",")) {
+        const [imported, alias] = part.trim().split(/\s+as\s+/);
+        const identifier = (alias || imported || "").trim();
+        if (identifier) identifiers.add(identifier);
+      }
+    }
+
+    const namespaceImport = match.groups?.namespace;
+    if (namespaceImport) {
+      const identifier = namespaceImport.replace(/^\*\s+as\s+/, "").trim();
+      if (identifier) identifiers.add(identifier);
+    }
+
+    const defaultImport = match.groups?.default;
+    if (defaultImport) {
+      identifiers.add(defaultImport);
+    }
+  }
+
+  return identifiers;
+}
+
+function checkControllerSupabaseAccess(file: string, content: string) {
+  if (!relative(ROOT, file).startsWith(CONTROLLERS_SRC)) return;
+
+  const supabaseImportPattern = /from\s+["'](?:@supabase\/supabase-js|[^"']*\/utils\/supabase[^"']*)["']/g;
+  let importMatch: RegExpExecArray | null;
+  while ((importMatch = supabaseImportPattern.exec(content)) !== null) {
     addFinding(
       file,
-      lineNumberAt(content, match.index),
-      "controller 禁止直接调用 Supabase .from()；请下沉到 service/repository",
+      lineNumberAt(content, importMatch.index),
+      "controller 禁止导入 Supabase 客户端；请下沉到 service/repository",
+    );
+  }
+
+  const identifiers = getControllerSupabaseIdentifiers(content);
+  const identifierPattern = new RegExp(
+    `\\b(?:${Array.from(identifiers).map(escapeRegExp).join("|")})\\b`,
+    "g",
+  );
+
+  let identifierMatch: RegExpExecArray | null;
+  while ((identifierMatch = identifierPattern.exec(content)) !== null) {
+    addFinding(
+      file,
+      lineNumberAt(content, identifierMatch.index),
+      "controller 禁止直接依赖 Supabase 客户端；请下沉到 service/repository",
     );
   }
 }
