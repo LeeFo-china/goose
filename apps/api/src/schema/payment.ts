@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PaginationQuerySchema } from "@/schema/request";
 import {
   PAYMENT_STATUS_VALUES,
   PAYMENT_TYPE_VALUES,
@@ -48,7 +49,18 @@ export const CreatePaymentSchema = PaymentBaseSchema.omit({
  */
 export const UpdatePaymentSchema = CreatePaymentSchema.partial();
 
+export const PaymentListQuerySchema = PaginationQuerySchema.extend({
+  project_id: z.string().uuid("请选择有效的关联项目").optional(),
+  status: z.enum(PAYMENT_STATUS_VALUES, {
+    message: "无效的支付状态",
+  }).optional(),
+  type: z.enum(PAYMENT_TYPE_VALUES, {
+    message: "请选择有效的支付类型",
+  }).optional(),
+});
+
 // 导出类型
 export type PaymentType = z.infer<typeof PaymentBaseSchema>;
 export type CreatePaymentInput = z.infer<typeof CreatePaymentSchema>;
 export type UpdatePaymentInput = z.infer<typeof UpdatePaymentSchema>;
+export type PaymentListQuery = z.infer<typeof PaymentListQuerySchema>;

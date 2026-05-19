@@ -33,7 +33,7 @@
 | `customers` | `customers` | 租户核心数据 | 已覆盖 4 个默认方法 | 低 | 保持现状，后续只做基类迁移 |
 | `employees` | `employees` | 租户核心数据 | 已覆盖 4 个默认方法 | 低 | 保持现状，后续只做基类迁移 |
 | `departments` | `departments` / `tenant_departments` | 租户组织数据 | 已覆盖 4 个默认方法 | 低 | 保持现状，继续推进新版部门模型 |
-| `payments` | `payments` | 租户财务数据 | 未覆盖，仍走默认 CRUD | 高 | 必须优先迁移，按项目归属校验租户权限 |
+| `payments` | `payments` | 租户财务数据 | 已覆盖 4 个默认方法 | 已整改 | 第一版通过项目归属校验租户权限 |
 | `expense-requests` | `expense_requests` | 租户财务审批 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `expense-request-categories` | `expense_request_categories` | 租户配置 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `projects` | `projects` | 租户核心数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
@@ -48,26 +48,27 @@
 
 ## 高风险项
 
-### 1. `payments`
+### 1. `payments`（已整改）
 
 现状：
 
-- `PaymentController` 只继承 `BaseController`。
-- `GET/POST/PATCH/PUT /payments` 全部走默认 CRUD。
-- `payments` 表早期模型只有 `project_id`，没有直接 `tenant_id`。
+- `PaymentController` 已覆盖 `list/getById/create/update`。
+- 已新增 `PaymentService` / `PaymentRepository`。
+- repository 使用 admin client。
+- `payments` 表早期模型仍只有 `project_id`，没有直接 `tenant_id`。
 
-风险：
+已关闭的风险：
 
-- 后台用户可能绕过项目权限查看或修改其它租户项目的收款记录。
-- 后续如果切换为 admin client，风险会进一步扩大。
+- 后台用户不能再通过默认 CRUD 绕过项目权限查看或修改其它租户项目的收款记录。
+- 创建、更新、读取都通过项目归属和项目权限做边界判断。
 
-建议：
+当前口径：
 
-1. 新增 `PaymentService` / `PaymentRepository`。
-2. 所有查询通过 `project_id -> projects.tenant_id` 校验租户边界。
-3. 写入前必须校验 `payment.create` 或对应财务权限点。
-4. 读取前必须校验项目可见性或财务读取权限。
-5. 中期评估是否给 `payments` 表补 `tenant_id`，从项目继承并建索引。
+1. 列表读取使用 `project.read` 的项目可见范围。
+2. 单条读取使用 `project.read` 校验项目访问权。
+3. 创建和更新使用 `project.update` 校验项目操作权。
+4. 收款记录必须关联项目，不允许创建或更新成无项目归属记录。
+5. 中期仍建议给 `payments` 表补 `tenant_id`，从项目继承并建索引，避免通过项目 ID 列表过滤带来的性能上限。
 
 ### 2. `external-referrers`
 
@@ -122,8 +123,7 @@
 
 优先顺序：
 
-1. `payments`
-2. `external-referrers`
+1. `external-referrers`
 
 每个资源都必须补：
 
@@ -160,6 +160,7 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 当前验收口径：
 
-- `payments` 和 `external-referrers` 是默认 CRUD 高风险遗留项。
+- `external-referrers` 是默认 CRUD 高风险遗留项。
+- `payments` 默认 CRUD 风险已整改，当前通过项目归属做租户边界。
 - `permissions` 平台权限字典鉴权缺口已整改。
 - 其它资源已显式覆盖默认 CRUD，但后续仍建议迁移到更清晰的基类结构。
