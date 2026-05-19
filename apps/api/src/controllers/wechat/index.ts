@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { SupabaseDB } from "@/utils/supabase";
 import { BaseController } from "@/controllers/BaseController";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
@@ -22,6 +21,7 @@ import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
+import { wechatAuthRoleService } from "@/services/wechat-auth-roles";
 import {
   wechatCustomerIdentityService,
   type CustomerIdentityRow,
@@ -1351,142 +1351,10 @@ export class WeChatController extends BaseController {
   }
 
   private async getUserRoles(userId: string) {
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource === "legacy") {
-      return this.getLegacyUserRoles(userId);
-    }
-
-    const memberships = await userIdentityService.listActiveBusinessMemberships({ userId });
-    const employeeIds = Array.from(new Set(
-      memberships
-        .filter((item) => item.identity_type === "employee")
-        .map((item) => item.identity_id),
-    ));
-    const customerIds = Array.from(new Set(
-      memberships
-        .filter((item) => item.identity_type === "customer")
-        .map((item) => item.identity_id),
-    ));
-    const adminClient = SupabaseDB.getAdminClient();
-    const [employeeResult, customerResult] = await Promise.all([
-      employeeIds.length > 0
-        ? adminClient
-          .from("employees")
-          .select(`
-            id,
-            status,
-            tenant:tenants!employees_tenant_id_fkey(
-              id,
-              status
-            )
-          `)
-          .in("id", employeeIds)
-        : Promise.resolve({ data: [], error: null }),
-      customerIds.length > 0
-        ? adminClient
-          .from("customers")
-          .select(`
-            id,
-            tenant:tenants!customers_tenant_id_fkey(
-              id,
-              status
-            )
-          `)
-          .in("id", customerIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    if (employeeResult.error) {
-      throw Errors.dbError("查询员工业务身份失败", employeeResult.error);
-    }
-
-    if (customerResult.error) {
-      throw Errors.dbError("查询客户业务身份失败", customerResult.error);
-    }
-
-    const roles = new Set<string>();
-    const hasActiveEmployee = ((employeeResult.data || []) as unknown as Array<{
-      status?: string | null;
-      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
-    }>).some((item) => {
-      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
-      return item.status === "active" && tenant?.status === "active";
+    return wechatAuthRoleService.getUserRoles({
+      userId,
+      identitySource: this.getAuthIdentitySource(),
     });
-
-    if (hasActiveEmployee) {
-      roles.add("employee");
-    }
-
-    const hasActiveCustomer = ((customerResult.data || []) as unknown as Array<{
-      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
-    }>).some((item) => {
-      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
-      return tenant?.status === "active";
-    });
-
-    if (hasActiveCustomer) {
-      roles.add("customer");
-    }
-
-    if (identitySource === "dual") {
-      for (const role of await this.getLegacyUserRoles(userId)) {
-        if (role !== "visitor") {
-          roles.add(role);
-        }
-      }
-    }
-
-    if (roles.size === 0) {
-      return ["visitor"];
-    }
-
-    return Array.from(roles);
-  }
-
-  private async getLegacyUserRoles(userId: string) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const roles: string[] = [];
-
-    const [{ data: employeeData }, { data: customerData }] = await Promise.all([
-      adminClient
-        .from("employees")
-        .select("id, status")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .limit(1),
-      adminClient
-        .from("customers")
-        .select(`
-          id,
-          tenant:tenants!customers_tenant_id_fkey(
-            id,
-            status
-          )
-        `)
-        .eq("user_id", userId)
-        .limit(2),
-    ]);
-
-    if ((employeeData || []).length > 0) {
-      roles.push("employee");
-    }
-
-    const hasActiveCustomer = ((customerData || []) as unknown as Array<{
-      tenant?: { status?: string | null } | Array<{ status?: string | null }> | null;
-    }>).some((item) => {
-      const tenant = Array.isArray(item.tenant) ? item.tenant[0] : item.tenant;
-      return tenant?.status === "active";
-    });
-
-    if (hasActiveCustomer) {
-      roles.push("customer");
-    }
-
-    if (roles.length === 0) {
-      roles.push("visitor");
-    }
-
-    return roles;
   }
 
   async verifyServer(request: FastifyRequest, reply: FastifyReply) {
