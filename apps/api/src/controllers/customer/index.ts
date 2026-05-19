@@ -48,6 +48,10 @@ import {
   type NormalizedCustomerPropertyPayload,
 } from "@/services/customer-properties";
 import { customerOwnerAssignmentService } from "@/services/customer-owner-assignments";
+import {
+  customerCoreService,
+  type CustomerCoreRow,
+} from "@/services/customer-core";
 import { ErrorCodes } from "@/errors/error-codes";
 import {
   resolveStoredFileUrl,
@@ -58,16 +62,7 @@ type CustomerPropertyPayload =
   | CreateCustomerSchemaType["property"]
   | UpdateCustomerSchemaType["property"];
 
-type CustomerRowForResponse = {
-  owner?: unknown;
-  owner_id: string | null;
-  id: string;
-  property_id?: string | null;
-  avatar?: string | null;
-  source?: string | null;
-  phone?: string | null;
-  douyin_screenshot_images?: unknown;
-};
+type CustomerRowForResponse = CustomerCoreRow;
 
 type CustomerFollowFilter = "due" | "overdue";
 
@@ -308,36 +303,6 @@ class CustomerController extends TenantBaseController<
       has_old_customer_new_lead: summary.has_old_customer_new_lead,
       has_platform_new_lead: summary.has_platform_new_lead,
       has_employee_share: summary.has_employee_share,
-    };
-  }
-
-  private async getRequiredCustomerRecord(
-    authContext: AuthContext & { tenantId: string },
-    customerId: string,
-    message = "客户不存在",
-  ) {
-    let query = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, owner_id, property_id, tenant_id")
-      .eq("id", customerId);
-
-    query = query.eq("tenant_id", authContext.tenantId);
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询客户失败", error);
-    }
-
-    if (!data) {
-      throw Errors.business(404, message, ErrorCodes.CUSTOMER_NOT_FOUND);
-    }
-
-    return data as {
-      id: string;
-      owner_id: string | null;
-      property_id: string | null;
-      tenant_id: string | null;
     };
   }
 
@@ -781,33 +746,15 @@ class CustomerController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(this.customerSelect)
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询客户失败", error);
-    }
-
-    if (!data) {
-      throw Errors.badRequest("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
+    const customer = await customerCoreService.getCustomerDetail({
       authContext,
-      (data as unknown) as { owner_id: string | null; tenant_id?: string | null },
-      "customer.read",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
+      customerId: idVerify.data.id,
+      notFoundAs: "bad_request",
+    });
 
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(
-        (data as unknown) as CustomerRowForResponse,
+        customer,
         {
           phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
             authContext,
@@ -1022,42 +969,13 @@ class CustomerController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const existing = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, owner_id, tenant_id")
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (existing.error) {
-      throw Errors.dbError("查询客户失败", existing.error);
-    }
-
-    if (!existing.data) {
-      throw Errors.badRequest("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
+    const customer = await customerCoreService.invalidateCustomer({
       authContext,
-      (existing.data as unknown) as { owner_id: string | null },
-      "customer.update",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .update({ status: "invalid" })
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .select(this.customerSelect)
-      .single();
-
-    if (error) throw Errors.dbError("作废客户失败", error);
+      customerId: idVerify.data.id,
+    });
     return ResponseHandler.success(
       this.serializeCustomer(
-        (data as unknown) as CustomerRowForResponse,
+        customer,
         await customerPhonePrivacyService.createPrivacyContext(authContext),
       ),
     );
@@ -1084,31 +1002,18 @@ class CustomerController extends TenantBaseController<
     request: FastifyRequest<{ Params: { id: string } }>,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    const { id } = request.params; // ← 这里拿到 UUID
-    const { data, error } = await SupabaseDB.getAdminClient().from("customers").select(this.customerSelect).eq(
-      "id",
-      id,
-    ).eq("tenant_id", authContext.tenantId).maybeSingle();
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    if (error) {
-      throw Errors.dbError("get customers data by id error", error);
-    }
-    if (!data) {
-      throw Errors.notFound("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
+    const customer = await customerCoreService.getCustomerDetail({
       authContext,
-      (data as unknown) as { owner_id: string | null },
-      "customer.read",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
+      customerId: idVerify.data.id,
+      notFoundAs: "not_found",
+    });
 
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(
-        (data as unknown) as CustomerRowForResponse,
+        customer,
         {
           includeProperties: true,
           phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
