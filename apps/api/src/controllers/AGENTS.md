@@ -14,7 +14,7 @@ controllers/
 ├── payment/index.ts            # payments table CRUD
 ├── posts/index.ts              # posts table CRUD
 ├── wechat/index.ts             # WeChat auth integration
-└── common/rpc/get_home_dashboard_stats/  # Supabase RPC wrapper
+└── common/rpc/            # Thin HTTP wrappers; RPC/database access lives in service/repository
 ```
 
 ## WHERE TO LOOK
@@ -23,7 +23,7 @@ controllers/
 | Add CRUD for new table | Create `controllers/{name}/index.ts` | Extend BaseController with Zod schemas |
 | Custom routes | Use `@Get("/path")` or `@Post("/path")` | Decorators auto-register via registerRoutes() |
 | Complex joins | See employee/index.ts | Supabase select with relationships |
-| RPC calls | controllers/common/rpc/ | Supabase RPC via getClient().rpc() |
+| RPC-backed endpoints | controllers/common/rpc/ + services/ + repositories/ | Controllers only call service; repository performs RPC |
 | Validation errors | Errors.fromZod(), Errors.dbError() | Consistent error handling |
 
 ## CONVENTIONS
@@ -41,4 +41,4 @@ controllers/
 - **DON'T** export class instead of instance - routes/factory.ts expects singleton
 - **DON'T** forget to pass schemas to BaseController constructor or validation breaks
 - **DON'T** use double `await await` (BaseController.ts:55, 72, 98 - typo pattern)
-- **DON'T** call SupabaseDB directly without error handling - always wrap with Errors.dbError()
+- **DON'T** call SupabaseDB, `.from()`, or `.rpc()` from controllers. Put database/RPC access in repositories and wrap failures with Errors.dbError().

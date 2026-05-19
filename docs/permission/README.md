@@ -93,12 +93,14 @@ SupabaseDB.getAdminClient()
 ## 当前遗留风险
 
 - `get_project_create_page_data` 已改为后台鉴权接口，要求 `project.create` 后经 service/repository 调 RPC。
+- Controller 层 Supabase 直连已清零；数据库表和 RPC 访问必须下沉到 service/repository。
 - `payments` 已覆盖默认 CRUD，当前通过项目归属做租户边界。
 - `external-referrers` 已覆盖默认 CRUD，当前按租户私有模型隔离。
 - `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
 - `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
 - `BaseController` 默认 CRUD 已运行时禁用，误调用会返回 `BASE_CONTROLLER_CRUD_DISABLED`。
 - `SupabaseDB.from()` 兼容方法已删除。
+- `check:permission-boundaries` 已增加 controller Supabase 直连扫描，防止回退。
 - 本轮权限线基础整改已完成闭环验收。
 - `check:permission-boundaries` 已接入 dev 和生产镜像构建 workflow。
 
@@ -107,6 +109,7 @@ SupabaseDB.getAdminClient()
 ```bash
 rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
+rg -n "SupabaseDB|getAdminClient|getClient|\\.from\\(|\\.rpc\\(" apps/api/src/controllers --glob '*.ts'
 rg -n "createResourceRoutes\\(" apps/api/src/routes/index.ts
 rg -n "override (list|getById|create|update) =" apps/api/src/controllers -S
 bun run check:permission-boundaries

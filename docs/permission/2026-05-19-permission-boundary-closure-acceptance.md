@@ -15,6 +15,7 @@
 - `payments` 已脱离默认 CRUD，通过项目归属做租户边界。
 - `external-referrers` 已脱离默认 CRUD，并改为租户私有模型。
 - 当前业务鉴权后的 Supabase 访问已显式使用 `getAdminClient()`。
+- Controller 层 Supabase 直连已清零；表查询和 RPC 调用已下沉到 service/repository。
 
 旧 public RPC 清理：
 
@@ -56,6 +57,14 @@ rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
 
 结果：无业务调用点。
 
+### Controller Supabase 直连扫描
+
+```bash
+rg -n "SupabaseDB|getAdminClient|getClient|\\.from\\(|\\.rpc\\(" apps/api/src/controllers --glob '*.ts'
+```
+
+结果：无 Supabase 直连调用点；仅存在 `Array.from()` 文本命中。
+
 ### `createResourceRoutes()` 扫描
 
 ```bash
@@ -89,6 +98,13 @@ bun run check:permission-boundaries
 ```
 
 结果：通过。
+
+脚本覆盖：
+
+- 禁止 `SupabaseDB.from()`。
+- 禁止业务代码新增 `SupabaseDB.getClient()`。
+- 禁止 controller 直接依赖 `SupabaseDB`、`getAdminClient()`、`getClient()`、`.from()`、`.rpc()`。
+- 要求 `createResourceRoutes()` 显式传入 CRUD 注册配置。
 
 CI 接入：
 
@@ -147,4 +163,4 @@ BASE_CONTROLLER_CRUD_DISABLED
    - `TenantBaseController`
    - `PlatformBaseController`
    - `PublicBaseController`
-2. 继续把遗留 controller 内直接访问数据库的逻辑迁移到 service/repository。
+2. 继续把复杂 controller 拆小，保持 HTTP / service / repository 职责边界清晰。

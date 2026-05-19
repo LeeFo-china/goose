@@ -9,6 +9,7 @@ type Finding = {
 
 const ROOT = process.cwd();
 const API_SRC = "apps/api/src";
+const CONTROLLERS_SRC = "apps/api/src/controllers";
 const findings: Finding[] = [];
 
 function walk(dir: string): string[] {
@@ -67,6 +68,51 @@ function checkSupabaseGetClient(file: string, content: string) {
       file,
       lineNumberAt(content, match.index),
       "SupabaseDB.getClient() 只允许明确 public/RLS 场景；新增前请在 docs/permission 更新例外说明",
+    );
+  }
+}
+
+function checkControllerSupabaseAccess(file: string, content: string) {
+  if (!relative(ROOT, file).startsWith(CONTROLLERS_SRC)) return;
+
+  const directPatterns: Array<[RegExp, string]> = [
+    [
+      /\bSupabaseDB\b/g,
+      "controller 禁止直接依赖 SupabaseDB；请下沉到 service/repository",
+    ],
+    [
+      /\bgetAdminClient\s*\(/g,
+      "controller 禁止直接调用 getAdminClient()；请下沉到 service/repository",
+    ],
+    [
+      /\bgetClient\s*\(/g,
+      "controller 禁止直接调用 getClient()；请下沉到明确 public/RLS service/repository",
+    ],
+    [
+      /\.rpc\s*\(/g,
+      "controller 禁止直接调用 Supabase RPC；请下沉到 service/repository",
+    ],
+  ];
+
+  for (const [pattern, message] of directPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      addFinding(file, lineNumberAt(content, match.index), message);
+    }
+  }
+
+  const fromPattern = /\.from\s*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = fromPattern.exec(content)) !== null) {
+    const prefix = content.slice(Math.max(0, match.index - 5), match.index);
+    if (prefix === "Array") {
+      continue;
+    }
+
+    addFinding(
+      file,
+      lineNumberAt(content, match.index),
+      "controller 禁止直接调用 Supabase .from()；请下沉到 service/repository",
     );
   }
 }
@@ -130,6 +176,7 @@ for (const file of walk(join(ROOT, API_SRC))) {
   const content = readFileSync(file, "utf8");
   checkSupabaseFrom(file, content);
   checkSupabaseGetClient(file, content);
+  checkControllerSupabaseAccess(file, content);
 
   if (file.endsWith("routes/index.ts")) {
     checkCreateResourceRoutes(file, content);
