@@ -21,6 +21,7 @@
 - [Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)
 - [Project Referrals 权限边界核查](./2026-05-19-project-referrals-boundary-audit.md)
 - [Customer Follow Up Comments 权限边界核查](./2026-05-19-customer-follow-up-comments-boundary-audit.md)
+- [Customer 权限边界核查 Phase 1](./2026-05-19-customer-boundary-audit-phase1.md)
 
 ## 核心结论
 

@@ -1047,3 +1047,31 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查 `customer` controller。该 controller 范围较大，建议分段处理客户列表 / 客户详情 / 房产 / 跟进记录。
+
+### 2026-05-19 Customer 权限边界核查 Phase 1
+
+已完成：
+
+- 核查客户 controller 入口层。
+- 形成独立核查文档：[Customer 权限边界核查 Phase 1](./2026-05-19-customer-boundary-audit-phase1.md)。
+- 迁移 `customer` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 客户后台入口统一使用 `getRequiredTenantContext()`。
+- `getRequiredCustomerRecord()` 固定按当前租户过滤。
+- 创建客户和新增客户房产时写入确定的 `tenant_id`。
+
+特别说明：
+
+- `customer` controller 接近 2000 行，本阶段只做入口租户上下文收口。
+- 后续建议继续分段核查客户列表、客户详情、客户房产、跟进记录、手机号隐私动作。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续做 `customer` Phase 2，优先核查客户房产和跟进记录子链路，确认所有子查询都带租户边界。

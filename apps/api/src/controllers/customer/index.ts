@@ -13,7 +13,7 @@ import {
   CustomerSourceListQuerySchema,
   CustomerSourceParamsSchema,
 } from "@/schema/customer-sources";
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type {
@@ -29,7 +29,7 @@ import {
   CustomerPropertyParamsSchema,
   UpdateCustomerPropertySchema,
 } from "@/schema/properties";
-import { authorizationService } from "@/services/authorization";
+import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
 import {
@@ -136,7 +136,7 @@ function buildPagination(page: number, pageSize: number, total: number) {
 }
 
 // 继承基类
-class CustomerController extends BaseController<
+class CustomerController extends TenantBaseController<
   typeof CreateCustomerSchema,
   typeof UpdateCustomerSchema
 > {
@@ -172,14 +172,6 @@ class CustomerController extends BaseController<
 
   constructor() {
     super("customers", CreateCustomerSchema, UpdateCustomerSchema);
-  }
-
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
   }
 
   private normalizeOwner(owner: unknown) {
@@ -515,7 +507,7 @@ class CustomerController extends BaseController<
   }
 
   private async getRequiredCustomerRecord(
-    authContext: Awaited<ReturnType<CustomerController["getRequiredAuthContext"]>>,
+    authContext: AuthContext & { tenantId: string },
     customerId: string,
     message = "客户不存在",
   ) {
@@ -524,9 +516,7 @@ class CustomerController extends BaseController<
       .select("id, owner_id, property_id, tenant_id")
       .eq("id", customerId);
 
-    if (authContext.tenantId) {
-      query = query.eq("tenant_id", authContext.tenantId);
-    }
+    query = query.eq("tenant_id", authContext.tenantId);
 
     const { data, error } = await query.maybeSingle();
 
@@ -783,7 +773,7 @@ class CustomerController extends BaseController<
   async listCustomerProperties(
     request: FastifyRequest<{ Params: { customerId: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = CustomerPropertyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -819,7 +809,7 @@ class CustomerController extends BaseController<
   async createCustomerProperty(
     request: FastifyRequest<{ Params: { customerId: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = CustomerPropertyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = CreateCustomerPropertySchema.safeParse(request.body);
@@ -844,7 +834,7 @@ class CustomerController extends BaseController<
       .insert({
         id: randomUUID(),
         customer_id: customer.id,
-        tenant_id: authContext.tenantId ?? null,
+        tenant_id: authContext.tenantId,
         community: payload.community,
         building_info: payload.building_info ?? null,
         area: payload.area ?? null,
@@ -887,7 +877,7 @@ class CustomerController extends BaseController<
   async setCustomerPrimaryProperty(
     request: FastifyRequest<{ Params: { customerId: string; propertyId: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = CustomerPropertyDetailParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -931,7 +921,7 @@ class CustomerController extends BaseController<
   async updateCustomerProperty(
     request: FastifyRequest<{ Params: { customerId: string; propertyId: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = CustomerPropertyDetailParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdateCustomerPropertySchema.safeParse(request.body);
@@ -1139,7 +1129,7 @@ class CustomerController extends BaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -1314,7 +1304,7 @@ class CustomerController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1355,7 +1345,7 @@ class CustomerController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const scope = accessPolicyService.assertPermission(authContext, "customer.create");
 
     if (!this.createSchema) {
@@ -1372,7 +1362,7 @@ class CustomerController extends BaseController<
     const payload = {
       ...customerPayload,
       owner_id: customerPayload.owner_id ?? authContext.employeeId ?? null,
-      tenant_id: authContext.tenantId ?? null,
+      tenant_id: authContext.tenantId,
       douyin_screenshot_images: customerPayload.source === "douyin"
         ? douyinScreenshotImages
         : [],
@@ -1414,7 +1404,7 @@ class CustomerController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1560,7 +1550,7 @@ class CustomerController extends BaseController<
 
   @Delete("/customers/:id")
   async deleteCustomer(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1607,7 +1597,7 @@ class CustomerController extends BaseController<
 
   @Post("/customers/assign-owner/batch")
   async batchAssignOwner(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     if (!accessPolicyService.hasPermission(authContext, "customer.assign_owner")) {
       throw Errors.business(403, "无权批量分配客户负责人", "FORBIDDEN");
     }
@@ -1745,7 +1735,7 @@ class CustomerController extends BaseController<
   async getCustomerById(
     request: FastifyRequest<{ Params: { id: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const { id } = request.params; // ← 这里拿到 UUID
     const { data, error } = await SupabaseDB.getAdminClient().from("customers").select(this.customerSelect).eq(
       "id",
@@ -1786,7 +1776,7 @@ class CustomerController extends BaseController<
     request: FastifyRequest<{ Params: { id: string } }>,
     action: CustomerPhoneAction,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -1830,7 +1820,7 @@ class CustomerController extends BaseController<
   async listCustomerSources(
     request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = CustomerSourceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -1850,7 +1840,7 @@ class CustomerController extends BaseController<
   async getCustomerFollowUpById(
     request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const { id } = request.params; // ← 这里拿到 UUID
     const queryResult = PaginationQuerySchema.safeParse(request.query);
     if (!queryResult.success) {
@@ -1923,7 +1913,7 @@ class CustomerController extends BaseController<
       Body: FollowUpInsert;
     }>,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const { id } = request.params;
     const customer = await SupabaseDB.getAdminClient()
       .from("customers")
