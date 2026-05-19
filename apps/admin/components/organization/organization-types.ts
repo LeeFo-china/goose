@@ -1,3 +1,5 @@
+export const ORGANIZATION_PAGE_SIZE_OPTIONS = [5, 10, 15, 20] as const;
+
 export type Pagination = {
   page: number;
   pageSize: number;
@@ -65,6 +67,7 @@ export type DepartmentPostRuleRecord = {
   id: string;
   department_code: string;
   post_code: string;
+  alias_name?: string | null;
   enabled: boolean;
   sort: number;
   created_at: string | null;

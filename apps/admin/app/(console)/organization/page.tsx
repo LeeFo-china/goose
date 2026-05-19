@@ -1,4 +1,3 @@
-import { Building2, BriefcaseBusiness, GitBranch, Workflow } from "lucide-react";
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import type {
@@ -8,18 +7,20 @@ import type {
   ProjectMemberRolePostRuleConfig,
   PostRecord,
 } from "@/components/organization/organization-types";
-import { Card, CardContent } from "@/components/ui/card";
+import { ORGANIZATION_PAGE_SIZE_OPTIONS } from "@/components/organization/organization-types";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
-type OrganizationTab = "departments" | "posts" | "role-rules" | "department-post-rules";
+type OrganizationTab = "departments" | "posts" | "role-rules";
 
 type OrganizationSearchParams = {
   tab?: string;
   departmentPage?: string;
+  departmentPageSize?: string;
   departmentCode?: string;
   departmentKeyword?: string;
   postPage?: string;
+  postPageSize?: string;
   postStatus?: string;
   postSalaryType?: string;
   postKeyword?: string;
@@ -46,8 +47,14 @@ function normalizePage(value: string | undefined) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
+function normalizePageSize(value: string | undefined) {
+  const pageSize = Number(value || emptyPagination.pageSize);
+  return (ORGANIZATION_PAGE_SIZE_OPTIONS as readonly number[]).includes(pageSize)
+    ? pageSize
+    : emptyPagination.pageSize;
+}
+
 function normalizeTab(value: string | undefined): OrganizationTab {
-  if (value === "department-post-rules") return "department-post-rules";
   if (value === "role-rules") return "role-rules";
   return value === "posts" ? "posts" : "departments";
 }
@@ -163,7 +170,7 @@ async function getDepartmentPostRuleConfig(input: {
 function buildDepartmentQuery(params: OrganizationSearchParams) {
   const query = new URLSearchParams({
     page: String(normalizePage(params.departmentPage)),
-    pageSize: "20",
+    pageSize: String(normalizePageSize(params.departmentPageSize)),
   });
   const keyword = params.departmentKeyword?.trim() || "";
   const code = params.departmentCode?.trim() || "";
@@ -175,7 +182,7 @@ function buildDepartmentQuery(params: OrganizationSearchParams) {
 function buildPostQuery(params: OrganizationSearchParams) {
   const query = new URLSearchParams({
     page: String(normalizePage(params.postPage)),
-    pageSize: "20",
+    pageSize: String(normalizePageSize(params.postPageSize)),
   });
   const keyword = params.postKeyword?.trim() || "";
   const status = params.postStatus?.trim() || "";
@@ -216,60 +223,6 @@ export default async function OrganizationPage({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">组织架构</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          选择启用标准部门，维护租户显示名称，并在部门下扩展岗位。当前共 {departments.pagination.total} 个部门配置，{posts.pagination.total} 个岗位。
-        </p>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Building2 />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">部门配置</div>
-              <div className="text-xl font-semibold">{departments.pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <BriefcaseBusiness />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选岗位</div>
-              <div className="text-xl font-semibold">{posts.pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Workflow />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">项目候选规则</div>
-              <div className="text-xl font-semibold">{roleRuleConfig.roles.length}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-              <GitBranch />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">部门岗位规则</div>
-              <div className="text-xl font-semibold">{departmentPostRuleConfig.departments.length}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <OrganizationTabs
         activeTab={activeTab}
         departments={departments}

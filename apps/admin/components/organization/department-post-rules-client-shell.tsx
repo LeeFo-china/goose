@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { BriefcaseBusiness, Loader2, Save, Search, X } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreatePostButton } from "@/components/organization/post-mutations";
 import type {
+  DepartmentPostRuleConfig,
   DepartmentPostRuleDepartment,
   DepartmentPostRulePostOption,
 } from "@/components/organization/organization-types";
@@ -16,9 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   InputGroup,
@@ -56,7 +56,13 @@ async function saveDepartmentPostCodes(
     if (!response.ok) {
       throw new Error(payload?.message || payload?.error || "保存部门岗位规则失败");
     }
-    return payload;
+    return payload as {
+      data?: {
+        department_code?: string;
+        selected_post_codes?: string[];
+        config?: DepartmentPostRuleConfig;
+      };
+    };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error("请求超时，请稍后重试");
@@ -86,11 +92,14 @@ export function DepartmentPostRulesClientShell({
   departments,
   postOptions,
   error,
+  onSaved,
 }: {
   departments: DepartmentPostRuleDepartment[];
   postOptions: DepartmentPostRulePostOption[];
   error: string | null;
+  onSaved?: (config: DepartmentPostRuleConfig) => void;
 }) {
+  const router = useRouter();
   const [activeDepartmentCode, setActiveDepartmentCode] = useState(
     departments[0]?.code || "",
   );
@@ -116,10 +125,6 @@ export function DepartmentPostRulesClientShell({
   const dirty = JSON.stringify(sortCodes(selectedCodes)) !==
     JSON.stringify(sortCodes(baselineCodes));
   const saving = pending && savingDepartmentCode === activeDepartmentCode;
-  const totalSelected = useMemo(
-    () => Object.values(selected).reduce((sum, values) => sum + values.length, 0),
-    [selected],
-  );
   const normalizedKeyword = keyword.trim().toLowerCase();
   const filteredPosts = normalizedKeyword
     ? postOptions.filter((post) =>
@@ -182,11 +187,20 @@ export function DepartmentPostRulesClientShell({
     setSavingDepartmentCode(activeDepartment.code);
     startTransition(async () => {
       try {
-        await saveDepartmentPostCodes(activeDepartment.code, selectedCodes);
-        setBaseline((current) => ({
-          ...current,
-          [activeDepartment.code]: selectedCodes,
-        }));
+        const payload = await saveDepartmentPostCodes(activeDepartment.code, selectedCodes);
+        const nextConfig = payload.data?.config;
+        const nextState = nextConfig
+          ? createSelectedState(nextConfig.departments)
+          : {
+            ...selected,
+            [activeDepartment.code]: payload.data?.selected_post_codes || selectedCodes,
+          };
+        setSelected(nextState);
+        setBaseline(nextState);
+        if (nextConfig) {
+          onSaved?.(nextConfig);
+        }
+        router.refresh();
         toast.success(`${activeDepartment.name} 岗位规则已保存`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "保存部门岗位规则失败");
@@ -198,27 +212,6 @@ export function DepartmentPostRulesClientShell({
 
   return (
     <div className="flex flex-col gap-5">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <CardTitle className="flex items-center gap-2">
-                <BriefcaseBusiness aria-hidden="true" />
-                部门岗位规则
-              </CardTitle>
-              <CardDescription>
-                配置每个部门允许选择的岗位。保存后，员工新增和编辑会按该规则校验。
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{departments.length} 个部门</Badge>
-              <Badge variant="secondary">{postOptions.length} 个岗位</Badge>
-              <Badge variant="secondary">{totalSelected} 个启用映射</Badge>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
       <Card>

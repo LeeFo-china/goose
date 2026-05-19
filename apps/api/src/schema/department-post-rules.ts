@@ -8,6 +8,14 @@ export const DepartmentPostRuleDepartmentParamsSchema = z.object({
   }),
 });
 
+export const DepartmentPostRuleAliasParamsSchema =
+  DepartmentPostRuleDepartmentParamsSchema.extend({
+    post_code: z
+      .string()
+      .trim()
+      .regex(POST_CODE_PATTERN, "无效的岗位编码"),
+  });
+
 export const UpdateDepartmentPostRuleSchema = z.object({
   post_codes: z
     .array(
@@ -20,6 +28,20 @@ export const UpdateDepartmentPostRuleSchema = z.object({
     .transform((values) => Array.from(new Set(values))),
 });
 
+export const UpdateDepartmentPostRuleAliasSchema = z.object({
+  alias_name: z
+    .string()
+    .trim()
+    .max(50, "岗位别名不能超过 50 个字符")
+    .nullable()
+    .optional()
+    .transform((value) => value || null),
+});
+
 export type UpdateDepartmentPostRuleInput = z.infer<
   typeof UpdateDepartmentPostRuleSchema
+>;
+
+export type UpdateDepartmentPostRuleAliasInput = z.infer<
+  typeof UpdateDepartmentPostRuleAliasSchema
 >;

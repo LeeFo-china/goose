@@ -259,7 +259,7 @@ Migrate Dev Database
 - 必须手动触发。
 - 必须输入 dev Supabase project ref：`fclnkyatvfvmzgzdqlba`。
 - workflow 会检查 `SUPABASE_DB_URL` 必须指向 dev project ref。
-- workflow 会阻断已知旧库或禁用 project ref：`unqhypivjkpwldhufpjc`。
+- workflow 会阻断已知旧库或禁用 project ref：`<supabase-project-ref>`。
 - 执行摘要会输出执行前后 migration 数量、最新版本、待执行版本、已执行版本、租户数和权限数。
 
 生产 migration 前必须先完成 dev `plan` 和 `apply` 验收。

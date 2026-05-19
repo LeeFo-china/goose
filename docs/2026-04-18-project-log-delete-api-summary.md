@@ -130,7 +130,7 @@ PATCH /project_logs/:id/images
   "data": {
     "id": "2d074cba-3e16-4ae3-85dd-22ae03ae0493",
     "images": [
-      "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
+      "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
     ]
   },
   "message": "success"
@@ -152,7 +152,7 @@ PATCH /project_logs/:id/images
 ```json
 {
   "path": "c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg",
-  "url": "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
+  "url": "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
 }
 ```
 

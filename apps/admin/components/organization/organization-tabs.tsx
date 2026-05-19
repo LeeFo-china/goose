@@ -1,11 +1,9 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Building2, BriefcaseBusiness, Loader2, Workflow } from "lucide-react";
-import { GitBranch } from "lucide-react";
 import { DepartmentsClientShell } from "@/components/organization/departments-client-shell";
-import { DepartmentPostRulesClientShell } from "@/components/organization/department-post-rules-client-shell";
 import { PostsClientShell } from "@/components/organization/posts-client-shell";
 import { RolePostRulesClientShell } from "@/components/organization/role-post-rules-client-shell";
 import type {
@@ -15,12 +13,11 @@ import type {
   ProjectMemberRolePostRuleConfig,
   PostRecord,
 } from "@/components/organization/organization-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type OrganizationTab = "departments" | "posts" | "role-rules" | "department-post-rules";
+type OrganizationTab = "departments" | "posts" | "role-rules";
 
 type ListData<T> = {
   list: T[];
@@ -43,11 +40,6 @@ const tabs = [
     value: "role-rules" as const,
     label: "候选规则",
     icon: Workflow,
-  },
-  {
-    value: "department-post-rules" as const,
-    label: "部门岗位",
-    icon: GitBranch,
   },
 ];
 
@@ -77,12 +69,26 @@ export function OrganizationTabs({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [localDepartmentPostRuleConfig, setLocalDepartmentPostRuleConfig] = useState(
+    departmentPostRuleConfig,
+  );
+  useEffect(() => {
+    setLocalDepartmentPostRuleConfig(departmentPostRuleConfig);
+  }, [departmentPostRuleConfig]);
   const enabledDepartmentCodes = Array.from(new Set([
-    ...departmentPostRuleConfig.departments.map((item) => item.code),
+    ...localDepartmentPostRuleConfig.departments.map((item) => item.code),
     ...departments.list
       .filter((item) => item.enabled !== false && item.code)
       .map((item) => item.code as string),
   ]));
+
+  function updateDepartmentPostConfig(config: DepartmentPostRuleConfig) {
+    setLocalDepartmentPostRuleConfig((current) => ({
+      ...current,
+      ...config,
+      error: current.error,
+    }));
+  }
 
   function switchTab(tab: OrganizationTab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -100,13 +106,6 @@ export function OrganizationTabs({
           {tabs.map((tab) => {
             const active = tab.value === activeTab;
             const Icon = tab.icon;
-            const total = tab.value === "departments"
-              ? departments.pagination.total
-              : tab.value === "posts"
-                ? posts.pagination.total
-                : tab.value === "role-rules"
-                  ? roleRuleConfig.roles.length
-                  : departmentPostRuleConfig.departments.length;
 
             return (
               <Button
@@ -127,7 +126,6 @@ export function OrganizationTabs({
                   <Icon data-icon="inline-start" />
                 )}
                 {tab.label}
-                <Badge variant={active ? "secondary" : "outline"}>{total}</Badge>
               </Button>
             );
           })}
@@ -137,11 +135,13 @@ export function OrganizationTabs({
         {activeTab === "departments" ? (
           <DepartmentsClientShell
             departments={departments.list}
+            departmentPostRuleConfig={localDepartmentPostRuleConfig}
             pagination={departments.pagination}
             code={departmentCode}
             keyword={departmentKeyword}
             enabledDepartmentCodes={enabledDepartmentCodes}
             error={departments.error}
+            onDepartmentPostRuleConfigChange={updateDepartmentPostConfig}
           />
         ) : activeTab === "posts" ? (
           <PostsClientShell
@@ -151,7 +151,7 @@ export function OrganizationTabs({
             salaryType={postSalaryType}
             keyword={postKeyword}
             error={posts.error}
-            departments={departmentPostRuleConfig.departments}
+            departments={localDepartmentPostRuleConfig.departments}
           />
         ) : activeTab === "role-rules" ? (
           <div className="border-t p-4">
@@ -161,15 +161,7 @@ export function OrganizationTabs({
               error={roleRuleConfig.error}
             />
           </div>
-        ) : (
-          <div className="border-t p-4">
-            <DepartmentPostRulesClientShell
-              departments={departmentPostRuleConfig.departments}
-              postOptions={departmentPostRuleConfig.post_options}
-              error={departmentPostRuleConfig.error}
-            />
-          </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

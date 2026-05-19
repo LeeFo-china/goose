@@ -1,23 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   DepartmentFilters,
+  DepartmentPageSizeSelect,
   DepartmentsPagination,
 } from "@/components/organization/department-list-actions";
 import { EnableDepartmentButton } from "@/components/organization/department-mutations";
 import { DepartmentsTable } from "@/components/organization/departments-table";
 import type {
   DepartmentRecord,
+  DepartmentPostRuleConfig,
   Pagination,
 } from "@/components/organization/organization-types";
 import { Badge } from "@/components/ui/badge";
 
 export function DepartmentsClientShell({
   departments,
+  departmentPostRuleConfig,
   pagination,
   code,
   keyword,
@@ -25,8 +28,10 @@ export function DepartmentsClientShell({
   error,
   onDepartmentDisabled,
   onDepartmentsEnabled,
+  onDepartmentPostRuleConfigChange,
 }: {
   departments: DepartmentRecord[];
+  departmentPostRuleConfig: DepartmentPostRuleConfig;
   pagination: Pagination;
   code: string;
   keyword: string;
@@ -34,11 +39,13 @@ export function DepartmentsClientShell({
   error: string | null;
   onDepartmentDisabled?: (code: string) => void;
   onDepartmentsEnabled?: (codes: string[]) => void;
+  onDepartmentPostRuleConfigChange?: (config: DepartmentPostRuleConfig) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [locallyDisabledCodes, setLocallyDisabledCodes] = useState<string[]>([]);
   const [locallyEnabledCodes, setLocallyEnabledCodes] = useState<string[]>([]);
+  const [ruleConfig, setRuleConfig] = useState(departmentPostRuleConfig);
   const syncedEnabledDepartmentCodes = useMemo(() => {
     const disabledSet = new Set(locallyDisabledCodes);
     return Array.from(new Set([
@@ -46,6 +53,29 @@ export function DepartmentsClientShell({
       ...locallyEnabledCodes,
     ])).filter((item) => !disabledSet.has(item));
   }, [enabledDepartmentCodes, locallyDisabledCodes, locallyEnabledCodes]);
+
+  useEffect(() => {
+    setRuleConfig(departmentPostRuleConfig);
+  }, [departmentPostRuleConfig]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/backend/department-post-rules", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload?.success !== false && payload?.data) {
+          setRuleConfig(payload.data);
+        }
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      });
+
+    return () => controller.abort();
+  }, []);
 
   function navigate(href: string) {
     startTransition(() => {
@@ -67,6 +97,7 @@ export function DepartmentsClientShell({
           <DepartmentFilters
             code={code}
             keyword={keyword}
+            pageSize={pagination.pageSize}
             pending={pending}
             onNavigate={navigate}
           />
@@ -85,6 +116,11 @@ export function DepartmentsClientShell({
       <div className="relative flex flex-col gap-4">
         <DepartmentsTable
           departments={departments}
+          departmentPostRuleConfig={ruleConfig}
+          onDepartmentPostsSaved={(config) => {
+            setRuleConfig(config);
+            onDepartmentPostRuleConfigChange?.(config);
+          }}
           onDepartmentDisabled={(disabledCode) => {
             setLocallyDisabledCodes((current) =>
               current.includes(disabledCode) ? current : [...current, disabledCode]
@@ -105,8 +141,16 @@ export function DepartmentsClientShell({
         ) : null}
         <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>每页</span>
+            <DepartmentPageSizeSelect
+              pagination={pagination}
+              code={code}
+              keyword={keyword}
+              pending={pending}
+              onNavigate={navigate}
+            />
             <span>
-              每页 {pagination.pageSize} 条，共 {pagination.total} 条，第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+              共 {pagination.total} 条，第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
             </span>
             {pending ? (
               <Badge variant="secondary">

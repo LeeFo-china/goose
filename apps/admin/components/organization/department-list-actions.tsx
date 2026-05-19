@@ -14,7 +14,18 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import type { Pagination } from "@/components/organization/organization-types";
+import {
+  ORGANIZATION_PAGE_SIZE_OPTIONS,
+  type Pagination,
+} from "@/components/organization/organization-types";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Navigate = (href: string) => void;
 
@@ -28,12 +39,16 @@ const codeOptions = [
 
 function buildDepartmentsHref(input: {
   page?: number;
+  pageSize?: number;
   code?: string;
   keyword?: string;
 }) {
   const params = new URLSearchParams();
   params.set("tab", "departments");
   if (input.page && input.page > 1) params.set("departmentPage", String(input.page));
+  if (input.pageSize && input.pageSize !== 20) {
+    params.set("departmentPageSize", String(input.pageSize));
+  }
   if (input.code) params.set("departmentCode", input.code);
   if (input.keyword) params.set("departmentKeyword", input.keyword);
   const query = params.toString();
@@ -43,11 +58,13 @@ function buildDepartmentsHref(input: {
 export function DepartmentFilters({
   code,
   keyword,
+  pageSize,
   pending,
   onNavigate,
 }: {
   code: string;
   keyword: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -63,6 +80,7 @@ export function DepartmentFilters({
     onNavigate(buildDepartmentsHref({
       code: nextCode,
       keyword,
+      pageSize,
     }));
   }
 
@@ -71,6 +89,7 @@ export function DepartmentFilters({
     onNavigate(buildDepartmentsHref({
       code: selectedCode,
       keyword: selectedKeyword.trim(),
+      pageSize,
     }));
   }
 
@@ -144,6 +163,7 @@ export function DepartmentsPagination({
         disabled={pagination.page <= 1 || pending}
         onClick={() => onNavigate(buildDepartmentsHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize: pagination.pageSize,
           code,
           keyword,
         }))}
@@ -157,6 +177,7 @@ export function DepartmentsPagination({
         disabled={pagination.page >= pagination.totalPages || pending}
         onClick={() => onNavigate(buildDepartmentsHref({
           page: pagination.page + 1,
+          pageSize: pagination.pageSize,
           code,
           keyword,
         }))}
@@ -165,5 +186,44 @@ export function DepartmentsPagination({
         {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
       </Button>
     </div>
+  );
+}
+
+export function DepartmentPageSizeSelect({
+  pagination,
+  code,
+  keyword,
+  pending,
+  onNavigate,
+}: {
+  pagination: Pagination;
+  code: string;
+  keyword: string;
+  pending: boolean;
+  onNavigate: Navigate;
+}) {
+  return (
+    <Select
+      value={String(pagination.pageSize)}
+      disabled={pending}
+      onValueChange={(value) => onNavigate(buildDepartmentsHref({
+        pageSize: Number(value),
+        code,
+        keyword,
+      }))}
+    >
+      <SelectTrigger className="h-8 w-[104px] shadow-none" aria-label="选择每页部门条数">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {ORGANIZATION_PAGE_SIZE_OPTIONS.map((option) => (
+            <SelectItem key={option} value={String(option)}>
+              {option} 条/页
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }

@@ -16,7 +16,18 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import type { Pagination } from "@/components/organization/organization-types";
+import {
+  ORGANIZATION_PAGE_SIZE_OPTIONS,
+  type Pagination,
+} from "@/components/organization/organization-types";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Navigate = (href: string) => void;
 
@@ -38,6 +49,7 @@ const salaryTypeOptions = [
 
 function buildPostsHref(input: {
   page?: number;
+  pageSize?: number;
   status?: string;
   salaryType?: string;
   keyword?: string;
@@ -45,6 +57,9 @@ function buildPostsHref(input: {
   const params = new URLSearchParams();
   params.set("tab", "posts");
   if (input.page && input.page > 1) params.set("postPage", String(input.page));
+  if (input.pageSize && input.pageSize !== 20) {
+    params.set("postPageSize", String(input.pageSize));
+  }
   if (input.status) params.set("postStatus", input.status);
   if (input.salaryType) params.set("postSalaryType", input.salaryType);
   if (input.keyword) params.set("postKeyword", input.keyword);
@@ -56,12 +71,14 @@ export function PostFilters({
   status,
   salaryType,
   keyword,
+  pageSize,
   pending,
   onNavigate,
 }: {
   status: string;
   salaryType: string;
   keyword: string;
+  pageSize: number;
   pending: boolean;
   onNavigate: Navigate;
 }) {
@@ -83,6 +100,7 @@ export function PostFilters({
       status: input.status ?? status,
       salaryType: input.salaryType ?? salaryType,
       keyword,
+      pageSize,
     }));
   }
 
@@ -92,6 +110,7 @@ export function PostFilters({
       status: selectedStatus,
       salaryType: selectedSalaryType,
       keyword: selectedKeyword.trim(),
+      pageSize,
     }));
   }
 
@@ -182,6 +201,7 @@ export function PostsPagination({
         disabled={pagination.page <= 1 || pending}
         onClick={() => onNavigate(buildPostsHref({
           page: Math.max(1, pagination.page - 1),
+          pageSize: pagination.pageSize,
           status,
           salaryType,
           keyword,
@@ -196,6 +216,7 @@ export function PostsPagination({
         disabled={pagination.page >= pagination.totalPages || pending}
         onClick={() => onNavigate(buildPostsHref({
           page: pagination.page + 1,
+          pageSize: pagination.pageSize,
           status,
           salaryType,
           keyword,
@@ -205,5 +226,47 @@ export function PostsPagination({
         {pending ? <Loader2 className="animate-spin" data-icon="inline-end" /> : <ChevronRight data-icon="inline-end" />}
       </Button>
     </div>
+  );
+}
+
+export function PostPageSizeSelect({
+  pagination,
+  status,
+  salaryType,
+  keyword,
+  pending,
+  onNavigate,
+}: {
+  pagination: Pagination;
+  status: string;
+  salaryType: string;
+  keyword: string;
+  pending: boolean;
+  onNavigate: Navigate;
+}) {
+  return (
+    <Select
+      value={String(pagination.pageSize)}
+      disabled={pending}
+      onValueChange={(value) => onNavigate(buildPostsHref({
+        pageSize: Number(value),
+        status,
+        salaryType,
+        keyword,
+      }))}
+    >
+      <SelectTrigger className="h-8 w-[104px] shadow-none" aria-label="选择每页岗位条数">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {ORGANIZATION_PAGE_SIZE_OPTIONS.map((option) => (
+            <SelectItem key={option} value={String(option)}>
+              {option} 条/页
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }

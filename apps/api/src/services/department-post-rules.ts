@@ -46,6 +46,53 @@ class DepartmentPostRuleService {
     };
   }
 
+  async updateDepartmentPostAlias(input: {
+    departmentCode: DepartmentCode;
+    postCode: string;
+    aliasName: string | null;
+    tenantId?: string | null;
+  }) {
+    const scopedTenantId = this.requireTenantId(input.tenantId);
+    const [department, existingPostCodes] = await Promise.all([
+      departmentPostRuleRepository.findDepartmentByCode({
+        tenantId: scopedTenantId,
+        departmentCode: input.departmentCode,
+      }),
+      departmentPostRuleRepository.listExistingPostCodes({
+        tenantId: scopedTenantId,
+        postCodes: [input.postCode],
+      }),
+    ]);
+
+    if (!department?.tenant_department_id) {
+      throw Errors.badRequest("部门不存在或未启用");
+    }
+
+    if (existingPostCodes.length === 0) {
+      throw Errors.badRequest("岗位不存在");
+    }
+
+    const updated = await departmentPostRuleRepository.updateDepartmentPostRuleAlias({
+      tenantDepartmentId: department.tenant_department_id,
+      departmentCode: input.departmentCode,
+      postCode: input.postCode as EmployeePostCode,
+      aliasName: input.aliasName,
+      tenantId: scopedTenantId,
+    });
+
+    if (!updated) {
+      throw Errors.badRequest("该部门暂未关联该岗位");
+    }
+
+    return {
+      department_code: input.departmentCode,
+      tenant_department_id: department.tenant_department_id,
+      post_code: input.postCode,
+      alias_name: input.aliasName,
+      config: await this.getConfig(scopedTenantId),
+    };
+  }
+
   async updateDepartmentPostCodes(
     departmentCode: DepartmentCode,
     postCodes: string[],
@@ -87,6 +134,7 @@ class DepartmentPostRuleService {
       department_code: departmentCode,
       tenant_department_id: department.tenant_department_id,
       selected_post_codes: uniquePostCodes,
+      config: await this.getConfig(scopedTenantId),
     };
   }
 

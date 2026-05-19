@@ -22,7 +22,7 @@
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > src/types/database.ts"
+    "gen": "supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > src/types/database.ts"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.4",

@@ -59,7 +59,7 @@ Content-Type: multipart/form-data
   "data": {
     "list": [
       {
-        "url": "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg",
+        "url": "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg",
         "path": "c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
       }
     ]
@@ -137,7 +137,7 @@ Content-Type: application/json
     "node_name": "接口联调测试",
     "content": "通过上传接口和创建日志接口完成的联调测试记录。",
     "images": [
-      "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
+      "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
     ],
     "created_at": "2026-04-18T05:03:32.274122+00:00",
     "employee": {
@@ -226,7 +226,7 @@ Content-Type: application/json
   "data": {
     "id": "5afbef84-37a6-4788-a294-d0130aa5d130",
     "images": [
-      "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
+      "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
     ]
   },
   "message": "success"

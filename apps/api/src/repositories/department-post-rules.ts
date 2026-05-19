@@ -10,6 +10,7 @@ export type DepartmentPostRuleRecord = {
   tenant_department_id: string | null;
   department_code: DepartmentCode;
   post_code: EmployeePostCode;
+  alias_name: string | null;
   enabled: boolean;
   sort: number;
   created_at: string | null;
@@ -41,7 +42,8 @@ class DepartmentPostRuleRepository {
   async listRules(tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("department_post_rules")
-      .select("id, tenant_department_id, department_code, post_code, enabled, sort, created_at, updated_at")
+      .select("id, tenant_department_id, department_code, post_code, alias_name, enabled, sort, created_at, updated_at")
+      .eq("enabled", true)
       .order("tenant_department_id", { ascending: true, nullsFirst: false })
       .order("sort", { ascending: true })
       .order("created_at", { ascending: true });
@@ -184,6 +186,33 @@ class DepartmentPostRuleRepository {
     return ((data || []) as Array<{ code: EmployeePostCode }>).map((item) => item.code);
   }
 
+  async updateDepartmentPostRuleAlias(input: {
+    tenantDepartmentId: string;
+    departmentCode: DepartmentCode;
+    postCode: EmployeePostCode;
+    aliasName: string | null;
+    tenantId?: string | null;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("department_post_rules")
+      .update({
+        alias_name: input.aliasName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("post_code", input.postCode)
+      .eq("enabled", true)
+      .or(`tenant_department_id.eq.${input.tenantDepartmentId},department_code.eq.${input.departmentCode}`);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query.select("id");
+
+    if (error) throw Errors.dbError("保存部门岗位别名失败", error);
+    return ((data || []) as Array<{ id: string }>)[0] || null;
+  }
+
   async replaceDepartmentRules(input: {
     tenantDepartmentId: string;
     departmentCode: DepartmentCode;
@@ -196,7 +225,7 @@ class DepartmentPostRuleRepository {
         enabled: false,
         updated_at: new Date().toISOString(),
       })
-      .eq("tenant_department_id", input.tenantDepartmentId);
+      .or(`tenant_department_id.eq.${input.tenantDepartmentId},department_code.eq.${input.departmentCode}`);
 
     if (input.tenantId) {
       disableQuery = disableQuery.eq("tenant_id", input.tenantId);
@@ -224,7 +253,7 @@ class DepartmentPostRuleRepository {
     const { error } = await SupabaseDB.getAdminClient()
       .from("department_post_rules")
       .upsert(payload, {
-        onConflict: "tenant_id,tenant_department_id,post_code",
+        onConflict: "tenant_id,department_code,post_code",
       })
       .select("id");
 
@@ -248,7 +277,7 @@ class DepartmentPostRuleRepository {
         enabled: true,
         updated_at: now,
       }, {
-        onConflict: "tenant_id,tenant_department_id,post_code",
+        onConflict: "tenant_id,department_code,post_code",
       })
       .select("id");
 

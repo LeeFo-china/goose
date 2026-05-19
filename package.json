@@ -44,6 +44,6 @@
     "admin:dev:remote-api": "GOOES_API_BASE_URL=https://api-dev.goodcms.cn NEXT_PUBLIC_GOOES_API_BASE_URL=https://api-dev.goodcms.cn NEXT_PUBLIC_GOOES_H5_BASE_URL=https://h5-dev.goodcms.cn pnpm --dir apps/admin dev",
     "admin:build": "pnpm --dir apps/admin build",
     "admin:start": "pnpm --dir apps/admin start",
-    "gen": "supabase gen types typescript --project-id unqhypivjkpwldhufpjc > apps/api/src/types/database.ts"
+    "gen": "supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/types/database.ts"
   }
 }

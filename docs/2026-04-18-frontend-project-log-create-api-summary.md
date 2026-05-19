@@ -57,7 +57,7 @@ POST /uploads/images
   "data": {
     "list": [
       {
-        "url": "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg",
+        "url": "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg",
         "path": "c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
       }
     ]
@@ -154,7 +154,7 @@ POST /project_logs
     "node_name": "水电进场",
     "content": "今天完成厨房和卫生间水电放线，现场已确认插座点位。",
     "images": [
-      "https://unqhypivjkpwldhufpjc.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
+      "https://<supabase-project-ref>.supabase.co/storage/v1/object/public/project-logs/c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2/2026/04/18/a.jpg"
     ],
     "created_at": "2026-04-18T09:30:00.000Z",
     "employee": {

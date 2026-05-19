@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Loader2, Save, SearchCheck, Workflow } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
@@ -11,13 +11,6 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type SelectedState = Record<string, string[]>;
@@ -89,11 +82,6 @@ export function RolePostRulesClientShell({
   const [savingRoleCode, setSavingRoleCode] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const totalSelected = useMemo(
-    () => Object.values(selected).reduce((sum, values) => sum + values.length, 0),
-    [selected],
-  );
-
   function togglePost(roleCode: string, postCode: string, checked: boolean) {
     setSelected((current) => {
       const currentValues = current[roleCode] || [];
@@ -133,35 +121,6 @@ export function RolePostRulesClientShell({
 
   return (
     <div className="flex flex-col gap-5">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <CardTitle className="flex items-center gap-2">
-                <Workflow className="size-4" />
-                项目候选规则
-              </CardTitle>
-              <CardDescription>
-                配置每个项目成员角色允许选择的岗位，保存后立即影响项目创建和项目成员候选列表。
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{roles.length} 个角色</Badge>
-              <Badge variant="secondary">{postOptions.length} 个可选岗位</Badge>
-              <Badge variant="secondary">{totalSelected} 个映射</Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-start gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm text-muted-foreground">
-            <SearchCheck className="mt-0.5 size-4 shrink-0" />
-            <span>
-              小程序端不需要维护岗位筛选规则；这里保存后，原有接口会按新规则返回候选员工。
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
