@@ -705,7 +705,7 @@ class CustomerController extends TenantBaseController<
         .insert({
           id: randomUUID(),
           customer_id: customerId,
-          tenant_id: tenantId ?? null,
+          tenant_id: tenantId,
           ...propertyPayload,
         })
         .select("id");
@@ -1948,11 +1948,20 @@ class CustomerController extends TenantBaseController<
 
     const scope = accessPolicyService.getScope(authContext, "customer.update");
     if (
-      scope !== "all" &&
       followUpPayload.employee_id &&
       followUpPayload.employee_id !== authContext.employeeId
     ) {
-      throw Errors.forbidden();
+      if (scope !== "all") {
+        throw Errors.forbidden();
+      }
+
+      const targetEmployee = await this.getAssignableTargetEmployee(
+        followUpPayload.employee_id,
+        authContext.tenantId,
+      );
+      if (!targetEmployee || targetEmployee.status !== "active") {
+        throw Errors.badRequest("跟进员工不存在或不可用");
+      }
     }
 
     const { data, error } = await SupabaseDB.getAdminClient().from("customer_follow_ups")

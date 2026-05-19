@@ -1075,3 +1075,28 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续做 `customer` Phase 2，优先核查客户房产和跟进记录子链路，确认所有子查询都带租户边界。
+
+### 2026-05-19 Customer 权限边界核查 Phase 2
+
+已完成：
+
+- 核查客户房产和客户跟进记录子链路。
+- 形成独立核查文档：[Customer 权限边界核查 Phase 2](./2026-05-19-customer-boundary-audit-phase2.md)。
+- `upsertCustomerPrimaryProperty()` 自动创建主房产时写入确定的 `tenant_id`。
+- 创建客户跟进记录时，如果指定的 `employee_id` 不是当前员工，即使 `customer.update = all` 也必须校验目标员工属于当前租户且状态为 active。
+
+特别说明：
+
+- `customer_follow_ups` 表当前没有冗余 `tenant_id`，租户边界依赖所属客户。
+- `getLatestFollowUpMap()` 依赖调用方传入已经过租户过滤的客户 ID，后续如抽为公共 service，应显式传入 `tenantId`。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续做 `customer` Phase 3，聚焦手机号隐私动作、客户来源和批量分配负责人链路。
