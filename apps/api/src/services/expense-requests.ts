@@ -232,6 +232,10 @@ function resolveApprovalChainRelations(value: unknown): unknown {
 }
 
 class ExpenseRequestService {
+  private requireTenantId(authContext: AuthContext) {
+    return accessPolicyService.assertTenantContext(authContext);
+  }
+
   private serializeExpenseRequest<T extends ExpenseRequestRecord | null>(record: T): T {
     if (!record) {
       return record;
@@ -718,7 +722,7 @@ class ExpenseRequestService {
       throw Errors.badRequest("缺少申请人");
     }
 
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const applicant = await this.getApplicantEmployee(applicantId, tenantId);
     const candidates = await expenseRequestRepository.listEmployeesForApprovalCandidates({
       keyword: params.keyword,
@@ -777,7 +781,7 @@ class ExpenseRequestService {
   }
 
   async createExpenseRequest(authContext: AuthContext, input: CreateExpenseRequestInput) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     this.ensureCurrentEmployee(authContext, input.employee_id, "expense_request.create");
     await this.assertEmployeeExists(input.employee_id, tenantId);
     await this.assertProjectExists(input.project_id, tenantId);
@@ -829,7 +833,7 @@ class ExpenseRequestService {
     id: string,
     input: UpdateExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -899,7 +903,7 @@ class ExpenseRequestService {
     id: string,
     input: SubmitExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -988,7 +992,7 @@ class ExpenseRequestService {
     id: string,
     input: ApproveExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -1101,7 +1105,7 @@ class ExpenseRequestService {
     id: string,
     input: RejectExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -1210,7 +1214,7 @@ class ExpenseRequestService {
     id: string,
     input: CancelExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -1267,7 +1271,7 @@ class ExpenseRequestService {
     id: string,
     input: PayExpenseRequestInput,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
     if (!existing) {
       throw Errors.badRequest("费用申请不存在");
@@ -1334,7 +1338,7 @@ class ExpenseRequestService {
   }
 
   async getExpenseRequestById(authContext: AuthContext, id: string) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const data = await expenseRequestRepository.findById(id, tenantId);
     if (!data) {
       throw Errors.badRequest("费用申请不存在");
@@ -1349,7 +1353,7 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestListQueryType,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const processPermission = this.getProcessPermissionForQuery(params);
     const visibility = processPermission
       ? await this.getVisibilityForPermission(authContext, processPermission)
@@ -1402,7 +1406,7 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestListQueryType,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const visibility = await accessPolicyService.getVisibleExpenseFilters(
       authContext,
       "expense_request.read",
@@ -1459,7 +1463,7 @@ class ExpenseRequestService {
     authContext: AuthContext,
     params: ExpenseRequestTodoQueryType,
   ) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = this.requireTenantId(authContext);
     const todoDefinitions = [
       {
         status: "pending",

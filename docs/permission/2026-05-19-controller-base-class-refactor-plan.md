@@ -717,3 +717,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续迁移仍继承 `BaseController` 的租户业务 controller，优先选择 `expense-requests` 或 `projects` 前先做业务边界核查。
+
+### 2026-05-19 Expense Requests 权限边界核查与迁移
+
+已完成：
+
+- 核查费用申请 controller、service、repository、schema。
+- 形成独立核查文档：[Expense Requests 权限边界核查](./2026-05-19-expense-requests-boundary-audit.md)。
+- 迁移 `expense-requests` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 列表、详情、审批模板、审批候选人、待办、统计、创建、修改、提交、审批、驳回、撤回、登记打款接口统一使用 `getRequiredTenantContext()`。
+- `expenseRequestService` 新增 `requireTenantId()`，费用申请业务不再使用平台管理员无租户兼容口径。
+- 保留原有 `expense_request.read`、`expense_request.create`、`expense_request.submit`、`expense_request.approve_manager`、`expense_request.approve_finance`、`expense_request.pay` 权限判断。
+
+特别说明：
+
+- `expense-requests` 是租户后台费用审批能力，平台超管跨租户查看或管理费用申请需要后续新增独立平台接口。
+- 本次没有改小程序端和 admin 端接口路径，仅收紧后端租户上下文边界。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续迁移 `projects` 前先做专项边界核查，重点关注项目成员、客户、工地日志、验收、设备等关联资源。

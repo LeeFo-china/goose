@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   ApproveExpenseRequestSchema,
@@ -17,9 +17,8 @@ import { expenseRequestService } from "@/services/expense-requests";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { authorizationService } from "@/services/authorization";
 
-class ExpenseRequestsController extends BaseController<
+class ExpenseRequestsController extends TenantBaseController<
   typeof CreateExpenseRequestSchema,
   typeof UpdateExpenseRequestSchema
 > {
@@ -31,16 +30,8 @@ class ExpenseRequestsController extends BaseController<
     );
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseRequestListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -52,7 +43,7 @@ class ExpenseRequestsController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -65,7 +56,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Get("/expense-requests/approval-template")
   async approvalTemplate(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredAuthContext(request);
+    await this.getRequiredTenantContext(request);
     const result = ExpenseApprovalTemplateQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -75,7 +66,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Get("/expense-requests/approval-candidates")
   async approvalCandidates(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseApprovalCandidateQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -88,7 +79,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Get("/expense-requests/todo")
   async todo(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseRequestTodoQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -101,7 +92,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Get("/expense-requests/stats/summary")
   async statsSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseRequestListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -113,7 +104,7 @@ class ExpenseRequestsController extends BaseController<
   }
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
     }
@@ -129,7 +120,7 @@ class ExpenseRequestsController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -150,7 +141,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/submit")
   async submit(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -168,7 +159,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/approve")
   async approve(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -186,7 +177,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/reject")
   async reject(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -204,7 +195,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/cancel")
   async cancel(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -222,7 +213,7 @@ class ExpenseRequestsController extends BaseController<
 
   @Post("/expense-requests/:id/pay")
   async pay(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
