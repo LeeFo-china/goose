@@ -1355,6 +1355,7 @@ class CustomerController extends TenantBaseController<
       .from("customers")
       .select(this.customerSelect)
       .eq("id", idVerify.data.id)
+      .eq("tenant_id", authContext.tenantId)
       .maybeSingle();
 
     if (error) {
@@ -1367,7 +1368,7 @@ class CustomerController extends TenantBaseController<
 
     const canAccess = await accessPolicyService.canAccessCustomer(
       authContext,
-      (data as unknown) as { owner_id: string | null },
+      (data as unknown) as { owner_id: string | null; tenant_id?: string | null },
       "customer.read",
     );
     if (!canAccess) {
@@ -1420,6 +1421,16 @@ class CustomerController extends TenantBaseController<
       payload.owner_id !== authContext.employeeId
     ) {
       throw Errors.forbidden();
+    }
+
+    if (payload.owner_id) {
+      const targetEmployee = await this.getAssignableTargetEmployee(
+        payload.owner_id,
+        authContext.tenantId,
+      );
+      if (!targetEmployee || targetEmployee.status !== "active") {
+        throw Errors.badRequest("目标负责人不存在或不可用");
+      }
     }
 
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -1558,6 +1569,7 @@ class CustomerController extends TenantBaseController<
         .from("customers")
         .update(payload)
         .eq("id", idVerify.data.id)
+        .eq("tenant_id", authContext.tenantId)
         .select(this.customerSelect)
         .single();
 
@@ -1568,6 +1580,7 @@ class CustomerController extends TenantBaseController<
         .from("customers")
         .select(this.customerSelect)
         .eq("id", idVerify.data.id)
+        .eq("tenant_id", authContext.tenantId)
         .maybeSingle();
 
       if (current.error) throw Errors.dbError("查询客户失败", current.error);
