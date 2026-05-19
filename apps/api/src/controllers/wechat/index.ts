@@ -22,6 +22,11 @@ import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
+import {
+  wechatCustomerIdentityService,
+  type CustomerIdentityRow,
+  type CustomerTenantOption,
+} from "@/services/wechat-customer-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -37,32 +42,6 @@ type WeChatSessionResponse = {
   unionid?: string;
   errcode?: number;
   errmsg?: string;
-};
-
-type CustomerIdentityRow = {
-  id: string;
-  name: string | null;
-  phone: string | null;
-  user_id: string | null;
-  tenant_id: string | null;
-  customer_origin?: string | null;
-  claimed_at?: string | null;
-};
-
-type CustomerTenantOption = CustomerIdentityRow & {
-  tenant: {
-    id: string | null;
-    name: string | null;
-    slug: string | null;
-    status: string | null;
-  } | Array<{
-    id: string | null;
-    name: string | null;
-    slug: string | null;
-    status: string | null;
-  }> | null;
-  project_count?: number;
-  latest_project_name?: string | null;
 };
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
@@ -834,215 +813,22 @@ export class WeChatController extends BaseController {
     }
   }
 
-  private async enrichCustomerTenantOptions(customers: CustomerTenantOption[]) {
-    if (customers.length === 0) {
-      return [] as CustomerTenantOption[];
-    }
-
-    const customerIds = customers.map((item) => item.id);
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("projects")
-      .select("id, name, customer_id, created_at")
-      .in("customer_id", customerIds)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw Errors.dbError("查询客户项目概览失败", error);
-    }
-
-    const projectMap = new Map<string, {
-      count: number;
-      latestName: string | null;
-    }>();
-
-    for (const project of (data || []) as Array<{
-      id: string;
-      name: string | null;
-      customer_id: string | null;
-      created_at: string | null;
-    }>) {
-      if (!project.customer_id) continue;
-      const current = projectMap.get(project.customer_id) ?? {
-        count: 0,
-        latestName: null,
-      };
-      current.count += 1;
-      if (!current.latestName) {
-        current.latestName = project.name ?? null;
-      }
-      projectMap.set(project.customer_id, current);
-    }
-
-    return customers.map((customer) => {
-      const summary = projectMap.get(customer.id);
-      return {
-        ...customer,
-        project_count: summary?.count ?? 0,
-        latest_project_name: summary?.latestName ?? null,
-      };
-    });
-  }
-
   private async listCustomerTenantOptionsByPhone(phone: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        customer_origin,
-        claimed_at,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .eq("phone", phone);
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    const customers = ((data || []) as unknown as CustomerTenantOption[])
-      .filter((item) => {
-        const tenant = this.normalizeTenantRelation(item.tenant);
-        return item.tenant_id && tenant?.status === "active";
-      });
-
-    return this.enrichCustomerTenantOptions(customers);
+    return wechatCustomerIdentityService.listCustomerTenantOptionsByPhone(phone);
   }
 
   private async listCustomerTenantOptionsByAuthUser(authUserId: string) {
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource === "membership") {
-      return this.enrichCustomerTenantOptions(
-        await this.listCustomerTenantOptionsByMembership(authUserId),
-      );
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        customer_origin,
-        claimed_at,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .eq("user_id", authUserId);
-
-    if (error) {
-      throw Errors.dbError("查询客户微信绑定失败", error);
-    }
-
-    const customers = ((data || []) as unknown as CustomerTenantOption[])
-      .filter((item) => {
-        const tenant = this.normalizeTenantRelation(item.tenant);
-        return item.tenant_id && tenant?.status === "active";
-      });
-
-    if (identitySource === "legacy") {
-      return this.enrichCustomerTenantOptions(customers);
-    }
-
-    const membershipCustomers = await this.listCustomerTenantOptionsByMembership(authUserId);
-    const customerMap = new Map<string, CustomerTenantOption>();
-    for (const customer of [...membershipCustomers, ...customers]) {
-      customerMap.set(customer.id, customer);
-    }
-
-    return this.enrichCustomerTenantOptions(Array.from(customerMap.values()));
-  }
-
-  private async listCustomerTenantOptionsByMembership(authUserId: string) {
-    const memberships = await userIdentityService.listActiveBusinessMemberships({
-      userId: authUserId,
-      identityType: "customer",
+    return wechatCustomerIdentityService.listCustomerTenantOptionsByAuthUser({
+      authUserId,
+      identitySource: this.getAuthIdentitySource(),
     });
-    const customerIds = Array.from(new Set(memberships.map((item) => item.identity_id)));
-    if (customerIds.length === 0) {
-      return [] as CustomerTenantOption[];
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        customer_origin,
-        claimed_at,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .in("id", customerIds);
-
-    if (error) {
-      throw Errors.dbError("查询客户业务身份失败", error);
-    }
-
-    const membershipTenantMap = new Map(
-      memberships.map((item) => [item.identity_id, item.tenant_id]),
-    );
-    const customers = ((data || []) as unknown as CustomerTenantOption[])
-      .filter((item) => {
-        const tenant = this.normalizeTenantRelation(item.tenant);
-        const membershipTenantId = membershipTenantMap.get(item.id);
-        return (
-          item.tenant_id &&
-          item.tenant_id === membershipTenantId &&
-          tenant?.status === "active"
-        );
-      });
-
-    return customers;
   }
 
   private async getCustomerTenantOptionById(customerId: string, tenantId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        name,
-        phone,
-        user_id,
-        tenant_id,
-        customer_origin,
-        claimed_at,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          name,
-          slug,
-          status
-        )
-      `)
-      .eq("id", customerId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    return (data || null) as unknown as CustomerTenantOption | null;
+    return wechatCustomerIdentityService.getCustomerTenantOptionById(
+      customerId,
+      tenantId,
+    );
   }
 
   private serializeCustomerTenantOption(customer: CustomerTenantOption) {
