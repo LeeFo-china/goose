@@ -18,6 +18,8 @@ export class GetProjectCreatePageDataController extends BaseController {
         request: FastifyRequest,
         reply: FastifyReply,
     ) {
+        // Legacy public/RLS RPC: this route has no app auth context, so do not
+        // switch it to the admin client without defining its caller boundary.
         const { data, error } = await SupabaseDB.getClient().rpc(
             "get_project_create_page_data",
         );

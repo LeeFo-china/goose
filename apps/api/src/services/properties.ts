@@ -8,7 +8,8 @@ class PropertyService {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let query = SupabaseDB.from("properties")
+    let query = SupabaseDB.getAdminClient()
+      .from("properties")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
 

@@ -38,7 +38,8 @@ class ProjectReferralRepository {
   `;
 
   async findById(id: string): Promise<ProjectReferralRecord | null> {
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .select(this.referralSelect)
       .eq("id", id)
       .maybeSingle();
@@ -51,7 +52,8 @@ class ProjectReferralRepository {
   }
 
   async findByProjectId(projectId: string): Promise<ProjectReferralRecord | null> {
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .select(this.referralSelect)
       .eq("project_id", projectId)
       .maybeSingle();
@@ -64,7 +66,8 @@ class ProjectReferralRepository {
   }
 
   async create(input: CreateProjectReferralInput): Promise<ProjectReferralRecord> {
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .insert({
         ...input,
         status: "pending",
@@ -84,7 +87,8 @@ class ProjectReferralRepository {
   }
 
   async update(id: string, input: UpdateProjectReferralInput): Promise<ProjectReferralRecord> {
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .update(input)
       .eq("id", id)
       .select(this.referralSelect)
@@ -120,7 +124,8 @@ class ProjectReferralRepository {
       payload.recalculated_at = new Date().toISOString();
     }
 
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .update(payload)
       .eq("project_id", params.projectId)
       .in("status", ["pending", "calculated"])
@@ -140,7 +145,8 @@ class ProjectReferralRepository {
   }
 
   async markPaid(id: string, input: MarkProjectReferralPaidInput): Promise<ProjectReferralRecord> {
-    const { data, error } = await SupabaseDB.from("project_referrals")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .update({
         status: "paid",
         paid_at: input.paid_at || new Date().toISOString(),
@@ -174,7 +180,8 @@ class ProjectReferralRepository {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let query = SupabaseDB.from("project_referrals")
+    let query = SupabaseDB.getAdminClient()
+      .from("project_referrals")
       .select(this.referralSelect, { count: "exact" })
       .order("created_at", { ascending: false });
 

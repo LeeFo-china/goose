@@ -390,7 +390,7 @@ class ProjectLogController extends BaseController<
     if (!hasAccess) {
       throw Errors.forbidden();
     }
-    const { data, error } = await SupabaseDB.getClient().rpc(
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
       "get_project_log_calendar",
       {
         project_uuid: project_id,

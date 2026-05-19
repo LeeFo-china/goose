@@ -1270,9 +1270,8 @@ class CustomerSelfServiceController extends BaseController {
     }>();
 
     if (logIds.length > 0) {
-      const { data: comments, error: commentsError } = await SupabaseDB.from(
-        "project_log_comments",
-      )
+      const { data: comments, error: commentsError } = await SupabaseDB.getAdminClient()
+        .from("project_log_comments")
         .select("id, log_id, parent_id, author_type, author_id, rating, created_at")
         .in("log_id", logIds)
         .eq("tenant_id", project.tenant_id)

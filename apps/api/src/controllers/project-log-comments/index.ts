@@ -137,7 +137,8 @@ class ProjectLogCommentsController extends BaseController {
       images: this.normalizeImages(payload.images),
     };
 
-    const { data, error } = await SupabaseDB.from("project_log_comments")
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_log_comments")
       .insert(insertPayload)
       .select()
       .single<ProjectLogCommentRow>();
@@ -160,7 +161,8 @@ class ProjectLogCommentsController extends BaseController {
     const viewer = await this.resolveCurrentAuthor(request);
     const log = await this.assertProjectLogReadable(request, log_id, viewer);
 
-    let query = SupabaseDB.from("project_log_comments")
+    let query = SupabaseDB.getAdminClient()
+      .from("project_log_comments")
       .select("*")
       .eq("log_id", log_id)
       .is("deleted_at", null);
@@ -359,7 +361,8 @@ class ProjectLogCommentsController extends BaseController {
     parentId: string,
     tenantId: string | null,
   ) {
-    let query = SupabaseDB.from("project_log_comments")
+    let query = SupabaseDB.getAdminClient()
+      .from("project_log_comments")
       .select("id, log_id")
       .eq("id", parentId)
       .is("deleted_at", null);

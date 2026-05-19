@@ -1199,7 +1199,8 @@ class ProjectController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    let query = SupabaseDB.from(this.tableName)
+    let query = SupabaseDB.getAdminClient()
+      .from(this.tableName)
       .select(this.publicProjectListSelect)
       .order("created_at", { ascending: false });
     query = this.applyPublicProjectVisibilityQuery(query);
@@ -1219,7 +1220,8 @@ class ProjectController extends BaseController<
 
   @Get("/front/projects")
   async getPublicProjects(request: FastifyRequest, reply: FastifyReply) {
-    let query = SupabaseDB.from(this.tableName)
+    let query = SupabaseDB.getAdminClient()
+      .from(this.tableName)
       .select(this.publicProjectListSelect)
       .order("created_at", { ascending: false });
     query = this.applyPublicProjectVisibilityQuery(query);

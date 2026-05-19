@@ -28,16 +28,24 @@ export class SupabaseDB {
     },
   );
 
-  static from(table: string) {
-    return this.client.from(table);
-  }
-
+  /**
+   * Public publish-key client.
+   *
+   * Do not use this for API business logic after Fastify auth/permission checks.
+   * It has no current app user session, so Supabase RLS treats it as anon and
+   * may return false negatives. Prefer getAdminClient() plus explicit tenant
+   * and permission checks in controller/service code.
+   */
   static getClient() {
     return this.client;
+  }
+
+  /** @deprecated Use getClient().from(table) only for intentional public/RLS reads. */
+  static from(table: string) {
+    return this.getClient().from(table);
   }
 
   static getAdminClient() {
     return this.adminClient;
   }
 }
-
