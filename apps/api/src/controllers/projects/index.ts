@@ -29,7 +29,6 @@ import {
   type ProjectLogStageCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
-import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectMemberService } from "@/services/project-members";
 import {
@@ -37,23 +36,6 @@ import {
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
-import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
-
-function escapeSupabaseOrValue(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/[%_]/g, "\\$&")
-    .replace(/,/g, "\\,");
-}
-
-function buildPagination(page: number, pageSize: number, total: number) {
-  return {
-    page,
-    pageSize,
-    total,
-    totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
-  };
-}
 
 type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
@@ -219,32 +201,6 @@ class ProjectController extends TenantBaseController<
     )
   `;
 
-  private projectListSelect = `
-    id,
-    name,
-    status,
-    budget,
-    start_date,
-    created_at,
-    address,
-    customer:customers!projects_customer_id_fkey(
-      id,
-      name
-    ),
-    property:properties!projects_property_id_fkey(
-      community,
-      building_info
-    ),
-    designer:employees!projects_designer_id_fkey(
-      id,
-      name
-    ),
-    supervisor:employees!projects_supervisor_id_fkey(
-      id,
-      name
-    )
-  `;
-
   private projectDetailSelect = `
     *,
     customer:customers!projects_customer_id_fkey(
@@ -284,174 +240,6 @@ class ProjectController extends TenantBaseController<
 
   constructor() {
     super("projects", CreateProjectSchema, UpdateProjectSchema);
-  }
-
-  private applyProjectIdsFilter(query: any, visibleProjectIds: string[] | null) {
-    if (visibleProjectIds === null) {
-      return query;
-    }
-
-    if (visibleProjectIds.length === 0) {
-      return query.eq("id", "00000000-0000-0000-0000-000000000000");
-    }
-
-    return query.in("id", visibleProjectIds);
-  }
-
-  private applyProjectListFilters(
-    query: any,
-    tenantId: string,
-    visibleProjectIds: string[] | null,
-    status?: string,
-    keyword?: string,
-    projectIds?: string[] | null,
-  ) {
-    let filteredQuery = this.applyProjectIdsFilter(query, visibleProjectIds);
-
-    filteredQuery = filteredQuery.eq("tenant_id", tenantId);
-
-    if (status) {
-      filteredQuery = filteredQuery.eq("status", status);
-    }
-
-    if (keyword) {
-      const escapedKeyword = escapeSupabaseOrValue(keyword);
-      filteredQuery = filteredQuery.or(
-        `name.ilike.%${escapedKeyword}%,address.ilike.%${escapedKeyword}%`,
-      );
-    }
-
-    if (projectIds !== undefined && projectIds !== null) {
-      if (projectIds.length === 0) {
-        filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");
-      } else {
-        filteredQuery = filteredQuery.in("id", projectIds);
-      }
-    }
-
-    return filteredQuery;
-  }
-
-  private async getTodayWorkProjectIds(tenantId: string) {
-    const { startIso, endIso } = getAsiaShanghaiTodayRange();
-    const ids = new Set<string>();
-
-    const addProjectRows = (rows: Array<{ id?: string | null }> | null) => {
-      (rows || []).forEach((item) => {
-        if (item.id) ids.add(item.id);
-      });
-    };
-    const addProjectIdRows = (
-      rows: Array<{ project_id?: string | null }> | null,
-    ) => {
-      (rows || []).forEach((item) => {
-        if (item.project_id) ids.add(item.project_id);
-      });
-    };
-
-    const [
-      createdProjects,
-      updatedProjects,
-      todayLogs,
-      createdAcceptances,
-      submittedAcceptances,
-      reviewedAcceptances,
-      customerConfirmedAcceptances,
-    ] = await Promise.all([
-      SupabaseDB.getAdminClient()
-        .from("projects")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .gte("created_at", startIso)
-        .lt("created_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("projects")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .gte("updated_at", startIso)
-        .lt("updated_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("project_logs")
-        .select("project_id")
-        .eq("tenant_id", tenantId)
-        .gte("created_at", startIso)
-        .lt("created_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("project_acceptances")
-        .select("project_id")
-        .eq("tenant_id", tenantId)
-        .gte("created_at", startIso)
-        .lt("created_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("project_acceptances")
-        .select("project_id")
-        .eq("tenant_id", tenantId)
-        .gte("submitted_at", startIso)
-        .lt("submitted_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("project_acceptances")
-        .select("project_id")
-        .eq("tenant_id", tenantId)
-        .gte("reviewed_at", startIso)
-        .lt("reviewed_at", endIso),
-      SupabaseDB.getAdminClient()
-        .from("project_acceptances")
-        .select("project_id")
-        .eq("tenant_id", tenantId)
-        .gte("customer_confirmed_at", startIso)
-        .lt("customer_confirmed_at", endIso),
-    ]);
-
-    if (createdProjects.error) {
-      throw Errors.dbError("查询今日新增项目失败", createdProjects.error);
-    }
-    if (updatedProjects.error) {
-      throw Errors.dbError("查询今日更新项目失败", updatedProjects.error);
-    }
-    if (todayLogs.error) {
-      throw Errors.dbError("查询今日项目日志失败", todayLogs.error);
-    }
-    if (createdAcceptances.error) {
-      throw Errors.dbError("查询今日发起验收失败", createdAcceptances.error);
-    }
-    if (submittedAcceptances.error) {
-      throw Errors.dbError("查询今日提交验收失败", submittedAcceptances.error);
-    }
-    if (reviewedAcceptances.error) {
-      throw Errors.dbError("查询今日复核验收失败", reviewedAcceptances.error);
-    }
-    if (customerConfirmedAcceptances.error) {
-      throw Errors.dbError("查询今日客户确认验收失败", customerConfirmedAcceptances.error);
-    }
-
-    addProjectRows(createdProjects.data as Array<{ id: string }> | null);
-    addProjectRows(updatedProjects.data as Array<{ id: string }> | null);
-    addProjectIdRows(todayLogs.data as Array<{ project_id: string | null }> | null);
-    addProjectIdRows(
-      createdAcceptances.data as Array<{ project_id: string | null }> | null,
-    );
-    addProjectIdRows(
-      submittedAcceptances.data as Array<{ project_id: string | null }> | null,
-    );
-    addProjectIdRows(
-      reviewedAcceptances.data as Array<{ project_id: string | null }> | null,
-    );
-    addProjectIdRows(
-      customerConfirmedAcceptances.data as Array<{ project_id: string | null }> | null,
-    );
-
-    return Array.from(ids);
-  }
-
-  private async getProjectListVisibleIds(
-    authContext: AuthContext,
-    ownership?: "self" | "all",
-  ) {
-    return accessPolicyService.getVisibleProjectIdsByOwnership(
-      authContext,
-      "project.read",
-      ownership,
-    );
   }
 
   private normalizeRelation<T extends Record<string, unknown>>(
@@ -767,55 +555,6 @@ class ProjectController extends TenantBaseController<
     };
   }
 
-  private async assertProjectRelationsInTenant(
-    input: {
-      customer_id?: string | null;
-      property_id?: string | null;
-      designer_id?: string | null;
-      supervisor_id?: string | null;
-    },
-    tenantId: string,
-  ) {
-    if (input.customer_id) {
-      const { data, error } = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .eq("id", input.customer_id)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-
-      if (error) throw Errors.dbError("校验项目客户失败", error);
-      if (!data) throw Errors.badRequest("客户不存在或不属于当前租户");
-    }
-
-    if (input.property_id) {
-      const { data, error } = await SupabaseDB.getAdminClient()
-        .from("properties")
-        .select("id")
-        .eq("id", input.property_id)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-
-      if (error) throw Errors.dbError("校验项目房产失败", error);
-      if (!data) throw Errors.badRequest("房产不存在或不属于当前租户");
-    }
-
-    const employeeIds = [input.designer_id, input.supervisor_id]
-      .filter((item): item is string => Boolean(item));
-    if (employeeIds.length > 0) {
-      const { data, error } = await SupabaseDB.getAdminClient()
-        .from("employees")
-        .select("id")
-        .in("id", Array.from(new Set(employeeIds)))
-        .eq("tenant_id", tenantId);
-
-      if (error) throw Errors.dbError("校验项目成员失败", error);
-      if ((data || []).length !== new Set(employeeIds).size) {
-        throw Errors.badRequest("设计师或监理不存在或不属于当前租户");
-      }
-    }
-  }
-
   private serializeProjectListItem<T extends Record<string, unknown>>(
     row: T,
     phonePrivacyContext?: CustomerPhonePrivacyContext,
@@ -878,66 +617,19 @@ class ProjectController extends TenantBaseController<
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const authContext = await this.getRequiredTenantContext(request);
-    const visibleProjectIds = await this.getProjectListVisibleIds(
+    const result = await projectSer.listProjects({
       authContext,
-      queryResult.data.ownership,
-    );
-
-    const { page, pageSize, status, keyword, work_scope: workScope } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const normalizedKeyword = keyword?.trim();
-    const todayProjectIds = workScope === "today"
-      ? await this.getTodayWorkProjectIds(authContext.tenantId)
-      : null;
-
-    let countQuery = SupabaseDB.getAdminClient()
-      .from("projects")
-      .select("id", { count: "exact", head: true });
-    countQuery = this.applyProjectListFilters(
-      countQuery,
-      authContext.tenantId,
-      visibleProjectIds,
-      status,
-      normalizedKeyword,
-      todayProjectIds,
-    );
-
-    const { error: countError, count } = await countQuery;
-    if (countError) throw Errors.dbError("列表查询失败", countError);
-
-    const total = count ?? 0;
-    if (from >= total) {
-      return ResponseHandler.success({
-        list: [],
-        pagination: buildPagination(page, pageSize, total),
-      });
-    }
-
-    let query = SupabaseDB.getAdminClient()
-      .from("projects")
-      .select(this.projectListSelect)
-      .order("created_at", { ascending: false });
-    query = this.applyProjectListFilters(
-      query,
-      authContext.tenantId,
-      visibleProjectIds,
-      status,
-      normalizedKeyword,
-      todayProjectIds,
-    );
-
-    const { data, error } = await query.range(from, to);
-    if (error) throw Errors.dbError("列表查询失败", error);
+      query: queryResult.data,
+    });
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
 
     return ResponseHandler.success({
-      list: ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+      list: result.rows.map((item) =>
         this.serializeProjectListItem(item, phonePrivacyContext)
       ),
-      pagination: buildPagination(page, pageSize, total),
+      pagination: result.pagination,
     });
   };
 
@@ -946,27 +638,14 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const hasAccess = await accessPolicyService.canAccessProject(
+    const project = await projectSer.getProjectDetail({
       authContext,
-      idVerify.data.id,
-      "project.read",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
-      .select(this.projectDetailSelect)
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询失败", error);
-    if (!data) throw Errors.dbError("查询记录不存在", error);
+      projectId: idVerify.data.id,
+    });
 
     return ResponseHandler.success(
       await this.serializeProjectDetailItem(
-        (data || {}) as unknown as Record<string, unknown>,
+        project,
         await customerPhonePrivacyService.createPrivacyContext(authContext),
       ),
     );
@@ -974,7 +653,6 @@ class ProjectController extends TenantBaseController<
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredTenantContext(request);
-    accessPolicyService.assertPermission(authContext, "project.create");
 
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
@@ -983,23 +661,11 @@ class ProjectController extends TenantBaseController<
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    await this.assertProjectRelationsInTenant(result.data, authContext.tenantId);
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .insert({
-        ...result.data,
-        tenant_id: authContext.tenantId,
-      })
-      .select()
-      .single();
-
-    if (error) throw Errors.dbError("创建失败", error);
-    await projectMemberService.createInitialLegacyProjectMembers(data.id, {
-      designer_id: result.data.designer_id,
-      supervisor_id: result.data.supervisor_id,
-    }, authContext.tenantId);
-    return ResponseHandler.success(data);
+    const project = await projectSer.createProject({
+      authContext,
+      payload: result.data,
+    });
+    return ResponseHandler.success(project);
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -1007,32 +673,18 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const hasAccess = await accessPolicyService.canAccessProject(
-      authContext,
-      idVerify.data.id,
-      "project.update",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
     if (!this.updateSchema) {
       throw Errors.badRequest("缺少参数类型：updateSchema");
     }
 
     const result = this.updateSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
-    await this.assertProjectRelationsInTenant(result.data, authContext.tenantId);
 
-    const data = await projectSer.updateProject(
-      idVerify.data.id,
-      result.data,
-      authContext.tenantId,
-    );
-    await projectMemberService.syncLegacyProjectMembers(idVerify.data.id, {
-      designer_id: result.data.designer_id,
-      supervisor_id: result.data.supervisor_id,
-    }, authContext.tenantId);
+    const data = await projectSer.updateProjectForTenant({
+      authContext,
+      projectId: idVerify.data.id,
+      payload: result.data,
+    });
     return ResponseHandler.success(data);
   };
 
@@ -1042,16 +694,10 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const hasAccess = await accessPolicyService.canAccessProject(
+    const data = await projectSer.deleteProjectForTenant({
       authContext,
-      idVerify.data.id,
-      "project.delete",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
-    const data = await projectSer.deleteProject(idVerify.data.id, authContext.tenantId);
+      projectId: idVerify.data.id,
+    });
     return ResponseHandler.success(data);
   }
 
@@ -1284,104 +930,19 @@ class ProjectController extends TenantBaseController<
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getRequiredTenantContext(request);
-    const visibleProjectIds = await this.getProjectListVisibleIds(
+    const result = await projectSer.listProjects({
       authContext,
-      queryResult.data.ownership,
-    );
-    const { page, pageSize, status, keyword, work_scope: workScope } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const normalizedKeyword = keyword?.trim();
-    const todayProjectIds = workScope === "today"
-      ? await this.getTodayWorkProjectIds(authContext.tenantId)
-      : null;
-
-    let countQuery = SupabaseDB
-      .getAdminClient()
-      .from("projects")
-      .select("id", { count: "exact", head: true });
-    countQuery = this.applyProjectListFilters(
-      countQuery,
-      authContext.tenantId,
-      visibleProjectIds,
-      status,
-      normalizedKeyword,
-      todayProjectIds,
-    );
-
-    const { error: countError, count } = await countQuery;
-    if (countError) throw Errors.dbError("列表查询失败", countError);
-
-    const total = count ?? 0;
-    if (from >= total) {
-      return ResponseHandler.success({
-        list: [],
-        pagination: buildPagination(page, pageSize, total),
-      });
-    }
-
-    let query = SupabaseDB
-      .getAdminClient()
-      .from("projects")
-      .select(
-        `
-            id,
-            name,
-            status,
-            budget,
-            start_date,
-            address,
-            created_at,
-            designer:employees!projects_designer_id_fkey(
-              id,
-              name,
-              avatar,
-              phone
-            ),
-            property:properties!projects_property_id_fkey(
-              community,
-              building_info,
-              area,
-              layout,
-              latitude,
-              longitude
-            ),
-            customer:customers!projects_customer_id_fkey(
-              id,
-              name,
-              phone
-            ),
-            supervisor:employees!projects_supervisor_id_fkey(
-              id,
-              name,
-              avatar,
-              phone
-            )
-            `,
-      );
-    query = this.applyProjectListFilters(
-      query,
-      authContext.tenantId,
-      visibleProjectIds,
-      status,
-      normalizedKeyword,
-      todayProjectIds,
-    );
-
-    const { data, error } = await query
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw Errors.dbError("列表查询失败", error);
+      query: queryResult.data,
+    });
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
 
     return ResponseHandler.success({
-      list: ((data || []) as Array<Record<string, unknown>>).map((item) =>
+      list: result.rows.map((item) =>
         this.serializeProjectListItem(item, phonePrivacyContext)
       ),
-      pagination: buildPagination(page, pageSize, total),
+      pagination: result.pagination,
     });
   }
 
