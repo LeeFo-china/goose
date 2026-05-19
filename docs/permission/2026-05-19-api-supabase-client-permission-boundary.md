@@ -30,12 +30,11 @@ SupabaseDB.getAdminClient().from("table")
 
 ```ts
 SupabaseDB.getClient()
-SupabaseDB.from()
 ```
 
 只允许用于明确需要 Supabase RLS 作为权限来源的 public/anon 场景。使用时必须在代码旁边说明原因。
 
-`SupabaseDB.from()` 已标记为 deprecated，后续新增代码不得使用。
+`SupabaseDB.from()` 兼容方法已删除，后续代码必须显式选择 `getAdminClient()` 或 `getClient()`。
 
 ### 3. 不允许依赖 RLS 做后台租户权限判断
 
@@ -62,7 +61,8 @@ const { data, error } = await SupabaseDB.getAdminClient()
 错误示例：
 
 ```ts
-const { data } = await SupabaseDB.from("projects")
+const { data } = await SupabaseDB.getClient()
+  .from("projects")
   .select("*")
   .eq("id", projectId)
   .maybeSingle();
@@ -84,7 +84,6 @@ if (!data) throw Errors.badRequest("项目不存在");
 
 保留项：
 
-- `BaseController` 仍存在 `SupabaseDB.from()` 使用，暂不直接替换。
 - `get_project_create_page_data` 仍使用普通 client。该旧 RPC 路由当前没有 app auth context，已在代码中标记为 legacy public/RLS RPC，后续需要先定义调用边界再决定是否升权。
 
 ## BaseController 遗留风险
@@ -99,7 +98,7 @@ if (!data) throw Errors.badRequest("项目不存在");
    - `TenantBaseController`
    - `PlatformBaseController`
    - `PublicBaseController`
-4. 完成逐项确认后，再删除 `SupabaseDB.from()` 兼容方法。
+4. 完成逐项确认后，继续拆分更明确的资源基类。
 
 ## 后续检查命令
 
@@ -110,6 +109,6 @@ rg -n "SupabaseDB\\.getClient\\(" apps/api/src -S
 
 验收口径：
 
-- 业务鉴权后的 API 不再新增 `SupabaseDB.from()`。
+- `SupabaseDB.from()` 兼容方法已删除，业务代码不能再使用。
 - 如必须使用 publish-key client，代码附近必须写明原因。
 - 租户数据查询必须显式带租户边界或业务权限校验。

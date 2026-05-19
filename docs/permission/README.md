@@ -20,13 +20,13 @@ SupabaseDB.getAdminClient()
 
 ## 当前遗留风险
 
-- `BaseController` 默认 CRUD 仍使用 `SupabaseDB.from()`，因为它缺少统一租户过滤，不能直接切成 admin client。
 - `get_project_create_page_data` 是旧 public/RLS RPC，当前没有 app auth context，后续需要先定义调用边界再决定是否升权。
 - `payments` 已覆盖默认 CRUD，当前通过项目归属做租户边界。
 - `external-referrers` 已覆盖默认 CRUD，当前按租户私有模型隔离。
 - `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
 - `createResourceRoutes()` 已要求显式声明 CRUD 注册配置，避免新增资源无意识暴露默认 CRUD。
 - `BaseController` 默认 CRUD 已运行时禁用，误调用会返回 `BASE_CONTROLLER_CRUD_DISABLED`。
+- `SupabaseDB.from()` 兼容方法已删除。
 
 ## 快速排查命令
 

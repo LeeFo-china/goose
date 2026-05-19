@@ -14,6 +14,7 @@ class ProjectService {
         const to = from + pageSize - 1;
 
         let query = SupabaseDB
+            .getAdminClient()
             .from("projects")
             .select(
                 `

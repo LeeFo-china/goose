@@ -1304,6 +1304,7 @@ class ProjectController extends BaseController<
       : null;
 
     let countQuery = SupabaseDB
+      .getAdminClient()
       .from("projects")
       .select("id", { count: "exact", head: true });
     countQuery = this.applyProjectListFilters(
@@ -1327,6 +1328,7 @@ class ProjectController extends BaseController<
     }
 
     let query = SupabaseDB
+      .getAdminClient()
       .from("projects")
       .select(
         `

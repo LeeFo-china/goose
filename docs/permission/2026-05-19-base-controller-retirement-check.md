@@ -49,19 +49,19 @@ BASE_CONTROLLER_CRUD_DISABLED
 - `createResourceRoutes()` 已要求显式声明 CRUD 注册配置。
 - 15 个已注册资源均显式覆盖 CRUD。
 - `BaseController` 默认 CRUD 已运行时禁用。
-- `SupabaseDB.from()` 当前没有业务调用点。
+- `SupabaseDB.from()` 兼容方法已删除。
 
 ## 后续建议
 
-下一步可以删除 `SupabaseDB.from()` 兼容方法。删除前再次执行检查：
+后续继续保持以下检查：
 
 ```bash
 rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 ```
 
-如果没有结果，可以删除 `apps/api/src/utils/supabase/index.ts` 中的 deprecated `from(table)` 方法。
+如果出现结果，说明有代码试图使用已删除的兼容层，需要改为显式 `getAdminClient()` 或明确 public/RLS 场景下的 `getClient()`。
 
-再下一步可考虑拆分基类：
+下一步可考虑拆分基类：
 
 - `TenantBaseController`
 - `PlatformBaseController`

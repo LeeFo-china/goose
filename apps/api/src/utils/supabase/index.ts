@@ -40,11 +40,6 @@ export class SupabaseDB {
     return this.client;
   }
 
-  /** @deprecated Use getClient().from(table) only for intentional public/RLS reads. */
-  static from(table: string) {
-    return this.getClient().from(table);
-  }
-
   static getAdminClient() {
     return this.adminClient;
   }

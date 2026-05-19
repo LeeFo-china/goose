@@ -155,7 +155,7 @@
 当所有 `createResourceRoutes()` 资源都不再依赖默认 CRUD 后：
 
 1. 删除或限制 `BaseController.list/getById/create/update`。
-2. 删除 `SupabaseDB.from()` 兼容方法。
+2. `SupabaseDB.from()` 兼容方法已删除。
 3. 将 `createResourceRoutes()` 从“按配置挂载 controller 方法”进一步改为“只注册显式传入的 handler”。
 
 ## 验收命令
