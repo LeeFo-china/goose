@@ -141,66 +141,6 @@ class ProjectController extends TenantBaseController<
   typeof CreateProjectSchema,
   typeof UpdateProjectSchema
 > {
-  private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
-
-  private publicProjectListSelect = `
-    id,
-    name,
-    status,
-    budget,
-    start_date,
-    created_at,
-    address,
-    style_tags,
-    visibility_status,
-    customer:customers!projects_customer_id_fkey(
-      id,
-      name
-    ),
-    property:properties!projects_property_id_fkey(
-      id,
-      community,
-      building_info,
-      area,
-      layout,
-      latitude,
-      longitude
-    ),
-    designer:employees!projects_designer_id_fkey(
-      id,
-      name,
-      avatar
-    ),
-    supervisor:employees!projects_supervisor_id_fkey(
-      id,
-      name,
-      avatar
-    )
-  `;
-
-  private publicProjectDetailSelect = `
-    id,
-    name,
-    status,
-    budget,
-    start_date,
-    address,
-    style_tags,
-    visibility_status,
-    customer:customers!projects_customer_id_fkey(
-      name
-    ),
-    property:properties!projects_property_id_fkey(
-      id,
-      community,
-      building_info,
-      layout,
-      area,
-      latitude,
-      longitude
-    )
-  `;
-
   private projectDetailSelect = `
     *,
     customer:customers!projects_customer_id_fkey(
@@ -277,32 +217,6 @@ class ProjectController extends TenantBaseController<
     return resolveStoredFileUrlList(images);
   }
 
-  private isPublicProjectVisible(row: Record<string, unknown>) {
-    const visibilityStatus =
-      typeof row.visibility_status === "string" ? row.visibility_status : "inherit";
-    const status = typeof row.status === "string" ? row.status : null;
-
-    if (visibilityStatus === "hidden") {
-      return false;
-    }
-
-    if (visibilityStatus === "public") {
-      return true;
-    }
-
-    return status
-      ? this.publicProjectVisibleStatuses.includes(
-          status as (typeof this.publicProjectVisibleStatuses)[number],
-        )
-      : false;
-  }
-
-  private applyPublicProjectVisibilityQuery(query: any) {
-    return query
-      .neq("visibility_status", "hidden")
-      .or("status.in.(signed,constructing,completed),visibility_status.eq.public");
-  }
-
   private serializePublicProjectMember(item: {
     id: string;
     role_code: ProjectMemberRoleCode;
@@ -352,17 +266,8 @@ class ProjectController extends TenantBaseController<
   }
 
   private async getPublicProjectLogs(projectId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("project_logs")
-      .select("id, project_id, stage_code, node_name, content, images, created_at")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw Errors.dbError("查询公开项目日志失败", error);
-    }
-
-    return ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+    const logs = await projectSer.listPublicProjectLogs(projectId);
+    return logs.map((item) =>
       this.serializePublicProjectLog(item)
     );
   }
@@ -824,19 +729,10 @@ class ProjectController extends TenantBaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    let query = SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .select(this.publicProjectListSelect)
-      .order("created_at", { ascending: false });
-    query = this.applyPublicProjectVisibilityQuery(query);
-    const { data, error } = await query;
-
-    if (error) {
-      throw Errors.dbError("查询前端可展示项目失败", error);
-    }
+    const projects = await projectSer.listPublicProjects();
 
     return ResponseHandler.success(
-      ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+      projects.map((item) =>
         this.serializeProjectListItem(item)
       ),
       "查询成功",
@@ -845,19 +741,10 @@ class ProjectController extends TenantBaseController<
 
   @Get("/front/projects")
   async getPublicProjects(request: FastifyRequest, reply: FastifyReply) {
-    let query = SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .select(this.publicProjectListSelect)
-      .order("created_at", { ascending: false });
-    query = this.applyPublicProjectVisibilityQuery(query);
-    const { data, error } = await query;
-
-    if (error) {
-      throw Errors.dbError("查询公开项目列表失败", error);
-    }
+    const projects = await projectSer.listPublicProjects();
 
     return ResponseHandler.success(
-      ((data || []) as unknown as Array<Record<string, unknown>>).map((item) =>
+      projects.map((item) =>
         this.serializeProjectListItem(item)
       ),
     );
@@ -868,21 +755,10 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .select("id, status, visibility_status")
-      .eq("id", idVerify.data.id)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询公开项目失败", error);
-    }
-    if (!data || !this.isPublicProjectVisible((data || {}) as unknown as Record<string, unknown>)) {
-      throw Errors.notFound("项目不存在");
-    }
-
     return ResponseHandler.success(
-      await this.getPublicProjectLogs(idVerify.data.id),
+      (await projectSer.listPublicProjectLogs(idVerify.data.id)).map((item) =>
+        this.serializePublicProjectLog(item)
+      ),
     );
   }
 
@@ -891,22 +767,11 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .select(this.publicProjectDetailSelect)
-      .eq("id", idVerify.data.id)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询公开项目详情失败", error);
-    }
-    if (!data || !this.isPublicProjectVisible((data || {}) as unknown as Record<string, unknown>)) {
-      throw Errors.notFound("项目不存在");
-    }
+    const project = await projectSer.getPublicProjectDetail(idVerify.data.id);
 
     return ResponseHandler.success(
       await this.serializePublicProjectDetailItem(
-        (data || {}) as unknown as Record<string, unknown>,
+        project,
       ),
     );
   }

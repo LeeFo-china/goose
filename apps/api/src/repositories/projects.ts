@@ -70,6 +70,64 @@ export const PROJECT_DETAIL_SELECT = `
   )
 `;
 
+export const PUBLIC_PROJECT_LIST_SELECT = `
+  id,
+  name,
+  status,
+  budget,
+  start_date,
+  created_at,
+  address,
+  style_tags,
+  visibility_status,
+  customer:customers!projects_customer_id_fkey(
+    id,
+    name
+  ),
+  property:properties!projects_property_id_fkey(
+    id,
+    community,
+    building_info,
+    area,
+    layout,
+    latitude,
+    longitude
+  ),
+  designer:employees!projects_designer_id_fkey(
+    id,
+    name,
+    avatar
+  ),
+  supervisor:employees!projects_supervisor_id_fkey(
+    id,
+    name,
+    avatar
+  )
+`;
+
+export const PUBLIC_PROJECT_DETAIL_SELECT = `
+  id,
+  name,
+  status,
+  budget,
+  start_date,
+  address,
+  style_tags,
+  visibility_status,
+  customer:customers!projects_customer_id_fkey(
+    name
+  ),
+  property:properties!projects_property_id_fkey(
+    id,
+    community,
+    building_info,
+    layout,
+    area,
+    latitude,
+    longitude
+  )
+`;
+
 export type ProjectCoreListFilters = {
   tenantId: string;
   visibleProjectIds: string[] | null;
@@ -306,6 +364,70 @@ class ProjectRepository {
     }
 
     return (data as unknown as Record<string, unknown> | null) ?? null;
+  }
+
+  private applyPublicProjectVisibilityQuery(query: any) {
+    return query
+      .neq("visibility_status", "hidden")
+      .or("status.in.(signed,constructing,completed),visibility_status.eq.public");
+  }
+
+  async listPublicProjects() {
+    const query = this.applyPublicProjectVisibilityQuery(
+      SupabaseDB.getAdminClient()
+        .from("projects")
+        .select(PUBLIC_PROJECT_LIST_SELECT)
+        .order("created_at", { ascending: false }),
+    );
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询公开项目列表失败", error);
+    }
+
+    return (data || []) as unknown as Array<Record<string, unknown>>;
+  }
+
+  async findPublicVisibilityById(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, status, visibility_status")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询公开项目失败", error);
+    }
+
+    return (data as unknown as Record<string, unknown> | null) ?? null;
+  }
+
+  async findPublicDetailById(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select(PUBLIC_PROJECT_DETAIL_SELECT)
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询公开项目详情失败", error);
+    }
+
+    return (data as unknown as Record<string, unknown> | null) ?? null;
+  }
+
+  async listPublicProjectLogs(projectId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, project_id, stage_code, node_name, content, images, created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询公开项目日志失败", error);
+    }
+
+    return (data || []) as unknown as Array<Record<string, unknown>>;
   }
 
   async create(input: CreateProjectInput & { tenant_id: string }) {

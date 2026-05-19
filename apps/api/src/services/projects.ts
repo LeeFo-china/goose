@@ -10,6 +10,28 @@ import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
 class ProjectService {
+    private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
+
+    private isPublicProjectVisible(row: Record<string, unknown>) {
+        const visibilityStatus =
+            typeof row.visibility_status === "string" ? row.visibility_status : "inherit";
+        const status = typeof row.status === "string" ? row.status : null;
+
+        if (visibilityStatus === "hidden") {
+            return false;
+        }
+
+        if (visibilityStatus === "public") {
+            return true;
+        }
+
+        return status
+            ? this.publicProjectVisibleStatuses.includes(
+                status as (typeof this.publicProjectVisibleStatuses)[number],
+            )
+            : false;
+    }
+
     async listProjects(input: {
         authContext: AuthContext;
         query: ProjectListQuery;
@@ -51,6 +73,33 @@ class ProjectService {
     }
 
     async searchProjectsByName() {
+    }
+
+    async listPublicProjects() {
+        return projectRepository.listPublicProjects();
+    }
+
+    async getRequiredPublicProjectVisibility(projectId: string) {
+        const project = await projectRepository.findPublicVisibilityById(projectId);
+        if (!project || !this.isPublicProjectVisible(project)) {
+            throw Errors.notFound("项目不存在");
+        }
+
+        return project;
+    }
+
+    async getPublicProjectDetail(projectId: string) {
+        const project = await projectRepository.findPublicDetailById(projectId);
+        if (!project || !this.isPublicProjectVisible(project)) {
+            throw Errors.notFound("项目不存在");
+        }
+
+        return project;
+    }
+
+    async listPublicProjectLogs(projectId: string) {
+        await this.getRequiredPublicProjectVisibility(projectId);
+        return projectRepository.listPublicProjectLogs(projectId);
     }
 
     async getProjectDetail(input: {
