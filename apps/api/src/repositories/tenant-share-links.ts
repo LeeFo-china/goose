@@ -24,7 +24,7 @@ export type TenantShareLinkRecord = {
 
 export type TenantShareLinkPublicRecord = TenantShareLinkRecord & {
   tenant?: { id: string; name: string | null; slug: string | null; status: string | null } | null;
-  share_employee?: { id: string; name: string | null; phone: string | null } | null;
+  share_employee?: { id: string; name: string | null } | null;
 };
 
 export type BindCustomerFromTenantShareResult = {
@@ -40,16 +40,13 @@ export type BindCustomerFromTenantShareResult = {
 class TenantShareLinkRepository {
   private client = SupabaseDB.getAdminClient();
 
-  private from(table: string) {
-    return (this.client as unknown as { from: (table: string) => any }).from(table);
-  }
-
   async create(input: TenantShareLinkCreateInput & {
     tenantId: string;
     shareEmployeeId: string;
     token: string;
   }) {
-    const { data, error } = await this.from("tenant_share_links")
+    const { data, error } = await this.client
+      .from("tenant_share_links")
       .insert({
         tenant_id: input.tenantId,
         share_employee_id: input.shareEmployeeId,
@@ -78,7 +75,8 @@ class TenantShareLinkRepository {
     const from = (input.page - 1) * input.pageSize;
     const to = from + input.pageSize - 1;
 
-    let query = this.from("tenant_share_links")
+    let query = this.client
+      .from("tenant_share_links")
       .select("*", { count: "exact" })
       .eq("tenant_id", input.tenantId)
       .eq("share_employee_id", input.employeeId)
@@ -106,7 +104,8 @@ class TenantShareLinkRepository {
   }
 
   async findPublicByToken(token: string) {
-    const { data, error } = await this.from("tenant_share_links")
+    const { data, error } = await this.client
+      .from("tenant_share_links")
       .select("*")
       .eq("token", token)
       .maybeSingle();
@@ -152,7 +151,8 @@ class TenantShareLinkRepository {
   }
 
   private async findTenant(id: string) {
-    const { data, error } = await this.from("tenants")
+    const { data, error } = await this.client
+      .from("tenants")
       .select("id,name,slug,status")
       .eq("id", id)
       .maybeSingle();
@@ -165,8 +165,9 @@ class TenantShareLinkRepository {
   }
 
   private async findEmployee(id: string) {
-    const { data, error } = await this.from("employees")
-      .select("id,name,phone")
+    const { data, error } = await this.client
+      .from("employees")
+      .select("id,name")
       .eq("id", id)
       .maybeSingle();
 

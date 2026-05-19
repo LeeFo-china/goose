@@ -32,6 +32,7 @@
 - [Project Cameras 权限边界核查](./2026-05-19-project-cameras-boundary-audit.md)
 - [Project Cameras 权限边界重构闭环摘要](./2026-05-19-project-cameras-boundary-refactor-closure-summary.md)
 - [Tenant Share Links 权限边界核查](./2026-05-19-tenant-share-links-boundary-audit.md)
+- [Tenant Share Links 权限边界重构闭环摘要](./2026-05-19-tenant-share-links-boundary-refactor-closure-summary.md)
 - [Tenant Devices 权限边界核查](./2026-05-19-tenant-devices-boundary-audit.md)
 - [Departments / Department Post Rules 权限边界核查](./2026-05-19-departments-boundary-audit.md)
 - [Properties 权限边界核查](./2026-05-19-properties-boundary-audit.md)
