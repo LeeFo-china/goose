@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { PlatformBaseController } from "@/controllers/PlatformBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreatePlatformTenantSchema,
@@ -6,20 +6,19 @@ import {
   PlatformTenantListQuerySchema,
   UpdatePlatformTenantSchema,
 } from "@/schema/platform-tenants";
-import { authorizationService } from "@/services/authorization";
 import { platformTenantService } from "@/services/platform-tenants";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class PlatformTenantsController extends BaseController {
+class PlatformTenantsController extends PlatformBaseController {
   constructor() {
     super("tenants");
   }
 
   @Get("/platform/tenants")
   async listTenants(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const queryResult = PlatformTenantListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -30,7 +29,7 @@ class PlatformTenantsController extends BaseController {
 
   @Post("/platform/tenants")
   async createTenant(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const bodyResult = CreatePlatformTenantSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -41,7 +40,7 @@ class PlatformTenantsController extends BaseController {
 
   @Get("/platform/tenants/:id")
   async getTenant(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const paramsResult = PlatformTenantIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -52,7 +51,7 @@ class PlatformTenantsController extends BaseController {
 
   @Patch("/platform/tenants/:id")
   async updateTenant(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const paramsResult = PlatformTenantIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -70,7 +69,7 @@ class PlatformTenantsController extends BaseController {
 
   @Post("/platform/tenants/:id/suspend")
   async suspendTenant(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const paramsResult = PlatformTenantIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -81,7 +80,7 @@ class PlatformTenantsController extends BaseController {
 
   @Post("/platform/tenants/:id/activate")
   async activateTenant(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformAdminContext(request);
 
     const paramsResult = PlatformTenantIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);

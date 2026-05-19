@@ -420,3 +420,23 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 进入平台写操作类 controller：`platform-tenants`、`ai-config`。
 - 这两类会修改平台配置或租户状态，迁移时需要逐接口确认请求体校验和审计记录不变。
+
+### 2026-05-19 平台写操作试点
+
+已完成：
+
+- 迁移 `platform-tenants` 到 `PlatformBaseController`。
+- 列表、创建、详情、更新、停用、启用接口统一使用 `getRequiredPlatformAdminContext()`。
+- 保持 `platformTenantService` 内的平台管理员校验不变。
+- 保持租户创建初始化、租户状态更新、审计日志记录逻辑不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `ai-config`。
+- `ai-config` 是平台 AI 供应商、模型、场景路由配置入口，迁移时需要确认新增/更新接口的请求体验证不变。
