@@ -100,18 +100,14 @@ export function DepartmentsTable({
   onDepartmentDisabled?: (code: string) => void;
   onDepartmentPostsSaved?: (config: DepartmentPostRuleConfig) => void;
 }) {
-  const [openCodes, setOpenCodes] = useState<string[]>([]);
+  const [openCode, setOpenCode] = useState<string | null>(null);
   const postMap = useMemo(
     () => buildPostMap(departmentPostRuleConfig.post_options),
     [departmentPostRuleConfig.post_options],
   );
 
   function toggle(code: string) {
-    setOpenCodes((current) =>
-      current.includes(code)
-        ? current.filter((item) => item !== code)
-        : [...current, code]
-    );
+    setOpenCode((current) => (current === code ? null : code));
   }
 
   if (departments.length === 0) {
@@ -129,10 +125,9 @@ export function DepartmentsTable({
 
   return (
     <div className="border-t">
-      <div className="hidden grid-cols-[minmax(280px,1fr)_120px_150px_120px_140px_190px] items-center gap-3 bg-muted/60 px-4 py-2 text-sm font-medium text-muted-foreground lg:grid">
+      <div className="hidden grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] items-center gap-3 bg-muted/60 px-4 py-2 text-sm font-medium text-muted-foreground lg:grid">
         <div>部门</div>
         <div>状态</div>
-        <div>编码</div>
         <div>关联岗位</div>
         <div>创建时间</div>
         <div className="text-right">操作</div>
@@ -142,11 +137,11 @@ export function DepartmentsTable({
           const code = department.code || department.id;
           const label = department.template_name || getDepartmentLabel(department.code);
           const posts = getDepartmentPosts(department, departmentPostRuleConfig, postMap);
-          const open = openCodes.includes(code);
+          const open = openCode === code;
 
           return (
             <Collapsible key={department.id} open={open} onOpenChange={() => toggle(code)}>
-              <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(280px,1fr)_120px_150px_120px_140px_190px] lg:items-center">
+              <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] lg:items-center">
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
@@ -177,13 +172,6 @@ export function DepartmentsTable({
                   <Badge variant={department.enabled === false ? "secondary" : "success"}>
                     {department.enabled === false ? "已停用" : "已启用"}
                   </Badge>
-                </div>
-                <div>
-                  {department.code ? (
-                    <Badge variant="outline">{department.code}</Badge>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">未设置</span>
-                  )}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {posts.length} 个岗位
