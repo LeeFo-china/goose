@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateDepartmentSchema,
   UpdateDepartmentSchema,
@@ -9,8 +9,6 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase/index";
-import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
 
 const DepartmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
@@ -52,20 +50,12 @@ type TenantDepartmentRow = {
   department_templates?: DepartmentTemplateRow | DepartmentTemplateRow[] | null;
 };
 
-class DepartmentController extends BaseController<
+class DepartmentController extends TenantBaseController<
   typeof CreateDepartmentSchema,
   typeof UpdateDepartmentSchema
 > {
   constructor() {
     super("departments", CreateDepartmentSchema, UpdateDepartmentSchema);
-  }
-
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
   }
 
   private normalizeTemplate(value: TenantDepartmentRow["department_templates"]) {
@@ -296,11 +286,7 @@ class DepartmentController extends BaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "组织架构必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const queryResult = DepartmentListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -362,11 +348,7 @@ class DepartmentController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "组织架构必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -402,11 +384,7 @@ class DepartmentController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "组织架构必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const result = CreateDepartmentSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
     const template = await this.findDepartmentTemplate(result.data.code);
@@ -431,11 +409,7 @@ class DepartmentController extends BaseController<
   };
 
   enableBatch = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "组织架构必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const result = EnableDepartmentsBatchSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -480,11 +454,7 @@ class DepartmentController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "组织架构必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 

@@ -936,3 +936,32 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `departments` / `department-post-rules`，组织架构是租户侧基础权限数据，建议优先收紧。
+
+### 2026-05-19 Departments / Department Post Rules 权限边界核查与迁移
+
+已完成：
+
+- 核查部门 controller、部门岗位规则 controller、service、repository 和 schema。
+- 形成独立核查文档：[Departments / Department Post Rules 权限边界核查](./2026-05-19-departments-boundary-audit.md)。
+- 迁移 `departments` 到 `TenantBaseController`。
+- 迁移 `department-post-rules` 到 `TenantBaseController`。
+- 删除两个 controller 内重复的 `authorizationService` 依赖。
+- 部门 CRUD 和批量启用统一使用 `getRequiredTenantContext()`。
+- 部门岗位规则接口统一使用 `getRequiredTenantContext()`。
+- 部门岗位规则读取保留 `employee.read` 权限点，修改保留 `employee.update` 权限点。
+
+特别说明：
+
+- `departments` 当前仍直接访问 Supabase，后续可以继续拆 service / repository。
+- 旧 `departments` 表仍是兼容层，主模型应继续以 `tenant_departments` 为准。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查 `properties` 或 `customer`。如果按基础资料链路推进，建议先处理 `properties`。
