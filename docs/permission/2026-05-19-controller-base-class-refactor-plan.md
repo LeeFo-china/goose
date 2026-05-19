@@ -686,3 +686,34 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 迁移 `employee-permissions`，保留 `/auth/me/permissions` 普通 auth 口径，并收紧员工授权接口的目标员工租户校验。
+
+### 2026-05-19 Employee Permissions 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `employee-permissions` 到 `TenantBaseController`。
+- `/auth/me/permissions` 保留普通 `getRequiredAuthContext()`，支持平台管理员和租户员工读取自身权限上下文。
+- 员工权限详情、员工角色绑定、员工权限覆盖新增和删除接口统一使用 `getRequiredTenantContext()`。
+- 员工授权类接口保留 `employee.permission_manage` 权限判断。
+- `permissionService` 新增目标员工租户校验，员工授权、权限覆盖、权限上下文查询必须确认目标员工属于当前租户。
+- 删除普通员工授权接口中的平台管理员跨租户绕过逻辑。
+
+特别说明：
+
+- 平台超管后续如需跨租户查看或调整员工权限，应新增独立平台接口，不再复用租户员工授权接口。
+- 当前改动不影响 `/auth/me/permissions`，避免平台超管后台读取自身登录上下文时被租户上下文拦截。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+阶段结论：
+
+- `roles` 和 `employee-permissions` 这一组租户权限管理入口已完成 controller 基类迁移。
+- 员工授权路径已形成 controller 入口校验和 service 目标员工租户校验两层边界。
+
+下一步建议：
+
+- 继续迁移仍继承 `BaseController` 的租户业务 controller，优先选择 `expense-requests` 或 `projects` 前先做业务边界核查。

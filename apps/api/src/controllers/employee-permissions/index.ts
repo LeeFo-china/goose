@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   AssignEmployeeRolesSchema,
@@ -6,24 +6,14 @@ import {
   EmployeePermissionOverrideSchema,
   EmployeeRoleParamSchema,
 } from "@/schema/permissions";
-import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
 import { permissionService } from "@/services/permissions";
 import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class EmployeePermissionsController extends BaseController {
+class EmployeePermissionsController extends TenantBaseController {
   constructor() {
     super("employee_permissions");
-  }
-
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
   }
 
   @Get("/auth/me/permissions")
@@ -37,8 +27,8 @@ class EmployeePermissionsController extends BaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
-    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+    const authContext = await this.getRequiredTenantContext(request);
+    this.assertPermission(authContext, "employee.permission_manage");
 
     const idVerify = EmployeeRoleParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
@@ -52,8 +42,8 @@ class EmployeePermissionsController extends BaseController {
 
   @Post("/employees/:id/roles")
   async assignRoles(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+    const authContext = await this.getRequiredTenantContext(request);
+    this.assertPermission(authContext, "employee.permission_manage");
 
     const idVerify = EmployeeRoleParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
@@ -72,8 +62,8 @@ class EmployeePermissionsController extends BaseController {
 
   @Post("/employees/:id/permission-overrides")
   async upsertOverride(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+    const authContext = await this.getRequiredTenantContext(request);
+    this.assertPermission(authContext, "employee.permission_manage");
 
     const idVerify = EmployeeRoleParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
@@ -92,8 +82,8 @@ class EmployeePermissionsController extends BaseController {
 
   @Delete("/employees/:id/permission-overrides/:permission_id")
   async deleteOverride(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
-    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+    const authContext = await this.getRequiredTenantContext(request);
+    this.assertPermission(authContext, "employee.permission_manage");
 
     const idVerify = EmployeePermissionOverrideParamSchema.safeParse(
       request.params,

@@ -33,6 +33,23 @@ class PermissionService {
     return authContext.tenantId;
   }
 
+  private async getRequiredTenantEmployee(
+    authContext: AuthContext,
+    employeeId: string,
+  ) {
+    const tenantId = this.requireTenantRoleContext(authContext);
+    const employee = await permissionRepository.findEmployeeById(employeeId);
+    if (!employee) {
+      throw Errors.badRequest("员工不存在");
+    }
+
+    if (employee.tenant_id !== tenantId) {
+      throw Errors.forbidden();
+    }
+
+    return { employee, tenantId };
+  }
+
   async listRoles(params: RoleListQueryType, authContext: AuthContext) {
     const tenantId = this.requireTenantRoleContext(authContext);
     return permissionRepository.listRoles(params, tenantId);
@@ -120,16 +137,10 @@ class PermissionService {
     employeeId: string,
     input: AssignEmployeeRolesInput,
   ) {
-    const employee = await permissionRepository.findEmployeeById(employeeId);
-    if (!employee) {
-      throw Errors.badRequest("员工不存在");
-    }
-
-    if (!authContext.isPlatformAdmin && employee.tenant_id !== authContext.tenantId) {
-      throw Errors.forbidden();
-    }
-
-    const tenantId = this.requireTenantRoleContext(authContext);
+    const { employee, tenantId } = await this.getRequiredTenantEmployee(
+      authContext,
+      employeeId,
+    );
     const roles = await permissionRepository.listRolesByIds(input.role_ids, tenantId);
     if (roles.length !== Array.from(new Set(input.role_ids)).length) {
       throw Errors.badRequest("存在无效的角色 ID");
@@ -200,14 +211,10 @@ class PermissionService {
     employeeId: string,
     input: EmployeePermissionOverrideInput,
   ) {
-    const employee = await permissionRepository.findEmployeeById(employeeId);
-    if (!employee) {
-      throw Errors.badRequest("员工不存在");
-    }
-
-    if (!authContext.isPlatformAdmin && employee.tenant_id !== authContext.tenantId) {
-      throw Errors.forbidden();
-    }
+    const { employee } = await this.getRequiredTenantEmployee(
+      authContext,
+      employeeId,
+    );
 
     const permission = await permissionRepository.findPermissionById(
       input.permission_id,
@@ -237,14 +244,10 @@ class PermissionService {
     employeeId: string,
     permissionId: string,
   ) {
-    const employee = await permissionRepository.findEmployeeById(employeeId);
-    if (!employee) {
-      throw Errors.badRequest("员工不存在");
-    }
-
-    if (!authContext.isPlatformAdmin && employee.tenant_id !== authContext.tenantId) {
-      throw Errors.forbidden();
-    }
+    const { employee } = await this.getRequiredTenantEmployee(
+      authContext,
+      employeeId,
+    );
 
     const overrides = await permissionRepository.deleteEmployeePermissionOverride(
       employeeId,
@@ -267,15 +270,10 @@ class PermissionService {
   }
 
   async getEmployeePermissionContext(authContext: AuthContext, employeeId: string) {
+    await this.getRequiredTenantEmployee(authContext, employeeId);
     const employeeAuthContext = await authorizationService.getAuthContextByEmployeeId(
       employeeId,
     );
-    if (
-      !authContext.isPlatformAdmin &&
-      employeeAuthContext.tenantId !== authContext.tenantId
-    ) {
-      throw Errors.forbidden();
-    }
     const overrides = await permissionRepository.listEmployeePermissionOverrides(
       employeeId,
     );
