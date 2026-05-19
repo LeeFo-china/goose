@@ -287,6 +287,44 @@ class ExpenseRequestRepository {
     return (data as ExpenseRequestRecord | null) ?? null;
   }
 
+  async employeeExists(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
+      .from("employees")
+      .select("id")
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询员工失败", error);
+    }
+
+    return Boolean(data?.id);
+  }
+
+  async projectExists(id: string, tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id")
+      .eq("id", id);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目失败", error);
+    }
+
+    return Boolean(data?.id);
+  }
+
   async create(
     payload: ExpenseRequestMutationPayload,
     items: ExpenseRequestItemMutationInput[],

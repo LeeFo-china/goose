@@ -21,7 +21,6 @@ import type {
   ExpenseApprovalChainRecord,
   ExpenseRequestRecord,
 } from "@/repositories/expense-requests";
-import { SupabaseDB } from "@/utils/supabase/index";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { expenseRequestCategoryService } from "@/services/expense-request-categories";
@@ -647,22 +646,7 @@ class ExpenseRequestService {
     tenantId?: string | null,
     message = "员工不存在",
   ) {
-    let query = SupabaseDB.getAdminClient()
-      .from("employees")
-      .select("id")
-      .eq("id", id);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询员工失败", error);
-    }
-
-    if (!data?.id) {
+    if (!(await expenseRequestRepository.employeeExists(id, tenantId))) {
       throw Errors.badRequest(message);
     }
   }
@@ -675,22 +659,7 @@ class ExpenseRequestService {
       return;
     }
 
-    let query = SupabaseDB.getAdminClient()
-      .from("projects")
-      .select("id")
-      .eq("id", id);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询项目失败", error);
-    }
-
-    if (!data?.id) {
+    if (!(await expenseRequestRepository.projectExists(id, tenantId))) {
       throw Errors.badRequest("项目不存在");
     }
   }
