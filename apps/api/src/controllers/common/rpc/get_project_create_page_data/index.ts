@@ -1,12 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { SupabaseDB } from "@/utils/supabase";
-import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { BaseController } from "@/controllers/BaseController";
 import { Post } from "@/utils/decorators/route";
-import { any } from "zod";
 import { authorizationService } from "@/services/authorization";
-import { accessPolicyService } from "@/services/access-policy";
+import { projectCreatePageDataService } from "@/services/project-create-page-data";
 
 export class GetProjectCreatePageDataController extends BaseController {
     constructor() {
@@ -27,15 +24,10 @@ export class GetProjectCreatePageDataController extends BaseController {
         reply: FastifyReply,
     ) {
         const authContext = await this.getRequiredAuthContext(request);
-        accessPolicyService.assertPermission(authContext, "project.create");
 
-        const { data, error } = await SupabaseDB.getAdminClient().rpc(
-            "get_project_create_page_data",
+        return ResponseHandler.success(
+            await projectCreatePageDataService.getCreatePageData(authContext),
         );
-
-        if (error) throw Errors.dbError("call rpc error");
-
-        return ResponseHandler.success<any>(data);
     }
 }
 

@@ -20,7 +20,7 @@
 
 - `get_project_create_page_data` 已改为后台鉴权接口。
 - 调用前要求后台登录态和 `project.create` 权限。
-- RPC 调用已改为 `SupabaseDB.getAdminClient()`。
+- RPC 调用已下沉到 `projectCreatePageDataService` / `projectCreatePageDataRepository`，repository 使用 admin client。
 
 ## 验收命令
 

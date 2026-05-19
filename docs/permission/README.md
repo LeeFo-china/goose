@@ -76,6 +76,7 @@
 - [WeChat 权限边界核查 Phase 5](./2026-05-19-wechat-boundary-audit-phase5.md)
 - [WeChat 权限边界核查 Phase 6](./2026-05-19-wechat-boundary-audit-phase6.md)
 - [WeChat 权限边界重构闭环摘要](./2026-05-19-wechat-boundary-refactor-closure-summary.md)
+- [Project Create Page Data RPC 权限边界重构](./2026-05-19-project-create-page-data-rpc-boundary-refactor.md)
 
 ## 核心结论
 
@@ -91,7 +92,7 @@ SupabaseDB.getAdminClient()
 
 ## 当前遗留风险
 
-- `get_project_create_page_data` 已改为后台鉴权接口，要求 `project.create` 后使用 admin client 调 RPC。
+- `get_project_create_page_data` 已改为后台鉴权接口，要求 `project.create` 后经 service/repository 调 RPC。
 - `payments` 已覆盖默认 CRUD，当前通过项目归属做租户边界。
 - `external-referrers` 已覆盖默认 CRUD，当前按租户私有模型隔离。
 - `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
