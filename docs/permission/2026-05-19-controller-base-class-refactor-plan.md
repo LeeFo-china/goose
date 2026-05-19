@@ -533,3 +533,23 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 继续迁移低风险租户 controller：`posts`。
 - 再迁移 `external-referrers` 和 `payment`。
+
+### 2026-05-19 Posts 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `posts` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 和 `accessPolicyService` 依赖。
+- 岗位列表、创建、详情、更新接口统一使用 `getRequiredTenantContext()`。
+- 保持 `postsService` 内岗位编码生成、部门存在校验、岗位名称校验和 repository 调用不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `external-referrers`。
+- 再迁移 `payment`。

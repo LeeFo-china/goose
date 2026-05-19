@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreatePostSchema,
   CreateTenantPostSchema,
@@ -14,8 +14,6 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { postsService } from "@/services/posts";
-import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
 
 const PostListQuerySchema = z.object({
   page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
@@ -29,7 +27,7 @@ const PostListQuerySchema = z.object({
   ).optional(),
 });
 
-class PostsController extends BaseController<
+class PostsController extends TenantBaseController<
   typeof CreatePostSchema,
   typeof UpdatePostSchema
 > {
@@ -37,20 +35,8 @@ class PostsController extends BaseController<
     super("posts", CreatePostSchema, UpdatePostSchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "岗位管理必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const queryResult = PostListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -60,11 +46,7 @@ class PostsController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "岗位管理必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const result = CreateTenantPostSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -74,11 +56,7 @@ class PostsController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "岗位管理必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -90,11 +68,7 @@ class PostsController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
-    const tenantId = accessPolicyService.assertTenantContext(
-      authContext,
-      "岗位管理必须在租户上下文中操作",
-    );
+    const { tenantId } = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
