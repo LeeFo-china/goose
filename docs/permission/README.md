@@ -11,6 +11,7 @@
 - [Roles / Employee Permissions 权限模型核查](./2026-05-19-roles-employee-permissions-boundary-audit.md)
 - [Expense Requests 权限边界核查](./2026-05-19-expense-requests-boundary-audit.md)
 - [Employee 权限边界核查 Phase 1](./2026-05-19-employee-boundary-audit-phase1.md)
+- [Employee 权限边界核查 Phase 2](./2026-05-19-employee-boundary-audit-phase2.md)
 - [Projects 权限边界核查](./2026-05-19-projects-boundary-audit.md)
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
