@@ -274,25 +274,6 @@ class CustomerController extends TenantBaseController<
     };
   }
 
-  private async getAssignableTargetEmployee(
-    ownerId: string,
-    tenantId: string,
-  ) {
-    const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
-      .getAdminClient()
-      .from("employees")
-      .select("id, name, department_id, tenant_department_id, status, tenant_id")
-      .eq("id", ownerId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    if (targetEmployeeError) {
-      throw Errors.dbError("查询目标负责人失败", targetEmployeeError);
-    }
-
-    return targetEmployee;
-  }
-
   private attachPropertySummary<T extends CustomerRowForResponse>(
     customer: T,
     propertyMap: Map<string, CustomerPrimaryPropertySummary[]>,
@@ -873,13 +854,10 @@ class CustomerController extends TenantBaseController<
     }
 
     if (payload.owner_id) {
-      const targetEmployee = await this.getAssignableTargetEmployee(
-        payload.owner_id,
-        authContext.tenantId,
-      );
-      if (!targetEmployee || targetEmployee.status !== "active") {
-        throw Errors.badRequest("目标负责人不存在或不可用");
-      }
+      await customerOwnerAssignmentService.assertActiveTenantOwner({
+        ownerId: payload.owner_id,
+        tenantId: authContext.tenantId,
+      });
     }
 
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -985,30 +963,15 @@ class CustomerController extends TenantBaseController<
         throw Errors.badRequest("目标负责人不能为空");
       }
 
-      const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
-        .getAdminClient()
-        .from("employees")
-        .select("id, department_id, tenant_department_id, status, tenant_id")
-        .eq("id", payload.owner_id)
-        .eq("tenant_id", authContext.tenantId)
-        .maybeSingle();
-
-      if (targetEmployeeError) {
-        throw Errors.dbError("查询目标负责人失败", targetEmployeeError);
-      }
-
-      if (!targetEmployee) {
-        throw Errors.badRequest("目标负责人不存在或不可用");
-      }
-
-      const canAssign = await accessPolicyService.canAssignCustomerOwner(
+      await customerOwnerAssignmentService.assertCanAssignSingleOwner({
         authContext,
-        (existing.data as unknown) as { owner_id: string | null },
-        targetEmployee,
-      );
-      if (!canAssign) {
-        throw Errors.forbidden();
-      }
+        customer: (existing.data as unknown) as {
+          id: string;
+          owner_id: string | null;
+          tenant_id?: string | null;
+        },
+        ownerId: payload.owner_id,
+      });
     }
 
     let customer: CustomerRowForResponse | null = null;

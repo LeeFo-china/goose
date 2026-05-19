@@ -20,6 +20,44 @@ export type BatchAssignCustomerOwnerFailedItem = {
 };
 
 class CustomerOwnerAssignmentService {
+  async assertActiveTenantOwner(input: {
+    ownerId: string;
+    tenantId: string;
+  }) {
+    const targetEmployee = await customerOwnerAssignmentRepository.findTargetEmployee({
+      ownerId: input.ownerId,
+      tenantId: input.tenantId,
+    });
+
+    if (!targetEmployee || targetEmployee.status !== "active") {
+      throw Errors.badRequest("目标负责人不存在或不可用");
+    }
+
+    return targetEmployee;
+  }
+
+  async assertCanAssignSingleOwner(input: {
+    authContext: AuthContext;
+    customer: AssignableCustomer;
+    ownerId: string;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const targetEmployee = await this.assertActiveTenantOwner({
+      ownerId: input.ownerId,
+      tenantId,
+    });
+    const canAssign = await accessPolicyService.canAssignCustomerOwner(
+      input.authContext,
+      input.customer,
+      targetEmployee,
+    );
+    if (!canAssign) {
+      throw Errors.forbidden();
+    }
+
+    return targetEmployee;
+  }
+
   async batchAssignOwner(input: {
     authContext: AuthContext;
     payload: BatchAssignCustomerOwnerInput;
@@ -29,18 +67,10 @@ class CustomerOwnerAssignmentService {
       throw Errors.business(403, "无权批量分配客户负责人", "FORBIDDEN");
     }
 
-    const targetEmployee = await customerOwnerAssignmentRepository.findTargetEmployee({
+    const targetEmployee = await this.assertActiveTenantOwner({
       ownerId: input.payload.owner_id,
       tenantId,
     });
-
-    if (!targetEmployee) {
-      throw Errors.badRequest("目标负责人不存在或不可用");
-    }
-
-    if (targetEmployee.status !== "active") {
-      throw Errors.badRequest("目标负责人不存在或不可用");
-    }
 
     if (!accessPolicyService.canAssignCustomerOwnerTarget(
       input.authContext,
