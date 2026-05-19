@@ -376,3 +376,26 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议先实现 `PlatformBaseController`，并迁移 `platform-audit-logs` 作为最小试点。
 
 试点完成后，再迁移 `identity-diagnostics` 和 `user-auth-events`。这三个完成后，再决定是否继续批量迁移平台接口。
+
+## 执行记录
+
+### 2026-05-19 阶段 1 试点
+
+已完成：
+
+- 新增 `PlatformBaseController`。
+- `PlatformBaseController` 只提供 `getRequiredAuthContext()`、`assertPlatformAdmin()`、`getRequiredPlatformAdminContext()`。
+- 迁移 `platform-audit-logs` 到 `PlatformBaseController`。
+- 保持 `platformAuditLogService.list()` 的平台管理员校验不变，形成 controller + service 双层校验。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续迁移 `identity-diagnostics`。
+- 再迁移 `user-auth-events`。
+- 两个只读平台排查类 controller 完成后，再迁移 `permissions`。
