@@ -707,27 +707,13 @@ class ProjectController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const hasAccess = await accessPolicyService.canAccessProject(
+    const project = await projectSer.getProjectDetail({
       authContext,
-      idVerify.data.id,
-      "project.read",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from(this.tableName)
-      .select(this.projectDetailSelect)
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询项目成员失败", error);
-    if (!data) throw Errors.badRequest("项目不存在");
+      projectId: idVerify.data.id,
+    });
 
     const members = await this.getProjectMembersForDetail(
-      (data || {}) as unknown as Record<string, unknown>,
+      project,
     );
     return ResponseHandler.success(members);
   }
