@@ -62,6 +62,13 @@ const fullCrudRoutes = {
   update: true,
 } satisfies ResourceCrudRouteConfig;
 
+const employeeCrudRoutes = {
+  list: true,
+  getById: true,
+  create: true,
+  update: true,
+} satisfies ResourceCrudRouteConfig;
+
 const indexRoutes: FastifyPluginAsync = async (app, options) => {
   //
   app.get("/", async (request, reply) => {
@@ -98,7 +105,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   RpcController.registerExtraRoutes(app);
   GetProjectCreatePageDataController.registerExtraRoutes(app);
   app.register(createResourceRoutes("customers", CustomerController, fullCrudRoutes));
-  app.register(createResourceRoutes("employees", EmployeeController, fullCrudRoutes));
+  app.register(createResourceRoutes("employees", EmployeeController, employeeCrudRoutes));
   app.register(createResourceRoutes("departments", DepartmentController, fullCrudRoutes));
   app.register(createResourceRoutes("payments", PaymentController, fullCrudRoutes));
   app.register(createResourceRoutes("expense-requests", ExpenseRequestsController, fullCrudRoutes));

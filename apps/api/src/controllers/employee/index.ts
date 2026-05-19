@@ -2,12 +2,12 @@
  * 员工控制器 (Employee Controller)
  *
  * 提供员工数据的 CRUD 操作及自定义查询接口。
- * 继承 BaseController，使用 Zod 进行参数校验。
+ * 继承 TenantBaseController，使用 Zod 进行参数校验。
  *
  * @module controllers/employee
  */
 
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateEmployeeSchema,
   EmployeeListQuerySchema,
@@ -18,7 +18,10 @@ import { Errors } from "@/errors/error-factory";
 import { Delete, Get } from "@/utils/decorators/route";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
-import { authorizationService } from "@/services/authorization";
+import {
+  authorizationService,
+  type AuthContext,
+} from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { departmentPostRuleService } from "@/services/department-post-rules";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
@@ -64,7 +67,7 @@ type TenantDepartmentWriteRow = {
 };
 
 type EmployeeDepartmentWriteInput = {
-  tenantId: string | null;
+  tenantId: string;
   departmentId?: string | null;
   tenantDepartmentId?: string | null;
 };
@@ -87,29 +90,27 @@ type NormalizedEmployeeDepartment = {
  * - GET    /employees/withdepartment/:id   - 获取单个员工 (带部门信息)
  * - GET    /employees/withpost             - 获取员工列表 (带职位信息)
  *
- * @extends BaseController <CreateEmployeeSchema, UpdateEmployeeSchema>
+ * @extends TenantBaseController <CreateEmployeeSchema, UpdateEmployeeSchema>
  */
-class EmployeeController extends BaseController<
+type TenantEmployeeAuthContext = AuthContext & { tenantId: string };
+
+class EmployeeController extends TenantBaseController<
   typeof CreateEmployeeSchema,
   typeof UpdateEmployeeSchema
 > {
   constructor() {
     /**
      * 构造函数指定表名为 "employees"
-     * BaseController 会自动处理该表的 CRUD 路由注册
+     * 路由层显式声明员工 CRUD 暴露，controller 内完成租户上下文校验。
      */
     super("employees", CreateEmployeeSchema, UpdateEmployeeSchema);
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
-  private applyEmployeeScope(query: any, scope: "self" | "department" | "assigned" | "all" | null, authContext: Awaited<ReturnType<EmployeeController["getRequiredAuthContext"]>>) {
+  private applyEmployeeScope(
+    query: any,
+    scope: "self" | "department" | "assigned" | "all" | null,
+    authContext: TenantEmployeeAuthContext,
+  ) {
     if (!scope) {
       throw Errors.forbidden();
     }
@@ -138,17 +139,15 @@ class EmployeeController extends BaseController<
 
   private applyEmployeeListFilters(
     query: any,
-    tenantId: string | null,
+    tenantId: string,
     scope: "self" | "department" | "assigned" | "all" | null,
-    authContext: Awaited<ReturnType<EmployeeController["getRequiredAuthContext"]>>,
+    authContext: TenantEmployeeAuthContext,
     status?: string,
     keyword?: string,
   ) {
     let filteredQuery = this.applyEmployeeScope(query, scope, authContext);
 
-    if (tenantId) {
-      filteredQuery = filteredQuery.eq("tenant_id", tenantId);
-    }
+    filteredQuery = filteredQuery.eq("tenant_id", tenantId);
 
     if (status) {
       filteredQuery = filteredQuery.eq("status", status);
@@ -304,10 +303,6 @@ class EmployeeController extends BaseController<
   }
 
   private async findTenantDepartmentForEmployee(input: EmployeeDepartmentWriteInput) {
-    if (!input.tenantId) {
-      throw Errors.badRequest("缺少租户上下文，无法选择部门");
-    }
-
     let query = SupabaseDB.getAdminClient()
       .from("tenant_departments")
       .select("id, tenant_id, code, alias_name, enabled, legacy_department_id")
@@ -385,7 +380,7 @@ class EmployeeController extends BaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const scope = accessPolicyService.assertPermission(
       authContext,
       "employee.read",
@@ -456,7 +451,7 @@ class EmployeeController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "employee.create");
 
     if (!this.createSchema) {
@@ -484,7 +479,7 @@ class EmployeeController extends BaseController<
         ...result.data,
         department_id: department.departmentId,
         tenant_department_id: department.tenantDepartmentId,
-        tenant_id: authContext.tenantId ?? null,
+        tenant_id: authContext.tenantId,
       })
       .select(this.employeeSelectWithDepartment())
       .single();
@@ -494,7 +489,7 @@ class EmployeeController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "employee.update");
 
     const idVerify = this.idParamSchema.safeParse(request.params);
@@ -576,7 +571,7 @@ class EmployeeController extends BaseController<
 
   @Delete("/employees/:id")
   async deleteEmployee(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     accessPolicyService.assertPermission(authContext, "employee.update");
 
     const idVerify = this.idParamSchema.safeParse(request.params);
@@ -618,7 +613,7 @@ class EmployeeController extends BaseController<
   }
 
   // ==================== 基础 CRUD ====================
-  // 继承自 BaseController:
+  // 通过 routes/index.ts 显式注册:
   // - list()        : GET    /employees
   // - getById()     : GET    /employees/:id
   // - create()      : POST   /employees
@@ -651,7 +646,7 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const scope = accessPolicyService.assertPermission(
       authContext,
       "employee.read",
@@ -674,9 +669,7 @@ class EmployeeController extends BaseController<
       `);
 
     query = this.applyEmployeeScope(query, scope, authContext);
-    if (authContext.tenantId) {
-      query = query.eq("tenant_id", authContext.tenantId);
-    }
+    query = query.eq("tenant_id", authContext.tenantId);
 
     const { data, error } = await query;
 
@@ -700,7 +693,7 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
 
     // 1. 校验 UUID 参数
     const idVerify = this.idParamSchema.safeParse(request.params);
@@ -762,7 +755,7 @@ class EmployeeController extends BaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const scope = accessPolicyService.assertPermission(
       authContext,
       "employee.read",
@@ -777,9 +770,7 @@ class EmployeeController extends BaseController<
       `);
 
     query = this.applyEmployeeScope(query, scope, authContext);
-    if (authContext.tenantId) {
-      query = query.eq("tenant_id", authContext.tenantId);
-    }
+    query = query.eq("tenant_id", authContext.tenantId);
 
     const { data, error } = await query;
 
@@ -788,7 +779,7 @@ class EmployeeController extends BaseController<
   }
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
