@@ -666,3 +666,23 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 先迁移 `roles`。
 - 再迁移 `employee-permissions`，并同步收紧目标员工租户校验。
+
+### 2026-05-19 Roles 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `roles` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 和 `accessPolicyService` 依赖。
+- 角色列表、详情、创建、更新、角色权限绑定接口统一使用 `getRequiredTenantContext()`。
+- 保留 `employee.permission_manage` 权限判断。
+- 保持 `permissionService` 内租户角色上下文、角色编码生成、角色权限绑定逻辑不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `employee-permissions`，保留 `/auth/me/permissions` 普通 auth 口径，并收紧员工授权接口的目标员工租户校验。
