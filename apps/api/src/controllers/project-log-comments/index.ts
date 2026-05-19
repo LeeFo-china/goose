@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateProjectLogCommentSchema,
@@ -11,7 +11,6 @@ import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { SupabaseDB } from "@/utils/supabase";
 import type { ProjectLogCommentAuthorType } from "@gooes/domain";
-import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
@@ -75,17 +74,9 @@ type ProjectOwnerInfo = {
   tenant_id: string | null;
 };
 
-class ProjectLogCommentsController extends BaseController {
+class ProjectLogCommentsController extends TenantBaseController {
   constructor() {
     super("project_log_comments");
-  }
-
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
   }
 
   @Post("/project_log_comments")
@@ -314,7 +305,11 @@ class ProjectLogCommentsController extends BaseController {
       return log;
     }
 
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
+    if (authContext.tenantId !== log.tenant_id) {
+      throw Errors.forbidden();
+    }
+
     const hasAccess = await accessPolicyService.canAccessProject(
       authContext,
       log.project_id,

@@ -799,3 +799,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `project-log-comments`，评论应以日志、项目和租户三者归属为核心边界。
+
+### 2026-05-19 Project Log Comments 权限边界核查与迁移
+
+已完成：
+
+- 核查项目日志评论 controller 和 schema。
+- 形成独立核查文档：[Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)。
+- 迁移 `project-log-comments` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 保留客户评论链路的客户身份和项目归属校验。
+- 员工评论链路在访问项目日志时使用 `getRequiredTenantContext()`。
+- 员工评论链路增加员工租户必须等于日志 `tenant_id` 的显式校验。
+
+特别说明：
+
+- `project-log-comments` 是员工和客户混合入口，不能整体强制租户员工上下文。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `project-acceptances`，该模块同时涉及员工、客户、整改回复和验收状态流转，需要先做专项边界核查。

@@ -12,6 +12,7 @@
 - [Expense Requests 权限边界核查](./2026-05-19-expense-requests-boundary-audit.md)
 - [Projects 权限边界核查](./2026-05-19-projects-boundary-audit.md)
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
+- [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)
 
 ## 核心结论
 
