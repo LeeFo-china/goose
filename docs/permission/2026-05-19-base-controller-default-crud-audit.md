@@ -38,7 +38,7 @@
 | `expense-request-categories` | `expense_request_categories` | 租户配置 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `projects` | `projects` | 租户核心数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `roles` | `roles` | 租户权限配置 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
-| `permissions` | `permissions` | 平台权限字典 | 已覆盖 4 个默认方法，但缺少登录/平台校验 | 高 | 平台权限点管理必须限制为平台管理员 |
+| `permissions` | `permissions` | 平台权限字典 | 已覆盖 4 个默认方法，已补登录/平台管理员校验 | 已整改 | 平台权限点管理仅允许平台管理员 |
 | `external-referrers` | `external_referrers` | 介绍人/财务相关数据 | 未覆盖，仍走默认 CRUD | 高 | 必须优先迁移，并确认是否需要补 `tenant_id` |
 | `project-referrals` | `project_referrals` | 租户财务数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `project-logs` | `project_logs` | 租户项目过程数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
@@ -90,24 +90,23 @@
 3. 新增 `ExternalReferrerService` / `ExternalReferrerRepository`。
 4. 所有接口必须走 `project_referral.manage/read` 或独立权限点。
 
-### 3. `permissions`
+### 3. `permissions`（已整改）
 
 现状：
 
 - `PermissionsController` 已覆盖默认 CRUD。
-- 但 `list/create/update/delete` 没有读取 `AuthContext`，也没有平台管理员校验。
+- `list/getById/create/update/delete` 已读取 `AuthContext`，并校验 `authContext.isPlatformAdmin`。
 - `permissionService` 使用 admin client 访问权限字典。
 
-风险：
+已关闭的风险：
 
-- 如果路由没有全局兜底权限校验，可能允许非平台管理员修改平台权限字典。
+- 非平台管理员不能再通过权限字典接口读取、创建、更新或删除平台权限点。
 
-建议：
+当前口径：
 
-1. `permissions` 权限字典管理第一版限制为平台管理员。
-2. 在 controller 层统一调用 `authorizationService.getRequiredAuthContext()`。
-3. 校验 `authContext.isPlatformAdmin === true`。
-4. 租户侧只允许读取可分配权限，不允许直接维护平台权限字典。
+1. `permissions` 权限字典管理限制为平台管理员。
+2. 租户侧角色配置继续走 `roles`、`employee-permissions` 等租户接口。
+3. 租户端不直接维护平台权限字典。
 
 ## 后续分阶段执行
 
@@ -123,9 +122,8 @@
 
 优先顺序：
 
-1. `permissions`
-2. `payments`
-3. `external-referrers`
+1. `payments`
+2. `external-referrers`
 
 每个资源都必须补：
 
@@ -163,5 +161,5 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 当前验收口径：
 
 - `payments` 和 `external-referrers` 是默认 CRUD 高风险遗留项。
-- `permissions` 是平台权限字典鉴权缺口。
+- `permissions` 平台权限字典鉴权缺口已整改。
 - 其它资源已显式覆盖默认 CRUD，但后续仍建议迁移到更清晰的基类结构。

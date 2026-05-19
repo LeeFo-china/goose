@@ -22,7 +22,7 @@ SupabaseDB.getAdminClient()
 - `BaseController` 默认 CRUD 仍使用 `SupabaseDB.from()`，因为它缺少统一租户过滤，不能直接切成 admin client。
 - `get_project_create_page_data` 是旧 public/RLS RPC，当前没有 app auth context，后续需要先定义调用边界再决定是否升权。
 - `payments`、`external-referrers` 仍依赖默认 CRUD，是下一步优先整改项。
-- `permissions` 已覆盖默认 CRUD，但权限字典管理缺少平台管理员校验。
+- `permissions` 已覆盖默认 CRUD，并已补平台管理员校验。
 
 ## 快速排查命令
 
