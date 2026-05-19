@@ -73,6 +73,7 @@
 - [WeChat 权限边界核查 Phase 2](./2026-05-19-wechat-boundary-audit-phase2.md)
 - [WeChat 权限边界核查 Phase 3](./2026-05-19-wechat-boundary-audit-phase3.md)
 - [WeChat 权限边界核查 Phase 4](./2026-05-19-wechat-boundary-audit-phase4.md)
+- [WeChat 权限边界核查 Phase 5](./2026-05-19-wechat-boundary-audit-phase5.md)
 
 ## 核心结论
 

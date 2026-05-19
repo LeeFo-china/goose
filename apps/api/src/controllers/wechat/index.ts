@@ -27,6 +27,7 @@ import {
   type CustomerIdentityRow,
   type CustomerTenantOption,
 } from "@/services/wechat-customer-identities";
+import { wechatEmployeeIdentityService } from "@/services/wechat-employee-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -1172,30 +1173,18 @@ export class WeChatController extends BaseController {
     phone: string,
     openid: string | null,
   ) {
-    const adminClient = SupabaseDB.getAdminClient();
-    const { data, error } = await adminClient
-      .from("employees")
-      .select(`
-        id,
-        user_id,
-        status,
-        tenant:tenants!employees_tenant_id_fkey(id, status)
-      `)
-      .eq("phone", phone);
+    const employees = await wechatEmployeeIdentityService
+      .listEmployeeLoginCandidatesByPhone(phone);
 
-    if (error) {
-      throw Errors.dbError("查询员工身份失败", error);
-    }
-
-    if (!data || data.length === 0) {
+    if (employees.length === 0) {
       throw Errors.badRequest("该手机号未绑定员工身份");
     }
 
-    if (data.length > 1) {
+    if (employees.length > 1) {
       throw Errors.badRequest("该手机号绑定了多个员工档案，请联系管理员处理");
     }
 
-    const employee = data[0];
+    const employee = employees[0];
     if (!employee) {
       throw Errors.badRequest("该手机号未绑定员工身份");
     }
@@ -1229,15 +1218,11 @@ export class WeChatController extends BaseController {
       }
 
       if (employee.user_id !== authUserId) {
-        const { error: updateMembershipEmployeeError } = await adminClient
-          .from("employees")
-          .update({ user_id: authUserId })
-          .eq("id", employee.id)
-          .select("id");
-
-        if (updateMembershipEmployeeError) {
-          throw Errors.dbError("同步员工身份绑定失败", updateMembershipEmployeeError);
-        }
+        await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+          employeeId: employee.id,
+          authUserId,
+          errorMessage: "同步员工身份绑定失败",
+        });
       }
 
       await userIdentityService.syncBusinessMembershipBestEffort({
@@ -1286,26 +1271,16 @@ export class WeChatController extends BaseController {
 
     await wechatRebindRequestService.assertEmployeeCanBind(authUserId, employee);
 
-    const { error: cleanupError } = await adminClient
-      .from("employees")
-      .update({ user_id: null })
-      .eq("user_id", authUserId)
-      .neq("id", employee.id)
-      .select("id");
+    await wechatEmployeeIdentityService.clearOtherEmployeeBindings({
+      authUserId,
+      exceptEmployeeId: employee.id,
+    });
 
-    if (cleanupError) {
-      throw Errors.dbError("清理历史员工绑定失败", cleanupError);
-    }
-
-    const { error: updateError } = await adminClient
-      .from("employees")
-      .update({ user_id: authUserId })
-      .eq("id", employee.id)
-      .select("id");
-
-    if (updateError) {
-      throw Errors.dbError("绑定员工身份失败", updateError);
-    }
+    await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+      employeeId: employee.id,
+      authUserId,
+      errorMessage: "绑定员工身份失败",
+    });
 
     await userIdentityService.syncBusinessMembershipBestEffort({
       userId: authUserId,
