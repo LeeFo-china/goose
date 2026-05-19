@@ -881,3 +881,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `tenant-share-links` 或 `tenant-devices`。如果优先项目相关链路，建议先处理 `tenant-share-links`；如果优先设备资产链路，建议先处理 `tenant-devices`。
+
+### 2026-05-19 Tenant Share Links 权限边界核查与迁移
+
+已完成：
+
+- 核查租户分享链接 controller、service、repository、schema 和绑定 RPC。
+- 形成独立核查文档：[Tenant Share Links 权限边界核查](./2026-05-19-tenant-share-links-boundary-audit.md)。
+- 迁移 `tenant-share-links` 到 `TenantBaseController`。
+- 创建分享链接和分享链接列表接口统一使用 `getRequiredTenantContext()`。
+- service 从 `assertTenantId()` 改为 `assertTenantContext()`，平台管理员无租户上下文不能直接创建或查看租户员工分享链接。
+- 公开 token 详情接口保持 public 口径。
+
+特别说明：
+
+- `tenant-share-links` 是员工和公开分享混合入口，不能整体强制后台租户上下文。
+- 微信绑定链路仍通过 `wechat` controller 调用 RPC，后续如调整需要单独形成微信小程序对接文档。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `tenant-devices`，该模块同时包含租户设备资产和平台设备运维接口，需要按平台侧 / 租户侧拆清边界。

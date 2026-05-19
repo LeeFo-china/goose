@@ -15,7 +15,7 @@ import { notificationService } from "@/services/notifications";
 
 class TenantShareLinkService {
   async create(input: TenantShareLinkCreateInput, authContext: AuthContext) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
     if (!tenantId || !authContext.employeeId) {
       throw Errors.forbidden();
     }
@@ -30,7 +30,7 @@ class TenantShareLinkService {
   }
 
   async list(query: TenantShareLinkListQuery, authContext: AuthContext) {
-    const tenantId = accessPolicyService.assertTenantId(authContext);
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
     if (!tenantId || !authContext.employeeId) {
       throw Errors.forbidden();
     }
