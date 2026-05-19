@@ -31,12 +31,12 @@ import {
 } from "@/schema/properties";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import { customerFollowUpCommentService } from "@/services/customer-follow-up-comments";
 import {
   customerPhonePrivacyService,
   type CustomerPhoneAction,
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
+import { customerFollowUpService } from "@/services/customer-follow-ups";
 import {
   customerSourceService,
   type CustomerSourceSummary,
@@ -1874,69 +1874,22 @@ class CustomerController extends TenantBaseController<
     request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    const { id } = request.params; // ← 这里拿到 UUID
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
     const queryResult = PaginationQuerySchema.safeParse(request.query);
     if (!queryResult.success) {
       throw Errors.fromZod(queryResult.error);
     }
 
-    const customer = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, owner_id, tenant_id")
-      .eq("id", id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
-
-    if (customer.error) {
-      throw Errors.dbError("查询客户失败", customer.error);
-    }
-
-    if (!customer.data) {
-      throw Errors.badRequest("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
-      authContext,
-      (customer.data as unknown) as { owner_id: string | null },
-      "customer.read",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
-
-    const { page, pageSize } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    const { data, error, count } = await SupabaseDB.getAdminClient().from("customer_follow_ups")
-      .select(this.followUpSelect, { count: "exact" }).eq(
-        "customer_id",
-        id,
-      )
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      throw Errors.dbError("get customers data by id error", error);
-    }
-
-    return ResponseHandler.success({
-      list: await customerFollowUpCommentService.enrichFollowUpsWithCommentSummaries(
+    return ResponseHandler.success(
+      await customerFollowUpService.listCustomerFollowUps({
         authContext,
-        customer.data,
-        (((data || []) as unknown) as Array<{
-          id: string;
-          employee?: unknown;
-          employee_id: string | null;
-        }>).map((item) => this.serializeFollowUp(item)),
-      ),
-      pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
-    });
+        customerId: idVerify.data.id,
+        page: queryResult.data.page,
+        pageSize: queryResult.data.pageSize,
+      }),
+    );
   }
 
   @Post("/customers/:id/follow_ups")
@@ -1947,70 +1900,14 @@ class CustomerController extends TenantBaseController<
     }>,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    const { id } = request.params;
-    const customer = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, owner_id, tenant_id")
-      .eq("id", id)
-      .eq("tenant_id", authContext.tenantId)
-      .maybeSingle();
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    if (customer.error) {
-      throw Errors.dbError("查询客户失败", customer.error);
-    }
-
-    if (!customer.data) {
-      throw Errors.badRequest("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
-      authContext,
-      customer.data,
-      "customer.update",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
-
-    const followUpData = request.body;
-    const followUpPayload = {
-      ...followUpData,
-      employee_id: followUpData.employee_id ?? authContext.employeeId ?? null,
-      customer_id: id,
-    };
-
-    const scope = accessPolicyService.getScope(authContext, "customer.update");
-    if (
-      followUpPayload.employee_id &&
-      followUpPayload.employee_id !== authContext.employeeId
-    ) {
-      if (scope !== "all") {
-        throw Errors.forbidden();
-      }
-
-      const targetEmployee = await this.getAssignableTargetEmployee(
-        followUpPayload.employee_id,
-        authContext.tenantId,
-      );
-      if (!targetEmployee || targetEmployee.status !== "active") {
-        throw Errors.badRequest("跟进员工不存在或不可用");
-      }
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient().from("customer_follow_ups")
-      .insert({
-        ...followUpPayload,
-      })
-      .select(this.followUpSelect)
-      .single();
-
-    if (error) {
-      throw Errors.dbError("create follow up data error", error);
-    }
     return ResponseHandler.success(
-      this.serializeFollowUp((data as unknown) as {
-        employee?: unknown;
-        employee_id: string | null;
+      await customerFollowUpService.createCustomerFollowUp({
+        authContext,
+        customerId: idVerify.data.id,
+        payload: request.body,
       }),
     );
   }
