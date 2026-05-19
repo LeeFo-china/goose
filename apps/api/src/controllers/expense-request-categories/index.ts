@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateExpenseRequestCategorySchema,
@@ -7,13 +7,12 @@ import {
   ExpenseRequestCategoryStatusUpdateSchema,
   UpdateExpenseRequestCategorySchema,
 } from "@/schema/expense-request-categories";
-import { authorizationService } from "@/services/authorization";
 import { expenseRequestCategoryService } from "@/services/expense-request-categories";
 import { Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class ExpenseRequestCategoriesController extends BaseController<
+class ExpenseRequestCategoriesController extends TenantBaseController<
   typeof CreateExpenseRequestCategorySchema,
   typeof UpdateExpenseRequestCategorySchema
 > {
@@ -25,16 +24,8 @@ class ExpenseRequestCategoriesController extends BaseController<
     );
   }
 
-  private async getRequiredAuthContext(request: FastifyRequest) {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      request.user?.sub,
-    );
-    request.authContext = authContext;
-    return authContext;
-  }
-
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseRequestCategoryListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -46,7 +37,7 @@ class ExpenseRequestCategoriesController extends BaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const result = ExpenseRequestCategoryIdParamsSchema.safeParse(request.params);
     if (!result.success) throw Errors.fromZod(result.error);
 
@@ -58,7 +49,7 @@ class ExpenseRequestCategoriesController extends BaseController<
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
     }
@@ -74,7 +65,7 @@ class ExpenseRequestCategoriesController extends BaseController<
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = ExpenseRequestCategoryIdParamsSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -95,7 +86,7 @@ class ExpenseRequestCategoriesController extends BaseController<
 
   @Post("/expense-request-categories/:id/status")
   async updateStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getRequiredTenantContext(request);
     const idVerify = ExpenseRequestCategoryIdParamsSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 

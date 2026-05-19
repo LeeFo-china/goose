@@ -506,3 +506,30 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 - 先实现 `TenantBaseController`。
 - 用 `expense-request-categories` 或 `posts` 做低风险租户 controller 试点。
 - Tenant 基类稳定后，再回头拆 `system-settings`。
+
+### 2026-05-19 Tenant 基类试点
+
+已完成：
+
+- 新增 `TenantBaseController`。
+- `TenantBaseController` 只提供 `getRequiredAuthContext()`、`assertTenantContext()`、`getRequiredTenantContext()`、`assertPermission()`。
+- 迁移 `expense-request-categories` 到 `TenantBaseController`。
+- `expense-request-categories` controller 统一使用 `getRequiredTenantContext()`，进入 service 前必须具备租户上下文。
+- 保持 `expenseRequestCategoryService` 内权限点校验、费用分类编码/名称唯一性校验和 repository 调用不变。
+
+特别说明：
+
+- `TenantBaseController` 不允许无租户上下文的平台管理员直接访问租户业务接口。
+- 这与平台接口的 `PlatformBaseController` 明确分离，避免平台账号在没有选定租户时误读租户业务数据。
+- 如果未来需要平台代租户操作，应设计显式的“选择目标租户”接口，不应复用普通租户 controller。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续迁移低风险租户 controller：`posts`。
+- 再迁移 `external-referrers` 和 `payment`。
