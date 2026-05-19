@@ -47,6 +47,14 @@ export type EmployeeCoreRow = EmployeeCoreAccessRow & {
   department?: unknown;
 };
 
+export type EmployeeLoginBindingRow = {
+  employee_id: string;
+  auth_user_id: string | null;
+  has_admin_web: boolean | null;
+  has_wechat_mini: boolean | null;
+  wechat_openid_masked: string | null;
+};
+
 export type TenantDepartmentWriteRow = {
   id: string;
   tenant_id: string | null;
@@ -267,6 +275,29 @@ class EmployeeCoreRepository {
     }
 
     return (data as TenantDepartmentWriteRow | null) ?? null;
+  }
+
+  async listLoginBindingRows(employeeIds: string[]) {
+    if (employeeIds.length === 0) {
+      return [] as EmployeeLoginBindingRow[];
+    }
+
+    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (
+        functionName: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>;
+    }).rpc("list_employee_login_bindings", {
+      p_employee_ids: employeeIds,
+    });
+
+    if (error) {
+      throw Errors.dbError("查询员工登录绑定失败", error);
+    }
+
+    return Array.isArray(data)
+      ? data as EmployeeLoginBindingRow[]
+      : [] as EmployeeLoginBindingRow[];
   }
 }
 

@@ -23,7 +23,10 @@ import {
   type AuthContext,
 } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import { employeeCoreService } from "@/services/employee-core";
+import {
+  employeeCoreService,
+  type EmployeeLoginBindingRow,
+} from "@/services/employee-core";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 function buildPagination(page: number, pageSize: number, total: number) {
@@ -41,14 +44,6 @@ type EmployeeLoginBindingStatus =
   | "wechat_only"
   | "web_and_wechat"
   | "other";
-
-type EmployeeLoginBindingRpcRow = {
-  employee_id: string;
-  auth_user_id: string | null;
-  has_admin_web: boolean | null;
-  has_wechat_mini: boolean | null;
-  wechat_openid_masked: string | null;
-};
 
 /**
  * 员工控制器类
@@ -110,32 +105,7 @@ class EmployeeController extends TenantBaseController<
     return query.eq("id", authContext.employeeId);
   }
 
-  private async listEmployeeLoginBindingRows(employeeIds: string[]) {
-    if (employeeIds.length === 0) {
-      return new Map<string, EmployeeLoginBindingRpcRow>();
-    }
-
-    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
-      rpc: (
-        functionName: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: unknown }>;
-    }).rpc("list_employee_login_bindings", {
-      p_employee_ids: employeeIds,
-    });
-
-    if (error) {
-      throw Errors.dbError("查询员工登录绑定失败", error);
-    }
-
-    const rows = Array.isArray(data)
-      ? (data as EmployeeLoginBindingRpcRow[])
-      : [];
-
-    return new Map(rows.map((row) => [row.employee_id, row]));
-  }
-
-  private buildEmployeeLoginBindings(employee: Record<string, unknown>, row?: EmployeeLoginBindingRpcRow) {
+  private buildEmployeeLoginBindings(employee: Record<string, unknown>, row?: EmployeeLoginBindingRow) {
     const hasAuthUser = Boolean(employee.user_id);
     const web = Boolean(row?.has_admin_web);
     const wechatMini = Boolean(row?.has_wechat_mini);
@@ -238,7 +208,7 @@ class EmployeeController extends TenantBaseController<
       query: queryResult.data,
     });
 
-    const bindingRows = await this.listEmployeeLoginBindingRows(
+    const bindingRows = await employeeCoreService.listEmployeeLoginBindingMap(
       result.rows.map((employee) => employee.id),
     );
 

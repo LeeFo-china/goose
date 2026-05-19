@@ -3,6 +3,7 @@ import {
   employeeCoreRepository,
   type EmployeeCoreAccessRow,
   type EmployeeCoreRow,
+  type EmployeeLoginBindingRow,
   type EmployeeScope,
   type EmployeeVisibilityFilter,
 } from "@/repositories/employee-core";
@@ -223,6 +224,11 @@ class EmployeeCoreService {
     return employee;
   }
 
+  async listEmployeeLoginBindingMap(employeeIds: string[]) {
+    const rows = await employeeCoreRepository.listLoginBindingRows(employeeIds);
+    return new Map(rows.map((row) => [row.employee_id, row]));
+  }
+
   private async normalizeDepartmentForWrite(input: {
     tenantId: string;
     departmentId?: string | null;
@@ -285,4 +291,4 @@ class EmployeeCoreService {
 }
 
 export const employeeCoreService = new EmployeeCoreService();
-export type { EmployeeCoreAccessRow, EmployeeCoreRow };
+export type { EmployeeCoreAccessRow, EmployeeCoreRow, EmployeeLoginBindingRow };
