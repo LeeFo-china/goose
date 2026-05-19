@@ -32,6 +32,43 @@ export type CustomerSelfServiceUserProfileRow = {
   updated_at: string;
 };
 
+export type CustomerSelfServiceProjectListItem = {
+  id: string;
+  tenant_id?: string | null;
+  name: string | null;
+  status: string | null;
+  budget: number | null;
+  address: string | null;
+  start_date: string | null;
+  style_tags: unknown;
+  designer: {
+    id: string;
+    name: string | null;
+    avatar?: string | null;
+  } | {
+    id: string;
+    name: string | null;
+    avatar?: string | null;
+  }[] | null;
+  property: {
+    id: string;
+    community: string | null;
+    building_info: string | null;
+    layout?: string | null;
+    area?: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | {
+    id: string;
+    community: string | null;
+    building_info: string | null;
+    layout?: string | null;
+    area?: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }[] | null;
+};
+
 class CustomerSelfServiceRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -46,6 +83,31 @@ class CustomerSelfServiceRepository {
       name,
       slug,
       status
+    )
+  `;
+
+  private projectListSelect = `
+    id,
+    tenant_id,
+    name,
+    status,
+    budget,
+    address,
+    start_date,
+    style_tags,
+    designer:employees!projects_designer_id_fkey(
+      id,
+      name,
+      avatar
+    ),
+    property:properties!projects_property_id_fkey(
+      id,
+      community,
+      building_info,
+      layout,
+      area,
+      latitude,
+      longitude
     )
   `;
 
@@ -133,6 +195,54 @@ class CustomerSelfServiceRepository {
     }
 
     return data as CustomerSelfServiceUserProfileRow;
+  }
+
+  async listOwnedProjects(input: {
+    customerId: string;
+    tenantId: string;
+    from: number;
+    to: number;
+  }) {
+    const { data, error, count } = await this.adminClient
+      .from("projects")
+      .select(this.projectListSelect, { count: "exact" })
+      .eq("customer_id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false })
+      .range(input.from, input.to);
+
+    if (error) {
+      throw Errors.dbError("查询客户项目列表失败", error);
+    }
+
+    return {
+      list: (data || []) as unknown as CustomerSelfServiceProjectListItem[],
+      count: count || 0,
+    };
+  }
+
+  async findOwnedProject(input: {
+    projectId: string;
+    customerId: string;
+    tenantId?: string | null;
+  }) {
+    let query = this.adminClient
+      .from("projects")
+      .select(this.projectListSelect)
+      .eq("id", input.projectId)
+      .eq("customer_id", input.customerId);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户项目详情失败", error);
+    }
+
+    return (data as unknown as CustomerSelfServiceProjectListItem | null) ?? null;
   }
 }
 

@@ -1,6 +1,7 @@
 import {
   customerSelfServiceRepository,
   type CustomerSelfServiceCustomerContextRow,
+  type CustomerSelfServiceProjectListItem,
   type CustomerSelfServiceUserProfileRow,
 } from "@/repositories/customer-self-service";
 import type { AuthMeProfileUpdateInput } from "@/schema/user-profile";
@@ -54,9 +55,27 @@ class CustomerSelfServiceService {
       profileCompletedAt,
     });
   }
+
+  listOwnedProjects(input: {
+    customerId: string;
+    tenantId: string;
+    from: number;
+    to: number;
+  }) {
+    return customerSelfServiceRepository.listOwnedProjects(input);
+  }
+
+  findOwnedProject(input: {
+    projectId: string;
+    customerId: string;
+    tenantId?: string | null;
+  }) {
+    return customerSelfServiceRepository.findOwnedProject(input);
+  }
 }
 
 export type CustomerContextRow = CustomerSelfServiceCustomerContextRow;
+export type CustomerProjectListItem = CustomerSelfServiceProjectListItem;
 export type UserProfileRow = CustomerSelfServiceUserProfileRow;
 
 export const customerSelfServiceService = new CustomerSelfServiceService();

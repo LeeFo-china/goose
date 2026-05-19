@@ -6,6 +6,7 @@ import { projectAcceptanceService } from "@/services/project-acceptances";
 import {
   customerSelfServiceService,
   type CustomerContextRow,
+  type CustomerProjectListItem,
   type UserProfileRow,
 } from "@/services/customer-self-service";
 import {
@@ -37,43 +38,6 @@ import type { Tables } from "@/types/database";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
-
-type CustomerProjectListItem = {
-  id: string;
-  tenant_id?: string | null;
-  name: string | null;
-  status: string | null;
-  budget: number | null;
-  address: string | null;
-  start_date: string | null;
-  style_tags: unknown;
-  designer: {
-    id: string;
-    name: string | null;
-    avatar?: string | null;
-  } | {
-    id: string;
-    name: string | null;
-    avatar?: string | null;
-  }[] | null;
-  property: {
-    id: string;
-    community: string | null;
-    building_info: string | null;
-    layout?: string | null;
-    area?: number | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  } | {
-    id: string;
-    community: string | null;
-    building_info: string | null;
-    layout?: string | null;
-    area?: number | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  }[] | null;
-};
 
 type CustomerProjectLogRow = {
   id: string;
@@ -836,46 +800,21 @@ class CustomerSelfServiceController extends BaseController {
     };
   }
 
-  private async getOwnedProject(projectId: string, customerId: string) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("projects")
-      .select(`
-        id,
-        tenant_id,
-        name,
-        status,
-        budget,
-        address,
-        start_date,
-        style_tags,
-        designer:employees!projects_designer_id_fkey(
-          id,
-          name,
-          avatar
-        ),
-        property:properties!projects_property_id_fkey(
-          id,
-          community,
-          building_info,
-          layout,
-          area,
-          latitude,
-          longitude
-        )
-      `)
-      .eq("id", projectId)
-      .eq("customer_id", customerId)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询客户项目详情失败", error);
-    }
-
-    if (!data) {
+  private async getOwnedProject(
+    projectId: string,
+    customerId: string,
+    tenantId?: string | null,
+  ) {
+    const project = await customerSelfServiceService.findOwnedProject({
+      projectId,
+      customerId,
+      tenantId,
+    });
+    if (!project) {
       throw Errors.notFound("项目不存在");
     }
 
-    return data as unknown as CustomerProjectListItem;
+    return project;
   }
 
   @Get("/auth/me/customer-context")
@@ -966,42 +905,14 @@ class CustomerSelfServiceController extends BaseController {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("projects")
-      .select(`
-        id,
-        tenant_id,
-        name,
-        status,
-        budget,
-        address,
-        start_date,
-        style_tags,
-        designer:employees!projects_designer_id_fkey(
-          id,
-          name,
-          avatar
-        ),
-        property:properties!projects_property_id_fkey(
-          id,
-          community,
-          building_info,
-          layout,
-          area,
-          latitude,
-          longitude
-        )
-      `, { count: "exact" })
-      .eq("customer_id", customer!.id)
-      .eq("tenant_id", customer!.tenant_id)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    const { list: projectRows, count } = await customerSelfServiceService.listOwnedProjects({
+      customerId: customer!.id,
+      tenantId: customer!.tenant_id!,
+      from,
+      to,
+    });
 
-    if (error) {
-      throw Errors.dbError("查询客户项目列表失败", error);
-    }
-
-    const list = ((data || []) as unknown as CustomerProjectListItem[]).map((item) =>
+    const list = projectRows.map((item) =>
       this.serializeCustomerProjectListItem(item)
     );
 
@@ -1038,7 +949,7 @@ class CustomerSelfServiceController extends BaseController {
 
     return ResponseHandler.success(
       await this.serializeCustomerProjectDetailItem(
-        await this.getOwnedProject(idVerify.data.id, customer!.id),
+        await this.getOwnedProject(idVerify.data.id, customer!.id, customer!.tenant_id),
       ),
     );
   }
@@ -1114,7 +1025,11 @@ class CustomerSelfServiceController extends BaseController {
     const queryResult = CustomerProjectLogListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const project = await this.getOwnedProject(idVerify.data.id, customer!.id);
+    const project = await this.getOwnedProject(
+      idVerify.data.id,
+      customer!.id,
+      customer!.tenant_id,
+    );
     const { page, pageSize } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -1211,7 +1126,11 @@ class CustomerSelfServiceController extends BaseController {
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const project = await this.getOwnedProject(paramsResult.data.id, customer!.id);
+    const project = await this.getOwnedProject(
+      paramsResult.data.id,
+      customer!.id,
+      customer!.tenant_id,
+    );
     await this.getOwnedProjectLog(
       paramsResult.data.logId,
       paramsResult.data.id,
