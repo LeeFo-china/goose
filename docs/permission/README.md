@@ -13,6 +13,7 @@
 - [Employee 权限边界核查 Phase 1](./2026-05-19-employee-boundary-audit-phase1.md)
 - [Employee 权限边界核查 Phase 2](./2026-05-19-employee-boundary-audit-phase2.md)
 - [Employee 权限边界核查 Phase 3](./2026-05-19-employee-boundary-audit-phase3.md)
+- [Employee 权限边界核查 Phase 4](./2026-05-19-employee-boundary-audit-phase4.md)
 - [Projects 权限边界核查](./2026-05-19-projects-boundary-audit.md)
 - [Project Logs 权限边界核查](./2026-05-19-project-logs-boundary-audit.md)
 - [Project Log Comments 权限边界核查](./2026-05-19-project-log-comments-boundary-audit.md)

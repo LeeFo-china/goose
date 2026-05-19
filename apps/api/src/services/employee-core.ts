@@ -229,6 +229,49 @@ class EmployeeCoreService {
     return new Map(rows.map((row) => [row.employee_id, row]));
   }
 
+  async listEmployeesWithDepartment(input: { authContext: AuthContext }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const scope = accessPolicyService.assertPermission(
+      input.authContext,
+      "employee.read",
+    );
+
+    return employeeCoreRepository.listWithDepartment({
+      tenantId,
+      visibility: this.buildVisibilityFilter(scope, input.authContext),
+    });
+  }
+
+  async getEmployeeWithDepartment(input: {
+    authContext: AuthContext;
+    employeeId: string;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const employee = await employeeCoreRepository.findWithDepartmentById({
+      employeeId: input.employeeId,
+      tenantId,
+    });
+
+    if (!accessPolicyService.canAccessEmployee(input.authContext, employee, "employee.read")) {
+      throw Errors.forbidden();
+    }
+
+    return employee;
+  }
+
+  async listEmployeesWithPost(input: { authContext: AuthContext }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const scope = accessPolicyService.assertPermission(
+      input.authContext,
+      "employee.read",
+    );
+
+    return employeeCoreRepository.listWithPost({
+      tenantId,
+      visibility: this.buildVisibilityFilter(scope, input.authContext),
+    });
+  }
+
   private async normalizeDepartmentForWrite(input: {
     tenantId: string;
     departmentId?: string | null;

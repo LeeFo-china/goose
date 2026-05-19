@@ -17,6 +17,14 @@ export const EMPLOYEE_SELECT_WITH_DEPARTMENT = `
   )
 `;
 
+export const EMPLOYEE_SELECT_WITH_POST = `
+  *,
+  post:posts (
+    code,
+    name
+  )
+`;
+
 export type EmployeeScope = "self" | "department" | "assigned" | "all";
 
 export type EmployeeVisibilityFilter = {
@@ -94,9 +102,20 @@ class EmployeeCoreRepository {
     return query.eq("id", visibility.employeeId);
   }
 
+  private applyTenantVisibility(
+    query: any,
+    tenantId: string,
+    visibility: EmployeeVisibilityFilter,
+  ) {
+    return this.applyVisibility(query, visibility).eq("tenant_id", tenantId);
+  }
+
   private applyListFilters(query: any, filters: EmployeeListFilters) {
-    let filteredQuery = this.applyVisibility(query, filters.visibility)
-      .eq("tenant_id", filters.tenantId);
+    let filteredQuery = this.applyTenantVisibility(
+      query,
+      filters.tenantId,
+      filters.visibility,
+    );
 
     if (filters.status) {
       filteredQuery = filteredQuery.eq("status", filters.status);
@@ -179,6 +198,64 @@ class EmployeeCoreRepository {
     }
 
     return (data as unknown as EmployeeCoreRow | null) ?? null;
+  }
+
+  async listWithDepartment(input: {
+    tenantId: string;
+    visibility: EmployeeVisibilityFilter;
+  }) {
+    const query = this.applyTenantVisibility(
+      SupabaseDB.getAdminClient()
+        .from("employees")
+        .select(EMPLOYEE_SELECT_WITH_DEPARTMENT),
+      input.tenantId,
+      input.visibility,
+    );
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询失败", error);
+    }
+
+    return (data || []) as unknown as EmployeeCoreRow[];
+  }
+
+  async findWithDepartmentById(input: {
+    employeeId: string;
+    tenantId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employees")
+      .select(EMPLOYEE_SELECT_WITH_DEPARTMENT)
+      .eq("id", input.employeeId)
+      .eq("tenant_id", input.tenantId)
+      .single();
+
+    if (error) {
+      throw Errors.dbError("查询失败", error);
+    }
+
+    return data as unknown as EmployeeCoreRow;
+  }
+
+  async listWithPost(input: {
+    tenantId: string;
+    visibility: EmployeeVisibilityFilter;
+  }) {
+    const query = this.applyTenantVisibility(
+      SupabaseDB.getAdminClient()
+        .from("employees")
+        .select(EMPLOYEE_SELECT_WITH_POST),
+      input.tenantId,
+      input.visibility,
+    );
+
+    const { data, error } = await query;
+    if (error) {
+      throw Errors.dbError("查询失败", error);
+    }
+
+    return (data || []) as unknown as EmployeeCoreRow[];
   }
 
   async findByUserId(input: { userId: string; tenantId: string }) {

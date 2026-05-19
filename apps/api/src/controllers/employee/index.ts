@@ -13,16 +13,11 @@ import {
   EmployeeListQuerySchema,
   UpdateEmployeeSchema,
 } from "@/schema/employee";
-import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
 import { Delete, Get } from "@/utils/decorators/route";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ResponseHandler } from "@/utils/response";
-import {
-  authorizationService,
-  type AuthContext,
-} from "@/services/authorization";
-import { accessPolicyService } from "@/services/access-policy";
+import { authorizationService } from "@/services/authorization";
 import {
   employeeCoreService,
   type EmployeeLoginBindingRow,
@@ -60,8 +55,6 @@ type EmployeeLoginBindingStatus =
  *
  * @extends TenantBaseController <CreateEmployeeSchema, UpdateEmployeeSchema>
  */
-type TenantEmployeeAuthContext = AuthContext & { tenantId: string };
-
 class EmployeeController extends TenantBaseController<
   typeof CreateEmployeeSchema,
   typeof UpdateEmployeeSchema
@@ -72,37 +65,6 @@ class EmployeeController extends TenantBaseController<
      * 路由层显式声明员工 CRUD 暴露，controller 内完成租户上下文校验。
      */
     super("employees", CreateEmployeeSchema, UpdateEmployeeSchema);
-  }
-
-  private applyEmployeeScope(
-    query: any,
-    scope: "self" | "department" | "assigned" | "all" | null,
-    authContext: TenantEmployeeAuthContext,
-  ) {
-    if (!scope) {
-      throw Errors.forbidden();
-    }
-
-    if (scope === "all") {
-      return query;
-    }
-
-    if (scope === "department") {
-      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
-      if (!departmentScopeId) {
-        return query.eq("id", "00000000-0000-0000-0000-000000000000");
-      }
-
-      return query.or(
-        `tenant_department_id.eq.${departmentScopeId},department_id.eq.${departmentScopeId}`,
-      );
-    }
-
-    if (!authContext.employeeId) {
-      return query.eq("id", "00000000-0000-0000-0000-000000000000");
-    }
-
-    return query.eq("id", authContext.employeeId);
   }
 
   private buildEmployeeLoginBindings(employee: Record<string, unknown>, row?: EmployeeLoginBindingRow) {
@@ -316,34 +278,11 @@ class EmployeeController extends TenantBaseController<
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    const scope = accessPolicyService.assertPermission(
+    const employees = await employeeCoreService.listEmployeesWithDepartment({
       authContext,
-      "employee.read",
-    );
+    });
 
-    let query = SupabaseDB.getAdminClient().from(this.tableName).select(`
-        *,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey (
-          id,
-          code,
-          alias_name,
-          enabled,
-          legacy_department_id
-        ),
-        department:departments!employees_department_id_fkey (
-          id,
-          code,
-          name
-        )
-      `);
-
-    query = this.applyEmployeeScope(query, scope, authContext);
-    query = query.eq("tenant_id", authContext.tenantId);
-
-    const { data, error } = await query;
-
-    if (error) throw Errors.dbError("查询失败", error);
-    return ResponseHandler.success((data || []).map((employee) =>
+    return ResponseHandler.success(employees.map((employee) =>
       this.normalizeEmployeeDepartment(employee)
     ));
   }
@@ -368,35 +307,12 @@ class EmployeeController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    // 2. 查询单条员工记录，联查部门信息
-    const { data, error } = await SupabaseDB.getAdminClient().from(this.tableName)
-      .select(`
-        *,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey (
-          id,
-          code,
-          alias_name,
-          enabled,
-          legacy_department_id
-        ),
-        department:departments!employees_department_id_fkey (
-          id,
-          code,
-          name
-        )
-      `)
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", authContext.tenantId)
-      .single();
+    const employee = await employeeCoreService.getEmployeeWithDepartment({
+      authContext,
+      employeeId: idVerify.data.id,
+    });
 
-    // 3. 错误处理
-    if (error) throw Errors.dbError("查询失败", error);
-    if (!data) throw Errors.dbError("查询记录不存在");
-    if (!accessPolicyService.canAccessEmployee(authContext, data, "employee.read")) {
-      throw Errors.forbidden();
-    }
-
-    return ResponseHandler.success(this.normalizeEmployeeDepartment(data));
+    return ResponseHandler.success(this.normalizeEmployeeDepartment(employee));
   }
 
   /**
@@ -425,26 +341,11 @@ class EmployeeController extends TenantBaseController<
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
-    const scope = accessPolicyService.assertPermission(
+    const employees = await employeeCoreService.listEmployeesWithPost({
       authContext,
-      "employee.read",
-    );
+    });
 
-    let query = SupabaseDB.getAdminClient().from(this.tableName).select(`
-        *,
-        post:posts (
-          code,
-          name
-        )
-      `);
-
-    query = this.applyEmployeeScope(query, scope, authContext);
-    query = query.eq("tenant_id", authContext.tenantId);
-
-    const { data, error } = await query;
-
-    if (error) throw Errors.dbError("查询失败", error);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(employees);
   }
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
