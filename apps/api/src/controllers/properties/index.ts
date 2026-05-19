@@ -8,7 +8,6 @@ import { Errors } from "@/errors/error-factory";
 import { ResponseHandler } from "@/utils/response";
 import { propertySer } from "@/services/properties";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { SupabaseDB } from "@/utils/supabase/index";
 // import type { Tables, Inserts, Updates } from "@/types/db";
 
 class PropertyController extends TenantBaseController<
@@ -36,16 +35,10 @@ class PropertyController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("properties")
-      .select("*")
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询房产失败", error);
-    if (!data) throw Errors.badRequest("房产不存在");
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(await propertySer.getProperty({
+      id: idVerify.data.id,
+      tenantId,
+    }));
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -53,28 +46,10 @@ class PropertyController extends TenantBaseController<
     const result = CreatePropertySchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    if (result.data.customer_id) {
-      const customer = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .eq("id", result.data.customer_id)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      if (customer.error) throw Errors.dbError("校验房产客户失败", customer.error);
-      if (!customer.data) throw Errors.badRequest("客户不存在或不属于当前租户");
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("properties")
-      .insert({
-        ...result.data,
-        tenant_id: tenantId,
-      })
-      .select("*")
-      .single();
-
-    if (error) throw Errors.dbError("创建房产失败", error);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(await propertySer.createProperty({
+      tenantId,
+      payload: result.data,
+    }));
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -84,30 +59,12 @@ class PropertyController extends TenantBaseController<
 
     const result = UpdatePropertySchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
-    const { id: _bodyId, ...payload } = result.data;
 
-    if (payload.customer_id) {
-      const customer = await SupabaseDB.getAdminClient()
-        .from("customers")
-        .select("id")
-        .eq("id", payload.customer_id)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      if (customer.error) throw Errors.dbError("校验房产客户失败", customer.error);
-      if (!customer.data) throw Errors.badRequest("客户不存在或不属于当前租户");
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("properties")
-      .update(payload)
-      .eq("id", idVerify.data.id)
-      .eq("tenant_id", tenantId)
-      .select("*")
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("更新房产失败", error);
-    if (!data) throw Errors.badRequest("房产不存在或更新失败");
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(await propertySer.updateProperty({
+      id: idVerify.data.id,
+      tenantId,
+      payload: result.data,
+    }));
   };
 }
 

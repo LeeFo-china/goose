@@ -1,41 +1,91 @@
 import type { PropertyListQuery } from "@/schema/properties";
 import { Errors } from "@/errors/error-factory";
-import { SupabaseDB } from "@/utils/supabase/index";
+import { propertyRepository } from "@/repositories/properties";
+import type {
+  CreatePropertyInput,
+  UpdatePropertyInput,
+} from "@/schema/properties";
 
 class PropertyService {
-  async listProperties(params: PropertyListQuery, tenantId?: string | null) {
-    const { page, pageSize, customer_id } = params;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    let query = SupabaseDB.getAdminClient()
-      .from("properties")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
+  private async assertCustomerBelongsToTenant(input: {
+    customerId: string | null | undefined;
+    tenantId: string;
+  }) {
+    if (!input.customerId) {
+      return;
     }
 
-    if (customer_id) {
-      query = query.eq("customer_id", customer_id);
+    const customer = await propertyRepository.findCustomerById({
+      customerId: input.customerId,
+      tenantId: input.tenantId,
+    });
+    if (!customer) {
+      throw Errors.badRequest("客户不存在或不属于当前租户");
     }
+  }
 
-    const { data, error, count } = await query.range(from, to);
-
-    if (error) {
-      throw Errors.dbError("房产列表查询失败", error);
-    }
+  async listProperties(params: PropertyListQuery, tenantId: string) {
+    const { list, total } = await propertyRepository.list({
+      ...params,
+      tenantId,
+    });
 
     return {
-      list: data || [],
+      list,
       pagination: {
-        page,
-        pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
+        page: params.page,
+        pageSize: params.pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / params.pageSize) : 0,
       },
     };
+  }
+
+  async getProperty(input: {
+    id: string;
+    tenantId: string;
+  }) {
+    const property = await propertyRepository.findById(input);
+    if (!property) {
+      throw Errors.badRequest("房产不存在");
+    }
+
+    return property;
+  }
+
+  async createProperty(input: {
+    tenantId: string;
+    payload: CreatePropertyInput;
+  }) {
+    await this.assertCustomerBelongsToTenant({
+      customerId: input.payload.customer_id,
+      tenantId: input.tenantId,
+    });
+
+    return propertyRepository.create(input);
+  }
+
+  async updateProperty(input: {
+    id: string;
+    tenantId: string;
+    payload: UpdatePropertyInput;
+  }) {
+    const { id: _bodyId, ...payload } = input.payload;
+    await this.assertCustomerBelongsToTenant({
+      customerId: payload.customer_id,
+      tenantId: input.tenantId,
+    });
+
+    const property = await propertyRepository.update({
+      id: input.id,
+      tenantId: input.tenantId,
+      payload,
+    });
+    if (!property) {
+      throw Errors.badRequest("房产不存在或更新失败");
+    }
+
+    return property;
   }
 }
 

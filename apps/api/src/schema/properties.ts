@@ -39,11 +39,13 @@ export const CreatePropertySchema = PropertySchema.omit({
   id: true,
   created_at: true,
 });
+export type CreatePropertyInput = z.infer<typeof CreatePropertySchema>;
 
 // 更新房产时的校验：所有字段设为可选，但 id 必须存在
 export const UpdatePropertySchema = PropertySchema.partial().extend({
   id: z.uuid(),
 });
+export type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
 
 export const PropertyListQuerySchema = PaginationQuerySchema.extend({
   customer_id: z.uuid("无效的客户 ID 格式").optional(),
