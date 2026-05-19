@@ -647,3 +647,22 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 先核查 `roles` / `employee-permissions` 权限模型并形成文档。
 - 确认角色、权限点、员工权限覆盖的租户边界后，再迁移 controller。
+
+### 2026-05-19 Roles / Employee Permissions 权限模型核查
+
+已完成：
+
+- 核查 `roles` controller、service、repository、schema、migration 和 admin 角色管理页。
+- 核查 `employee-permissions` controller、service、repository 和 admin 员工角色弹窗。
+- 形成独立核查文档：[Roles / Employee Permissions 权限模型核查](./2026-05-19-roles-employee-permissions-boundary-audit.md)。
+
+结论：
+
+- `roles` 可以先迁移到 `TenantBaseController`。
+- `employee-permissions` 需要分口径处理：`/auth/me/permissions` 保留普通 auth 口径，员工授权接口使用租户上下文。
+- `permissionService` 中普通员工授权接口不应保留平台管理员跨租户绕过逻辑。
+
+下一步建议：
+
+- 先迁移 `roles`。
+- 再迁移 `employee-permissions`，并同步收紧目标员工租户校验。
