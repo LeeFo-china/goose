@@ -70,17 +70,13 @@ class CustomerSourceRepository {
 
   async findCustomerAccess(input: {
     customerId: string;
-    tenantId: string | null;
+    tenantId: string;
   }) {
-    let query = this.from("customers")
+    const { data, error } = await this.from("customers")
       .select("id, owner_id, tenant_id")
-      .eq("id", input.customerId);
-
-    if (input.tenantId) {
-      query = query.eq("tenant_id", input.tenantId);
-    }
-
-    const { data, error } = await query.maybeSingle();
+      .eq("id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .maybeSingle();
     if (error) {
       throw Errors.dbError("查询客户失败", error);
     }
@@ -89,29 +85,29 @@ class CustomerSourceRepository {
   }
 
   async listByCustomer(input: {
-    tenantId: string | null;
+    tenantId: string;
     customerId: string;
     query: CustomerSourceListQuery;
   }) {
     const from = (input.query.page - 1) * input.query.pageSize;
     const to = from + input.query.pageSize - 1;
 
-    let request = this.from("customer_sources")
+    const request = this.from("customer_sources")
       .select("*", { count: "exact" })
       .eq("customer_id", input.customerId)
+      .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
       .range(from, to);
-
-    if (input.tenantId) {
-      request = request.eq("tenant_id", input.tenantId);
-    }
 
     const { data, error, count } = await request;
     if (error) {
       throw Errors.dbError("查询客户来源时间线失败", error);
     }
 
-    const list = await this.serializeRows((data || []) as CustomerSourceRecord[]);
+    const list = await this.serializeRows(
+      (data || []) as CustomerSourceRecord[],
+      input.tenantId,
+    );
     return {
       list,
       pagination: {
@@ -124,31 +120,28 @@ class CustomerSourceRepository {
   }
 
   async listByCustomerIds(input: {
-    tenantId: string | null;
+    tenantId: string;
     customerIds: string[];
   }) {
     if (input.customerIds.length === 0) {
       return [] as SerializedCustomerSource[];
     }
 
-    let request = this.from("customer_sources")
+    const request = this.from("customer_sources")
       .select("*")
       .in("customer_id", input.customerIds)
+      .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false });
-
-    if (input.tenantId) {
-      request = request.eq("tenant_id", input.tenantId);
-    }
 
     const { data, error } = await request;
     if (error) {
       throw Errors.dbError("查询客户来源摘要失败", error);
     }
 
-    return this.serializeRows((data || []) as CustomerSourceRecord[]);
+    return this.serializeRows((data || []) as CustomerSourceRecord[], input.tenantId);
   }
 
-  private async serializeRows(rows: CustomerSourceRecord[]) {
+  private async serializeRows(rows: CustomerSourceRecord[], tenantId: string) {
     if (rows.length === 0) {
       return [] as SerializedCustomerSource[];
     }
@@ -159,10 +152,10 @@ class CustomerSourceRepository {
     const shareLinkIds = unique(rows.map((item) => item.share_link_id));
 
     const [sourceEmployees, assignedEmployees, platformLeads, shareLinks] = await Promise.all([
-      this.findEmployees(sourceEmployeeIds),
-      this.findEmployees(assignedEmployeeIds),
+      this.findEmployees(sourceEmployeeIds, tenantId),
+      this.findEmployees(assignedEmployeeIds, tenantId),
       this.findPlatformLeads(platformLeadIds),
-      this.findShareLinks(shareLinkIds),
+      this.findShareLinks(shareLinkIds, tenantId),
     ]);
 
     return rows.map((row): SerializedCustomerSource => {
@@ -190,12 +183,16 @@ class CustomerSourceRepository {
     });
   }
 
-  private async findEmployees(ids: string[]): Promise<Map<string, EmployeeLite>> {
+  private async findEmployees(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Map<string, EmployeeLite>> {
     if (ids.length === 0) return new Map<string, EmployeeLite>();
 
     const { data, error } = await this.from("employees")
       .select("id,name,phone")
-      .in("id", ids);
+      .in("id", ids)
+      .eq("tenant_id", tenantId);
 
     if (error) {
       throw Errors.dbError("查询客户来源员工失败", error);
@@ -218,12 +215,16 @@ class CustomerSourceRepository {
     return new Map((data || []).map((item: PlatformLeadLite) => [item.id, item]));
   }
 
-  private async findShareLinks(ids: string[]): Promise<Map<string, TenantShareLinkLite>> {
+  private async findShareLinks(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Map<string, TenantShareLinkLite>> {
     if (ids.length === 0) return new Map<string, TenantShareLinkLite>();
 
     const { data, error } = await this.from("tenant_share_links")
       .select("id,token,source,target_type,target_id")
-      .in("id", ids);
+      .in("id", ids)
+      .eq("tenant_id", tenantId);
 
     if (error) {
       throw Errors.dbError("查询分享链接来源失败", error);

@@ -1193,7 +1193,8 @@ class CustomerController extends TenantBaseController<
       const { data, error } = await SupabaseDB.getAdminClient()
         .from("customers")
         .select(this.customerSelect)
-        .in("id", pageCustomerIds);
+        .in("id", pageCustomerIds)
+        .eq("tenant_id", authContext.tenantId);
 
       if (error) throw Errors.dbError("列表查询失败", error);
 

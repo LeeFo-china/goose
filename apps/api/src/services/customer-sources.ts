@@ -22,10 +22,11 @@ class CustomerSourceService {
     customerId: string;
     query: CustomerSourceListQuery;
   }) {
-    await this.assertCanReadCustomer(input.authContext, input.customerId);
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    await this.assertCanReadCustomer(input.authContext, input.customerId, tenantId);
 
     return customerSourceRepository.listByCustomer({
-      tenantId: input.authContext.tenantId,
+      tenantId,
       customerId: input.customerId,
       query: input.query,
     });
@@ -35,8 +36,9 @@ class CustomerSourceService {
     authContext: AuthContext;
     customerIds: string[];
   }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     const rows = await customerSourceRepository.listByCustomerIds({
-      tenantId: input.authContext.tenantId,
+      tenantId,
       customerIds: input.customerIds,
     });
 
@@ -55,10 +57,14 @@ class CustomerSourceService {
     return result;
   }
 
-  private async assertCanReadCustomer(authContext: AuthContext, customerId: string) {
+  private async assertCanReadCustomer(
+    authContext: AuthContext,
+    customerId: string,
+    tenantId: string,
+  ) {
     const customer = await customerSourceRepository.findCustomerAccess({
       customerId,
-      tenantId: authContext.tenantId,
+      tenantId,
     });
 
     if (!customer) {
