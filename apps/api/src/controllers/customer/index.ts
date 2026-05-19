@@ -340,19 +340,15 @@ class CustomerController extends TenantBaseController<
 
   private async getAssignableTargetEmployee(
     ownerId: string,
-    tenantId: string | null,
+    tenantId: string,
   ) {
-    let query = SupabaseDB
+    const { data: targetEmployee, error: targetEmployeeError } = await SupabaseDB
       .getAdminClient()
       .from("employees")
       .select("id, name, department_id, tenant_department_id, status, tenant_id")
-      .eq("id", ownerId);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data: targetEmployee, error: targetEmployeeError } = await query.maybeSingle();
+      .eq("id", ownerId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
 
     if (targetEmployeeError) {
       throw Errors.dbError("查询目标负责人失败", targetEmployeeError);
@@ -361,18 +357,15 @@ class CustomerController extends TenantBaseController<
     return targetEmployee;
   }
 
-  private async getPrimaryCustomerPropertySummary(customerId: string, tenantId?: string | null) {
-    let query = SupabaseDB.getAdminClient()
+  private async getPrimaryCustomerPropertySummary(customerId: string, tenantId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect)
       .eq("customer_id", customerId)
-      .order("created_at", { ascending: false });
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.limit(1).maybeSingle();
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询客户主房产失败", error);
@@ -406,22 +399,17 @@ class CustomerController extends TenantBaseController<
     };
   }
 
-  private async getCustomerPropertySummaryMap(customerIds: string[], tenantId?: string | null) {
+  private async getCustomerPropertySummaryMap(customerIds: string[], tenantId: string) {
     if (customerIds.length === 0) {
       return new Map<string, PrimaryPropertySummary[]>();
     }
 
-    let query = SupabaseDB.getAdminClient()
+    const { data, error } = await SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect + ", customer_id")
       .in("customer_id", customerIds)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询客户房产摘要失败", error);
@@ -539,18 +527,14 @@ class CustomerController extends TenantBaseController<
   private async getRequiredCustomerPropertyRecord(
     customerId: string,
     propertyId: string,
-    tenantId?: string | null,
+    tenantId: string,
   ) {
-    let query = SupabaseDB.getAdminClient()
+    const { data, error } = await SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect + ", customer_id")
-      .eq("id", propertyId);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.maybeSingle();
+      .eq("id", propertyId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
 
     if (error) {
       throw Errors.dbError("查询房产失败", error);
@@ -571,18 +555,13 @@ class CustomerController extends TenantBaseController<
     return (data as unknown) as PrimaryPropertySummary & { customer_id: string | null };
   }
 
-  private async getCustomerPropertySummaries(customerId: string, tenantId?: string | null) {
-    let query = SupabaseDB.getAdminClient()
+  private async getCustomerPropertySummaries(customerId: string, tenantId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
       .from("properties")
       .select(this.propertySummarySelect)
       .eq("customer_id", customerId)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       throw Errors.dbError("查询客户房产摘要失败", error);
@@ -701,7 +680,7 @@ class CustomerController extends TenantBaseController<
   private async upsertCustomerPrimaryProperty(
     customerId: string,
     propertyPayload: NormalizedCustomerPropertyPayload | undefined,
-    tenantId?: string | null,
+    tenantId: string,
   ) {
     if (!propertyPayload) {
       return this.getPrimaryCustomerPropertySummary(customerId, tenantId);
@@ -744,25 +723,23 @@ class CustomerController extends TenantBaseController<
 
   private async buildCustomerDetailResponse(
     customer: CustomerRowForResponse,
-    options?: {
+    options: {
       primaryProperty?: PrimaryPropertySummary | null;
       includeProperties?: boolean;
       phonePrivacyContext?: CustomerPhonePrivacyContext;
-      tenantId?: string | null;
+      tenantId: string;
     },
   ) {
-    const primaryProperty = options?.primaryProperty ?? await this.getPrimaryCustomerPropertySummary(
+    const tenantId = options.tenantId;
+    const primaryProperty = options.primaryProperty ?? await this.getPrimaryCustomerPropertySummary(
       customer.id,
-      options?.tenantId,
+      tenantId,
     );
-    const properties = options?.includeProperties
-      ? await this.getCustomerPropertySummaries(customer.id, options?.tenantId)
+    const properties = options.includeProperties
+      ? await this.getCustomerPropertySummaries(customer.id, tenantId)
       : undefined;
-    const tenantId = options?.tenantId ?? options?.phonePrivacyContext?.authContext.tenantId;
-    const followUpMap = tenantId
-      ? await this.getLatestFollowUpMap([customer.id], tenantId)
-      : new Map<string, CustomerFollowUpSummary>();
-    const sourceSummaryMap = options?.phonePrivacyContext
+    const followUpMap = await this.getLatestFollowUpMap([customer.id], tenantId);
+    const sourceSummaryMap = options.phonePrivacyContext
       ? await customerSourceService.getCustomerSourceSummaryMap({
         authContext: options.phonePrivacyContext.authContext,
         customerIds: [customer.id],
@@ -775,14 +752,14 @@ class CustomerController extends TenantBaseController<
           this.attachFollowUpSummary(customer, followUpMap),
           sourceSummaryMap,
         ),
-        options?.phonePrivacyContext,
+        options.phonePrivacyContext,
       ),
       property_id: primaryProperty?.id ?? null,
       community: primaryProperty?.community ?? null,
       building_info: primaryProperty?.building_info ?? null,
       layout: primaryProperty?.layout ?? null,
       area: primaryProperty?.area ?? null,
-      ...(options?.includeProperties
+      ...(options.includeProperties
         ? {
           properties: (properties || []).map((item) =>
             this.serializePropertySummary(
