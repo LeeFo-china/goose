@@ -1738,6 +1738,7 @@ export type Database = {
           phone: string | null
           remark: string | null
           status: string
+          tenant_id: string
           updated_at: string
           wechat_account: string | null
         }
@@ -1751,6 +1752,7 @@ export type Database = {
           phone?: string | null
           remark?: string | null
           status?: string
+          tenant_id: string
           updated_at?: string
           wechat_account?: string | null
         }
@@ -1764,10 +1766,19 @@ export type Database = {
           phone?: string | null
           remark?: string | null
           status?: string
+          tenant_id?: string
           updated_at?: string
           wechat_account?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "external_referrers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ezviz_access_tokens: {
         Row: {

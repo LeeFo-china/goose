@@ -39,7 +39,7 @@
 | `projects` | `projects` | 租户核心数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `roles` | `roles` | 租户权限配置 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `permissions` | `permissions` | 平台权限字典 | 已覆盖 4 个默认方法，已补登录/平台管理员校验 | 已整改 | 平台权限点管理仅允许平台管理员 |
-| `external-referrers` | `external_referrers` | 介绍人/财务相关数据 | 未覆盖，仍走默认 CRUD | 高 | 必须优先迁移，并确认是否需要补 `tenant_id` |
+| `external-referrers` | `external_referrers` | 介绍人/财务相关数据 | 已覆盖 4 个默认方法 | 已整改 | 已按租户私有模型补 `tenant_id` |
 | `project-referrals` | `project_referrals` | 租户财务数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `project-logs` | `project_logs` | 租户项目过程数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
 | `project-acceptances` | `project_acceptances` | 租户工序验收数据 | 已覆盖 4 个默认方法 | 低 | 保持现状 |
@@ -70,26 +70,27 @@
 4. 收款记录必须关联项目，不允许创建或更新成无项目归属记录。
 5. 中期仍建议给 `payments` 表补 `tenant_id`，从项目继承并建索引，避免通过项目 ID 列表过滤带来的性能上限。
 
-### 2. `external-referrers`
+### 2. `external-referrers`（已整改）
 
 现状：
 
-- `ExternalReferrersController` 只继承 `BaseController`。
-- `GET/POST/PATCH/PUT /external-referrers` 全部走默认 CRUD。
-- `external_referrers` 表当前没有 `tenant_id`。
+- `ExternalReferrersController` 已覆盖 `list/getById/create/update`。
+- 已新增 `ExternalReferrerService` / `ExternalReferrerRepository`。
+- repository 使用 admin client。
+- 已新增 migration，把 `external_referrers` 改为租户私有模型并补 `tenant_id`。
 
-风险：
+已关闭的风险：
 
-- 外部介绍人含手机号、银行卡、微信、支付宝等敏感信息。
-- 如果它应该归属租户，现在无法做租户隔离。
-- 如果它应该是平台级主档，也缺少平台管理员校验。
+- 租户不能再通过默认 CRUD 读取或修改其它租户介绍人。
+- 创建项目介绍费时会校验 `referrer_id` 必须属于当前租户。
+- 修改项目介绍费的 `referrer_id` 时同样校验当前租户归属。
 
-建议：
+当前口径：
 
-1. 先拍板模型：介绍人是租户私有，还是平台共享主档。
-2. 更推荐租户私有：补 `tenant_id`，按租户隔离。
-3. 新增 `ExternalReferrerService` / `ExternalReferrerRepository`。
-4. 所有接口必须走 `project_referral.manage/read` 或独立权限点。
+1. 外部介绍人是租户私有数据，不做平台共享主档。
+2. 列表和详情使用 `project_referral.read`。
+3. 创建和更新使用 `project_referral.manage`。
+4. 历史数据按 `project_referrals -> projects.tenant_id` 回填；同一介绍人被多个租户历史引用时，会复制为多条租户私有介绍人并修正介绍费引用。
 
 ### 3. `permissions`（已整改）
 
@@ -121,11 +122,13 @@
 
 ### 阶段 2：修复高风险接口
 
-优先顺序：
+已完成：
 
-1. `external-referrers`
+- `permissions`
+- `payments`
+- `external-referrers`
 
-每个资源都必须补：
+每个已整改资源都已补：
 
 - controller 只处理 HTTP
 - service 做业务权限和租户边界
@@ -160,7 +163,7 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 当前验收口径：
 
-- `external-referrers` 是默认 CRUD 高风险遗留项。
 - `payments` 默认 CRUD 风险已整改，当前通过项目归属做租户边界。
+- `external-referrers` 默认 CRUD 风险已整改，当前按租户私有模型隔离。
 - `permissions` 平台权限字典鉴权缺口已整改。
 - 其它资源已显式覆盖默认 CRUD，但后续仍建议迁移到更清晰的基类结构。

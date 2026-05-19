@@ -33,7 +33,7 @@ class ProjectReferralRepository {
   private referralSelect = `
     *,
     project:projects(id, name, status, signed_amount, customer_id),
-    referrer:external_referrers(id, name, phone, status),
+    referrer:external_referrers(id, tenant_id, name, phone, status),
     paid_operator:employees!project_referrals_paid_by_fkey(id, name, phone)
   `;
 

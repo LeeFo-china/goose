@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { externalReferrerRepository } from "@/repositories/external-referrers";
 import { projectRepository } from "@/repositories/projects";
 import { projectReferralRepository } from "@/repositories/project-referrals";
 import type { ProjectReferralRecord } from "@/repositories/project-referrals";
@@ -46,6 +47,22 @@ class ProjectReferralService {
     }
   }
 
+  private async ensureReferrerInCurrentTenant(
+    authContext: AuthContext,
+    referrerId: string,
+  ) {
+    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const referrer = await externalReferrerRepository.findById(
+      referrerId,
+      tenantId,
+    );
+    if (!referrer) {
+      throw Errors.badRequest("外部介绍人不存在或不属于当前租户");
+    }
+
+    return referrer;
+  }
+
   async createProjectReferral(
     authContext: AuthContext,
     input: CreateProjectReferralInput,
@@ -64,6 +81,8 @@ class ProjectReferralService {
     if (!canAccessProject) {
       throw Errors.forbidden();
     }
+
+    await this.ensureReferrerInCurrentTenant(authContext, input.referrer_id);
 
     const created = await projectReferralRepository.create(input);
     return this.serializeReferral(await projectReferralRepository.findById(created.id));
@@ -91,6 +110,10 @@ class ProjectReferralService {
 
     if (existing.status === "paid" || existing.paid_at) {
       throw Errors.badRequest("项目介绍费已支付后不允许再修改");
+    }
+
+    if (input.referrer_id) {
+      await this.ensureReferrerInCurrentTenant(authContext, input.referrer_id);
     }
 
     const updated = await projectReferralRepository.update(id, input);

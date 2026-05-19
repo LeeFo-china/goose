@@ -49,6 +49,11 @@ export const CreateExternalReferrerSchema = ExternalReferrerBaseSchema.omit({
 
 export const UpdateExternalReferrerSchema = CreateExternalReferrerSchema.partial();
 
+export const ExternalReferrerListQuerySchema = PaginationQuerySchema.extend({
+  status: ExternalReferrerStatusSchema.optional(),
+  keyword: z.string().trim().max(100, "搜索关键词过长").optional(),
+});
+
 export const ProjectReferralBaseSchema = z.object({
   id: z.uuid("无效的项目介绍费 ID").optional(),
   project_id: z.uuid("无效的项目 ID"),
@@ -109,6 +114,7 @@ export const ProjectReferralListQuerySchema = PaginationQuerySchema.extend({
 export type ExternalReferrerType = z.infer<typeof ExternalReferrerBaseSchema>;
 export type CreateExternalReferrerInput = z.infer<typeof CreateExternalReferrerSchema>;
 export type UpdateExternalReferrerInput = z.infer<typeof UpdateExternalReferrerSchema>;
+export type ExternalReferrerListQueryType = z.infer<typeof ExternalReferrerListQuerySchema>;
 export type ProjectReferralType = z.infer<typeof ProjectReferralBaseSchema>;
 export type CreateProjectReferralInput = z.infer<typeof CreateProjectReferralSchema>;
 export type UpdateProjectReferralInput = z.infer<typeof UpdateProjectReferralSchema>;
