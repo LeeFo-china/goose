@@ -572,3 +572,28 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 迁移 `payment`。
+
+### 2026-05-19 Payment 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `payment` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 收款列表、详情、创建、更新接口统一使用 `getRequiredTenantContext()`。
+- 保持 `paymentService` 内项目可见性、`project.read` / `project.update` 权限校验和项目归属访问策略不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+阶段结论：
+
+- 第一批低风险租户 controller 已完成：`expense-request-categories`、`posts`、`external-referrers`、`payment`。
+- `TenantBaseController` 形态可继续推广到更大的租户业务 controller。
+
+下一步建议：
+
+- 迁移 `roles` 和 `employee-permissions` 前先核查权限模型。
+- 或先迁移较独立的 `notifications`、`task-center`，继续扩大低风险样本。
