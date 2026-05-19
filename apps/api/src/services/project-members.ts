@@ -18,6 +18,8 @@ type ProjectMemberEmployee = {
   name: string | null;
   avatar: string | null;
   phone: string | null;
+  department_name: string | null;
+  post_name: string | null;
 };
 
 type ProjectMemberRecord = {
@@ -58,6 +60,14 @@ const DIRECT_PROJECT_MEMBER_FALLBACK_ROLE_CODE: ProjectMemberRoleCode =
   "construction_manager";
 
 class ProjectMemberService {
+  private normalizeRelation<T>(value: T | T[] | null | undefined): T | null {
+    if (Array.isArray(value)) {
+      return value[0] ?? null;
+    }
+
+    return value ?? null;
+  }
+
   private normalizeEmployee(value: unknown): ProjectMemberEmployee | null {
     if (Array.isArray(value)) {
       return this.normalizeEmployee(value[0]);
@@ -67,12 +77,30 @@ class ProjectMemberService {
       return null;
     }
 
-    const row = value as ProjectMemberEmployee;
+    const row = value as ProjectMemberEmployee & {
+      department?:
+        | { name?: string | null }
+        | Array<{ name?: string | null }>
+        | null;
+      tenant_department?:
+        | { alias_name?: string | null }
+        | Array<{ alias_name?: string | null }>
+        | null;
+      post?:
+        | { name?: string | null }
+        | Array<{ name?: string | null }>
+        | null;
+    };
+    const department = this.normalizeRelation(row.department);
+    const tenantDepartment = this.normalizeRelation(row.tenant_department);
+    const post = this.normalizeRelation(row.post);
     return {
       id: row.id,
       name: row.name ?? null,
       avatar: row.avatar ?? null,
       phone: row.phone ?? null,
+      department_name: tenantDepartment?.alias_name ?? department?.name ?? null,
+      post_name: post?.name ?? null,
     };
   }
 

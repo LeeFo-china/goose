@@ -106,6 +106,8 @@ type ProjectMemberEmployeeSummary = {
   name: string | null;
   avatar: string | null;
   phone: string | null;
+  department_name?: string | null;
+  post_name?: string | null;
 };
 
 type ProjectMemberSummary = {
@@ -683,6 +685,8 @@ class ProjectController extends BaseController<
       name: null,
       avatar: null,
       phone: null,
+      department_name: null,
+      post_name: null,
     });
     const customerOwner = projectMemberService.buildDerivedCustomerOwnerMember({
       projectId,

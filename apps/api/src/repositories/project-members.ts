@@ -19,38 +19,67 @@ type ProjectMemberRow = {
         name: string | null;
         avatar: string | null;
         phone: string | null;
+        department:
+          | { id: string; name: string | null; code: string | null }
+          | Array<{ id: string; name: string | null; code: string | null }>
+          | null;
+        tenant_department:
+          | { id: string; alias_name: string | null; code: string | null }
+          | Array<{ id: string; alias_name: string | null; code: string | null }>
+          | null;
+        post:
+          | { id: string; name: string | null; code: string | null }
+          | Array<{ id: string; name: string | null; code: string | null }>
+          | null;
       }
     | Array<{
         id: string;
         name: string | null;
         avatar: string | null;
         phone: string | null;
+        department:
+          | { id: string; name: string | null; code: string | null }
+          | Array<{ id: string; name: string | null; code: string | null }>
+          | null;
+        tenant_department:
+          | { id: string; alias_name: string | null; code: string | null }
+          | Array<{ id: string; alias_name: string | null; code: string | null }>
+          | null;
+        post:
+          | { id: string; name: string | null; code: string | null }
+          | Array<{ id: string; name: string | null; code: string | null }>
+          | null;
       }>
     | null;
 };
+
+const projectMemberSelect = `
+  id,
+  project_id,
+  employee_id,
+  role_code,
+  role_name,
+  is_primary,
+  sort_order,
+  created_at,
+  updated_at,
+  deleted_at,
+  employee:employees!project_members_employee_id_fkey(
+    id,
+    name,
+    avatar,
+    phone,
+    department:departments!employees_department_id_fkey(id, name, code),
+    tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
+    post:posts!employees_post_id_fkey(id, name, code)
+  )
+`;
 
 class ProjectMemberRepository {
   async listActiveByProjectId(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
-      .select(`
-        id,
-        project_id,
-        employee_id,
-        role_code,
-        role_name,
-        is_primary,
-        sort_order,
-        created_at,
-        updated_at,
-        deleted_at,
-        employee:employees!project_members_employee_id_fkey(
-          id,
-          name,
-          avatar,
-          phone
-        )
-      `)
+      .select(projectMemberSelect)
       .eq("project_id", projectId)
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
@@ -75,24 +104,7 @@ class ProjectMemberRepository {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
       .insert(input)
-      .select(`
-        id,
-        project_id,
-        employee_id,
-        role_code,
-        role_name,
-        is_primary,
-        sort_order,
-        created_at,
-        updated_at,
-        deleted_at,
-        employee:employees!project_members_employee_id_fkey(
-          id,
-          name,
-          avatar,
-          phone
-        )
-      `)
+      .select(projectMemberSelect)
       .single();
 
     if (error) {
@@ -105,24 +117,7 @@ class ProjectMemberRepository {
   async getById(projectId: string, memberId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
-      .select(`
-        id,
-        project_id,
-        employee_id,
-        role_code,
-        role_name,
-        is_primary,
-        sort_order,
-        created_at,
-        updated_at,
-        deleted_at,
-        employee:employees!project_members_employee_id_fkey(
-          id,
-          name,
-          avatar,
-          phone
-        )
-      `)
+      .select(projectMemberSelect)
       .eq("project_id", projectId)
       .eq("id", memberId)
       .is("deleted_at", null)
@@ -149,24 +144,7 @@ class ProjectMemberRepository {
       .eq("project_id", projectId)
       .eq("id", memberId)
       .is("deleted_at", null)
-      .select(`
-        id,
-        project_id,
-        employee_id,
-        role_code,
-        role_name,
-        is_primary,
-        sort_order,
-        created_at,
-        updated_at,
-        deleted_at,
-        employee:employees!project_members_employee_id_fkey(
-          id,
-          name,
-          avatar,
-          phone
-        )
-      `)
+      .select(projectMemberSelect)
       .maybeSingle();
 
     if (error) {

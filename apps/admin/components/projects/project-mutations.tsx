@@ -7,17 +7,27 @@ import {
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   Edit3,
   Eye,
   Loader2,
   Plus,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +54,8 @@ type RelationPerson = {
   name?: string | null;
   phone?: string | null;
   avatar?: string | null;
+  department_name?: string | null;
+  post_name?: string | null;
 };
 
 type CustomerRelation = {
@@ -83,6 +95,7 @@ export type ProjectRecord = {
   supervisor?: RelationPerson | RelationPerson[] | null;
   members?: Array<{
     id: string;
+    employee_id: string;
     role_name: string;
     role_code: string;
     employee?: RelationPerson | null;
@@ -95,6 +108,15 @@ type Option = {
   id: string;
   label: string;
   description?: string | null;
+};
+
+type EmployeeOption = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  avatar?: string | null;
+  department_name?: string | null;
+  post_name?: string | null;
 };
 
 type ProjectMode = "create" | "edit";
@@ -325,6 +347,200 @@ function OptionSelect({
       ]}
       onChange={(nextValue) => onChange(nextValue === "__none" ? "" : nextValue)}
     />
+  );
+}
+
+function getEmployeeOptionLabel(employee: EmployeeOption | RelationPerson | null | undefined) {
+  if (!employee) return "-";
+  return employee.name || employee.phone || employee.id || "-";
+}
+
+function getEmployeeMeta(employee: EmployeeOption | RelationPerson | null | undefined) {
+  if (!employee) return "";
+  return [
+    employee.department_name,
+    employee.post_name,
+    employee.phone,
+  ].filter(Boolean).join(" · ");
+}
+
+function AddProjectMemberDialog({
+  projectId,
+  existingEmployeeIds,
+  onAdded,
+}: {
+  projectId: string;
+  existingEmployeeIds: string[];
+  onAdded: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [candidates, setCandidates] = useState<EmployeeOption[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const existingEmployeeIdSet = useMemo(
+    () => new Set(existingEmployeeIds),
+    [existingEmployeeIds],
+  );
+  const availableCandidates = useMemo(
+    () => candidates.filter((item) => !existingEmployeeIdSet.has(item.id)),
+    [candidates, existingEmployeeIdSet],
+  );
+  const selectedEmployee = availableCandidates.find(
+    (item) => item.id === selectedEmployeeId,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const query = new URLSearchParams({
+        page: "1",
+        pageSize: "20",
+      });
+      const normalizedKeyword = keyword.trim();
+      if (normalizedKeyword) query.set("keyword", normalizedKeyword);
+
+      setLoading(true);
+      setError("");
+      fetch(`/api/backend/projects/${projectId}/member-candidates?${query.toString()}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      })
+        .then((response) => response.json().then((payload) => ({ response, payload })))
+        .then(({ response, payload }) => {
+          if (!response.ok || payload.success === false) {
+            throw new Error(getPayloadMessage(payload, "员工候选加载失败"));
+          }
+          setCandidates((payload.data?.list || []) as EmployeeOption[]);
+        })
+        .catch((err) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setCandidates([]);
+          setError(err instanceof Error ? err.message : "员工候选加载失败");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, keyword, projectId]);
+
+  function resetAndClose() {
+    setOpen(false);
+    setKeyword("");
+    setSelectedEmployeeId("");
+    setError("");
+  }
+
+  function close() {
+    if (pending) return;
+    resetAndClose();
+  }
+
+  function submit() {
+    if (!selectedEmployeeId) {
+      setError("请选择员工");
+      return;
+    }
+
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestProject({
+          path: `/projects/${projectId}/members`,
+          method: "POST",
+          payload: {
+            employee_id: selectedEmployeeId,
+            is_primary: false,
+          },
+        });
+        await onAdded();
+        resetAndClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "添加成员失败");
+      }
+    });
+  }
+
+  return (
+    <>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <UserPlus data-icon="inline-start" />
+        添加员工
+      </Button>
+      <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : close())}>
+        <DialogContent className="max-w-[520px] p-0">
+          <DialogHeader className="border-b p-5">
+            <DialogTitle>添加项目成员</DialogTitle>
+            <DialogDescription>
+              直接选择租户员工加入项目，不需要配置项目角色。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 p-5">
+            <Command shouldFilter={false} className="rounded-md border">
+              <CommandInput
+                value={keyword}
+                onValueChange={setKeyword}
+                placeholder="搜索员工姓名或手机号"
+              />
+              <CommandList className="max-h-[320px]">
+                <CommandEmpty>
+                  {loading ? "加载中..." : "没有可添加的员工"}
+                </CommandEmpty>
+                <CommandGroup>
+                  {availableCandidates.map((employee) => {
+                    const selected = employee.id === selectedEmployeeId;
+                    return (
+                      <CommandItem
+                        key={employee.id}
+                        value={`${employee.name || ""} ${employee.phone || ""} ${employee.department_name || ""} ${employee.post_name || ""}`}
+                        onSelect={() => setSelectedEmployeeId(employee.id)}
+                        className="cursor-pointer"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-medium">
+                            {getEmployeeOptionLabel(employee)}
+                          </span>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {getEmployeeMeta(employee) || "暂无部门岗位信息"}
+                          </span>
+                        </span>
+                        {selected ? <Check data-icon="inline-end" /> : null}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+            {selectedEmployee ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <span className="font-medium">{getEmployeeOptionLabel(selectedEmployee)}</span>
+                <span className="ml-2 text-muted-foreground">
+                  {getEmployeeMeta(selectedEmployee)}
+                </span>
+              </div>
+            ) : null}
+            {error ? <StatusAlert>{error}</StatusAlert> : null}
+          </div>
+          <DialogFooter className="border-t p-5">
+            <Button type="button" variant="outline" onClick={close} disabled={pending}>
+              取消
+            </Button>
+            <Button type="button" onClick={submit} disabled={pending || !selectedEmployeeId}>
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -595,6 +811,27 @@ function ProjectDetailDialog({
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
+  const [currentProject, setCurrentProject] = useState(project);
+  const [refreshing, setRefreshing] = useState(false);
+  const members = currentProject.members || [];
+  const existingEmployeeIds = members
+    .map((member) => member.employee?.id || member.employee_id)
+    .filter((item): item is string => Boolean(item));
+
+  useEffect(() => {
+    setCurrentProject(project);
+  }, [project]);
+
+  async function refreshProject() {
+    setRefreshing(true);
+    try {
+      const data = await requestProject({ path: `/projects/${currentProject.id}` });
+      setCurrentProject(data as ProjectRecord);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   const updateActiveTab = (value: string) => {
     if (
       value === "overview" ||
@@ -611,8 +848,8 @@ function ProjectDetailDialog({
       <DialogContent className="flex h-[88vh] max-w-[920px] flex-col overflow-hidden p-0">
         <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
           <div>
-            <DialogTitle>{project.name}</DialogTitle>
-            <DialogDescription>{project.id}</DialogDescription>
+            <DialogTitle>{currentProject.name}</DialogTitle>
+            <DialogDescription>{currentProject.id}</DialogDescription>
           </div>
           <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
         </DialogHeader>
@@ -639,39 +876,60 @@ function ProjectDetailDialog({
           >
             <TabsContent value="overview" className="flex flex-col gap-5">
               <div className="grid gap-3 md:grid-cols-4">
-                <InfoItem label="客户" value={customerName(project.customer)} />
-                <InfoItem label="房产" value={propertyLabel(project.property)} />
-                <InfoItem label="预算" value={`¥${formatMoney(project.budget)}`} />
-                <InfoItem label="签约金额" value={`¥${formatMoney(project.signed_amount)}`} />
-                <InfoItem label="设计师" value={personName(project.designer)} />
-                <InfoItem label="工程负责人" value={personName(project.supervisor)} />
-                <InfoItem label="开工日期" value={formatDate(project.start_date)} />
-                <InfoItem label="展示状态" value={project.visibility_status || "inherit"} />
+                <InfoItem label="客户" value={customerName(currentProject.customer)} />
+                <InfoItem label="房产" value={propertyLabel(currentProject.property)} />
+                <InfoItem label="预算" value={`¥${formatMoney(currentProject.budget)}`} />
+                <InfoItem label="签约金额" value={`¥${formatMoney(currentProject.signed_amount)}`} />
+                <InfoItem label="设计师" value={personName(currentProject.designer)} />
+                <InfoItem label="工程负责人" value={personName(currentProject.supervisor)} />
+                <InfoItem label="开工日期" value={formatDate(currentProject.start_date)} />
+                <InfoItem label="展示状态" value={currentProject.visibility_status || "inherit"} />
               </div>
               <section>
                 <h3 className="mb-3 text-sm font-semibold">项目地址</h3>
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                  {project.address || "-"}
+                  {currentProject.address || "-"}
                 </div>
               </section>
             </TabsContent>
             <TabsContent value="members">
-              <section>
-                <h3 className="mb-3 text-sm font-semibold">项目成员</h3>
+              <section className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-sm font-semibold">项目成员</h3>
+                  <div className="flex items-center gap-2">
+                    {refreshing ? (
+                      <Badge variant="secondary">
+                        <Loader2 className="animate-spin" data-icon="inline-start" />
+                        正在刷新
+                      </Badge>
+                    ) : null}
+                    <AddProjectMemberDialog
+                      projectId={currentProject.id}
+                      existingEmployeeIds={existingEmployeeIds}
+                      onAdded={refreshProject}
+                    />
+                  </div>
+                </div>
                 <div className="grid gap-2 md:grid-cols-2">
-                  {(project.members || []).map((member) => (
+                  {members.map((member) => (
                     <div key={member.id} className="rounded-md border p-3">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="font-medium">{member.role_name}</div>
-                        {member.is_primary ? <Badge variant="success">主责</Badge> : null}
-                      </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {personName(member.employee)}
-                        {member.is_virtual ? " · 客户归属" : ""}
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {personName(member.employee)}
+                          </div>
+                          <div className="mt-1 truncate text-sm text-muted-foreground">
+                            {getEmployeeMeta(member.employee) || "暂无部门岗位信息"}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {member.is_primary ? <Badge variant="success">主责</Badge> : null}
+                          {member.is_virtual ? <Badge variant="secondary">客户归属</Badge> : null}
+                        </div>
                       </div>
                     </div>
                   ))}
-                  {(project.members || []).length === 0 ? (
+                  {members.length === 0 ? (
                     <div className="rounded-md border p-4 text-sm text-muted-foreground">
                       暂无成员
                     </div>
@@ -680,11 +938,11 @@ function ProjectDetailDialog({
               </section>
             </TabsContent>
             <TabsContent value="logs">
-              <ProjectLogsPanel project={project} active={activeTab === "logs"} />
+              <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
             </TabsContent>
             <TabsContent value="acceptances" className="h-full min-h-0">
               <ProjectAcceptancesPanel
-                project={project}
+                project={currentProject}
                 active={activeTab === "acceptances"}
               />
             </TabsContent>
