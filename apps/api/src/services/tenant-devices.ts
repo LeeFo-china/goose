@@ -14,7 +14,7 @@ import type {
   UpdateTenantDeviceInput,
 } from "@/schema/tenant-devices";
 import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService, type AuthContext } from "@/services/authorization";
+import type { AuthContext } from "@/services/authorization";
 import { ezvizDeviceService } from "@/services/ezviz";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { tencentIotVideoService } from "@/services/tencent-iot-video";
@@ -40,12 +40,7 @@ function generateSipPassword() {
 }
 
 class TenantDeviceService {
-  private async getTenantAuthContext(authUserId?: string | null, permissionCode = "project.read") {
-    if (!authUserId) {
-      throw Errors.unauthorized("缺少登录凭证");
-    }
-
-    const authContext = await authorizationService.getRequiredAuthContext(authUserId);
+  private assertTenantDeviceAccess(authContext: AuthContext, permissionCode = "project.read") {
     if (!authContext.employeeId || !accessPolicyService.hasPermission(authContext, permissionCode)) {
       throw Errors.business(
         403,
@@ -54,15 +49,14 @@ class TenantDeviceService {
       );
     }
 
-    return authContext;
+    return accessPolicyService.assertTenantContext(authContext);
   }
 
   async listTenantDevices(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
     query: TenantDeviceListQueryInput;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.read");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.read");
 
     return tenantDeviceRepository.list({
       ...input.query,
@@ -247,11 +241,10 @@ class TenantDeviceService {
   }
 
   async getTenantDevice(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
     id: string;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.read");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.read");
     const device = await tenantDeviceRepository.findById(input.id, tenantId);
     if (!device) {
       throw Errors.badRequest("设备资产不存在");
@@ -261,11 +254,10 @@ class TenantDeviceService {
   }
 
   async createTenantDevice(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
     payload: CreateTenantDeviceInput;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.update");
     const project = await projectCameraRepository.getProject(
       input.payload.source_project_id,
       tenantId,
@@ -294,17 +286,16 @@ class TenantDeviceService {
     return tenantDeviceRepository.create({
       ...input.payload,
       tenant_id: tenantId,
-      created_by: authContext.employeeId,
+      created_by: input.authContext.employeeId,
     });
   }
 
   async updateTenantDevice(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
     id: string;
     payload: UpdateTenantDeviceInput;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.update");
     const device = await tenantDeviceRepository.findById(input.id, tenantId);
     if (!device) {
       throw Errors.badRequest("设备资产不存在");
@@ -312,16 +303,15 @@ class TenantDeviceService {
 
     return tenantDeviceRepository.update(input.id, {
       ...input.payload,
-      updated_by: authContext.employeeId,
+      updated_by: input.authContext.employeeId,
     }, tenantId);
   }
 
   async deleteTenantDevice(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
     id: string;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.update");
     const device = await tenantDeviceRepository.findById(input.id, tenantId);
     if (!device) {
       throw Errors.badRequest("设备资产不存在");
@@ -338,22 +328,21 @@ class TenantDeviceService {
     await tenantDeviceRepository.softDelete(
       input.id,
       tenantId,
-      authContext.employeeId,
+      input.authContext.employeeId,
     );
 
     return { success: true };
   }
 
   async syncTenantDevices(input: {
-    authUserId?: string | null;
+    authContext: AuthContext;
   }) {
-    const authContext = await this.getTenantAuthContext(input.authUserId, "project.update");
-    const tenantId = accessPolicyService.assertTenantContext(authContext);
+    const tenantId = this.assertTenantDeviceAccess(input.authContext, "project.update");
     const assets = await tenantDeviceRepository.listAllByTenant(tenantId);
     return this.syncAssets({
       tenantId,
       assets,
-      updatedBy: authContext.employeeId,
+      updatedBy: input.authContext.employeeId,
     });
   }
 

@@ -908,3 +908,31 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 下一步建议：
 
 - 继续核查并迁移 `tenant-devices`，该模块同时包含租户设备资产和平台设备运维接口，需要按平台侧 / 租户侧拆清边界。
+
+### 2026-05-19 Tenant Devices 权限边界核查与迁移
+
+已完成：
+
+- 核查租户设备资产 controller、service、repository、schema 和项目摄像头绑定关系。
+- 形成独立核查文档：[Tenant Devices 权限边界核查](./2026-05-19-tenant-devices-boundary-audit.md)。
+- 迁移 `tenant-devices` 到 `TenantBaseController`。
+- 租户设备资产接口统一使用 `getRequiredTenantContext()`。
+- 租户侧 service 改为接收 controller 已校验的 `AuthContext`，不再重复用 `authUserId` 读取上下文。
+- service 增加 `assertTenantDeviceAccess()`，统一校验员工身份、权限点和租户上下文。
+- 平台设备运维接口保留平台管理员校验和审计日志。
+
+特别说明：
+
+- `tenant-devices` 当前是平台侧和租户侧混合 controller，后续可以拆成 `tenant-devices` 和 `platform-devices` 两个 controller。
+- 租户侧设备权限当前复用 `project.read` / `project.update`，后续可升级为独立设备权限点。
+- 本次没有修改小程序端代码。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 继续核查并迁移 `departments` / `department-post-rules`，组织架构是租户侧基础权限数据，建议优先收紧。

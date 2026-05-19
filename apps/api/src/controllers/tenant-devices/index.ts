@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { BaseController } from "@/controllers/BaseController";
+import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantDeviceSchema,
@@ -10,23 +10,23 @@ import {
   TenantDeviceParamsSchema,
   UpdateTenantDeviceSchema,
 } from "@/schema/tenant-devices";
-import { authorizationService } from "@/services/authorization";
 import { tenantDeviceService } from "@/services/tenant-devices";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
-class TenantDeviceController extends BaseController {
+class TenantDeviceController extends TenantBaseController {
   constructor() {
     super("tenant_devices");
   }
 
   @Get("/tenant-devices")
   async listTenantDevices(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const queryResult = TenantDeviceListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const result = await tenantDeviceService.listTenantDevices({
-      authUserId: request.user?.sub,
+      authContext,
       query: queryResult.data,
     });
 
@@ -35,7 +35,7 @@ class TenantDeviceController extends BaseController {
 
   @Get("/platform/tenant-devices")
   async listPlatformTenantDevices(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = PlatformTenantDeviceListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -49,7 +49,7 @@ class TenantDeviceController extends BaseController {
 
   @Get("/platform/tencent-devices")
   async listPlatformTencentDevices(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const queryResult = PlatformTencentDeviceListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -63,7 +63,7 @@ class TenantDeviceController extends BaseController {
 
   @Delete("/platform/tencent-devices/:device_id")
   async deletePlatformTencentDevice(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const paramsResult = PlatformTencentDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -77,7 +77,7 @@ class TenantDeviceController extends BaseController {
 
   @Get("/platform/tenant-devices/:id/tencent-access")
   async getPlatformTencentDeviceAccessInfo(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -91,7 +91,7 @@ class TenantDeviceController extends BaseController {
 
   @Get("/platform/tenant-devices/:id/tencent-password")
   async getPlatformTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -105,7 +105,7 @@ class TenantDeviceController extends BaseController {
 
   @Post("/platform/tenant-devices/:id/tencent-password")
   async resetPlatformTencentDevicePassword(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -119,7 +119,7 @@ class TenantDeviceController extends BaseController {
 
   @Post("/platform/tenant-devices/:id/sync")
   async syncPlatformTenantDevice(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredAuthContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -133,11 +133,12 @@ class TenantDeviceController extends BaseController {
 
   @Get("/tenant-devices/:id")
   async getTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
     const result = await tenantDeviceService.getTenantDevice({
-      authUserId: request.user?.sub,
+      authContext,
       id: paramsResult.data.id,
     });
 
@@ -146,11 +147,12 @@ class TenantDeviceController extends BaseController {
 
   @Post("/tenant-devices")
   async createTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const bodyResult = CreateTenantDeviceSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const result = await tenantDeviceService.createTenantDevice({
-      authUserId: request.user?.sub,
+      authContext,
       payload: bodyResult.data,
     });
 
@@ -159,8 +161,9 @@ class TenantDeviceController extends BaseController {
 
   @Post("/tenant-devices/sync")
   async syncTenantDevices(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const result = await tenantDeviceService.syncTenantDevices({
-      authUserId: request.user?.sub,
+      authContext,
     });
 
     return ResponseHandler.success(result);
@@ -168,6 +171,7 @@ class TenantDeviceController extends BaseController {
 
   @Patch("/tenant-devices/:id")
   async updateTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -175,7 +179,7 @@ class TenantDeviceController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const result = await tenantDeviceService.updateTenantDevice({
-      authUserId: request.user?.sub,
+      authContext,
       id: paramsResult.data.id,
       payload: bodyResult.data,
     });
@@ -185,11 +189,12 @@ class TenantDeviceController extends BaseController {
 
   @Delete("/tenant-devices/:id")
   async deleteTenantDevice(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
     const result = await tenantDeviceService.deleteTenantDevice({
-      authUserId: request.user?.sub,
+      authContext,
       id: paramsResult.data.id,
     });
 
