@@ -553,3 +553,22 @@ rg -n "SupabaseDB\\.from\\(" apps/api/src -S
 
 - 迁移 `external-referrers`。
 - 再迁移 `payment`。
+
+### 2026-05-19 External Referrers 租户 Controller 迁移
+
+已完成：
+
+- 迁移 `external-referrers` 到 `TenantBaseController`。
+- 删除 controller 内重复的 `authorizationService` 依赖。
+- 外部介绍人列表、详情、创建、更新接口统一使用 `getRequiredTenantContext()`。
+- 保持 `externalReferrerService` 内租户上下文校验、`project_referral.read` / `project_referral.manage` 权限校验和 repository 租户过滤不变。
+
+验收：
+
+- `bun run api:typecheck` 通过。
+- `bun run check:permission-boundaries` 通过。
+- `git diff --check` 通过。
+
+下一步建议：
+
+- 迁移 `payment`。
