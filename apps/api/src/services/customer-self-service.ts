@@ -107,19 +107,6 @@ class CustomerSelfServiceService {
     ].join(":");
   }
 
-  listLegacyCustomerProfilesByAuthUserId(
-    authUserId: string,
-    options?: {
-      tenantId?: string | null;
-      customerId?: string | null;
-    },
-  ) {
-    return customerSelfServiceRepository.listLegacyCustomerProfilesByAuthUserId(
-      authUserId,
-      options,
-    );
-  }
-
   listCustomerProfilesByIds(customerIds: string[]) {
     const normalizedIds = Array.from(new Set(customerIds)).sort();
     if (normalizedIds.length === 0) {

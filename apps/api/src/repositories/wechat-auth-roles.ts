@@ -68,40 +68,6 @@ class WechatAuthRoleRepository {
     return (data || []) as unknown as WechatAuthCustomerRoleRow[];
   }
 
-  async listLegacyActiveEmployeesByAuthUserId(authUserId: string) {
-    const { data, error } = await this.adminClient
-      .from("employees")
-      .select("id, status")
-      .eq("user_id", authUserId)
-      .eq("status", "active")
-      .limit(1);
-
-    if (error) {
-      throw Errors.dbError("查询员工业务身份失败", error);
-    }
-
-    return (data || []) as Array<{ id: string; status: string | null }>;
-  }
-
-  async listLegacyCustomersByAuthUserId(authUserId: string) {
-    const { data, error } = await this.adminClient
-      .from("customers")
-      .select(`
-        id,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          status
-        )
-      `)
-      .eq("user_id", authUserId)
-      .limit(2);
-
-    if (error) {
-      throw Errors.dbError("查询客户业务身份失败", error);
-    }
-
-    return (data || []) as unknown as WechatAuthCustomerRoleRow[];
-  }
 }
 
 export const wechatAuthRoleRepository = new WechatAuthRoleRepository();

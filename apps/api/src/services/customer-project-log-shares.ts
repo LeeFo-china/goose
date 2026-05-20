@@ -196,8 +196,6 @@ type CampaignOwnerRow = {
   user_id: string | null;
 };
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 type UserProfileRow = {
   auth_user_id: string;
   nickname: string | null;
@@ -730,15 +728,6 @@ class CustomerProjectLogShareService {
     return resolveStoredFileUrl(path);
   }
 
-  private getAuthIdentitySource(): AuthIdentitySource {
-    const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
-    if (value === "legacy" || value === "membership") {
-      return value;
-    }
-
-    return "dual";
-  }
-
   private async listCustomerProfilesByMembership(authUserId: string) {
     const memberships = await userIdentityService.listActiveBusinessMemberships({
       userId: authUserId,
@@ -794,50 +783,7 @@ class CustomerProjectLogShareService {
   }
 
   private async loadCustomerByAuthUserId(authUserId: string) {
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource === "membership") {
-      const list = await this.listCustomerProfilesByMembership(authUserId);
-      if (list.length > 1) {
-        throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
-      }
-
-      if (!list[0]) {
-        throw Errors.forbidden();
-      }
-
-      return list[0];
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("customers")
-      .select("id, tenant_id, name, user_id")
-      .eq("user_id", authUserId)
-      .limit(2);
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    const legacyList = (data || []) as CustomerRow[];
-    if (identitySource === "legacy") {
-      if (legacyList.length > 1) {
-        throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
-      }
-
-      if (!legacyList[0]) {
-        throw Errors.forbidden();
-      }
-
-      return legacyList[0];
-    }
-
-    const membershipList = await this.listCustomerProfilesByMembership(authUserId);
-    const customerMap = new Map<string, CustomerRow>();
-    for (const customer of [...membershipList, ...legacyList]) {
-      customerMap.set(customer.id, customer);
-    }
-
-    const list = Array.from(customerMap.values());
+    const list = await this.listCustomerProfilesByMembership(authUserId);
     if (list.length > 1) {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请联系管理员处理");
     }

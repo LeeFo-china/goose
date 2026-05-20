@@ -3,10 +3,8 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
-import { SupabaseDB } from "@/utils/supabase";
 import { userIdentityService } from "@/services/user-identities";
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
 type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
 
 const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 10_000;
@@ -171,15 +169,6 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
   return Errors.unauthorized("登录凭证无效", ErrorCodes.TOKEN_INVALID);
 }
 
-function getAuthIdentitySource(): AuthIdentitySource {
-  const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
-  if (value === "legacy" || value === "membership") {
-    return value;
-  }
-
-  return "dual";
-}
-
 function getWechatIdentityCheckCacheTtlMs() {
   const parsed = Number(process.env.WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -207,7 +196,6 @@ function pruneWechatIdentityCheckCache(now: number) {
 
 function buildWechatIdentityCheckCacheKey(kind: "oauth" | "business", payload: VerifiedJwtPayload) {
   return [
-    getAuthIdentitySource(),
     kind,
     payload.sub,
     payload.openid ?? "",
@@ -252,13 +240,10 @@ export function primeWechatIdentityCheckCacheFromToken(token: string) {
     return;
   }
 
-  const identitySource = getAuthIdentitySource();
-  if (identitySource !== "legacy") {
-    setWechatIdentityCheckCache(
-      buildWechatIdentityCheckCacheKey("oauth", payload),
-      payload,
-    );
-  }
+  setWechatIdentityCheckCache(
+    buildWechatIdentityCheckCacheKey("oauth", payload),
+    payload,
+  );
 
   if (payload.tenant_id && (payload.customer_id || payload.employee_id)) {
     setWechatIdentityCheckCache(
@@ -311,86 +296,35 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
     return;
   }
 
-  const adminClient = SupabaseDB.getAdminClient();
-  const identitySource = getAuthIdentitySource();
-
   if (payload.customer_id) {
-    let hasActiveMembership = false;
-    if (identitySource !== "legacy") {
-      hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-        userId: payload.sub,
-        tenantId: payload.tenant_id,
-        identityType: "customer",
-        identityId: payload.customer_id,
-      });
-    }
+    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: payload.sub,
+      tenantId: payload.tenant_id,
+      identityType: "customer",
+      identityId: payload.customer_id,
+    });
 
-    if (!hasActiveMembership && identitySource === "membership") {
+    if (!hasActiveMembership) {
       throw Errors.unauthorized(
         "当前微信绑定关系已变化，请重新登录",
         ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
       );
-    }
-
-    if (!hasActiveMembership) {
-      const { data, error } = await adminClient
-        .from("customers")
-        .select("id")
-        .eq("id", payload.customer_id)
-        .eq("tenant_id", payload.tenant_id)
-        .eq("user_id", payload.sub)
-        .maybeSingle();
-
-      if (error) {
-        throw Errors.dbError("校验客户微信绑定失败", error);
-      }
-
-      if (!data) {
-        throw Errors.unauthorized(
-          "当前微信绑定关系已变化，请重新登录",
-          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-        );
-      }
     }
   }
 
   if (payload.employee_id) {
-    let hasActiveMembership = false;
-    if (identitySource !== "legacy") {
-      hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-        userId: payload.sub,
-        tenantId: payload.tenant_id,
-        identityType: "employee",
-        identityId: payload.employee_id,
-      });
-    }
+    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: payload.sub,
+      tenantId: payload.tenant_id,
+      identityType: "employee",
+      identityId: payload.employee_id,
+    });
 
-    if (!hasActiveMembership && identitySource === "membership") {
+    if (!hasActiveMembership) {
       throw Errors.unauthorized(
         "当前微信绑定关系已变化，请重新登录",
         ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
       );
-    }
-
-    if (!hasActiveMembership) {
-      const { data, error } = await adminClient
-        .from("employees")
-        .select("id")
-        .eq("id", payload.employee_id)
-        .eq("tenant_id", payload.tenant_id)
-        .eq("user_id", payload.sub)
-        .maybeSingle();
-
-      if (error) {
-        throw Errors.dbError("校验员工微信绑定失败", error);
-      }
-
-      if (!data) {
-        throw Errors.unauthorized(
-          "当前微信绑定关系已变化，请重新登录",
-          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-        );
-      }
     }
   }
 
@@ -399,11 +333,6 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
 
 async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToken>) {
   if (!payload?.openid || !payload.sub) {
-    return;
-  }
-
-  const identitySource = getAuthIdentitySource();
-  if (identitySource === "legacy") {
     return;
   }
 
@@ -419,24 +348,6 @@ async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToke
   if (activeOauth?.user_id === payload.sub) {
     setWechatIdentityCheckCache(cacheKey, payload);
     return;
-  }
-
-  if (identitySource === "dual") {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("wechat_identities")
-      .select("auth_user_id")
-      .eq("openid", payload.openid)
-      .eq("auth_user_id", payload.sub)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("校验微信登录凭证失败", error);
-    }
-
-    if (data) {
-      setWechatIdentityCheckCache(cacheKey, payload);
-      return;
-    }
   }
 
   throw Errors.unauthorized(

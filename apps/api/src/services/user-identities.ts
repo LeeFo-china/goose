@@ -115,14 +115,6 @@ class UserIdentityService {
     this.activeMembershipsInFlight.delete(cacheKey);
   }
 
-  private membershipKey(input: {
-    tenant_id: string | null;
-    identity_type: string;
-    identity_id: string;
-  }) {
-    return `${input.identity_type}:${input.tenant_id ?? "global"}:${input.identity_id}`;
-  }
-
   private async recordEventBestEffort(input: {
     userId?: string | null;
     eventType: string;
@@ -242,6 +234,13 @@ class UserIdentityService {
       this.setCacheValue(this.activeOauthCache, cacheKey, identity);
     }
     return identity;
+  }
+
+  async findActiveOauthIdentityByUserId(input: {
+    userId: string;
+    platform: OAuthPlatform;
+  }) {
+    return userIdentityRepository.findActiveOauthIdentityByUserId(input);
   }
 
   async unbindOauthIdentityBestEffort(input: {
@@ -469,108 +468,6 @@ class UserIdentityService {
       identityId: input.identityId,
       source: input.source,
     });
-  }
-
-  async observeLegacyIdentityStateBestEffort(input: {
-    userId: string;
-    openid?: string | null;
-    unionid?: string | null;
-    source: string;
-  }) {
-    try {
-      if (input.openid) {
-        const oauth = await userIdentityRepository.findActiveOauthIdentity(
-          "wechat_mini",
-          input.openid,
-        );
-        if (!oauth || oauth.user_id !== input.userId) {
-          await this.recordEventBestEffort({
-            userId: input.userId,
-            eventType: "identity_oauth_mismatch",
-            platform: "wechat_mini",
-            openid: input.openid,
-            metadata: {
-              source: input.source,
-              expected_user_id: input.userId,
-              actual_user_id: oauth?.user_id ?? null,
-              actual_identity_id: oauth?.id ?? null,
-            },
-          });
-        }
-      }
-
-      const [legacyCustomers, legacyEmployees, memberships] = await Promise.all([
-        userIdentityRepository.listLegacyCustomerBindings(input.userId),
-        userIdentityRepository.listLegacyEmployeeBindings(input.userId),
-        userIdentityRepository.listBusinessMemberships(input.userId),
-      ]);
-
-      const legacyKeys = new Set<string>();
-      for (const customer of legacyCustomers) {
-        if (!customer.tenant_id) continue;
-        legacyKeys.add(this.membershipKey({
-          tenant_id: customer.tenant_id,
-          identity_type: "customer",
-          identity_id: customer.id,
-        }));
-      }
-
-      for (const employee of legacyEmployees) {
-        if (!employee.tenant_id) continue;
-        legacyKeys.add(this.membershipKey({
-          tenant_id: employee.tenant_id,
-          identity_type: "employee",
-          identity_id: employee.id,
-        }));
-      }
-
-      const membershipKeys = new Set(
-        memberships.map((item) => this.membershipKey(item)),
-      );
-
-      const missingMemberships = Array.from(legacyKeys)
-        .filter((key) => !membershipKeys.has(key));
-      const orphanMemberships = this.findOrphanMemberships(memberships, legacyKeys);
-
-      if (missingMemberships.length > 0 || orphanMemberships.length > 0) {
-        await this.recordEventBestEffort({
-          userId: input.userId,
-          eventType: "identity_membership_mismatch",
-          platform: input.openid ? "wechat_mini" : null,
-          openid: input.openid ?? null,
-          metadata: {
-            source: input.source,
-            missing_memberships: missingMemberships,
-            orphan_memberships: orphanMemberships.map((item) => ({
-              id: item.id,
-              tenant_id: item.tenant_id,
-              identity_type: item.identity_type,
-              identity_id: item.identity_id,
-            })),
-          },
-        });
-      }
-    } catch (error) {
-      await this.recordEventBestEffort({
-        userId: input.userId,
-        eventType: "identity_observe_failed",
-        platform: input.openid ? "wechat_mini" : null,
-        openid: input.openid ?? null,
-        metadata: {
-          source: input.source,
-          error: this.serializeError(error),
-        },
-      });
-    }
-  }
-
-  private findOrphanMemberships(
-    memberships: UserBusinessMembershipRecord[],
-    legacyKeys: Set<string>,
-  ) {
-    return memberships.filter((item) => (
-      item.status === "active" && !legacyKeys.has(this.membershipKey(item))
-    ));
   }
 
   private serializeError(error: unknown) {

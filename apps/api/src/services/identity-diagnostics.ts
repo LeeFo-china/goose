@@ -3,7 +3,6 @@ import {
   identityDiagnosticsRepository,
   type IdentityDiagnosticCustomerRecord,
   type IdentityDiagnosticEmployeeRecord,
-  type IdentityDiagnosticLegacyWechatRecord,
   type IdentityDiagnosticMembershipRecord,
   type IdentityDiagnosticOauthRecord,
 } from "@/repositories/identity-diagnostics";
@@ -45,7 +44,6 @@ class IdentityDiagnosticsService {
         oauth_identity_count: data.oauth_identities.length,
         active_oauth_identity_count: current.oauth_identities.length,
         history_oauth_identity_count: history.oauth_identities.length,
-        legacy_wechat_identity_count: data.legacy_wechat_identities.length,
         membership_count: data.memberships.length,
         active_membership_count: current.memberships.length,
         history_membership_count: history.memberships.length,
@@ -128,19 +126,13 @@ class IdentityDiagnosticsService {
       this.checkOauthIdentity(
         oauth,
         data.oauth_identities,
-        data.legacy_wechat_identities,
         issues,
       );
-    }
-
-    for (const legacy of data.legacy_wechat_identities) {
-      this.checkLegacyWechatIdentity(legacy, data.oauth_identities, issues);
     }
 
     if (
       data.auth_users.length === 0 &&
       data.oauth_identities.length === 0 &&
-      data.legacy_wechat_identities.length === 0 &&
       data.memberships.length === 0 &&
       data.customers.length === 0 &&
       data.employees.length === 0
@@ -241,25 +233,9 @@ class IdentityDiagnosticsService {
   private checkOauthIdentity(
     oauth: IdentityDiagnosticOauthRecord,
     oauthRows: IdentityDiagnosticOauthRecord[],
-    legacyRows: IdentityDiagnosticLegacyWechatRecord[],
     issues: DiagnosticIssue[],
   ) {
     if (oauth.platform !== "wechat_mini") return;
-
-    const legacy = legacyRows.find((item) => (
-      item.auth_user_id === oauth.user_id &&
-      item.openid === oauth.openid
-    ));
-
-    if (oauth.status === "active" && !legacy) {
-      issues.push({
-        severity: "warning",
-        code: "active_oauth_without_legacy_wechat",
-        title: "active OAuth 缺少旧微信映射",
-        description: "user_oauth_identities 已是主链路，旧表缺失不一定阻塞，但 dual 模式下可能影响兼容。",
-        related_user_id: oauth.user_id,
-      });
-    }
 
     const hasActiveOauthForSameCredential = oauthRows.some((item) => (
       item.user_id === oauth.user_id &&
@@ -268,34 +244,13 @@ class IdentityDiagnosticsService {
       item.status === "active"
     ));
 
-    if (oauth.status === "unbound" && legacy && !hasActiveOauthForSameCredential) {
-      issues.push({
-        severity: "danger",
-        code: "unbound_oauth_has_legacy_wechat",
-        title: "已解绑 OAuth 仍存在旧微信映射",
-        description: "该 openid 已标记 unbound，但 wechat_identities 仍存在映射，可能导致旧兼容路径误登录。",
-        related_user_id: oauth.user_id,
-      });
-    }
-  }
-
-  private checkLegacyWechatIdentity(
-    legacy: IdentityDiagnosticLegacyWechatRecord,
-    oauthRows: IdentityDiagnosticOauthRecord[],
-    issues: DiagnosticIssue[],
-  ) {
-    const oauth = oauthRows.find((item) => (
-      item.user_id === legacy.auth_user_id &&
-      item.openid === legacy.openid
-    ));
-
-    if (!oauth) {
+    if (oauth.status === "unbound" && !hasActiveOauthForSameCredential) {
       issues.push({
         severity: "warning",
-        code: "legacy_wechat_without_oauth",
-        title: "旧微信映射缺少 OAuth 记录",
-        description: "wechat_identities 存在映射，但 user_oauth_identities 没有对应记录。",
-        related_user_id: legacy.auth_user_id,
+        code: "unbound_oauth_without_active_replacement",
+        title: "已解绑 OAuth 缺少 active 替代凭证",
+        description: "该 openid 已标记 unbound，当前用户没有相同 openid 的 active OAuth 记录。",
+        related_user_id: oauth.user_id,
       });
     }
   }

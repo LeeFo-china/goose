@@ -48,8 +48,6 @@ type WeChatSessionResponse = {
   errmsg?: string;
 };
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 type WechatAuthResolution =
   | {
     kind: "auth_user";
@@ -103,15 +101,6 @@ export class WeChatController extends BaseController {
 
   private async getRequiredAuthContext(request: FastifyRequest) {
     return authorizationService.getRequiredAuthContext(request.user?.sub);
-  }
-
-  private getAuthIdentitySource(): AuthIdentitySource {
-    const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
-    if (value === "legacy" || value === "membership") {
-      return value;
-    }
-
-    return "dual";
   }
 
   private serializeBackgroundError(error: unknown) {
@@ -239,13 +228,6 @@ export class WeChatController extends BaseController {
     request: FastifyRequest,
     authUserId: string,
   ) {
-    if (this.getAuthIdentitySource() !== "membership") {
-      return {
-        isVisitorOnly: false,
-        memberships: null,
-      };
-    }
-
     if (this.getCachedVisitorOnlyAuthUser(authUserId)) {
       request.log.info(
         { requestId: request.id, userId: authUserId, source: "memory" },
@@ -374,19 +356,18 @@ export class WeChatController extends BaseController {
     openid?: string | null,
     roles: string[] = ["employee"],
   ) {
-    let authContext = await authorizationService.getEmployeeLoginContextByAuthUserId(authUserId);
-    if (!authContext.employeeId && this.getAuthIdentitySource() !== "legacy") {
-      const employeeMembership = (await userIdentityService.listActiveBusinessMemberships({
-        userId: authUserId,
-        identityType: "employee",
-      }))[0];
+    const employeeMembership = (await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+      identityType: "employee",
+    }))[0];
 
-      if (employeeMembership) {
-        authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
-          employeeMembership.identity_id,
-        );
-      }
+    if (!employeeMembership) {
+      return null;
     }
+
+    let authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
+      employeeMembership.identity_id,
+    );
 
     if (authContext.employeeId && !authContext.tenantId && !authContext.isPlatformAdmin) {
       authContext = await authorizationService.getAuthContextByEmployeeId(authContext.employeeId);
@@ -540,14 +521,6 @@ export class WeChatController extends BaseController {
 
       if (employeeLogin) {
         this.prewarmEmployeeAuthContext(request, userId, employeeLogin);
-        this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
-          userIdentityService.observeLegacyIdentityStateBestEffort({
-            userId,
-            openid: wxData.openid,
-            unionid: wxData.unionid ?? null,
-            source: "wechat_auth",
-          })
-        );
 
         request.log.info(
           { requestId: request.id, userId, totalMs: Date.now() - startedAt },
@@ -565,10 +538,9 @@ export class WeChatController extends BaseController {
       }
     }
 
-    const canResolveCustomerOnlyRolesFromMembership = (
-      this.getAuthIdentitySource() === "membership" &&
+    const canResolveCustomerOnlyRolesFromMembership = Boolean(
       visitorState.memberships?.some((item) => item.identity_type === "customer") &&
-      visitorState.memberships.every((item) => item.identity_type !== "employee")
+        visitorState.memberships.every((item) => item.identity_type !== "employee")
     );
     let roles = ["customer"];
     let rolesResolvedFromMembership = true;
@@ -586,15 +558,6 @@ export class WeChatController extends BaseController {
         "[auth] resolved user roles",
       );
     }
-    this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
-      userIdentityService.observeLegacyIdentityStateBestEffort({
-        userId,
-        openid: wxData.openid,
-        unionid: wxData.unionid ?? null,
-        source: "wechat_auth",
-      })
-    );
-
     request.log.info({ requestId: request.id, userId, roles }, "[auth] resolve login context start");
     const employeeContextStartedAt = Date.now();
     const employeeLogin = roles.includes("employee")
@@ -1117,314 +1080,69 @@ export class WeChatController extends BaseController {
   ): Promise<WechatAuthResolution> {
     const allowVisitorSession = options.allowVisitorSession ?? true;
     request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource !== "legacy") {
-      const activeOauthStartedAt = Date.now();
-      const activeOauthIdentity = await userIdentityService.findActiveOauthIdentity({
-        platform: "wechat_mini",
-        openid,
-      });
-      request.log.info(
-        {
-          requestId: request.id,
-          openid,
-          durationMs: Date.now() - activeOauthStartedAt,
-          found: Boolean(activeOauthIdentity),
-          identitySource,
-        },
-        "[auth] active oauth identity lookup result",
-      );
-
-      if (activeOauthIdentity) {
-        request.log.info(
-          {
-            requestId: request.id,
-            openid,
-            authUserId: activeOauthIdentity.user_id,
-            identitySource,
-          },
-          "[auth] resolved user by active oauth identity",
-        );
-
-        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
-          userIdentityService.syncOauthIdentityBestEffort({
-            userId: activeOauthIdentity.user_id,
-            platform: "wechat_mini",
-            openid,
-            unionid: unionid ?? activeOauthIdentity.unionid ?? null,
-            source: "wechat_auth_oauth_primary",
-          })
-        );
-
-        return {
-          kind: "auth_user",
-          userId: activeOauthIdentity.user_id,
-          isNewUser: false,
-        };
-      }
-
-      if (identitySource === "membership") {
-        if (!allowVisitorSession) {
-          return this.createWechatVisitorUser({
-            request,
-            openid,
-            unionid: unionid || null,
-            uniqueEmail: true,
-            source: "wechat_auth_oauth_miss_background",
-          });
-        }
-
-        request.log.info(
-          { requestId: request.id, openid, identitySource },
-          "[auth] active oauth miss visitor fast path",
-        );
-        return this.createWechatVisitorSession({
-          request,
-          openid,
-          unionid: unionid || null,
-          uniqueEmail: true,
-          source: "wechat_auth_oauth_miss_fast_path",
-          backgroundMode: "resolve_identity",
-        });
-      }
-    }
-
-    const existingIdentity = await this.findIdentityByOpenId(openid);
-
-    request.log.info(
-      { requestId: request.id, openid, found: Boolean(existingIdentity), authUserId: existingIdentity?.auth_user_id },
-      "[auth] query user by openid result",
-    );
-
-    if (existingIdentity) {
-      const existingOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
-        userId: existingIdentity.auth_user_id,
-        platform: "wechat_mini",
-        openid,
-      });
-
-      if (existingOauthUnbound) {
-        await wechatAuthIdentityService.deleteIdentityByAuthUserOpenId({
-          authUserId: existingIdentity.auth_user_id,
-          openid,
-        });
-
-        if (allowVisitorSession) {
-          return this.createWechatVisitorSession({
-            request,
-            openid,
-            unionid: unionid ?? existingIdentity.unionid ?? null,
-            uniqueEmail: true,
-            source: "wechat_auth_existing_identity_unbound",
-          });
-        }
-
-        request.log.info(
-          { requestId: request.id, openid, userId: existingIdentity.auth_user_id },
-          "[auth] create visitor for unbound existing identity",
-        );
-
-        return this.createWechatVisitorUser({
-          request,
-          openid,
-          unionid: unionid ?? existingIdentity.unionid ?? null,
-          uniqueEmail: true,
-          source: "wechat_auth_existing_identity_unbound",
-        });
-      }
-
-      this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
-        userIdentityService.syncOauthIdentityBestEffort({
-          userId: existingIdentity.auth_user_id,
-          platform: "wechat_mini",
-          openid,
-          unionid: unionid ?? existingIdentity.unionid ?? null,
-          source: "wechat_auth_existing_identity",
-        })
-      );
-
-      return {
-        kind: "auth_user",
-        userId: existingIdentity.auth_user_id,
-        isNewUser: false,
-      };
-    }
-
-    const legacyLookupStartedAt = Date.now();
-    const legacyUser = await this.findLegacyAuthUser(openid);
+    const activeOauthStartedAt = Date.now();
+    const activeOauthIdentity = await userIdentityService.findActiveOauthIdentity({
+      platform: "wechat_mini",
+      openid,
+    });
     request.log.info(
       {
         requestId: request.id,
         openid,
-        durationMs: Date.now() - legacyLookupStartedAt,
-        found: Boolean(legacyUser),
+        durationMs: Date.now() - activeOauthStartedAt,
+        found: Boolean(activeOauthIdentity),
       },
-      "[auth] legacy auth user lookup result",
+      "[auth] active oauth identity lookup result",
     );
-    if (legacyUser) {
-      const legacyOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
-        userId: legacyUser.id,
-        platform: "wechat_mini",
-        openid,
-      });
 
-      if (legacyOauthUnbound) {
-        request.log.info(
-          { requestId: request.id, openid, userId: legacyUser.id },
-          "[auth] skip legacy identity repair for unbound oauth",
-        );
-
-        if (allowVisitorSession) {
-          return this.createWechatVisitorSession({
-            request,
-            openid,
-            unionid: unionid || legacyUser.unionid || null,
-            uniqueEmail: true,
-            source: "wechat_auth_legacy_unbound",
-          });
-        }
-
-        return this.createWechatVisitorUser({
-          request,
-          openid,
-          unionid: unionid || legacyUser.unionid || null,
-          uniqueEmail: true,
-          source: "wechat_auth_legacy_unbound",
-        });
-      }
-
-      this.runAuthBackgroundTask(request, "repair_legacy_wechat_identity", () =>
-        wechatAuthIdentityService.upsertIdentity({
-          authUserId: legacyUser.id,
-          openid,
-          unionid: unionid || legacyUser.unionid || null,
-          errorMessage: "补建微信身份映射失败",
-        })
-      );
-
+    if (activeOauthIdentity) {
       request.log.info(
-        { requestId: request.id, openid, userId: legacyUser.id },
-        "[auth] repaired legacy identity mapping",
+        {
+          requestId: request.id,
+          openid,
+          authUserId: activeOauthIdentity.user_id,
+        },
+        "[auth] resolved user by active oauth identity",
       );
-
       this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
         userIdentityService.syncOauthIdentityBestEffort({
-          userId: legacyUser.id,
+          userId: activeOauthIdentity.user_id,
           platform: "wechat_mini",
           openid,
-          unionid: unionid || legacyUser.unionid || null,
-          source: "wechat_auth_legacy_repair",
+          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
+          source: "wechat_auth_oauth_primary",
         })
       );
 
       return {
         kind: "auth_user",
-        userId: legacyUser.id,
+        userId: activeOauthIdentity.user_id,
         isNewUser: false,
       };
     }
 
     if (allowVisitorSession) {
+      request.log.info(
+        { requestId: request.id, openid },
+        "[auth] active oauth miss visitor fast path",
+      );
       return this.createWechatVisitorSession({
         request,
         openid,
         unionid: unionid || null,
-        uniqueEmail: false,
-        source: "wechat_auth_new_visitor_session",
+        uniqueEmail: true,
+        source: "wechat_auth_oauth_miss_fast_path",
+        backgroundMode: "resolve_identity",
       });
     }
 
-    request.log.info({ requestId: request.id, openid }, "[auth] create visitor user start");
-
-    const { data, error } = await wechatAuthIdentityService.createWechatAuthUser({
+    return this.createWechatVisitorUser({
+      request,
       openid,
       unionid: unionid || null,
+      uniqueEmail: true,
+      source: "wechat_auth_oauth_miss_background",
     });
-
-    if (error) {
-      request.log.error(
-        { requestId: request.id, openid, error: { message: error.message, status: error.status, name: error.name } },
-        "[auth] create visitor user failed",
-      );
-
-      const legacyUser = await this.findLegacyAuthUser(openid);
-      if (legacyUser) {
-        const legacyOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
-          userId: legacyUser.id,
-          platform: "wechat_mini",
-          openid,
-        });
-
-        if (legacyOauthUnbound) {
-          request.log.info(
-            { requestId: request.id, openid, userId: legacyUser.id },
-            "[auth] skip legacy identity repair for unbound oauth",
-          );
-
-          return this.createWechatVisitorUser({
-            request,
-            openid,
-            unionid: unionid || legacyUser.unionid || null,
-            uniqueEmail: true,
-            source: "wechat_auth_legacy_unbound",
-          });
-        }
-
-        this.runAuthBackgroundTask(request, "repair_legacy_wechat_identity", () =>
-          wechatAuthIdentityService.upsertIdentity({
-            authUserId: legacyUser.id,
-            openid,
-            unionid: unionid || legacyUser.unionid || null,
-            errorMessage: "补建微信身份映射失败",
-          })
-        );
-
-        request.log.info(
-          { requestId: request.id, openid, userId: legacyUser.id },
-          "[auth] repaired legacy identity mapping",
-        );
-
-        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
-          userIdentityService.syncOauthIdentityBestEffort({
-            userId: legacyUser.id,
-            platform: "wechat_mini",
-            openid,
-            unionid: unionid || legacyUser.unionid || null,
-            source: "wechat_auth_legacy_repair",
-          })
-        );
-
-        return {
-          kind: "auth_user",
-          userId: legacyUser.id,
-          isNewUser: false,
-        };
-      }
-
-      throw Errors.dbError("创建微信用户失败", error);
-    }
-
-    if (!data.user) {
-      throw Errors.dbError("创建微信用户失败");
-    }
-
-    this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
-      userIdentityService.syncOauthIdentityBestEffort({
-        userId: data.user!.id,
-        platform: "wechat_mini",
-        openid,
-        unionid: unionid || null,
-        source: "wechat_auth_create_user",
-      })
-    );
-
-    request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
-
-    return {
-      kind: "auth_user",
-      userId: data.user.id,
-      isNewUser: true,
-    };
   }
 
   private createWechatVisitorSession(input: {
@@ -1526,32 +1244,6 @@ export class WeChatController extends BaseController {
     };
   }
 
-  private async findIdentityByOpenId(openid: string) {
-    return wechatAuthIdentityService.findIdentityByOpenId(openid);
-  }
-
-  private async syncLegacyWechatIdentityMapping(input: {
-    authUserId: string;
-    openid: string;
-    unionid?: string | null;
-  }) {
-    const currentIdentity = await this.findIdentityByOpenId(input.openid);
-    if (currentIdentity && currentIdentity.auth_user_id !== input.authUserId) {
-      await wechatAuthIdentityService.deleteIdentityByOpenId(input.openid);
-    }
-
-    await wechatAuthIdentityService.upsertIdentity({
-      authUserId: input.authUserId,
-      openid: input.openid,
-      unionid: input.unionid ?? null,
-      errorMessage: "同步微信身份映射失败",
-    });
-  }
-
-  private async findLegacyAuthUser(openid: string) {
-    return wechatAuthIdentityService.findLegacyAuthUserByOpenId(openid);
-  }
-
   private normalizeTenantRelation(value: CustomerTenantOption["tenant"]) {
     if (Array.isArray(value)) {
       return value[0] ?? null;
@@ -1585,7 +1277,6 @@ export class WeChatController extends BaseController {
   ) {
     return wechatCustomerIdentityService.listCustomerTenantOptionsByAuthUser({
       authUserId,
-      identitySource: this.getAuthIdentitySource(),
       includeProjectSummary: options?.includeProjectSummary,
     });
   }
@@ -1668,14 +1359,12 @@ export class WeChatController extends BaseController {
       openid?: string | null;
     },
   ) {
-    const hasActiveMembership = this.getAuthIdentitySource() !== "legacy"
-      ? await userIdentityService.hasActiveBusinessMembership({
-        userId: authUserId,
-        tenantId: customer.tenant_id,
-        identityType: "customer",
-        identityId: customer.id,
-      })
-      : false;
+    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: authUserId,
+      tenantId: customer.tenant_id,
+      identityType: "customer",
+      identityId: customer.id,
+    });
 
     if (customer.user_id && customer.user_id !== authUserId && !hasActiveMembership) {
       const existingOpenid = await this.findOpenIdByAuthUserId(customer.user_id);
@@ -1687,12 +1376,6 @@ export class WeChatController extends BaseController {
         throw Errors.badRequest("当前账号未绑定微信身份");
       }
 
-      await this.bindWechatOpenIdToExistingAuthUser({
-        openid: options.openid,
-        fromAuthUserId: authUserId,
-        toAuthUserId: customer.user_id,
-        targetRole: "customer",
-      });
       await userIdentityService.syncOauthIdentityBestEffort({
         userId: customer.user_id,
         platform: "wechat_mini",
@@ -1897,14 +1580,12 @@ export class WeChatController extends BaseController {
     }
 
     const canSelectByCurrentBinding = customer.user_id === input.authUserId;
-    const canSelectByMembership = this.getAuthIdentitySource() !== "legacy"
-      ? await userIdentityService.hasActiveBusinessMembership({
-        userId: input.authUserId,
-        tenantId: customer.tenant_id,
-        identityType: "customer",
-        identityId: customer.id,
-      })
-      : false;
+    const canSelectByMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: input.authUserId,
+      tenantId: customer.tenant_id,
+      identityType: "customer",
+      identityId: customer.id,
+    });
     const canSelectByVerifiedPhone = Boolean(
       input.verifiedPhone &&
         customer.phone &&
@@ -2013,19 +1694,16 @@ export class WeChatController extends BaseController {
     );
 
     const membershipStartedAt = Date.now();
-    const hasActiveMembership = this.getAuthIdentitySource() !== "legacy"
-      ? await userIdentityService.hasActiveBusinessMembership({
-        userId: authUserId,
-        tenantId: tenant.id,
-        identityType: "employee",
-        identityId: employee.id,
-      })
-      : false;
+    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+      userId: authUserId,
+      tenantId: tenant.id,
+      identityType: "employee",
+      identityId: employee.id,
+    });
     logEmployeeBindStage("active_membership_checked", membershipStartedAt, {
       employeeId: employee.id,
       tenantId: tenant.id,
       hasActiveMembership,
-      identitySource: this.getAuthIdentitySource(),
     });
 
     if (hasActiveMembership) {
@@ -2069,14 +1747,12 @@ export class WeChatController extends BaseController {
     }
 
     if (employee.user_id && employee.user_id !== authUserId) {
-      const targetMembershipPromise = this.getAuthIdentitySource() !== "legacy"
-        ? userIdentityService.hasActiveBusinessMembership({
-          userId: employee.user_id,
-          tenantId: tenant.id,
-          identityType: "employee",
-          identityId: employee.id,
-        })
-        : Promise.resolve(false);
+      const targetMembershipPromise = userIdentityService.hasActiveBusinessMembership({
+        userId: employee.user_id,
+        tenantId: tenant.id,
+        identityType: "employee",
+        identityId: employee.id,
+      });
       const existingOpenidStartedAt = Date.now();
       const existingOpenid = await this.findOpenIdByAuthUserId(employee.user_id);
       logEmployeeBindStage("existing_employee_openid_checked", existingOpenidStartedAt, {
@@ -2100,19 +1776,6 @@ export class WeChatController extends BaseController {
         throw Errors.badRequest("当前账号未绑定微信身份");
       }
 
-      const bindWechatStartedAt = Date.now();
-      this.runAuthBackgroundTask(request, "sync_legacy_employee_wechat_identity", () =>
-        this.bindWechatOpenIdToExistingAuthUser({
-          openid,
-          fromAuthUserId: authUserId,
-          toAuthUserId: employee.user_id!,
-        })
-      );
-      logEmployeeBindStage("legacy_wechat_identity_sync_scheduled", bindWechatStartedAt, {
-        employeeId: employee.id,
-        tenantId: tenant.id,
-        existingAuthUserId: employee.user_id,
-      });
       const syncOauthStartedAt = Date.now();
       await userIdentityService.syncOauthIdentityBestEffort({
         userId: employee.user_id,
@@ -2207,59 +1870,19 @@ export class WeChatController extends BaseController {
   }
 
   private async findOpenIdByAuthUserId(authUserId: string) {
-    return wechatAuthIdentityService.findOpenIdByAuthUserId(authUserId);
-  }
-
-  private async bindWechatOpenIdToExistingAuthUser(input: {
-    openid: string;
-    fromAuthUserId: string;
-    toAuthUserId: string;
-    targetRole?: "customer" | "employee";
-  }) {
-    const targetOpenid = await this.findOpenIdByAuthUserId(input.toAuthUserId);
-    if (targetOpenid && targetOpenid !== input.openid) {
-      throw Errors.business(
-        409,
-        "该手机号已绑定其他微信账号，可提交换绑申请",
-        ErrorCodes.WECHAT_ALREADY_BOUND,
-        {
-          can_request_rebind: true,
-          target_role: input.targetRole ?? "employee",
-        },
-      );
-    }
-
-    const currentIdentity = await this.findIdentityByOpenId(input.openid);
-    if (currentIdentity && currentIdentity.auth_user_id !== input.fromAuthUserId) {
-      if (currentIdentity.auth_user_id === input.toAuthUserId) {
-        return;
-      }
-
-      throw Errors.business(
-        409,
-        "当前微信已绑定其他账号，请重新登录",
-        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-      );
-    }
-
-    if (currentIdentity) {
-      await wechatAuthIdentityService.updateIdentityAuthUser({
-        fromAuthUserId: input.fromAuthUserId,
-        toAuthUserId: input.toAuthUserId,
-        openid: input.openid,
-      });
-      return;
-    }
-
-    await wechatAuthIdentityService.upsertIdentity({
-      authUserId: input.toAuthUserId,
-      openid: input.openid,
-      errorMessage: "创建微信身份映射失败",
+    const identity = await userIdentityService.findActiveOauthIdentityByUserId({
+      userId: authUserId,
+      platform: "wechat_mini",
     });
+    return identity?.openid ?? null;
   }
 
   private async getOpenIdByAuthUserId(authUserId: string) {
-    return wechatAuthIdentityService.getRequiredOpenIdByAuthUserId(authUserId);
+    const openid = await this.findOpenIdByAuthUserId(authUserId);
+    if (!openid) {
+      throw Errors.badRequest("当前账号未绑定微信身份");
+    }
+    return openid;
   }
 
   private async getUserRoles(
@@ -2268,7 +1891,6 @@ export class WeChatController extends BaseController {
   ) {
     return wechatAuthRoleService.getUserRoles({
       userId,
-      identitySource: this.getAuthIdentitySource(),
       memberships,
     });
   }

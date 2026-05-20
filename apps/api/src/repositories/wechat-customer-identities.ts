@@ -195,21 +195,6 @@ class WechatCustomerIdentityRepository {
     return (data || []) as WechatCustomerIdentityRow[];
   }
 
-  async listCustomerTenantOptionsByAuthUserId(authUserId: string) {
-    const { data, error } = await runAuthReadQuery(() =>
-      this.adminClient
-        .from("customers")
-        .select(this.customerTenantSelect)
-        .eq("user_id", authUserId)
-    );
-
-    if (error) {
-      throw Errors.dbError("查询客户微信绑定失败", error);
-    }
-
-    return (data || []) as unknown as WechatCustomerTenantOption[];
-  }
-
   async listCustomerTenantOptionsByIds(customerIds: string[]) {
     if (customerIds.length === 0) {
       return [] as WechatCustomerTenantOption[];

@@ -5,8 +5,6 @@ import {
 } from "@/repositories/wechat-auth-roles";
 import { userIdentityService } from "@/services/user-identities";
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 class WechatAuthRoleService {
   private normalizeTenantRelation(
     value: WechatAuthEmployeeRoleRow["tenant"] | WechatAuthCustomerRoleRow["tenant"],
@@ -34,13 +32,8 @@ class WechatAuthRoleService {
 
   async getUserRoles(input: {
     userId: string;
-    identitySource: AuthIdentitySource;
     memberships?: Awaited<ReturnType<typeof userIdentityService.listActiveBusinessMemberships>>;
   }) {
-    if (input.identitySource === "legacy") {
-      return this.getLegacyUserRoles(input.userId);
-    }
-
     const memberships = input.memberships ??
       await userIdentityService.listActiveBusinessMemberships({
         userId: input.userId,
@@ -70,41 +63,11 @@ class WechatAuthRoleService {
       roles.add("customer");
     }
 
-    if (input.identitySource === "dual") {
-      for (const role of await this.getLegacyUserRoles(input.userId)) {
-        if (role !== "visitor") {
-          roles.add(role);
-        }
-      }
-    }
-
     if (roles.size === 0) {
       return ["visitor"];
     }
 
     return Array.from(roles);
-  }
-
-  async getLegacyUserRoles(userId: string) {
-    const [employees, customers] = await Promise.all([
-      wechatAuthRoleRepository.listLegacyActiveEmployeesByAuthUserId(userId),
-      wechatAuthRoleRepository.listLegacyCustomersByAuthUserId(userId),
-    ]);
-
-    const roles: string[] = [];
-    if (employees.length > 0) {
-      roles.push("employee");
-    }
-
-    if (this.hasActiveCustomer(customers)) {
-      roles.push("customer");
-    }
-
-    if (roles.length === 0) {
-      roles.push("visitor");
-    }
-
-    return roles;
   }
 }
 

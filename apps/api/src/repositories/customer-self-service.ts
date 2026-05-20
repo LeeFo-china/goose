@@ -183,35 +183,6 @@ class CustomerSelfServiceRepository {
     )
   `;
 
-  async listLegacyCustomerProfilesByAuthUserId(
-    authUserId: string,
-    options?: {
-      tenantId?: string | null;
-      customerId?: string | null;
-    },
-  ) {
-    let query = this.adminClient
-      .from("customers")
-      .select(this.customerContextSelect)
-      .eq("user_id", authUserId);
-
-    if (options?.tenantId) {
-      query = query.eq("tenant_id", options.tenantId);
-    }
-
-    if (options?.customerId) {
-      query = query.eq("id", options.customerId);
-    }
-
-    const { data, error } = await query.limit(2);
-
-    if (error) {
-      throw Errors.dbError("查询客户身份失败", error);
-    }
-
-    return (data || []) as unknown as CustomerSelfServiceCustomerContextRow[];
-  }
-
   async listCustomerProfilesByIds(customerIds: string[]) {
     if (customerIds.length === 0) {
       return [] as CustomerSelfServiceCustomerContextRow[];

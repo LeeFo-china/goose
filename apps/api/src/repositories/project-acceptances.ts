@@ -538,46 +538,6 @@ class ProjectAcceptanceRepository {
     return (data || []) as ProjectAcceptanceCustomerRow[];
   }
 
-  async getCustomerByAuthUserId(
-    authUserId: string,
-    scope?: {
-      tenantId?: string | null;
-      customerId?: string | null;
-    },
-  ) {
-    let query = SupabaseDB.getAdminClient()
-      .from("customers")
-      .select(`
-        id,
-        tenant_id,
-        name,
-        phone,
-        user_id,
-        tenant:tenants!customers_tenant_id_fkey(
-          id,
-          status
-        )
-      `)
-      .eq("user_id", authUserId);
-
-    if (scope?.tenantId) {
-      query = query.eq("tenant_id", scope.tenantId);
-    }
-
-    if (scope?.customerId) {
-      query = query.eq("id", scope.customerId);
-    }
-
-    const { data, error } = await query.limit(2);
-
-    if (error) throw Errors.dbError("查询客户身份失败", error);
-    const list = (data || []) as ProjectAcceptanceCustomerRow[];
-    if (list.length > 1) {
-      throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
-    }
-    return list[0] || null;
-  }
-
   async getTenantById(id: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("tenants")

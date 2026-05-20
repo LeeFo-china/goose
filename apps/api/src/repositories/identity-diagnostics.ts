@@ -42,15 +42,6 @@ export type IdentityDiagnosticOauthRecord = {
   updated_at: string;
 };
 
-export type IdentityDiagnosticLegacyWechatRecord = {
-  id?: string;
-  auth_user_id: string;
-  openid: string;
-  unionid: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
 export type IdentityDiagnosticMembershipRecord = {
   id: string;
   user_id: string;
@@ -106,7 +97,6 @@ type LookupResult = {
   };
   auth_users: IdentityDiagnosticAuthUserRecord[];
   oauth_identities: IdentityDiagnosticOauthRecord[];
-  legacy_wechat_identities: IdentityDiagnosticLegacyWechatRecord[];
   memberships: IdentityDiagnosticMembershipRecord[];
   customers: IdentityDiagnosticCustomerRecord[];
   employees: IdentityDiagnosticEmployeeRecord[];
@@ -141,15 +131,13 @@ class IdentityDiagnosticsRepository {
     const queryType = this.detectQueryType(keyword);
     const openidHash = this.hashOpenid(keyword, queryType);
 
-    const [customersByPhone, employeesByPhone, customersByUuid, employeesByUuid, oauthByOpenid, oauthByUserId, legacyByOpenid, legacyByUserId, membershipsByUserId, membershipsByIdentityId] = await Promise.all([
+    const [customersByPhone, employeesByPhone, customersByUuid, employeesByUuid, oauthByOpenid, oauthByUserId, membershipsByUserId, membershipsByIdentityId] = await Promise.all([
       queryType === "phone" ? this.findCustomersByPhone(keyword) : Promise.resolve([]),
       queryType === "phone" ? this.findEmployeesByPhone(keyword) : Promise.resolve([]),
       queryType === "user_id" ? this.findCustomersByUuid(keyword) : Promise.resolve([]),
       queryType === "user_id" ? this.findEmployeesByUuid(keyword) : Promise.resolve([]),
       queryType === "openid" ? this.findOauthByOpenid(keyword) : Promise.resolve([]),
       queryType === "user_id" ? this.findOauthByUserId(keyword) : Promise.resolve([]),
-      queryType === "openid" ? this.findLegacyWechatByOpenid(keyword) : Promise.resolve([]),
-      queryType === "user_id" ? this.findLegacyWechatByUserId(keyword) : Promise.resolve([]),
       queryType === "user_id" ? this.findMembershipsByUserId(keyword) : Promise.resolve([]),
       queryType === "user_id" ? this.findMembershipsByIdentityId(keyword) : Promise.resolve([]),
     ]);
@@ -157,14 +145,12 @@ class IdentityDiagnosticsRepository {
     let customers = uniqueById([...customersByPhone, ...customersByUuid]);
     let employees = uniqueById([...employeesByPhone, ...employeesByUuid]);
     let oauthIdentities = uniqueById([...oauthByOpenid, ...oauthByUserId]);
-    let legacyWechatIdentities = uniqueLegacyWechat([...legacyByOpenid, ...legacyByUserId]);
     let memberships = uniqueById([...membershipsByUserId, ...membershipsByIdentityId]);
 
     const userIds = new Set<string>();
     for (const item of customers) if (item.user_id) userIds.add(item.user_id);
     for (const item of employees) if (item.user_id) userIds.add(item.user_id);
     for (const item of oauthIdentities) userIds.add(item.user_id);
-    for (const item of legacyWechatIdentities) userIds.add(item.auth_user_id);
     for (const item of memberships) userIds.add(item.user_id);
     if (queryType === "user_id") userIds.add(keyword);
 
@@ -183,16 +169,14 @@ class IdentityDiagnosticsRepository {
       identityIds.add(item.identity_id);
     }
 
-    const [customersByIds, employeesByIds, oauthByUsers, legacyByUsers] = await Promise.all([
+    const [customersByIds, employeesByIds, oauthByUsers] = await Promise.all([
       this.findCustomersByIds(Array.from(identityIds)),
       this.findEmployeesByIds(Array.from(identityIds)),
       this.findOauthByUserIds(Array.from(userIds)),
-      this.findLegacyWechatByUserIds(Array.from(userIds)),
     ]);
     customers = uniqueById([...customers, ...customersByIds]);
     employees = uniqueById([...employees, ...employeesByIds]);
     oauthIdentities = uniqueById([...oauthIdentities, ...oauthByUsers]);
-    legacyWechatIdentities = uniqueLegacyWechat([...legacyWechatIdentities, ...legacyByUsers]);
 
     const tenantIds = unique([
       ...customers.map((item) => item.tenant_id),
@@ -217,7 +201,6 @@ class IdentityDiagnosticsRepository {
       },
       auth_users: authUsers,
       oauth_identities: sortByCreatedAt(oauthIdentities),
-      legacy_wechat_identities: sortByCreatedAt(legacyWechatIdentities),
       memberships: sortByCreatedAt(memberships),
       customers,
       employees,
@@ -316,28 +299,6 @@ class IdentityDiagnosticsRepository {
       .order("created_at", { ascending: false });
     if (error) throw Errors.dbError("查询登录凭证失败", error);
     return (data || []) as IdentityDiagnosticOauthRecord[];
-  }
-
-  private async findLegacyWechatByOpenid(openid: string) {
-    const { data, error } = await this.from("wechat_identities")
-      .select("*")
-      .eq("openid", openid);
-    if (error) throw Errors.dbError("查询旧微信身份映射失败", error);
-    return (data || []) as IdentityDiagnosticLegacyWechatRecord[];
-  }
-
-  private async findLegacyWechatByUserId(userId: string) {
-    return this.findLegacyWechatByUserIds([userId]);
-  }
-
-  private async findLegacyWechatByUserIds(userIds: string[]) {
-    const values = unique(userIds);
-    if (values.length === 0) return [] as IdentityDiagnosticLegacyWechatRecord[];
-    const { data, error } = await this.from("wechat_identities")
-      .select("*")
-      .in("auth_user_id", values);
-    if (error) throw Errors.dbError("查询旧微信身份映射失败", error);
-    return (data || []) as IdentityDiagnosticLegacyWechatRecord[];
   }
 
   private async findMembershipsByUserId(userId: string) {
@@ -443,12 +404,6 @@ function unique(values: Array<string | null | undefined>) {
 
 function uniqueById<T extends { id: string }>(items: T[]) {
   return Array.from(new Map(items.map((item) => [item.id, item])).values());
-}
-
-function uniqueLegacyWechat(items: IdentityDiagnosticLegacyWechatRecord[]) {
-  return Array.from(
-    new Map(items.map((item) => [`${item.auth_user_id}:${item.openid}`, item])).values(),
-  );
 }
 
 function sortByCreatedAt<T extends { created_at?: string | null }>(items: T[]) {

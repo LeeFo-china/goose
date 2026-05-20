@@ -54,8 +54,6 @@ const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
 const CUSTOMER_ACCEPTANCE_LIST_CACHE_TTL_MS = 10_000;
 const MAX_CUSTOMER_ACCEPTANCE_LIST_CACHE_SIZE = 2_000;
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 type AcceptanceImageSource = "acceptance_item" | "rectification_item";
 
 type AcceptanceImageItem = {
@@ -224,15 +222,6 @@ class ProjectAcceptanceService {
     ].join(":");
   }
 
-  private getAuthIdentitySource(): AuthIdentitySource {
-    const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
-    if (value === "legacy" || value === "membership") {
-      return value;
-    }
-
-    return "dual";
-  }
-
   private async listCustomerProfilesByMembership(
     authUserId: string,
     scope?: {
@@ -276,30 +265,7 @@ class ProjectAcceptanceService {
       customerId?: string | null;
     },
   ) {
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource === "membership") {
-      const customers = await this.listCustomerProfilesByMembership(authUserId, scope);
-      if (customers.length > 1) {
-        throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
-      }
-      return customers[0] || null;
-    }
-
-    const legacyCustomer = await projectAcceptanceRepository.getCustomerByAuthUserId(
-      authUserId,
-      scope,
-    );
-    if (identitySource === "legacy") {
-      return legacyCustomer;
-    }
-
-    const membershipCustomers = await this.listCustomerProfilesByMembership(authUserId, scope);
-    const customerMap = new Map<string, ProjectAcceptanceCustomerRow>();
-    for (const customer of [...membershipCustomers, ...(legacyCustomer ? [legacyCustomer] : [])]) {
-      customerMap.set(customer.id, customer);
-    }
-
-    const customers = Array.from(customerMap.values());
+    const customers = await this.listCustomerProfilesByMembership(authUserId, scope);
     if (customers.length > 1) {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
     }

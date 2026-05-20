@@ -236,10 +236,6 @@ class AdminAuthService {
       deactivateOtherSameType: true,
       source: "admin_web_login",
     });
-    await userIdentityService.observeLegacyIdentityStateBestEffort({
-      userId: authUserId,
-      source: "admin_web_login",
-    });
 
     if (verificationCode) {
       await adminAuthRepository.markVerificationCodeVerified(verificationCode.id);

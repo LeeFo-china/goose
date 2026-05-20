@@ -41,8 +41,6 @@ import {
 } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 type CustomerProjectLogCommentAuthor = {
   id: string;
   name: string | null;
@@ -129,15 +127,6 @@ class CustomerSelfServiceController extends BaseController {
     super("customer-self-service");
   }
 
-  private getAuthIdentitySource(): AuthIdentitySource {
-    const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
-    if (value === "legacy" || value === "membership") {
-      return value;
-    }
-
-    return "dual";
-  }
-
   private async getRequiredAuthUserId(request: FastifyRequest) {
     const authUserId = request.user?.sub;
     if (!authUserId) {
@@ -209,47 +198,6 @@ class CustomerSelfServiceController extends BaseController {
   }
 
   private async getCustomerProfileByAuthUserId(
-    authUserId: string,
-    options?: {
-      required?: boolean;
-      tenantId?: string | null;
-      customerId?: string | null;
-    },
-  ) {
-    const identitySource = this.getAuthIdentitySource();
-    if (identitySource === "membership") {
-      return this.getCustomerProfileByMembership(authUserId, options);
-    }
-
-    let list = await customerSelfServiceService.listLegacyCustomerProfilesByAuthUserId(
-      authUserId,
-      options,
-    );
-    if (identitySource === "dual") {
-      const membershipCustomers = await this.listCustomerProfilesByMembership(
-        authUserId,
-        options,
-      );
-      const customerMap = new Map<string, CustomerContextRow>();
-      for (const customer of [...membershipCustomers, ...list]) {
-        customerMap.set(customer.id, customer);
-      }
-      list = Array.from(customerMap.values());
-    }
-
-    if (list.length > 1) {
-      throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
-    }
-
-    const customer = list[0] || null;
-    if (!customer && options?.required) {
-      throw Errors.forbidden();
-    }
-
-    return customer;
-  }
-
-  private async getCustomerProfileByMembership(
     authUserId: string,
     options?: {
       required?: boolean;

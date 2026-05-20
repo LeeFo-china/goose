@@ -246,7 +246,6 @@ class WechatRebindRequestService {
     tenantId: string;
     identityType: "customer" | "employee";
     identityId: string;
-    legacyUserId?: string | null;
   }) {
     const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
       userId: input.userId,
@@ -254,7 +253,7 @@ class WechatRebindRequestService {
       identityType: input.identityType,
       identityId: input.identityId,
     });
-    if (hasActiveMembership || input.legacyUserId === input.userId) {
+    if (hasActiveMembership) {
       return;
     }
 
@@ -299,7 +298,6 @@ class WechatRebindRequestService {
       identityId: user.customer_id,
     });
     await this.assertActiveWechatOauth(user);
-    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
     await userIdentityService.unbindOauthIdentityBestEffort({
       userId: user.sub,
       platform: "wechat_mini",
@@ -344,10 +342,8 @@ class WechatRebindRequestService {
       tenantId: user.tenant_id,
       identityType: "employee",
       identityId: user.employee_id,
-      legacyUserId: employee.user_id,
     });
     await this.assertActiveWechatOauth(user);
-    await wechatRebindRequestRepository.deleteWechatIdentity(user.sub);
     await userIdentityService.unbindOauthIdentityBestEffort({
       userId: user.sub,
       platform: "wechat_mini",

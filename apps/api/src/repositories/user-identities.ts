@@ -34,13 +34,6 @@ export type UserBusinessMembershipRecord = {
   updated_at: string;
 };
 
-export type LegacyBusinessBindingRecord = {
-  id: string;
-  tenant_id: string | null;
-  user_id: string | null;
-  status?: string | null;
-};
-
 export type UserAuthEventRecord = {
   id: string;
   user_id: string | null;
@@ -90,6 +83,25 @@ class UserIdentityRepository {
       .eq("platform", platform)
       .eq("openid", openid)
       .eq("status", "active")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询用户登录凭证失败", error);
+    }
+
+    return (data || null) as UserOAuthIdentityRecord | null;
+  }
+
+  async findActiveOauthIdentityByUserId(input: {
+    userId: string;
+    platform: OAuthPlatform;
+  }) {
+    const { data, error } = await this.from("user_oauth_identities")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("platform", input.platform)
+      .eq("status", "active")
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -320,30 +332,6 @@ class UserIdentityRepository {
     if (error) {
       throw Errors.dbError("解绑用户业务身份失败", error);
     }
-  }
-
-  async listLegacyCustomerBindings(userId: string) {
-    const { data, error } = await this.from("customers")
-      .select("id, tenant_id, user_id")
-      .eq("user_id", userId);
-
-    if (error) {
-      throw Errors.dbError("查询旧客户身份失败", error);
-    }
-
-    return (data || []) as LegacyBusinessBindingRecord[];
-  }
-
-  async listLegacyEmployeeBindings(userId: string) {
-    const { data, error } = await this.from("employees")
-      .select("id, tenant_id, user_id, status")
-      .eq("user_id", userId);
-
-    if (error) {
-      throw Errors.dbError("查询旧员工身份失败", error);
-    }
-
-    return (data || []) as LegacyBusinessBindingRecord[];
   }
 
   async recordAuthEvent(input: {

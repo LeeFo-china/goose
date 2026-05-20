@@ -7,8 +7,6 @@ import { Errors } from "@/errors/error-factory";
 import { userIdentityService } from "@/services/user-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 
-type AuthIdentitySource = "legacy" | "dual" | "membership";
-
 const CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS = 10_000;
 const MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE = 4_000;
 
@@ -21,11 +19,9 @@ class WechatCustomerIdentityService {
 
   private customerTenantOptionsCacheKey(input: {
     authUserId: string;
-    identitySource: AuthIdentitySource;
     includeProjectSummary?: boolean;
   }) {
     return [
-      input.identitySource,
       input.includeProjectSummary ? "summary" : "lean",
       input.authUserId,
     ].join(":");
@@ -139,7 +135,6 @@ class WechatCustomerIdentityService {
 
   private async loadCustomerTenantOptionsByAuthUser(input: {
     authUserId: string;
-    identitySource: AuthIdentitySource;
     includeProjectSummary?: boolean;
   }) {
     const maybeEnrich = (customers: WechatCustomerTenantOption[]) => (
@@ -148,34 +143,11 @@ class WechatCustomerIdentityService {
         : customers
     );
 
-    if (input.identitySource === "membership") {
-      return maybeEnrich(await this.listCustomerTenantOptionsByMembership(input.authUserId));
-    }
-
-    const legacyCustomers = this.filterActiveTenantCustomers(
-      await wechatCustomerIdentityRepository.listCustomerTenantOptionsByAuthUserId(
-        input.authUserId,
-      ),
-    );
-
-    if (input.identitySource === "legacy") {
-      return maybeEnrich(legacyCustomers);
-    }
-
-    const membershipCustomers = await this.listCustomerTenantOptionsByMembership(
-      input.authUserId,
-    );
-    const customerMap = new Map<string, WechatCustomerTenantOption>();
-    for (const customer of [...membershipCustomers, ...legacyCustomers]) {
-      customerMap.set(customer.id, customer);
-    }
-
-    return maybeEnrich(Array.from(customerMap.values()));
+    return maybeEnrich(await this.listCustomerTenantOptionsByMembership(input.authUserId));
   }
 
   async listCustomerTenantOptionsByAuthUser(input: {
     authUserId: string;
-    identitySource: AuthIdentitySource;
     includeProjectSummary?: boolean;
   }) {
     const cacheKey = this.customerTenantOptionsCacheKey(input);
