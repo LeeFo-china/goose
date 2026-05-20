@@ -363,27 +363,57 @@ class CustomerSelfServiceController extends BaseController {
     page: number;
     pageSize: number;
     include?: "home_summary";
+    request?: FastifyRequest;
   }) {
     const from = (input.page - 1) * input.pageSize;
     const to = from + input.pageSize - 1;
 
+    const projectsStartedAt = Date.now();
     const { list: projectRows, count } = await customerSelfServiceService.listOwnedProjects({
       customerId: input.customer.id,
       tenantId: input.customer.tenant_id!,
       from,
       to,
     });
+    input.request?.log.info(
+      {
+        requestId: input.request.id,
+        durationMs: Date.now() - projectsStartedAt,
+        customerId: input.customer.id,
+        tenantId: input.customer.tenant_id,
+        count: projectRows.length,
+        total: count || 0,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
+      "[customer-bootstrap] owned projects loaded",
+    );
 
     const list = projectRows.map((item) =>
       this.serializeCustomerProjectListItem(item)
     );
 
-    const recentLogMap = input.include === "home_summary"
-      ? await this.listRecentLogSummariesForProjects(
+    let recentLogMap: Awaited<
+      ReturnType<CustomerSelfServiceController["listRecentLogSummariesForProjects"]>
+    > | null = null;
+    if (input.include === "home_summary") {
+      const recentLogsStartedAt = Date.now();
+      const loadedRecentLogMap = await this.listRecentLogSummariesForProjects(
         input.customer.id,
         list.map((item) => item.id),
-      )
-      : null;
+      );
+      recentLogMap = loadedRecentLogMap;
+      input.request?.log.info(
+        {
+          requestId: input.request.id,
+          durationMs: Date.now() - recentLogsStartedAt,
+          customerId: input.customer.id,
+          projectCount: list.length,
+          recentLogProjectCount: loadedRecentLogMap.size,
+        },
+        "[customer-bootstrap] recent log summaries loaded",
+      );
+    }
 
     return {
       list: list.map((item) => ({
@@ -817,28 +847,66 @@ class CustomerSelfServiceController extends BaseController {
 
   @Get("/customer/bootstrap")
   async getCustomerBootstrap(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
     const authUserId = await this.getRequiredAuthUserId(request);
+    const customerStartedAt = Date.now();
     const customer = await this.getCustomerProfileFromRequest(request, {
       required: true,
     });
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - customerStartedAt,
+        authUserId,
+        customerId: customer?.id ?? null,
+        tenantId: customer?.tenant_id ?? null,
+      },
+      "[customer-bootstrap] customer context loaded",
+    );
     const queryResult = CustomerBootstrapQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const { page, pageSize, include } = queryResult.data;
+    const userProfileStartedAt = Date.now();
+    const userProfilePromise = this.getUserProfileByAuthUserId(authUserId)
+      .then((userProfile) => {
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - userProfileStartedAt,
+            authUserId,
+            hasUserProfile: Boolean(userProfile),
+          },
+          "[customer-bootstrap] user profile loaded",
+        );
+        return userProfile;
+      });
     const [userProfile, projects] = await Promise.all([
-      this.getUserProfileByAuthUserId(authUserId),
+      userProfilePromise,
       this.buildCustomerProjectsPayload({
         customer: customer!,
         page,
         pageSize,
         include,
+        request,
       }),
     ]);
 
-    return ResponseHandler.success({
+    const response = {
       context: this.serializeCustomerContext(authUserId, customer!, userProfile),
       projects,
-    });
+    };
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - startedAt,
+        authUserId,
+        customerId: customer?.id ?? null,
+        projectCount: projects.list.length,
+      },
+      "[customer-bootstrap] bootstrap resolved",
+    );
+    return ResponseHandler.success(response);
   }
 
   @Get("/customer/projects")
@@ -856,6 +924,7 @@ class CustomerSelfServiceController extends BaseController {
         page,
         pageSize,
         include,
+        request,
       }),
     );
   }
