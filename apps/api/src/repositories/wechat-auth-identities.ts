@@ -59,7 +59,7 @@ class WechatAuthIdentityRepository {
       .delete()
       .eq("auth_user_id", input.authUserId)
       .eq("openid", input.openid)
-      .select("id");
+      .select("auth_user_id");
 
     if (error) {
       throw Errors.dbError("清理已解绑微信身份映射失败", error);
@@ -71,7 +71,7 @@ class WechatAuthIdentityRepository {
       .from("wechat_identities")
       .delete()
       .eq("openid", openid)
-      .select("id");
+      .select("auth_user_id");
 
     if (error) {
       throw Errors.dbError("清理旧微信身份映射失败", error);
@@ -88,7 +88,7 @@ class WechatAuthIdentityRepository {
       auth_user_id: input.authUserId,
       openid: input.openid,
       unionid: input.unionid ?? null,
-    }).select("id");
+    }).select("auth_user_id");
 
     if (error) {
       throw Errors.dbError(input.errorMessage || "创建微信身份映射失败", error);
@@ -105,7 +105,7 @@ class WechatAuthIdentityRepository {
       .update({ auth_user_id: input.toAuthUserId })
       .eq("auth_user_id", input.fromAuthUserId)
       .eq("openid", input.openid)
-      .select("id");
+      .select("auth_user_id");
 
     if (error) {
       throw Errors.dbError("更新微信身份映射失败", error);
