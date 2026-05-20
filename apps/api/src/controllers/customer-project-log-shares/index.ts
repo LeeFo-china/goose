@@ -73,6 +73,13 @@ class CustomerProjectLogSharesController extends BaseController {
     return request.user?.sub;
   }
 
+  private getCustomerProjectScope(request: FastifyRequest) {
+    return {
+      customerId: request.user?.customer_id ?? null,
+      tenantId: request.user?.tenant_id ?? null,
+    };
+  }
+
   private buildAbsoluteUrl(request: FastifyRequest, path: string) {
     const proto = (request.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim()
       || request.protocol
@@ -280,6 +287,7 @@ class CustomerProjectLogSharesController extends BaseController {
     const data = await customerProjectLogShareService.getCustomerProjectCampaignSummary(
       authUserId,
       paramsResult.data.projectId,
+      this.getCustomerProjectScope(request),
     );
 
     return ResponseHandler.success({
@@ -299,6 +307,7 @@ class CustomerProjectLogSharesController extends BaseController {
     const data = await customerProjectLogShareService.getOrCreateCustomerAppointmentRewardCampaign(
       authUserId,
       paramsResult.data.projectId,
+      this.getCustomerProjectScope(request),
     );
 
     return ResponseHandler.success(this.withCampaignType(data));
@@ -313,6 +322,7 @@ class CustomerProjectLogSharesController extends BaseController {
     const data = await customerProjectLogShareService.getCustomerAppointmentRewardCampaign(
       authUserId,
       paramsResult.data.projectId,
+      this.getCustomerProjectScope(request),
     );
 
     const voucherToken = data.reward_claim_voucher?.voucher_token;

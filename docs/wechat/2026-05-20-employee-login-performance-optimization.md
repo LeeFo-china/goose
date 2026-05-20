@@ -307,13 +307,16 @@ API 当前处理步骤：
 - `/customer/projects` 增加 10 秒 per-customer/per-tenant/per-page 短缓存。
 - 客户身份绑定、资料更新会清理或覆盖对应短缓存。
 - `/auth` 返回 customer session 前后台预热 `/auth/me/customer-context` 需要的客户档案和用户资料；小程序紧接着请求时可命中同一个 in-flight 或短缓存。
-- `/customer/projects/:projectId/share-campaigns/summary` 增加 10 秒 per-auth-user/per-project 短缓存和 in-flight 合并，用于降低客户项目详情页重复刷新等待。
+- `/customer/projects/:projectId/share-campaigns/summary` 增加 60 秒 per-customer/per-project 短缓存和 in-flight 合并，用于降低客户项目详情页重复刷新等待。
 - membership 模式下，如果当前账号只有 customer membership，`/auth` 直接推导 `roles: ["customer"]`，不再额外查询角色表。
-- `/customer/projects/:projectId/appointment-reward-campaign` 对“未命中活动”的 404 增加 10 秒负缓存和 in-flight 合并，避免项目详情页重复等待慢 404。
+- `/customer/projects/:projectId/appointment-reward-campaign` 对“未命中活动”的 404 增加 300 秒负缓存和 in-flight 合并，避免项目详情页重复等待慢 404。
 - `/auth` 客户租户选项改为 lean 查询：单租户 customer 自动登录不再加载项目数和最近项目名；只有返回 `select_tenant` 时才补充项目概览。
 - `/customer/project-acceptances` 增加 10 秒 per-auth-user/per-tenant/per-customer/per-query 短缓存和 in-flight 合并；列表详情从逐条补齐改为批量补齐 items、actions、project、参与人和短信通知记录，减少客户项目详情页首次加载时的远端查询轮次。
-- `/customer/projects/:projectId/share-campaigns/summary` 首次请求改为并行读取客户项目归属和分享配置，并提前并行读取最近图片日志；同一首屏内复用 customer、ownedProject、projectTenant、marketingCampaign 匹配和 recent image log 的 10 秒热点缓存/in-flight。
-- `/customer/projects/:projectId/appointment-reward-campaign` 首次请求改为并行读取客户项目归属和预约奖励活动匹配；未命中活动时仍保留 10 秒负缓存，同一首屏内复用 ownedProject、projectTenant 和 marketingCampaign 匹配结果。
+- `/customer/projects/:projectId/share-campaigns/summary` 首次请求改为并行读取客户项目归属和分享配置，并提前并行读取最近图片日志；同一首屏内复用 customer、ownedProject、projectTenant、marketingCampaign 匹配和 recent image log 的热点缓存/in-flight。
+- `/customer/projects/:projectId/appointment-reward-campaign` 首次请求改为并行读取客户项目归属和预约奖励活动匹配；未命中活动时仍保留负缓存，同一首屏内复用 ownedProject、projectTenant 和 marketingCampaign 匹配结果。
+- `/customer/projects/:projectId/share-campaigns/summary` 和 `/customer/projects/:projectId/appointment-reward-campaign` 现在优先使用 customer token 中的 `customer_id/tenant_id` 做项目归属校验，避免首个请求再次通过 `auth_user_id` 反查客户身份。
+- 分享 summary 的活动配置读取改为并行读取营销活动匹配和旧项目配置；当回退旧配置时不再额外串行等待。
+- 带 `customer_id/tenant_id` 的本地 service 验证结果：分享 summary 未预热约 `2281ms`，缓存命中约 `0ms`；预约奖励未命中活动约 `1103ms`，负缓存命中约 `0ms`。
 - `/customer/projects/:projectId` 增加 10 秒 per-customer/per-tenant/per-project 短缓存和 in-flight；`/customer/projects` 列表返回时同步预热项目详情缓存，降低列表后立刻进详情的重复项目查询。
 - `/customer/projects/:projectId/logs` 增加 10 秒 per-project/per-tenant/per-page 日志列表缓存和日志评论聚合缓存，减少页面 onShow 或详情页并发刷新时的重复日志查询。
 - `/auth` 客户租户选项关键读查询增加 8 秒快速超时和 1 次瞬时网络错误重试，避免 Supabase socket 短暂断开时单次登录卡到几十秒。
@@ -322,7 +325,7 @@ API 当前处理步骤：
 边界：
 
 - 该阶段只优化客户自助端重复请求和首屏串行等待，不改变员工身份判断。
-- 缓存 TTL 仍保持 10 秒，避免客户资料、项目列表、项目详情、日志、验收列表和营销活动状态长时间陈旧。
+- 客户资料、项目列表、项目详情、日志、验收列表仍保持短 TTL；项目详情扩展活动接口按读场景放宽到 60 秒 summary 缓存和 300 秒预约奖励未命中负缓存。
 - 如果后续要继续优化验收列表首个请求，需要进一步拆分列表轻量响应和详情响应，避免列表页同步返回完整验收项、操作记录和通知记录。
 
 ### 阶段 7：清理旧兼容登录热路径
@@ -454,5 +457,5 @@ API 当前处理步骤：
 
 1. 小程序端先补 employee/customer 登录态门禁，杜绝 `/auth` 未完成时抢跑业务接口。
 2. 小程序端拆分客户项目详情页首屏和活动/验收扩展数据，避免分享 summary、预约奖励、验收列表阻塞页面主体。
-3. API 继续优化 customer tenant options、project acceptances、share summary 的首个请求耗时。
+3. API 继续优化 customer project acceptances 和客户项目详情日志/活动扩展的首个请求耗时。
 4. 完成 visitor、customer、employee 三条真实登录回归后，记录耗时日志并关闭本轮登录链路清理。
