@@ -7,7 +7,7 @@ import { userIdentityService } from "@/services/user-identities";
 
 type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
 
-const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 10_000;
+const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 30_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 60_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
 const AUTH_TIMING_LOG_MIN_DURATION_MS = 100;

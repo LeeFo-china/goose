@@ -468,8 +468,13 @@ Authorization: Bearer <employee_token>
 - 同一个 `wx.login()` code 只能使用一次，失败重试必须重新调用 `wx.login()`。
 - 页面 onShow / 初始化不要重复并发调用 `/auth`。
 - 退出登录后必须先清空旧 token 和用户态，再进入登录状态机。
+- “已有 token 恢复”和“重新登录 / wx.login”是互斥流程，不能同一轮同时执行。
+- 如果本轮已经决定调用 `wx.login()` 和 `/auth`，必须先取消或忽略旧 token 触发的 `/employee/bootstrap`、`/home_stats`、`/task-center/todos/summary`、`/customers`、`/projects/status`。
+- 如果本轮走已有 token 恢复，只允许请求 `/employee/bootstrap`；不要同时触发新的 `/auth`，除非 bootstrap 返回 `401/403` 或 token 已明确过期。
 - 新一轮 `/auth` 未完成、未写入新 token 前，不要并发请求员工首页接口：
   - `/auth/me/permissions`
+  - `/auth/me/profile`
+  - `/employee/bootstrap`
   - `/home_stats`
   - `/task-center/todos/summary`
   - `/customers`
@@ -488,6 +493,61 @@ Authorization: Bearer <employee_token>
 5. `auth_failed`：清理本次 code 和临时状态，重新触发必须重新调用 `wx.login()`。
 
 首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。页面 `onShow` 如果发现状态已经是 `employee_ready`，也必须先检查本轮 `/employee/bootstrap` 是否完成；未完成时不能抢跑 `/auth/me/permissions`、`/auth/me/profile`、`/home_stats`、`/task-center/todos/summary`、`/projects/status` 或 `/customers`。
+
+### 员工恢复登录和重新登录互斥
+
+本地日志已出现过反例：小程序先用旧 token 请求 `/employee/bootstrap`，随后又调用 `wx.login()` 和 `POST /auth`。这种混合流程会导致用户先等待一次旧 token bootstrap，再等待真正的 `/auth`，体感变慢。
+
+端上必须拆成两个互斥入口：
+
+#### A. 已有 token 恢复
+
+适用场景：
+
+- 应用冷启动或页面 onShow 发现本地存在 employee token。
+- 用户没有主动点击“重新登录”。
+- token 未明确过期。
+
+请求顺序：
+
+1. 进入 `restoring_employee` 状态。
+2. 只发一个 `GET /employee/bootstrap`。
+3. 多个页面需要员工首页状态时，复用同一个 bootstrap Promise。
+4. bootstrap 成功后进入 `employee_ready`。
+5. bootstrap 返回 `401/403` 后，清空旧 token 和所有 in-flight，再进入 `anonymous` 或 `authenticating`。
+
+禁止事项：
+
+- `restoring_employee` 状态下不要调用 `wx.login()`。
+- `restoring_employee` 状态下不要并发请求 `/auth`。
+- bootstrap 未完成前，不要请求 `/home_stats`、`/task-center/todos/summary`、`/customers`、`/projects/status`。
+
+#### B. 重新登录 / wx.login
+
+适用场景：
+
+- 用户主动点击登录。
+- 退出登录后重新进入。
+- bootstrap 已返回 `401/403`。
+- token 已明确过期。
+
+请求顺序：
+
+1. 进入 `authenticating` 状态。
+2. 同步清空旧 token、旧角色、旧员工态。
+3. 取消或标记废弃旧 token 触发的所有 in-flight 请求。
+4. 调用 `wx.login()`。
+5. 请求 `POST /auth`。
+6. `/auth` 返回 `mode: "employee"` 后写入新 token。
+7. 进入 `employee_ready`。
+8. 请求 `GET /employee/bootstrap`。
+
+禁止事项：
+
+- `authenticating` 状态下不要用旧 token 请求 `/employee/bootstrap`。
+- 新 token 写入前，不要请求任何员工首页接口。
+- 同一轮只允许一个 `/auth` in-flight。
+- 同一轮只允许一个 `/employee/bootstrap` in-flight。
 
 ### 客户登录态门禁
 
@@ -898,6 +958,49 @@ Authorization: Bearer <employee_token>
 - 首屏不要等待 `home_stats` 或 `task_summary` 才展示首页框架。
 - bootstrap 返回后再分别拉 `/home_stats`、`/task-center/todos/summary`、`/projects/status`、`/customers`。
 - 同一轮恢复登录只允许一个 `/employee/bootstrap` in-flight，多个页面复用同一个 Promise。
+
+## 2026-05-20 21:40 auth-plugin 鉴权缓存窗口
+
+轻量 bootstrap 后，理想链路已经出现：
+
+- `/employee/bootstrap`：约 `1ms`
+- `/home_stats`：约 `1ms`
+- `/task-center/todos/summary`：约 `0ms`
+- `/customers`：约 `1ms`
+- `/projects/status`：约 `2ms`
+
+但当小程序在十几秒后再次触发员工首页接口时，auth-plugin 的微信 OAuth / business binding 校验缓存已经过期，后续 `/home_stats`、`/task-center/todos/summary`、`/customers`、`/projects/status` 会重新等待一轮远端身份校验，单接口可能增加 `0.7s - 1.6s`。
+
+已完成 API 调整：
+
+- auth-plugin 微信身份校验默认缓存 TTL 从 `10s` 调整为 `30s`。
+- 仍可通过 `WECHAT_IDENTITY_CHECK_CACHE_TTL_MS` 覆盖，最大值保持 `60s`。
+- 同一 token 的并发请求继续复用 in-flight 校验；30 秒窗口用于覆盖登录后首页、页面 onShow 和延迟分区请求。
+
+边界：
+
+- 该缓存只缓存校验成功结果。
+- 身份绑定变化后，最坏会在短 TTL 内继续接受旧 token；因此默认只扩大到 30 秒，不做长期缓存。
+
+## 2026-05-20 21:48 小程序互斥登录流程对接
+
+小程序最新两轮登录日志显示：
+
+- 先出现旧 token 的 `/employee/bootstrap`，耗时约 `5.1s - 5.9s`。
+- 随后又出现 `POST /auth`，耗时约 `2.6s`。
+- `/auth` 后的新 token bootstrap 命中缓存，约 `2ms`。
+- `/home_stats`、`/task-center/todos/summary` 在 `/auth` 后约 `1ms`。
+
+结论：
+
+- API 侧 `/auth` 后的 bootstrap 和首屏缓存链路已经生效。
+- 当前慢点来自小程序端把“已有 token 恢复”和“重新登录 / wx.login”混在同一轮执行。
+
+小程序端必须按“员工恢复登录和重新登录互斥”章节调整：
+
+- 已有 token 恢复：只请求 `/employee/bootstrap`，不要同时发 `/auth`。
+- 重新登录：先清空旧 token 和旧 in-flight，再发 `/auth`，`/auth` 成功后再请求 `/employee/bootstrap`。
+- 同一轮只允许一个 `/auth` in-flight 和一个 `/employee/bootstrap` in-flight。
 
 ## 验收标准
 
