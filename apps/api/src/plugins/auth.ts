@@ -246,6 +246,28 @@ function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
   }
 }
 
+export function primeWechatIdentityCheckCacheFromToken(token: string) {
+  const payload = verifyToken(token);
+  if (!payload?.sub || !payload.openid) {
+    return;
+  }
+
+  const identitySource = getAuthIdentitySource();
+  if (identitySource !== "legacy") {
+    setWechatIdentityCheckCache(
+      buildWechatIdentityCheckCacheKey("oauth", payload),
+      payload,
+    );
+  }
+
+  if (payload.tenant_id && (payload.customer_id || payload.employee_id)) {
+    setWechatIdentityCheckCache(
+      buildWechatIdentityCheckCacheKey("business", payload),
+      payload,
+    );
+  }
+}
+
 async function logAuthStage<T>(
   request: FastifyRequest,
   stage: string,

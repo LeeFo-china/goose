@@ -6,7 +6,8 @@ import { Errors } from "@/errors/error-factory";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
-import { signToken, signVisitorSessionToken } from "@/utils/jwt";
+import { signToken, signVisitorSessionToken, type JwtPayload } from "@/utils/jwt";
+import { primeWechatIdentityCheckCacheFromToken } from "@/plugins/auth";
 import {
   ReviewWechatRebindRequestSchema,
   SendCodeSchema,
@@ -203,6 +204,12 @@ export class WeChatController extends BaseController {
     return true;
   }
 
+  private signWechatAuthToken(payload: Omit<JwtPayload, "iat" | "exp">) {
+    const token = signToken(payload);
+    primeWechatIdentityCheckCacheFromToken(token);
+    return token;
+  }
+
   private setCachedVisitorOnlyAuthUser(authUserId: string) {
     this.visitorOnlyAuthUserCache.set(authUserId, {
       expiresAt: Date.now() + VISITOR_ONLY_AUTH_USER_CACHE_TTL_MS,
@@ -267,7 +274,7 @@ export class WeChatController extends BaseController {
   }) {
     return {
       mode: "platform_visitor",
-      token: signToken({
+      token: this.signWechatAuthToken({
         sub: input.authUserId,
         openid: input.openid,
         login_channel: "wechat",
@@ -341,7 +348,7 @@ export class WeChatController extends BaseController {
 
     return {
       authContext,
-      token: signToken({
+      token: this.signWechatAuthToken({
         sub: authUserId,
         openid: openid ?? undefined,
         login_channel: "wechat",
@@ -520,7 +527,7 @@ export class WeChatController extends BaseController {
     }
 
     if (customerOptions.length > 1) {
-      const token = signToken({
+      const token = this.signWechatAuthToken({
         sub: userId,
         openid: wxData.openid,
         login_channel: "wechat",
@@ -537,7 +544,7 @@ export class WeChatController extends BaseController {
       }, "登录成功");
     }
 
-    const token = signToken({
+    const token = this.signWechatAuthToken({
       sub: userId,
       openid: wxData.openid,
       login_channel: "wechat",
@@ -1476,7 +1483,7 @@ export class WeChatController extends BaseController {
     this.assertCustomerTenantAvailable(input.customer);
     const roles = await this.getUserRoles(input.authUserId);
     const normalizedRoles = roles.includes("customer") ? roles : [...roles, "customer"];
-    const token = signToken({
+    const token = this.signWechatAuthToken({
       sub: input.authUserId,
       openid: input.openid ?? undefined,
       roles: normalizedRoles,
@@ -1618,7 +1625,7 @@ export class WeChatController extends BaseController {
 
     if (customers.length === 0) {
       const roles = await this.getUserRoles(authUserId);
-      const token = signToken({
+      const token = this.signWechatAuthToken({
         sub: authUserId,
         openid: openid ?? undefined,
         roles,
@@ -1655,7 +1662,7 @@ export class WeChatController extends BaseController {
     }
 
     const roles = await this.getUserRoles(authUserId);
-    const token = signToken({
+    const token = this.signWechatAuthToken({
       sub: authUserId,
       openid: openid ?? undefined,
       roles,
