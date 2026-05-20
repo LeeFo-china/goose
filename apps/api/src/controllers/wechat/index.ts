@@ -64,6 +64,8 @@ const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
 
+const VISITOR_ONLY_AUTH_USER_CACHE_TTL_MS = 60_000;
+
 const CustomerTenantSelectBodySchema = z.object({
   tenant_id: z.uuid("无效的租户 ID"),
   customer_id: z.uuid("无效的客户 ID"),
@@ -78,6 +80,8 @@ const H5MarketingSessionBodySchema = z.object({
 });
 
 export class WeChatController extends BaseController {
+  private visitorOnlyAuthUserCache = new Map<string, { expiresAt: number }>();
+
   constructor() {
     super("wechat");
   }
@@ -173,6 +177,95 @@ export class WeChatController extends BaseController {
       user_id: null,
       visitor_id: input.visitorId,
       roles: ["visitor"],
+      is_new_user: input.isNewUser,
+      tenant: null,
+      employee: null,
+      customer: null,
+      has_customer_profile: false,
+    };
+  }
+
+  private clearVisitorOnlyAuthUserCache(authUserId: string) {
+    this.visitorOnlyAuthUserCache.delete(authUserId);
+  }
+
+  private getCachedVisitorOnlyAuthUser(authUserId: string) {
+    const cached = this.visitorOnlyAuthUserCache.get(authUserId);
+    if (!cached) {
+      return false;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.visitorOnlyAuthUserCache.delete(authUserId);
+      return false;
+    }
+
+    return true;
+  }
+
+  private setCachedVisitorOnlyAuthUser(authUserId: string) {
+    this.visitorOnlyAuthUserCache.set(authUserId, {
+      expiresAt: Date.now() + VISITOR_ONLY_AUTH_USER_CACHE_TTL_MS,
+    });
+  }
+
+  private async isMembershipVisitorOnlyAuthUser(
+    request: FastifyRequest,
+    authUserId: string,
+  ) {
+    if (this.getAuthIdentitySource() !== "membership") {
+      return false;
+    }
+
+    if (this.getCachedVisitorOnlyAuthUser(authUserId)) {
+      request.log.info(
+        { requestId: request.id, userId: authUserId, source: "memory" },
+        "[auth] visitor only auth user resolved",
+      );
+      return true;
+    }
+
+    const startedAt = Date.now();
+    const memberships = await userIdentityService.listActiveBusinessMemberships({
+      userId: authUserId,
+    });
+    const isVisitorOnly = memberships.length === 0;
+    if (isVisitorOnly) {
+      this.setCachedVisitorOnlyAuthUser(authUserId);
+    } else {
+      this.clearVisitorOnlyAuthUserCache(authUserId);
+    }
+
+    request.log.info(
+      {
+        requestId: request.id,
+        userId: authUserId,
+        durationMs: Date.now() - startedAt,
+        membershipCount: memberships.length,
+        isVisitorOnly,
+      },
+      "[auth] visitor only auth user checked",
+    );
+
+    return isVisitorOnly;
+  }
+
+  private createAuthUserVisitorResponse(input: {
+    authUserId: string;
+    openid: string;
+    roles: string[];
+    isNewUser: boolean;
+  }) {
+    return {
+      mode: "platform_visitor",
+      token: signToken({
+        sub: input.authUserId,
+        openid: input.openid,
+        login_channel: "wechat",
+        roles: input.roles,
+      }),
+      user_id: input.authUserId,
+      roles: input.roles,
       is_new_user: input.isNewUser,
       tenant: null,
       employee: null,
@@ -309,6 +402,28 @@ export class WeChatController extends BaseController {
       { requestId: request.id, userId, durationMs: Date.now() - resolveIdentityStartedAt },
       "[auth] resolved auth user",
     );
+
+    const visitorOnlyStartedAt = Date.now();
+    if (await this.isMembershipVisitorOnlyAuthUser(request, userId)) {
+      request.log.info(
+        {
+          requestId: request.id,
+          userId,
+          durationMs: Date.now() - visitorOnlyStartedAt,
+          totalMs: Date.now() - startedAt,
+        },
+        "[auth] resolved existing visitor login context",
+      );
+      return ResponseHandler.success(
+        this.createAuthUserVisitorResponse({
+          authUserId: userId,
+          openid: wxData.openid,
+          roles: ["visitor"],
+          isNewUser,
+        }),
+        "登录成功",
+      );
+    }
 
     const rolesStartedAt = Date.now();
     const roles = await this.getUserRoles(userId);
@@ -505,11 +620,13 @@ export class WeChatController extends BaseController {
 
     if (target_role === "employee") {
       const bindStartedAt = Date.now();
+      this.clearVisitorOnlyAuthUserCache(authUserId);
       const employeeAuthUserId = await this.bindEmployeeRole(
         authUserId,
         phone,
         requestOpenid,
       );
+      this.clearVisitorOnlyAuthUserCache(employeeAuthUserId);
       request.log.info(
         {
           requestId: request.id,
@@ -599,6 +716,7 @@ export class WeChatController extends BaseController {
     }
 
     const customerStartedAt = Date.now();
+    this.clearVisitorOnlyAuthUserCache(authUserId);
     const customerLogin = await this.resolveCustomerLoginState(
       authUserId,
       phone,

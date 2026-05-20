@@ -163,6 +163,17 @@ API 当前处理步骤：
 - `/projects/frontend-visible` 与 `/ai/decoration-qa/suggestions` 并发请求。
 - 小程序本地保留上次项目列表和推荐问题，二次进入先展示本地缓存，再静默刷新服务端数据。
 
+### 阶段 0.3：已补建 visitor auth user 快路径
+
+后台补建 visitor auth user 后，同一个 openid 再次登录会命中 active OAuth identity。此时如果继续走完整角色解析，会重新等待 `getUserRoles()` 和空的 customer tenant options 查询。
+
+优化策略：
+
+- 在 `AUTH_IDENTITY_SOURCE=membership` 下，active OAuth 命中后先检查 `user_business_memberships`。
+- 如果没有任何 active business membership，直接返回 visitor 登录上下文。
+- 该 visitor-only 判定结果内存缓存 60 秒。
+- 员工 / 客户身份验证开始时主动清理相关 auth user 的 visitor-only 缓存，避免身份升级后误判。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：
