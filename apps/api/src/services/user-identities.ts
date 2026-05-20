@@ -7,7 +7,7 @@ import {
   type UserOAuthIdentityRecord,
 } from "@/repositories/user-identities";
 
-const IDENTITY_LOOKUP_CACHE_TTL_MS = 10_000;
+const IDENTITY_LOOKUP_CACHE_TTL_MS = 60_000;
 const MAX_IDENTITY_LOOKUP_CACHE_SIZE = 4_000;
 
 type BusinessMembershipSyncInput = {

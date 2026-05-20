@@ -34,6 +34,25 @@ export type WechatCustomerProjectSummaryRow = {
   created_at: string | null;
 };
 
+export type WechatLoginMembershipRow = {
+  membership_id: string;
+  user_id: string;
+  tenant_id: string | null;
+  identity_type: string;
+  identity_id: string;
+  status: string;
+  is_default: boolean;
+  customer_id: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_user_id: string | null;
+  customer_origin: string | null;
+  customer_claimed_at: string | null;
+  tenant_name: string | null;
+  tenant_slug: string | null;
+  tenant_status: string | null;
+};
+
 const AUTH_READ_QUERY_TIMEOUT_MS = 8_000;
 const AUTH_READ_QUERY_MAX_ATTEMPTS = 2;
 const AUTH_READ_QUERY_RETRY_DELAY_MS = 150;
@@ -229,6 +248,20 @@ class WechatCustomerIdentityRepository {
     }
 
     return (data || null) as unknown as WechatCustomerTenantOption | null;
+  }
+
+  async listWechatLoginMemberships(authUserId: string) {
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient.rpc("list_wechat_login_memberships", {
+        p_user_id: authUserId,
+      })
+    );
+
+    if (error) {
+      throw Errors.dbError("查询微信登录业务身份失败", error);
+    }
+
+    return (data || []) as WechatLoginMembershipRow[];
   }
 
   async listProjectSummariesByCustomerIds(customerIds: string[]) {

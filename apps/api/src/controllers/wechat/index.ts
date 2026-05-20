@@ -60,6 +60,10 @@ type WechatAuthResolution =
     isNewUser: true;
   };
 
+type ActiveBusinessMembership = Awaited<
+  ReturnType<typeof userIdentityService.listActiveBusinessMemberships>
+>[number];
+
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
 });
@@ -472,14 +476,36 @@ export class WeChatController extends BaseController {
       "[auth] resolved auth user",
     );
 
-    const visitorOnlyStartedAt = Date.now();
-    const visitorState = await this.resolveMembershipVisitorState(request, userId);
+    const loginMembershipStartedAt = Date.now();
+    const loginMembershipState = await wechatCustomerIdentityService
+      .resolveWechatLoginMembershipState(userId);
+    const visitorState = {
+      isVisitorOnly: loginMembershipState.memberships.length === 0,
+      memberships: loginMembershipState.memberships,
+    };
+    if (visitorState.isVisitorOnly) {
+      this.setCachedVisitorOnlyAuthUser(userId);
+    } else {
+      this.clearVisitorOnlyAuthUserCache(userId);
+    }
+    request.log.info(
+      {
+        requestId: request.id,
+        userId,
+        durationMs: Date.now() - loginMembershipStartedAt,
+        membershipCount: visitorState.memberships.length,
+        customerOptionCount: loginMembershipState.customerOptions.length,
+        isVisitorOnly: visitorState.isVisitorOnly,
+        source: "login_memberships",
+      },
+      "[auth] visitor only auth user checked",
+    );
     if (visitorState.isVisitorOnly) {
       request.log.info(
         {
           requestId: request.id,
           userId,
-          durationMs: Date.now() - visitorOnlyStartedAt,
+          durationMs: Date.now() - loginMembershipStartedAt,
           totalMs: Date.now() - startedAt,
         },
         "[auth] resolved existing visitor login context",
@@ -591,13 +617,14 @@ export class WeChatController extends BaseController {
     }
 
     const customerOptionsStartedAt = Date.now();
-    const customerOptions = await this.listCustomerTenantOptionsByAuthUser(userId);
+    const customerOptions = loginMembershipState.customerOptions;
     request.log.info(
       {
         requestId: request.id,
         userId,
         durationMs: Date.now() - customerOptionsStartedAt,
         count: customerOptions.length,
+        source: "login_memberships",
       },
       "[auth] resolved customer tenant options",
     );
@@ -621,6 +648,7 @@ export class WeChatController extends BaseController {
     if (customerOptions.length > 1) {
       const enrichedCustomerOptions = await this.listCustomerTenantOptionsByAuthUser(userId, {
         includeProjectSummary: true,
+        memberships: visitorState.memberships ?? undefined,
       });
       const token = this.signWechatAuthToken({
         sub: userId,
@@ -850,6 +878,7 @@ export class WeChatController extends BaseController {
     const customerStartedAt = Date.now();
     this.clearVisitorOnlyAuthUserCache(authUserId);
     const customerLogin = await this.resolveCustomerLoginState(
+      request,
       authUserId,
       phone,
       requestOpenid,
@@ -1104,15 +1133,17 @@ export class WeChatController extends BaseController {
         },
         "[auth] resolved user by active oauth identity",
       );
-      this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
-        userIdentityService.syncOauthIdentityBestEffort({
-          userId: activeOauthIdentity.user_id,
-          platform: "wechat_mini",
-          openid,
-          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
-          source: "wechat_auth_oauth_primary",
-        })
-      );
+      if (unionid && unionid !== activeOauthIdentity.unionid) {
+        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+          userIdentityService.syncOauthIdentityBestEffort({
+            userId: activeOauthIdentity.user_id,
+            platform: "wechat_mini",
+            openid,
+            unionid,
+            source: "wechat_auth_oauth_primary",
+          })
+        );
+      }
 
       return {
         kind: "auth_user",
@@ -1273,8 +1304,19 @@ export class WeChatController extends BaseController {
 
   private async listCustomerTenantOptionsByAuthUser(
     authUserId: string,
-    options?: { includeProjectSummary?: boolean },
+    options?: {
+      includeProjectSummary?: boolean;
+      memberships?: ActiveBusinessMembership[];
+    },
   ) {
+    if (options?.memberships) {
+      return wechatCustomerIdentityService.listCustomerTenantOptionsByMemberships({
+        authUserId,
+        memberships: options.memberships,
+        includeProjectSummary: options.includeProjectSummary,
+      });
+    }
+
     return wechatCustomerIdentityService.listCustomerTenantOptionsByAuthUser({
       authUserId,
       includeProjectSummary: options?.includeProjectSummary,
@@ -1353,41 +1395,84 @@ export class WeChatController extends BaseController {
   }
 
   private async bindCustomerToAuthUser(
+    request: FastifyRequest | null,
     authUserId: string,
     customer: CustomerTenantOption,
     options?: {
       openid?: string | null;
     },
   ) {
+    const logCustomerBindStage = (
+      stage: string,
+      startedAt: number,
+      extra: Record<string, unknown> = {},
+    ) => {
+      request?.log.info(
+        {
+          requestId: request.id,
+          stage,
+          durationMs: Date.now() - startedAt,
+          ...extra,
+        },
+        "[auth] customer bind stage completed",
+      );
+    };
+
+    const membershipStartedAt = Date.now();
     const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
       userId: authUserId,
       tenantId: customer.tenant_id,
       identityType: "customer",
       identityId: customer.id,
     });
+    logCustomerBindStage("current_membership_checked", membershipStartedAt, {
+      authUserId,
+      customerId: customer.id,
+      hasActiveMembership,
+    });
 
     if (customer.user_id && customer.user_id !== authUserId && !hasActiveMembership) {
+      const existingOpenidStartedAt = Date.now();
       const existingOpenid = await this.findOpenIdByAuthUserId(customer.user_id);
+      logCustomerBindStage("existing_customer_openid_checked", existingOpenidStartedAt, {
+        customerAuthUserId: customer.user_id,
+        hasExistingOpenid: Boolean(existingOpenid),
+      });
       if (existingOpenid) {
+        const rebindStartedAt = Date.now();
         await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
+        logCustomerBindStage("customer_rebind_checked", rebindStartedAt, {
+          customerAuthUserId: customer.user_id,
+        });
       }
 
       if (!options?.openid) {
         throw Errors.badRequest("当前账号未绑定微信身份");
       }
 
+      const oauthStartedAt = Date.now();
       await userIdentityService.syncOauthIdentityBestEffort({
         userId: customer.user_id,
         platform: "wechat_mini",
         openid: options.openid,
         source: "customer_verify_role_bind_existing_auth_user",
       });
+      logCustomerBindStage("oauth_identity_synced", oauthStartedAt, {
+        customerAuthUserId: customer.user_id,
+      });
+
+      const membershipSyncStartedAt = Date.now();
       await userIdentityService.syncBusinessMembershipBestEffort({
         userId: customer.user_id,
         tenantId: customer.tenant_id,
         identityType: "customer",
         identityId: customer.id,
         source: "customer_verify_role_bind_existing_auth_user",
+      });
+      logCustomerBindStage("business_membership_synced", membershipSyncStartedAt, {
+        customerAuthUserId: customer.user_id,
+        customerId: customer.id,
+        tenantId: customer.tenant_id,
       });
       authorizationService.invalidateAuthContext({ authUserId });
       authorizationService.invalidateAuthContext({ authUserId: customer.user_id });
@@ -1395,7 +1480,11 @@ export class WeChatController extends BaseController {
     }
 
     if (!hasActiveMembership) {
+      const rebindStartedAt = Date.now();
       await wechatRebindRequestService.assertCustomerCanBind(authUserId, customer);
+      logCustomerBindStage("customer_rebind_checked", rebindStartedAt, {
+        customerAuthUserId: customer.user_id,
+      });
     }
 
     if (customer.user_id === authUserId && hasActiveMembership) {
@@ -1403,12 +1492,18 @@ export class WeChatController extends BaseController {
     }
 
     if (customer.user_id === authUserId) {
+      const membershipSyncStartedAt = Date.now();
       await userIdentityService.syncBusinessMembershipBestEffort({
         userId: authUserId,
         tenantId: customer.tenant_id,
         identityType: "customer",
         identityId: customer.id,
         source: "customer_bind_auth_user_existing",
+      });
+      logCustomerBindStage("business_membership_synced", membershipSyncStartedAt, {
+        authUserId,
+        customerId: customer.id,
+        tenantId: customer.tenant_id,
       });
       return authUserId;
     }
@@ -1419,15 +1514,22 @@ export class WeChatController extends BaseController {
       });
     }
 
+    const bindStartedAt = Date.now();
     await wechatCustomerIdentityService.bindCustomerAuthUser({
       authUserId,
       customer,
+    });
+    logCustomerBindStage("customer_auth_user_bound", bindStartedAt, {
+      authUserId,
+      customerId: customer.id,
+      tenantId: customer.tenant_id,
     });
 
     authorizationService.invalidateAuthContext({
       authUserId,
     });
 
+    const membershipSyncStartedAt = Date.now();
     await userIdentityService.syncBusinessMembershipBestEffort({
       userId: authUserId,
       tenantId: customer.tenant_id,
@@ -1435,11 +1537,17 @@ export class WeChatController extends BaseController {
       identityId: customer.id,
       source: "customer_bind_auth_user",
     });
+    logCustomerBindStage("business_membership_synced", membershipSyncStartedAt, {
+      authUserId,
+      customerId: customer.id,
+      tenantId: customer.tenant_id,
+    });
 
     return authUserId;
   }
 
   private async resolveCustomerLoginState(
+    request: FastifyRequest,
     authUserId: string,
     phone: string,
     openid: string | null,
@@ -1480,6 +1588,7 @@ export class WeChatController extends BaseController {
     if (customers.length === 1) {
       const customer = customers[0]!;
       const customerAuthUserId = await this.bindCustomerToAuthUser(
+        request,
         authUserId,
         customer,
         { openid },
@@ -1491,6 +1600,8 @@ export class WeChatController extends BaseController {
           ...customer,
           user_id: customerAuthUserId,
         },
+        roles: ["customer"],
+        request,
       });
     }
 
@@ -1596,6 +1707,7 @@ export class WeChatController extends BaseController {
     }
 
     const customerAuthUserId = await this.bindCustomerToAuthUser(
+      null,
       input.authUserId,
       customer,
       { openid: input.openid },
