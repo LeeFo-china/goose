@@ -254,6 +254,70 @@ API 当前处理步骤：
 - 登录后的首个 `/auth/me/permissions` 从约 `2s+` 降到预热完成后的毫秒级。
 - 即使权限接口追上预热任务，也只等待同一次查询，不重复打远端 Supabase。
 
+### 阶段 2.4：员工首页 bootstrap 合并入口
+
+2026-05-20 已调整：
+
+- 新增 `GET /employee/bootstrap`。
+- 该接口要求 employee token，服务端会一次性完成：
+  - 当前员工完整 `context`。
+  - 首页统计 `home_stats`。
+  - 任务中心摘要 `task_summary`。
+- 服务端响应后会后台预热：
+  - `/projects/status?page=1&pageSize=20&ownership=self`
+  - `/customers?page=1&pageSize=20`
+- `projects_mode` 和 `customers_mode` 当前固定返回 `defer`，表示项目列表和客户列表仍由小程序后续请求，但这些请求可复用服务端预热产生的 in-flight 或短缓存。
+
+接口示例：
+
+```http
+GET /employee/bootstrap
+Authorization: Bearer <employee_token>
+```
+
+响应结构：
+
+```json
+{
+  "data": {
+    "context": {
+      "authUserId": "...",
+      "tenantId": "...",
+      "employeeId": "...",
+      "roles": [],
+      "permissions": []
+    },
+    "home_stats": {},
+    "task_summary": {},
+    "projects_mode": "defer",
+    "projects": null,
+    "customers_mode": "defer",
+    "customers": null
+  },
+  "message": "success"
+}
+```
+
+小程序端接入要求：
+
+- `/auth` 返回 `mode: "employee"` 后，先写入新 token，再进入 `employee_ready`。
+- `employee_ready` 后优先请求 `GET /employee/bootstrap`。
+- 小程序不要再在登录完成后立即并发请求：
+  - `/auth/me/permissions`
+  - `/home_stats`
+  - `/task-center/todos/summary`
+- 上述三类数据改为从 `/employee/bootstrap` 读取。
+- 项目列表和客户列表可以在 bootstrap 返回后再请求：
+  - `/projects/status?page=1&pageSize=20&ownership=self`
+  - `/customers?page=1&pageSize=20`
+- 页面首屏应先用 bootstrap 的 `home_stats` 和 `task_summary` 渲染，再逐步填充项目和客户列表。
+
+预期收益：
+
+- 登录后首页首批请求从至少 3 条员工上下文相关接口，收敛为 1 条 bootstrap。
+- `/auth/me/permissions` 不再作为员工首页首屏必需接口。
+- 项目 / 客户首屏仍保留短缓存和 in-flight 合并，但不阻塞 bootstrap 返回。
+
 ### 阶段 3：提高 auth context 缓存命中
 
 当前 `authorizationService` 缓存 TTL 是 `30s`。开发和小程序登录场景可以考虑：
@@ -624,6 +688,52 @@ API 当前处理步骤：
 - 权限上下文 RPC 生效，首个权限接口等待时间明显下降。
 - 当前体验剩余主要来自微信官方接口、一次登录态 RPC，以及员工首页多个业务接口并发冷读。
 - 下一步如果继续优化，应优先做员工首页 bootstrap，把 `/home_stats`、`/task-center/todos/summary`、`/projects/status`、`/customers` 的首屏必要数据合并或分层返回。
+
+## 2026-05-20 20:42 员工首页数据预热
+
+已完成 API 调整：
+
+- `customerCoreService.listCustomers()` 增加 10 秒 per-user/per-query in-flight/cache。
+- 客户列表默认分支里 `count` 与 `rows` 改为并行请求，减少串行远端读。
+- 员工登录返回后，后台新增 `prewarm_employee_home_data`：
+  - 等待完整 auth context 预热完成。
+  - 预热 `/home_stats` 对应的 `homeDashboardService.getStats()`。
+  - 预热 `/task-center/todos/summary` 对应的 `taskCenterService.getSummary()`。
+  - 预热 `/projects/status?page=1&pageSize=20&ownership=self` 对应的项目首屏。
+  - 预热 `/customers?page=1&pageSize=20` 对应的客户首屏核心数据。
+
+下一次员工登录重点看：
+
+- 是否出现 `[auth] background task completed` 且 `task=prewarm_employee_home_data`。
+- 登录后的 `/home_stats`、`/task-center/todos/summary`、`/projects/status` 是否命中 in-flight/cache。
+- `/customers` 至少核心列表应命中缓存；属性摘要、来源摘要、手机号隐私上下文仍可能产生额外远端读。
+
+## 2026-05-20 20:50 员工首页预热验证结果
+
+最新一次员工登录：
+
+- `/auth`：约 `3.3s`
+  - `jscode2session`：约 `2.1s`
+  - `resolve_wechat_login_state_by_openid`：约 `1.2s`
+  - 员工轻量上下文：`2ms`
+- `prewarm_employee_auth_context`：约 `1.4s`
+- `/auth/me/permissions`：约 `1.4s`
+- `/home_stats`：约 `0.9s`
+- `/task-center/todos/summary`：约 `1.3s`
+- `/customers`：约 `1.5s`
+- `/projects/status`：约 `1.6s`
+- `prewarm_employee_home_data`：约 `5.5s`
+
+结论：
+
+- `prewarm_employee_home_data` 已执行，但小程序在 `/auth/me/permissions` 返回后立刻请求首页接口，预热任务尚未完成。
+- 首页接口当前主要是在复用 in-flight，而不是读取已完成缓存。
+- `/home_stats` 已降到 1 秒内；任务、客户、项目仍在 1.3s - 1.6s。
+
+下一步建议：
+
+- API 侧继续做员工首页 bootstrap，按“先返回首屏必须数据、延迟返回扩展列表”的方式减少小程序并发接口数。
+- 小程序侧不要把 `/auth/me/permissions` 作为唯一首屏闸门后立即并发所有首页接口；可以先展示员工首页框架和核心统计，项目/客户/任务分区异步加载。
 
 ## 验收标准
 

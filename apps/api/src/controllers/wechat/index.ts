@@ -21,6 +21,10 @@ import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
 import { customerSelfServiceService } from "@/services/customer-self-service";
+import { customerCoreService } from "@/services/customer-core";
+import { homeDashboardService } from "@/services/home-dashboard";
+import { taskCenterService } from "@/services/task-center";
+import { projectSer } from "@/services/projects";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
@@ -161,6 +165,32 @@ export class WeChatController extends BaseController {
         employeeId,
       })
     );
+    this.runAuthBackgroundTask(request, "prewarm_employee_home_data", async () => {
+      const authContext = await authorizationService.prewarmEmployeeAuthContext({
+        authUserId,
+        employeeId,
+      });
+
+      await Promise.allSettled([
+        homeDashboardService.getStats(authContext),
+        taskCenterService.getSummary(authContext),
+        projectSer.listProjects({
+          authContext,
+          query: {
+            page: 1,
+            pageSize: 20,
+            ownership: "self",
+          },
+        }),
+        customerCoreService.listCustomers({
+          authContext,
+          query: {
+            page: 1,
+            pageSize: 20,
+          },
+        }),
+      ]);
+    });
   }
 
   private buildVisitorSessionId(openid: string) {

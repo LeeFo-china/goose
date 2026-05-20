@@ -31,6 +31,7 @@ import ExpenseRequestsController from "@/controllers/expense-requests";
 import RolesController from "@/controllers/roles";
 import PermissionsController from "@/controllers/permissions";
 import EmployeePermissionsController from "@/controllers/employee-permissions";
+import EmployeeSelfServiceController from "@/controllers/employee-self-service";
 import TaskCenterController from "@/controllers/task-center";
 import CustomerSelfServiceController from "@/controllers/customer-self-service";
 import CustomerProjectLogSharesController from "@/controllers/customer-project-log-shares";
@@ -118,6 +119,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   UploadController.registerExtraRoutes(app);
   ProjectLogCommentsController.registerExtraRoutes(app);
   EmployeePermissionsController.registerExtraRoutes(app);
+  EmployeeSelfServiceController.registerExtraRoutes(app);
   TaskCenterController.registerExtraRoutes(app);
   CustomerSelfServiceController.registerExtraRoutes(app);
   CustomerProjectLogSharesController.registerExtraRoutes(app);
