@@ -93,6 +93,10 @@ const CustomerProjectListQuerySchema = PaginationQuerySchema.extend({
   include: optionalCustomerQueryValue(z.enum(["home_summary"])),
 });
 
+const CustomerBootstrapQuerySchema = PaginationQuerySchema.extend({
+  include: optionalCustomerQueryValue(z.enum(["home_summary"])).default("home_summary"),
+});
+
 const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
   pageSize: z.coerce.number().int().min(1, "每页条数必须大于 0").max(
     20,
@@ -330,6 +334,70 @@ class CustomerSelfServiceController extends BaseController {
       avatar_path: userProfile?.avatar_path ?? null,
       profile_completed: Boolean(userProfile?.profile_completed_at),
       profile_completed_at: userProfile?.profile_completed_at ?? null,
+    };
+  }
+
+  private serializeCustomerContext(
+    authUserId: string,
+    customer: CustomerContextRow | null,
+    userProfile: UserProfileRow | null,
+  ) {
+    const tenant = customer ? this.normalizeTenantRelation(customer.tenant) : null;
+
+    return {
+      mode: customer ? "customer" : "platform_visitor",
+      auth_user_id: authUserId,
+      customer_id: customer?.id ?? null,
+      tenant_id: customer?.tenant_id ?? null,
+      tenant_status: tenant?.status ?? null,
+      customer_name: customer?.name ?? null,
+      has_customer_profile: Boolean(customer),
+      nickname: userProfile?.nickname ?? null,
+      avatar: this.getImagePublicUrl(userProfile?.avatar_path),
+      profile_completed: Boolean(userProfile?.profile_completed_at),
+    };
+  }
+
+  private async buildCustomerProjectsPayload(input: {
+    customer: CustomerContextRow;
+    page: number;
+    pageSize: number;
+    include?: "home_summary";
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    const { list: projectRows, count } = await customerSelfServiceService.listOwnedProjects({
+      customerId: input.customer.id,
+      tenantId: input.customer.tenant_id!,
+      from,
+      to,
+    });
+
+    const list = projectRows.map((item) =>
+      this.serializeCustomerProjectListItem(item)
+    );
+
+    const recentLogMap = input.include === "home_summary"
+      ? await this.listRecentLogSummariesForProjects(
+        input.customer.id,
+        list.map((item) => item.id),
+      )
+      : null;
+
+    return {
+      list: list.map((item) => ({
+        ...item,
+        ...(recentLogMap
+          ? { recent_logs: recentLogMap.get(item.id) || [] }
+          : {}),
+      })),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: count || 0,
+        totalPages: count ? Math.ceil(count / input.pageSize) : 0,
+      },
     };
   }
 
@@ -697,20 +765,10 @@ class CustomerSelfServiceController extends BaseController {
     }
     this.assertCustomerTenantAvailable(customer);
     const userProfile = await this.getUserProfileByAuthUserId(authUserId);
-    const tenant = customer ? this.normalizeTenantRelation(customer.tenant) : null;
 
-    return ResponseHandler.success({
-      mode: customer ? "customer" : "platform_visitor",
-      auth_user_id: authUserId,
-      customer_id: customer?.id ?? null,
-      tenant_id: customer?.tenant_id ?? null,
-      tenant_status: tenant?.status ?? null,
-      customer_name: customer?.name ?? null,
-      has_customer_profile: Boolean(customer),
-      nickname: userProfile?.nickname ?? null,
-      avatar: this.getImagePublicUrl(userProfile?.avatar_path),
-      profile_completed: Boolean(userProfile?.profile_completed_at),
-    });
+    return ResponseHandler.success(
+      this.serializeCustomerContext(authUserId, customer, userProfile),
+    );
   }
 
   @Get("/auth/me/profile")
@@ -757,6 +815,32 @@ class CustomerSelfServiceController extends BaseController {
     );
   }
 
+  @Get("/customer/bootstrap")
+  async getCustomerBootstrap(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const customer = await this.getCustomerProfileFromRequest(request, {
+      required: true,
+    });
+    const queryResult = CustomerBootstrapQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const { page, pageSize, include } = queryResult.data;
+    const [userProfile, projects] = await Promise.all([
+      this.getUserProfileByAuthUserId(authUserId),
+      this.buildCustomerProjectsPayload({
+        customer: customer!,
+        page,
+        pageSize,
+        include,
+      }),
+    ]);
+
+    return ResponseHandler.success({
+      context: this.serializeCustomerContext(authUserId, customer!, userProfile),
+      projects,
+    });
+  }
+
   @Get("/customer/projects")
   async listCustomerProjects(request: FastifyRequest, reply: FastifyReply) {
     const customer = await this.getCustomerProfileFromRequest(request, {
@@ -766,41 +850,14 @@ class CustomerSelfServiceController extends BaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const { page, pageSize, include } = queryResult.data;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    const { list: projectRows, count } = await customerSelfServiceService.listOwnedProjects({
-      customerId: customer!.id,
-      tenantId: customer!.tenant_id!,
-      from,
-      to,
-    });
-
-    const list = projectRows.map((item) =>
-      this.serializeCustomerProjectListItem(item)
-    );
-
-    const recentLogMap = include === "home_summary"
-      ? await this.listRecentLogSummariesForProjects(
-        customer!.id,
-        list.map((item) => item.id),
-      )
-      : null;
-
-    return ResponseHandler.success({
-      list: list.map((item) => ({
-        ...item,
-        ...(recentLogMap
-          ? { recent_logs: recentLogMap.get(item.id) || [] }
-          : {}),
-      })),
-      pagination: {
+    return ResponseHandler.success(
+      await this.buildCustomerProjectsPayload({
+        customer: customer!,
         page,
         pageSize,
-        total: count || 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
-      },
-    });
+        include,
+      }),
+    );
   }
 
   @Get("/customer/projects/:id")

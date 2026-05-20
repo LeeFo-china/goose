@@ -400,6 +400,7 @@ API 当前处理步骤：
 `authenticating` 阶段禁止提前请求：
 
 - `/auth/me/customer-context`
+- `/customer/bootstrap`
 - `/auth/me/profile`
 - `/customer/projects`
 - `/customer/projects/:id`
@@ -412,9 +413,38 @@ API 当前处理步骤：
 
 1. `/auth` 完成，写入新 token、`mode`、`tenant_id`、`customer_id`。
 2. 进入 `customer_ready`。
-3. 先请求 `/auth/me/customer-context` 和 `/customer/projects`。
-4. 只有用户进入具体项目详情页时，再请求项目详情、日志、验收、预约奖励和分享 summary。
-5. 预约奖励和分享活动不是进入客户首页的阻塞条件，建议延后加载；接口未返回前展示局部骨架或隐藏活动卡片。
+3. 客户首页优先请求 `/customer/bootstrap?page=1&pageSize=20&include=home_summary`。
+4. `/customer/bootstrap` 会一次返回 `context` 和 `projects`，小程序不要再并发请求 `/auth/me/customer-context`、`/customer/projects`、`/customer/projects?include=home_summary`。
+5. 只有用户进入具体项目详情页时，再请求项目详情、日志、验收、预约奖励和分享 summary。
+6. 预约奖励和分享活动不是进入客户首页的阻塞条件，建议延后加载；接口未返回前展示局部骨架或隐藏活动卡片。
+
+`/customer/bootstrap` 响应结构：
+
+```ts
+{
+  context: {
+    mode: "customer";
+    auth_user_id: string;
+    customer_id: string;
+    tenant_id: string;
+    tenant_status: string | null;
+    customer_name: string | null;
+    has_customer_profile: boolean;
+    nickname: string | null;
+    avatar: string | null;
+    profile_completed: boolean;
+  };
+  projects: {
+    list: Array<CustomerProject & { recent_logs?: CustomerRecentLog[] }>;
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  };
+}
+```
 
 端上去重要求：
 
