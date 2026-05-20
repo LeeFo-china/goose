@@ -370,6 +370,7 @@ export class WeChatController extends BaseController {
 
   @Post("/auth/verify-role")
   async verifyRole(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
     if (!request.user?.sub) {
       throw Errors.unauthorized();
     }
@@ -391,26 +392,56 @@ export class WeChatController extends BaseController {
       ReturnType<typeof smsVerificationCodeService.findValidPending>
     > | null = null;
 
+    request.log.info(
+      { requestId: request.id, targetRole: target_role, scene },
+      "[auth] verify role start",
+    );
+
     if (!skipCodeVerification) {
       if (!normalizedCode) {
         throw Errors.badRequest("请输入验证码");
       }
 
+      const verifySmsStartedAt = Date.now();
       verificationRecord = await smsVerificationCodeService.findValidPending({
         phone,
         scene,
         code: normalizedCode,
       });
+      request.log.info(
+        {
+          requestId: request.id,
+          targetRole: target_role,
+          durationMs: Date.now() - verifySmsStartedAt,
+          found: Boolean(verificationRecord),
+        },
+        "[auth] verify role sms checked",
+      );
       if (!verificationRecord) {
         throw Errors.badRequest("验证码错误或已过期");
       }
+    } else {
+      request.log.info(
+        { requestId: request.id, targetRole: target_role },
+        "[auth] verify role sms skipped",
+      );
     }
 
     if (target_role === "employee") {
+      const bindStartedAt = Date.now();
       const employeeAuthUserId = await this.bindEmployeeRole(
         request.user.sub,
         phone,
         request.user.openid ?? null,
+      );
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - bindStartedAt,
+          fromAuthUserId: request.user.sub,
+          toAuthUserId: employeeAuthUserId,
+        },
+        "[auth] verify role employee bound",
       );
 
       authorizationService.invalidateAuthContext({
@@ -423,20 +454,63 @@ export class WeChatController extends BaseController {
       }
 
       if (verificationRecord) {
+        const markVerifiedStartedAt = Date.now();
         await smsVerificationCodeService.markVerified(verificationRecord.id);
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - markVerifiedStartedAt,
+          },
+          "[auth] verify role sms marked verified",
+        );
       }
 
+      const openidStartedAt = Date.now();
       const openid = await this.getOpenIdByAuthUserId(employeeAuthUserId);
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - openidStartedAt,
+          hasOpenid: Boolean(openid),
+        },
+        "[auth] verify role openid resolved",
+      );
+      const rolesStartedAt = Date.now();
       const roles = await this.getUserRoles(employeeAuthUserId);
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - rolesStartedAt,
+          roles,
+        },
+        "[auth] verify role roles resolved",
+      );
+      const contextStartedAt = Date.now();
       const employeeLogin = await this.buildEmployeeLoginContext(
         employeeAuthUserId,
         openid,
         roles,
       );
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - contextStartedAt,
+          hasEmployeeLogin: Boolean(employeeLogin),
+        },
+        "[auth] verify role employee context resolved",
+      );
       if (!employeeLogin) {
         throw Errors.badRequest("该手机号未绑定员工身份");
       }
 
+      request.log.info(
+        {
+          requestId: request.id,
+          targetRole: target_role,
+          totalMs: Date.now() - startedAt,
+        },
+        "[auth] verify role employee completed",
+      );
       return ResponseHandler.success({
         mode: "employee",
         token: employeeLogin.token,
@@ -448,17 +522,42 @@ export class WeChatController extends BaseController {
       }, "身份验证成功");
     }
 
+    const customerStartedAt = Date.now();
     const customerLogin = await this.resolveCustomerLoginState(
       request.user.sub,
       phone,
       request.user.openid ?? null,
       bodyResult.data.share_token ?? null,
     );
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - customerStartedAt,
+        mode: customerLogin.mode,
+      },
+      "[auth] verify role customer state resolved",
+    );
 
     if (verificationRecord) {
+      const markVerifiedStartedAt = Date.now();
       await smsVerificationCodeService.markVerified(verificationRecord.id);
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - markVerifiedStartedAt,
+        },
+        "[auth] verify role sms marked verified",
+      );
     }
 
+    request.log.info(
+      {
+        requestId: request.id,
+        targetRole: target_role,
+        totalMs: Date.now() - startedAt,
+      },
+      "[auth] verify role customer completed",
+    );
     return ResponseHandler.success(customerLogin, "身份验证成功");
   }
 
@@ -708,6 +807,69 @@ export class WeChatController extends BaseController {
 
       return {
         userId: existingIdentity.auth_user_id,
+        isNewUser: false,
+      };
+    }
+
+    const legacyLookupStartedAt = Date.now();
+    const legacyUser = await this.findLegacyAuthUser(openid);
+    request.log.info(
+      {
+        requestId: request.id,
+        openid,
+        durationMs: Date.now() - legacyLookupStartedAt,
+        found: Boolean(legacyUser),
+      },
+      "[auth] legacy auth user lookup result",
+    );
+    if (legacyUser) {
+      const legacyOauthUnbound = await userIdentityService.isOauthIdentityUnbound({
+        userId: legacyUser.id,
+        platform: "wechat_mini",
+        openid,
+      });
+
+      if (legacyOauthUnbound) {
+        request.log.info(
+          { requestId: request.id, openid, userId: legacyUser.id },
+          "[auth] skip legacy identity repair for unbound oauth",
+        );
+
+        return this.createWechatVisitorUser({
+          request,
+          openid,
+          unionid: unionid || legacyUser.unionid || null,
+          uniqueEmail: true,
+          source: "wechat_auth_legacy_unbound",
+        });
+      }
+
+      this.runAuthBackgroundTask(request, "repair_legacy_wechat_identity", () =>
+        wechatAuthIdentityService.upsertIdentity({
+          authUserId: legacyUser.id,
+          openid,
+          unionid: unionid || legacyUser.unionid || null,
+          errorMessage: "补建微信身份映射失败",
+        })
+      );
+
+      request.log.info(
+        { requestId: request.id, openid, userId: legacyUser.id },
+        "[auth] repaired legacy identity mapping",
+      );
+
+      this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+        userIdentityService.syncOauthIdentityBestEffort({
+          userId: legacyUser.id,
+          platform: "wechat_mini",
+          openid,
+          unionid: unionid || legacyUser.unionid || null,
+          source: "wechat_auth_legacy_repair",
+        })
+      );
+
+      return {
+        userId: legacyUser.id,
         isNewUser: false,
       };
     }
