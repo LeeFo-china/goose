@@ -95,6 +95,43 @@ export class WeChatController extends BaseController {
     return "dual";
   }
 
+  private serializeBackgroundError(error: unknown) {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+      };
+    }
+
+    return { message: String(error) };
+  }
+
+  private runAuthBackgroundTask(
+    request: FastifyRequest,
+    task: string,
+    handler: () => Promise<unknown>,
+  ) {
+    const startedAt = Date.now();
+    void handler()
+      .then(() => {
+        request.log.info(
+          { requestId: request.id, task, durationMs: Date.now() - startedAt },
+          "[auth] background task completed",
+        );
+      })
+      .catch((error) => {
+        request.log.warn(
+          {
+            requestId: request.id,
+            task,
+            durationMs: Date.now() - startedAt,
+            error: this.serializeBackgroundError(error),
+          },
+          "[auth] background task failed",
+        );
+      });
+  }
+
   private serializeEmployeeFromAuthContext(authContext: AuthContext) {
     if (!authContext.employeeId) {
       return null;
@@ -157,6 +194,7 @@ export class WeChatController extends BaseController {
 
   @Post("/auth")
   async getOpenId(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
     const bodyResult = WeChatAuthBodySchema.safeParse(request.body);
     if (!bodyResult.success) {
       throw Errors.fromZod(bodyResult.error);
@@ -165,8 +203,17 @@ export class WeChatController extends BaseController {
     request.log.info({ requestId: request.id }, "[auth] receive code");
 
     request.log.info({ requestId: request.id }, "[auth] call wechat jscode2session start");
+    const wechatStartedAt = Date.now();
     const wxData = await this.getWeChatSession(bodyResult.data.code);
-    request.log.info({ requestId: request.id, hasOpenid: Boolean(wxData.openid), hasUnionid: Boolean(wxData.unionid) }, "[auth] call wechat jscode2session result");
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - wechatStartedAt,
+        hasOpenid: Boolean(wxData.openid),
+        hasUnionid: Boolean(wxData.unionid),
+      },
+      "[auth] call wechat jscode2session result",
+    );
 
     if (!wxData.openid) {
       throw Errors.badRequest("微信登录失败，未获取到 openid");
@@ -174,27 +221,52 @@ export class WeChatController extends BaseController {
 
     request.log.info({ requestId: request.id, openid: wxData.openid }, "[auth] parsed openid");
 
+    const resolveIdentityStartedAt = Date.now();
     const { userId, isNewUser } = await this.getOrCreateAuthUser(
       request,
       wxData.openid,
       wxData.unionid,
     );
+    request.log.info(
+      { requestId: request.id, userId, durationMs: Date.now() - resolveIdentityStartedAt },
+      "[auth] resolved auth user",
+    );
 
+    const rolesStartedAt = Date.now();
     const roles = await this.getUserRoles(userId);
-    await userIdentityService.observeLegacyIdentityStateBestEffort({
-      userId,
-      openid: wxData.openid,
-      unionid: wxData.unionid ?? null,
-      source: "wechat_auth",
-    });
+    request.log.info(
+      { requestId: request.id, userId, durationMs: Date.now() - rolesStartedAt, roles },
+      "[auth] resolved user roles",
+    );
+    this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
+      userIdentityService.observeLegacyIdentityStateBestEffort({
+        userId,
+        openid: wxData.openid,
+        unionid: wxData.unionid ?? null,
+        source: "wechat_auth",
+      })
+    );
 
     request.log.info({ requestId: request.id, userId, roles }, "[auth] resolve login context start");
+    const employeeContextStartedAt = Date.now();
     const employeeLogin = roles.includes("employee")
       ? await this.buildEmployeeLoginContext(userId, wxData.openid, roles)
       : null;
+    request.log.info(
+      {
+        requestId: request.id,
+        userId,
+        durationMs: Date.now() - employeeContextStartedAt,
+        hasEmployeeLogin: Boolean(employeeLogin),
+      },
+      "[auth] resolved employee login context result",
+    );
 
     if (employeeLogin) {
-      request.log.info({ requestId: request.id, userId }, "[auth] resolved employee login context");
+      request.log.info(
+        { requestId: request.id, userId, totalMs: Date.now() - startedAt },
+        "[auth] resolved employee login context",
+      );
       return ResponseHandler.success({
         mode: "employee",
         token: employeeLogin.token,
@@ -206,9 +278,22 @@ export class WeChatController extends BaseController {
       }, "登录成功");
     }
 
+    const customerOptionsStartedAt = Date.now();
     const customerOptions = await this.listCustomerTenantOptionsByAuthUser(userId);
+    request.log.info(
+      {
+        requestId: request.id,
+        userId,
+        durationMs: Date.now() - customerOptionsStartedAt,
+        count: customerOptions.length,
+      },
+      "[auth] resolved customer tenant options",
+    );
     if (customerOptions.length === 1) {
-      request.log.info({ requestId: request.id, userId }, "[auth] resolved customer login context");
+      request.log.info(
+        { requestId: request.id, userId, totalMs: Date.now() - startedAt },
+        "[auth] resolved customer login context",
+      );
       return ResponseHandler.success(
         await this.signCustomerSession({
           authUserId: userId,
@@ -243,7 +328,10 @@ export class WeChatController extends BaseController {
       login_channel: "wechat",
       roles,
     });
-    request.log.info({ requestId: request.id, userId }, "[auth] resolved visitor login context");
+    request.log.info(
+      { requestId: request.id, userId, totalMs: Date.now() - startedAt },
+      "[auth] resolved visitor login context",
+    );
 
     return ResponseHandler.success({
       mode: "platform_visitor",
@@ -550,18 +638,22 @@ export class WeChatController extends BaseController {
           "[auth] resolved user by active oauth identity",
         );
 
-        await this.syncLegacyWechatIdentityMapping({
-          authUserId: activeOauthIdentity.user_id,
-          openid,
-          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
-        });
-        await userIdentityService.syncOauthIdentityBestEffort({
-          userId: activeOauthIdentity.user_id,
-          platform: "wechat_mini",
-          openid,
-          unionid: unionid ?? activeOauthIdentity.unionid ?? null,
-          source: "wechat_auth_oauth_primary",
-        });
+        this.runAuthBackgroundTask(request, "sync_legacy_wechat_identity", () =>
+          this.syncLegacyWechatIdentityMapping({
+            authUserId: activeOauthIdentity.user_id,
+            openid,
+            unionid: unionid ?? activeOauthIdentity.unionid ?? null,
+          })
+        );
+        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+          userIdentityService.syncOauthIdentityBestEffort({
+            userId: activeOauthIdentity.user_id,
+            platform: "wechat_mini",
+            openid,
+            unionid: unionid ?? activeOauthIdentity.unionid ?? null,
+            source: "wechat_auth_oauth_primary",
+          })
+        );
 
         return {
           userId: activeOauthIdentity.user_id,
@@ -604,13 +696,15 @@ export class WeChatController extends BaseController {
         });
       }
 
-      await userIdentityService.syncOauthIdentityBestEffort({
-        userId: existingIdentity.auth_user_id,
-        platform: "wechat_mini",
-        openid,
-        unionid: unionid ?? existingIdentity.unionid ?? null,
-        source: "wechat_auth_existing_identity",
-      });
+      this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+        userIdentityService.syncOauthIdentityBestEffort({
+          userId: existingIdentity.auth_user_id,
+          platform: "wechat_mini",
+          openid,
+          unionid: unionid ?? existingIdentity.unionid ?? null,
+          source: "wechat_auth_existing_identity",
+        })
+      );
 
       return {
         userId: existingIdentity.auth_user_id,
@@ -654,25 +748,29 @@ export class WeChatController extends BaseController {
           });
         }
 
-        await wechatAuthIdentityService.upsertIdentity({
-          authUserId: legacyUser.id,
-          openid,
-          unionid: unionid || legacyUser.unionid || null,
-          errorMessage: "补建微信身份映射失败",
-        });
+        this.runAuthBackgroundTask(request, "repair_legacy_wechat_identity", () =>
+          wechatAuthIdentityService.upsertIdentity({
+            authUserId: legacyUser.id,
+            openid,
+            unionid: unionid || legacyUser.unionid || null,
+            errorMessage: "补建微信身份映射失败",
+          })
+        );
 
         request.log.info(
           { requestId: request.id, openid, userId: legacyUser.id },
           "[auth] repaired legacy identity mapping",
         );
 
-        await userIdentityService.syncOauthIdentityBestEffort({
-          userId: legacyUser.id,
-          platform: "wechat_mini",
-          openid,
-          unionid: unionid || legacyUser.unionid || null,
-          source: "wechat_auth_legacy_repair",
-        });
+        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+          userIdentityService.syncOauthIdentityBestEffort({
+            userId: legacyUser.id,
+            platform: "wechat_mini",
+            openid,
+            unionid: unionid || legacyUser.unionid || null,
+            source: "wechat_auth_legacy_repair",
+          })
+        );
 
         return {
           userId: legacyUser.id,
@@ -687,20 +785,24 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败");
     }
 
-    await wechatAuthIdentityService.upsertIdentity({
-      authUserId: data.user.id,
-      openid,
-      unionid: unionid || null,
-      errorMessage: "创建微信身份映射失败",
-    });
+    this.runAuthBackgroundTask(request, "create_legacy_wechat_identity", () =>
+      wechatAuthIdentityService.upsertIdentity({
+        authUserId: data.user!.id,
+        openid,
+        unionid: unionid || null,
+        errorMessage: "创建微信身份映射失败",
+      })
+    );
 
-    await userIdentityService.syncOauthIdentityBestEffort({
-      userId: data.user.id,
-      platform: "wechat_mini",
-      openid,
-      unionid: unionid || null,
-      source: "wechat_auth_create_user",
-    });
+    this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+      userIdentityService.syncOauthIdentityBestEffort({
+        userId: data.user!.id,
+        platform: "wechat_mini",
+        openid,
+        unionid: unionid || null,
+        source: "wechat_auth_create_user",
+      })
+    );
 
     request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
 
@@ -739,20 +841,24 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败");
     }
 
-    await wechatAuthIdentityService.upsertIdentity({
-      authUserId: data.user.id,
-      openid: input.openid,
-      unionid: input.unionid || null,
-      errorMessage: "创建微信身份映射失败",
-    });
+    this.runAuthBackgroundTask(input.request, "create_legacy_wechat_identity", () =>
+      wechatAuthIdentityService.upsertIdentity({
+        authUserId: data.user!.id,
+        openid: input.openid,
+        unionid: input.unionid || null,
+        errorMessage: "创建微信身份映射失败",
+      })
+    );
 
-    await userIdentityService.syncOauthIdentityBestEffort({
-      userId: data.user.id,
-      platform: "wechat_mini",
-      openid: input.openid,
-      unionid: input.unionid || null,
-      source: input.source,
-    });
+    this.runAuthBackgroundTask(input.request, "sync_oauth_identity", () =>
+      userIdentityService.syncOauthIdentityBestEffort({
+        userId: data.user!.id,
+        platform: "wechat_mini",
+        openid: input.openid,
+        unionid: input.unionid || null,
+        source: input.source,
+      })
+    );
 
     input.request.log.info(
       { requestId: input.request.id, openid: input.openid, userId: data.user.id },
