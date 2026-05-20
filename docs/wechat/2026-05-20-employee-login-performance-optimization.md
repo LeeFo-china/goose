@@ -335,10 +335,13 @@ API 当前处理步骤：
 - 新建访客 auth user 后不再后台补写 `wechat_identities`，只写 `user_oauth_identities`。
 - `/auth/me/*`、客户自助、项目验收、客户分享活动等身份解析的默认口径同步改为 membership。
 
-保留项：
+2026-05-20 后续清理已完成：
 
-- 解绑/换绑里的旧 `wechat_identities` 删除兜底暂时保留，用于清理历史残留。
-- 显式设置 `AUTH_IDENTITY_SOURCE=dual|legacy` 的回滚分支尚未物理删除；下一阶段确认无需回滚后再清代码和旧表。
+- API 运行时代码已移除 `AUTH_IDENTITY_SOURCE=dual|legacy`、旧 `wechat_identities` fallback、历史 `${openid}@wechat.local` 找回和 `find_auth_user_by_openid` 修复链路。
+- Supabase 远端已删除 `public.wechat_identities` 和 `public.find_auth_user_by_openid(text)`。
+- `list_employee_login_bindings` 已改为读取 `user_oauth_identities(platform='wechat_mini', status='active')`。
+- `apps/api/src/types/database.ts` 已重新生成，类型层也不再包含旧表和旧 RPC。
+- 小程序端不需要、也不能再依赖旧微信身份映射。登录和绑定问题统一按 `user_oauth_identities` + `user_business_memberships` 排查。
 
 ## 小程序端优化计划
 
@@ -429,9 +432,10 @@ API 当前处理步骤：
 ### API 验收
 
 - 已绑定员工再次进入小程序，`POST /auth` 成功返回 `mode: "employee"`。
-- `/auth` 不再因为旧身份映射修复失败直接 500。
+- `/auth` 不再访问旧身份映射或历史 auth user 修复链路。
 - `/auth` 日志能看到每个阶段耗时。
-- best-effort 同步失败只记 warn/error，不影响主响应。
+- OAuth/membership best-effort 同步失败只记 warn/error，不影响主响应。
+- 远端 `to_regclass('public.wechat_identities')` 和 `to_regprocedure('public.find_auth_user_by_openid(text)')` 均为 `null`。
 - `bun run api:typecheck` 通过。
 - `bun run check:permission-boundaries` 通过。
 
@@ -451,4 +455,4 @@ API 当前处理步骤：
 1. 小程序端先补 employee/customer 登录态门禁，杜绝 `/auth` 未完成时抢跑业务接口。
 2. 小程序端拆分客户项目详情页首屏和活动/验收扩展数据，避免分享 summary、预约奖励、验收列表阻塞页面主体。
 3. API 继续优化 customer tenant options、project acceptances、share summary 的首个请求耗时。
-4. 再决定是否物理删除 `AUTH_IDENTITY_SOURCE=dual|legacy` 回滚分支和旧 `wechat_identities` 表数据。
+4. 完成 visitor、customer、employee 三条真实登录回归后，记录耗时日志并关闭本轮登录链路清理。
