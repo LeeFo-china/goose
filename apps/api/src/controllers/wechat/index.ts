@@ -209,12 +209,15 @@ export class WeChatController extends BaseController {
     });
   }
 
-  private async isMembershipVisitorOnlyAuthUser(
+  private async resolveMembershipVisitorState(
     request: FastifyRequest,
     authUserId: string,
   ) {
     if (this.getAuthIdentitySource() !== "membership") {
-      return false;
+      return {
+        isVisitorOnly: false,
+        memberships: null,
+      };
     }
 
     if (this.getCachedVisitorOnlyAuthUser(authUserId)) {
@@ -222,7 +225,10 @@ export class WeChatController extends BaseController {
         { requestId: request.id, userId: authUserId, source: "memory" },
         "[auth] visitor only auth user resolved",
       );
-      return true;
+      return {
+        isVisitorOnly: true,
+        memberships: [],
+      };
     }
 
     const startedAt = Date.now();
@@ -247,7 +253,10 @@ export class WeChatController extends BaseController {
       "[auth] visitor only auth user checked",
     );
 
-    return isVisitorOnly;
+    return {
+      isVisitorOnly,
+      memberships,
+    };
   }
 
   private createAuthUserVisitorResponse(input: {
@@ -416,7 +425,8 @@ export class WeChatController extends BaseController {
     );
 
     const visitorOnlyStartedAt = Date.now();
-    if (await this.isMembershipVisitorOnlyAuthUser(request, userId)) {
+    const visitorState = await this.resolveMembershipVisitorState(request, userId);
+    if (visitorState.isVisitorOnly) {
       request.log.info(
         {
           requestId: request.id,
@@ -438,7 +448,7 @@ export class WeChatController extends BaseController {
     }
 
     const rolesStartedAt = Date.now();
-    const roles = await this.getUserRoles(userId);
+    const roles = await this.getUserRoles(userId, visitorState.memberships ?? undefined);
     request.log.info(
       { requestId: request.id, userId, durationMs: Date.now() - rolesStartedAt, roles },
       "[auth] resolved user roles",
@@ -2095,10 +2105,14 @@ export class WeChatController extends BaseController {
     return wechatAuthIdentityService.getRequiredOpenIdByAuthUserId(authUserId);
   }
 
-  private async getUserRoles(userId: string) {
+  private async getUserRoles(
+    userId: string,
+    memberships?: Parameters<typeof wechatAuthRoleService.getUserRoles>[0]["memberships"],
+  ) {
     return wechatAuthRoleService.getUserRoles({
       userId,
       identitySource: this.getAuthIdentitySource(),
+      memberships,
     });
   }
 

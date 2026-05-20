@@ -35,14 +35,16 @@ class WechatAuthRoleService {
   async getUserRoles(input: {
     userId: string;
     identitySource: AuthIdentitySource;
+    memberships?: Awaited<ReturnType<typeof userIdentityService.listActiveBusinessMemberships>>;
   }) {
     if (input.identitySource === "legacy") {
       return this.getLegacyUserRoles(input.userId);
     }
 
-    const memberships = await userIdentityService.listActiveBusinessMemberships({
-      userId: input.userId,
-    });
+    const memberships = input.memberships ??
+      await userIdentityService.listActiveBusinessMemberships({
+        userId: input.userId,
+      });
     const employeeIds = Array.from(new Set(
       memberships
         .filter((item) => item.identity_type === "employee")
