@@ -307,6 +307,27 @@ class ProjectAcceptanceService {
     return customers[0] || null;
   }
 
+  private async getCustomerByAuthUserOrScope(
+    authUserId: string,
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    if (scope?.tenantId && scope.customerId) {
+      const [customer] = await projectAcceptanceRepository.listCustomers([
+        scope.customerId,
+      ]);
+      if (customer?.tenant_id === scope.tenantId) {
+        return customer;
+      }
+
+      return null;
+    }
+
+    return this.getCustomerByAuthUserId(authUserId, scope);
+  }
+
   private getStatusLabel(status: ProjectAcceptanceStatus) {
     const labels: Record<ProjectAcceptanceStatus, string> = {
       draft: "草稿",
@@ -685,53 +706,76 @@ class ProjectAcceptanceService {
     return result;
   }
 
-  private async buildDetails(rows: ProjectAcceptanceRow[]): Promise<AcceptanceDetail[]> {
+  private async buildDetails(
+    rows: ProjectAcceptanceRow[],
+    known?: {
+      projects?: ProjectAcceptanceProjectRow[];
+      customers?: ProjectAcceptanceCustomerRow[];
+    },
+  ): Promise<AcceptanceDetail[]> {
     if (rows.length === 0) return [];
 
     const acceptanceIds = rows.map((item) => item.id);
     const tenantId = this.getCommonTenantId(rows);
+    const knownProjectMap = new Map(
+      (known?.projects || []).map((item) => [item.id, item]),
+    );
+    const missingProjectIds = Array.from(
+      new Set(rows.map((item) => item.project_id)),
+    ).filter((projectId) => !knownProjectMap.has(projectId));
     const [items, actions, projects, latestNotifications] = await Promise.all([
       projectAcceptanceRepository.listItemsByAcceptanceIds(acceptanceIds, tenantId),
       projectAcceptanceRepository.listActionsByAcceptanceIds(acceptanceIds, tenantId),
-      projectAcceptanceRepository.listProjectsByIds(
-        Array.from(new Set(rows.map((item) => item.project_id))),
-        tenantId,
-      ),
+      projectAcceptanceRepository.listProjectsByIds(missingProjectIds, tenantId),
       projectAcceptanceOpenTicketRepository.listLatestByAcceptances(
         acceptanceIds,
         tenantId,
       ),
     ]);
     const employeeIds = new Set<string>();
-    const customerIds = new Set<string>();
+    const customerMap = new Map(
+      (known?.customers || []).map((item) => [item.id, item]),
+    );
+    const missingCustomerIds = new Set<string>();
 
     for (const row of rows) {
       employeeIds.add(row.initiator_id);
       if (row.reviewer_id) employeeIds.add(row.reviewer_id);
-      if (row.customer_id) customerIds.add(row.customer_id);
+      if (row.customer_id && !customerMap.has(row.customer_id)) {
+        missingCustomerIds.add(row.customer_id);
+      }
     }
 
     for (const action of actions) {
       if (action.operator_type === "employee" && action.operator_id) {
         employeeIds.add(action.operator_id);
       }
-      if (action.operator_type === "customer" && action.operator_id) {
-        customerIds.add(action.operator_id);
+      if (
+        action.operator_type === "customer" &&
+        action.operator_id &&
+        !customerMap.has(action.operator_id)
+      ) {
+        missingCustomerIds.add(action.operator_id);
       }
     }
 
     const [employees, customers] = await Promise.all([
       projectAcceptanceRepository.listEmployees(Array.from(employeeIds)),
-      projectAcceptanceRepository.listCustomers(Array.from(customerIds)),
+      projectAcceptanceRepository.listCustomers(Array.from(missingCustomerIds)),
     ]);
     const itemsByAcceptance = this.groupBy(items, (item) => item.acceptance_id);
     const actionsByAcceptance = this.groupBy(actions, (item) => item.acceptance_id);
-    const projectMap = new Map(projects.map((item) => [item.id, item]));
+    const projectMap = new Map([
+      ...knownProjectMap,
+      ...projects.map((item) => [item.id, item] as const),
+    ]);
     const notificationMap = new Map(
       latestNotifications.map((item) => [item.acceptance_id, item]),
     );
     const employeeMap = new Map(employees.map((item) => [item.id, item]));
-    const customerMap = new Map(customers.map((item) => [item.id, item]));
+    for (const customer of customers) {
+      customerMap.set(customer.id, customer);
+    }
 
     return rows.map((row) =>
       this.buildDetailFromParts(row, {
@@ -1301,17 +1345,20 @@ class ProjectAcceptanceService {
       customerId?: string | null;
     },
   ): Promise<CustomerAcceptanceListResult> {
-    const customer = await this.getCustomerByAuthUserId(
-      authUserId,
-      scope,
-    );
+    const customerPromise = this.getCustomerByAuthUserOrScope(authUserId, scope);
+    const projectPromise = scope?.tenantId
+      ? projectAcceptanceRepository.getProject(query.project_id, scope.tenantId)
+      : null;
+    const customer = await customerPromise;
     if (!customer) throw Errors.forbidden();
     this.assertCustomerTenantAvailable(customer);
 
-    const project = await projectAcceptanceRepository.getProject(
-      query.project_id,
-      customer.tenant_id,
-    );
+    const project = projectPromise
+      ? await projectPromise
+      : await projectAcceptanceRepository.getProject(
+        query.project_id,
+        customer.tenant_id,
+      );
     if (
       !project ||
       project.customer_id !== customer.id ||
@@ -1327,7 +1374,10 @@ class ProjectAcceptanceService {
     });
 
     return {
-      list: await this.buildDetails(list),
+      list: await this.buildDetails(list, {
+        projects: [project],
+        customers: [customer],
+      }),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,

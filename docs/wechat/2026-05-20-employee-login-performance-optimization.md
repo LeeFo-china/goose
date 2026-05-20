@@ -317,12 +317,13 @@ API 当前处理步骤：
 - `/customer/projects/:projectId` 增加 10 秒 per-customer/per-tenant/per-project 短缓存和 in-flight；`/customer/projects` 列表返回时同步预热项目详情缓存，降低列表后立刻进详情的重复项目查询。
 - `/customer/projects/:projectId/logs` 增加 10 秒 per-project/per-tenant/per-page 日志列表缓存和日志评论聚合缓存，减少页面 onShow 或详情页并发刷新时的重复日志查询。
 - `/auth` 客户租户选项关键读查询增加 8 秒快速超时和 1 次瞬时网络错误重试，避免 Supabase socket 短暂断开时单次登录卡到几十秒。
+- `/customer/project-acceptances` 首次请求继续缩短串行链路：优先复用 customer token 中的 `customer_id/tenant_id` 做客户校验，客户校验和项目校验并行执行，并复用本次已查到的 project/customer 参与列表详情拼装。
 
 边界：
 
 - 该阶段只优化客户自助端重复请求和首屏串行等待，不改变员工身份判断。
 - 缓存 TTL 仍保持 10 秒，避免客户资料、项目列表、项目详情、日志、验收列表和营销活动状态长时间陈旧。
-- 如果后续要继续优化验收列表首个请求，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
+- 如果后续要继续优化验收列表首个请求，需要进一步拆分列表轻量响应和详情响应，避免列表页同步返回完整验收项、操作记录和通知记录。
 
 ### 阶段 7：清理旧兼容登录热路径
 
