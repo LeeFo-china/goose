@@ -84,13 +84,12 @@ class EmployeeSelfServiceController extends TenantBaseController {
 
     this.assertPermission(authContext, "dashboard.read");
     this.assertTaskSummaryReadable(authContext);
+    this.prewarmDeferredHomeData(request, authContext);
 
     const [homeStats, taskSummary] = await Promise.all([
       homeDashboardService.getStats(authContext),
       taskCenterService.getSummary(authContext),
     ]);
-
-    this.prewarmDeferredHomeData(request, authContext);
 
     const response = {
       context: authContext,

@@ -804,6 +804,31 @@ Authorization: Bearer <employee_token>
 - 同一轮登录中如果页面或状态机重复触发 `/auth`，后续请求不会重复打远端 Supabase。
 - 首次登录仍需要等待微信官方接口和一次远端 Supabase 登录态解析。
 
+## 2026-05-20 21:18 员工 bootstrap 预热前移
+
+连续两次员工登录后，第二次 `/auth` 已命中 openid 登录态缓存：
+
+- `/auth`：约 `281ms`
+- `resolve login state by openid`：`0ms`
+
+但第二次登录后的扩展列表仍有等待：
+
+- `/employee/bootstrap`：约 `2.2s`
+- `/customers`：约 `1.2s`
+- `/projects/status`：约 `1.6s`
+
+原因：
+
+- `/employee/bootstrap` 原实现先等待 `home_stats` 和 `task_summary`。
+- 等 bootstrap 即将返回时，才启动 projects/customers deferred prewarm。
+- 小程序收到 bootstrap 后立刻请求 `/customers` 和 `/projects/status`，此时预热刚开始，仍要等待远端查询。
+
+已完成 API 调整：
+
+- `/employee/bootstrap` 在拿到 authContext 并完成权限校验后，立即启动 projects/customers deferred prewarm。
+- `home_stats`、`task_summary` 与 projects/customers 预热并行执行。
+- bootstrap 返回时，项目和客户列表更可能已经完成或正在 in-flight，后续请求更容易命中缓存/复用。
+
 ## 验收标准
 
 ### API 验收
