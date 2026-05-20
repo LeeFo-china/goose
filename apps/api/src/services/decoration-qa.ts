@@ -35,6 +35,12 @@ type DecorationQaSuggestionResult = {
   expires_at: string | null;
 };
 
+const SUGGESTION_MEMORY_CACHE_TTL_MS = 60_000;
+const suggestionMemoryCache = new Map<string, {
+  expiresAt: number;
+  result: DecorationQaSuggestionResult;
+}>();
+
 type DecorationQaStreamEvent =
   | {
     type: "start";
@@ -1265,6 +1271,41 @@ async function tryGetCachedSuggestion(cacheKey: string, now: Date) {
   }
 }
 
+function cloneSuggestionResult(result: DecorationQaSuggestionResult): DecorationQaSuggestionResult {
+  return {
+    ...result,
+    list: [...result.list],
+  };
+}
+
+function getMemoryCachedSuggestion(cacheKey: string, nowMs: number) {
+  const cached = suggestionMemoryCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= nowMs) {
+    suggestionMemoryCache.delete(cacheKey);
+    return null;
+  }
+
+  return cloneSuggestionResult({
+    ...cached.result,
+    source: "cache",
+  });
+}
+
+function setMemoryCachedSuggestion(
+  cacheKey: string,
+  result: DecorationQaSuggestionResult,
+  nowMs: number,
+) {
+  suggestionMemoryCache.set(cacheKey, {
+    result: cloneSuggestionResult(result),
+    expiresAt: nowMs + SUGGESTION_MEMORY_CACHE_TTL_MS,
+  });
+}
+
 async function trySaveSuggestionCache(input: {
   cacheKey: string;
   scene: DecorationQaSuggestionScene;
@@ -1296,12 +1337,20 @@ export async function getDecorationQaSuggestions(input: {
   roles?: string[];
 }): Promise<DecorationQaSuggestionResult> {
   const now = new Date();
+  const nowMs = now.getTime();
   const scene = input.query.scene;
   const projectId = scene === "customer"
     ? input.query.project_id ?? null
     : null;
   const cacheKey = buildSuggestionCacheKey({ scene, projectId, now });
   const expiresAt = getSuggestionExpiresAt({ scene, projectId, now });
+  if (!input.query.refresh) {
+    const memoryCached = getMemoryCachedSuggestion(cacheKey, nowMs);
+    if (memoryCached) {
+      return memoryCached;
+    }
+  }
+
   const scenePrompt = await buildSuggestionScenePrompt({
     scene,
     projectId,
@@ -1311,12 +1360,14 @@ export async function getDecorationQaSuggestions(input: {
   if (!input.query.refresh) {
     const cached = await tryGetCachedSuggestion(cacheKey, now);
     if (cached) {
-      return {
+      const result: DecorationQaSuggestionResult = {
         list: normalizeSuggestionQuestions(cached.questions, scene),
         source: "cache",
         cache_key: cacheKey,
         expires_at: cached.expires_at,
       };
+      setMemoryCachedSuggestion(cacheKey, result, nowMs);
+      return result;
     }
   }
 
@@ -1344,12 +1395,14 @@ export async function getDecorationQaSuggestions(input: {
       expiresAt,
     });
 
-    return {
+    const result: DecorationQaSuggestionResult = {
       list: aiQuestions,
       source: "ai",
       cache_key: cacheKey,
       expires_at: expiresAt.toISOString(),
     };
+    setMemoryCachedSuggestion(cacheKey, result, nowMs);
+    return result;
   } catch {
     const fallbackQuestions = getFallbackSuggestionQuestions(scene);
     await trySaveSuggestionCache({
@@ -1361,12 +1414,14 @@ export async function getDecorationQaSuggestions(input: {
       expiresAt,
     });
 
-    return {
+    const result: DecorationQaSuggestionResult = {
       list: fallbackQuestions,
       source: "fallback",
       cache_key: cacheKey,
       expires_at: expiresAt.toISOString(),
     };
+    setMemoryCachedSuggestion(cacheKey, result, nowMs);
+    return result;
   }
 }
 

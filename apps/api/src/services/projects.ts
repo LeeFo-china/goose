@@ -14,8 +14,14 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
+const PUBLIC_PROJECTS_CACHE_TTL_MS = 60_000;
+
 class ProjectService {
     private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
+    private publicProjectsCache: {
+        expiresAt: number;
+        rows: Array<Record<string, unknown>>;
+    } | null = null;
 
     private isPublicProjectVisible(row: Record<string, unknown>) {
         const visibilityStatus =
@@ -81,7 +87,21 @@ class ProjectService {
     }
 
     async listPublicProjects() {
-        return projectRepository.listPublicProjects();
+        const now = Date.now();
+        if (this.publicProjectsCache && this.publicProjectsCache.expiresAt > now) {
+            return this.publicProjectsCache.rows;
+        }
+
+        const rows = await projectRepository.listPublicProjects();
+        this.publicProjectsCache = {
+            rows,
+            expiresAt: now + PUBLIC_PROJECTS_CACHE_TTL_MS,
+        };
+        return rows;
+    }
+
+    private invalidatePublicProjectsCache() {
+        this.publicProjectsCache = null;
     }
 
     async getRequiredPublicProjectVisibility(projectId: string) {
@@ -214,6 +234,7 @@ class ProjectService {
             },
             tenantId,
         );
+        this.invalidatePublicProjectsCache();
 
         return project;
     }
@@ -238,7 +259,9 @@ class ProjectService {
             }
         }
 
-        return projectRepository.update(id, input, tenantId);
+        const project = await projectRepository.update(id, input, tenantId);
+        this.invalidatePublicProjectsCache();
+        return project;
     }
 
     async updateProjectForTenant(input: {
@@ -277,9 +300,11 @@ class ProjectService {
             throw Errors.badRequest("项目不存在");
         }
 
-        return projectRepository.update(id, {
+        const project = await projectRepository.update(id, {
             status: "invalid",
         }, tenantId);
+        this.invalidatePublicProjectsCache();
+        return project;
     }
 
     async deleteProjectForTenant(input: {
