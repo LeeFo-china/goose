@@ -138,6 +138,12 @@ API 当前处理步骤：
 - fast path 返回的仍是受限 visitor token，不能访问员工 / 客户 / 管理接口。
 - 后台发现 legacy 状态异常时只完成诊断或补建，不给当前 visitor token 升级权限。
 
+实测结果：
+
+- visitor `/auth` 从约 `9705ms` 降到 `2293ms`。
+- 同步主链路只剩微信 `jscode2session` 约 `1281ms` 和 active OAuth 查询约 `1008ms`。
+- legacy / unbound / create user 兼容链路在响应后后台执行，最近一次后台解析约 `6131ms`，不阻塞首屏。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：
