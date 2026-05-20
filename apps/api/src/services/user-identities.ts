@@ -146,35 +146,7 @@ class UserIdentityService {
   }) {
     this.clearOauthCache(input);
     try {
-      const existing = await userIdentityRepository.findActiveOauthIdentity(
-        input.platform,
-        input.openid,
-      );
-
-      if (existing) {
-        if (existing.user_id !== input.userId || existing.unionid !== (input.unionid ?? null)) {
-          await userIdentityRepository.updateOauthIdentity({
-            id: existing.id,
-            userId: input.userId,
-            unionid: input.unionid ?? null,
-          });
-          this.clearOauthCache(input);
-        }
-        this.setCacheValue(
-          this.activeOauthCache,
-          this.oauthCacheKey(input.platform, input.openid),
-          {
-            ...existing,
-            user_id: input.userId,
-            unionid: input.unionid ?? null,
-            status: "active",
-            unbound_at: null,
-          },
-        );
-        return;
-      }
-
-      const created = await userIdentityRepository.createOauthIdentity({
+      const synced = await userIdentityRepository.syncOauthIdentity({
         userId: input.userId,
         platform: input.platform,
         openid: input.openid,
@@ -183,7 +155,7 @@ class UserIdentityService {
       this.setCacheValue(
         this.activeOauthCache,
         this.oauthCacheKey(input.platform, input.openid),
-        created,
+        synced,
       );
     } catch (error) {
       this.clearOauthCache(input);

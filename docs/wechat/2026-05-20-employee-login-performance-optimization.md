@@ -463,6 +463,124 @@ API 当前处理步骤：
 - 后台调用 `/auth/me/profile` 或权限接口刷新身份。
 - token 失效再走完整登录。
 
+## 2026-05-20 19:50 员工首次重绑优化
+
+本轮日志显示，员工退出后从 landing 页重新登录时，慢点集中在 visitor 账号重绑到已有员工 auth user：
+
+- `POST /auth` 仍需要等待微信 `jscode2session`，本次约 `2.8s`。
+- `POST /auth/verify-role` 总耗时约 `8.6s`。
+- `bindEmployeeRole()` 里 `oauth_identity_synced` 单段约 `3.3s`，是最大同步等待。
+- 登录后首个 `/auth/me/permissions` 约 `3s`，主要是在等待员工 auth context 首次预热完成。
+
+已完成 API 调整：
+
+- 新增 `sync_user_oauth_identity(p_user_id, p_platform, p_openid, p_unionid)` RPC。
+- 员工/customer/visitor 登录共用的 OAuth 身份同步由“先查 active OAuth，再 update/insert”改为一次 RPC 完成。
+- `verify-role` 仍同步等待 OAuth 绑定完成后再签发 employee token，避免新 token 立刻被 auth 插件拒绝。
+- 远端 migration 已推送，API 3000 服务已重启。
+
+下一次员工首次登录重点看日志：
+
+- `oauth_identity_synced` 是否从 `3s+` 降到约一次远端 RPC 的耗时。
+- `/auth/verify-role` 总耗时是否明显下降。
+- `/auth/me/permissions` 是否仍被首屏立即请求阻塞；如果仍慢，下一步应做 employee bootstrap 或让小程序复用 `verify-role` 返回的员工上下文，减少登录后立刻拉权限的必要性。
+
+## 2026-05-20 20:01 员工直登优化
+
+重绑完成后的员工再次登录已经不走 `/auth/verify-role`，而是 `POST /auth` 直接返回 employee。最新一次日志：
+
+- `jscode2session`：约 `1.8s`
+- active OAuth 查询：约 `1.1s`
+- login memberships 查询：约 `1.1s`
+- 员工登录上下文：约 `1.2s`
+- `/auth` 总耗时：约 `5.2s`
+
+已完成 API 调整：
+
+- 扩展 `list_wechat_login_memberships()` RPC，员工 membership 行同时返回员工、租户、部门、岗位的轻量字段。
+- `/auth` 命中 employee membership 时，不再额外按 employeeId 查一次员工基础上下文，直接用 membership RPC 返回的轻量上下文签发 employee token。
+- 完整权限上下文仍由 `prewarm_employee_auth_context` 后台预热，避免阻塞 `/auth` 主响应。
+
+下一次员工直登重点看日志：
+
+- `[auth] resolved employee login context result` 的 `source` 应为 `login_membership_row`。
+- 该阶段耗时应从约 `1.2s` 降为毫秒级。
+- `/auth` 总耗时理论上应减少到约 `4s` 左右；剩余大头是微信 `jscode2session`、active OAuth 查询和 login memberships 查询。
+
+## 2026-05-20 20:07 员工直登合并登录态查询
+
+再次员工直登日志确认上一轮优化已命中：
+
+- `[auth] resolved employee login context result`：`2ms`
+- `source`：`login_membership_row`
+- `/auth` 总耗时：约 `4.9s`
+
+剩余慢点变成两个串行远端读：
+
+- active OAuth 查询：约 `1.8s`
+- login memberships 查询：约 `1.1s`
+
+已完成 API 调整：
+
+- 新增 `resolve_wechat_login_state_by_openid(p_openid)` RPC。
+- `/auth` 在拿到微信 openid 后，优先用一次 RPC 同时解析 active OAuth、auth user、membership、客户选项和员工轻量上下文。
+- 命中该 RPC 时，不再先查 OAuth、再按 userId 查 membership。
+- 如果 RPC 未命中 active OAuth，仍回退到 visitor session / 创建 auth user 的原有链路。
+
+下一次员工直登重点看日志：
+
+- 应出现 `[auth] resolved login state by openid`。
+- 命中时 `found: true`。
+- 后续 `[auth] visitor only auth user checked` 的 `source` 应为 `login_state_by_openid`。
+- 不应再出现独立的 `[auth] active oauth identity lookup result`，除非 openid 没有 active OAuth、进入 visitor fallback。
+- `/auth` 总耗时应再减少约一次远端读，剩余主要是微信 `jscode2session` 和一次登录态 RPC。
+
+## 2026-05-20 20:20 员工登录验证结果
+
+最新两次员工直登已经命中合并登录态 RPC：
+
+- 第一次 `/auth`：约 `2.1s`
+  - `jscode2session`：`274ms`
+  - `resolve_wechat_login_state_by_openid`：约 `1.8s`
+  - 员工轻量上下文：`2ms`
+- 第二次 `/auth`：约 `2.5s`
+  - `jscode2session`：约 `1.4s`
+  - `resolve_wechat_login_state_by_openid`：约 `1.0s`
+  - 员工轻量上下文：`0ms`
+- 第二次 `/auth/me/permissions`：`0ms`
+
+已完成 API 调整：
+
+- auth-plugin 对同一个 token 的 OAuth / business binding 校验增加 in-flight 复用，避免登录后 `/auth/me/profile` 与 `/auth/me/permissions` 并发时重复打远端。
+- `/projects/status` 的 count 和 rows 查询改为并行执行，并增加 10 秒 per-user/per-query in-flight/cache，降低员工首页项目列表重复请求成本。
+
+当前剩余首屏慢点：
+
+- `/projects/status` 仍可能约 `2.8s - 3.1s`，下一次登录后需验证并行和缓存是否生效。
+- `/home_stats`、`/task-center/todos/summary`、`/customers` 仍约 `1.2s - 1.7s`，可继续做首屏 bootstrap 或短缓存聚合。
+
+## 2026-05-20 20:25 员工首页首屏验证结果
+
+最新一次员工登录后：
+
+- `/auth`：约 `2.6s`
+  - `jscode2session`：约 `1.4s`
+  - `resolve_wechat_login_state_by_openid`：约 `1.2s`
+  - 员工轻量上下文：`2ms`
+- `/auth/me/permissions`：约 `3.1s`
+  - 仍在等待后台 `prewarm_employee_auth_context` 完成。
+- `/projects/status`：约 `1.6s`
+  - 已从上一轮 `2.8s - 3.1s` 明显下降。
+- `/customers`：约 `1.2s`
+- `/home_stats`：约 `1.3s`
+- `/task-center/todos/summary`：约 `1.8s`
+
+结论：
+
+- 登录主链路优化已生效，当前 `/auth` 剩余主要是微信接口和一次远端登录态 RPC。
+- `/projects/status` 并行 count/rows 和短缓存已生效。
+- 下一刀最有价值的是员工权限上下文预热：让 `/auth/me/permissions` 不再阻塞首屏，或把小程序端首屏改为不等待该接口完成。
+
 ## 验收标准
 
 ### API 验收

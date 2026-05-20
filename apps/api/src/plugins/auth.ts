@@ -13,6 +13,7 @@ const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
 const AUTH_TIMING_LOG_MIN_DURATION_MS = 100;
 
 const wechatIdentityCheckCache = new Map<string, { expiresAt: number }>();
+const wechatIdentityCheckInFlight = new Map<string, Promise<void>>();
 
 const publicRoutes = new Set([
   "/",
@@ -213,6 +214,7 @@ function hasWechatIdentityCheckCache(key: string) {
 
   if (cached.expiresAt <= Date.now()) {
     wechatIdentityCheckCache.delete(key);
+    wechatIdentityCheckInFlight.delete(key);
     return false;
   }
 
@@ -232,6 +234,34 @@ function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
   if (expiresAt > now) {
     wechatIdentityCheckCache.set(key, { expiresAt });
   }
+}
+
+async function runWechatIdentityCheckOnce(
+  cacheKey: string,
+  payload: VerifiedJwtPayload,
+  handler: () => Promise<void>,
+) {
+  if (hasWechatIdentityCheckCache(cacheKey)) {
+    return;
+  }
+
+  const inFlight = wechatIdentityCheckInFlight.get(cacheKey);
+  if (inFlight) {
+    await inFlight;
+    return;
+  }
+
+  const request = handler()
+    .then(() => {
+      setWechatIdentityCheckCache(cacheKey, payload);
+    })
+    .finally(() => {
+      if (wechatIdentityCheckInFlight.get(cacheKey) === request) {
+        wechatIdentityCheckInFlight.delete(cacheKey);
+      }
+    });
+  wechatIdentityCheckInFlight.set(cacheKey, request);
+  await request;
 }
 
 export function primeWechatIdentityCheckCacheFromToken(token: string) {
@@ -292,43 +322,39 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
   }
 
   const cacheKey = buildWechatIdentityCheckCacheKey("business", payload);
-  if (hasWechatIdentityCheckCache(cacheKey)) {
-    return;
-  }
+  await runWechatIdentityCheckOnce(cacheKey, payload, async () => {
+    if (payload.customer_id) {
+      const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+        userId: payload.sub,
+        tenantId: payload.tenant_id,
+        identityType: "customer",
+        identityId: payload.customer_id,
+      });
 
-  if (payload.customer_id) {
-    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-      userId: payload.sub,
-      tenantId: payload.tenant_id,
-      identityType: "customer",
-      identityId: payload.customer_id,
-    });
-
-    if (!hasActiveMembership) {
-      throw Errors.unauthorized(
-        "当前微信绑定关系已变化，请重新登录",
-        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-      );
+      if (!hasActiveMembership) {
+        throw Errors.unauthorized(
+          "当前微信绑定关系已变化，请重新登录",
+          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+        );
+      }
     }
-  }
 
-  if (payload.employee_id) {
-    const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-      userId: payload.sub,
-      tenantId: payload.tenant_id,
-      identityType: "employee",
-      identityId: payload.employee_id,
-    });
+    if (payload.employee_id) {
+      const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
+        userId: payload.sub,
+        tenantId: payload.tenant_id,
+        identityType: "employee",
+        identityId: payload.employee_id,
+      });
 
-    if (!hasActiveMembership) {
-      throw Errors.unauthorized(
-        "当前微信绑定关系已变化，请重新登录",
-        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-      );
+      if (!hasActiveMembership) {
+        throw Errors.unauthorized(
+          "当前微信绑定关系已变化，请重新登录",
+          ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+        );
+      }
     }
-  }
-
-  setWechatIdentityCheckCache(cacheKey, payload);
+  });
 }
 
 async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToken>) {
@@ -337,23 +363,20 @@ async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToke
   }
 
   const cacheKey = buildWechatIdentityCheckCacheKey("oauth", payload);
-  if (hasWechatIdentityCheckCache(cacheKey)) {
-    return;
-  }
+  await runWechatIdentityCheckOnce(cacheKey, payload, async () => {
+    const activeOauth = await userIdentityService.findActiveOauthIdentity({
+      platform: "wechat_mini",
+      openid: payload.openid,
+    });
+    if (activeOauth?.user_id === payload.sub) {
+      return;
+    }
 
-  const activeOauth = await userIdentityService.findActiveOauthIdentity({
-    platform: "wechat_mini",
-    openid: payload.openid,
+    throw Errors.unauthorized(
+      "当前微信登录凭证已失效，请重新登录",
+      ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+    );
   });
-  if (activeOauth?.user_id === payload.sub) {
-    setWechatIdentityCheckCache(cacheKey, payload);
-    return;
-  }
-
-  throw Errors.unauthorized(
-    "当前微信登录凭证已失效，请重新登录",
-    ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
-  );
 }
 
 const authPlugin = (app: FastifyInstance) => {

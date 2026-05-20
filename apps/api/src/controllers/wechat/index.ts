@@ -30,6 +30,7 @@ import {
   type CustomerIdentityRow,
   type CustomerTenantOption,
 } from "@/services/wechat-customer-identities";
+import type { WechatLoginMembershipRow } from "@/repositories/wechat-customer-identities";
 import { wechatEmployeeIdentityService } from "@/services/wechat-employee-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 import { MarketingPageSlugSchema, TenantSlugSchema } from "@/schema/marketing-pages";
@@ -407,6 +408,43 @@ export class WeChatController extends BaseController {
     });
   }
 
+  private buildEmployeeLoginContextFromMembership(input: {
+    authUserId: string;
+    row: WechatLoginMembershipRow;
+    openid?: string | null;
+    roles?: string[];
+  }) {
+    const row = input.row;
+    const authContext: AuthContext = {
+      authUserId: input.authUserId,
+      employeeId: row.employee_id,
+      tenantId: row.tenant_id,
+      tenantName: row.tenant_name,
+      tenantSlug: row.tenant_slug,
+      tenantStatus: row.tenant_status,
+      isPlatformAdmin: false,
+      employeeName: row.employee_name,
+      employeeStatus: row.employee_status,
+      departmentId: row.employee_department_id,
+      tenantDepartmentId: row.employee_tenant_department_id,
+      departmentCode: row.tenant_department_code ?? row.department_code,
+      departmentName: row.tenant_department_alias_name ?? row.department_name,
+      postId: row.employee_post_id,
+      postName: row.post_name,
+      avatar: row.employee_avatar,
+      roleCodes: [],
+      roles: [],
+      permissions: [],
+    };
+
+    return this.buildEmployeeLoginResponse({
+      authUserId: input.authUserId,
+      openid: input.openid,
+      roles: input.roles ?? ["employee"],
+      authContext,
+    });
+  }
+
   @Post("/auth")
   async getOpenId(request: FastifyRequest, reply: FastifyReply) {
     const startedAt = Date.now();
@@ -437,48 +475,94 @@ export class WeChatController extends BaseController {
     request.log.info({ requestId: request.id, openid: wxData.openid }, "[auth] parsed openid");
 
     const resolveIdentityStartedAt = Date.now();
-    const authResolution = await this.getOrCreateAuthUser(
-      request,
-      wxData.openid,
-      wxData.unionid,
+    const loginStateStartedAt = Date.now();
+    const resolvedLoginState = await wechatCustomerIdentityService
+      .resolveWechatLoginStateByOpenid(wxData.openid);
+    request.log.info(
+      {
+        requestId: request.id,
+        openid: wxData.openid,
+        durationMs: Date.now() - loginStateStartedAt,
+        found: Boolean(resolvedLoginState),
+      },
+      "[auth] resolved login state by openid",
     );
-    if (authResolution.kind === "visitor_session") {
+
+    let userId: string;
+    let isNewUser = false;
+    let loginMembershipState: Awaited<
+      ReturnType<typeof wechatCustomerIdentityService.resolveWechatLoginMembershipState>
+    >;
+
+    if (resolvedLoginState) {
+      userId = resolvedLoginState.authUserId;
+      loginMembershipState = resolvedLoginState;
+      if (wxData.unionid && wxData.unionid !== resolvedLoginState.oauthUnionid) {
+        this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
+          userIdentityService.syncOauthIdentityBestEffort({
+            userId,
+            platform: "wechat_mini",
+            openid: wxData.openid!,
+            unionid: wxData.unionid,
+            source: "wechat_auth_login_state_primary",
+          })
+        );
+      }
+    } else {
+      const authResolution = await this.getOrCreateAuthUser(
+        request,
+        wxData.openid,
+        wxData.unionid,
+      );
+      if (authResolution.kind === "visitor_session") {
+        request.log.info(
+          {
+            requestId: request.id,
+            visitorId: authResolution.visitorId,
+            durationMs: Date.now() - resolveIdentityStartedAt,
+          },
+          "[auth] resolved visitor session",
+        );
+        request.log.info(
+          {
+            requestId: request.id,
+            visitorId: authResolution.visitorId,
+            totalMs: Date.now() - startedAt,
+          },
+          "[auth] resolved visitor login context",
+        );
+        return ResponseHandler.success(
+          this.createVisitorSessionResponse({
+            openid: wxData.openid,
+            unionid: wxData.unionid ?? null,
+            visitorId: authResolution.visitorId,
+            isNewUser: authResolution.isNewUser,
+          }),
+          "登录成功",
+        );
+      }
+
+      userId = authResolution.userId;
+      isNewUser = authResolution.isNewUser;
+      const loginMembershipStartedAt = Date.now();
+      loginMembershipState = await wechatCustomerIdentityService
+        .resolveWechatLoginMembershipState(userId);
       request.log.info(
         {
           requestId: request.id,
-          visitorId: authResolution.visitorId,
-          durationMs: Date.now() - resolveIdentityStartedAt,
+          userId,
+          durationMs: Date.now() - loginMembershipStartedAt,
+          source: "auth_user_fallback",
         },
-        "[auth] resolved visitor session",
-      );
-      request.log.info(
-        {
-          requestId: request.id,
-          visitorId: authResolution.visitorId,
-          totalMs: Date.now() - startedAt,
-        },
-        "[auth] resolved visitor login context",
-      );
-      return ResponseHandler.success(
-        this.createVisitorSessionResponse({
-          openid: wxData.openid,
-          unionid: wxData.unionid ?? null,
-          visitorId: authResolution.visitorId,
-          isNewUser: authResolution.isNewUser,
-        }),
-        "登录成功",
+        "[auth] resolved login memberships fallback",
       );
     }
 
-    const { userId, isNewUser } = authResolution;
     request.log.info(
       { requestId: request.id, userId, durationMs: Date.now() - resolveIdentityStartedAt },
       "[auth] resolved auth user",
     );
 
-    const loginMembershipStartedAt = Date.now();
-    const loginMembershipState = await wechatCustomerIdentityService
-      .resolveWechatLoginMembershipState(userId);
     const visitorState = {
       isVisitorOnly: loginMembershipState.memberships.length === 0,
       memberships: loginMembershipState.memberships,
@@ -492,11 +576,11 @@ export class WeChatController extends BaseController {
       {
         requestId: request.id,
         userId,
-        durationMs: Date.now() - loginMembershipStartedAt,
+        durationMs: Date.now() - resolveIdentityStartedAt,
         membershipCount: visitorState.memberships.length,
         customerOptionCount: loginMembershipState.customerOptions.length,
         isVisitorOnly: visitorState.isVisitorOnly,
-        source: "login_memberships",
+        source: resolvedLoginState ? "login_state_by_openid" : "login_memberships",
       },
       "[auth] visitor only auth user checked",
     );
@@ -528,19 +612,29 @@ export class WeChatController extends BaseController {
       request.log.info({ requestId: request.id, userId }, "[auth] resolve employee login by membership start");
       const employeeContextStartedAt = Date.now();
       const roles = ["employee"];
-      const employeeLogin = await this.buildEmployeeLoginContextByEmployeeId({
-        authUserId: userId,
-        employeeId: employeeMembership.identity_id,
-        openid: wxData.openid,
-        roles,
-      });
+      const employeeLoginRow = loginMembershipState.employeeLoginRows.find((item) =>
+        item.identity_id === employeeMembership.identity_id
+      );
+      const employeeLogin = employeeLoginRow
+        ? this.buildEmployeeLoginContextFromMembership({
+          authUserId: userId,
+          row: employeeLoginRow,
+          openid: wxData.openid,
+          roles,
+        })
+        : await this.buildEmployeeLoginContextByEmployeeId({
+          authUserId: userId,
+          employeeId: employeeMembership.identity_id,
+          openid: wxData.openid,
+          roles,
+        });
       request.log.info(
         {
           requestId: request.id,
           userId,
           durationMs: Date.now() - employeeContextStartedAt,
           hasEmployeeLogin: Boolean(employeeLogin),
-          source: "membership",
+          source: employeeLoginRow ? "login_membership_row" : "membership",
         },
         "[auth] resolved employee login context result",
       );

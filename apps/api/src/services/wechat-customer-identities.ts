@@ -2,6 +2,7 @@ import {
   wechatCustomerIdentityRepository,
   type WechatCustomerIdentityRow,
   type WechatLoginMembershipRow,
+  type WechatLoginStateRow,
   type WechatCustomerTenantOption,
 } from "@/repositories/wechat-customer-identities";
 import { Errors } from "@/errors/error-factory";
@@ -15,6 +16,12 @@ const MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE = 4_000;
 type WechatLoginMembershipState = {
   memberships: UserBusinessMembershipRecord[];
   customerOptions: WechatCustomerTenantOption[];
+  employeeLoginRows: WechatLoginMembershipRow[];
+};
+
+type WechatLoginStateByOpenid = WechatLoginMembershipState & {
+  authUserId: string;
+  oauthUnionid: string | null;
 };
 
 class WechatCustomerIdentityService {
@@ -272,6 +279,12 @@ class WechatCustomerIdentityService {
     const customerOptions = rows
       .map((row) => this.mapLoginCustomerOption(row))
       .filter((item): item is WechatCustomerTenantOption => Boolean(item));
+    const employeeLoginRows = rows.filter((row) => (
+      row.identity_type === "employee" &&
+      row.employee_id === row.identity_id &&
+      row.tenant_id &&
+      row.tenant_status === "active"
+    ));
 
     this.setCachedCustomerTenantOptions(
       this.customerTenantOptionsCacheKey({ authUserId }),
@@ -281,6 +294,7 @@ class WechatCustomerIdentityService {
     return {
       memberships,
       customerOptions,
+      employeeLoginRows,
     };
   }
 
@@ -307,6 +321,75 @@ class WechatCustomerIdentityService {
       });
     this.loginMembershipStateInFlight.set(authUserId, request);
     return request;
+  }
+
+  private normalizeLoginStateRow(row: WechatLoginStateRow): WechatLoginMembershipRow | null {
+    if (!row.membership_id || !row.identity_type || !row.identity_id || !row.status) {
+      return null;
+    }
+
+    return {
+      ...row,
+      membership_id: row.membership_id,
+      user_id: row.auth_user_id,
+      tenant_id: row.tenant_id,
+      identity_type: row.identity_type,
+      identity_id: row.identity_id,
+      status: row.status,
+      is_default: Boolean(row.is_default),
+    };
+  }
+
+  private buildLoginMembershipStateFromRows(
+    authUserId: string,
+    rows: WechatLoginMembershipRow[],
+  ): WechatLoginMembershipState {
+    const memberships = rows.map((row) => this.mapLoginMembership(row));
+    const customerOptions = rows
+      .map((row) => this.mapLoginCustomerOption(row))
+      .filter((item): item is WechatCustomerTenantOption => Boolean(item));
+    const employeeLoginRows = rows.filter((row) => (
+      row.identity_type === "employee" &&
+      row.employee_id === row.identity_id &&
+      row.tenant_id &&
+      row.tenant_status === "active"
+    ));
+
+    this.setCachedLoginMembershipState(authUserId, {
+      memberships,
+      customerOptions,
+      employeeLoginRows,
+    });
+    this.setCachedCustomerTenantOptions(
+      this.customerTenantOptionsCacheKey({ authUserId }),
+      customerOptions,
+    );
+
+    return {
+      memberships,
+      customerOptions,
+      employeeLoginRows,
+    };
+  }
+
+  async resolveWechatLoginStateByOpenid(openid: string): Promise<WechatLoginStateByOpenid | null> {
+    const rows = await wechatCustomerIdentityRepository.resolveWechatLoginStateByOpenid(openid);
+    const first = rows[0];
+    if (!first) {
+      return null;
+    }
+
+    const authUserId = first.auth_user_id;
+    const membershipRows = rows
+      .map((row) => this.normalizeLoginStateRow(row))
+      .filter((row): row is WechatLoginMembershipRow => Boolean(row));
+    const state = this.buildLoginMembershipStateFromRows(authUserId, membershipRows);
+
+    return {
+      authUserId,
+      oauthUnionid: first.oauth_unionid,
+      ...state,
+    };
   }
 
   async listCustomerTenantOptionsByMemberships(input: {

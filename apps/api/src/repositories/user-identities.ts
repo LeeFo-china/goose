@@ -77,6 +77,15 @@ class UserIdentityRepository {
     }).from(table);
   }
 
+  private rpc(name: string, params: Record<string, unknown>) {
+    return (this.client as unknown as {
+      rpc: (functionName: string, parameters: Record<string, unknown>) => Promise<{
+        data: unknown;
+        error: unknown;
+      }>;
+    }).rpc(name, params);
+  }
+
   async findActiveOauthIdentity(platform: OAuthPlatform, openid: string) {
     const { data, error } = await this.from("user_oauth_identities")
       .select("*")
@@ -182,6 +191,33 @@ class UserIdentityRepository {
     }
 
     return data as UserOAuthIdentityRecord;
+  }
+
+  async syncOauthIdentity(input: {
+    userId: string;
+    platform: OAuthPlatform;
+    openid: string;
+    unionid?: string | null;
+  }) {
+    const { data, error } = await this.rpc("sync_user_oauth_identity", {
+      p_user_id: input.userId,
+      p_platform: input.platform,
+      p_openid: input.openid,
+      p_unionid: input.unionid ?? null,
+    });
+
+    if (error) {
+      throw Errors.dbError("同步用户登录凭证失败", error);
+    }
+
+    const [record] = (data || []) as UserOAuthIdentityRecord[];
+    if (!record) {
+      throw Errors.dbError("同步用户登录凭证失败", {
+        message: "sync_user_oauth_identity returned no rows",
+      });
+    }
+
+    return record;
   }
 
   async updateOauthIdentity(input: {

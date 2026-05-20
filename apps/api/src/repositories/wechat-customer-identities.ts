@@ -51,6 +51,34 @@ export type WechatLoginMembershipRow = {
   tenant_name: string | null;
   tenant_slug: string | null;
   tenant_status: string | null;
+  employee_id: string | null;
+  employee_user_id: string | null;
+  employee_name: string | null;
+  employee_status: string | null;
+  employee_department_id: string | null;
+  employee_tenant_department_id: string | null;
+  employee_post_id: string | null;
+  employee_avatar: string | null;
+  department_name: string | null;
+  department_code: string | null;
+  tenant_department_alias_name: string | null;
+  tenant_department_code: string | null;
+  post_name: string | null;
+};
+
+export type WechatLoginStateRow = Omit<
+  WechatLoginMembershipRow,
+  "membership_id" | "tenant_id" | "identity_type" | "identity_id" | "status" | "is_default"
+> & {
+  active_oauth_id: string;
+  auth_user_id: string;
+  oauth_unionid: string | null;
+  membership_id: string | null;
+  tenant_id: string | null;
+  identity_type: string | null;
+  identity_id: string | null;
+  status: string | null;
+  is_default: boolean | null;
 };
 
 const AUTH_READ_QUERY_TIMEOUT_MS = 8_000;
@@ -262,6 +290,20 @@ class WechatCustomerIdentityRepository {
     }
 
     return (data || []) as WechatLoginMembershipRow[];
+  }
+
+  async resolveWechatLoginStateByOpenid(openid: string) {
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient.rpc("resolve_wechat_login_state_by_openid", {
+        p_openid: openid,
+      })
+    );
+
+    if (error) {
+      throw Errors.dbError("查询微信登录状态失败", error);
+    }
+
+    return (data || []) as WechatLoginStateRow[];
   }
 
   async listProjectSummariesByCustomerIds(customerIds: string[]) {

@@ -15,6 +15,17 @@ import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 60_000;
+const PROJECT_LIST_CACHE_TTL_MS = 10_000;
+
+type ProjectListResult = {
+    rows: Array<Record<string, unknown>>;
+    pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+    };
+};
 
 class ProjectService {
     private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
@@ -23,6 +34,11 @@ class ProjectService {
         rows: Array<Record<string, unknown>>;
     } | null = null;
     private publicProjectsInFlight: Promise<Array<Record<string, unknown>>> | null = null;
+    private projectListCache = new Map<string, {
+        expiresAt: number;
+        value: ProjectListResult;
+    }>();
+    private projectListInFlight = new Map<string, Promise<ProjectListResult>>();
 
     private isPublicProjectVisible(row: Record<string, unknown>) {
         const visibilityStatus =
@@ -49,18 +65,99 @@ class ProjectService {
         query: ProjectListQuery;
     }) {
         const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        const cacheKey = this.projectListCacheKey(input.authContext, input.query);
+        const cached = this.getProjectListCache(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const inFlight = this.projectListInFlight.get(cacheKey);
+        if (inFlight) {
+            return inFlight;
+        }
+
+        const request = this.loadProjects({ tenantId, ...input })
+            .then((result) => {
+                this.setProjectListCache(cacheKey, result);
+                return result;
+            })
+            .finally(() => {
+                if (this.projectListInFlight.get(cacheKey) === request) {
+                    this.projectListInFlight.delete(cacheKey);
+                }
+            });
+        this.projectListInFlight.set(cacheKey, request);
+        return request;
+    }
+
+    private projectListCacheKey(authContext: AuthContext, query: ProjectListQuery) {
+        return JSON.stringify({
+            tenantId: authContext.tenantId,
+            authUserId: authContext.authUserId,
+            employeeId: authContext.employeeId,
+            page: query.page,
+            pageSize: query.pageSize,
+            status: query.status ?? null,
+            keyword: query.keyword?.trim() ?? null,
+            ownership: query.ownership ?? null,
+            work_scope: query.work_scope ?? null,
+        });
+    }
+
+    private getProjectListCache(cacheKey: string) {
+        const cached = this.projectListCache.get(cacheKey);
+        if (!cached) {
+            return null;
+        }
+
+        if (cached.expiresAt <= Date.now()) {
+            this.projectListCache.delete(cacheKey);
+            this.projectListInFlight.delete(cacheKey);
+            return null;
+        }
+
+        return cached.value;
+    }
+
+    private setProjectListCache(cacheKey: string, value: ProjectListResult) {
+        const now = Date.now();
+        if (this.projectListCache.size >= 500) {
+            for (const [key, item] of this.projectListCache.entries()) {
+                if (item.expiresAt <= now) {
+                    this.projectListCache.delete(key);
+                }
+            }
+
+            if (this.projectListCache.size >= 500) {
+                this.projectListCache.clear();
+            }
+        }
+
+        this.projectListCache.set(cacheKey, {
+            expiresAt: now + PROJECT_LIST_CACHE_TTL_MS,
+            value,
+        });
+    }
+
+    private async loadProjects(input: {
+        tenantId: string;
+        authContext: AuthContext;
+        query: ProjectListQuery;
+    }): Promise<ProjectListResult> {
+        const tenantId = input.tenantId;
         const { page, pageSize, status, keyword, work_scope: workScope } = input.query;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
-        const visibleProjectIds = await accessPolicyService
-            .getVisibleProjectIdsByOwnership(
+        const [visibleProjectIds, todayProjectIds] = await Promise.all([
+            accessPolicyService.getVisibleProjectIdsByOwnership(
                 input.authContext,
                 "project.read",
                 input.query.ownership,
-            );
-        const todayProjectIds = workScope === "today"
-            ? await projectRepository.listTodayWorkProjectIds(tenantId)
-            : null;
+            ),
+            workScope === "today"
+                ? projectRepository.listTodayWorkProjectIds(tenantId)
+                : Promise.resolve(null),
+        ]);
         const filters = {
             tenantId,
             visibleProjectIds,
@@ -68,13 +165,13 @@ class ProjectService {
             keyword: keyword?.trim(),
             projectIds: todayProjectIds,
         };
-        const total = await projectRepository.count(filters);
-        const rows = from >= total
-            ? []
-            : await projectRepository.listRows({ filters, from, to });
+        const [total, rows] = await Promise.all([
+            projectRepository.count(filters),
+            projectRepository.listRows({ filters, from, to }),
+        ]);
 
         return {
-            rows,
+            rows: from >= total ? [] : rows,
             pagination: {
                 page,
                 pageSize,
