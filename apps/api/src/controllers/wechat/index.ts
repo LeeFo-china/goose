@@ -317,6 +317,39 @@ export class WeChatController extends BaseController {
     return Array.from(roles);
   }
 
+  private buildEmployeeLoginResponse(input: {
+    authUserId: string;
+    openid?: string | null;
+    roles: string[];
+    authContext: AuthContext;
+  }) {
+    const { authUserId, openid, roles, authContext } = input;
+    if (!authContext.employeeId) {
+      return null;
+    }
+
+    if (!isEmployeeOperableStatus(authContext.employeeStatus)) {
+      return null;
+    }
+
+    authorizationService.assertTenantAvailable(authContext);
+
+    return {
+      authContext,
+      token: this.signWechatAuthToken({
+        sub: authUserId,
+        openid: openid ?? undefined,
+        login_channel: "wechat",
+        roles,
+        tenant_id: authContext.tenantId,
+        tenant_slug: authContext.tenantSlug,
+        employee_id: authContext.employeeId,
+      }),
+      tenant: this.serializeTenantFromAuthContext(authContext),
+      employee: this.serializeEmployeeFromAuthContext(authContext),
+    };
+  }
+
   private async buildEmployeeLoginContext(
     authUserId: string,
     openid?: string | null,
@@ -336,30 +369,38 @@ export class WeChatController extends BaseController {
       }
     }
 
-    if (!authContext.employeeId) {
-      return null;
-    }
-
-    if (!authContext.tenantId && !authContext.isPlatformAdmin) {
+    if (authContext.employeeId && !authContext.tenantId && !authContext.isPlatformAdmin) {
       authContext = await authorizationService.getAuthContextByEmployeeId(authContext.employeeId);
     }
 
-    authorizationService.assertTenantAvailable(authContext);
-
-    return {
+    return this.buildEmployeeLoginResponse({
+      authUserId,
+      openid,
+      roles,
       authContext,
-      token: this.signWechatAuthToken({
-        sub: authUserId,
-        openid: openid ?? undefined,
-        login_channel: "wechat",
-        roles,
-        tenant_id: authContext.tenantId,
-        tenant_slug: authContext.tenantSlug,
-        employee_id: authContext.employeeId,
-      }),
-      tenant: this.serializeTenantFromAuthContext(authContext),
-      employee: this.serializeEmployeeFromAuthContext(authContext),
-    };
+    });
+  }
+
+  private async buildEmployeeLoginContextByEmployeeId(input: {
+    authUserId: string;
+    employeeId: string;
+    openid?: string | null;
+    roles?: string[];
+  }) {
+    let authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
+      input.employeeId,
+    );
+
+    if (authContext.employeeId && !authContext.tenantId && !authContext.isPlatformAdmin) {
+      authContext = await authorizationService.getAuthContextByEmployeeId(authContext.employeeId);
+    }
+
+    return this.buildEmployeeLoginResponse({
+      authUserId: input.authUserId,
+      openid: input.openid,
+      roles: input.roles ?? ["employee"],
+      authContext,
+    });
   }
 
   @Post("/auth")
@@ -452,6 +493,56 @@ export class WeChatController extends BaseController {
         }),
         "登录成功",
       );
+    }
+
+    const employeeMembership = visitorState.memberships?.find((item) =>
+      item.identity_type === "employee"
+    );
+    if (employeeMembership) {
+      request.log.info({ requestId: request.id, userId }, "[auth] resolve employee login by membership start");
+      const employeeContextStartedAt = Date.now();
+      const roles = ["employee"];
+      const employeeLogin = await this.buildEmployeeLoginContextByEmployeeId({
+        authUserId: userId,
+        employeeId: employeeMembership.identity_id,
+        openid: wxData.openid,
+        roles,
+      });
+      request.log.info(
+        {
+          requestId: request.id,
+          userId,
+          durationMs: Date.now() - employeeContextStartedAt,
+          hasEmployeeLogin: Boolean(employeeLogin),
+          source: "membership",
+        },
+        "[auth] resolved employee login context result",
+      );
+
+      if (employeeLogin) {
+        this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
+          userIdentityService.observeLegacyIdentityStateBestEffort({
+            userId,
+            openid: wxData.openid,
+            unionid: wxData.unionid ?? null,
+            source: "wechat_auth",
+          })
+        );
+
+        request.log.info(
+          { requestId: request.id, userId, totalMs: Date.now() - startedAt },
+          "[auth] resolved employee login context",
+        );
+        return ResponseHandler.success({
+          mode: "employee",
+          token: employeeLogin.token,
+          user_id: userId,
+          roles,
+          is_new_user: isNewUser,
+          tenant: employeeLogin.tenant,
+          employee: employeeLogin.employee,
+        }, "登录成功");
+      }
     }
 
     const rolesStartedAt = Date.now();

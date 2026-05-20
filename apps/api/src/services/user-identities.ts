@@ -4,7 +4,11 @@ import {
   type BusinessIdentityType,
   type OAuthPlatform,
   type UserBusinessMembershipRecord,
+  type UserOAuthIdentityRecord,
 } from "@/repositories/user-identities";
+
+const IDENTITY_LOOKUP_CACHE_TTL_MS = 10_000;
+const MAX_IDENTITY_LOOKUP_CACHE_SIZE = 4_000;
 
 type BusinessMembershipSyncInput = {
   userId: string;
@@ -17,9 +21,98 @@ type BusinessMembershipSyncInput = {
 };
 
 class UserIdentityService {
+  private activeOauthCache = new Map<string, {
+    expiresAt: number;
+    value: UserOAuthIdentityRecord | null;
+  }>();
+  private activeOauthInFlight = new Map<string, Promise<UserOAuthIdentityRecord | null>>();
+  private activeMembershipsCache = new Map<string, {
+    expiresAt: number;
+    value: UserBusinessMembershipRecord[];
+  }>();
+  private activeMembershipsInFlight = new Map<string, Promise<UserBusinessMembershipRecord[]>>();
+
   private hashOpenid(openid?: string | null) {
     if (!openid) return null;
     return createHash("sha256").update(openid).digest("hex");
+  }
+
+  private getCacheValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
+    const item = cache.get(key);
+    if (!item) {
+      return null;
+    }
+
+    if (item.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return null;
+    }
+
+    return item.value;
+  }
+
+  private setCacheValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string, value: T) {
+    const now = Date.now();
+    if (cache.size >= MAX_IDENTITY_LOOKUP_CACHE_SIZE) {
+      for (const [cacheKey, item] of cache.entries()) {
+        if (item.expiresAt <= now) {
+          cache.delete(cacheKey);
+        }
+      }
+
+      if (cache.size >= MAX_IDENTITY_LOOKUP_CACHE_SIZE) {
+        cache.clear();
+      }
+    }
+
+    cache.set(key, {
+      expiresAt: now + IDENTITY_LOOKUP_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private oauthCacheKey(platform: OAuthPlatform, openid: string) {
+    return `${platform}:${openid}`;
+  }
+
+  private membershipsCacheKey(userId: string) {
+    return userId;
+  }
+
+  private clearOauthCache(input: {
+    platform?: OAuthPlatform | null;
+    openid?: string | null;
+    userId?: string | null;
+  }) {
+    if (input.platform && input.openid) {
+      const cacheKey = this.oauthCacheKey(input.platform, input.openid);
+      this.activeOauthCache.delete(cacheKey);
+      this.activeOauthInFlight.delete(cacheKey);
+    }
+
+    if (!input.userId && !input.platform) {
+      return;
+    }
+
+    for (const [key, item] of this.activeOauthCache.entries()) {
+      if (
+        (!input.platform || key.startsWith(`${input.platform}:`)) &&
+        (!input.userId || item.value?.user_id === input.userId)
+      ) {
+        this.activeOauthCache.delete(key);
+        this.activeOauthInFlight.delete(key);
+      }
+    }
+  }
+
+  private clearMembershipsCache(userId?: string | null) {
+    if (!userId) {
+      return;
+    }
+
+    const cacheKey = this.membershipsCacheKey(userId);
+    this.activeMembershipsCache.delete(cacheKey);
+    this.activeMembershipsInFlight.delete(cacheKey);
   }
 
   private membershipKey(input: {
@@ -59,6 +152,7 @@ class UserIdentityService {
     unionid?: string | null;
     source: string;
   }) {
+    this.clearOauthCache(input);
     try {
       const existing = await userIdentityRepository.findActiveOauthIdentity(
         input.platform,
@@ -72,17 +166,35 @@ class UserIdentityService {
             userId: input.userId,
             unionid: input.unionid ?? null,
           });
+          this.clearOauthCache(input);
         }
+        this.setCacheValue(
+          this.activeOauthCache,
+          this.oauthCacheKey(input.platform, input.openid),
+          {
+            ...existing,
+            user_id: input.userId,
+            unionid: input.unionid ?? null,
+            status: "active",
+            unbound_at: null,
+          },
+        );
         return;
       }
 
-      await userIdentityRepository.createOauthIdentity({
+      const created = await userIdentityRepository.createOauthIdentity({
         userId: input.userId,
         platform: input.platform,
         openid: input.openid,
         unionid: input.unionid ?? null,
       });
+      this.setCacheValue(
+        this.activeOauthCache,
+        this.oauthCacheKey(input.platform, input.openid),
+        created,
+      );
     } catch (error) {
+      this.clearOauthCache(input);
       await this.recordEventBestEffort({
         userId: input.userId,
         eventType: "identity_oauth_dual_write_failed",
@@ -100,10 +212,36 @@ class UserIdentityService {
     platform: OAuthPlatform;
     openid: string;
   }) {
-    return userIdentityRepository.findActiveOauthIdentity(
+    const cacheKey = this.oauthCacheKey(input.platform, input.openid);
+    const cached = this.getCacheValue(this.activeOauthCache, cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.activeOauthInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = userIdentityRepository.findActiveOauthIdentity(
       input.platform,
       input.openid,
-    );
+    ).then((identity) => {
+      if (identity) {
+        this.setCacheValue(this.activeOauthCache, cacheKey, identity);
+      }
+      return identity;
+    }).finally(() => {
+      if (this.activeOauthInFlight.get(cacheKey) === request) {
+        this.activeOauthInFlight.delete(cacheKey);
+      }
+    });
+    this.activeOauthInFlight.set(cacheKey, request);
+    const identity = await request;
+    if (identity) {
+      this.setCacheValue(this.activeOauthCache, cacheKey, identity);
+    }
+    return identity;
   }
 
   async unbindOauthIdentityBestEffort(input: {
@@ -112,6 +250,7 @@ class UserIdentityService {
     openid?: string | null;
     source: string;
   }) {
+    this.clearOauthCache(input);
     try {
       await userIdentityRepository.unbindOauthIdentities({
         userId: input.userId,
@@ -127,7 +266,9 @@ class UserIdentityService {
           source: input.source,
         },
       });
+      this.clearOauthCache(input);
     } catch (error) {
+      this.clearOauthCache(input);
       await this.recordEventBestEffort({
         userId: input.userId,
         eventType: "identity_oauth_unbind_failed",
@@ -153,13 +294,34 @@ class UserIdentityService {
     userId: string;
     identityType?: BusinessIdentityType;
   }) {
-    const memberships = await userIdentityRepository.listBusinessMemberships(input.userId);
-    return memberships
-      .filter((item) => (
-        item.status === "active" &&
-        (!input.identityType || item.identity_type === input.identityType)
-      ))
-      .sort((a, b) => Number(b.is_default) - Number(a.is_default));
+    const cacheKey = this.membershipsCacheKey(input.userId);
+    let memberships = this.getCacheValue(this.activeMembershipsCache, cacheKey);
+    if (!memberships) {
+      const inFlight = this.activeMembershipsInFlight.get(cacheKey);
+      if (inFlight) {
+        memberships = await inFlight;
+      } else {
+        const request = userIdentityRepository.listBusinessMemberships(input.userId)
+          .then((records) => {
+            const activeMemberships = records
+              .filter((item) => item.status === "active")
+              .sort((a, b) => Number(b.is_default) - Number(a.is_default));
+            this.setCacheValue(this.activeMembershipsCache, cacheKey, activeMemberships);
+            return activeMemberships;
+          })
+          .finally(() => {
+            if (this.activeMembershipsInFlight.get(cacheKey) === request) {
+              this.activeMembershipsInFlight.delete(cacheKey);
+            }
+          });
+        this.activeMembershipsInFlight.set(cacheKey, request);
+        memberships = await request;
+      }
+    }
+
+    return memberships.filter((item) => (
+      !input.identityType || item.identity_type === input.identityType
+    ));
   }
 
   async hasActiveBusinessMembership(input: {
@@ -180,6 +342,7 @@ class UserIdentityService {
   }
 
   async syncBusinessMembershipBestEffort(input: BusinessMembershipSyncInput) {
+    this.clearMembershipsCache(input.userId);
     if (!input.tenantId) {
       await this.recordEventBestEffort({
         userId: input.userId,
@@ -216,6 +379,7 @@ class UserIdentityService {
           status: "active",
           isDefault: input.isDefault ?? true,
         });
+        this.clearMembershipsCache(input.userId);
         return;
       }
 
@@ -227,7 +391,9 @@ class UserIdentityService {
         status: "active",
         isDefault: input.isDefault ?? true,
       });
+      this.clearMembershipsCache(input.userId);
     } catch (error) {
+      this.clearMembershipsCache(input.userId);
       await this.recordEventBestEffort({
         userId: input.userId,
         eventType: "identity_membership_dual_write_failed",
@@ -253,6 +419,7 @@ class UserIdentityService {
       return;
     }
 
+    this.clearMembershipsCache(input.userId);
     try {
       await userIdentityRepository.unbindBusinessMembership({
         userId: input.userId,
@@ -260,7 +427,9 @@ class UserIdentityService {
         identityType: input.identityType,
         identityId: input.identityId,
       });
+      this.clearMembershipsCache(input.userId);
     } catch (error) {
+      this.clearMembershipsCache(input.userId);
       await this.recordEventBestEffort({
         userId: input.userId,
         eventType: "identity_membership_unbind_failed",

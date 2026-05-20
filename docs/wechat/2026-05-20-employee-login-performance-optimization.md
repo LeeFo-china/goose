@@ -208,6 +208,38 @@ API 当前处理步骤：
 - 命中 active OAuth identity 后，可以带着 `authUserId` 直接走员工上下文解析。
 - 如果 employee membership 已存在，优先用 membership 的 `identity_id` 构建 auth context，减少 fallback 查询。
 
+### 阶段 2.1：已绑定员工 membership 快路径
+
+2026-05-20 已调整：
+
+- `/auth` 在 `AUTH_IDENTITY_SOURCE=membership` 下，active OAuth 命中后仍先查一次 active business memberships。
+- 如果存在 `identity_type = "employee"` 的 active membership，直接用 `identity_id` 构建员工登录上下文。
+- 该路径不再先进入通用 `getUserRoles()`，避免额外查询 employees/customers 来推导角色。
+- 员工登录上下文会显式检查员工状态；停用员工不会签发 employee token。
+- employee token 签发后会预热 auth-plugin 的 OAuth / business binding 校验缓存，登录后的首个 `/auth/me/permissions` 不再重复远端校验。
+
+最近一次验证日志：
+
+- 优化前：`/auth` 中 `resolved user roles` 约 `1643ms`，`/auth` 总耗时约 `5431ms`。
+- token 预热后：新 token 的首个 `/auth/me/permissions` 从约 `3.7s` 降到 `1ms - 2ms`。
+- 本阶段预期继续减少已绑定员工 `/auth` 中约 `1.5s - 1.8s` 的角色解析等待。
+
+### 阶段 2.2：身份查询短 TTL 缓存
+
+2026-05-20 已调整：
+
+- `userIdentityService.findActiveOauthIdentity()` 对 active OAuth 正向结果增加 10 秒内存缓存。
+- `userIdentityService.listActiveBusinessMemberships()` 对 active memberships 增加 10 秒内存缓存。
+- 同一个 openid / userId 的并发身份查询会复用 in-flight Promise，避免首批并发请求同时打远端 Supabase。
+- OAuth 同步、OAuth 解绑、membership 同步、membership 解绑、membership 转移时，本进程立即清理相关缓存。
+- TTL 与 auth-plugin 微信身份校验缓存保持同一量级，避免长期持有已变化身份。
+
+预期收益：
+
+- 退出后重登、权限校验、员工首页首批接口在短时间内重复读取同一 openid / userId 时，减少重复 Supabase round trip。
+- 小程序端完成登录状态门禁后，`/auth` 后的首批员工接口能复用刚登录阶段产生的身份缓存。
+- 如果小程序端暂时仍提前触发旧 token 权限校验，该校验产生的身份查询结果也能被随后 `/auth` 复用，降低重复等待。
+
 ### 阶段 3：提高 auth context 缓存命中
 
 当前 `authorizationService` 缓存 TTL 是 `30s`。开发和小程序登录场景可以考虑：
@@ -247,6 +279,27 @@ API 当前处理步骤：
 - 登录请求未完成前禁用按钮。
 - 同一个 `wx.login()` code 只能使用一次，失败重试必须重新调用 `wx.login()`。
 - 页面 onShow / 初始化不要重复并发调用 `/auth`。
+- 退出登录后必须先清空旧 token 和用户态，再进入登录状态机。
+- 新一轮 `/auth` 未完成、未写入新 token 前，不要并发请求员工首页接口：
+  - `/auth/me/permissions`
+  - `/home_stats`
+  - `/task-center/todos/summary`
+  - `/customers`
+  - `/projects/status`
+- 上述首页数据请求必须由“employee token 已写入本地存储”这个事件触发，而不是由 landing 页展示、页面 onShow 或旧 token 残留触发。
+- 如果登录中需要展示首页骨架屏，只展示本地缓存或静态骨架，不发需要 employee token 的接口。
+
+本地日志已出现过反例：退出后 `/auth` 尚未完成时，小程序提前并发请求首页接口，导致 `/home_stats`、`/task-center/todos/summary`、`/customers`、`/projects/status` 返回 `401`。这些 401 会造成额外重试和用户体感等待，必须在小程序端用登录状态门禁解决。
+
+推荐小程序状态机：
+
+1. `anonymous`：无 token，只能发 `/auth`、游客公开接口。
+2. `authenticating`：已经调用 `wx.login()` 或 `/auth`，禁止发员工首页接口。
+3. `employee_ready`：`/auth` 返回 `mode: "employee"`，并且新 token 已写入本地存储，可以发员工首页接口。
+4. `visitor_ready`：`/auth` 返回 visitor，只能发 visitor 允许接口；点击员工登录再进入 `/auth/verify-role`。
+5. `auth_failed`：清理本次 code 和临时状态，重新触发必须重新调用 `wx.login()`。
+
+首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。
 
 ### 缓存短期登录态
 
