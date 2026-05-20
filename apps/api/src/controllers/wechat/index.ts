@@ -106,7 +106,7 @@ export class WeChatController extends BaseController {
   }
 
   private getAuthIdentitySource(): AuthIdentitySource {
-    const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+    const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
     if (value === "legacy" || value === "membership") {
       return value;
     }
@@ -1143,13 +1143,6 @@ export class WeChatController extends BaseController {
           "[auth] resolved user by active oauth identity",
         );
 
-        this.runAuthBackgroundTask(request, "sync_legacy_wechat_identity", () =>
-          this.syncLegacyWechatIdentityMapping({
-            authUserId: activeOauthIdentity.user_id,
-            openid,
-            unionid: unionid ?? activeOauthIdentity.unionid ?? null,
-          })
-        );
         this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
           userIdentityService.syncOauthIdentityBestEffort({
             userId: activeOauthIdentity.user_id,
@@ -1167,7 +1160,17 @@ export class WeChatController extends BaseController {
         };
       }
 
-      if (allowVisitorSession && identitySource === "membership") {
+      if (identitySource === "membership") {
+        if (!allowVisitorSession) {
+          return this.createWechatVisitorUser({
+            request,
+            openid,
+            unionid: unionid || null,
+            uniqueEmail: true,
+            source: "wechat_auth_oauth_miss_background",
+          });
+        }
+
         request.log.info(
           { requestId: request.id, openid, identitySource },
           "[auth] active oauth miss visitor fast path",
@@ -1402,15 +1405,6 @@ export class WeChatController extends BaseController {
       throw Errors.dbError("创建微信用户失败");
     }
 
-    this.runAuthBackgroundTask(request, "create_legacy_wechat_identity", () =>
-      wechatAuthIdentityService.upsertIdentity({
-        authUserId: data.user!.id,
-        openid,
-        unionid: unionid || null,
-        errorMessage: "创建微信身份映射失败",
-      })
-    );
-
     this.runAuthBackgroundTask(request, "sync_oauth_identity", () =>
       userIdentityService.syncOauthIdentityBestEffort({
         userId: data.user!.id,
@@ -1506,15 +1500,6 @@ export class WeChatController extends BaseController {
     if (!data.user) {
       throw Errors.dbError("创建微信用户失败");
     }
-
-    this.runAuthBackgroundTask(input.request, "create_legacy_wechat_identity", () =>
-      wechatAuthIdentityService.upsertIdentity({
-        authUserId: data.user!.id,
-        openid: input.openid,
-        unionid: input.unionid || null,
-        errorMessage: "创建微信身份映射失败",
-      })
-    );
 
     this.runAuthBackgroundTask(input.request, "sync_oauth_identity", () =>
       userIdentityService.syncOauthIdentityBestEffort({

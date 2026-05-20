@@ -317,6 +317,21 @@ API 当前处理步骤：
 - 缓存 TTL 仍保持 10 秒，避免客户资料和项目列表长时间陈旧。
 - 如果后续要继续优化项目详情、日志、验收列表和预约奖励，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
 
+### 阶段 7：清理旧兼容登录热路径
+
+2026-05-20 已调整：
+
+- `AUTH_IDENTITY_SOURCE` 默认值从 `dual` 改为 `membership`。
+- membership 模式下，`/auth` active OAuth miss 不再 fallback 到旧 `wechat_identities` 或旧 `${openid}@wechat.local` auth user 修复路径。
+- `/auth` 命中 active OAuth 后不再后台补写 `wechat_identities`。
+- 新建访客 auth user 后不再后台补写 `wechat_identities`，只写 `user_oauth_identities`。
+- `/auth/me/*`、客户自助、项目验收、客户分享活动等身份解析的默认口径同步改为 membership。
+
+保留项：
+
+- 解绑/换绑里的旧 `wechat_identities` 删除兜底暂时保留，用于清理历史残留。
+- 显式设置 `AUTH_IDENTITY_SOURCE=dual|legacy` 的回滚分支尚未物理删除；下一阶段确认无需回滚后再清代码和旧表。
+
 ## 小程序端优化计划
 
 ### 分阶段 UI 反馈

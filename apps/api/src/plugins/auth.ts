@@ -172,7 +172,7 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
 }
 
 function getAuthIdentitySource(): AuthIdentitySource {
-  const value = (process.env.AUTH_IDENTITY_SOURCE || "dual").trim().toLowerCase();
+  const value = (process.env.AUTH_IDENTITY_SOURCE || "membership").trim().toLowerCase();
   if (value === "legacy" || value === "membership") {
     return value;
   }
