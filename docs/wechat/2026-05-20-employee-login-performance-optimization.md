@@ -174,6 +174,18 @@ API 当前处理步骤：
 - 该 visitor-only 判定结果内存缓存 60 秒。
 - 员工 / 客户身份验证开始时主动清理相关 auth user 的 visitor-only 缓存，避免身份升级后误判。
 
+### 阶段 0.4：visitor 首屏接口鉴权快路径
+
+已补建 visitor auth user 会拿到带 `sub` 的普通 auth token。访客首屏接口不需要员工 / 客户业务身份，但原鉴权插件仍会对 `openid + sub` 做远端 OAuth credential 校验，导致缓存命中的首屏接口仍可能等待远端身份查询。
+
+优化策略：
+
+- 对 `roles=["visitor"]` 且不包含 `tenant_id / customer_id / employee_id` 的纯 visitor token：
+  - 访问访客允许路由时，只校验 JWT 签名和过期时间。
+  - 跳过远端 OAuth credential 查询。
+- 员工 / 客户 token，以及访问非访客路由时，仍保留原 OAuth / business binding 校验。
+- `authPlugin` 增加阶段耗时日志，便于确认慢点是否发生在鉴权前置阶段。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：

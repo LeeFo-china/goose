@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
@@ -12,6 +12,7 @@ type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
 const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 10_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 60_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
+const AUTH_TIMING_LOG_MIN_DURATION_MS = 100;
 
 const wechatIdentityCheckCache = new Map<string, { expiresAt: number }>();
 
@@ -143,6 +144,17 @@ function isVisitorSessionRoute(method: string, url: string) {
   return false;
 }
 
+function isPureVisitorPayload(payload: VerifiedJwtPayload) {
+  const roles = Array.isArray(payload.roles) ? payload.roles : [];
+  return (
+    roles.length === 1 &&
+    roles[0] === "visitor" &&
+    !payload.tenant_id &&
+    !payload.customer_id &&
+    !payload.employee_id
+  );
+}
+
 function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requestId: string) {
   return fail(appError.message, appError.code, requestId, appError.details);
 }
@@ -231,6 +243,39 @@ function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
 
   if (expiresAt > now) {
     wechatIdentityCheckCache.set(key, { expiresAt });
+  }
+}
+
+async function logAuthStage<T>(
+  request: FastifyRequest,
+  stage: string,
+  handler: () => Promise<T>,
+) {
+  const startedAt = Date.now();
+  try {
+    const result = await handler();
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= AUTH_TIMING_LOG_MIN_DURATION_MS) {
+      request.log.info(
+        { requestId: request.id, stage, durationMs },
+        "[auth-plugin] stage completed",
+      );
+    }
+    return result;
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    request.log.warn(
+      {
+        requestId: request.id,
+        stage,
+        durationMs,
+        error: error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { message: String(error) },
+      },
+      "[auth-plugin] stage failed",
+    );
+    throw error;
   }
 }
 
@@ -400,7 +445,7 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
-    const payload = verifyToken(token);
+    const payload = await logAuthStage(request, "verify_token", async () => verifyToken(token));
     if (!payload) {
       const error = getTokenError("invalid");
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
@@ -424,9 +469,22 @@ const authPlugin = (app: FastifyInstance) => {
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
+    if (payload.openid && isPureVisitorPayload(payload) && isVisitorSessionRoute(method, url)) {
+      request.log.info(
+        { requestId: request.id, path: url },
+        "[auth-plugin] skip visitor oauth credential check",
+      );
+      request.user = payload;
+      return;
+    }
+
     await Promise.all([
-      assertWechatOauthCredential(payload),
-      assertWechatBusinessBinding(payload),
+      logAuthStage(request, "assert_wechat_oauth_credential", () =>
+        assertWechatOauthCredential(payload)
+      ),
+      logAuthStage(request, "assert_wechat_business_binding", () =>
+        assertWechatBusinessBinding(payload)
+      ),
     ]);
 
     request.user = payload;
