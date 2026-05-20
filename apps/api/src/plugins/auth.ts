@@ -114,6 +114,35 @@ function isPublicRoute(method: string, url: string) {
   return false;
 }
 
+function isVisitorSessionRoute(method: string, url: string) {
+  if (method === "POST" && url === "/auth/verify-role") {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/projects/frontend-visible" || url === "/front/projects" || url.startsWith("/front/projects/"))
+  ) {
+    return true;
+  }
+
+  if (
+    method === "GET"
+    && url === "/ai/decoration-qa/suggestions"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && (url === "/ai/decoration-qa" || url === "/ai/decoration-qa/stream")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requestId: string) {
   return fail(appError.message, appError.code, requestId, appError.details);
 }
@@ -375,6 +404,19 @@ const authPlugin = (app: FastifyInstance) => {
     if (!payload) {
       const error = getTokenError("invalid");
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+    }
+
+    if (payload.token_type === "visitor_session") {
+      if (!isVisitorSessionRoute(method, url)) {
+        const error = Errors.unauthorized(
+          "访客会话不支持该操作，请先完成身份验证",
+          ErrorCodes.TOKEN_INVALID,
+        );
+        return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+      }
+
+      request.user = payload;
+      return;
     }
 
     if (payload.token_type && payload.token_type !== "auth") {

@@ -99,6 +99,30 @@ API 当前处理步骤：
 
 ## API 优化计划
 
+### 阶段 0：visitor session 链路拆分
+
+对陌生游客不再在 `POST /auth` 同步创建 Supabase Auth 用户。
+
+新链路：
+
+1. `/auth` 仍然先用微信 `code` 换 `openid`。
+2. API 先尝试解析已有 OAuth / legacy 身份，避免把已绑定员工或客户误判为游客。
+3. 如果确认是新游客或已解绑 legacy 身份，立即返回短期 `visitor_session` token：
+   - `mode: "platform_visitor"`
+   - `roles: ["visitor"]`
+   - `user_id: null`
+   - `visitor_id: wechat_visitor_<openid hash>`
+4. 真实 Supabase Auth 用户创建、`wechat_identities` 和 `user_oauth_identities` 同步改为后台任务。
+5. `visitor_session` 只允许访问访客可用接口和 `/auth/verify-role`，不能访问需要真实 `auth.users.id` 的业务接口。
+6. 用户执行员工 / 客户手机号验证时，`/auth/verify-role` 会先把 `visitor_session` 升级为真实 auth user，再继续绑定员工或客户身份。
+
+设计收益：
+
+- 陌生游客首屏不再等待 Supabase Auth `createUser()`。
+- visitor 不再阻塞 `getUserRoles()` 和空的 customer tenant options 查询。
+- 后续真正需要业务身份时再承担创建用户成本，等待发生在明确的“身份验证”动作里。
+- 临时 visitor token 不带真实 `sub`，避免被误写入 UUID 外键字段。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：

@@ -460,6 +460,9 @@ class UploadController extends BaseController {
     }
 
     const authUserId = user.sub;
+    if (!authUserId) {
+      throw Errors.unauthorized();
+    }
     const authContext = await authorizationService.getRequiredAuthContext(authUserId);
     if (authContext.tenantId || authContext.employeeId) {
       return {

@@ -1,11 +1,12 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { createHash } from "node:crypto";
 import { BaseController } from "@/controllers/BaseController";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
-import { signToken } from "@/utils/jwt";
+import { signToken, signVisitorSessionToken } from "@/utils/jwt";
 import {
   ReviewWechatRebindRequestSchema,
   SendCodeSchema,
@@ -46,6 +47,18 @@ type WeChatSessionResponse = {
 };
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
+
+type WechatAuthResolution =
+  | {
+    kind: "auth_user";
+    userId: string;
+    isNewUser: boolean;
+  }
+  | {
+    kind: "visitor_session";
+    visitorId: string;
+    isNewUser: true;
+  };
 
 const WeChatAuthBodySchema = z.object({
   code: z.string().trim().min(1, "缺少 code"),
@@ -130,6 +143,42 @@ export class WeChatController extends BaseController {
           "[auth] background task failed",
         );
       });
+  }
+
+  private buildVisitorSessionId(openid: string) {
+    return `wechat_visitor_${createHash("sha256").update(openid).digest("hex").slice(0, 32)}`;
+  }
+
+  private signVisitorSession(input: {
+    openid: string;
+    unionid?: string | null;
+    visitorId: string;
+  }) {
+    return signVisitorSessionToken({
+      openid: input.openid,
+      visitor_id: input.visitorId,
+      unionid: input.unionid ?? undefined,
+    });
+  }
+
+  private createVisitorSessionResponse(input: {
+    openid: string;
+    unionid?: string | null;
+    visitorId: string;
+    isNewUser: boolean;
+  }) {
+    return {
+      mode: "platform_visitor",
+      token: this.signVisitorSession(input),
+      user_id: null,
+      visitor_id: input.visitorId,
+      roles: ["visitor"],
+      is_new_user: input.isNewUser,
+      tenant: null,
+      employee: null,
+      customer: null,
+      has_customer_profile: false,
+    };
   }
 
   private serializeEmployeeFromAuthContext(authContext: AuthContext) {
@@ -222,11 +271,40 @@ export class WeChatController extends BaseController {
     request.log.info({ requestId: request.id, openid: wxData.openid }, "[auth] parsed openid");
 
     const resolveIdentityStartedAt = Date.now();
-    const { userId, isNewUser } = await this.getOrCreateAuthUser(
+    const authResolution = await this.getOrCreateAuthUser(
       request,
       wxData.openid,
       wxData.unionid,
     );
+    if (authResolution.kind === "visitor_session") {
+      request.log.info(
+        {
+          requestId: request.id,
+          visitorId: authResolution.visitorId,
+          durationMs: Date.now() - resolveIdentityStartedAt,
+        },
+        "[auth] resolved visitor session",
+      );
+      request.log.info(
+        {
+          requestId: request.id,
+          visitorId: authResolution.visitorId,
+          totalMs: Date.now() - startedAt,
+        },
+        "[auth] resolved visitor login context",
+      );
+      return ResponseHandler.success(
+        this.createVisitorSessionResponse({
+          openid: wxData.openid,
+          unionid: wxData.unionid ?? null,
+          visitorId: authResolution.visitorId,
+          isNewUser: authResolution.isNewUser,
+        }),
+        "登录成功",
+      );
+    }
+
+    const { userId, isNewUser } = authResolution;
     request.log.info(
       { requestId: request.id, userId, durationMs: Date.now() - resolveIdentityStartedAt },
       "[auth] resolved auth user",
@@ -371,14 +449,12 @@ export class WeChatController extends BaseController {
   @Post("/auth/verify-role")
   async verifyRole(request: FastifyRequest, reply: FastifyReply) {
     const startedAt = Date.now();
-    if (!request.user?.sub) {
-      throw Errors.unauthorized();
-    }
-
     const bodyResult = VerifyRoleSchema.safeParse(request.body);
     if (!bodyResult.success) {
       throw Errors.fromZod(bodyResult.error);
     }
+    const authUserId = await this.getAuthUserIdForRoleVerification(request);
+    const requestOpenid = request.user?.openid ?? null;
 
     const { phone, code } = bodyResult.data;
     const target_role: AuthTargetRole = bodyResult.data.target_role;
@@ -430,24 +506,24 @@ export class WeChatController extends BaseController {
     if (target_role === "employee") {
       const bindStartedAt = Date.now();
       const employeeAuthUserId = await this.bindEmployeeRole(
-        request.user.sub,
+        authUserId,
         phone,
-        request.user.openid ?? null,
+        requestOpenid,
       );
       request.log.info(
         {
           requestId: request.id,
           durationMs: Date.now() - bindStartedAt,
-          fromAuthUserId: request.user.sub,
+          fromAuthUserId: authUserId,
           toAuthUserId: employeeAuthUserId,
         },
         "[auth] verify role employee bound",
       );
 
       authorizationService.invalidateAuthContext({
-        authUserId: request.user.sub,
+        authUserId,
       });
-      if (employeeAuthUserId !== request.user.sub) {
+      if (employeeAuthUserId !== authUserId) {
         authorizationService.invalidateAuthContext({
           authUserId: employeeAuthUserId,
         });
@@ -524,9 +600,9 @@ export class WeChatController extends BaseController {
 
     const customerStartedAt = Date.now();
     const customerLogin = await this.resolveCustomerLoginState(
-      request.user.sub,
+      authUserId,
       phone,
-      request.user.openid ?? null,
+      requestOpenid,
       bodyResult.data.share_token ?? null,
     );
     request.log.info(
@@ -688,6 +764,39 @@ export class WeChatController extends BaseController {
     return ResponseHandler.success(data, "H5 访问凭证已生成");
   }
 
+  private async getAuthUserIdForRoleVerification(request: FastifyRequest) {
+    if (request.user?.sub) {
+      return request.user.sub;
+    }
+
+    if (request.user?.token_type !== "visitor_session" || !request.user.openid) {
+      throw Errors.unauthorized();
+    }
+
+    const startedAt = Date.now();
+    const resolution = await this.getOrCreateAuthUser(
+      request,
+      request.user.openid,
+      request.user.unionid ?? undefined,
+      { allowVisitorSession: false },
+    );
+
+    if (resolution.kind !== "auth_user") {
+      throw Errors.unauthorized();
+    }
+
+    request.log.info(
+      {
+        requestId: request.id,
+        userId: resolution.userId,
+        durationMs: Date.now() - startedAt,
+      },
+      "[auth] upgraded visitor session to auth user",
+    );
+
+    return resolution.userId;
+  }
+
   // 这里必须保留注释：微信 code 只能短时且单次使用，接口失败原因需要在服务端集中兜底，前端才能稳定触发静默重登。
   private async getWeChatSession(code: string) {
     const appId = await systemSettingsService.getSecretString("WECHAT_APPID");
@@ -717,7 +826,9 @@ export class WeChatController extends BaseController {
     request: FastifyRequest,
     openid: string,
     unionid?: string,
-  ) {
+    options: { allowVisitorSession?: boolean } = {},
+  ): Promise<WechatAuthResolution> {
+    const allowVisitorSession = options.allowVisitorSession ?? true;
     request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
     const identitySource = this.getAuthIdentitySource();
     if (identitySource !== "legacy") {
@@ -755,6 +866,7 @@ export class WeChatController extends BaseController {
         );
 
         return {
+          kind: "auth_user",
           userId: activeOauthIdentity.user_id,
           isNewUser: false,
         };
@@ -781,6 +893,16 @@ export class WeChatController extends BaseController {
           openid,
         });
 
+        if (allowVisitorSession) {
+          return this.createWechatVisitorSession({
+            request,
+            openid,
+            unionid: unionid ?? existingIdentity.unionid ?? null,
+            uniqueEmail: true,
+            source: "wechat_auth_existing_identity_unbound",
+          });
+        }
+
         request.log.info(
           { requestId: request.id, openid, userId: existingIdentity.auth_user_id },
           "[auth] create visitor for unbound existing identity",
@@ -806,6 +928,7 @@ export class WeChatController extends BaseController {
       );
 
       return {
+        kind: "auth_user",
         userId: existingIdentity.auth_user_id,
         isNewUser: false,
       };
@@ -834,6 +957,16 @@ export class WeChatController extends BaseController {
           { requestId: request.id, openid, userId: legacyUser.id },
           "[auth] skip legacy identity repair for unbound oauth",
         );
+
+        if (allowVisitorSession) {
+          return this.createWechatVisitorSession({
+            request,
+            openid,
+            unionid: unionid || legacyUser.unionid || null,
+            uniqueEmail: true,
+            source: "wechat_auth_legacy_unbound",
+          });
+        }
 
         return this.createWechatVisitorUser({
           request,
@@ -869,9 +1002,20 @@ export class WeChatController extends BaseController {
       );
 
       return {
+        kind: "auth_user",
         userId: legacyUser.id,
         isNewUser: false,
       };
+    }
+
+    if (allowVisitorSession) {
+      return this.createWechatVisitorSession({
+        request,
+        openid,
+        unionid: unionid || null,
+        uniqueEmail: false,
+        source: "wechat_auth_new_visitor_session",
+      });
     }
 
     request.log.info({ requestId: request.id, openid }, "[auth] create visitor user start");
@@ -935,6 +1079,7 @@ export class WeChatController extends BaseController {
         );
 
         return {
+          kind: "auth_user",
           userId: legacyUser.id,
           isNewUser: false,
         };
@@ -969,7 +1114,43 @@ export class WeChatController extends BaseController {
     request.log.info({ requestId: request.id, openid, userId: data.user.id }, "[auth] create visitor user result");
 
     return {
+      kind: "auth_user",
       userId: data.user.id,
+      isNewUser: true,
+    };
+  }
+
+  private createWechatVisitorSession(input: {
+    request: FastifyRequest;
+    openid: string;
+    unionid?: string | null;
+    uniqueEmail?: boolean;
+    source: string;
+  }): WechatAuthResolution {
+    const visitorId = this.buildVisitorSessionId(input.openid);
+    input.request.log.info(
+      {
+        requestId: input.request.id,
+        openid: input.openid,
+        visitorId,
+        source: input.source,
+      },
+      "[auth] create visitor session result",
+    );
+
+    this.runAuthBackgroundTask(input.request, "create_visitor_auth_user", () =>
+      this.createWechatVisitorUser({
+        request: input.request,
+        openid: input.openid,
+        unionid: input.unionid ?? null,
+        uniqueEmail: input.uniqueEmail,
+        source: `${input.source}_background`,
+      })
+    );
+
+    return {
+      kind: "visitor_session",
+      visitorId,
       isNewUser: true,
     };
   }
@@ -980,7 +1161,7 @@ export class WeChatController extends BaseController {
     unionid?: string | null;
     uniqueEmail?: boolean;
     source: string;
-  }) {
+  }): Promise<Extract<WechatAuthResolution, { kind: "auth_user" }>> {
     const { data, error } = await wechatAuthIdentityService.createWechatAuthUser({
       openid: input.openid,
       unionid: input.unionid || null,
@@ -1028,6 +1209,7 @@ export class WeChatController extends BaseController {
     );
 
     return {
+      kind: "auth_user",
       userId: data.user.id,
       isNewUser: true,
     };

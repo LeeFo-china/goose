@@ -3,9 +3,11 @@ import { AppError } from "@/errors/app-error";
 import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
-  sub: string;
-  token_type?: "auth" | "h5_marketing";
+  sub?: string;
+  token_type?: "auth" | "visitor_session" | "h5_marketing";
   openid?: string;
+  unionid?: string | null;
+  visitor_id?: string;
   login_channel?: "wechat" | "admin_web";
   roles?: string[];
   tenant_id?: string | null;
@@ -122,6 +124,24 @@ export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   return signJwtPayload(payload, process.env.JWT_EXPIRES_IN || "7d");
 }
 
+export function signVisitorSessionToken(payload: Omit<
+  JwtPayload,
+  "iat" | "exp" | "token_type" | "roles" | "login_channel"
+> & {
+  openid: string;
+  visitor_id: string;
+}) {
+  return signJwtPayload(
+    {
+      ...payload,
+      token_type: "visitor_session",
+      login_channel: "wechat",
+      roles: ["visitor"],
+    },
+    process.env.VISITOR_SESSION_JWT_EXPIRES_IN || "2h",
+  );
+}
+
 export function signH5MarketingToken(
   payload: Omit<H5MarketingTokenPayload, "iat" | "exp" | "token_type">,
 ) {
@@ -176,7 +196,15 @@ export function verifyTokenDetailed(token: string): {
     const payload = JSON.parse(fromBase64Url(encodedPayload)) as JwtPayload;
     const now = Math.floor(Date.now() / 1000);
 
-    if (!payload.sub || !payload.exp) {
+    if (!payload.exp) {
+      return { payload: null, reason: "invalid" };
+    }
+
+    if (payload.token_type === "visitor_session") {
+      if (!payload.openid || !payload.visitor_id) {
+        return { payload: null, reason: "invalid" };
+      }
+    } else if (!payload.sub) {
       return { payload: null, reason: "invalid" };
     }
 
