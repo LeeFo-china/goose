@@ -581,6 +581,50 @@ API 当前处理步骤：
 - `/projects/status` 并行 count/rows 和短缓存已生效。
 - 下一刀最有价值的是员工权限上下文预热：让 `/auth/me/permissions` 不再阻塞首屏，或把小程序端首屏改为不等待该接口完成。
 
+## 2026-05-20 20:32 员工权限上下文预热优化
+
+`/auth/me/permissions` 仍会等待 `prewarm_employee_auth_context` 完成，上一轮约 `3.1s`。原链路是：
+
+1. 按 employeeId 查询员工、租户、部门、岗位基础信息。
+2. 查询员工角色及角色权限。
+3. 查询员工权限覆盖。
+4. API 侧合并 role permissions 与 overrides，生成最终 auth context。
+
+已完成 API 调整：
+
+- 新增 `get_employee_permission_context_fast(p_employee_id)` RPC。
+- 该 RPC 一次返回 employee、roles、role_permissions、overrides。
+- `authorizationService.getAuthContextByEmployeeId()` 底层仓储改为走该 RPC，减少权限预热时的远端读轮次。
+
+下一次员工登录重点看：
+
+- `prewarm_employee_auth_context` 是否从约 `3s` 降低。
+- 登录后首个 `/auth/me/permissions` 是否跟随下降。
+- 如果小程序旧 token 在 API watch 重载后直接并发请求首页接口，该轮会混入冷启动和鉴权重建耗时，不适合作为稳定对比。
+
+## 2026-05-20 20:37 员工权限上下文验证结果
+
+最新一次员工登录后：
+
+- `/auth`：约 `3.4s`
+  - `jscode2session`：约 `2.1s`
+  - `resolve_wechat_login_state_by_openid`：约 `1.25s`
+  - 员工轻量上下文：`2ms`
+- `prewarm_employee_auth_context`：约 `1.8s`
+  - 已从上一轮约 `3.1s` 降低。
+- `/auth/me/permissions`：约 `1.8s`
+  - 与权限预热同步下降。
+- `/customers`：约 `1.4s`
+- `/projects/status`：约 `1.6s`
+- `/task-center/todos/summary`：约 `1.8s`
+- `/home_stats`：约 `2.0s`
+
+结论：
+
+- 权限上下文 RPC 生效，首个权限接口等待时间明显下降。
+- 当前体验剩余主要来自微信官方接口、一次登录态 RPC，以及员工首页多个业务接口并发冷读。
+- 下一步如果继续优化，应优先做员工首页 bootstrap，把 `/home_stats`、`/task-center/todos/summary`、`/projects/status`、`/customers` 的首屏必要数据合并或分层返回。
+
 ## 验收标准
 
 ### API 验收

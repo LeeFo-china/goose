@@ -115,8 +115,24 @@ type RoleWithPermissionsRecord = RoleRecord & {
   }> | null;
 };
 
+type EmployeePermissionContextRpcRow = {
+  employee: EmployeePermissionContextRecord["employee"];
+  roles: RoleRecord[] | null;
+  role_permissions: EmployeePermissionContextRecord["rolePermissions"] | null;
+  overrides: EmployeePermissionContextRecord["overrides"] | null;
+};
+
 class PermissionRepository {
   private adminClient = SupabaseDB.getAdminClient();
+
+  private rpc(name: string, params: Record<string, unknown>) {
+    return (this.adminClient as unknown as {
+      rpc: (functionName: string, parameters: Record<string, unknown>) => Promise<{
+        data: unknown;
+        error: unknown;
+      }>;
+    }).rpc(name, params);
+  }
 
   private isRetryableError(error: unknown) {
     if (!error || typeof error !== "object") {
@@ -1004,11 +1020,30 @@ class PermissionRepository {
   async getEmployeePermissionContextByEmployeeId(
     employeeId: string,
   ): Promise<EmployeePermissionContextRecord> {
-    const employee = await this.findEmployeeById(employeeId);
-    return this.getEmployeePermissionContextForEmployee(
-      (employee as EmployeePermissionContextRecord["employee"]) || null,
-      employeeId,
-    );
+    const { data, error } = await this.rpc("get_employee_permission_context_fast", {
+      p_employee_id: employeeId,
+    });
+
+    if (error) {
+      throw Errors.dbError("查询员工权限上下文失败", error);
+    }
+
+    const [row] = (data || []) as EmployeePermissionContextRpcRow[];
+    if (!row?.employee) {
+      return {
+        employee: null,
+        roles: [],
+        rolePermissions: [],
+        overrides: [],
+      };
+    }
+
+    return {
+      employee: row.employee,
+      roles: row.roles || [],
+      rolePermissions: row.role_permissions || [],
+      overrides: row.overrides || [],
+    };
   }
 
   private async getEmployeePermissionContextForEmployee(
