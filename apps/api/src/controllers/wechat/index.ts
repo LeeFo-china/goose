@@ -293,6 +293,14 @@ export class WeChatController extends BaseController {
     };
   }
 
+  private buildEmployeeLoginRoles(existingRoles?: string[] | null) {
+    const roles = new Set(
+      (existingRoles || []).filter((role) => role && role !== "visitor"),
+    );
+    roles.add("employee");
+    return Array.from(roles);
+  }
+
   private async buildEmployeeLoginContext(
     authUserId: string,
     openid?: string | null,
@@ -663,18 +671,9 @@ export class WeChatController extends BaseController {
         );
       }
 
-      const openidStartedAt = Date.now();
-      const openid = await this.getOpenIdByAuthUserId(employeeAuthUserId);
-      request.log.info(
-        {
-          requestId: request.id,
-          durationMs: Date.now() - openidStartedAt,
-          hasOpenid: Boolean(openid),
-        },
-        "[auth] verify role openid resolved",
-      );
+      const openid = requestOpenid ?? await this.getOpenIdByAuthUserId(employeeAuthUserId);
       const rolesStartedAt = Date.now();
-      const roles = await this.getUserRoles(employeeAuthUserId);
+      const roles = this.buildEmployeeLoginRoles(request.user?.roles);
       request.log.info(
         {
           requestId: request.id,
@@ -1903,6 +1902,14 @@ export class WeChatController extends BaseController {
     }
 
     if (employee.user_id && employee.user_id !== authUserId) {
+      const targetMembershipPromise = this.getAuthIdentitySource() !== "legacy"
+        ? userIdentityService.hasActiveBusinessMembership({
+          userId: employee.user_id,
+          tenantId: tenant.id,
+          identityType: "employee",
+          identityId: employee.id,
+        })
+        : Promise.resolve(false);
       const existingOpenidStartedAt = Date.now();
       const existingOpenid = await this.findOpenIdByAuthUserId(employee.user_id);
       logEmployeeBindStage("existing_employee_openid_checked", existingOpenidStartedAt, {
@@ -1927,12 +1934,14 @@ export class WeChatController extends BaseController {
       }
 
       const bindWechatStartedAt = Date.now();
-      await this.bindWechatOpenIdToExistingAuthUser({
-        openid,
-        fromAuthUserId: authUserId,
-        toAuthUserId: employee.user_id,
-      });
-      logEmployeeBindStage("wechat_openid_rebound", bindWechatStartedAt, {
+      this.runAuthBackgroundTask(request, "sync_legacy_employee_wechat_identity", () =>
+        this.bindWechatOpenIdToExistingAuthUser({
+          openid,
+          fromAuthUserId: authUserId,
+          toAuthUserId: employee.user_id!,
+        })
+      );
+      logEmployeeBindStage("legacy_wechat_identity_sync_scheduled", bindWechatStartedAt, {
         employeeId: employee.id,
         tenantId: tenant.id,
         existingAuthUserId: employee.user_id,
@@ -1949,6 +1958,22 @@ export class WeChatController extends BaseController {
         tenantId: tenant.id,
         existingAuthUserId: employee.user_id,
       });
+      const targetMembershipStartedAt = Date.now();
+      const hasTargetActiveMembership = await targetMembershipPromise;
+      logEmployeeBindStage("target_active_membership_checked", targetMembershipStartedAt, {
+        employeeId: employee.id,
+        tenantId: tenant.id,
+        existingAuthUserId: employee.user_id,
+        hasActiveMembership: hasTargetActiveMembership,
+      });
+      if (hasTargetActiveMembership) {
+        authorizationService.invalidateAuthContext({
+          authUserId: employee.user_id,
+          employeeId: employee.id,
+        });
+        return employee.user_id;
+      }
+
       const syncMembershipStartedAt = Date.now();
       await userIdentityService.syncBusinessMembershipBestEffort({
         userId: employee.user_id,
