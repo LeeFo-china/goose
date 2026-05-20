@@ -20,6 +20,7 @@ import { authorizationService, type AuthContext } from "@/services/authorization
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
+import { customerSelfServiceService } from "@/services/customer-self-service";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
@@ -564,12 +565,27 @@ export class WeChatController extends BaseController {
       }
     }
 
-    const rolesStartedAt = Date.now();
-    const roles = await this.getUserRoles(userId, visitorState.memberships ?? undefined);
-    request.log.info(
-      { requestId: request.id, userId, durationMs: Date.now() - rolesStartedAt, roles },
-      "[auth] resolved user roles",
+    const canResolveCustomerOnlyRolesFromMembership = (
+      this.getAuthIdentitySource() === "membership" &&
+      visitorState.memberships?.some((item) => item.identity_type === "customer") &&
+      visitorState.memberships.every((item) => item.identity_type !== "employee")
     );
+    let roles = ["customer"];
+    let rolesResolvedFromMembership = true;
+    if (!canResolveCustomerOnlyRolesFromMembership) {
+      rolesResolvedFromMembership = false;
+      const rolesStartedAt = Date.now();
+      roles = await this.getUserRoles(userId, visitorState.memberships ?? undefined);
+      request.log.info(
+        { requestId: request.id, userId, durationMs: Date.now() - rolesStartedAt, roles },
+        "[auth] resolved user roles",
+      );
+    } else {
+      request.log.info(
+        { requestId: request.id, userId, durationMs: 0, roles, source: "membership_customer_only" },
+        "[auth] resolved user roles",
+      );
+    }
     this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
       userIdentityService.observeLegacyIdentityStateBestEffort({
         userId,
@@ -633,6 +649,7 @@ export class WeChatController extends BaseController {
           openid: wxData.openid,
           customer: customerOptions[0]!,
           roles,
+          request,
         }),
         "登录成功",
       );
@@ -654,6 +671,21 @@ export class WeChatController extends BaseController {
         is_new_user: isNewUser,
         tenants: customerOptions.map((item) => this.serializeCustomerTenantOption(item)),
       }, "登录成功");
+    }
+
+    if (rolesResolvedFromMembership) {
+      const rolesStartedAt = Date.now();
+      roles = await this.getUserRoles(userId, visitorState.memberships ?? undefined);
+      request.log.info(
+        {
+          requestId: request.id,
+          userId,
+          durationMs: Date.now() - rolesStartedAt,
+          roles,
+          reason: "customer_options_empty",
+        },
+        "[auth] resolved user roles",
+      );
     }
 
     const token = this.signWechatAuthToken({
@@ -1592,6 +1624,7 @@ export class WeChatController extends BaseController {
     openid: string | null;
     customer: CustomerTenantOption;
     roles?: string[];
+    request?: FastifyRequest;
   }) {
     const tenant = this.normalizeTenantRelation(input.customer.tenant);
     this.assertCustomerTenantAvailable(input.customer);
@@ -1605,6 +1638,17 @@ export class WeChatController extends BaseController {
       tenant_slug: tenant?.slug ?? null,
       customer_id: input.customer.id,
     });
+    if (input.request) {
+      this.runAuthBackgroundTask(input.request, "prewarm_customer_context", () =>
+        customerSelfServiceService.prewarmCustomerContext({
+          authUserId: input.authUserId,
+          customer: {
+            ...input.customer,
+            user_id: input.authUserId,
+          },
+        })
+      );
+    }
 
     return {
       mode: "customer",

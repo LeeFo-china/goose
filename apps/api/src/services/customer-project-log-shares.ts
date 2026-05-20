@@ -72,6 +72,9 @@ import {
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
 
+const CUSTOMER_PROJECT_CAMPAIGN_SUMMARY_CACHE_TTL_MS = 10_000;
+const CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS = 10_000;
+
 type CustomerProjectRow = {
   id: string;
   tenant_id: string | null;
@@ -558,6 +561,72 @@ function parseCopiesResult(rawContent: string, context: CustomerProjectLogShareC
 }
 
 class CustomerProjectLogShareService {
+  private customerProjectCampaignSummaryCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<CustomerProjectLogShareService["loadCustomerProjectCampaignSummary"]>>;
+  }>();
+  private customerProjectCampaignSummaryInFlight = new Map<
+    string,
+    Promise<Awaited<ReturnType<CustomerProjectLogShareService["loadCustomerProjectCampaignSummary"]>>>
+  >();
+  private customerAppointmentRewardCampaignMissCache = new Map<string, { expiresAt: number }>();
+  private customerAppointmentRewardCampaignInFlight = new Map<
+    string,
+    Promise<Awaited<ReturnType<CustomerProjectLogShareService["loadCustomerAppointmentRewardCampaign"]>>>
+  >();
+
+  private customerProjectCampaignSummaryCacheKey(authUserId: string, projectId: string) {
+    return `${authUserId}:${projectId}`;
+  }
+
+  private customerAppointmentRewardCampaignCacheKey(authUserId: string, projectId: string) {
+    return `${authUserId}:${projectId}`;
+  }
+
+  private getCachedCustomerProjectCampaignSummary(cacheKey: string) {
+    const cached = this.customerProjectCampaignSummaryCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.customerProjectCampaignSummaryCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setCachedCustomerProjectCampaignSummary(
+    cacheKey: string,
+    value: Awaited<ReturnType<CustomerProjectLogShareService["loadCustomerProjectCampaignSummary"]>>,
+  ) {
+    this.customerProjectCampaignSummaryCache.set(cacheKey, {
+      expiresAt: Date.now() + CUSTOMER_PROJECT_CAMPAIGN_SUMMARY_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private hasCachedCustomerAppointmentRewardCampaignMiss(cacheKey: string) {
+    const cached = this.customerAppointmentRewardCampaignMissCache.get(cacheKey);
+    if (!cached) {
+      return false;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.customerAppointmentRewardCampaignMissCache.delete(cacheKey);
+      return false;
+    }
+
+    return true;
+  }
+
+  private setCachedCustomerAppointmentRewardCampaignMiss(cacheKey: string) {
+    this.customerAppointmentRewardCampaignMissCache.set(cacheKey, {
+      expiresAt: Date.now() + CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS,
+    });
+  }
+
   private buildCampaignSummary(
     campaign: CustomerProjectLogShareCampaignRow,
   ): ShareCampaignSummary {
@@ -2272,7 +2341,7 @@ class CustomerProjectLogShareService {
     };
   }
 
-  async getCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
+  private async loadCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
     const { customer } = await this.getOwnedProject(authUserId, projectId);
     const configResult = await this.getEffectiveShareCampaignConfig(projectId);
     const campaigns = (await customerProjectLogShareCampaignRepository.listByProject({
@@ -2346,6 +2415,32 @@ class CustomerProjectLogShareService {
         }
         : null,
     };
+  }
+
+  async getCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
+    const cacheKey = this.customerProjectCampaignSummaryCacheKey(authUserId, projectId);
+    const cached = this.getCachedCustomerProjectCampaignSummary(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.customerProjectCampaignSummaryInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadCustomerProjectCampaignSummary(authUserId, projectId)
+      .then((result) => {
+        this.setCachedCustomerProjectCampaignSummary(cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.customerProjectCampaignSummaryInFlight.get(cacheKey) === request) {
+          this.customerProjectCampaignSummaryInFlight.delete(cacheKey);
+        }
+      });
+    this.customerProjectCampaignSummaryInFlight.set(cacheKey, request);
+    return request;
   }
 
   async getCustomerCampaignDetail(authUserId: string, campaignId: string) {
@@ -2450,11 +2545,16 @@ class CustomerProjectLogShareService {
     };
   }
 
-  async getCustomerAppointmentRewardCampaign(authUserId: string, projectId: string) {
+  private async loadCustomerAppointmentRewardCampaign(
+    authUserId: string,
+    projectId: string,
+    cacheKey: string,
+  ) {
     const { customer, project } = await this.getOwnedProject(authUserId, projectId);
     const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
 
     if (!matched) {
+      this.setCachedCustomerAppointmentRewardCampaignMiss(cacheKey);
       throw Errors.business(
         404,
         "当前项目未命中预约奖励活动",
@@ -2494,6 +2594,34 @@ class CustomerProjectLogShareService {
       display_subtitle: summary.display_subtitle,
       reward_claim_voucher: voucher,
     };
+  }
+
+  async getCustomerAppointmentRewardCampaign(authUserId: string, projectId: string) {
+    const cacheKey = this.customerAppointmentRewardCampaignCacheKey(authUserId, projectId);
+    if (this.hasCachedCustomerAppointmentRewardCampaignMiss(cacheKey)) {
+      throw Errors.business(
+        404,
+        "当前项目未命中预约奖励活动",
+        ErrorCodes.APPOINTMENT_REWARD_CAMPAIGN_NOT_FOUND,
+      );
+    }
+
+    const inFlight = this.customerAppointmentRewardCampaignInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadCustomerAppointmentRewardCampaign(
+      authUserId,
+      projectId,
+      cacheKey,
+    ).finally(() => {
+      if (this.customerAppointmentRewardCampaignInFlight.get(cacheKey) === request) {
+        this.customerAppointmentRewardCampaignInFlight.delete(cacheKey);
+      }
+    });
+    this.customerAppointmentRewardCampaignInFlight.set(cacheKey, request);
+    return request;
   }
 
   async submitCustomerAppointmentRewardCampaign(

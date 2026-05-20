@@ -46,6 +46,20 @@ class CustomerSelfServiceService {
     return item.value;
   }
 
+  private getCachedEntry<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
+    const item = cache.get(key);
+    if (!item) {
+      return null;
+    }
+
+    if (item.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return null;
+    }
+
+    return item;
+  }
+
   private setCachedValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string, value: T) {
     const now = Date.now();
     if (cache.size >= MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE) {
@@ -111,9 +125,9 @@ class CustomerSelfServiceService {
   }
 
   getUserProfileByAuthUserId(authUserId: string) {
-    const cached = this.getCachedValue(this.userProfileCache, authUserId);
-    if (cached !== null) {
-      return Promise.resolve(cached);
+    const cached = this.getCachedEntry(this.userProfileCache, authUserId);
+    if (cached) {
+      return Promise.resolve(cached.value);
     }
 
     const inFlight = this.userProfileInFlight.get(authUserId);
@@ -133,6 +147,14 @@ class CustomerSelfServiceService {
       });
     this.userProfileInFlight.set(authUserId, request);
     return request;
+  }
+
+  prewarmCustomerContext(input: {
+    authUserId: string;
+    customer: CustomerSelfServiceCustomerContextRow;
+  }) {
+    this.setCachedValue(this.customerProfilesByIdsCache, input.customer.id, [input.customer]);
+    return this.getUserProfileByAuthUserId(input.authUserId);
   }
 
   async saveAuthUserProfile(

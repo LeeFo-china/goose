@@ -306,12 +306,16 @@ API 当前处理步骤：
 - 客户上下文需要的客户档案、用户资料增加 10 秒短缓存。
 - `/customer/projects` 增加 10 秒 per-customer/per-tenant/per-page 短缓存。
 - 客户身份绑定、资料更新会清理或覆盖对应短缓存。
+- `/auth` 返回 customer session 前后台预热 `/auth/me/customer-context` 需要的客户档案和用户资料；小程序紧接着请求时可命中同一个 in-flight 或短缓存。
+- `/customer/projects/:projectId/share-campaigns/summary` 增加 10 秒 per-auth-user/per-project 短缓存和 in-flight 合并，用于降低客户项目详情页重复刷新等待。
+- membership 模式下，如果当前账号只有 customer membership，`/auth` 直接推导 `roles: ["customer"]`，不再额外查询角色表。
+- `/customer/projects/:projectId/appointment-reward-campaign` 对“未命中活动”的 404 增加 10 秒负缓存和 in-flight 合并，避免项目详情页重复等待慢 404。
 
 边界：
 
 - 该阶段只优化客户自助端重复请求和首屏串行等待，不改变员工身份判断。
 - 缓存 TTL 仍保持 10 秒，避免客户资料和项目列表长时间陈旧。
-- 如果后续要继续优化项目详情、日志、分享活动 summary，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
+- 如果后续要继续优化项目详情、日志、验收列表和预约奖励，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
 
 ## 小程序端优化计划
 
