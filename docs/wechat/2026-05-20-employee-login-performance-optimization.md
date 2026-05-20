@@ -261,11 +261,16 @@ API 当前处理步骤：
 - 新增 `GET /employee/bootstrap`。
 - 该接口要求 employee token，服务端会一次性完成：
   - 当前员工完整 `context`。
+  - 用户资料 `profile`，字段兼容 `/auth/me/profile` 的首屏使用场景。
   - 首页统计 `home_stats`。
   - 任务中心摘要 `task_summary`。
 - 服务端响应后会后台预热：
+  - `/home_stats`
+  - `/task-center/todos/summary`
   - `/projects/status?page=1&pageSize=20&ownership=self`
   - `/customers?page=1&pageSize=20`
+- 默认 `home_mode=defer`、`tasks_mode=defer`，`home_stats` 和 `task_summary` 返回 `null`。
+- 如果需要兼容旧行为，可以显式请求 `GET /employee/bootstrap?home_mode=inline&tasks_mode=inline`。
 - `projects_mode` 和 `customers_mode` 当前固定返回 `defer`，表示项目列表和客户列表仍由小程序后续请求，但这些请求可复用服务端预热产生的 in-flight 或短缓存。
 
 接口示例：
@@ -287,8 +292,19 @@ Authorization: Bearer <employee_token>
       "roles": [],
       "permissions": []
     },
-    "home_stats": {},
-    "task_summary": {},
+    "profile": {
+      "auth_user_id": "...",
+      "nickname": null,
+      "avatar": null,
+      "avatar_path": null,
+      "profile_completed": false,
+      "profile_completed_at": null,
+      "roles": []
+    },
+    "home_mode": "defer",
+    "home_stats": null,
+    "tasks_mode": "defer",
+    "task_summary": null,
     "projects_mode": "defer",
     "projects": null,
     "customers_mode": "defer",
@@ -304,19 +320,20 @@ Authorization: Bearer <employee_token>
 - `employee_ready` 后优先请求 `GET /employee/bootstrap`。
 - 小程序不要再在登录完成后立即并发请求：
   - `/auth/me/permissions`
+  - `/auth/me/profile`
   - `/home_stats`
   - `/task-center/todos/summary`
-- 上述三类数据改为从 `/employee/bootstrap` 读取。
+- 上述数据改为从 `/employee/bootstrap` 读取。
 - 项目列表和客户列表可以在 bootstrap 返回后再请求：
   - `/projects/status?page=1&pageSize=20&ownership=self`
   - `/customers?page=1&pageSize=20`
-- 页面首屏应先用 bootstrap 的 `home_stats` 和 `task_summary` 渲染，再逐步填充项目和客户列表。
+- 页面首屏应先用 bootstrap 的 `context` 和 `profile` 渲染首页框架，再逐步填充统计、任务、项目和客户列表。
 
 预期收益：
 
-- 登录后首页首批请求从至少 3 条员工上下文相关接口，收敛为 1 条 bootstrap。
-- `/auth/me/permissions` 不再作为员工首页首屏必需接口。
-- 项目 / 客户首屏仍保留短缓存和 in-flight 合并，但不阻塞 bootstrap 返回。
+- 登录后首页身份/profile 请求收敛为 1 条 bootstrap。
+- `/auth/me/permissions` 和 `/auth/me/profile` 不再作为员工首页首屏必需接口。
+- 统计、任务、项目、客户首屏仍保留短缓存和 in-flight 合并，但不阻塞 bootstrap 返回。
 
 ### 阶段 3：提高 auth context 缓存命中
 
@@ -429,18 +446,21 @@ Authorization: Bearer <employee_token>
 2. 小程序同步写入新 `employee_token`，清理旧 token 触发的 in-flight 请求。
 3. 状态切到 `employee_ready`。
 4. 立即请求 `GET /employee/bootstrap`。
-5. 使用 bootstrap 返回的 `context`、`home_stats`、`task_summary` 渲染员工首页第一屏。
-6. bootstrap 返回后，再延迟加载扩展列表：
+5. 使用 bootstrap 返回的 `context` 和 `profile` 渲染员工首页框架。
+6. bootstrap 返回后，再延迟加载扩展数据：
+   - `/home_stats`
+   - `/task-center/todos/summary`
    - `/projects/status?page=1&pageSize=20&ownership=self`
    - `/customers?page=1&pageSize=20`
 
 首屏禁止继续把以下接口作为登录后的立即并发请求：
 
 - `/auth/me/permissions`
+- `/auth/me/profile`
 - `/home_stats`
 - `/task-center/todos/summary`
 
-这三类数据已经由 `/employee/bootstrap` 返回。小程序端如果仍然请求这些旧接口，说明还没有完成本轮员工首页 bootstrap 对接。
+这些数据已经由 `/employee/bootstrap` 返回。小程序端如果仍然请求这些旧接口，说明还没有完成本轮员工首页 bootstrap 对接。
 
 ### 避免重复触发登录
 
@@ -467,7 +487,7 @@ Authorization: Bearer <employee_token>
 4. `visitor_ready`：`/auth` 返回 visitor，只能发 visitor 允许接口；点击员工登录再进入 `/auth/verify-role`。
 5. `auth_failed`：清理本次 code 和临时状态，重新触发必须重新调用 `wx.login()`。
 
-首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。页面 `onShow` 如果发现状态已经是 `employee_ready`，也必须先检查本轮 `/employee/bootstrap` 是否完成；未完成时不能抢跑 `/auth/me/permissions`、`/home_stats`、`/task-center/todos/summary`、`/projects/status` 或 `/customers`。
+首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。页面 `onShow` 如果发现状态已经是 `employee_ready`，也必须先检查本轮 `/employee/bootstrap` 是否完成；未完成时不能抢跑 `/auth/me/permissions`、`/auth/me/profile`、`/home_stats`、`/task-center/todos/summary`、`/projects/status` 或 `/customers`。
 
 ### 客户登录态门禁
 
@@ -828,6 +848,56 @@ Authorization: Bearer <employee_token>
 - `/employee/bootstrap` 在拿到 authContext 并完成权限校验后，立即启动 projects/customers deferred prewarm。
 - `home_stats`、`task_summary` 与 projects/customers 预热并行执行。
 - bootstrap 返回时，项目和客户列表更可能已经完成或正在 in-flight，后续请求更容易命中缓存/复用。
+
+## 2026-05-20 21:25 员工 profile 合并进 bootstrap
+
+已有 token 恢复登录态时，本地日志显示小程序仍先请求 `/auth/me/profile`，再请求 `/employee/bootstrap`。这会在员工首页首屏前额外增加一次鉴权和远端读等待。
+
+已完成 API 调整：
+
+- `/employee/bootstrap` 响应新增 `profile` 字段。
+- `profile` 字段兼容 `/auth/me/profile` 的首屏使用场景：
+  - `auth_user_id`
+  - `nickname`
+  - `avatar`
+  - `avatar_path`
+  - `profile_completed`
+  - `profile_completed_at`
+  - `roles`
+- profile、`home_stats`、`task_summary` 在 bootstrap 内并行加载。
+
+小程序端接入要求：
+
+- 员工首页首屏和已有 token 恢复登录态时，不再先请求 `/auth/me/profile`。
+- 需要头像、昵称、资料完成状态时，直接读取 `/employee/bootstrap` 返回的 `profile`。
+- `/auth/me/profile` 只保留给个人资料页或资料编辑后的显式刷新。
+
+## 2026-05-20 21:32 员工 bootstrap 轻量化
+
+小程序移除 `/auth/me/profile` 后，恢复已有 token 的首屏链路只剩 `/employee/bootstrap`、`/customers` 和 `/projects/status`。但 bootstrap 仍会同步等待 `home_stats` 和 `task_summary`，单次可能达到 `3s - 6s`。
+
+已完成 API 调整：
+
+- `/employee/bootstrap` 默认改为轻量模式：
+  - 同步返回 `context`。
+  - 同步返回 `profile`。
+  - `home_stats` 默认返回 `null`。
+  - `task_summary` 默认返回 `null`。
+  - `home_mode` 默认返回 `defer`。
+  - `tasks_mode` 默认返回 `defer`。
+- 服务端会后台预热 `home_stats`、`task_summary`、`projects/status` 和 `customers`。
+- 如果需要旧行为，可显式请求：
+
+```http
+GET /employee/bootstrap?home_mode=inline&tasks_mode=inline
+Authorization: Bearer <employee_token>
+```
+
+小程序端接入要求：
+
+- 首屏不要等待 `home_stats` 或 `task_summary` 才展示首页框架。
+- bootstrap 返回后再分别拉 `/home_stats`、`/task-center/todos/summary`、`/projects/status`、`/customers`。
+- 同一轮恢复登录只允许一个 `/employee/bootstrap` in-flight，多个页面复用同一个 Promise。
 
 ## 验收标准
 
