@@ -108,6 +108,13 @@ export type EmployeePermissionContextRecord = {
   }>;
 };
 
+type RoleWithPermissionsRecord = RoleRecord & {
+  role_permissions?: Array<{
+    access_scope: string;
+    permission: { code: string } | null;
+  }> | null;
+};
+
 class PermissionRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -510,6 +517,56 @@ class PermissionRepository {
     return (rows
       .map((item) => item.role)
       .filter(Boolean) as RoleRecord[]);
+  }
+
+  private async listEmployeeRolesWithPermissions(employeeId: string) {
+    const { data, error } = await this.adminClient
+      .from("employee_roles")
+      .select(`
+        role:roles (
+          id,
+          code,
+          name,
+          description,
+          status,
+          tenant_id,
+          created_at,
+          updated_at,
+          role_permissions (
+            access_scope,
+            permission:permissions (
+              code
+            )
+          )
+        )
+      `)
+      .eq("employee_id", employeeId);
+
+    if (error) {
+      throw Errors.dbError("查询员工角色权限失败", error);
+    }
+
+    const rows = ((data || []) as unknown as Array<{
+      role: RoleWithPermissionsRecord | null;
+    }>);
+    const roles: RoleRecord[] = [];
+    const rolePermissions: Array<{ code: string; scope: string }> = [];
+
+    for (const row of rows) {
+      if (!row.role) continue;
+      const { role_permissions: permissions, ...role } = row.role;
+      roles.push(role);
+
+      for (const item of permissions || []) {
+        if (!item.permission?.code) continue;
+        rolePermissions.push({
+          code: item.permission.code,
+          scope: item.access_scope,
+        });
+      }
+    }
+
+    return { roles, rolePermissions };
   }
 
   async listEmployeeRoleIds(employeeId: string) {
@@ -948,17 +1005,34 @@ class PermissionRepository {
     employeeId: string,
   ): Promise<EmployeePermissionContextRecord> {
     const employee = await this.findEmployeeById(employeeId);
-    const roles = await this.listEmployeeRoles(employeeId);
-    const roleIds = roles.map((item) => item.id);
-    const [rolePermissions, overrides] = await Promise.all([
-      this.listRolePermissions(roleIds),
+    return this.getEmployeePermissionContextForEmployee(
+      (employee as EmployeePermissionContextRecord["employee"]) || null,
+      employeeId,
+    );
+  }
+
+  private async getEmployeePermissionContextForEmployee(
+    employee: EmployeePermissionContextRecord["employee"],
+    employeeId: string,
+  ): Promise<EmployeePermissionContextRecord> {
+    if (!employee) {
+      return {
+        employee: null,
+        roles: [],
+        rolePermissions: [],
+        overrides: [],
+      };
+    }
+
+    const [roleResult, overrides] = await Promise.all([
+      this.listEmployeeRolesWithPermissions(employeeId),
       this.listEmployeePermissionOverrides(employeeId),
     ]);
 
     return {
-      employee: employee || null,
-      roles,
-      rolePermissions,
+      employee,
+      roles: roleResult.roles,
+      rolePermissions: roleResult.rolePermissions,
       overrides,
     };
   }
@@ -976,7 +1050,10 @@ class PermissionRepository {
       };
     }
 
-    return this.getEmployeePermissionContextByEmployeeId(employee.id);
+    return this.getEmployeePermissionContextForEmployee(
+      employee as EmployeePermissionContextRecord["employee"],
+      employee.id,
+    );
   }
 }
 

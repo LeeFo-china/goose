@@ -298,7 +298,7 @@ export class WeChatController extends BaseController {
     openid?: string | null,
     roles: string[] = ["employee"],
   ) {
-    let authContext = await authorizationService.getAuthContextByAuthUserId(authUserId);
+    let authContext = await authorizationService.getEmployeeLoginContextByAuthUserId(authUserId);
     if (!authContext.employeeId && this.getAuthIdentitySource() !== "legacy") {
       const employeeMembership = (await userIdentityService.listActiveBusinessMemberships({
         userId: authUserId,
@@ -306,7 +306,7 @@ export class WeChatController extends BaseController {
       }))[0];
 
       if (employeeMembership) {
-        authContext = await authorizationService.getAuthContextByEmployeeId(
+        authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
           employeeMembership.identity_id,
         );
       }
@@ -314,6 +314,10 @@ export class WeChatController extends BaseController {
 
     if (!authContext.employeeId) {
       return null;
+    }
+
+    if (!authContext.tenantId && !authContext.isPlatformAdmin) {
+      authContext = await authorizationService.getAuthContextByEmployeeId(authContext.employeeId);
     }
 
     authorizationService.assertTenantAvailable(authContext);

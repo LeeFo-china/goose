@@ -332,6 +332,36 @@ class AuthorizationService {
     return context;
   }
 
+  async getEmployeeLoginContextByAuthUserId(authUserId: string): Promise<AuthContext> {
+    const cached = this.getCacheValue(this.authUserCache, authUserId);
+    if (cached?.employeeId) {
+      return cached;
+    }
+
+    const employee = await permissionRepository.findEmployeeByAuthUserId(authUserId);
+    return this.buildAuthContext({
+      employee: employee as EmployeePermissionContextRecord["employee"] || null,
+      roles: [],
+      rolePermissions: [],
+      overrides: [],
+    }, authUserId);
+  }
+
+  async getEmployeeLoginContextByEmployeeId(employeeId: string): Promise<AuthContext> {
+    const cached = this.getCacheValue(this.employeeCache, employeeId);
+    if (cached?.employeeId) {
+      return cached;
+    }
+
+    const employee = await permissionRepository.findEmployeeById(employeeId);
+    return this.buildAuthContext({
+      employee: employee as EmployeePermissionContextRecord["employee"] || null,
+      roles: [],
+      rolePermissions: [],
+      overrides: [],
+    }, employee?.user_id || "");
+  }
+
   invalidateAuthContext(input: {
     authUserId?: string | null;
     employeeId?: string | null;
