@@ -144,6 +144,25 @@ API 当前处理步骤：
 - 同步主链路只剩微信 `jscode2session` 约 `1281ms` 和 active OAuth 查询约 `1008ms`。
 - legacy / unbound / create user 兼容链路在响应后后台执行，最近一次后台解析约 `6131ms`，不阻塞首屏。
 
+### 阶段 0.2：访客首屏数据缓存
+
+访客登录后的首屏接口已经加服务端短 TTL 缓存：
+
+- `/projects/frontend-visible`：60 秒内存缓存，项目创建 / 更新 / 删除时主动失效；缓存过期时使用 in-flight Promise 合并并发远端查询。
+- `/ai/decoration-qa/suggestions`：60 秒内存缓存，复用已有 DB / AI cache 结果；同一 cache key 的并发请求复用同一个 in-flight Promise。
+
+实测结果：
+
+- `/projects/frontend-visible`：冷请求约 `1.720s`，缓存命中约 `0.002s`。
+- `/ai/decoration-qa/suggestions?scene=visitor`：冷请求约 `1.076s`，缓存命中约 `0.002s`。
+
+小程序端接入要求：
+
+- visitor 登录成功不能依赖 `user_id` 判断登录态；新 visitor session 可能返回 `user_id: null` 和 `visitor_id`。
+- 保存 `/auth` 返回的 token 后立即渲染 visitor 首页基础 UI。
+- `/projects/frontend-visible` 与 `/ai/decoration-qa/suggestions` 并发请求。
+- 小程序本地保留上次项目列表和推荐问题，二次进入先展示本地缓存，再静默刷新服务端数据。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：

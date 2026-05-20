@@ -22,6 +22,7 @@ class ProjectService {
         expiresAt: number;
         rows: Array<Record<string, unknown>>;
     } | null = null;
+    private publicProjectsInFlight: Promise<Array<Record<string, unknown>>> | null = null;
 
     private isPublicProjectVisible(row: Record<string, unknown>) {
         const visibilityStatus =
@@ -92,16 +93,26 @@ class ProjectService {
             return this.publicProjectsCache.rows;
         }
 
-        const rows = await projectRepository.listPublicProjects();
-        this.publicProjectsCache = {
-            rows,
-            expiresAt: now + PUBLIC_PROJECTS_CACHE_TTL_MS,
-        };
-        return rows;
+        if (!this.publicProjectsInFlight) {
+            this.publicProjectsInFlight = projectRepository.listPublicProjects()
+                .then((rows) => {
+                    this.publicProjectsCache = {
+                        rows,
+                        expiresAt: Date.now() + PUBLIC_PROJECTS_CACHE_TTL_MS,
+                    };
+                    return rows;
+                })
+                .finally(() => {
+                    this.publicProjectsInFlight = null;
+                });
+        }
+
+        return this.publicProjectsInFlight;
     }
 
     private invalidatePublicProjectsCache() {
         this.publicProjectsCache = null;
+        this.publicProjectsInFlight = null;
     }
 
     async getRequiredPublicProjectVisibility(projectId: string) {
