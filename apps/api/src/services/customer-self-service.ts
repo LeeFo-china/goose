@@ -12,7 +12,60 @@ import {
 } from "@/repositories/customer-self-service";
 import type { AuthMeProfileUpdateInput } from "@/schema/user-profile";
 
+const CUSTOMER_SELF_SERVICE_CACHE_TTL_MS = 10_000;
+const MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE = 4_000;
+
 class CustomerSelfServiceService {
+  private customerProfilesByIdsCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerSelfServiceCustomerContextRow[];
+  }>();
+  private customerProfilesByIdsInFlight = new Map<string, Promise<CustomerSelfServiceCustomerContextRow[]>>();
+  private userProfileCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerSelfServiceUserProfileRow | null;
+  }>();
+  private userProfileInFlight = new Map<string, Promise<CustomerSelfServiceUserProfileRow | null>>();
+  private ownedProjectsCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<typeof customerSelfServiceRepository.listOwnedProjects>>;
+  }>();
+  private ownedProjectsInFlight = new Map<string, Promise<Awaited<ReturnType<typeof customerSelfServiceRepository.listOwnedProjects>>>>();
+
+  private getCachedValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
+    const item = cache.get(key);
+    if (!item) {
+      return null;
+    }
+
+    if (item.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return null;
+    }
+
+    return item.value;
+  }
+
+  private setCachedValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string, value: T) {
+    const now = Date.now();
+    if (cache.size >= MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE) {
+      for (const [cacheKey, item] of cache.entries()) {
+        if (item.expiresAt <= now) {
+          cache.delete(cacheKey);
+        }
+      }
+
+      if (cache.size >= MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE) {
+        cache.clear();
+      }
+    }
+
+    cache.set(key, {
+      expiresAt: now + CUSTOMER_SELF_SERVICE_CACHE_TTL_MS,
+      value,
+    });
+  }
+
   listLegacyCustomerProfilesByAuthUserId(
     authUserId: string,
     options?: {
@@ -27,17 +80,67 @@ class CustomerSelfServiceService {
   }
 
   listCustomerProfilesByIds(customerIds: string[]) {
-    return customerSelfServiceRepository.listCustomerProfilesByIds(customerIds);
+    const normalizedIds = Array.from(new Set(customerIds)).sort();
+    if (normalizedIds.length === 0) {
+      return Promise.resolve([] as CustomerSelfServiceCustomerContextRow[]);
+    }
+
+    const cacheKey = normalizedIds.join(",");
+    const cached = this.getCachedValue(this.customerProfilesByIdsCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.customerProfilesByIdsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.listCustomerProfilesByIds(normalizedIds)
+      .then((result) => {
+        this.setCachedValue(this.customerProfilesByIdsCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.customerProfilesByIdsInFlight.get(cacheKey) === request) {
+          this.customerProfilesByIdsInFlight.delete(cacheKey);
+        }
+      });
+    this.customerProfilesByIdsInFlight.set(cacheKey, request);
+    return request;
   }
 
   getUserProfileByAuthUserId(authUserId: string) {
-    return customerSelfServiceRepository.getUserProfileByAuthUserId(authUserId);
+    const cached = this.getCachedValue(this.userProfileCache, authUserId);
+    if (cached !== null) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.userProfileInFlight.get(authUserId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.getUserProfileByAuthUserId(authUserId)
+      .then((result) => {
+        this.setCachedValue(this.userProfileCache, authUserId, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.userProfileInFlight.get(authUserId) === request) {
+          this.userProfileInFlight.delete(authUserId);
+        }
+      });
+    this.userProfileInFlight.set(authUserId, request);
+    return request;
   }
 
   async saveAuthUserProfile(
     authUserId: string,
     input: AuthMeProfileUpdateInput,
   ) {
+    this.userProfileCache.delete(authUserId);
+    this.userProfileInFlight.delete(authUserId);
     const current = await this.getUserProfileByAuthUserId(authUserId);
     const nickname = input.nickname !== undefined
       ? input.nickname
@@ -54,12 +157,14 @@ class CustomerSelfServiceService {
       return null;
     }
 
-    return customerSelfServiceRepository.upsertUserProfile({
+    const saved = await customerSelfServiceRepository.upsertUserProfile({
       authUserId,
       nickname,
       avatarPath,
       profileCompletedAt,
     });
+    this.setCachedValue(this.userProfileCache, authUserId, saved);
+    return saved;
   }
 
   listOwnedProjects(input: {
@@ -68,7 +173,34 @@ class CustomerSelfServiceService {
     from: number;
     to: number;
   }) {
-    return customerSelfServiceRepository.listOwnedProjects(input);
+    const cacheKey = [
+      input.customerId,
+      input.tenantId,
+      input.from,
+      input.to,
+    ].join(":");
+    const cached = this.getCachedValue(this.ownedProjectsCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.ownedProjectsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.listOwnedProjects(input)
+      .then((result) => {
+        this.setCachedValue(this.ownedProjectsCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.ownedProjectsInFlight.get(cacheKey) === request) {
+          this.ownedProjectsInFlight.delete(cacheKey);
+        }
+      });
+    this.ownedProjectsInFlight.set(cacheKey, request);
+    return request;
   }
 
   findOwnedProject(input: {

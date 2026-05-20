@@ -4,6 +4,8 @@ import { accessPolicyService } from "@/services/access-policy";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { homeDashboardRepository } from "@/repositories/home-dashboard";
 
+const HOME_DASHBOARD_CACHE_TTL_MS = 10_000;
+
 function getMonthRange(now = new Date()) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -15,6 +17,42 @@ function getMonthRange(now = new Date()) {
 }
 
 class HomeDashboardService {
+  private statsCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<HomeDashboardService["loadStats"]>>;
+  }>();
+  private statsInFlight = new Map<string, Promise<Awaited<ReturnType<HomeDashboardService["loadStats"]>>>>();
+
+  private buildStatsCacheKey(authContext: AuthContext) {
+    return [
+      authContext.tenantId ?? "",
+      authContext.employeeId ?? "",
+      authContext.roleCodes.join(","),
+      authContext.permissions.map((item) => `${item.code}:${item.scope}`).join(","),
+    ].join(":");
+  }
+
+  private getCachedStats(cacheKey: string) {
+    const cached = this.statsCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.statsCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setCachedStats(cacheKey: string, value: Awaited<ReturnType<HomeDashboardService["loadStats"]>>) {
+    this.statsCache.set(cacheKey, {
+      expiresAt: Date.now() + HOME_DASHBOARD_CACHE_TTL_MS,
+      value,
+    });
+  }
+
   private assertTenantScope(authContext: AuthContext) {
     if (!authContext.employeeId) {
       throw Errors.business(403, "员工身份缺失，无法查看首页统计", "EMPLOYEE_TENANT_MISSING");
@@ -35,7 +73,7 @@ class HomeDashboardService {
     return authContext.tenantId;
   }
 
-  async getStats(authContext: AuthContext) {
+  private async loadStats(authContext: AuthContext) {
     const tenantId = this.assertTenantScope(authContext);
     const { monthStart, nextMonthStart } = getMonthRange();
 
@@ -74,6 +112,32 @@ class HomeDashboardService {
       },
       generated_at: new Date().toISOString(),
     };
+  }
+
+  async getStats(authContext: AuthContext) {
+    const cacheKey = this.buildStatsCacheKey(authContext);
+    const cached = this.getCachedStats(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.statsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadStats(authContext)
+      .then((result) => {
+        this.setCachedStats(cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.statsInFlight.get(cacheKey) === request) {
+          this.statsInFlight.delete(cacheKey);
+        }
+      });
+    this.statsInFlight.set(cacheKey, request);
+    return request;
   }
 }
 

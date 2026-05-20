@@ -632,6 +632,7 @@ export class WeChatController extends BaseController {
           authUserId: userId,
           openid: wxData.openid,
           customer: customerOptions[0]!,
+          roles,
         }),
         "登录成功",
       );
@@ -1590,10 +1591,11 @@ export class WeChatController extends BaseController {
     authUserId: string;
     openid: string | null;
     customer: CustomerTenantOption;
+    roles?: string[];
   }) {
     const tenant = this.normalizeTenantRelation(input.customer.tenant);
     this.assertCustomerTenantAvailable(input.customer);
-    const roles = await this.getUserRoles(input.authUserId);
+    const roles = input.roles ?? await this.getUserRoles(input.authUserId);
     const normalizedRoles = roles.includes("customer") ? roles : [...roles, "customer"];
     const token = this.signWechatAuthToken({
       sub: input.authUserId,

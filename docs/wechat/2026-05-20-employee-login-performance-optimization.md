@@ -277,6 +277,42 @@ API 当前处理步骤：
 
 日志必须继续脱敏 openid、手机号、token。
 
+### 阶段 5：员工首页读接口短缓存
+
+2026-05-20 已调整：
+
+- `/home_stats` 增加 10 秒 per-tenant/per-employee/per-permission 内存缓存。
+- `/task-center/todos/summary` 增加 10 秒 per-tenant/per-employee/per-permission 内存缓存。
+- 两个接口都增加 in-flight Promise 合并，同一员工短时间内重复或并发请求只触发一次远端查询。
+
+边界：
+
+- 缓存时间较短，只用于登录后首屏和页面重复 onShow 的读性能优化。
+- 缓存 key 包含租户、员工、角色和权限 scope，避免跨员工或权限变化串数据。
+- 新建/更新业务数据后的强一致刷新后续可通过显式刷新接口或缓存失效事件补充；当前阶段优先解决退出重登后的首屏重复请求等待。
+
+### 阶段 6：客户自助链路短缓存
+
+2026-05-20 观察到退出/重登后实际落到 customer 链路，慢点集中在：
+
+- `/auth` 的客户租户选项解析。
+- `/auth/me/customer-context` 的客户身份和用户资料查询。
+- `/customer/projects` 的客户项目列表查询。
+
+已调整：
+
+- `/auth` 客户单租户自动登录复用当前请求已查询到的 roles，避免签 customer token 前重复查询角色。
+- 客户租户选项增加 10 秒 per-auth-user/per-identity-source 内存缓存和 in-flight 合并。
+- 客户上下文需要的客户档案、用户资料增加 10 秒短缓存。
+- `/customer/projects` 增加 10 秒 per-customer/per-tenant/per-page 短缓存。
+- 客户身份绑定、资料更新会清理或覆盖对应短缓存。
+
+边界：
+
+- 该阶段只优化客户自助端重复请求和首屏串行等待，不改变员工身份判断。
+- 缓存 TTL 仍保持 10 秒，避免客户资料和项目列表长时间陈旧。
+- 如果后续要继续优化项目详情、日志、分享活动 summary，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
+
 ## 小程序端优化计划
 
 ### 分阶段 UI 反馈

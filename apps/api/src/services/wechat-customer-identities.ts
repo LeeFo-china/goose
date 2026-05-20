@@ -9,7 +9,70 @@ import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
 
+const CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS = 10_000;
+const MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE = 4_000;
+
 class WechatCustomerIdentityService {
+  private customerTenantOptionsCache = new Map<string, {
+    expiresAt: number;
+    value: WechatCustomerTenantOption[];
+  }>();
+  private customerTenantOptionsInFlight = new Map<string, Promise<WechatCustomerTenantOption[]>>();
+
+  private customerTenantOptionsCacheKey(input: {
+    authUserId: string;
+    identitySource: AuthIdentitySource;
+  }) {
+    return `${input.identitySource}:${input.authUserId}`;
+  }
+
+  private getCachedCustomerTenantOptions(cacheKey: string) {
+    const cached = this.customerTenantOptionsCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.customerTenantOptionsCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setCachedCustomerTenantOptions(cacheKey: string, value: WechatCustomerTenantOption[]) {
+    const now = Date.now();
+    if (this.customerTenantOptionsCache.size >= MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE) {
+      for (const [key, item] of this.customerTenantOptionsCache.entries()) {
+        if (item.expiresAt <= now) {
+          this.customerTenantOptionsCache.delete(key);
+        }
+      }
+
+      if (this.customerTenantOptionsCache.size >= MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE) {
+        this.customerTenantOptionsCache.clear();
+      }
+    }
+
+    this.customerTenantOptionsCache.set(cacheKey, {
+      expiresAt: now + CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  invalidateCustomerTenantOptions(authUserId?: string | null) {
+    if (!authUserId) {
+      return;
+    }
+
+    for (const key of this.customerTenantOptionsCache.keys()) {
+      if (key.endsWith(`:${authUserId}`)) {
+        this.customerTenantOptionsCache.delete(key);
+        this.customerTenantOptionsInFlight.delete(key);
+      }
+    }
+  }
+
   private normalizeTenantRelation(value: WechatCustomerTenantOption["tenant"]) {
     if (Array.isArray(value)) {
       return value[0] ?? null;
@@ -69,7 +132,7 @@ class WechatCustomerIdentityService {
     );
   }
 
-  async listCustomerTenantOptionsByAuthUser(input: {
+  private async loadCustomerTenantOptionsByAuthUser(input: {
     authUserId: string;
     identitySource: AuthIdentitySource;
   }) {
@@ -98,6 +161,35 @@ class WechatCustomerIdentityService {
     }
 
     return this.enrichCustomerTenantOptions(Array.from(customerMap.values()));
+  }
+
+  async listCustomerTenantOptionsByAuthUser(input: {
+    authUserId: string;
+    identitySource: AuthIdentitySource;
+  }) {
+    const cacheKey = this.customerTenantOptionsCacheKey(input);
+    const cached = this.getCachedCustomerTenantOptions(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.customerTenantOptionsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadCustomerTenantOptionsByAuthUser(input)
+      .then((result) => {
+        this.setCachedCustomerTenantOptions(cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.customerTenantOptionsInFlight.get(cacheKey) === request) {
+          this.customerTenantOptionsInFlight.delete(cacheKey);
+        }
+      });
+    this.customerTenantOptionsInFlight.set(cacheKey, request);
+    return request;
   }
 
   async listCustomerTenantOptionsByMembership(authUserId: string) {
@@ -133,19 +225,21 @@ class WechatCustomerIdentityService {
     );
   }
 
-  bindCustomerAuthUser(input: {
+  async bindCustomerAuthUser(input: {
     authUserId: string;
     customer: Pick<
       WechatCustomerIdentityRow,
       "id" | "tenant_id" | "claimed_at"
     >;
   }) {
-    return wechatCustomerIdentityRepository.bindCustomerAuthUser({
+    const result = await wechatCustomerIdentityRepository.bindCustomerAuthUser({
       customerId: input.customer.id,
       authUserId: input.authUserId,
       tenantId: input.customer.tenant_id,
       claimedAt: input.customer.claimed_at ? null : new Date().toISOString(),
     });
+    this.invalidateCustomerTenantOptions(input.authUserId);
+    return result;
   }
 
   async bindCustomerRole(input: {
@@ -186,6 +280,7 @@ class WechatCustomerIdentityService {
         authUserId: input.authUserId,
         registeredAt: new Date().toISOString(),
       });
+      this.invalidateCustomerTenantOptions(input.authUserId);
 
       return;
     }
@@ -220,6 +315,7 @@ class WechatCustomerIdentityService {
       identityId: customer.id,
       source: "customer_verify_role_bind",
     });
+    this.invalidateCustomerTenantOptions(input.authUserId);
   }
 }
 

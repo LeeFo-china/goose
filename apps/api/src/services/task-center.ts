@@ -8,6 +8,7 @@ import type {
 } from "@/schema/task-center";
 
 type TaskPriority = "high" | "medium";
+const TASK_CENTER_SUMMARY_CACHE_TTL_MS = 10_000;
 
 export type TaskCenterTodoItem = {
   id: string;
@@ -51,6 +52,42 @@ function getPriorityLabel(priority: TaskPriority) {
 }
 
 class TaskCenterService {
+  private summaryCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<TaskCenterService["loadSummary"]>>;
+  }>();
+  private summaryInFlight = new Map<string, Promise<Awaited<ReturnType<TaskCenterService["loadSummary"]>>>>();
+
+  private buildSummaryCacheKey(authContext: AuthContext) {
+    return [
+      authContext.tenantId ?? "",
+      authContext.employeeId ?? "",
+      authContext.roleCodes.join(","),
+      authContext.permissions.map((item) => `${item.code}:${item.scope}`).join(","),
+    ].join(":");
+  }
+
+  private getCachedSummary(cacheKey: string) {
+    const cached = this.summaryCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.summaryCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setCachedSummary(cacheKey: string, value: Awaited<ReturnType<TaskCenterService["loadSummary"]>>) {
+    this.summaryCache.set(cacheKey, {
+      expiresAt: Date.now() + TASK_CENTER_SUMMARY_CACHE_TTL_MS,
+      value,
+    });
+  }
+
   private isExpenseVisible(
     visibility: Awaited<ReturnType<typeof accessPolicyService.getVisibleExpenseFilters>>,
     record: { employee_id: string; assignee_id: string | null },
@@ -474,7 +511,7 @@ class TaskCenterService {
     };
   }
 
-  async getSummary(authContext: AuthContext) {
+  private async loadSummary(authContext: AuthContext) {
     const list = await this.buildTodos(authContext);
     return {
       total: list.length,
@@ -485,6 +522,32 @@ class TaskCenterService {
         employee_id: authContext.employeeId,
       },
     };
+  }
+
+  async getSummary(authContext: AuthContext) {
+    const cacheKey = this.buildSummaryCacheKey(authContext);
+    const cached = this.getCachedSummary(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.summaryInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadSummary(authContext)
+      .then((result) => {
+        this.setCachedSummary(cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.summaryInFlight.get(cacheKey) === request) {
+          this.summaryInFlight.delete(cacheKey);
+        }
+      });
+    this.summaryInFlight.set(cacheKey, request);
+    return request;
   }
 }
 
