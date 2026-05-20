@@ -123,6 +123,21 @@ API 当前处理步骤：
 - 后续真正需要业务身份时再承担创建用户成本，等待发生在明确的“身份验证”动作里。
 - 临时 visitor token 不带真实 `sub`，避免被误写入 UUID 外键字段。
 
+### 阶段 0.1：membership 模式 visitor fast path
+
+当 `AUTH_IDENTITY_SOURCE=membership` 时，`user_oauth_identities` 是微信登录身份的主来源。此模式下：
+
+1. `/auth` 只同步等待微信 `jscode2session` 和 active OAuth identity 查询。
+2. 如果 active OAuth 命中，继续走真实员工 / 客户 / 已有用户登录链路。
+3. 如果 active OAuth 未命中，立即返回 `visitor_session`。
+4. legacy `wechat_identities`、历史 auth user 查询、unbound 判断和用户补建放到后台完整解析链路执行。
+
+边界：
+
+- `legacy` / `dual` 模式仍保留旧兼容查询，不启用该 fast path。
+- fast path 返回的仍是受限 visitor token，不能访问员工 / 客户 / 管理接口。
+- 后台发现 legacy 状态异常时只完成诊断或补建，不给当前 visitor token 升级权限。
+
 ### 阶段 1：拆出非阻塞同步
 
 把不影响本次响应正确性的同步动作改为响应后异步执行：

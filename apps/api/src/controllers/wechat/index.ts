@@ -832,10 +832,21 @@ export class WeChatController extends BaseController {
     request.log.info({ requestId: request.id, openid }, "[auth] query user by openid start");
     const identitySource = this.getAuthIdentitySource();
     if (identitySource !== "legacy") {
+      const activeOauthStartedAt = Date.now();
       const activeOauthIdentity = await userIdentityService.findActiveOauthIdentity({
         platform: "wechat_mini",
         openid,
       });
+      request.log.info(
+        {
+          requestId: request.id,
+          openid,
+          durationMs: Date.now() - activeOauthStartedAt,
+          found: Boolean(activeOauthIdentity),
+          identitySource,
+        },
+        "[auth] active oauth identity lookup result",
+      );
 
       if (activeOauthIdentity) {
         request.log.info(
@@ -870,6 +881,21 @@ export class WeChatController extends BaseController {
           userId: activeOauthIdentity.user_id,
           isNewUser: false,
         };
+      }
+
+      if (allowVisitorSession && identitySource === "membership") {
+        request.log.info(
+          { requestId: request.id, openid, identitySource },
+          "[auth] active oauth miss visitor fast path",
+        );
+        return this.createWechatVisitorSession({
+          request,
+          openid,
+          unionid: unionid || null,
+          uniqueEmail: true,
+          source: "wechat_auth_oauth_miss_fast_path",
+          backgroundMode: "resolve_identity",
+        });
       }
     }
 
@@ -1126,6 +1152,7 @@ export class WeChatController extends BaseController {
     unionid?: string | null;
     uniqueEmail?: boolean;
     source: string;
+    backgroundMode?: "create_user" | "resolve_identity";
   }): WechatAuthResolution {
     const visitorId = this.buildVisitorSessionId(input.openid);
     input.request.log.info(
@@ -1138,15 +1165,27 @@ export class WeChatController extends BaseController {
       "[auth] create visitor session result",
     );
 
-    this.runAuthBackgroundTask(input.request, "create_visitor_auth_user", () =>
-      this.createWechatVisitorUser({
+    const backgroundMode = input.backgroundMode ?? "create_user";
+    this.runAuthBackgroundTask(input.request, backgroundMode === "resolve_identity"
+      ? "resolve_visitor_auth_user"
+      : "create_visitor_auth_user", () => {
+      if (backgroundMode === "resolve_identity") {
+        return this.getOrCreateAuthUser(
+          input.request,
+          input.openid,
+          input.unionid ?? undefined,
+          { allowVisitorSession: false },
+        );
+      }
+
+      return this.createWechatVisitorUser({
         request: input.request,
         openid: input.openid,
         unionid: input.unionid ?? null,
         uniqueEmail: input.uniqueEmail,
         source: `${input.source}_background`,
-      })
-    );
+      });
+    });
 
     return {
       kind: "visitor_session",
