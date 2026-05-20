@@ -310,12 +310,19 @@ API 当前处理步骤：
 - `/customer/projects/:projectId/share-campaigns/summary` 增加 10 秒 per-auth-user/per-project 短缓存和 in-flight 合并，用于降低客户项目详情页重复刷新等待。
 - membership 模式下，如果当前账号只有 customer membership，`/auth` 直接推导 `roles: ["customer"]`，不再额外查询角色表。
 - `/customer/projects/:projectId/appointment-reward-campaign` 对“未命中活动”的 404 增加 10 秒负缓存和 in-flight 合并，避免项目详情页重复等待慢 404。
+- `/auth` 客户租户选项改为 lean 查询：单租户 customer 自动登录不再加载项目数和最近项目名；只有返回 `select_tenant` 时才补充项目概览。
+- `/customer/project-acceptances` 增加 10 秒 per-auth-user/per-tenant/per-customer/per-query 短缓存和 in-flight 合并；列表详情从逐条补齐改为批量补齐 items、actions、project、参与人和短信通知记录，减少客户项目详情页首次加载时的远端查询轮次。
+- `/customer/projects/:projectId/share-campaigns/summary` 首次请求改为并行读取客户项目归属和分享配置，并提前并行读取最近图片日志；同一首屏内复用 customer、ownedProject、projectTenant、marketingCampaign 匹配和 recent image log 的 10 秒热点缓存/in-flight。
+- `/customer/projects/:projectId/appointment-reward-campaign` 首次请求改为并行读取客户项目归属和预约奖励活动匹配；未命中活动时仍保留 10 秒负缓存，同一首屏内复用 ownedProject、projectTenant 和 marketingCampaign 匹配结果。
+- `/customer/projects/:projectId` 增加 10 秒 per-customer/per-tenant/per-project 短缓存和 in-flight；`/customer/projects` 列表返回时同步预热项目详情缓存，降低列表后立刻进详情的重复项目查询。
+- `/customer/projects/:projectId/logs` 增加 10 秒 per-project/per-tenant/per-page 日志列表缓存和日志评论聚合缓存，减少页面 onShow 或详情页并发刷新时的重复日志查询。
+- `/auth` 客户租户选项关键读查询增加 8 秒快速超时和 1 次瞬时网络错误重试，避免 Supabase socket 短暂断开时单次登录卡到几十秒。
 
 边界：
 
 - 该阶段只优化客户自助端重复请求和首屏串行等待，不改变员工身份判断。
-- 缓存 TTL 仍保持 10 秒，避免客户资料和项目列表长时间陈旧。
-- 如果后续要继续优化项目详情、日志、验收列表和预约奖励，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
+- 缓存 TTL 仍保持 10 秒，避免客户资料、项目列表、项目详情、日志、验收列表和营销活动状态长时间陈旧。
+- 如果后续要继续优化验收列表首个请求，需要先按 customer 端单独拆链路，避免和员工登录优化混在一个验收口径里。
 
 ### 阶段 7：清理旧兼容登录热路径
 
@@ -370,6 +377,46 @@ API 当前处理步骤：
 
 首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。
 
+### 客户登录态门禁
+
+2026-05-20 本地日志确认：客户登录时 `/auth` 尚未完成，小程序仍会提前用旧 token 或旧页面状态请求 `/customer/project-acceptances`，单次抢跑可耗时 `5s+`。这类请求会和 `/auth`、客户首屏接口并发竞争网络与后端查询，导致用户体感“登录很慢”。
+
+客户登录必须和员工登录一样使用状态门禁：
+
+1. `anonymous`：无 token，只能发 `/auth`、公开分享页、公开营销页接口。
+2. `authenticating`：已调用 `wx.login()` 或 `/auth`，禁止发任何需要 customer token 的接口。
+3. `customer_ready`：`/auth` 返回 `mode: "customer"`，并且新 token 已写入本地存储后，才能发客户首屏接口。
+4. `platform_visitor_ready`：`/auth` 返回 `platform_visitor`，只能发游客允许接口；不能发 `/customer/*`。
+5. `select_tenant`：`/auth` 返回多租户选择，只能展示租户选择页；选择租户并拿到 customer token 前不能发 `/customer/*`。
+6. `auth_failed`：清理本次 code、临时 token 和旧角色态；重试必须重新调用 `wx.login()`。
+
+`authenticating` 阶段禁止提前请求：
+
+- `/auth/me/customer-context`
+- `/auth/me/profile`
+- `/customer/projects`
+- `/customer/projects/:id`
+- `/customer/projects/:id/logs`
+- `/customer/project-acceptances`
+- `/customer/projects/:projectId/appointment-reward-campaign`
+- `/customer/projects/:projectId/share-campaigns/summary`
+
+客户首屏建议触发顺序：
+
+1. `/auth` 完成，写入新 token、`mode`、`tenant_id`、`customer_id`。
+2. 进入 `customer_ready`。
+3. 先请求 `/auth/me/customer-context` 和 `/customer/projects`。
+4. 只有用户进入具体项目详情页时，再请求项目详情、日志、验收、预约奖励和分享 summary。
+5. 预约奖励和分享活动不是进入客户首页的阻塞条件，建议延后加载；接口未返回前展示局部骨架或隐藏活动卡片。
+
+端上去重要求：
+
+- 同一轮登录只允许一个 `/auth` in-flight。
+- 同一 projectId 的项目详情、日志、验收、预约奖励、分享 summary 在 in-flight 时复用同一个 Promise，不重复发请求。
+- 页面 `onShow` 如果发现状态是 `authenticating`，只能订阅登录完成事件，不能主动拉客户接口。
+- 退出登录时必须同步清空 token、角色、`customer_id`、`tenant_id`、项目缓存和所有 in-flight 请求引用。
+- 新 token 写入前，不允许旧页面的 mounted/onShow 逻辑继续用旧 token 拉 `/customer/*`。
+
 ### 缓存短期登录态
 
 - 本地已有有效 employee token 时，优先进入页面。
@@ -394,10 +441,13 @@ API 当前处理步骤：
 - 请求失败后可重新触发 `wx.login()` 并重试。
 - 员工已绑定时不进入手机号验证页。
 - visitor 绑定员工时，验证码验证成功后能进入员工首页。
+- customer 登录时，`/auth` 完成前不得出现 `/customer/project-acceptances`、`/customer/projects`、项目详情、日志、预约奖励或分享 summary 请求。
+- customer 登录成功后，必须先进入 `customer_ready` 再拉客户首屏数据。
+- 客户项目详情页的预约奖励和分享 summary 不阻塞页面主体展示，允许局部 loading 或延迟加载。
 
 ## 当前建议优先级
 
-1. API 先把 `/auth` 的旧身份同步和 best-effort 同步改成非阻塞。
-2. API 增加阶段耗时日志，确认真实瓶颈。
-3. 小程序端补登录 loading 分阶段文案和防重复点击。
-4. 再决定是否继续合并 role/context 查询或拉长 auth context 缓存。
+1. 小程序端先补 employee/customer 登录态门禁，杜绝 `/auth` 未完成时抢跑业务接口。
+2. 小程序端拆分客户项目详情页首屏和活动/验收扩展数据，避免分享 summary、预约奖励、验收列表阻塞页面主体。
+3. API 继续优化 customer tenant options、project acceptances、share summary 的首个请求耗时。
+4. 再决定是否物理删除 `AUTH_IDENTITY_SOURCE=dual|legacy` 回滚分支和旧 `wechat_identities` 表数据。

@@ -74,6 +74,8 @@ import {
 
 const CUSTOMER_PROJECT_CAMPAIGN_SUMMARY_CACHE_TTL_MS = 10_000;
 const CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS = 10_000;
+const CUSTOMER_PROJECT_LOG_SHARE_HOT_CACHE_TTL_MS = 10_000;
+const MAX_CUSTOMER_PROJECT_LOG_SHARE_HOT_CACHE_SIZE = 2_000;
 
 type CustomerProjectRow = {
   id: string;
@@ -561,6 +563,37 @@ function parseCopiesResult(rawContent: string, context: CustomerProjectLogShareC
 }
 
 class CustomerProjectLogShareService {
+  private customerByAuthUserCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerRow;
+  }>();
+  private customerByAuthUserInFlight = new Map<string, Promise<CustomerRow>>();
+  private ownedProjectCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<CustomerProjectLogShareService["loadOwnedProject"]>>;
+  }>();
+  private ownedProjectInFlight = new Map<
+    string,
+    Promise<Awaited<ReturnType<CustomerProjectLogShareService["loadOwnedProject"]>>>
+  >();
+  private projectTenantCache = new Map<string, {
+    expiresAt: number;
+    value: string | null;
+  }>();
+  private projectTenantInFlight = new Map<string, Promise<string | null>>();
+  private matchingMarketingCampaignCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<CustomerProjectLogShareService["loadMatchingMarketingCampaign"]>>;
+  }>();
+  private matchingMarketingCampaignInFlight = new Map<
+    string,
+    Promise<Awaited<ReturnType<CustomerProjectLogShareService["loadMatchingMarketingCampaign"]>>>
+  >();
+  private recentImageProjectLogCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerProjectLogRow | null;
+  }>();
+  private recentImageProjectLogInFlight = new Map<string, Promise<CustomerProjectLogRow | null>>();
   private customerProjectCampaignSummaryCache = new Map<string, {
     expiresAt: number;
     value: Awaited<ReturnType<CustomerProjectLogShareService["loadCustomerProjectCampaignSummary"]>>;
@@ -581,6 +614,54 @@ class CustomerProjectLogShareService {
 
   private customerAppointmentRewardCampaignCacheKey(authUserId: string, projectId: string) {
     return `${authUserId}:${projectId}`;
+  }
+
+  private getHotCacheValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
+    const cached = cache.get(key);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private getHotCacheEntry<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
+    const cached = cache.get(key);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return null;
+    }
+
+    return cached;
+  }
+
+  private setHotCacheValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string, value: T) {
+    const now = Date.now();
+    if (cache.size >= MAX_CUSTOMER_PROJECT_LOG_SHARE_HOT_CACHE_SIZE) {
+      for (const [cacheKey, cached] of cache.entries()) {
+        if (cached.expiresAt <= now) {
+          cache.delete(cacheKey);
+        }
+      }
+
+      if (cache.size >= MAX_CUSTOMER_PROJECT_LOG_SHARE_HOT_CACHE_SIZE) {
+        cache.clear();
+      }
+    }
+
+    cache.set(key, {
+      expiresAt: now + CUSTOMER_PROJECT_LOG_SHARE_HOT_CACHE_TTL_MS,
+      value,
+    });
   }
 
   private getCachedCustomerProjectCampaignSummary(cacheKey: string) {
@@ -688,6 +769,31 @@ class CustomerProjectLogShareService {
   }
 
   private async getCustomerByAuthUserId(authUserId: string) {
+    const cached = this.getHotCacheValue(this.customerByAuthUserCache, authUserId);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.customerByAuthUserInFlight.get(authUserId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadCustomerByAuthUserId(authUserId)
+      .then((result) => {
+        this.setHotCacheValue(this.customerByAuthUserCache, authUserId, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.customerByAuthUserInFlight.get(authUserId) === request) {
+          this.customerByAuthUserInFlight.delete(authUserId);
+        }
+      });
+    this.customerByAuthUserInFlight.set(authUserId, request);
+    return request;
+  }
+
+  private async loadCustomerByAuthUserId(authUserId: string) {
     const identitySource = this.getAuthIdentitySource();
     if (identitySource === "membership") {
       const list = await this.listCustomerProfilesByMembership(authUserId);
@@ -1292,6 +1398,35 @@ class CustomerProjectLogShareService {
     projectId: string,
     campaignType: "share_assist" | "appointment_reward" = "share_assist",
   ) {
+    const cacheKey = `${projectId}:${campaignType}`;
+    const cached = this.getHotCacheEntry(this.matchingMarketingCampaignCache, cacheKey);
+    if (cached) {
+      return cached.value;
+    }
+
+    const inFlight = this.matchingMarketingCampaignInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadMatchingMarketingCampaign(projectId, campaignType)
+      .then((result) => {
+        this.setHotCacheValue(this.matchingMarketingCampaignCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.matchingMarketingCampaignInFlight.get(cacheKey) === request) {
+          this.matchingMarketingCampaignInFlight.delete(cacheKey);
+        }
+      });
+    this.matchingMarketingCampaignInFlight.set(cacheKey, request);
+    return request;
+  }
+
+  private async loadMatchingMarketingCampaign(
+    projectId: string,
+    campaignType: "share_assist" | "appointment_reward" = "share_assist",
+  ) {
     const tenantId = await this.getProjectTenantId(projectId);
     const campaigns = await marketingCampaignRepository.listActiveByType(campaignType, tenantId);
     if (!campaigns.length) {
@@ -1566,6 +1701,32 @@ class CustomerProjectLogShareService {
   }
 
   private async getOwnedProject(authUserId: string, projectId: string) {
+    const cacheKey = `${authUserId}:${projectId}`;
+    const cached = this.getHotCacheValue(this.ownedProjectCache, cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.ownedProjectInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadOwnedProject(authUserId, projectId)
+      .then((result) => {
+        this.setHotCacheValue(this.ownedProjectCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.ownedProjectInFlight.get(cacheKey) === request) {
+          this.ownedProjectInFlight.delete(cacheKey);
+        }
+      });
+    this.ownedProjectInFlight.set(cacheKey, request);
+    return request;
+  }
+
+  private async loadOwnedProject(authUserId: string, projectId: string) {
     const customer = await this.getCustomerByAuthUserId(authUserId);
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("projects")
@@ -1638,21 +1799,38 @@ class CustomerProjectLogShareService {
   }
 
   private async getRecentImageProjectLog(projectId: string) {
-    const { data: projectData, error: projectError } = await SupabaseDB.getAdminClient()
-      .from("projects")
-      .select("tenant_id")
-      .eq("id", projectId)
-      .maybeSingle<{ tenant_id: string | null }>();
-
-    if (projectError) {
-      throw Errors.dbError("查询项目租户失败", projectError);
+    const cached = this.getHotCacheEntry(this.recentImageProjectLogCache, projectId);
+    if (cached) {
+      return cached.value;
     }
+
+    const inFlight = this.recentImageProjectLogInFlight.get(projectId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadRecentImageProjectLog(projectId)
+      .then((result) => {
+        this.setHotCacheValue(this.recentImageProjectLogCache, projectId, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.recentImageProjectLogInFlight.get(projectId) === request) {
+          this.recentImageProjectLogInFlight.delete(projectId);
+        }
+      });
+    this.recentImageProjectLogInFlight.set(projectId, request);
+    return request;
+  }
+
+  private async loadRecentImageProjectLog(projectId: string) {
+    const tenantId = await this.getProjectTenantId(projectId);
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_logs")
       .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("project_id", projectId)
-      .eq("tenant_id", projectData?.tenant_id ?? null)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(20);
 
@@ -2342,13 +2520,19 @@ class CustomerProjectLogShareService {
   }
 
   private async loadCustomerProjectCampaignSummary(authUserId: string, projectId: string) {
-    const { customer } = await this.getOwnedProject(authUserId, projectId);
-    const configResult = await this.getEffectiveShareCampaignConfig(projectId);
-    const campaigns = (await customerProjectLogShareCampaignRepository.listByProject({
-      customer_id: customer.id,
-      project_id: projectId,
-      limit: 20,
-    })).map((item) => this.ensureCampaignPhase2Metadata(item));
+    const [{ customer }, configResult] = await Promise.all([
+      this.getOwnedProject(authUserId, projectId),
+      this.getEffectiveShareCampaignConfig(projectId),
+    ]);
+    const [campaignRows, recentImageLog] = await Promise.all([
+      customerProjectLogShareCampaignRepository.listByProject({
+        customer_id: customer.id,
+        project_id: projectId,
+        limit: 20,
+      }),
+      this.getRecentImageProjectLog(projectId),
+    ]);
+    const campaigns = campaignRows.map((item) => this.ensureCampaignPhase2Metadata(item));
     const resolvedCampaigns = await Promise.all(campaigns);
 
     const claimRewardCampaign = resolvedCampaigns.find((item) =>
@@ -2360,7 +2544,7 @@ class CustomerProjectLogShareService {
     const focusCampaign = claimRewardCampaign || activeCampaign || claimedCampaign;
     const recentLog = focusCampaign
       ? await this.getProjectLogById(focusCampaign.log_id)
-      : await this.getRecentImageProjectLog(projectId);
+      : recentImageLog;
 
     if (!focusCampaign && !recentLog) {
       return {
@@ -2502,8 +2686,10 @@ class CustomerProjectLogShareService {
   }
 
   async getOrCreateCustomerAppointmentRewardCampaign(authUserId: string, projectId: string) {
-    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
-    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+    const [{ customer, project }, matched] = await Promise.all([
+      this.getOwnedProject(authUserId, projectId),
+      this.getMatchingMarketingCampaign(projectId, "appointment_reward"),
+    ]);
 
     if (!matched) {
       throw Errors.business(
@@ -2550,8 +2736,10 @@ class CustomerProjectLogShareService {
     projectId: string,
     cacheKey: string,
   ) {
-    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
-    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+    const [{ customer, project }, matched] = await Promise.all([
+      this.getOwnedProject(authUserId, projectId),
+      this.getMatchingMarketingCampaign(projectId, "appointment_reward"),
+    ]);
 
     if (!matched) {
       this.setCachedCustomerAppointmentRewardCampaignMiss(cacheKey);
@@ -2629,8 +2817,10 @@ class CustomerProjectLogShareService {
     projectId: string,
     input: CustomerAppointmentRewardSubmitInput,
   ) {
-    const { customer, project } = await this.getOwnedProject(authUserId, projectId);
-    const matched = await this.getMatchingMarketingCampaign(projectId, "appointment_reward");
+    const [{ customer, project }, matched] = await Promise.all([
+      this.getOwnedProject(authUserId, projectId),
+      this.getMatchingMarketingCampaign(projectId, "appointment_reward"),
+    ]);
 
     if (!matched) {
       throw Errors.business(
@@ -2889,6 +3079,31 @@ class CustomerProjectLogShareService {
   }
 
   private async getProjectTenantId(projectId: string) {
+    const cached = this.getHotCacheEntry(this.projectTenantCache, projectId);
+    if (cached) {
+      return cached.value;
+    }
+
+    const inFlight = this.projectTenantInFlight.get(projectId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadProjectTenantId(projectId)
+      .then((result) => {
+        this.setHotCacheValue(this.projectTenantCache, projectId, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.projectTenantInFlight.get(projectId) === request) {
+          this.projectTenantInFlight.delete(projectId);
+        }
+      });
+    this.projectTenantInFlight.set(projectId, request);
+    return request;
+  }
+
+  private async loadProjectTenantId(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("projects")
       .select("tenant_id")

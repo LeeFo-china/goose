@@ -19,7 +19,10 @@ import { createHash, randomBytes } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
-import { projectAcceptanceOpenTicketRepository } from "@/repositories/project-acceptance-open-tickets";
+import {
+  projectAcceptanceOpenTicketRepository,
+  type ProjectAcceptanceOpenTicketRow,
+} from "@/repositories/project-acceptance-open-tickets";
 import { systemSettingsService } from "@/services/system-settings";
 import { sendSmsTemplate } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
@@ -48,6 +51,8 @@ const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "leader_approved",
   "rejected",
 ];
+const CUSTOMER_ACCEPTANCE_LIST_CACHE_TTL_MS = 10_000;
+const MAX_CUSTOMER_ACCEPTANCE_LIST_CACHE_SIZE = 2_000;
 
 type AuthIdentitySource = "legacy" | "dual" | "membership";
 
@@ -108,6 +113,16 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
   } | null;
 };
 
+type CustomerAcceptanceListResult = {
+  list: AcceptanceDetail[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 class ProjectAcceptanceWorkflowService {
   assertTransition(input: {
     currentStatus: ProjectAcceptanceStatus;
@@ -131,8 +146,82 @@ class ProjectAcceptanceWorkflowService {
 const projectAcceptanceWorkflowService = new ProjectAcceptanceWorkflowService();
 
 class ProjectAcceptanceService {
+  private customerAcceptanceListCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerAcceptanceListResult;
+  }>();
+  private customerAcceptanceListInFlight = new Map<string, Promise<CustomerAcceptanceListResult>>();
+
   private requireTenantId(authContext: AuthContext) {
     return accessPolicyService.assertTenantContext(authContext);
+  }
+
+  private getCachedCustomerAcceptanceList(cacheKey: string) {
+    const item = this.customerAcceptanceListCache.get(cacheKey);
+    if (!item) {
+      return null;
+    }
+
+    if (item.expiresAt <= Date.now()) {
+      this.customerAcceptanceListCache.delete(cacheKey);
+      return null;
+    }
+
+    return item.value;
+  }
+
+  private setCachedCustomerAcceptanceList(
+    cacheKey: string,
+    value: CustomerAcceptanceListResult,
+  ) {
+    const now = Date.now();
+    if (this.customerAcceptanceListCache.size >= MAX_CUSTOMER_ACCEPTANCE_LIST_CACHE_SIZE) {
+      for (const [key, item] of this.customerAcceptanceListCache.entries()) {
+        if (item.expiresAt <= now) {
+          this.customerAcceptanceListCache.delete(key);
+        }
+      }
+
+      if (this.customerAcceptanceListCache.size >= MAX_CUSTOMER_ACCEPTANCE_LIST_CACHE_SIZE) {
+        this.customerAcceptanceListCache.clear();
+      }
+    }
+
+    this.customerAcceptanceListCache.set(cacheKey, {
+      expiresAt: now + CUSTOMER_ACCEPTANCE_LIST_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private clearCustomerAcceptanceListCache() {
+    this.customerAcceptanceListCache.clear();
+    this.customerAcceptanceListInFlight.clear();
+  }
+
+  private customerAcceptanceListCacheKey(
+    authUserId: string,
+    query: {
+      project_id: string;
+      page: number;
+      pageSize: number;
+      status?: ProjectAcceptanceStatus;
+      stage_code?: ProjectLogStageCode;
+    },
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    return [
+      authUserId,
+      scope?.tenantId ?? "",
+      scope?.customerId ?? "",
+      query.project_id,
+      query.page,
+      query.pageSize,
+      query.status ?? "",
+      query.stage_code ?? "",
+    ].join(":");
   }
 
   private getAuthIdentitySource(): AuthIdentitySource {
@@ -452,50 +541,24 @@ class ProjectAcceptanceService {
       PROJECT_LOG_STAGE_CONFIG[stageCode].label;
   }
 
-  private async buildDetail(row: ProjectAcceptanceRow): Promise<AcceptanceDetail> {
-    const rawActions = await projectAcceptanceRepository.listActions(
-      row.id,
-      row.tenant_id,
-    );
-    const actionEmployeeIds = rawActions
-      .filter((item) => item.operator_type === "employee" && item.operator_id)
-      .map((item) => item.operator_id as string);
-    const actionCustomerIds = rawActions
-      .filter((item) => item.operator_type === "customer" && item.operator_id)
-      .map((item) => item.operator_id as string);
-
-    const [items, actions, project, employees, customers, latestNotification] = await Promise.all([
-      projectAcceptanceRepository.listItems(row.id, row.tenant_id),
-      Promise.resolve(rawActions),
-      projectAcceptanceRepository.getProject(row.project_id, row.tenant_id),
-      projectAcceptanceRepository.listEmployees(
-        Array.from(new Set([
-          row.initiator_id,
-          row.reviewer_id,
-          ...actionEmployeeIds,
-        ].filter((item): item is string => Boolean(item)))),
-      ),
-      projectAcceptanceRepository.listCustomers(
-        Array.from(new Set([
-          row.customer_id,
-          ...actionCustomerIds,
-        ].filter((item): item is string => Boolean(item)))),
-      ),
-      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(
-        row.id,
-        row.tenant_id,
-      ),
-    ]);
-
-    const employeeMap = new Map(employees.map((item) => [item.id, item]));
-    const customerMap = new Map(customers.map((item) => [item.id, item]));
-    const hasCustomerDispute = actions.some((item) =>
+  private buildDetailFromParts(
+    row: ProjectAcceptanceRow,
+    input: {
+      items: ProjectAcceptanceItemRow[];
+      actions: ProjectAcceptanceActionRow[];
+      project: ProjectAcceptanceProjectRow | null;
+      employeeMap: Map<string, ProjectAcceptanceEmployeeRow>;
+      customerMap: Map<string, ProjectAcceptanceCustomerRow>;
+      latestNotification: ProjectAcceptanceOpenTicketRow | null;
+    },
+  ): AcceptanceDetail {
+    const hasCustomerDispute = input.actions.some((item) =>
       item.action === "customer_dispute"
     );
     const customerStatusLabel = row.status === "leader_approved" && hasCustomerDispute
       ? "整改完成，待你确认"
       : this.getStatusLabel(row.status);
-    const detailItems = items.map((item) => ({
+    const detailItems = input.items.map((item) => ({
       ...item,
       images: this.normalizeImageArray(item.images),
       image_items: this.normalizeAcceptanceImageItems({
@@ -522,39 +585,164 @@ class ProjectAcceptanceService {
       customer_status_label: customerStatusLabel,
       has_customer_dispute: hasCustomerDispute,
       items: detailItems,
-      actions: actions.map((item) => {
+      actions: input.actions.map((item) => {
         const metadata = this.normalizeActionMetadata(item.metadata);
         return {
           ...item,
           operator: item.operator_type === "employee" && item.operator_id
-            ? employeeMap.get(item.operator_id) || null
+            ? input.employeeMap.get(item.operator_id) || null
             : item.operator_type === "customer" && item.operator_id
-            ? customerMap.get(item.operator_id) || null
+            ? input.customerMap.get(item.operator_id) || null
             : null,
           images: metadata.images,
           image_items: metadata.image_items,
           referenced_images: metadata.referenced_images,
         };
       }),
-      project,
-      initiator: employeeMap.get(row.initiator_id) || null,
-      reviewer: row.reviewer_id ? employeeMap.get(row.reviewer_id) || null : null,
-      customer: row.customer_id ? customerMap.get(row.customer_id) || null : null,
-      latest_customer_notification: latestNotification
+      project: input.project,
+      initiator: input.employeeMap.get(row.initiator_id) || null,
+      reviewer: row.reviewer_id ? input.employeeMap.get(row.reviewer_id) || null : null,
+      customer: row.customer_id ? input.customerMap.get(row.customer_id) || null : null,
+      latest_customer_notification: input.latestNotification
         ? {
-          id: latestNotification.id,
-          status: latestNotification.status,
-          send_status: latestNotification.send_status,
-          send_error: latestNotification.send_error,
-          phone: this.maskPhone(latestNotification.phone),
-          link_type: latestNotification.link_type,
-          sent_at: latestNotification.sent_at,
-          expire_at: latestNotification.expire_at,
-          used_at: latestNotification.used_at,
-          created_at: latestNotification.created_at,
+          id: input.latestNotification.id,
+          status: input.latestNotification.status,
+          send_status: input.latestNotification.send_status,
+          send_error: input.latestNotification.send_error,
+          phone: this.maskPhone(input.latestNotification.phone),
+          link_type: input.latestNotification.link_type,
+          sent_at: input.latestNotification.sent_at,
+          expire_at: input.latestNotification.expire_at,
+          used_at: input.latestNotification.used_at,
+          created_at: input.latestNotification.created_at,
         }
         : null,
     };
+  }
+
+  private async buildDetail(row: ProjectAcceptanceRow): Promise<AcceptanceDetail> {
+    const rawActions = await projectAcceptanceRepository.listActions(
+      row.id,
+      row.tenant_id,
+    );
+    const actionEmployeeIds = rawActions
+      .filter((item) => item.operator_type === "employee" && item.operator_id)
+      .map((item) => item.operator_id as string);
+    const actionCustomerIds = rawActions
+      .filter((item) => item.operator_type === "customer" && item.operator_id)
+      .map((item) => item.operator_id as string);
+
+    const [items, project, employees, customers, latestNotification] = await Promise.all([
+      projectAcceptanceRepository.listItems(row.id, row.tenant_id),
+      projectAcceptanceRepository.getProject(row.project_id, row.tenant_id),
+      projectAcceptanceRepository.listEmployees(
+        Array.from(new Set([
+          row.initiator_id,
+          row.reviewer_id,
+          ...actionEmployeeIds,
+        ].filter((item): item is string => Boolean(item)))),
+      ),
+      projectAcceptanceRepository.listCustomers(
+        Array.from(new Set([
+          row.customer_id,
+          ...actionCustomerIds,
+        ].filter((item): item is string => Boolean(item)))),
+      ),
+      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(
+        row.id,
+        row.tenant_id,
+      ),
+    ]);
+
+    return this.buildDetailFromParts(row, {
+      items,
+      actions: rawActions,
+      project,
+      employeeMap: new Map(employees.map((item) => [item.id, item])),
+      customerMap: new Map(customers.map((item) => [item.id, item])),
+      latestNotification,
+    });
+  }
+
+  private getCommonTenantId(rows: ProjectAcceptanceRow[]) {
+    const tenantIds = Array.from(
+      new Set(rows.map((item) => item.tenant_id).filter((item): item is string => Boolean(item))),
+    );
+    return tenantIds.length === 1 ? tenantIds[0] : null;
+  }
+
+  private groupBy<T>(rows: T[], getKey: (row: T) => string) {
+    const result = new Map<string, T[]>();
+    for (const row of rows) {
+      const key = getKey(row);
+      const list = result.get(key);
+      if (list) {
+        list.push(row);
+      } else {
+        result.set(key, [row]);
+      }
+    }
+    return result;
+  }
+
+  private async buildDetails(rows: ProjectAcceptanceRow[]): Promise<AcceptanceDetail[]> {
+    if (rows.length === 0) return [];
+
+    const acceptanceIds = rows.map((item) => item.id);
+    const tenantId = this.getCommonTenantId(rows);
+    const [items, actions, projects, latestNotifications] = await Promise.all([
+      projectAcceptanceRepository.listItemsByAcceptanceIds(acceptanceIds, tenantId),
+      projectAcceptanceRepository.listActionsByAcceptanceIds(acceptanceIds, tenantId),
+      projectAcceptanceRepository.listProjectsByIds(
+        Array.from(new Set(rows.map((item) => item.project_id))),
+        tenantId,
+      ),
+      projectAcceptanceOpenTicketRepository.listLatestByAcceptances(
+        acceptanceIds,
+        tenantId,
+      ),
+    ]);
+    const employeeIds = new Set<string>();
+    const customerIds = new Set<string>();
+
+    for (const row of rows) {
+      employeeIds.add(row.initiator_id);
+      if (row.reviewer_id) employeeIds.add(row.reviewer_id);
+      if (row.customer_id) customerIds.add(row.customer_id);
+    }
+
+    for (const action of actions) {
+      if (action.operator_type === "employee" && action.operator_id) {
+        employeeIds.add(action.operator_id);
+      }
+      if (action.operator_type === "customer" && action.operator_id) {
+        customerIds.add(action.operator_id);
+      }
+    }
+
+    const [employees, customers] = await Promise.all([
+      projectAcceptanceRepository.listEmployees(Array.from(employeeIds)),
+      projectAcceptanceRepository.listCustomers(Array.from(customerIds)),
+    ]);
+    const itemsByAcceptance = this.groupBy(items, (item) => item.acceptance_id);
+    const actionsByAcceptance = this.groupBy(actions, (item) => item.acceptance_id);
+    const projectMap = new Map(projects.map((item) => [item.id, item]));
+    const notificationMap = new Map(
+      latestNotifications.map((item) => [item.acceptance_id, item]),
+    );
+    const employeeMap = new Map(employees.map((item) => [item.id, item]));
+    const customerMap = new Map(customers.map((item) => [item.id, item]));
+
+    return rows.map((row) =>
+      this.buildDetailFromParts(row, {
+        items: itemsByAcceptance.get(row.id) || [],
+        actions: actionsByAcceptance.get(row.id) || [],
+        project: projectMap.get(row.project_id) || null,
+        employeeMap,
+        customerMap,
+        latestNotification: notificationMap.get(row.id) || null,
+      })
+    );
   }
 
   private async getRequiredAcceptance(id: string, tenantId?: string | null) {
@@ -727,6 +915,7 @@ class ProjectAcceptanceService {
       comment: input.comment ?? null,
       metadata: input.metadata ?? {},
     });
+    this.clearCustomerAcceptanceListCache();
   }
 
   private maskPhone(phone: string) {
@@ -866,6 +1055,7 @@ class ProjectAcceptanceService {
       });
 
     if (reusable?.sent_at && reusable.send_status === "sent") {
+      this.clearCustomerAcceptanceListCache();
       return {
         sent: true,
         reused: true,
@@ -915,6 +1105,7 @@ class ProjectAcceptanceService {
         input.row.tenant_id,
       );
 
+      this.clearCustomerAcceptanceListCache();
       return {
         sent: true,
         reused: false,
@@ -931,6 +1122,7 @@ class ProjectAcceptanceService {
         },
         input.row.tenant_id,
       );
+      this.clearCustomerAcceptanceListCache();
       throw error;
     }
   }
@@ -1039,7 +1231,7 @@ class ProjectAcceptanceService {
     });
 
     return {
-      list: await Promise.all(list.map((item) => this.buildDetail(item))),
+      list: await this.buildDetails(list),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -1070,6 +1262,45 @@ class ProjectAcceptanceService {
       customerId?: string | null;
     },
   ) {
+    const cacheKey = this.customerAcceptanceListCacheKey(authUserId, query, scope);
+    const cached = this.getCachedCustomerAcceptanceList(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.customerAcceptanceListInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadCustomerAcceptances(authUserId, query, scope)
+      .then((result) => {
+        this.setCachedCustomerAcceptanceList(cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.customerAcceptanceListInFlight.get(cacheKey) === request) {
+          this.customerAcceptanceListInFlight.delete(cacheKey);
+        }
+      });
+    this.customerAcceptanceListInFlight.set(cacheKey, request);
+    return request;
+  }
+
+  private async loadCustomerAcceptances(
+    authUserId: string,
+    query: {
+      project_id: string;
+      page: number;
+      pageSize: number;
+      status?: ProjectAcceptanceStatus;
+      stage_code?: ProjectLogStageCode;
+    },
+    scope?: {
+      tenantId?: string | null;
+      customerId?: string | null;
+    },
+  ): Promise<CustomerAcceptanceListResult> {
     const customer = await this.getCustomerByAuthUserId(
       authUserId,
       scope,
@@ -1096,7 +1327,7 @@ class ProjectAcceptanceService {
     });
 
     return {
-      list: await Promise.all(list.map((item) => this.buildDetail(item))),
+      list: await this.buildDetails(list),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -1450,6 +1681,7 @@ class ProjectAcceptanceService {
 
     this.assertCanUpdateOwn(authContext, row);
     await projectAcceptanceRepository.deleteAcceptance(row.id, row.tenant_id);
+    this.clearCustomerAcceptanceListCache();
 
     return {
       id: row.id,

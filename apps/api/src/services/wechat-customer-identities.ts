@@ -22,8 +22,13 @@ class WechatCustomerIdentityService {
   private customerTenantOptionsCacheKey(input: {
     authUserId: string;
     identitySource: AuthIdentitySource;
+    includeProjectSummary?: boolean;
   }) {
-    return `${input.identitySource}:${input.authUserId}`;
+    return [
+      input.identitySource,
+      input.includeProjectSummary ? "summary" : "lean",
+      input.authUserId,
+    ].join(":");
   }
 
   private getCachedCustomerTenantOptions(cacheKey: string) {
@@ -135,11 +140,16 @@ class WechatCustomerIdentityService {
   private async loadCustomerTenantOptionsByAuthUser(input: {
     authUserId: string;
     identitySource: AuthIdentitySource;
+    includeProjectSummary?: boolean;
   }) {
+    const maybeEnrich = (customers: WechatCustomerTenantOption[]) => (
+      input.includeProjectSummary
+        ? this.enrichCustomerTenantOptions(customers)
+        : customers
+    );
+
     if (input.identitySource === "membership") {
-      return this.enrichCustomerTenantOptions(
-        await this.listCustomerTenantOptionsByMembership(input.authUserId),
-      );
+      return maybeEnrich(await this.listCustomerTenantOptionsByMembership(input.authUserId));
     }
 
     const legacyCustomers = this.filterActiveTenantCustomers(
@@ -149,7 +159,7 @@ class WechatCustomerIdentityService {
     );
 
     if (input.identitySource === "legacy") {
-      return this.enrichCustomerTenantOptions(legacyCustomers);
+      return maybeEnrich(legacyCustomers);
     }
 
     const membershipCustomers = await this.listCustomerTenantOptionsByMembership(
@@ -160,12 +170,13 @@ class WechatCustomerIdentityService {
       customerMap.set(customer.id, customer);
     }
 
-    return this.enrichCustomerTenantOptions(Array.from(customerMap.values()));
+    return maybeEnrich(Array.from(customerMap.values()));
   }
 
   async listCustomerTenantOptionsByAuthUser(input: {
     authUserId: string;
     identitySource: AuthIdentitySource;
+    includeProjectSummary?: boolean;
   }) {
     const cacheKey = this.customerTenantOptionsCacheKey(input);
     const cached = this.getCachedCustomerTenantOptions(cacheKey);

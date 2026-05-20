@@ -221,6 +221,24 @@ class ProjectAcceptanceRepository {
     return (data || null) as ProjectAcceptanceProjectRow | null;
   }
 
+  async listProjectsByIds(projectIds: string[], tenantId?: string | null) {
+    if (projectIds.length === 0) return [] as ProjectAcceptanceProjectRow[];
+
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, tenant_id, name, customer_id, supervisor_id")
+      .in("id", Array.from(new Set(projectIds)));
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw Errors.dbError("查询项目失败", error);
+    return (data || []) as ProjectAcceptanceProjectRow[];
+  }
+
   async findPrimaryConstructionManager(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
@@ -351,6 +369,27 @@ class ProjectAcceptanceRepository {
     return (data || []) as ProjectAcceptanceItemRow[];
   }
 
+  async listItemsByAcceptanceIds(acceptanceIds: string[], tenantId?: string | null) {
+    if (acceptanceIds.length === 0) return [] as ProjectAcceptanceItemRow[];
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_acceptance_items")
+      .select("*")
+      .in("acceptance_id", Array.from(new Set(acceptanceIds)));
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
+      .order("acceptance_id", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) throw Errors.dbError("查询项目验收项失败", error);
+    return (data || []) as ProjectAcceptanceItemRow[];
+  }
+
   async listActions(acceptanceId: string, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("project_acceptance_actions")
@@ -362,6 +401,26 @@ class ProjectAcceptanceRepository {
     }
 
     const { data, error } = await query.order("created_at", { ascending: true });
+
+    if (error) throw Errors.dbError("查询项目验收操作记录失败", error);
+    return (data || []) as ProjectAcceptanceActionRow[];
+  }
+
+  async listActionsByAcceptanceIds(acceptanceIds: string[], tenantId?: string | null) {
+    if (acceptanceIds.length === 0) return [] as ProjectAcceptanceActionRow[];
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_acceptance_actions")
+      .select("*")
+      .in("acceptance_id", Array.from(new Set(acceptanceIds)));
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query
+      .order("acceptance_id", { ascending: true })
+      .order("created_at", { ascending: true });
 
     if (error) throw Errors.dbError("查询项目验收操作记录失败", error);
     return (data || []) as ProjectAcceptanceActionRow[];

@@ -34,6 +34,101 @@ export type WechatCustomerProjectSummaryRow = {
   created_at: string | null;
 };
 
+const AUTH_READ_QUERY_TIMEOUT_MS = 8_000;
+const AUTH_READ_QUERY_MAX_ATTEMPTS = 2;
+const AUTH_READ_QUERY_RETRY_DELAY_MS = 150;
+
+type SupabaseReadResult<T> = {
+  data: T | null;
+  error: unknown;
+};
+
+function readErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return typeof error === "string" ? error : "";
+  }
+
+  const record = error as Record<string, unknown>;
+  return [
+    record.name,
+    record.code,
+    record.message,
+    record.details,
+    record.hint,
+  ]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ")
+    .toLowerCase();
+}
+
+function isTransientReadError(error: unknown) {
+  const message = readErrorMessage(error);
+  return (
+    message.includes("socket connection was closed") ||
+    message.includes("fetch failed") ||
+    message.includes("network") ||
+    message.includes("timeout") ||
+    message.includes("aborted") ||
+    message.includes("terminated") ||
+    message.includes("econnreset") ||
+    message.includes("etimedout") ||
+    message.includes("und_err")
+  );
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function withAuthReadTimeout<T>(request: PromiseLike<T>) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return new Promise<T>((resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject({
+        code: "SUPABASE_AUTH_READ_TIMEOUT",
+        message: `Supabase auth read timed out after ${AUTH_READ_QUERY_TIMEOUT_MS}ms`,
+      });
+    }, AUTH_READ_QUERY_TIMEOUT_MS);
+
+    Promise.resolve(request)
+      .then(resolve, reject)
+      .finally(() => {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      });
+  });
+}
+
+async function runAuthReadQuery<T>(
+  createRequest: () => PromiseLike<SupabaseReadResult<T>>,
+) {
+  let lastResult: SupabaseReadResult<T> | null = null;
+
+  for (let attempt = 1; attempt <= AUTH_READ_QUERY_MAX_ATTEMPTS; attempt += 1) {
+    let result: SupabaseReadResult<T>;
+    try {
+      result = await withAuthReadTimeout(createRequest());
+    } catch (error) {
+      result = {
+        data: null,
+        error,
+      };
+    }
+
+    lastResult = result;
+    if (!result.error || !isTransientReadError(result.error) || attempt === AUTH_READ_QUERY_MAX_ATTEMPTS) {
+      return result;
+    }
+
+    await delay(AUTH_READ_QUERY_RETRY_DELAY_MS);
+  }
+
+  return lastResult ?? { data: null, error: null };
+}
+
 class WechatCustomerIdentityRepository {
   private adminClient = SupabaseDB.getAdminClient();
 
@@ -54,10 +149,12 @@ class WechatCustomerIdentityRepository {
   `;
 
   async listCustomerTenantOptionsByPhone(phone: string) {
-    const { data, error } = await this.adminClient
-      .from("customers")
-      .select(this.customerTenantSelect)
-      .eq("phone", phone);
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient
+        .from("customers")
+        .select(this.customerTenantSelect)
+        .eq("phone", phone)
+    );
 
     if (error) {
       throw Errors.dbError("查询客户身份失败", error);
@@ -99,10 +196,12 @@ class WechatCustomerIdentityRepository {
   }
 
   async listCustomerTenantOptionsByAuthUserId(authUserId: string) {
-    const { data, error } = await this.adminClient
-      .from("customers")
-      .select(this.customerTenantSelect)
-      .eq("user_id", authUserId);
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient
+        .from("customers")
+        .select(this.customerTenantSelect)
+        .eq("user_id", authUserId)
+    );
 
     if (error) {
       throw Errors.dbError("查询客户微信绑定失败", error);
@@ -116,10 +215,12 @@ class WechatCustomerIdentityRepository {
       return [] as WechatCustomerTenantOption[];
     }
 
-    const { data, error } = await this.adminClient
-      .from("customers")
-      .select(this.customerTenantSelect)
-      .in("id", customerIds);
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient
+        .from("customers")
+        .select(this.customerTenantSelect)
+        .in("id", customerIds)
+    );
 
     if (error) {
       throw Errors.dbError("查询客户业务身份失败", error);
@@ -129,12 +230,14 @@ class WechatCustomerIdentityRepository {
   }
 
   async getCustomerTenantOptionById(customerId: string, tenantId: string) {
-    const { data, error } = await this.adminClient
-      .from("customers")
-      .select(this.customerTenantSelect)
-      .eq("id", customerId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
+    const { data, error } = await runAuthReadQuery(() =>
+      this.adminClient
+        .from("customers")
+        .select(this.customerTenantSelect)
+        .eq("id", customerId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle()
+    );
 
     if (error) {
       throw Errors.dbError("查询客户身份失败", error);

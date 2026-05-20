@@ -120,6 +120,33 @@ class ProjectAcceptanceOpenTicketRepository {
     return (data || null) as ProjectAcceptanceOpenTicketRow | null;
   }
 
+  async listLatestByAcceptances(acceptanceIds: string[], tenantId?: string | null) {
+    if (acceptanceIds.length === 0) return [] as ProjectAcceptanceOpenTicketRow[];
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_acceptance_open_tickets")
+      .select("*")
+      .in("acceptance_id", Array.from(new Set(acceptanceIds)))
+      .order("created_at", { ascending: false });
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw Errors.dbError("查询验收短信通知记录失败", error);
+
+    const latestByAcceptance = new Map<string, ProjectAcceptanceOpenTicketRow>();
+    for (const item of (data || []) as ProjectAcceptanceOpenTicketRow[]) {
+      if (!latestByAcceptance.has(item.acceptance_id)) {
+        latestByAcceptance.set(item.acceptance_id, item);
+      }
+    }
+
+    return Array.from(latestByAcceptance.values());
+  }
+
   async update(
     id: string,
     input: Partial<

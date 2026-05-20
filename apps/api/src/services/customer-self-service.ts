@@ -31,6 +31,21 @@ class CustomerSelfServiceService {
     value: Awaited<ReturnType<typeof customerSelfServiceRepository.listOwnedProjects>>;
   }>();
   private ownedProjectsInFlight = new Map<string, Promise<Awaited<ReturnType<typeof customerSelfServiceRepository.listOwnedProjects>>>>();
+  private ownedProjectCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerSelfServiceProjectListItem | null;
+  }>();
+  private ownedProjectInFlight = new Map<string, Promise<CustomerSelfServiceProjectListItem | null>>();
+  private projectLogsCache = new Map<string, {
+    expiresAt: number;
+    value: Awaited<ReturnType<typeof customerSelfServiceRepository.listProjectLogs>>;
+  }>();
+  private projectLogsInFlight = new Map<string, Promise<Awaited<ReturnType<typeof customerSelfServiceRepository.listProjectLogs>>>>();
+  private projectLogCommentAggregatesCache = new Map<string, {
+    expiresAt: number;
+    value: CustomerSelfServiceProjectLogCommentAggregateRow[];
+  }>();
+  private projectLogCommentAggregatesInFlight = new Map<string, Promise<CustomerSelfServiceProjectLogCommentAggregateRow[]>>();
 
   private getCachedValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
     const item = cache.get(key);
@@ -78,6 +93,18 @@ class CustomerSelfServiceService {
       expiresAt: now + CUSTOMER_SELF_SERVICE_CACHE_TTL_MS,
       value,
     });
+  }
+
+  private ownedProjectCacheKey(input: {
+    projectId: string;
+    customerId: string;
+    tenantId?: string | null;
+  }) {
+    return [
+      input.customerId,
+      input.tenantId ?? "",
+      input.projectId,
+    ].join(":");
   }
 
   listLegacyCustomerProfilesByAuthUserId(
@@ -214,6 +241,17 @@ class CustomerSelfServiceService {
     const request = customerSelfServiceRepository.listOwnedProjects(input)
       .then((result) => {
         this.setCachedValue(this.ownedProjectsCache, cacheKey, result);
+        for (const project of result.list) {
+          this.setCachedValue(
+            this.ownedProjectCache,
+            this.ownedProjectCacheKey({
+              projectId: project.id,
+              customerId: input.customerId,
+              tenantId: input.tenantId,
+            }),
+            project,
+          );
+        }
         return result;
       })
       .finally(() => {
@@ -230,7 +268,29 @@ class CustomerSelfServiceService {
     customerId: string;
     tenantId?: string | null;
   }) {
-    return customerSelfServiceRepository.findOwnedProject(input);
+    const cacheKey = this.ownedProjectCacheKey(input);
+    const cached = this.getCachedEntry(this.ownedProjectCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached.value);
+    }
+
+    const inFlight = this.ownedProjectInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.findOwnedProject(input)
+      .then((result) => {
+        this.setCachedValue(this.ownedProjectCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.ownedProjectInFlight.get(cacheKey) === request) {
+          this.ownedProjectInFlight.delete(cacheKey);
+        }
+      });
+    this.ownedProjectInFlight.set(cacheKey, request);
+    return request;
   }
 
   listRecentLogSummariesForProjects(input: {
@@ -255,14 +315,74 @@ class CustomerSelfServiceService {
     from: number;
     to: number;
   }) {
-    return customerSelfServiceRepository.listProjectLogs(input);
+    const cacheKey = [
+      input.projectId,
+      input.tenantId ?? "",
+      input.from,
+      input.to,
+    ].join(":");
+    const cached = this.getCachedValue(this.projectLogsCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.projectLogsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.listProjectLogs(input)
+      .then((result) => {
+        this.setCachedValue(this.projectLogsCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.projectLogsInFlight.get(cacheKey) === request) {
+          this.projectLogsInFlight.delete(cacheKey);
+        }
+      });
+    this.projectLogsInFlight.set(cacheKey, request);
+    return request;
   }
 
   listProjectLogCommentAggregates(input: {
     logIds: string[];
     tenantId: string | null;
   }) {
-    return customerSelfServiceRepository.listProjectLogCommentAggregates(input);
+    const normalizedLogIds = Array.from(new Set(input.logIds)).sort();
+    if (normalizedLogIds.length === 0) {
+      return Promise.resolve([] as CustomerSelfServiceProjectLogCommentAggregateRow[]);
+    }
+
+    const cacheKey = [
+      input.tenantId ?? "",
+      normalizedLogIds.join(","),
+    ].join(":");
+    const cached = this.getCachedValue(this.projectLogCommentAggregatesCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.projectLogCommentAggregatesInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.listProjectLogCommentAggregates({
+      ...input,
+      logIds: normalizedLogIds,
+    })
+      .then((result) => {
+        this.setCachedValue(this.projectLogCommentAggregatesCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.projectLogCommentAggregatesInFlight.get(cacheKey) === request) {
+          this.projectLogCommentAggregatesInFlight.delete(cacheKey);
+        }
+      });
+    this.projectLogCommentAggregatesInFlight.set(cacheKey, request);
+    return request;
   }
 
   listProjectLogComments(input: {

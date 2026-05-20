@@ -656,6 +656,9 @@ export class WeChatController extends BaseController {
     }
 
     if (customerOptions.length > 1) {
+      const enrichedCustomerOptions = await this.listCustomerTenantOptionsByAuthUser(userId, {
+        includeProjectSummary: true,
+      });
       const token = this.signWechatAuthToken({
         sub: userId,
         openid: wxData.openid,
@@ -669,7 +672,7 @@ export class WeChatController extends BaseController {
         user_id: userId,
         roles,
         is_new_user: isNewUser,
-        tenants: customerOptions.map((item) => this.serializeCustomerTenantOption(item)),
+        tenants: enrichedCustomerOptions.map((item) => this.serializeCustomerTenantOption(item)),
       }, "登录成功");
     }
 
@@ -1576,10 +1579,14 @@ export class WeChatController extends BaseController {
     return wechatCustomerIdentityService.listCustomerTenantOptionsByPhone(phone);
   }
 
-  private async listCustomerTenantOptionsByAuthUser(authUserId: string) {
+  private async listCustomerTenantOptionsByAuthUser(
+    authUserId: string,
+    options?: { includeProjectSummary?: boolean },
+  ) {
     return wechatCustomerIdentityService.listCustomerTenantOptionsByAuthUser({
       authUserId,
       identitySource: this.getAuthIdentitySource(),
+      includeProjectSummary: options?.includeProjectSummary,
     });
   }
 
