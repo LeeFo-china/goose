@@ -421,6 +421,27 @@ Authorization: Bearer <employee_token>
 3. `4s+`：显示“网络较慢，请稍候”，保留 loading。
 4. 请求失败：展示后端 message，并提供重试按钮。
 
+### 员工首屏标准请求顺序
+
+员工登录成功后的首屏只能按以下顺序发请求：
+
+1. `POST /auth` 返回 `mode: "employee"`。
+2. 小程序同步写入新 `employee_token`，清理旧 token 触发的 in-flight 请求。
+3. 状态切到 `employee_ready`。
+4. 立即请求 `GET /employee/bootstrap`。
+5. 使用 bootstrap 返回的 `context`、`home_stats`、`task_summary` 渲染员工首页第一屏。
+6. bootstrap 返回后，再延迟加载扩展列表：
+   - `/projects/status?page=1&pageSize=20&ownership=self`
+   - `/customers?page=1&pageSize=20`
+
+首屏禁止继续把以下接口作为登录后的立即并发请求：
+
+- `/auth/me/permissions`
+- `/home_stats`
+- `/task-center/todos/summary`
+
+这三类数据已经由 `/employee/bootstrap` 返回。小程序端如果仍然请求这些旧接口，说明还没有完成本轮员工首页 bootstrap 对接。
+
 ### 避免重复触发登录
 
 - 登录请求未完成前禁用按钮。
@@ -442,11 +463,11 @@ Authorization: Bearer <employee_token>
 
 1. `anonymous`：无 token，只能发 `/auth`、游客公开接口。
 2. `authenticating`：已经调用 `wx.login()` 或 `/auth`，禁止发员工首页接口。
-3. `employee_ready`：`/auth` 返回 `mode: "employee"`，并且新 token 已写入本地存储，可以发员工首页接口。
+3. `employee_ready`：`/auth` 返回 `mode: "employee"`，并且新 token 已写入本地存储；进入该状态后的第一条员工首页请求必须是 `/employee/bootstrap`。
 4. `visitor_ready`：`/auth` 返回 visitor，只能发 visitor 允许接口；点击员工登录再进入 `/auth/verify-role`。
 5. `auth_failed`：清理本次 code 和临时状态，重新触发必须重新调用 `wx.login()`。
 
-首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。
+首页数据请求只允许从 `employee_ready` 状态触发。页面 `onShow` 如果发现状态是 `authenticating`，只订阅登录完成事件，不主动请求员工接口。页面 `onShow` 如果发现状态已经是 `employee_ready`，也必须先检查本轮 `/employee/bootstrap` 是否完成；未完成时不能抢跑 `/auth/me/permissions`、`/home_stats`、`/task-center/todos/summary`、`/projects/status` 或 `/customers`。
 
 ### 客户登录态门禁
 
@@ -524,7 +545,9 @@ Authorization: Bearer <employee_token>
 ### 缓存短期登录态
 
 - 本地已有有效 employee token 时，优先进入页面。
-- 后台调用 `/auth/me/profile` 或权限接口刷新身份。
+- 后台调用 `/employee/bootstrap` 刷新员工首页身份、统计和任务摘要。
+- `/auth/me/profile` 只用于个人资料页或确实需要 profile 字段的场景，不作为员工首页首屏必需接口。
+- `/auth/me/permissions` 只用于权限调试或 bootstrap 之外的特殊权限刷新，不作为员工首页首屏必需接口。
 - token 失效再走完整登录。
 
 ## 2026-05-20 19:50 员工首次重绑优化
@@ -547,7 +570,7 @@ Authorization: Bearer <employee_token>
 
 - `oauth_identity_synced` 是否从 `3s+` 降到约一次远端 RPC 的耗时。
 - `/auth/verify-role` 总耗时是否明显下降。
-- `/auth/me/permissions` 是否仍被首屏立即请求阻塞；如果仍慢，下一步应做 employee bootstrap 或让小程序复用 `verify-role` 返回的员工上下文，减少登录后立刻拉权限的必要性。
+- `/auth/me/permissions` 是否仍被首屏立即请求阻塞；该问题后续已通过 `GET /employee/bootstrap` 作为员工首屏入口处理。
 
 ## 2026-05-20 20:01 员工直登优化
 
@@ -618,10 +641,10 @@ Authorization: Bearer <employee_token>
 - auth-plugin 对同一个 token 的 OAuth / business binding 校验增加 in-flight 复用，避免登录后 `/auth/me/profile` 与 `/auth/me/permissions` 并发时重复打远端。
 - `/projects/status` 的 count 和 rows 查询改为并行执行，并增加 10 秒 per-user/per-query in-flight/cache，降低员工首页项目列表重复请求成本。
 
-当前剩余首屏慢点：
+当时剩余首屏慢点：
 
 - `/projects/status` 仍可能约 `2.8s - 3.1s`，下一次登录后需验证并行和缓存是否生效。
-- `/home_stats`、`/task-center/todos/summary`、`/customers` 仍约 `1.2s - 1.7s`，可继续做首屏 bootstrap 或短缓存聚合。
+- `/home_stats`、`/task-center/todos/summary`、`/customers` 仍约 `1.2s - 1.7s`，后续已通过“阶段 2.4：员工首页 bootstrap 合并入口”处理。
 
 ## 2026-05-20 20:25 员工首页首屏验证结果
 
@@ -687,7 +710,7 @@ Authorization: Bearer <employee_token>
 
 - 权限上下文 RPC 生效，首个权限接口等待时间明显下降。
 - 当前体验剩余主要来自微信官方接口、一次登录态 RPC，以及员工首页多个业务接口并发冷读。
-- 下一步如果继续优化，应优先做员工首页 bootstrap，把 `/home_stats`、`/task-center/todos/summary`、`/projects/status`、`/customers` 的首屏必要数据合并或分层返回。
+- 后续已新增员工首页 bootstrap。小程序端应按“员工首屏标准请求顺序”对接，不再把 `/auth/me/permissions`、`/home_stats`、`/task-center/todos/summary` 作为登录后立即并发请求。
 
 ## 2026-05-20 20:42 员工首页数据预热
 
@@ -730,10 +753,28 @@ Authorization: Bearer <employee_token>
 - 首页接口当前主要是在复用 in-flight，而不是读取已完成缓存。
 - `/home_stats` 已降到 1 秒内；任务、客户、项目仍在 1.3s - 1.6s。
 
-下一步建议：
+后续对接要求：
 
-- API 侧继续做员工首页 bootstrap，按“先返回首屏必须数据、延迟返回扩展列表”的方式减少小程序并发接口数。
-- 小程序侧不要把 `/auth/me/permissions` 作为唯一首屏闸门后立即并发所有首页接口；可以先展示员工首页框架和核心统计，项目/客户/任务分区异步加载。
+- API 侧已完成员工首页 bootstrap，按“先返回首屏必须数据、延迟返回扩展列表”的方式减少小程序并发接口数。
+- 小程序侧不要把 `/auth/me/permissions` 作为首屏闸门，也不要在其返回后立即并发所有首页接口。
+- 小程序侧必须在 `/auth` 返回 employee 并写入 token 后，先请求 `/employee/bootstrap`，再延迟请求项目和客户列表。
+
+## 2026-05-20 20:58 员工 bootstrap 对接核查
+
+本地最新两轮员工登录日志显示，小程序端仍未请求 `/employee/bootstrap`，实际请求仍是旧链路：
+
+- `POST /auth`
+- `/auth/me/permissions`
+- `/home_stats`
+- `/task-center/todos/summary`
+- `/customers`
+- `/projects/status`
+
+核查结论：
+
+- 后端 `/employee/bootstrap` 路由已注册，未带 token 请求会返回 `401 TOKEN_MISSING`，说明不是 404 或路由缺失。
+- 日志中没有出现 `GET /employee/bootstrap` 或 `[employee-bootstrap] bootstrap resolved`。
+- 小程序端需要继续按“员工首屏标准请求顺序”调整登录完成后的首页加载逻辑。
 
 ## 验收标准
 
