@@ -69,6 +69,8 @@ class AuthorizationService {
     expiresAt: number;
     value: AuthContext;
   }>();
+  private authUserInFlight = new Map<string, Promise<AuthContext>>();
+  private employeeInFlight = new Map<string, Promise<AuthContext>>();
 
   private getCacheValue(
     cache: Map<string, { expiresAt: number; value: AuthContext }>,
@@ -94,6 +96,46 @@ class AuthorizationService {
     if (value.employeeId) {
       this.employeeCache.set(value.employeeId, { expiresAt, value });
     }
+  }
+
+  private setCacheContext(value: AuthContext) {
+    if (value.authUserId) {
+      this.setCacheValue(value.authUserId, value);
+      return;
+    }
+
+    if (value.employeeId) {
+      this.employeeCache.set(value.employeeId, {
+        expiresAt: Date.now() + this.cacheTtlMs,
+        value,
+      });
+    }
+  }
+
+  private setAuthUserInFlight(authUserId: string, promise: Promise<AuthContext>) {
+    this.authUserInFlight.set(authUserId, promise);
+    void promise.then(() => {
+      if (this.authUserInFlight.get(authUserId) === promise) {
+        this.authUserInFlight.delete(authUserId);
+      }
+    }, () => {
+      if (this.authUserInFlight.get(authUserId) === promise) {
+        this.authUserInFlight.delete(authUserId);
+      }
+    });
+  }
+
+  private setEmployeeInFlight(employeeId: string, promise: Promise<AuthContext>) {
+    this.employeeInFlight.set(employeeId, promise);
+    void promise.then(() => {
+      if (this.employeeInFlight.get(employeeId) === promise) {
+        this.employeeInFlight.delete(employeeId);
+      }
+    }, () => {
+      if (this.employeeInFlight.get(employeeId) === promise) {
+        this.employeeInFlight.delete(employeeId);
+      }
+    });
   }
 
   private mergeScopes(
@@ -294,12 +336,20 @@ class AuthorizationService {
       return cached;
     }
 
-    const raw = await permissionRepository.getEmployeePermissionContextByAuthUserId(
+    const inFlight = this.authUserInFlight.get(authUserId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const promise = permissionRepository.getEmployeePermissionContextByAuthUserId(
       authUserId,
-    );
-    const context = this.buildAuthContext(raw, authUserId);
-    this.setCacheValue(authUserId, context);
-    return context;
+    ).then((raw) => {
+      const context = this.buildAuthContext(raw, authUserId);
+      this.setCacheValue(authUserId, context);
+      return context;
+    });
+    this.setAuthUserInFlight(authUserId, promise);
+    return promise;
   }
 
   async getAuthContextByEmployeeId(employeeId: string): Promise<AuthContext> {
@@ -308,28 +358,58 @@ class AuthorizationService {
       return cached;
     }
 
-    const raw = await permissionRepository.getEmployeePermissionContextByEmployeeId(
-      employeeId,
-    );
-
-    const authUserId = raw.employee?.user_id || "";
-    const context = this.buildAuthContext(
-      {
-        ...raw,
-      },
-      authUserId,
-    );
-
-    if (authUserId) {
-      this.setCacheValue(authUserId, context);
-    } else if (context.employeeId) {
-      this.employeeCache.set(context.employeeId, {
-        expiresAt: Date.now() + this.cacheTtlMs,
-        value: context,
-      });
+    const inFlight = this.employeeInFlight.get(employeeId);
+    if (inFlight) {
+      return inFlight;
     }
 
-    return context;
+    const promise = permissionRepository.getEmployeePermissionContextByEmployeeId(
+      employeeId,
+    ).then((raw) => {
+      const authUserId = raw.employee?.user_id || "";
+      const context = this.buildAuthContext(
+        {
+          ...raw,
+        },
+        authUserId,
+      );
+
+      this.setCacheContext(context);
+      return context;
+    });
+    this.setEmployeeInFlight(employeeId, promise);
+    return promise;
+  }
+
+  prewarmEmployeeAuthContext(input: {
+    authUserId: string;
+    employeeId: string;
+  }) {
+    const cachedByAuthUser = this.getCacheValue(this.authUserCache, input.authUserId);
+    const cachedByEmployee = this.getCacheValue(this.employeeCache, input.employeeId);
+    if (
+      cachedByAuthUser?.roles.length ||
+      cachedByAuthUser?.permissions.length ||
+      cachedByEmployee?.roles.length ||
+      cachedByEmployee?.permissions.length
+    ) {
+      return Promise.resolve(cachedByAuthUser ?? cachedByEmployee!);
+    }
+
+    const existingAuthUserPromise = this.authUserInFlight.get(input.authUserId);
+    if (existingAuthUserPromise) {
+      return existingAuthUserPromise;
+    }
+
+    const existingEmployeePromise = this.employeeInFlight.get(input.employeeId);
+    if (existingEmployeePromise) {
+      this.setAuthUserInFlight(input.authUserId, existingEmployeePromise);
+      return existingEmployeePromise;
+    }
+
+    const promise = this.getAuthContextByEmployeeId(input.employeeId);
+    this.setAuthUserInFlight(input.authUserId, promise);
+    return promise;
   }
 
   async getEmployeeLoginContextByAuthUserId(authUserId: string): Promise<AuthContext> {
@@ -368,10 +448,12 @@ class AuthorizationService {
   }) {
     if (input.authUserId) {
       this.authUserCache.delete(input.authUserId);
+      this.authUserInFlight.delete(input.authUserId);
     }
 
     if (input.employeeId) {
       this.employeeCache.delete(input.employeeId);
+      this.employeeInFlight.delete(input.employeeId);
     }
   }
 

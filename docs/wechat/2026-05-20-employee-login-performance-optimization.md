@@ -240,6 +240,20 @@ API 当前处理步骤：
 - 小程序端完成登录状态门禁后，`/auth` 后的首批员工接口能复用刚登录阶段产生的身份缓存。
 - 如果小程序端暂时仍提前触发旧 token 权限校验，该校验产生的身份查询结果也能被随后 `/auth` 复用，降低重复等待。
 
+### 阶段 2.3：员工完整权限上下文预热
+
+2026-05-20 已调整：
+
+- `/auth` 或 `/auth/verify-role` 成功返回 employee token 前，会启动 `prewarm_employee_auth_context` 后台任务。
+- 该任务加载完整 `authorizationService.getAuthContextByEmployeeId()`，包含角色、权限和权限覆盖。
+- `authorizationService` 对 authUserId / employeeId 的完整上下文加载增加 in-flight 复用。
+- 如果小程序在登录成功后立即请求 `/auth/me/permissions`，会复用同一个预热 Promise，避免再开一轮完整权限查询。
+
+预期收益：
+
+- 登录后的首个 `/auth/me/permissions` 从约 `2s+` 降到预热完成后的毫秒级。
+- 即使权限接口追上预热任务，也只等待同一次查询，不重复打远端 Supabase。
+
 ### 阶段 3：提高 auth context 缓存命中
 
 当前 `authorizationService` 缓存 TTL 是 `30s`。开发和小程序登录场景可以考虑：

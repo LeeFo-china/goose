@@ -150,6 +150,24 @@ export class WeChatController extends BaseController {
       });
   }
 
+  private prewarmEmployeeAuthContext(
+    request: FastifyRequest,
+    authUserId: string,
+    employeeLogin: NonNullable<Awaited<ReturnType<WeChatController["buildEmployeeLoginContext"]>>>,
+  ) {
+    const employeeId = employeeLogin.authContext.employeeId;
+    if (!employeeId) {
+      return;
+    }
+
+    this.runAuthBackgroundTask(request, "prewarm_employee_auth_context", () =>
+      authorizationService.prewarmEmployeeAuthContext({
+        authUserId,
+        employeeId,
+      })
+    );
+  }
+
   private buildVisitorSessionId(openid: string) {
     return `wechat_visitor_${createHash("sha256").update(openid).digest("hex").slice(0, 32)}`;
   }
@@ -520,6 +538,7 @@ export class WeChatController extends BaseController {
       );
 
       if (employeeLogin) {
+        this.prewarmEmployeeAuthContext(request, userId, employeeLogin);
         this.runAuthBackgroundTask(request, "observe_legacy_identity_state", () =>
           userIdentityService.observeLegacyIdentityStateBestEffort({
             userId,
@@ -576,6 +595,7 @@ export class WeChatController extends BaseController {
     );
 
     if (employeeLogin) {
+      this.prewarmEmployeeAuthContext(request, userId, employeeLogin);
       request.log.info(
         { requestId: request.id, userId, totalMs: Date.now() - startedAt },
         "[auth] resolved employee login context",
@@ -808,6 +828,7 @@ export class WeChatController extends BaseController {
         throw Errors.badRequest("该手机号未绑定员工身份");
       }
 
+      this.prewarmEmployeeAuthContext(request, employeeAuthUserId, employeeLogin);
       request.log.info(
         {
           requestId: request.id,
