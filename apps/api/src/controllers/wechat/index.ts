@@ -1605,6 +1605,10 @@ export class WeChatController extends BaseController {
         customerId: customer.id,
         tenantId: customer.tenant_id,
       });
+      wechatCustomerIdentityService.invalidateWechatLoginState({
+        authUserId: customer.user_id,
+        openid: options.openid,
+      });
       authorizationService.invalidateAuthContext({ authUserId });
       authorizationService.invalidateAuthContext({ authUserId: customer.user_id });
       return customer.user_id;
@@ -1635,6 +1639,10 @@ export class WeChatController extends BaseController {
         authUserId,
         customerId: customer.id,
         tenantId: customer.tenant_id,
+      });
+      wechatCustomerIdentityService.invalidateWechatLoginState({
+        authUserId,
+        openid: options?.openid,
       });
       return authUserId;
     }
@@ -1672,6 +1680,10 @@ export class WeChatController extends BaseController {
       authUserId,
       customerId: customer.id,
       tenantId: customer.tenant_id,
+    });
+    wechatCustomerIdentityService.invalidateWechatLoginState({
+      authUserId,
+      openid: options?.openid,
     });
 
     return authUserId;
@@ -1985,6 +1997,10 @@ export class WeChatController extends BaseController {
         tenantId: tenant.id,
         branch: "active_membership",
       });
+      wechatCustomerIdentityService.invalidateWechatLoginState({
+        authUserId,
+        openid,
+      });
       authorizationService.invalidateAuthContext({ authUserId, employeeId: employee.id });
       return authUserId;
     }
@@ -2044,6 +2060,10 @@ export class WeChatController extends BaseController {
           authUserId: employee.user_id,
           employeeId: employee.id,
         });
+        wechatCustomerIdentityService.invalidateWechatLoginState({
+          authUserId: employee.user_id,
+          openid,
+        });
         return employee.user_id;
       }
 
@@ -2061,6 +2081,10 @@ export class WeChatController extends BaseController {
         tenantId: tenant.id,
         existingAuthUserId: employee.user_id,
         branch: "existing_employee_auth_user",
+      });
+      wechatCustomerIdentityService.invalidateWechatLoginState({
+        authUserId: employee.user_id,
+        openid,
       });
       return employee.user_id;
     }
@@ -2107,6 +2131,10 @@ export class WeChatController extends BaseController {
       employeeId: employee.id,
       tenantId: tenant.id,
       branch: "new_employee_auth_user",
+    });
+    wechatCustomerIdentityService.invalidateWechatLoginState({
+      authUserId,
+      openid,
     });
 
     return authUserId;

@@ -776,6 +776,34 @@ Authorization: Bearer <employee_token>
 - 日志中没有出现 `GET /employee/bootstrap` 或 `[employee-bootstrap] bootstrap resolved`。
 - 小程序端需要继续按“员工首屏标准请求顺序”调整登录完成后的首页加载逻辑。
 
+## 2026-05-20 21:10 openid 登录态短缓存
+
+员工 bootstrap 对接后，首屏扩展请求已经能命中毫秒级缓存。剩余主要耗时集中在 `/auth`：
+
+- 微信 `jscode2session`：约 `1.5s - 1.6s`，属于微信官方接口等待。
+- `resolve_wechat_login_state_by_openid`：约 `1.0s - 1.2s`，属于远端 Supabase 读请求等待。
+
+本地用 API 环境直测远端 Supabase：
+
+- 极简 `user_oauth_identities` 查询约 `1.27s`。
+- 极简 `user_business_memberships` 查询约 `1.27s`。
+- `resolve_wechat_login_state_by_openid` RPC 约 `1.16s`。
+
+结论：该阶段主要不是 SQL 复杂度，而是本机到远端 Supabase 的单次请求往返延迟。继续拆 SQL 对首次登录收益有限。
+
+已完成 API 调整：
+
+- `wechatCustomerIdentityService.resolveWechatLoginStateByOpenid()` 增加 60 秒正向短缓存。
+- 同一个 openid 的并发登录态解析复用同一个 in-flight Promise。
+- 客户/员工身份绑定、membership 同步后清理对应 openid/authUserId 的登录态缓存。
+- 缓存只保存 active OAuth 命中的正向结果；openid 未绑定时不做负缓存，避免 visitor 刚绑定后被短期误判。
+
+预期收益：
+
+- 退出后短时间内重登，`resolve_wechat_login_state_by_openid` 可从约 `1.1s` 降到毫秒级。
+- 同一轮登录中如果页面或状态机重复触发 `/auth`，后续请求不会重复打远端 Supabase。
+- 首次登录仍需要等待微信官方接口和一次远端 Supabase 登录态解析。
+
 ## 验收标准
 
 ### API 验收

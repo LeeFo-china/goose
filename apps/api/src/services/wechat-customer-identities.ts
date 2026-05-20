@@ -35,6 +35,11 @@ class WechatCustomerIdentityService {
     value: WechatLoginMembershipState;
   }>();
   private loginMembershipStateInFlight = new Map<string, Promise<WechatLoginMembershipState>>();
+  private loginStateByOpenidCache = new Map<string, {
+    expiresAt: number;
+    value: WechatLoginStateByOpenid;
+  }>();
+  private loginStateByOpenidInFlight = new Map<string, Promise<WechatLoginStateByOpenid | null>>();
 
   private customerTenantOptionsCacheKey(input: {
     authUserId: string;
@@ -114,6 +119,61 @@ class WechatCustomerIdentityService {
     });
   }
 
+  private getCachedLoginStateByOpenid(openid: string) {
+    const cached = this.loginStateByOpenidCache.get(openid);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.loginStateByOpenidCache.delete(openid);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setCachedLoginStateByOpenid(openid: string, value: WechatLoginStateByOpenid) {
+    const now = Date.now();
+    if (this.loginStateByOpenidCache.size >= MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE) {
+      for (const [key, item] of this.loginStateByOpenidCache.entries()) {
+        if (item.expiresAt <= now) {
+          this.loginStateByOpenidCache.delete(key);
+        }
+      }
+
+      if (this.loginStateByOpenidCache.size >= MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE) {
+        this.loginStateByOpenidCache.clear();
+      }
+    }
+
+    this.loginStateByOpenidCache.set(openid, {
+      expiresAt: now + CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  invalidateWechatLoginState(input: {
+    authUserId?: string | null;
+    openid?: string | null;
+  }) {
+    if (input.openid) {
+      this.loginStateByOpenidCache.delete(input.openid);
+      this.loginStateByOpenidInFlight.delete(input.openid);
+    }
+
+    if (!input.authUserId) {
+      return;
+    }
+
+    for (const [openid, item] of this.loginStateByOpenidCache.entries()) {
+      if (item.value.authUserId === input.authUserId) {
+        this.loginStateByOpenidCache.delete(openid);
+        this.loginStateByOpenidInFlight.delete(openid);
+      }
+    }
+  }
+
   invalidateCustomerTenantOptions(authUserId?: string | null) {
     if (!authUserId) {
       return;
@@ -121,6 +181,7 @@ class WechatCustomerIdentityService {
 
     this.loginMembershipStateCache.delete(authUserId);
     this.loginMembershipStateInFlight.delete(authUserId);
+    this.invalidateWechatLoginState({ authUserId });
 
     for (const key of this.customerTenantOptionsCache.keys()) {
       if (key.endsWith(`:${authUserId}`)) {
@@ -372,7 +433,7 @@ class WechatCustomerIdentityService {
     };
   }
 
-  async resolveWechatLoginStateByOpenid(openid: string): Promise<WechatLoginStateByOpenid | null> {
+  private async loadWechatLoginStateByOpenid(openid: string): Promise<WechatLoginStateByOpenid | null> {
     const rows = await wechatCustomerIdentityRepository.resolveWechatLoginStateByOpenid(openid);
     const first = rows[0];
     if (!first) {
@@ -390,6 +451,34 @@ class WechatCustomerIdentityService {
       oauthUnionid: first.oauth_unionid,
       ...state,
     };
+  }
+
+  async resolveWechatLoginStateByOpenid(openid: string): Promise<WechatLoginStateByOpenid | null> {
+    const cached = this.getCachedLoginStateByOpenid(openid);
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = this.loginStateByOpenidInFlight.get(openid);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = this.loadWechatLoginStateByOpenid(openid)
+      .then((result) => {
+        if (result) {
+          this.setCachedLoginStateByOpenid(openid, result);
+        }
+        return result;
+      })
+      .finally(() => {
+        if (this.loginStateByOpenidInFlight.get(openid) === request) {
+          this.loginStateByOpenidInFlight.delete(openid);
+        }
+      });
+
+    this.loginStateByOpenidInFlight.set(openid, request);
+    return request;
   }
 
   async listCustomerTenantOptionsByMemberships(input: {
