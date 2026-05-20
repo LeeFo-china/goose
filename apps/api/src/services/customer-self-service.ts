@@ -163,12 +163,29 @@ class CustomerSelfServiceService {
     return request;
   }
 
+  getCachedUserProfileByAuthUserId(authUserId: string) {
+    return this.getCachedEntry(this.userProfileCache, authUserId)?.value ?? null;
+  }
+
   prewarmCustomerContext(input: {
     authUserId: string;
     customer: CustomerSelfServiceCustomerContextRow;
   }) {
     this.setCachedValue(this.customerProfilesByIdsCache, input.customer.id, [input.customer]);
     return this.getUserProfileByAuthUserId(input.authUserId);
+  }
+
+  prewarmCustomerHomeProjects(input: {
+    customerId: string;
+    tenantId: string;
+    pageSize?: number;
+  }) {
+    return this.listOwnedProjects({
+      customerId: input.customerId,
+      tenantId: input.tenantId,
+      from: 0,
+      to: (input.pageSize ?? 20) - 1,
+    });
   }
 
   async saveAuthUserProfile(

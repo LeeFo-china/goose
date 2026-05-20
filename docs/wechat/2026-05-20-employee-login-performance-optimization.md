@@ -413,10 +413,12 @@ API 当前处理步骤：
 
 1. `/auth` 完成，写入新 token、`mode`、`tenant_id`、`customer_id`。
 2. 进入 `customer_ready`。
-3. 客户首页优先请求 `/customer/bootstrap?page=1&pageSize=20&include=home_summary`。
-4. `/customer/bootstrap` 会一次返回 `context` 和 `projects`，小程序不要再并发请求 `/auth/me/customer-context`、`/customer/projects`、`/customer/projects?include=home_summary`。
-5. 只有用户进入具体项目详情页时，再请求项目详情、日志、验收、预约奖励和分享 summary。
-6. 预约奖励和分享活动不是进入客户首页的阻塞条件，建议延后加载；接口未返回前展示局部骨架或隐藏活动卡片。
+3. 客户首页优先请求 `/customer/bootstrap?page=1&pageSize=20&include=home_summary&projects_mode=defer`，先拿到客户身份态。
+4. `projects_mode=defer` 时，`/customer/bootstrap` 只返回 `context`，`projects` 为 `null`；服务端会后台预热首页项目列表。
+5. bootstrap 返回后，再请求 `/customer/projects?page=1&pageSize=20&include=home_summary` 渲染项目列表；该请求可复用 `/auth` 或 bootstrap 触发的后台预热。
+6. 小程序不要再并发请求 `/auth/me/customer-context`，也不要同时打两个 `/customer/projects`。
+7. 只有用户进入具体项目详情页时，再请求项目详情、日志、验收、预约奖励和分享 summary。
+8. 预约奖励和分享活动不是进入客户首页的阻塞条件，建议延后加载；接口未返回前展示局部骨架或隐藏活动卡片。
 
 `/customer/bootstrap` 响应结构：
 
@@ -434,7 +436,8 @@ API 当前处理步骤：
     avatar: string | null;
     profile_completed: boolean;
   };
-  projects: {
+  projects_mode: "inline" | "defer";
+  projects: null | {
     list: Array<CustomerProject & { recent_logs?: CustomerRecentLog[] }>;
     pagination: {
       page: number;

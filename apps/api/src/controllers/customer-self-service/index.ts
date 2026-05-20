@@ -95,6 +95,7 @@ const CustomerProjectListQuerySchema = PaginationQuerySchema.extend({
 
 const CustomerBootstrapQuerySchema = PaginationQuerySchema.extend({
   include: optionalCustomerQueryValue(z.enum(["home_summary"])).default("home_summary"),
+  projects_mode: optionalCustomerQueryValue(z.enum(["inline", "defer"])).default("inline"),
 });
 
 const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
@@ -209,6 +210,20 @@ class CustomerSelfServiceController extends BaseController {
       customerId?: string | null;
     },
   ) {
+    if (options?.customerId && options.tenantId) {
+      const customers = await customerSelfServiceService.listCustomerProfilesByIds([
+        options.customerId,
+      ]);
+      const customer = customers.find((item) => (
+        item.id === options.customerId && item.tenant_id === options.tenantId
+      )) ?? null;
+      if (!customer && options.required) {
+        throw Errors.forbidden();
+      }
+
+      return customer;
+    }
+
     const list = await this.listCustomerProfilesByMembership(authUserId, options);
     if (list.length > 1) {
       throw Errors.badRequest("当前账号绑定了多个客户档案，请先选择装修公司");
@@ -866,35 +881,56 @@ class CustomerSelfServiceController extends BaseController {
     const queryResult = CustomerBootstrapQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const { page, pageSize, include } = queryResult.data;
+    const { page, pageSize, include, projects_mode: projectsMode } = queryResult.data;
     const userProfileStartedAt = Date.now();
-    const userProfilePromise = this.getUserProfileByAuthUserId(authUserId)
-      .then((userProfile) => {
-        request.log.info(
-          {
-            requestId: request.id,
-            durationMs: Date.now() - userProfileStartedAt,
-            authUserId,
-            hasUserProfile: Boolean(userProfile),
-          },
-          "[customer-bootstrap] user profile loaded",
-        );
-        return userProfile;
-      });
-    const [userProfile, projects] = await Promise.all([
-      userProfilePromise,
-      this.buildCustomerProjectsPayload({
+    const cachedUserProfile = customerSelfServiceService
+      .getCachedUserProfileByAuthUserId(authUserId);
+    if (!cachedUserProfile) {
+      void this.getUserProfileByAuthUserId(authUserId);
+    }
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - userProfileStartedAt,
+        authUserId,
+        hasUserProfile: Boolean(cachedUserProfile),
+        source: cachedUserProfile ? "cache" : "background",
+      },
+      "[customer-bootstrap] user profile loaded",
+    );
+    const projects = projectsMode === "inline"
+      ? await this.buildCustomerProjectsPayload({
         customer: customer!,
         page,
         pageSize,
         include,
         request,
-      }),
-    ]);
+      })
+      : null;
+    if (projectsMode === "defer") {
+      void customerSelfServiceService.prewarmCustomerHomeProjects({
+        customerId: customer!.id,
+        tenantId: customer!.tenant_id!,
+        pageSize,
+      });
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: 0,
+          customerId: customer!.id,
+          tenantId: customer!.tenant_id,
+          page,
+          pageSize,
+          source: "defer",
+        },
+        "[customer-bootstrap] owned projects deferred",
+      );
+    }
 
     const response = {
-      context: this.serializeCustomerContext(authUserId, customer!, userProfile),
+      context: this.serializeCustomerContext(authUserId, customer!, cachedUserProfile),
       projects,
+      projects_mode: projectsMode,
     };
     request.log.info(
       {
@@ -902,7 +938,8 @@ class CustomerSelfServiceController extends BaseController {
         durationMs: Date.now() - startedAt,
         authUserId,
         customerId: customer?.id ?? null,
-        projectCount: projects.list.length,
+        projectCount: projects?.list.length ?? 0,
+        projectsMode,
       },
       "[customer-bootstrap] bootstrap resolved",
     );

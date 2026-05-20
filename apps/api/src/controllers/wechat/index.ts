@@ -1373,6 +1373,13 @@ export class WeChatController extends BaseController {
           },
         })
       );
+      this.runAuthBackgroundTask(input.request, "prewarm_customer_home_projects", () =>
+        customerSelfServiceService.prewarmCustomerHomeProjects({
+          customerId: input.customer.id,
+          tenantId: input.customer.tenant_id!,
+          pageSize: 20,
+        })
+      );
     }
 
     return {
