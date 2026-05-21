@@ -1568,6 +1568,7 @@ API 行为：
 - `/projects/status?mode=home` 仍保留租户、员工权限、状态、归属、关键词、今日工作等过滤，但跳过同步 `count` 和手机号隐私上下文。
 - home 模式分页使用 `pageSize + 1` lookahead 判断是否还有下一页，`pagination.total` 是轻量估算值，只能用于首页判断是否还有更多，不应展示为精确总数。
 - `/employee/bootstrap` 和 `/auth` 后台预热已改为预热 home 模式缓存；小程序端延迟请求必须带同样的 `mode=home` 才能命中预热/in-flight/cache。
+- home 模式列表服务端短缓存已延长到 60 秒，缓存 key 会标准化角色和权限数组，减少 bootstrap 预热与页面延迟请求之间的缓存错位。
 
 小程序端需要对接：
 

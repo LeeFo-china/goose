@@ -15,7 +15,7 @@ import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 60_000;
-const PROJECT_LIST_CACHE_TTL_MS = 10_000;
+const PROJECT_LIST_CACHE_TTL_MS = 60_000;
 
 type ProjectListResult = {
     rows: Array<Record<string, unknown>>;
@@ -103,6 +103,11 @@ class ProjectService {
     }
 
     private projectListCacheKey(authContext: AuthContext, query: ProjectListQuery) {
+        const roleCodes = [...authContext.roleCodes].sort();
+        const permissions = authContext.permissions
+            .map((item) => `${item.code}:${item.scope}`)
+            .sort();
+
         return JSON.stringify({
             tenantId: authContext.tenantId,
             authUserId: authContext.authUserId,
@@ -114,6 +119,8 @@ class ProjectService {
             ownership: query.ownership ?? null,
             work_scope: query.work_scope ?? null,
             mode: query.mode ?? null,
+            roleCodes,
+            permissions,
         });
     }
 

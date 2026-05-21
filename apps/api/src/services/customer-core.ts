@@ -9,7 +9,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerFollowUpService } from "@/services/customer-follow-ups";
 
-const CUSTOMER_LIST_CACHE_TTL_MS = 10_000;
+const CUSTOMER_LIST_CACHE_TTL_MS = 60_000;
 
 type CustomerListResult = {
   rows: CustomerCoreRow[];
@@ -70,6 +70,11 @@ class CustomerCoreService {
   }
 
   private buildListCacheKey(authContext: AuthContext, query: CustomerListQueryType) {
+    const roleCodes = [...authContext.roleCodes].sort();
+    const permissions = authContext.permissions
+      .map((item) => `${item.code}:${item.scope}`)
+      .sort();
+
     return JSON.stringify({
       tenantId: authContext.tenantId,
       authUserId: authContext.authUserId,
@@ -83,8 +88,8 @@ class CustomerCoreService {
       follow: query.follow ?? null,
       work_scope: query.work_scope ?? null,
       mode: query.mode ?? null,
-      roleCodes: authContext.roleCodes,
-      permissions: authContext.permissions,
+      roleCodes,
+      permissions,
     });
   }
 
