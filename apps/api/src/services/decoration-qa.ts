@@ -35,7 +35,7 @@ type DecorationQaSuggestionResult = {
   expires_at: string | null;
 };
 
-const SUGGESTION_MEMORY_CACHE_TTL_MS = 60_000;
+const SUGGESTION_MEMORY_CACHE_TTL_MS = 5 * 60_000;
 const suggestionMemoryCache = new Map<string, {
   expiresAt: number;
   result: DecorationQaSuggestionResult;

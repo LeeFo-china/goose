@@ -14,7 +14,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
-const PUBLIC_PROJECTS_CACHE_TTL_MS = 60_000;
+const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
 
 type ProjectListResult = {

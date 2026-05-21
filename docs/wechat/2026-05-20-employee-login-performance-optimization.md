@@ -1999,6 +1999,50 @@ GET /ai/decoration-qa/suggestions?scene=visitor -> 200
 2. 再优化 visitor 首页冷请求 `/projects/frontend-visible` 和 `/ai/decoration-qa/suggestions`。
 3. 最后处理 visitor 项目详情 `/front/projects/:id` 和 `/front/projects/:id/logs` 慢查询。
 
+## 2026-05-21 12:05 visitor 首页预热优化生效
+
+API 侧继续优化 visitor 冷启动性能：
+
+- `openid -> 微信登录态` 正向缓存独立延长到 5 分钟。
+- `openid -> 微信登录态` 空结果增加 15 秒短缓存。
+- `/projects/frontend-visible` 内存缓存 TTL 从 `60s` 延长到 `5min`。
+- `/ai/decoration-qa/suggestions` 内存缓存 TTL 从 `60s` 延长到 `5min`。
+- `/auth` 收到微信 code 后立即启动 visitor 首页公开数据预热：
+  - `projectSer.listPublicProjects()`
+  - `getDecorationQaSuggestions({ scene: "visitor" })`
+- 预热不阻塞 `/auth` 响应，但会和微信 `jscode2session`、openid 登录态查询并行。
+
+本轮冷登录实测时间线：
+
+```text
+/auth receive code
+prewarm_visitor_home_data completed: 1271ms
+wechat jscode2session completed: 1588ms
+resolved login state by openid: 1226ms
+POST /auth completed: 2833ms
+GET /projects/frontend-visible: 4ms
+GET /ai/decoration-qa/suggestions?scene=visitor: 2ms
+```
+
+结论：
+
+- visitor 首页预热已经在 `/auth` 返回前完成。
+- `/projects/frontend-visible` 从首轮约 `1.1s - 1.9s` 降到 `4ms`。
+- `/ai/decoration-qa/suggestions?scene=visitor` 从首轮约 `1.3s - 2.0s` 降到 `2ms`。
+- `TOKEN_INVALID` 未复现。
+- visitor 快路径正常命中：
+
+```text
+[auth-plugin] skip visitor oauth credential check
+```
+
+剩余慢点：
+
+- `/auth` 仍约 `2.8s`。
+- 其中微信 `jscode2session` 约 `1.6s`。
+- API reload 后首次 openid 登录态查询仍约 `1.2s`；5 分钟内再次 `/auth` 可命中缓存降到 `0ms`。
+- 后续性能优化重点转向 `/auth` 首次远端登录态 RPC 和 visitor 项目详情。
+
 ## 验收标准
 
 ### API 验收

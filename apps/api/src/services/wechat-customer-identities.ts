@@ -11,6 +11,8 @@ import type { UserBusinessMembershipRecord } from "@/repositories/user-identitie
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
 
 const CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS = 60_000;
+const LOGIN_STATE_BY_OPENID_CACHE_TTL_MS = 5 * 60_000;
+const LOGIN_STATE_BY_OPENID_MISS_CACHE_TTL_MS = 15_000;
 const MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE = 4_000;
 
 type WechatLoginMembershipState = {
@@ -37,7 +39,7 @@ class WechatCustomerIdentityService {
   private loginMembershipStateInFlight = new Map<string, Promise<WechatLoginMembershipState>>();
   private loginStateByOpenidCache = new Map<string, {
     expiresAt: number;
-    value: WechatLoginStateByOpenid;
+    value: WechatLoginStateByOpenid | null;
   }>();
   private loginStateByOpenidInFlight = new Map<string, Promise<WechatLoginStateByOpenid | null>>();
 
@@ -122,18 +124,18 @@ class WechatCustomerIdentityService {
   private getCachedLoginStateByOpenid(openid: string) {
     const cached = this.loginStateByOpenidCache.get(openid);
     if (!cached) {
-      return null;
+      return undefined;
     }
 
     if (cached.expiresAt <= Date.now()) {
       this.loginStateByOpenidCache.delete(openid);
-      return null;
+      return undefined;
     }
 
     return cached.value;
   }
 
-  private setCachedLoginStateByOpenid(openid: string, value: WechatLoginStateByOpenid) {
+  private setCachedLoginStateByOpenid(openid: string, value: WechatLoginStateByOpenid | null) {
     const now = Date.now();
     if (this.loginStateByOpenidCache.size >= MAX_CUSTOMER_TENANT_OPTIONS_CACHE_SIZE) {
       for (const [key, item] of this.loginStateByOpenidCache.entries()) {
@@ -148,7 +150,9 @@ class WechatCustomerIdentityService {
     }
 
     this.loginStateByOpenidCache.set(openid, {
-      expiresAt: now + CUSTOMER_TENANT_OPTIONS_CACHE_TTL_MS,
+      expiresAt: now + (
+        value ? LOGIN_STATE_BY_OPENID_CACHE_TTL_MS : LOGIN_STATE_BY_OPENID_MISS_CACHE_TTL_MS
+      ),
       value,
     });
   }
@@ -167,7 +171,7 @@ class WechatCustomerIdentityService {
     }
 
     for (const [openid, item] of this.loginStateByOpenidCache.entries()) {
-      if (item.value.authUserId === input.authUserId) {
+      if (item.value?.authUserId === input.authUserId) {
         this.loginStateByOpenidCache.delete(openid);
         this.loginStateByOpenidInFlight.delete(openid);
       }
@@ -455,7 +459,7 @@ class WechatCustomerIdentityService {
 
   async resolveWechatLoginStateByOpenid(openid: string): Promise<WechatLoginStateByOpenid | null> {
     const cached = this.getCachedLoginStateByOpenid(openid);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -466,9 +470,7 @@ class WechatCustomerIdentityService {
 
     const request = this.loadWechatLoginStateByOpenid(openid)
       .then((result) => {
-        if (result) {
-          this.setCachedLoginStateByOpenid(openid, result);
-        }
+        this.setCachedLoginStateByOpenid(openid, result);
         return result;
       })
       .finally(() => {

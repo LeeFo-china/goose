@@ -25,6 +25,7 @@ import { customerCoreService } from "@/services/customer-core";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { taskCenterService } from "@/services/task-center";
 import { projectSer } from "@/services/projects";
+import { getDecorationQaSuggestions } from "@/services/decoration-qa";
 import { userIdentityService } from "@/services/user-identities";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { wechatAuthIdentityService } from "@/services/wechat-auth-identities";
@@ -189,6 +190,20 @@ export class WeChatController extends BaseController {
             page: 1,
             pageSize: 20,
             mode: "home",
+          },
+        }),
+      ]);
+    });
+  }
+
+  private prewarmVisitorHomeData(request: FastifyRequest) {
+    this.runAuthBackgroundTask(request, "prewarm_visitor_home_data", async () => {
+      await Promise.allSettled([
+        projectSer.listPublicProjects(),
+        getDecorationQaSuggestions({
+          query: {
+            scene: "visitor",
+            refresh: false,
           },
         }),
       ]);
@@ -486,6 +501,7 @@ export class WeChatController extends BaseController {
     }
 
     request.log.info({ requestId: request.id }, "[auth] receive code");
+    this.prewarmVisitorHomeData(request);
 
     request.log.info({ requestId: request.id }, "[auth] call wechat jscode2session start");
     const wechatStartedAt = Date.now();
