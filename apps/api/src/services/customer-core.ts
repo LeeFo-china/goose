@@ -4,12 +4,15 @@ import {
   type CustomerCoreAccessRow,
   type CustomerCoreRow,
 } from "@/repositories/customer-core";
-import type { CustomerListQueryType } from "@/schema/customer";
+import type {
+  CustomerListQueryType,
+  CustomerStatusTransitionInput,
+  CustomerStatusTransitionListQuery,
+} from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerFollowUpService } from "@/services/customer-follow-ups";
 import { customerStatusService } from "@/services/customer-status";
-import type { CustomerStatusTransitionInput } from "@/schema/customer";
 
 const CUSTOMER_LIST_CACHE_TTL_MS = 60_000;
 
@@ -405,6 +408,21 @@ class CustomerCoreService {
     const customer = await customerStatusService.transitionCustomerStatus(input);
     this.invalidateListCache();
     return customer;
+  }
+
+  async listCustomerStatusActions(input: {
+    authContext: AuthContext;
+    customerId: string;
+  }) {
+    return customerStatusService.listCustomerStatusActions(input);
+  }
+
+  async listCustomerStatusTransitions(input: {
+    authContext: AuthContext;
+    customerId: string;
+    query: CustomerStatusTransitionListQuery;
+  }) {
+    return customerStatusService.listCustomerStatusTransitions(input);
   }
 
   async getCustomerDetail(input: {

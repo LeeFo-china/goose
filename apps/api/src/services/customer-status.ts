@@ -1,13 +1,17 @@
 import { Errors } from "@/errors/error-factory";
 import { customerCoreRepository } from "@/repositories/customer-core";
 import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
-import type { CustomerStatusTransitionInput } from "@/schema/customer";
+import type {
+  CustomerStatusTransitionInput,
+  CustomerStatusTransitionListQuery,
+} from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
   CustomerStatusActionConfig,
   inferCustomerStatusAction,
   isCustomerStatus,
+  listCustomerStatusActions,
   resolveCustomerStatusTransition,
   type CustomerStatus,
 } from "@gooes/domain";
@@ -132,6 +136,80 @@ class CustomerStatusService {
           source: "project_sign_contract",
           project_id: input.projectId,
         },
+      },
+    };
+  }
+
+  async listCustomerStatusActions(input: {
+    authContext: AuthContext;
+    customerId: string;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const customer = await customerCoreRepository.findById({
+      customerId: input.customerId,
+      tenantId,
+    });
+    if (!customer) {
+      throw Errors.badRequest("客户不存在");
+    }
+
+    const canAccess = await accessPolicyService.canAccessCustomer(
+      input.authContext,
+      customer,
+      "customer.read",
+    );
+    if (!canAccess) {
+      throw Errors.forbidden();
+    }
+
+    const fromStatus = this.getRequiredCurrentStatus(customer.status);
+    return {
+      current_status: fromStatus,
+      actions: listCustomerStatusActions({
+        fromStatus,
+      }),
+    };
+  }
+
+  async listCustomerStatusTransitions(input: {
+    authContext: AuthContext;
+    customerId: string;
+    query: CustomerStatusTransitionListQuery;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const customer = await customerCoreRepository.findById({
+      customerId: input.customerId,
+      tenantId,
+    });
+    if (!customer) {
+      throw Errors.badRequest("客户不存在");
+    }
+
+    const canAccess = await accessPolicyService.canAccessCustomer(
+      input.authContext,
+      customer,
+      "customer.read",
+    );
+    if (!canAccess) {
+      throw Errors.forbidden();
+    }
+
+    const result = await customerStatusTransitionRepository.listByCustomer({
+      customerId: input.customerId,
+      tenantId,
+      page: input.query.page,
+      pageSize: input.query.pageSize,
+    });
+
+    return {
+      rows: result.rows,
+      pagination: {
+        page: input.query.page,
+        pageSize: input.query.pageSize,
+        total: result.total,
+        totalPages: result.total > 0
+          ? Math.ceil(result.total / input.query.pageSize)
+          : 0,
       },
     };
   }

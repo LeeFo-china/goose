@@ -165,3 +165,39 @@ bun run api:build
 bun run check:permission-boundaries
 git diff --check
 ```
+
+## 2026-05-21 阶段 5 端侧动作化后端接口
+
+已完成：
+
+- 新增项目当前状态可执行动作接口：
+  - `GET /projects/:id/status-actions`
+- 新增项目状态流转日志分页接口：
+  - `GET /projects/:id/status-transitions?page=1&pageSize=20`
+- 新增客户当前状态可执行动作接口：
+  - `GET /customers/:id/status-actions`
+- 新增客户状态流转日志分页接口：
+  - `GET /customers/:id/status-transitions?page=1&pageSize=20`
+- 项目 `on_hold` 状态动作列表会读取最近一次暂停日志里的 `paused_from_status`；缺少暂停上下文时不会返回恢复动作。
+- 状态流转日志接口按 `created_at desc` 排序，并返回统一分页结构。
+- 补充小程序对接文档：
+  - `docs/status-machine-remediation/wechat/2026-05-21-status-actions-and-transition-timeline.md`
+- 补充 Admin 对接文档：
+  - `docs/status-machine-remediation/admin/2026-05-21-status-actions-and-transition-timeline.md`
+
+端侧收口要求：
+
+- 项目 / 客户详情页用 `status-actions` 渲染按钮。
+- 状态变更仍统一调用 `POST /:resource/:id/status-transition`。
+- 时间线用 `status-transitions` 分页加载。
+- 新代码不要再通过 `PATCH` 直接提交 `status`。
+
+阶段 5 验证命令：
+
+```bash
+bun run api:typecheck
+cd packages/domain && bun run build
+bun run api:build
+bun run check:permission-boundaries
+git diff --check
+```

@@ -139,11 +139,16 @@ export const CustomerStatusTransitionSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
+export const CustomerStatusTransitionListQuerySchema = PaginationQuerySchema;
+
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
 export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;
 export type UpdateCustomerSchemaType = z.infer<typeof UpdateCustomerSchema>;
 export type CustomerStatusTransitionInput = z.infer<
   typeof CustomerStatusTransitionSchema
+>;
+export type CustomerStatusTransitionListQuery = z.infer<
+  typeof CustomerStatusTransitionListQuerySchema
 >;
 
 export const CustomerListQuerySchema = PaginationQuerySchema.extend({

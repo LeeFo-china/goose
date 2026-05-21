@@ -52,6 +52,32 @@ class CustomerStatusTransitionRepository {
 
     return data as CustomerStatusTransitionRecord;
   }
+
+  async listByCustomer(input: {
+    customerId: string;
+    tenantId: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const { data, error, count } = await SupabaseDB.getAdminClient()
+      .from("customer_status_transition_logs")
+      .select("*", { count: "exact" })
+      .eq("customer_id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询客户状态流转日志失败", error);
+    }
+
+    return {
+      rows: (data || []) as CustomerStatusTransitionRecord[],
+      total: count ?? 0,
+    };
+  }
 }
 
 export const customerStatusTransitionRepository =

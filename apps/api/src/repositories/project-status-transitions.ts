@@ -71,7 +71,32 @@ class ProjectStatusTransitionRepository {
 
     return (data as ProjectStatusTransitionRecord | null) ?? null;
   }
+
+  async listByProject(input: {
+    projectId: string;
+    tenantId: string;
+    page: number;
+    pageSize: number;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const { data, error, count } = await SupabaseDB.getAdminClient()
+      .from("project_status_transition_logs")
+      .select("*", { count: "exact" })
+      .eq("project_id", input.projectId)
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw Errors.dbError("查询项目状态流转日志失败", error);
+    }
+
+    return {
+      rows: (data || []) as ProjectStatusTransitionRecord[],
+      total: count ?? 0,
+    };
+  }
 }
 
 export const projectStatusTransitionRepository = new ProjectStatusTransitionRepository();
-

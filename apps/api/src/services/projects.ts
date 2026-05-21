@@ -1,6 +1,7 @@
 import {
     type CreateProjectInput,
     type ProjectStatusTransitionInput,
+    type ProjectStatusTransitionListQuery,
     type ProjectListQuery,
     type UpdateProjectInput,
 } from "@/schema/projects";
@@ -724,6 +725,21 @@ class ProjectService {
         this.invalidatePublicProjectsCache();
         this.invalidatePublicProjectCache(input.projectId);
         return project;
+    }
+
+    async listProjectStatusActionsForTenant(input: {
+        authContext: AuthContext;
+        projectId: string;
+    }) {
+        return projectStatusService.listProjectStatusActions(input);
+    }
+
+    async listProjectStatusTransitionsForTenant(input: {
+        authContext: AuthContext;
+        projectId: string;
+        query: ProjectStatusTransitionListQuery;
+    }) {
+        return projectStatusService.listProjectStatusTransitions(input);
     }
 
     async deleteProject(id: string, tenantId: string) {

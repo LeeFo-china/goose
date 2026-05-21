@@ -117,11 +117,16 @@ export const ProjectStatusTransitionSchema = z.object({
     .optional(),
 });
 
+export const ProjectStatusTransitionListQuerySchema = PaginationQuerySchema;
+
 // 导出类型
 export type ProjectType = z.infer<typeof ProjectBaseSchema>;
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 export type ProjectStatusTransitionInput = z.infer<typeof ProjectStatusTransitionSchema>;
+export type ProjectStatusTransitionListQuery = z.infer<
+  typeof ProjectStatusTransitionListQuerySchema
+>;
 
 // 3. 从 Zod 自动推导出 TypeScript 类型 (这样你就不需要手动写 type ProjectStatus = ...)
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;

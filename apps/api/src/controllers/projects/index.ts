@@ -1,6 +1,7 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateProjectSchema,
+  ProjectStatusTransitionListQuerySchema,
   ProjectStatusTransitionSchema,
   UpdateProjectSchema,
 } from "@/schema/projects";
@@ -611,6 +612,43 @@ class ProjectController extends TenantBaseController<
       authContext,
       projectId: idVerify.data.id,
       payload: result.data,
+    });
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/projects/:id/status-actions")
+  async listProjectStatusActions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectSer.listProjectStatusActionsForTenant({
+      authContext,
+      projectId: idVerify.data.id,
+    });
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/projects/:id/status-transitions")
+  async listProjectStatusTransitions(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = ProjectStatusTransitionListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await projectSer.listProjectStatusTransitionsForTenant({
+      authContext,
+      projectId: idVerify.data.id,
+      query: queryResult.data,
     });
 
     return ResponseHandler.success(data);

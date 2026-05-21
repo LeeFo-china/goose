@@ -3,6 +3,7 @@ import { projectRepository } from "@/repositories/projects";
 import { projectStatusTransitionRepository } from "@/repositories/project-status-transitions";
 import type {
   ProjectStatusTransitionInput,
+  ProjectStatusTransitionListQuery,
   UpdateProjectInput,
 } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
@@ -12,6 +13,7 @@ import { customerStatusService } from "@/services/customer-status";
 import {
   inferProjectStatusAction,
   isProjectStatus,
+  listProjectStatusActions,
   ProjectStatusActionConfig,
   resolveProjectStatusTransition,
   type ProjectStatus,
@@ -156,6 +158,80 @@ class ProjectStatusService {
     return project;
   }
 
+  async listProjectStatusActions(input: {
+    authContext: AuthContext;
+    projectId: string;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const hasAccess = await accessPolicyService.canAccessProject(
+      input.authContext,
+      input.projectId,
+      "project.read",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const project = await projectRepository.findById(input.projectId, tenantId);
+    if (!project) {
+      throw Errors.badRequest("项目不存在");
+    }
+
+    const fromStatus = this.getRequiredCurrentStatus(project.status);
+    const pausedFromStatus = fromStatus === "on_hold"
+      ? await this.getOptionalPausedFromStatus(input.projectId, tenantId)
+      : null;
+
+    return {
+      current_status: fromStatus,
+      paused_from_status: pausedFromStatus,
+      actions: listProjectStatusActions({
+        fromStatus,
+        pausedFromStatus,
+      }),
+    };
+  }
+
+  async listProjectStatusTransitions(input: {
+    authContext: AuthContext;
+    projectId: string;
+    query: ProjectStatusTransitionListQuery;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const hasAccess = await accessPolicyService.canAccessProject(
+      input.authContext,
+      input.projectId,
+      "project.read",
+    );
+    if (!hasAccess) {
+      throw Errors.forbidden();
+    }
+
+    const project = await projectRepository.findById(input.projectId, tenantId);
+    if (!project) {
+      throw Errors.badRequest("项目不存在");
+    }
+
+    const result = await projectStatusTransitionRepository.listByProject({
+      projectId: input.projectId,
+      tenantId,
+      page: input.query.page,
+      pageSize: input.query.pageSize,
+    });
+
+    return {
+      rows: result.rows,
+      pagination: {
+        page: input.query.page,
+        pageSize: input.query.pageSize,
+        total: result.total,
+        totalPages: result.total > 0
+          ? Math.ceil(result.total / input.query.pageSize)
+          : 0,
+      },
+    };
+  }
+
   buildTransitionPayloadFromStatus(input: {
     existing: Record<string, unknown>;
     nextStatus: unknown;
@@ -211,6 +287,23 @@ class ProjectStatusService {
     return typeof input.existing.customer_id === "string"
       ? input.existing.customer_id
       : null;
+  }
+
+  private async getOptionalPausedFromStatus(projectId: string, tenantId: string) {
+    const latestPause = await projectStatusTransitionRepository.findLatestPause(
+      projectId,
+      tenantId,
+    );
+    const pausedFromStatus = latestPause?.metadata?.paused_from_status;
+    if (
+      typeof pausedFromStatus !== "string" ||
+      !isProjectStatus(pausedFromStatus) ||
+      pausedFromStatus === "on_hold"
+    ) {
+      return null;
+    }
+
+    return pausedFromStatus;
   }
 
   private async getPausedFromStatus(projectId: string, tenantId: string) {

@@ -91,3 +91,7 @@ git diff --check
 - 小程序员工端执行非法动作返回 400。
 - 无权限员工执行状态动作返回 403。
 - 状态流转日志可在客户 / 项目详情查看。
+- `GET /projects/:id/status-actions` 返回当前项目状态和合法动作。
+- `GET /customers/:id/status-actions` 返回当前客户状态和合法动作。
+- `GET /projects/:id/status-transitions` 支持分页返回项目状态流转日志。
+- `GET /customers/:id/status-transitions` 支持分页返回客户状态流转日志。

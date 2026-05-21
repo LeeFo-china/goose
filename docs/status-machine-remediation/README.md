@@ -19,6 +19,8 @@
 - [Admin 客户状态机对接文档](./admin/2026-05-21-customer-status-machine-integration.md)
 - [小程序客户项目状态联动对接文档](./wechat/2026-05-21-customer-project-status-linkage.md)
 - [Admin 客户项目状态联动对接文档](./admin/2026-05-21-customer-project-status-linkage.md)
+- [小程序状态动作和时间线对接文档](./wechat/2026-05-21-status-actions-and-transition-timeline.md)
+- [Admin 状态动作和时间线对接文档](./admin/2026-05-21-status-actions-and-transition-timeline.md)
 
 ## 分阶段计划
 
@@ -106,13 +108,20 @@
 
 ### 阶段 5：前端和小程序动作式对接
 
-状态：待执行
+状态：已完成后端接口
 
 交付物：
 
 - Admin / 小程序不再直接传 `status`。
 - 后端返回当前状态可执行动作列表。
 - 状态流转日志可在客户 / 项目详情查看。
+
+已落地接口：
+
+- `GET /projects/:id/status-actions`
+- `GET /projects/:id/status-transitions?page=1&pageSize=20`
+- `GET /customers/:id/status-actions`
+- `GET /customers/:id/status-transitions?page=1&pageSize=20`
 
 ## 执行原则
 

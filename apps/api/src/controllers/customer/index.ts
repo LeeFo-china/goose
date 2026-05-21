@@ -5,6 +5,7 @@ import {
   BatchAssignCustomerOwnerSchema,
   CreateCustomerSchema,
   CustomerListQuerySchema,
+  CustomerStatusTransitionListQuerySchema,
   CustomerStatusTransitionSchema,
   UpdateCustomerSchema,
 } from "@/schema/customer";
@@ -735,6 +736,43 @@ class CustomerController extends TenantBaseController<
         tenantId: authContext.tenantId,
       }),
     );
+  }
+
+  @Get("/customers/:id/status-actions")
+  async listCustomerStatusActions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await customerCoreService.listCustomerStatusActions({
+      authContext,
+      customerId: idVerify.data.id,
+    });
+
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/customers/:id/status-transitions")
+  async listCustomerStatusTransitions(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = CustomerStatusTransitionListQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await customerCoreService.listCustomerStatusTransitions({
+      authContext,
+      customerId: idVerify.data.id,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success(data);
   }
 
   @Post("/customers/assign-owner/batch")
