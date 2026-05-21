@@ -438,6 +438,135 @@ Authorization: Bearer <employee_token>
 3. `4s+`：显示“网络较慢，请稍候”，保留 loading。
 4. 请求失败：展示后端 message，并提供重试按钮。
 
+### 小程序端对接任务单
+
+本轮小程序端只需要围绕员工登录状态机改动，核心目标是：同一轮流程中不能同时跑“旧 token 恢复”和“重新登录 / wx.login”。
+
+必须完成：
+
+- 增加全局登录流程状态：
+  - `anonymous`
+  - `restoring_employee`
+  - `authenticating`
+  - `employee_ready`
+  - `visitor_ready`
+  - `auth_failed`
+- 增加全局 in-flight 复用：
+  - `authPromise`
+  - `employeeBootstrapPromise`
+- `employeeBootstrapPromise` 必须放在全局登录/session store 中，不能放在单个页面实例里。
+- 所有入口都必须通过同一个 `ensureEmployeeBootstrap()` 获取员工 bootstrap：
+  - app 启动
+  - landing 页
+  - 员工首页 onShow
+  - tab 初始化
+  - 登录成功事件回调
+  - 页面刷新/下拉刷新
+- 已有 employee token 恢复时，只允许进入 `restoring_employee`：
+  - 只请求 `GET /employee/bootstrap`
+  - 成功后进入 `employee_ready`
+  - `401/403` 后清空 token，再进入 `anonymous` 或 `authenticating`
+- 重新登录 / 点击登录 / 退出后登录时，只允许进入 `authenticating`：
+  - 先清空旧 token、旧角色、旧员工态
+  - 取消或标记废弃旧 token 触发的所有 in-flight
+  - 再调用 `wx.login()`
+  - 再请求 `POST /auth`
+  - `/auth` 返回 `mode: "employee"` 并写入新 token 后，才请求 `GET /employee/bootstrap`
+- 员工首页首屏使用 `/employee/bootstrap` 返回的：
+  - `context`
+  - `profile`
+- 员工首页首屏不再请求：
+  - `/auth/me/profile`
+  - `/auth/me/permissions`
+- bootstrap 返回后再延迟请求：
+  - `/home_stats`
+  - `/task-center/todos/summary`
+  - `/projects/status?page=1&pageSize=20&ownership=self`
+  - `/customers?page=1&pageSize=20`
+
+必须禁止：
+
+- `restoring_employee` 状态下触发 `wx.login()` 或 `/auth`。
+- `authenticating` 状态下用旧 token 触发 `/employee/bootstrap`。
+- `/auth` 未完成、新 token 未写入前，请求任何员工首页接口。
+- 同一轮发起多个 `/auth`。
+- 同一轮发起多个 `/employee/bootstrap`。
+- 页面各自维护局部 `employeeBootstrapPromise`。
+- 在 bootstrap 已经 in-flight 时，另一个页面直接调用接口层重新请求 `/employee/bootstrap`。
+- 页面 `onShow`、组件 mounted、landing 页展示时绕过全局状态机直接拉员工接口。
+
+建议实现：
+
+```ts
+let authPromise: Promise<AuthResult> | null = null;
+let employeeBootstrapPromise: Promise<EmployeeBootstrap> | null = null;
+let loginEpoch = 0;
+
+function ensureEmployeeBootstrap() {
+  employeeBootstrapPromise ||= api.employeeBootstrap();
+  return employeeBootstrapPromise;
+}
+
+async function restoreEmployeeSession() {
+  if (authState !== "anonymous" && authState !== "employee_ready") return;
+  const token = getStoredEmployeeToken();
+  if (!token) return;
+
+  authState = "restoring_employee";
+  const epoch = ++loginEpoch;
+
+  try {
+    const bootstrap = await ensureEmployeeBootstrap();
+    if (epoch !== loginEpoch) return;
+    authState = "employee_ready";
+    applyEmployeeBootstrap(bootstrap);
+  } catch (error) {
+    if (epoch !== loginEpoch) return;
+    clearEmployeeSession();
+    authState = "anonymous";
+  } finally {
+    if (epoch === loginEpoch) employeeBootstrapPromise = null;
+  }
+}
+
+async function loginByWechatCode() {
+  if (authPromise) return authPromise;
+
+  const epoch = ++loginEpoch;
+  authState = "authenticating";
+  employeeBootstrapPromise = null;
+  clearEmployeeSession();
+
+  authPromise = (async () => {
+    const code = await wxLogin();
+    const auth = await api.auth({ code });
+    if (epoch !== loginEpoch) return auth;
+
+    if (auth.mode === "employee") {
+      saveEmployeeToken(auth.token);
+      authState = "employee_ready";
+      applyEmployeeBootstrap(await ensureEmployeeBootstrap());
+    }
+
+    return auth;
+  })().finally(() => {
+    if (epoch === loginEpoch) authPromise = null;
+    if (epoch === loginEpoch) employeeBootstrapPromise = null;
+  });
+
+  return authPromise;
+}
+```
+
+验收标准：
+
+- 已有 token 恢复时，日志只应出现 `/employee/bootstrap`，不应同时出现 `POST /auth`。
+- 重新登录时，日志顺序必须是 `POST /auth` 成功后，再出现 `/employee/bootstrap`。
+- 同一轮最多出现一次 `/employee/bootstrap`；如果多个页面同时需要，必须复用全局 `employeeBootstrapPromise`。
+- 一组页面 onShow / tab 初始化 / 登录成功回调同时发生时，日志里仍只能出现一个 `/employee/bootstrap`。
+- 员工首屏不再出现 `/auth/me/profile`、`/auth/me/permissions`。
+- 正常缓存命中时，`/employee/bootstrap` 应接近毫秒级；冷启动或远端鉴权重建时可以有一次慢请求。
+
 ### 员工首屏标准请求顺序
 
 员工登录成功后的首屏只能按以下顺序发请求：
@@ -1001,6 +1130,375 @@ Authorization: Bearer <employee_token>
 - 已有 token 恢复：只请求 `/employee/bootstrap`，不要同时发 `/auth`。
 - 重新登录：先清空旧 token 和旧 in-flight，再发 `/auth`，`/auth` 成功后再请求 `/employee/bootstrap`。
 - 同一轮只允许一个 `/auth` in-flight 和一个 `/employee/bootstrap` in-flight。
+
+## 2026-05-20 21:55 小程序 bootstrap 全局去重
+
+最新两轮日志显示：
+
+- 未再看到 `POST /auth` 和旧 token `/employee/bootstrap` 混跑，互斥流程方向正确。
+- 但同一轮仍出现重复 `/employee/bootstrap`：
+  - 第一条冷恢复 bootstrap 约 `1.8s - 5.6s`。
+  - 后续重复 bootstrap 可命中缓存，约 `1ms`。
+- `/auth/me/profile` 和 `/auth/me/permissions` 已不再出现。
+
+结论：
+
+- 小程序端还需要把 `employeeBootstrapPromise` 放到全局登录/session store。
+- landing、首页 onShow、tab 初始化、登录成功事件回调、页面刷新都必须调用同一个 `ensureEmployeeBootstrap()`。
+- 页面级局部 Promise 不够，会导致不同页面各自发一次 `/employee/bootstrap`。
+
+验收：
+
+- 同一轮页面恢复或登录完成后，API 日志最多出现一次 `/employee/bootstrap`。
+- 如果多个页面同时需要员工 bootstrap，它们必须 await 同一个全局 Promise。
+- bootstrap 完成后再触发统计、任务、客户、项目列表的延迟请求。
+
+## 2026-05-20 22:40 小程序对接补充排查项
+
+本次小程序再次登录后，当前 3000 端口 API 会话没有吐出新的请求日志。排查时先确认小程序实际请求地址仍是当前本机 API：
+
+- `baseUrl` 应指向当前局域网 IP 的 `:3000`。
+- 不要同时开多个 API 服务或代理到旧端口。
+- 重新编译后确认开发者工具没有保留旧 bundle / 旧请求封装缓存。
+
+如果确认请求已经打到当前 API，下一轮验收只看以下接口序列：
+
+#### 员工 token 恢复
+
+期望日志：
+
+```text
+GET /employee/bootstrap
+```
+
+不应出现：
+
+```text
+POST /auth
+GET /auth/me/profile
+GET /auth/me/permissions
+```
+
+说明：
+
+- 恢复登录只验证旧 employee token 是否仍有效。
+- 如果 `/employee/bootstrap` 成功，直接进入员工首页。
+- 只有 `/employee/bootstrap` 返回 `401/403` 后，才允许清 token 并进入 `/auth`。
+
+#### 员工重新登录
+
+期望日志：
+
+```text
+POST /auth
+GET /employee/bootstrap
+```
+
+不应出现：
+
+```text
+GET /employee/bootstrap
+POST /auth
+GET /employee/bootstrap
+```
+
+说明：
+
+- 重新登录必须先清空旧 token 和旧员工态。
+- `/auth` 成功、保存新 employee token 后，才允许请求 `/employee/bootstrap`。
+- 如果登录成功事件、首页 `onShow`、tab 初始化都触发 bootstrap，它们必须 await 同一个全局 `employeeBootstrapPromise`。
+
+#### 重复 bootstrap 的定位方式
+
+如果同一轮仍出现多个 `/employee/bootstrap`，小程序端按入口逐个加日志定位调用来源：
+
+- app 启动恢复。
+- landing 页初始化。
+- 员工首页 `onShow`。
+- tab 初始化。
+- 登录成功事件回调。
+- 下拉刷新 / 手动刷新。
+
+每个入口日志至少包含：
+
+- `loginEpoch`
+- `authState`
+- `hasEmployeeBootstrapPromise`
+- `source`
+
+验收标准：
+
+- 同一轮 `loginEpoch` 内，最多只能真实发起一次 `/employee/bootstrap`。
+- 其他入口必须打印 `reuse employeeBootstrapPromise`，不能再次调用接口层。
+- 新 token 写入前，任何入口都不能请求员工首页接口。
+- bootstrap 未完成前，扩展数据接口只能排队，不能抢跑。
+
+## 2026-05-20 22:45 两次员工登录复测结果
+
+本次小程序两次员工登录已经打到当前 3000 API 服务，日志结果：
+
+- 未再出现 `/auth/me/profile`。
+- 未再出现 `/auth/me/permissions`。
+- 未看到 `POST /auth` 与旧 token bootstrap 混跑，说明这两次更像是已有 employee token 恢复。
+- 仍出现重复 `/employee/bootstrap`：
+  - 第一次 bootstrap：约 `5326ms`，其中 auth-plugin 远端校验约 `1197ms / 1534ms`，bootstrap 内部解析约 `3790ms`。
+  - 第二次 bootstrap：约 `1726ms`。
+  - 随后又出现一次重复 bootstrap：约 `1ms`，明显是缓存命中后的重复调用。
+- 第一次 bootstrap 后，`/home_stats` 和 `/task-center/todos/summary` 已命中毫秒级。
+- 第二次 bootstrap 后，扩展数据仍有一次抢跑远端查询：
+  - `/home_stats`：约 `2817ms`
+  - `/task-center/todos/summary`：约 `2518ms`
+  - `/customers`：约 `3435ms`
+  - `/projects/status`：约 `3212ms`
+- 随后的重复 bootstrap 之后，扩展数据全部回到毫秒级：
+  - `/home_stats`：约 `1ms`
+  - `/task-center/todos/summary`：约 `2ms`
+  - `/customers`：约 `2ms`
+  - `/projects/status`：约 `1ms`
+
+结论：
+
+- 小程序端已完成“移除旧 profile / permissions 首屏请求”的方向。
+- 仍未完成“同一轮只发一次 `/employee/bootstrap`”。
+- 扩展数据请求需要等待 bootstrap 完成，并尽量在 bootstrap 后延迟一个微任务或由同一个全局 store 统一调度，避免和服务端预热同时抢远端查询。
+
+下一步小程序端对接要求：
+
+- 所有入口继续收敛到全局 `ensureEmployeeBootstrap()`。
+- `employeeBootstrapPromise` resolve 前，不允许页面自行发 `/home_stats`、`/task-center/todos/summary`、`/customers`、`/projects/status`。
+- bootstrap 成功后，由全局登录/session store 统一触发扩展数据加载，页面只订阅 store 数据，不直接抢接口。
+- 再次验收时，同一轮只应看到一条 `/employee/bootstrap`，扩展数据应稳定命中毫秒级或只允许第一条冷请求慢。
+
+## 2026-05-20 22:50 两次员工登录复测结果
+
+本次日志显示旧接口仍然没有回来，但登录状态机又出现混合流程：
+
+- 未出现 `/auth/me/profile`。
+- 未出现 `/auth/me/permissions`。
+- 先出现两次 employee token 恢复 bootstrap：
+  - 第一次 `/employee/bootstrap`：约 `5436ms`。
+  - 第二次 `/employee/bootstrap`：约 `1449ms`。
+- 第二次 bootstrap 后扩展数据抢跑：
+  - `/home_stats`：约 `1706ms`
+  - `/task-center/todos/summary`：约 `1332ms`
+  - `/customers`：约 `3595ms`
+  - `/projects/status`：约 `3609ms`
+- 随后又出现一次 `POST /auth`：
+  - 总耗时约 `2582ms`
+  - `jscode2session`：约 `1383ms`
+  - `resolve_wechat_login_state_by_openid`：约 `1194ms`
+  - employee login context：`0ms`
+- `/auth` 成功后又出现 `/employee/bootstrap`：约 `1761ms`。
+- 之后再次出现一个重复 `/employee/bootstrap`：约 `1ms`，并且扩展数据回到毫秒级。
+
+结论：
+
+- `/auth` 本身已经是预期链路，慢点主要是微信接口和一次登录态 RPC。
+- 当前用户体感慢不是旧 profile / permissions 导致，而是端上同一轮里先做 token 恢复，又重新触发 `/auth`，并且多个入口重复 bootstrap。
+- 扩展数据仍有页面抢跑，未完全由全局 store 在 bootstrap 完成后统一调度。
+
+小程序端必须修正：
+
+- 如果已经进入 `restoring_employee` 并发起 `/employee/bootstrap`，本轮不允许再自动触发 `wx.login()` / `POST /auth`。
+- 只有 bootstrap 返回 `401/403`、用户主动点击重新登录、或明确退出登录后，才允许进入 `authenticating`。
+- 一旦进入 `authenticating`，必须先废弃所有旧 token 触发的 bootstrap 和扩展数据请求。
+- 登录成功后只能复用一个全局 `employeeBootstrapPromise`，不能由登录成功回调、首页 `onShow`、tab 初始化各发一次。
+- 扩展数据请求必须由全局 store 串在 bootstrap resolve 之后统一触发。
+
+## 2026-05-20 22:55 两次员工登录复测结果
+
+本次复测模式与 22:50 基本一致：
+
+- 未出现 `/auth/me/profile`。
+- 未出现 `/auth/me/permissions`。
+- 先出现两次 employee token 恢复 bootstrap：
+  - 第一次 `/employee/bootstrap`：约 `5339ms`。
+  - 第二次 `/employee/bootstrap`：约 `4053ms`。
+- 随后又出现一次 `POST /auth`：
+  - 总耗时约 `3162ms`
+  - `jscode2session`：约 `1409ms`
+  - `resolve_wechat_login_state_by_openid`：约 `1749ms`
+  - employee login context：`0ms`
+- `/auth` 成功后又出现 `/employee/bootstrap`：约 `3171ms`。
+- 紧接着又出现一次重复 `/employee/bootstrap`：约 `1ms`。
+
+扩展数据变化：
+
+- `/home_stats` 和 `/task-center/todos/summary` 大多已经稳定命中毫秒级。
+- `/customers` 和 `/projects/status` 仍会出现 `1.1s - 1.7s` 的冷请求：
+  - `/customers`：约 `1214ms / 1190ms / 1707ms`
+  - `/projects/status`：约 `1331ms / 1171ms / 1272ms`
+
+结论：
+
+- 小程序端已经移除了员工首页旧 profile / permissions 请求。
+- 小程序端仍没有解决恢复登录和重新登录互斥：同一轮先 bootstrap，再 `/auth`，再 bootstrap。
+- 小程序端仍没有解决 bootstrap 全局去重：登录成功后还有重复 bootstrap。
+- API 侧 `/auth` 已经没有明显业务串行瓶颈，剩余主要是微信接口和一次远端登录态 RPC。
+
+下一步只看小程序端状态机：
+
+- 自动恢复 token 和主动重新登录必须由一个全局状态机仲裁。
+- 如果本地有 employee token，默认只走 `restoreEmployeeSession()`；不要自动补一次 `loginByWechatCode()`。
+- 如果用户点击登录按钮，应先 `logoutLocalOnly()` 清空旧 token、递增 `loginEpoch`、废弃所有旧请求，再进入 `authenticating`。
+- 页面 `onShow` 不能直接调用登录或 bootstrap，只能调用全局 `ensureSessionReady()`。
+- 再次验收时，任何一轮只能二选一：
+  - 恢复：`GET /employee/bootstrap`
+  - 重新登录：`POST /auth` -> `GET /employee/bootstrap`
+
+## 2026-05-20 23:00 两次员工登录复测结果
+
+本次复测仍然是同一类问题，说明小程序端状态机还没有完成收敛：
+
+- 未出现 `/auth/me/profile`。
+- 未出现 `/auth/me/permissions`。
+- 先出现两次 employee token 恢复 bootstrap：
+  - 第一次 `/employee/bootstrap`：约 `5144ms`。
+  - 第二次 `/employee/bootstrap`：约 `6433ms`。
+- 第二次恢复后，又出现第三次 `/employee/bootstrap`：约 `1293ms`。
+- 随后又触发一次 `POST /auth`：
+  - 总耗时约 `2802ms`
+  - `jscode2session`：约 `1601ms`
+  - `resolve_wechat_login_state_by_openid`：约 `1198ms`
+  - employee login context：`0ms`
+- `/auth` 成功后又出现 `/employee/bootstrap`：约 `2649ms`。
+- 最后又出现一次重复 `/employee/bootstrap`：约 `1ms`。
+
+扩展数据：
+
+- `/home_stats` 和 `/task-center/todos/summary` 继续稳定在 `0ms - 1ms`。
+- `/customers` 仍有冷请求：约 `3018ms / 1619ms / 1153ms / 2184ms`。
+- `/projects/status` 仍有冷请求：约 `1273ms / 2250ms / 1522ms / 1227ms`。
+- 重复 bootstrap 后，`/customers` 和 `/projects/status` 可命中 `1ms`。
+
+结论：
+
+- 旧接口已经清理到位。
+- API 登录主链路已稳定，`/auth` 主要耗时来自微信接口和一次登录态 RPC。
+- 当前体感慢的首要原因仍是小程序端重复触发：
+  - 多次恢复 bootstrap。
+  - 恢复后又自动发 `/auth`。
+  - `/auth` 后再发多次 bootstrap。
+- `/customers` 和 `/projects/status` 的冷请求可以后续继续优化，但它们应当在 bootstrap 后作为延迟数据加载，不应阻塞员工首页进入。
+
+小程序端下一步必须按这个硬规则验收：
+
+- 如果本地存在 employee token，进入 `restoring_employee` 后本轮只能等 `/employee/bootstrap` 成败。
+- `restoring_employee` 成功后不得自动触发 `POST /auth`。
+- 用户主动重新登录时，必须先清空本地 employee token，再进入 `authenticating`，不能先 restore 再 login。
+- 所有页面入口只允许调用 `ensureSessionReady()`，不能直接调用 `employeeBootstrap()` 或 `auth()`。
+
+## 2026-05-21 08:29 两次员工登录复测结果
+
+本次复测仍然延续同一个问题：小程序端还在同一轮里混用恢复登录和重新登录。
+
+日志结果：
+
+- 未出现 `/auth/me/profile`。
+- 未出现 `/auth/me/permissions`。
+- 先出现 employee token 恢复 bootstrap：
+  - `/employee/bootstrap`：约 `6376ms`。
+  - 随后又一次重复 `/employee/bootstrap`：约 `1ms`。
+  - 再出现一次 `/employee/bootstrap`：约 `1006ms`。
+- 随后又触发 `POST /auth`：
+  - 总耗时约 `3438ms`
+  - `jscode2session`：约 `1821ms`
+  - `resolve_wechat_login_state_by_openid`：约 `1610ms`
+  - employee login context：`0ms`
+- `/auth` 成功后又出现 `/employee/bootstrap`：约 `1719ms`。
+- 最后又出现一次重复 `/employee/bootstrap`：约 `2250ms`。
+
+扩展数据：
+
+- `/home_stats` 和 `/task-center/todos/summary` 继续稳定在 `0ms - 1ms`。
+- `/customers` 冷请求约 `1063ms - 1718ms`，缓存命中约 `2ms`。
+- `/projects/status` 冷请求约 `1148ms - 1660ms`，缓存命中约 `1ms`。
+
+结论：
+
+- API 旧接口清理和员工首页轻量 bootstrap 方向已经生效。
+- 端上互斥状态机仍未收敛：同一轮出现 `bootstrap -> bootstrap -> auth -> bootstrap -> bootstrap`。
+- 当前用户体感慢的主要原因仍是重复请求叠加，而不是 `/auth` 内部员工身份解析。
+
+小程序端本轮必须修正：
+
+- `ensureSessionReady()` 内部必须先判断是否已有 `authPromise` 或 `employeeBootstrapPromise`，有则直接复用。
+- `restoreEmployeeSession()` 成功后，不能再由 landing 页、首页 `onShow`、tab 初始化或登录按钮兜底逻辑触发 `loginByWechatCode()`。
+- `loginByWechatCode()` 开始前必须确认这是用户主动重新登录，或旧 token 已经被 bootstrap 判定为 `401/403`。
+- 所有页面禁止直接调用 `/employee/bootstrap`，只能通过全局 session store。
+
+## 2026-05-21 08:47 两次员工登录复测结果
+
+本次复测没有再看到新的 `POST /auth`，说明这两次更像是只做了 employee token 恢复，不是退出后重新登录混跑。
+
+日志结果：
+
+- 未出现 `/auth/me/profile`。
+- 未出现 `/auth/me/permissions`。
+- 未出现新的 `POST /auth`。
+- 仍出现多次 `/employee/bootstrap`：
+  - 第一次 `/employee/bootstrap`：约 `4351ms`。
+  - 第二次 `/employee/bootstrap`：约 `5296ms`。
+  - 随后重复 bootstrap 命中缓存：约 `1ms`。
+  - 再次出现 `/employee/bootstrap`：约 `1452ms`。
+
+扩展数据：
+
+- `/home_stats` 基本稳定 `0ms - 1ms`。
+- `/task-center/todos/summary` 大多数为毫秒级，但有一次约 `1517ms`。
+- `/customers` 冷请求约 `1013ms - 1244ms`，缓存命中约 `1ms`。
+- `/projects/status` 冷请求约 `1131ms - 1632ms`，缓存命中约 `0ms`。
+
+结论：
+
+- “恢复后又触发 `/auth`”这次没有复现。
+- 当前主要问题变成单纯的 bootstrap 全局去重没完成：多个入口仍在直接或间接发 `/employee/bootstrap`。
+- 扩展数据整体已较稳定，但页面仍可能在 bootstrap 预热未结束时抢跑一次慢请求。
+
+小程序端下一步只修 bootstrap 去重：
+
+- `employeeBootstrapPromise` 必须是进程级 / 全局 store 单例，不能跟页面生命周期绑定。
+- 任何页面入口调用 `ensureEmployeeBootstrap()` 时，如果已有 promise，必须直接返回同一个 promise。
+- bootstrap 成功后短时间内应保留结果缓存；页面二次 `onShow` 应读取 store 中的 `employeeBootstrap`，不要重新发请求。
+- 刷新按钮或下拉刷新如果要强制刷新，必须显式传 `force: true`，普通页面进入不能 force。
+
+## 2026-05-21 09:06 API bootstrap 短缓存优化
+
+本轮 API 已增加员工 bootstrap 短缓存和阶段日志：
+
+- `/employee/bootstrap` 结果增加 15 秒短 TTL 内存缓存。
+- 缓存 key 包含：
+  - `authUserId`
+  - `tenantId`
+  - `employeeId`
+  - `home_mode`
+  - `tasks_mode`
+- 同一个 cache key 的并发请求复用同一个 in-flight Promise。
+- 如果 JWT 中已有 `sub / tenant_id / employee_id`，API 会先用 token 信息尝试命中 bootstrap cache / in-flight，再进入完整 auth context 解析。
+- 缓存命中时会打印：
+  - `[employee-bootstrap] bootstrap cache hit`
+- token 级缓存命中时会打印：
+  - `[employee-bootstrap] bootstrap token cache hit`
+- 并发复用时会打印：
+  - `[employee-bootstrap] bootstrap in-flight reused`
+- token 级并发复用时会打印：
+  - `[employee-bootstrap] bootstrap token in-flight reused`
+- 新增阶段日志：
+  - `[employee-bootstrap] auth context resolved`
+  - `[employee-bootstrap] synchronous data resolved`
+  - `[employee-bootstrap] response built`
+
+预期效果：
+
+- 小程序端还没完全去重时，短时间内重复 `/employee/bootstrap` 不再反复等待 auth context、profile 和 bootstrap 响应构建。
+- 仍无法跳过 auth-plugin 的 token / 微信绑定校验；如果日志里慢点在 `assert_wechat_oauth_credential` 或 `assert_wechat_business_binding`，说明慢在进入 controller 前。
+- 正常复测时，第二条重复 bootstrap 应看到 `bootstrap cache hit` 或 `bootstrap in-flight reused`。
+
+后续复测判断：
+
+- 如果第一条 bootstrap 慢，但第二条出现 `bootstrap cache hit` 且总耗时接近毫秒级，API 短缓存生效。
+- 如果第二条仍慢且没有 cache hit，说明请求间隔超过 15 秒、query mode 不一致，或端上触发了不同 token / 不同员工上下文。
+- 如果 cache hit 已生效但用户仍体感慢，下一步继续看 `/customers` 和 `/projects/status` 是否还在首屏阻塞。
 
 ## 验收标准
 

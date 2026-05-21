@@ -619,7 +619,7 @@ export class WeChatController extends BaseController {
         {
           requestId: request.id,
           userId,
-          durationMs: Date.now() - loginMembershipStartedAt,
+          durationMs: Date.now() - resolveIdentityStartedAt,
           totalMs: Date.now() - startedAt,
         },
         "[auth] resolved existing visitor login context",

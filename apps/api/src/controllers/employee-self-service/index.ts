@@ -41,9 +41,97 @@ const EmployeeBootstrapQuerySchema = z.object({
   tasks_mode: optionalEmployeeQueryValue(z.enum(["inline", "defer"])).default("defer"),
 });
 
+const EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS = 15_000;
+const MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE = 1_000;
+
+type EmployeeBootstrapQuery = z.infer<typeof EmployeeBootstrapQuerySchema>;
+type EmployeeBootstrapProfile = ReturnType<EmployeeSelfServiceController["serializeAuthProfile"]>;
+type EmployeeBootstrapResponse = {
+  context: AuthContext & { tenantId: string };
+  profile: EmployeeBootstrapProfile;
+  home_stats: Awaited<ReturnType<typeof homeDashboardService.getStats>> | null;
+  home_mode: EmployeeBootstrapQuery["home_mode"];
+  task_summary: Awaited<ReturnType<typeof taskCenterService.getSummary>> | null;
+  tasks_mode: EmployeeBootstrapQuery["tasks_mode"];
+  projects_mode: "defer";
+  projects: null;
+  customers_mode: "defer";
+  customers: null;
+};
+
 class EmployeeSelfServiceController extends TenantBaseController {
+  private bootstrapCache = new Map<string, {
+    expiresAt: number;
+    value: EmployeeBootstrapResponse;
+  }>();
+  private bootstrapInFlight = new Map<string, Promise<EmployeeBootstrapResponse>>();
+
   constructor() {
     super("employee_self_service");
+  }
+
+  private getCachedBootstrap(cacheKey: string) {
+    const item = this.bootstrapCache.get(cacheKey);
+    if (!item) {
+      return null;
+    }
+
+    if (item.expiresAt <= Date.now()) {
+      this.bootstrapCache.delete(cacheKey);
+      return null;
+    }
+
+    return item.value;
+  }
+
+  private setCachedBootstrap(cacheKey: string, value: EmployeeBootstrapResponse) {
+    const now = Date.now();
+    if (this.bootstrapCache.size >= MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE) {
+      for (const [key, item] of this.bootstrapCache.entries()) {
+        if (item.expiresAt <= now) {
+          this.bootstrapCache.delete(key);
+        }
+      }
+
+      if (this.bootstrapCache.size >= MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE) {
+        this.bootstrapCache.clear();
+      }
+    }
+
+    this.bootstrapCache.set(cacheKey, {
+      expiresAt: now + EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private bootstrapCacheKey(
+    authContext: AuthContext & { tenantId: string },
+    query: EmployeeBootstrapQuery,
+  ) {
+    return [
+      authContext.authUserId,
+      authContext.tenantId,
+      authContext.employeeId,
+      query.home_mode,
+      query.tasks_mode,
+    ].join(":");
+  }
+
+  private bootstrapTokenCacheKey(
+    user: FastifyRequest["user"],
+    query: EmployeeBootstrapQuery,
+  ) {
+    if (!user?.sub || !user.tenant_id || !user.employee_id) {
+      return null;
+    }
+
+    return [
+      user.sub,
+      user.tenant_id,
+      user.employee_id,
+      query.home_mode,
+      query.tasks_mode,
+    ].join(":");
   }
 
   private assertTaskSummaryReadable(authContext: AuthContext) {
@@ -167,34 +255,38 @@ class EmployeeSelfServiceController extends TenantBaseController {
     };
   }
 
-  @Get("/employee/bootstrap")
-  async getEmployeeBootstrap(request: FastifyRequest, reply: FastifyReply) {
+  private async buildEmployeeBootstrapResponse(
+    request: FastifyRequest,
+    authContext: AuthContext & { tenantId: string },
+    query: EmployeeBootstrapQuery,
+  ): Promise<EmployeeBootstrapResponse> {
     const startedAt = Date.now();
-    const authContext = await this.getRequiredTenantContext(request);
-
-    if (!authContext.employeeId) {
-      throw Errors.business(403, "员工身份缺失，无法加载员工首页", "EMPLOYEE_MISSING");
-    }
-
-    this.assertPermission(authContext, "dashboard.read");
-    this.assertTaskSummaryReadable(authContext);
-    const queryResult = EmployeeBootstrapQuerySchema.safeParse(request.query);
-    if (!queryResult.success) {
-      throw Errors.fromZod(queryResult.error);
-    }
-
-    const { home_mode: homeMode, tasks_mode: tasksMode } = queryResult.data;
+    const { home_mode: homeMode, tasks_mode: tasksMode } = query;
     this.prewarmDeferredHomeData(request, authContext);
     this.prewarmDeferredSummaryData(request, authContext, {
       includeHomeStats: homeMode === "defer",
       includeTaskSummary: tasksMode === "defer",
     });
 
+    const profileStartedAt = Date.now();
     const [homeStats, taskSummary, userProfile] = await Promise.all([
       homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
       tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
       customerSelfServiceService.getUserProfileByAuthUserId(authContext.authUserId),
     ]);
+
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - profileStartedAt,
+        employeeId: authContext.employeeId,
+        tenantId: authContext.tenantId,
+        homeMode,
+        tasksMode,
+        hasUserProfile: Boolean(userProfile),
+      },
+      "[employee-bootstrap] synchronous data resolved",
+    );
 
     const response = {
       context: authContext,
@@ -203,11 +295,118 @@ class EmployeeSelfServiceController extends TenantBaseController {
       home_mode: homeMode,
       task_summary: taskSummary,
       tasks_mode: tasksMode,
-      projects_mode: "defer",
+      projects_mode: "defer" as const,
       projects: null,
-      customers_mode: "defer",
+      customers_mode: "defer" as const,
       customers: null,
     };
+
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - startedAt,
+        employeeId: authContext.employeeId,
+        tenantId: authContext.tenantId,
+      },
+      "[employee-bootstrap] response built",
+    );
+
+    return response;
+  }
+
+  private async resolveEmployeeBootstrap(
+    request: FastifyRequest,
+    query: EmployeeBootstrapQuery,
+    startedAt: number,
+    options: {
+      skipCacheLookup?: boolean;
+    } = {},
+  ) {
+    const authContextStartedAt = Date.now();
+    const authContext = await this.getRequiredTenantContext(request);
+    request.log.info(
+      {
+        requestId: request.id,
+        durationMs: Date.now() - authContextStartedAt,
+        employeeId: authContext.employeeId ?? null,
+        tenantId: authContext.tenantId,
+      },
+      "[employee-bootstrap] auth context resolved",
+    );
+
+    if (!authContext.employeeId) {
+      throw Errors.business(403, "员工身份缺失，无法加载员工首页", "EMPLOYEE_MISSING");
+    }
+
+    this.assertPermission(authContext, "dashboard.read");
+    this.assertTaskSummaryReadable(authContext);
+
+    const cacheKey = this.bootstrapCacheKey(authContext, query);
+    if (!options.skipCacheLookup) {
+      const cached = this.getCachedBootstrap(cacheKey);
+      if (cached) {
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - startedAt,
+            employeeId: authContext.employeeId,
+            tenantId: authContext.tenantId,
+          },
+          "[employee-bootstrap] bootstrap cache hit",
+        );
+
+        return cached;
+      }
+
+      const existingRequest = this.bootstrapInFlight.get(cacheKey);
+      if (existingRequest) {
+        const response = await existingRequest;
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - startedAt,
+            employeeId: authContext.employeeId,
+            tenantId: authContext.tenantId,
+          },
+          "[employee-bootstrap] bootstrap in-flight reused",
+        );
+
+        return response;
+      }
+    } else {
+      const response = await this.buildEmployeeBootstrapResponse(
+        request,
+        authContext,
+        query,
+      );
+      this.setCachedBootstrap(cacheKey, response);
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - startedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+        },
+        "[employee-bootstrap] bootstrap resolved",
+      );
+
+      return response;
+    }
+
+    const responsePromise = this.buildEmployeeBootstrapResponse(
+      request,
+      authContext,
+      query,
+    ).then((response) => {
+      this.setCachedBootstrap(cacheKey, response);
+      return response;
+    }).finally(() => {
+      if (this.bootstrapInFlight.get(cacheKey) === responsePromise) {
+        this.bootstrapInFlight.delete(cacheKey);
+      }
+    });
+    this.bootstrapInFlight.set(cacheKey, responsePromise);
+    const response = await responsePromise;
 
     request.log.info(
       {
@@ -219,6 +418,75 @@ class EmployeeSelfServiceController extends TenantBaseController {
       "[employee-bootstrap] bootstrap resolved",
     );
 
+    return response;
+  }
+
+  @Get("/employee/bootstrap")
+  async getEmployeeBootstrap(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
+    const queryResult = EmployeeBootstrapQuerySchema.safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const tokenCacheKey = this.bootstrapTokenCacheKey(request.user, queryResult.data);
+    if (tokenCacheKey) {
+      const cached = this.getCachedBootstrap(tokenCacheKey);
+      if (cached) {
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - startedAt,
+            authUserId: request.user?.sub ?? null,
+            employeeId: request.user?.employee_id ?? null,
+            tenantId: request.user?.tenant_id ?? null,
+          },
+          "[employee-bootstrap] bootstrap token cache hit",
+        );
+
+        return ResponseHandler.success(cached);
+      }
+
+      const existingRequest = this.bootstrapInFlight.get(tokenCacheKey);
+      if (existingRequest) {
+        const response = await existingRequest;
+        request.log.info(
+          {
+            requestId: request.id,
+            durationMs: Date.now() - startedAt,
+            authUserId: request.user?.sub ?? null,
+            employeeId: request.user?.employee_id ?? null,
+            tenantId: request.user?.tenant_id ?? null,
+          },
+          "[employee-bootstrap] bootstrap token in-flight reused",
+        );
+
+        return ResponseHandler.success(response);
+      }
+
+      const responsePromise = this.resolveEmployeeBootstrap(
+        request,
+        queryResult.data,
+        startedAt,
+        { skipCacheLookup: true },
+      ).then((response) => {
+        this.setCachedBootstrap(tokenCacheKey, response);
+        return response;
+      }).finally(() => {
+        if (this.bootstrapInFlight.get(tokenCacheKey) === responsePromise) {
+          this.bootstrapInFlight.delete(tokenCacheKey);
+        }
+      });
+      this.bootstrapInFlight.set(tokenCacheKey, responsePromise);
+      const response = await responsePromise;
+      return ResponseHandler.success(response);
+    }
+
+    const response = await this.resolveEmployeeBootstrap(
+      request,
+      queryResult.data,
+      startedAt,
+    );
     return ResponseHandler.success(response);
   }
 }

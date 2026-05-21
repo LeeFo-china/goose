@@ -321,14 +321,18 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
     return;
   }
 
+  const userId = payload.sub;
+  const tenantId = payload.tenant_id;
+  const customerId = payload.customer_id ?? null;
+  const employeeId = payload.employee_id ?? null;
   const cacheKey = buildWechatIdentityCheckCacheKey("business", payload);
   await runWechatIdentityCheckOnce(cacheKey, payload, async () => {
-    if (payload.customer_id) {
+    if (customerId) {
       const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-        userId: payload.sub,
-        tenantId: payload.tenant_id,
+        userId,
+        tenantId,
         identityType: "customer",
-        identityId: payload.customer_id,
+        identityId: customerId,
       });
 
       if (!hasActiveMembership) {
@@ -339,12 +343,12 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
       }
     }
 
-    if (payload.employee_id) {
+    if (employeeId) {
       const hasActiveMembership = await userIdentityService.hasActiveBusinessMembership({
-        userId: payload.sub,
-        tenantId: payload.tenant_id,
+        userId,
+        tenantId,
         identityType: "employee",
-        identityId: payload.employee_id,
+        identityId: employeeId,
       });
 
       if (!hasActiveMembership) {
@@ -362,13 +366,15 @@ async function assertWechatOauthCredential(payload: ReturnType<typeof verifyToke
     return;
   }
 
+  const openid = payload.openid;
+  const userId = payload.sub;
   const cacheKey = buildWechatIdentityCheckCacheKey("oauth", payload);
   await runWechatIdentityCheckOnce(cacheKey, payload, async () => {
     const activeOauth = await userIdentityService.findActiveOauthIdentity({
       platform: "wechat_mini",
-      openid: payload.openid,
+      openid,
     });
-    if (activeOauth?.user_id === payload.sub) {
+    if (activeOauth?.user_id === userId) {
       return;
     }
 
