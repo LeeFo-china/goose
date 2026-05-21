@@ -17,6 +17,8 @@
 - [Admin 对接文档](./admin/2026-05-21-project-status-machine-integration.md)
 - [小程序客户状态机对接文档](./wechat/2026-05-21-customer-status-machine-integration.md)
 - [Admin 客户状态机对接文档](./admin/2026-05-21-customer-status-machine-integration.md)
+- [小程序客户项目状态联动对接文档](./wechat/2026-05-21-customer-project-status-linkage.md)
+- [Admin 客户项目状态联动对接文档](./admin/2026-05-21-customer-project-status-linkage.md)
 
 ## 分阶段计划
 
@@ -86,13 +88,21 @@
 
 ### 阶段 4：客户和项目状态联动
 
-状态：待执行
+状态：已完成最小闭环
 
 交付物：
 
 - 项目签约同步客户签约状态。
 - 客户签约动作和项目创建 / 关联规则。
 - 多项目客户的状态聚合策略。
+
+已落地规则：
+
+- 项目执行 `sign_contract` 时，如果有关联客户，会同步客户为 `contracted`。
+- 关联客户已是 `contracted` 时，不重复写客户状态日志。
+- 关联客户必须处于 `following / arrived / ordered / contracted`，否则项目签约返回 400，提示先推进客户状态。
+- 项目作废不会自动作废客户，避免多项目客户被误伤。
+- 客户侧主动 `sign_contract` 暂不强制创建项目；端侧应优先通过项目签约完成联动。
 
 ### 阶段 5：前端和小程序动作式对接
 

@@ -56,6 +56,8 @@ Content-Type: application/json
 ## 必填规则
 
 - `sign_contract` 必须传 `signed_amount > 0`。
+- `sign_contract` 如果项目有关联客户，会同步客户为 `contracted`。
+- 关联客户必须处于 `following / arrived / ordered / contracted`；如果仍是 `potential / dormant / invalid`，后端返回 400。
 - `pause_project` 必须传 `reason`。
 - `mark_invalid` 必须传 `reason`。
 - 非法状态动作会返回 400。
@@ -81,4 +83,3 @@ Content-Type: application/json
 ## 兼容说明
 
 短期内 `PATCH /projects/:id` 传 `status` 仍兼容，但后端会推断动作并走状态机校验。该兼容入口后续会逐步收口，新的小程序代码不要依赖它。
-

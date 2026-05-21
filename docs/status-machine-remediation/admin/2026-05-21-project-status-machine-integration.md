@@ -34,6 +34,8 @@ Content-Type: application/json
 - 状态区域展示当前状态、状态标签和可执行动作按钮。
 - 需要原因的动作弹出确认框并要求填写原因。
 - `sign_contract` 动作要求填写 `signed_amount`。
+- `sign_contract` 如果项目有关联客户，会同步客户为 `contracted`。
+- 关联客户必须处于 `following / arrived / ordered / contracted`，否则后端返回 400。
 
 项目编辑页：
 
@@ -76,4 +78,3 @@ Admin 端需要处理以下 400 错误：
 - 状态流转日志列表接口。
 - 项目详情展示状态流转时间线。
 - 根据后端返回的“可执行动作列表”动态渲染按钮。
-

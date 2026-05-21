@@ -18,6 +18,7 @@ type TransitionCustomerStatusInput = {
   payload: CustomerStatusTransitionInput;
   patch?: Record<string, unknown>;
   existing?: Record<string, unknown> | null;
+  skipAccessCheck?: boolean;
 };
 
 class CustomerStatusService {
@@ -32,18 +33,20 @@ class CustomerStatusService {
       throw Errors.badRequest("客户不存在");
     }
 
-    const canAccess = await accessPolicyService.canAccessCustomer(
-      input.authContext,
-      {
-        owner_id: typeof existing.owner_id === "string" ? existing.owner_id : null,
-        tenant_id: typeof existing.tenant_id === "string"
-          ? existing.tenant_id
-          : tenantId,
-      },
-      "customer.update",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
+    if (!input.skipAccessCheck) {
+      const canAccess = await accessPolicyService.canAccessCustomer(
+        input.authContext,
+        {
+          owner_id: typeof existing.owner_id === "string" ? existing.owner_id : null,
+          tenant_id: typeof existing.tenant_id === "string"
+            ? existing.tenant_id
+            : tenantId,
+        },
+        "customer.update",
+      );
+      if (!canAccess) {
+        throw Errors.forbidden();
+      }
     }
 
     const fromStatus = this.getRequiredCurrentStatus(existing.status);
@@ -84,6 +87,53 @@ class CustomerStatusService {
     });
 
     return customer;
+  }
+
+  async buildProjectContractSync(input: {
+    authContext: AuthContext;
+    customerId: string | null;
+    projectId: string;
+  }): Promise<{
+    existing: Record<string, unknown>;
+    payload: CustomerStatusTransitionInput;
+  } | null> {
+    if (!input.customerId) {
+      return null;
+    }
+
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const customer = await customerCoreRepository.findById({
+      customerId: input.customerId,
+      tenantId,
+    });
+    if (!customer) {
+      throw Errors.badRequest("项目关联客户不存在");
+    }
+
+    const fromStatus = this.getRequiredCurrentStatus(customer.status);
+    if (fromStatus === "contracted") {
+      return null;
+    }
+
+    const transition = resolveCustomerStatusTransition({
+      action: "sign_contract",
+      fromStatus,
+    });
+    if (!transition) {
+      throw Errors.badRequest("项目签约前，关联客户状态必须为跟进中、已到店或已下定");
+    }
+
+    return {
+      existing: customer,
+      payload: {
+        action: "sign_contract",
+        reason: "项目签约后同步客户签约状态",
+        metadata: {
+          source: "project_sign_contract",
+          project_id: input.projectId,
+        },
+      },
+    };
   }
 
   buildTransitionPayloadFromStatus(input: {

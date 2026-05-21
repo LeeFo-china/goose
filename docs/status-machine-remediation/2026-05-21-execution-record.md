@@ -133,3 +133,35 @@ bun run api:build
 bun run check:permission-boundaries
 git diff --check
 ```
+
+## 2026-05-21 阶段 4 客户项目状态联动最小闭环
+
+已完成：
+
+- 项目 `sign_contract` 状态动作成功时，如果项目有关联客户，会同步客户状态为 `contracted`。
+- 客户同步仍复用 `customerStatusService.transitionCustomerStatus()`，因此会写入 `customer_status_transition_logs`。
+- 关联客户已是 `contracted` 时，不重复写客户状态日志。
+- 关联客户如果不是 `following / arrived / ordered / contracted`，项目签约会返回 400：
+  - `项目签约前，关联客户状态必须为跟进中、已到店或已下定`
+- 项目未关联客户时，暂不阻断项目签约。
+- 项目作废、暂停、完工不会反向自动修改客户状态，避免多项目客户被单项目状态误伤。
+- 补充小程序对接文档：
+  - `docs/status-machine-remediation/wechat/2026-05-21-customer-project-status-linkage.md`
+- 补充 Admin 对接文档：
+  - `docs/status-machine-remediation/admin/2026-05-21-customer-project-status-linkage.md`
+
+当前保守策略：
+
+- 项目签约是客户签约联动的主入口。
+- 客户侧主动 `sign_contract` 暂不强制创建项目，避免破坏现有客户编辑和跟进体验。
+- 后续如要强制“客户签约必须选择项目”，应先完成 Admin / 小程序项目选择 UI。
+
+阶段 4 验证命令：
+
+```bash
+bun run api:typecheck
+cd packages/domain && bun run build
+bun run api:build
+bun run check:permission-boundaries
+git diff --check
+```

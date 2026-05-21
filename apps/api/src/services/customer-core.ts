@@ -399,6 +399,8 @@ class CustomerCoreService {
     authContext: AuthContext;
     customerId: string;
     payload: CustomerStatusTransitionInput;
+    existing?: Record<string, unknown> | null;
+    skipAccessCheck?: boolean;
   }) {
     const customer = await customerStatusService.transitionCustomerStatus(input);
     this.invalidateListCache();

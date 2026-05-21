@@ -7,6 +7,8 @@ import type {
 } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { customerCoreService } from "@/services/customer-core";
+import { customerStatusService } from "@/services/customer-status";
 import {
   inferProjectStatusAction,
   isProjectStatus,
@@ -102,6 +104,18 @@ class ProjectStatusService {
       patch.signed_amount = Number(nextSignedAmount);
     }
 
+    const targetCustomerId = this.getTargetCustomerId({
+      existing,
+      patch,
+    });
+    const customerContractSync = input.payload.action === "sign_contract"
+      ? await customerStatusService.buildProjectContractSync({
+        authContext: input.authContext,
+        customerId: targetCustomerId,
+        projectId: input.projectId,
+      })
+      : null;
+
     const metadata = {
       ...input.payload.metadata,
       ...(input.payload.action === "pause_project"
@@ -128,6 +142,16 @@ class ProjectStatusService {
       reason,
       metadata,
     });
+
+    if (customerContractSync && targetCustomerId) {
+      await customerCoreService.transitionCustomerStatus({
+        authContext: input.authContext,
+        customerId: targetCustomerId,
+        payload: customerContractSync.payload,
+        existing: customerContractSync.existing,
+        skipAccessCheck: true,
+      });
+    }
 
     return project;
   }
@@ -170,6 +194,23 @@ class ProjectStatusService {
     }
 
     return value;
+  }
+
+  private getTargetCustomerId(input: {
+    existing: Record<string, unknown>;
+    patch: Record<string, unknown>;
+  }) {
+    if (typeof input.patch.customer_id === "string") {
+      return input.patch.customer_id;
+    }
+
+    if (input.patch.customer_id === null) {
+      return null;
+    }
+
+    return typeof input.existing.customer_id === "string"
+      ? input.existing.customer_id
+      : null;
   }
 
   private async getPausedFromStatus(projectId: string, tenantId: string) {
