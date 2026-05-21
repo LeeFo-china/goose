@@ -3,7 +3,103 @@ import type { AuthContext, EffectivePermission } from "@/services/authorization"
 import { permissionRepository } from "@/repositories/permissions";
 import { isEmployeeOperableStatus } from "@gooes/domain";
 
+const PROJECT_SCOPE_CACHE_TTL_MS = 10_000;
+
 class AccessPolicyService {
+  private visibleProjectIdsCache = new Map<string, {
+    expiresAt: number;
+    value: string[] | null;
+  }>();
+  private visibleProjectIdsInFlight = new Map<string, Promise<string[] | null>>();
+
+  private buildProjectScopeCacheKey(input: {
+    scope: EffectivePermission["scope"];
+    employeeId: string;
+    departmentId: string | null;
+    tenantDepartmentId?: string | null;
+    tenantId?: string | null;
+  }) {
+    return JSON.stringify({
+      scope: input.scope,
+      employeeId: input.employeeId,
+      departmentId: input.departmentId ?? null,
+      tenantDepartmentId: input.tenantDepartmentId ?? null,
+      tenantId: input.tenantId ?? null,
+    });
+  }
+
+  private getVisibleProjectIdsCache(cacheKey: string) {
+    const cached = this.visibleProjectIdsCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      this.visibleProjectIdsCache.delete(cacheKey);
+      this.visibleProjectIdsInFlight.delete(cacheKey);
+      return null;
+    }
+
+    return cached.value;
+  }
+
+  private setVisibleProjectIdsCache(cacheKey: string, value: string[] | null) {
+    const now = Date.now();
+    if (this.visibleProjectIdsCache.size >= 500) {
+      for (const [key, item] of this.visibleProjectIdsCache.entries()) {
+        if (item.expiresAt <= now) {
+          this.visibleProjectIdsCache.delete(key);
+        }
+      }
+
+      if (this.visibleProjectIdsCache.size >= 500) {
+        this.visibleProjectIdsCache.clear();
+      }
+    }
+
+    this.visibleProjectIdsCache.set(cacheKey, {
+      expiresAt: now + PROJECT_SCOPE_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private async listVisibleProjectIdsCached(input: {
+    scope: EffectivePermission["scope"];
+    employeeId: string;
+    departmentId: string | null;
+    tenantDepartmentId?: string | null;
+    tenantId?: string | null;
+  }) {
+    const cacheKey = this.buildProjectScopeCacheKey(input);
+    const cached = this.getVisibleProjectIdsCache(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
+    const cachedEntry = this.visibleProjectIdsCache.get(cacheKey);
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+      return cachedEntry.value;
+    }
+
+    const inFlight = this.visibleProjectIdsInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = permissionRepository.listVisibleProjectIds(input)
+      .then((value) => {
+        this.setVisibleProjectIdsCache(cacheKey, value);
+        return value;
+      })
+      .finally(() => {
+        if (this.visibleProjectIdsInFlight.get(cacheKey) === request) {
+          this.visibleProjectIdsInFlight.delete(cacheKey);
+        }
+      });
+    this.visibleProjectIdsInFlight.set(cacheKey, request);
+    return request;
+  }
+
   assertTenantId(authContext: AuthContext) {
     if (!authContext.tenantId && !authContext.isPlatformAdmin) {
       throw Errors.business(403, "缺少租户上下文", "FORBIDDEN");
@@ -112,7 +208,7 @@ class AccessPolicyService {
       return null;
     }
 
-    return permissionRepository.listVisibleProjectIds({
+    return this.listVisibleProjectIdsCached({
       scope,
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
@@ -126,13 +222,13 @@ class AccessPolicyService {
       return [] as string[];
     }
 
-    return permissionRepository.listVisibleProjectIds({
+    return (await this.listVisibleProjectIdsCached({
       scope: "self",
       employeeId: authContext.employeeId,
       departmentId: authContext.departmentId,
       tenantDepartmentId: authContext.tenantDepartmentId,
       tenantId: authContext.tenantId,
-    });
+    })) ?? [];
   }
 
   async getVisibleProjectIdsByOwnership(
@@ -140,6 +236,17 @@ class AccessPolicyService {
     permissionCode: string,
     ownership?: "self" | "all",
   ): Promise<string[] | null> {
+    const scope = this.assertPermission(authContext, permissionCode);
+    if (!scope || !authContext.employeeId) {
+      return [];
+    }
+
+    if (ownership === "self") {
+      if (scope === "self" || scope === "all") {
+        return this.getOwnedProjectIds(authContext);
+      }
+    }
+
     const visibleProjectIds = await this.getVisibleProjectIds(
       authContext,
       permissionCode,

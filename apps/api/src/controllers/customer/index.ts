@@ -454,6 +454,16 @@ class CustomerController extends TenantBaseController<
       query: queryResult.data,
     });
     if (queryResult.data.mode === "home") {
+      request.log.info(
+        {
+          requestId: request.id,
+          employeeId: authContext.employeeId ?? null,
+          tenantId: authContext.tenantId,
+          timings: listResult.debugTimings ?? null,
+        },
+        "[customer-home-list] timings",
+      );
+
       return ResponseHandler.success({
         list: listResult.rows.map((item) =>
           this.serializeCustomer(

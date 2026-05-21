@@ -487,6 +487,16 @@ class ProjectController extends TenantBaseController<
       query: queryResult.data,
     });
     if (queryResult.data.mode === "home") {
+      request.log.info(
+        {
+          requestId: request.id,
+          employeeId: authContext.employeeId ?? null,
+          tenantId: authContext.tenantId,
+          timings: result.debugTimings ?? null,
+        },
+        "[project-home-list] timings",
+      );
+
       return ResponseHandler.success({
         list: result.rows.map((item) => this.serializeProjectListItem(item)),
         pagination: result.pagination,
@@ -753,6 +763,16 @@ class ProjectController extends TenantBaseController<
       query: queryResult.data,
     });
     if (queryResult.data.mode === "home") {
+      request.log.info(
+        {
+          requestId: request.id,
+          employeeId: authContext.employeeId ?? null,
+          tenantId: authContext.tenantId,
+          timings: result.debugTimings ?? null,
+        },
+        "[project-home-list] timings",
+      );
+
       return ResponseHandler.success({
         list: result.rows.map((item) => this.serializeProjectListItem(item)),
         pagination: result.pagination,

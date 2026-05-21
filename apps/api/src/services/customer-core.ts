@@ -17,6 +17,7 @@ type CustomerListResult = {
   followUpMap: Awaited<ReturnType<typeof customerFollowUpService.getLatestFollowUpMap>>;
   page: number;
   pageSize: number;
+  debugTimings?: Record<string, number | string | null>;
 };
 
 class CustomerCoreService {
@@ -129,12 +130,23 @@ class CustomerCoreService {
     const cacheKey = this.buildListCacheKey(input.authContext, input.query);
     const cached = this.getListCache(cacheKey);
     if (cached) {
-      return cached;
+      return {
+        ...cached,
+        debugTimings: {
+          cache: "hit",
+        },
+      };
     }
 
     const inFlight = this.listInFlight.get(cacheKey);
     if (inFlight) {
-      return inFlight;
+      return inFlight.then((result) => ({
+        ...result,
+        debugTimings: {
+          ...result.debugTimings,
+          cache: "in_flight",
+        },
+      }));
     }
 
     const request = this.loadCustomers(input)
@@ -155,6 +167,7 @@ class CustomerCoreService {
     authContext: AuthContext;
     query: CustomerListQueryType;
   }): Promise<CustomerListResult> {
+    const startedAt = Date.now();
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     const {
       page,
@@ -170,6 +183,7 @@ class CustomerCoreService {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
     const normalizedKeyword = keyword?.trim();
+    const scopeStartedAt = Date.now();
     const [visibleOwnerIds, todayCustomerIds] = await Promise.all([
       accessPolicyService.getVisibleCustomerOwnerIds(
         input.authContext,
@@ -179,6 +193,7 @@ class CustomerCoreService {
         ? customerFollowUpService.getTodayWorkCustomerIds(tenantId)
         : Promise.resolve(null),
     ]);
+    const scopeDurationMs = Date.now() - scopeStartedAt;
     const filters = {
       tenantId,
       visibleOwnerIds,
@@ -190,11 +205,13 @@ class CustomerCoreService {
     };
 
     if (mode === "home" && !follow) {
+      const rowsStartedAt = Date.now();
       const rowsWithLookahead = await customerCoreRepository.listHomeRows({
         filters,
         from,
         to: from + pageSize,
       });
+      const rowsDurationMs = Date.now() - rowsStartedAt;
       const pagedRows = rowsWithLookahead.slice(0, pageSize);
       const hasMore = rowsWithLookahead.length > pageSize;
 
@@ -204,6 +221,16 @@ class CustomerCoreService {
         followUpMap: new Map(),
         page,
         pageSize,
+        debugTimings: {
+          cache: "miss",
+          scopeMs: scopeDurationMs,
+          rowsMs: rowsDurationMs,
+          totalMs: Date.now() - startedAt,
+          visibleOwnerCount: visibleOwnerIds?.length ?? null,
+          todayCustomerCount: todayCustomerIds?.length ?? null,
+          rowCount: pagedRows.length,
+          hasMore: hasMore ? 1 : 0,
+        },
       };
     }
 

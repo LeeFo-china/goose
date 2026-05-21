@@ -25,6 +25,7 @@ type ProjectListResult = {
         total: number;
         totalPages: number;
     };
+    debugTimings?: Record<string, number | string | null>;
 };
 
 class ProjectService {
@@ -68,12 +69,23 @@ class ProjectService {
         const cacheKey = this.projectListCacheKey(input.authContext, input.query);
         const cached = this.getProjectListCache(cacheKey);
         if (cached) {
-            return cached;
+            return {
+                ...cached,
+                debugTimings: {
+                    cache: "hit",
+                },
+            };
         }
 
         const inFlight = this.projectListInFlight.get(cacheKey);
         if (inFlight) {
-            return inFlight;
+            return inFlight.then((result) => ({
+                ...result,
+                debugTimings: {
+                    ...result.debugTimings,
+                    cache: "in_flight",
+                },
+            }));
         }
 
         const request = this.loadProjects({ tenantId, ...input })
@@ -145,10 +157,12 @@ class ProjectService {
         authContext: AuthContext;
         query: ProjectListQuery;
     }): Promise<ProjectListResult> {
+        const startedAt = Date.now();
         const tenantId = input.tenantId;
         const { page, pageSize, status, keyword, work_scope: workScope, mode } = input.query;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
+        const scopeStartedAt = Date.now();
         const [visibleProjectIds, todayProjectIds] = await Promise.all([
             accessPolicyService.getVisibleProjectIdsByOwnership(
                 input.authContext,
@@ -159,6 +173,7 @@ class ProjectService {
                 ? projectRepository.listTodayWorkProjectIds(tenantId)
                 : Promise.resolve(null),
         ]);
+        const scopeDurationMs = Date.now() - scopeStartedAt;
         const filters = {
             tenantId,
             visibleProjectIds,
@@ -167,11 +182,13 @@ class ProjectService {
             projectIds: todayProjectIds,
         };
         if (mode === "home") {
+            const rowsStartedAt = Date.now();
             const rowsWithLookahead = await projectRepository.listRows({
                 filters,
                 from,
                 to: from + pageSize,
             });
+            const rowsDurationMs = Date.now() - rowsStartedAt;
             const rows = rowsWithLookahead.slice(0, pageSize);
             const hasMore = rowsWithLookahead.length > pageSize;
             const total = from + rows.length + (hasMore ? 1 : 0);
@@ -183,6 +200,16 @@ class ProjectService {
                     pageSize,
                     total,
                     totalPages: total ? Math.ceil(total / pageSize) : 0,
+                },
+                debugTimings: {
+                    cache: "miss",
+                    scopeMs: scopeDurationMs,
+                    rowsMs: rowsDurationMs,
+                    totalMs: Date.now() - startedAt,
+                    visibleProjectCount: visibleProjectIds?.length ?? null,
+                    todayProjectCount: todayProjectIds?.length ?? null,
+                    rowCount: rows.length,
+                    hasMore: hasMore ? 1 : 0,
                 },
             };
         }
