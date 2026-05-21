@@ -180,6 +180,7 @@ export class WeChatController extends BaseController {
             page: 1,
             pageSize: 20,
             ownership: "self",
+            mode: "home",
           },
         }),
         customerCoreService.listCustomers({
@@ -187,6 +188,7 @@ export class WeChatController extends BaseController {
           query: {
             page: 1,
             pageSize: 20,
+            mode: "home",
           },
         }),
       ]);

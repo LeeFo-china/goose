@@ -453,6 +453,21 @@ class CustomerController extends TenantBaseController<
       authContext,
       query: queryResult.data,
     });
+    if (queryResult.data.mode === "home") {
+      return ResponseHandler.success({
+        list: listResult.rows.map((item) =>
+          this.serializeCustomer(
+            this.attachFollowUpSummary(item, listResult.followUpMap),
+          )
+        ),
+        pagination: buildPagination(
+          listResult.page,
+          listResult.pageSize,
+          listResult.total,
+        ),
+      });
+    }
+
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );

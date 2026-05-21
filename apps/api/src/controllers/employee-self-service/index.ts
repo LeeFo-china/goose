@@ -160,6 +160,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
           page: 1,
           pageSize: 20,
           ownership: "self",
+          mode: "home",
         },
       }),
       customerCoreService.listCustomers({
@@ -167,6 +168,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
         query: {
           page: 1,
           pageSize: 20,
+          mode: "home",
         },
       }),
     ]).then((results) => {

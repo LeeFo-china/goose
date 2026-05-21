@@ -81,6 +81,7 @@ class CustomerCoreService {
       keyword: query.keyword?.trim() ?? null,
       follow: query.follow ?? null,
       work_scope: query.work_scope ?? null,
+      mode: query.mode ?? null,
       roleCodes: authContext.roleCodes,
       permissions: authContext.permissions,
     });
@@ -164,6 +165,7 @@ class CustomerCoreService {
       keyword,
       follow,
       work_scope: workScope,
+      mode,
     } = input.query;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -186,6 +188,24 @@ class CustomerCoreService {
       keyword: normalizedKeyword,
       customerIds: todayCustomerIds,
     };
+
+    if (mode === "home" && !follow) {
+      const rowsWithLookahead = await customerCoreRepository.listHomeRows({
+        filters,
+        from,
+        to: from + pageSize,
+      });
+      const pagedRows = rowsWithLookahead.slice(0, pageSize);
+      const hasMore = rowsWithLookahead.length > pageSize;
+
+      return {
+        rows: pagedRows,
+        total: from + pagedRows.length + (hasMore ? 1 : 0),
+        followUpMap: new Map(),
+        page,
+        pageSize,
+      };
+    }
 
     if (follow) {
       const customerIds = await customerCoreRepository.listIds(filters);

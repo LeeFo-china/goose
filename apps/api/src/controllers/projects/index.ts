@@ -486,6 +486,13 @@ class ProjectController extends TenantBaseController<
       authContext,
       query: queryResult.data,
     });
+    if (queryResult.data.mode === "home") {
+      return ResponseHandler.success({
+        list: result.rows.map((item) => this.serializeProjectListItem(item)),
+        pagination: result.pagination,
+      });
+    }
+
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );
@@ -745,6 +752,13 @@ class ProjectController extends TenantBaseController<
       authContext,
       query: queryResult.data,
     });
+    if (queryResult.data.mode === "home") {
+      return ResponseHandler.success({
+        list: result.rows.map((item) => this.serializeProjectListItem(item)),
+        pagination: result.pagination,
+      });
+    }
+
     const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
       authContext,
     );

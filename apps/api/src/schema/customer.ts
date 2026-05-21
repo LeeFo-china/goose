@@ -148,6 +148,9 @@ export const CustomerListQuerySchema = PaginationQuerySchema.extend({
   work_scope: optionalQueryValue(z.enum(["all", "today"], {
     message: "work_scope must be one of: all, today",
   })),
+  mode: optionalQueryValue(z.enum(["home"], {
+    message: "mode must be one of: home",
+  })),
 });
 
 export type CustomerListQueryType = z.infer<typeof CustomerListQuerySchema>;

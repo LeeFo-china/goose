@@ -10,6 +10,25 @@ export const CUSTOMER_SELECT = `
   )
 `;
 
+export const CUSTOMER_HOME_LIST_SELECT = `
+  id,
+  name,
+  phone,
+  status,
+  source,
+  customer_origin,
+  owner_id,
+  avatar,
+  created_at,
+  updated_at,
+  douyin_screenshot_images,
+  owner:employees!customers_owner_id_fkey(
+    id,
+    name,
+    phone
+  )
+`;
+
 export type CustomerCoreAccessRow = {
   id: string;
   owner_id: string | null;
@@ -138,6 +157,27 @@ class CustomerCoreRepository {
       SupabaseDB.getAdminClient()
         .from("customers")
         .select(CUSTOMER_SELECT)
+        .order("created_at", { ascending: false }),
+      input.filters,
+    );
+
+    const { data, error } = await query.range(input.from, input.to);
+    if (error) {
+      throw Errors.dbError("列表查询失败", error);
+    }
+
+    return (data || []) as unknown as CustomerCoreRow[];
+  }
+
+  async listHomeRows(input: {
+    filters: CustomerListFilters;
+    from: number;
+    to: number;
+  }) {
+    const query = this.applyCustomerListFilters(
+      SupabaseDB.getAdminClient()
+        .from("customers")
+        .select(CUSTOMER_HOME_LIST_SELECT)
         .order("created_at", { ascending: false }),
       input.filters,
     );

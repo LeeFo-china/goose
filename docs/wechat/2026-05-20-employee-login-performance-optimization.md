@@ -1552,6 +1552,30 @@ GET /employee/bootstrap
 - 如果微信校验耗时约 `1.5s`、auth context 约 `2s`，总等待应从串行约 `3.5s` 降到接近两者最大值。
 - 如果日志里 `auth context resolved` 接近 `0ms`，说明 controller 已复用预热结果。
 
+## 2026-05-21 09:40 API 员工首页延迟列表 home 模式
+
+小程序端已确认 `/customers`、`/projects/status` 不再阻塞员工首页首屏，但冷请求仍可能在延迟加载阶段达到 `1s+`。本轮 API 为员工首页卡片场景增加轻量模式：
+
+```text
+GET /customers?mode=home&page=1&pageSize=20
+GET /projects/status?mode=home&ownership=self&page=1&pageSize=20
+```
+
+API 行为：
+
+- `mode=home` 只用于员工首页延迟卡片列表，不用于完整客户列表页或项目列表页。
+- `/customers?mode=home` 仍保留租户、员工权限、状态、来源、关键词、今日工作等过滤，但跳过同步 `count`、客户房产摘要、来源摘要、手机号隐私上下文和跟进摘要。
+- `/projects/status?mode=home` 仍保留租户、员工权限、状态、归属、关键词、今日工作等过滤，但跳过同步 `count` 和手机号隐私上下文。
+- home 模式分页使用 `pageSize + 1` lookahead 判断是否还有下一页，`pagination.total` 是轻量估算值，只能用于首页判断是否还有更多，不应展示为精确总数。
+- `/employee/bootstrap` 和 `/auth` 后台预热已改为预热 home 模式缓存；小程序端延迟请求必须带同样的 `mode=home` 才能命中预热/in-flight/cache。
+
+小程序端需要对接：
+
+- 员工首页延迟加载客户列表时追加 `mode=home`。
+- 员工首页延迟加载项目状态列表时追加 `mode=home`，并保留 `ownership=self`。
+- 完整列表页、搜索页、筛选页不要传 `mode=home`，继续使用默认接口以获得完整字段和精确分页。
+- 首页不要依赖 home 模式返回精确总数；如果需要“查看全部”，跳转完整列表页后重新拉默认接口。
+
 ## 验收标准
 
 ### API 验收

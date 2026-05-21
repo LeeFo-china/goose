@@ -101,6 +101,7 @@ class ProjectService {
             keyword: query.keyword?.trim() ?? null,
             ownership: query.ownership ?? null,
             work_scope: query.work_scope ?? null,
+            mode: query.mode ?? null,
         });
     }
 
@@ -145,7 +146,7 @@ class ProjectService {
         query: ProjectListQuery;
     }): Promise<ProjectListResult> {
         const tenantId = input.tenantId;
-        const { page, pageSize, status, keyword, work_scope: workScope } = input.query;
+        const { page, pageSize, status, keyword, work_scope: workScope, mode } = input.query;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
         const [visibleProjectIds, todayProjectIds] = await Promise.all([
@@ -165,6 +166,27 @@ class ProjectService {
             keyword: keyword?.trim(),
             projectIds: todayProjectIds,
         };
+        if (mode === "home") {
+            const rowsWithLookahead = await projectRepository.listRows({
+                filters,
+                from,
+                to: from + pageSize,
+            });
+            const rows = rowsWithLookahead.slice(0, pageSize);
+            const hasMore = rowsWithLookahead.length > pageSize;
+            const total = from + rows.length + (hasMore ? 1 : 0);
+
+            return {
+                rows,
+                pagination: {
+                    page,
+                    pageSize,
+                    total,
+                    totalPages: total ? Math.ceil(total / pageSize) : 0,
+                },
+            };
+        }
+
         const [total, rows] = await Promise.all([
             projectRepository.count(filters),
             projectRepository.listRows({ filters, from, to }),
