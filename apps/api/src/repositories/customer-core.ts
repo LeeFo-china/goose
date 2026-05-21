@@ -20,7 +20,6 @@ export const CUSTOMER_HOME_LIST_SELECT = `
   owner_id,
   avatar,
   created_at,
-  updated_at,
   douyin_screenshot_images,
   owner:employees!customers_owner_id_fkey(
     id,
