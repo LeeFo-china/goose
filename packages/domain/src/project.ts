@@ -81,17 +81,17 @@ export const ProjectStatusActionConfig: Record<
   },
   sign_contract: {
     label: '项目签约',
-    from: ['negotiating'],
+    from: ['negotiating', 'designing'],
     to: 'signed',
   },
   start_design: {
     label: '开始设计',
-    from: ['signed'],
+    from: ['negotiating'],
     to: 'designing',
   },
   start_construction: {
     label: '开始施工',
-    from: ['signed', 'designing'],
+    from: ['signed'],
     to: 'constructing',
   },
   pause_project: {

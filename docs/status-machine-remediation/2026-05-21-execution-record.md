@@ -141,8 +141,8 @@ git diff --check
 - 项目 `sign_contract` 状态动作成功时，如果项目有关联客户，会同步客户状态为 `contracted`。
 - 客户同步仍复用 `customerStatusService.transitionCustomerStatus()`，因此会写入 `customer_status_transition_logs`。
 - 关联客户已是 `contracted` 时，不重复写客户状态日志。
-- 关联客户如果不是 `following / arrived / ordered / contracted`，项目签约会返回 400：
-  - `项目签约前，关联客户状态必须为跟进中、已到店或已下定`
+- 关联客户如果不是 `ordered / contracted`，项目签约会返回 400：
+  - `项目签约前，关联客户状态必须为已下定`
 - 项目未关联客户时，暂不阻断项目签约。
 - 项目作废、暂停、完工不会反向自动修改客户状态，避免多项目客户被单项目状态误伤。
 - 补充小程序对接文档：
@@ -199,5 +199,48 @@ bun run api:typecheck
 cd packages/domain && bun run build
 bun run api:build
 bun run check:permission-boundaries
+git diff --check
+```
+
+## 2026-05-21 阶段 5 Admin 动作化对接
+
+已完成 Admin 端最小闭环。
+
+详细对接和落地记录已归档到：
+
+- `docs/status-machine-remediation/admin/2026-05-21-admin-status-machine-implementation.md`
+
+当前剩余：
+
+- 小程序代码目录未在当前仓库中发现 `apps/wechat`；仓库当前只有 `apps/h5`，且未发现状态机接口调用点。
+- 后续如接入真实小程序端，需要按 `docs/status-machine-remediation/wechat/README.md` 下的文档完成同样的动作化改造。
+
+## 2026-05-21 设计状态前置调整
+
+已完成：
+
+- 客户状态新增 `designing`，位置调整为 `arrived -> designing -> ordered`。
+- 客户动作新增 `start_design`：
+  - 仅 `arrived` 可执行。
+  - 执行前必须已有客户主房产。
+  - 成功后自动创建或复用客户主房产对应的有效项目。
+  - 自动项目状态为 `designing`。
+- 客户 `place_order` 收口为仅 `designing -> ordered`。
+- 客户 `sign_contract` 收口为仅 `ordered -> contracted`。
+- 项目状态流转调整为：
+  - `negotiating -> designing` 使用 `start_design`。
+  - `designing / negotiating -> signed` 使用 `sign_contract`。
+  - `signed -> constructing` 使用 `start_construction`。
+- 项目签约联动客户签约时，关联客户必须为 `ordered / contracted`。
+- 远端 Supabase 已更新 `customer_status_transition_logs` 约束，允许 `start_design` 和 `designing`。
+
+验证命令：
+
+```bash
+bun run api:typecheck
+pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit
+bun run api:build
+bun run check:permission-boundaries
+pnpm --dir apps/admin build
 git diff --check
 ```

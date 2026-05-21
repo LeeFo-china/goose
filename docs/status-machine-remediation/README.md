@@ -13,15 +13,14 @@
 - [阶段 0：状态盘点与规则冻结](./2026-05-21-phase-0-status-rule-freeze.md)
 - [验收测试方案](./2026-05-21-acceptance-test-plan.md)
 - [执行记录](./2026-05-21-execution-record.md)
-- [小程序对接文档](./wechat/2026-05-21-project-status-machine-integration.md)
-- [Admin 对接文档](./admin/2026-05-21-project-status-machine-integration.md)
-- [小程序客户状态机对接文档](./wechat/2026-05-21-customer-status-machine-integration.md)
-- [Admin 客户状态机对接文档](./admin/2026-05-21-customer-status-machine-integration.md)
-- [小程序客户项目状态联动对接文档](./wechat/2026-05-21-customer-project-status-linkage.md)
-- [Admin 客户项目状态联动对接文档](./admin/2026-05-21-customer-project-status-linkage.md)
 - [Admin 状态机对接总览](./admin/README.md)
-- [小程序状态动作和时间线对接文档](./wechat/2026-05-21-status-actions-and-transition-timeline.md)
-- [Admin 状态动作和时间线对接文档](./admin/2026-05-21-status-actions-and-transition-timeline.md)
+- [微信小程序状态机对接总览](./wechat/README.md)
+
+## 目录约定
+
+- Admin 对接文档统一放在 `docs/status-machine-remediation/admin/`。
+- 微信小程序对接文档统一放在 `docs/status-machine-remediation/wechat/`。
+- 根目录只保留状态机规则、验收方案、执行台账和总览索引。
 
 ## 分阶段计划
 
@@ -101,15 +100,16 @@
 
 已落地规则：
 
+- 客户执行 `start_design` 时，必须已有主房产，并会同步创建或复用一个 `designing` 项目。
 - 项目执行 `sign_contract` 时，如果有关联客户，会同步客户为 `contracted`。
 - 关联客户已是 `contracted` 时，不重复写客户状态日志。
-- 关联客户必须处于 `following / arrived / ordered / contracted`，否则项目签约返回 400，提示先推进客户状态。
+- 关联客户必须处于 `ordered / contracted`，否则项目签约返回 400，提示先推进客户状态。
 - 项目作废不会自动作废客户，避免多项目客户被误伤。
-- 客户侧主动 `sign_contract` 暂不强制创建项目；端侧应优先通过项目签约完成联动。
+- 端侧应优先通过客户开始设计创建项目，再通过项目签约完成客户签约联动。
 
 ### 阶段 5：前端和小程序动作式对接
 
-状态：已完成后端接口
+状态：已完成后端接口和 Admin 端最小闭环
 
 交付物：
 
@@ -123,6 +123,11 @@
 - `GET /projects/:id/status-transitions?page=1&pageSize=20`
 - `GET /customers/:id/status-actions`
 - `GET /customers/:id/status-transitions?page=1&pageSize=20`
+
+端侧对接文档：
+
+- Admin：见 `docs/status-machine-remediation/admin/`。
+- 微信小程序：见 `docs/status-machine-remediation/wechat/`。
 
 ## 执行原则
 

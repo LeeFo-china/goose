@@ -83,11 +83,12 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `start_following` | `potential` | `following` | 主按钮 |
 | `mark_arrived` | `following` | `arrived` | 主按钮 |
-| `place_order` | `following/arrived` | `ordered` | 主按钮 |
-| `sign_contract` | `following/arrived/ordered` | `contracted` | 主按钮，二次确认 |
-| `mark_dormant` | `potential/following/arrived/ordered` | `dormant` | 普通按钮，要求原因 |
+| `start_design` | `arrived` | `designing` | 主按钮，后端同步创建或复用项目 |
+| `place_order` | `designing` | `ordered` | 主按钮 |
+| `sign_contract` | `ordered` | `contracted` | 主按钮，二次确认；推荐通过项目签约触发 |
+| `mark_dormant` | `potential/following/arrived/designing/ordered` | `dormant` | 普通按钮，要求原因 |
 | `reactivate` | `dormant` | `following` | 主按钮 |
-| `mark_invalid` | `potential/following/arrived/ordered/dormant` | `invalid` | 危险按钮，要求原因 |
+| `mark_invalid` | `potential/following/arrived/designing/ordered/dormant` | `invalid` | 危险按钮，要求原因 |
 
 按钮渲染：
 
@@ -97,7 +98,7 @@ Content-Type: application/json
 
 动作按钮建议排序：
 
-1. 主推进动作：`start_following`、`mark_arrived`、`place_order`、`sign_contract`、`reactivate`。
+1. 主推进动作：`start_following`、`mark_arrived`、`start_design`、`place_order`、`sign_contract`、`reactivate`。
 2. 普通非主线动作：`mark_dormant`。
 3. 危险动作：`mark_invalid`。
 
@@ -109,6 +110,7 @@ Content-Type: application/json
 
 - `start_following`
 - `mark_arrived`
+- `start_design`
 - `place_order`
 - `reactivate`
 
@@ -217,7 +219,10 @@ Admin 端需要处理以下 400 错误：
 - 编辑已有客户保存时，请求 payload 不包含 `status`。
 - 客户详情页能看到当前状态标签和动作按钮。
 - `potential` 客户能执行 `start_following`。
-- `following` 客户能执行 `mark_arrived`、`place_order`、`sign_contract`、`mark_dormant`、`mark_invalid`。
+- `following` 客户能执行 `mark_arrived`、`mark_dormant`、`mark_invalid`。
+- `arrived` 客户能执行 `start_design`，且缺少主房产时后端返回 400。
+- `start_design` 成功后客户进入 `designing`，并同步创建或复用 `designing` 项目。
+- `designing` 客户能执行 `place_order`、`mark_dormant`、`mark_invalid`。
 - `mark_dormant` 未填写原因不能提交。
 - `mark_invalid` 未填写原因不能提交。
 - 状态动作成功后，详情和列表状态一致。

@@ -23,6 +23,7 @@ CHECK (
   action IN (
     'start_following',
     'mark_arrived',
+    'start_design',
     'place_order',
     'sign_contract',
     'mark_dormant',
@@ -36,6 +37,7 @@ CHECK (
     'potential',
     'following',
     'arrived',
+    'designing',
     'ordered',
     'contracted',
     'dormant',
@@ -48,6 +50,7 @@ CHECK (
     'potential',
     'following',
     'arrived',
+    'designing',
     'ordered',
     'contracted',
     'dormant',

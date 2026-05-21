@@ -59,8 +59,9 @@ Content-Type: application/json
 | From | 可执行动作 |
 | --- | --- |
 | `potential` | `start_following`, `mark_dormant`, `mark_invalid` |
-| `following` | `mark_arrived`, `place_order`, `sign_contract`, `mark_dormant`, `mark_invalid` |
-| `arrived` | `place_order`, `sign_contract`, `mark_dormant`, `mark_invalid` |
+| `following` | `mark_arrived`, `mark_dormant`, `mark_invalid` |
+| `arrived` | `start_design`, `mark_dormant`, `mark_invalid` |
+| `designing` | `place_order`, `mark_dormant`, `mark_invalid` |
 | `ordered` | `sign_contract`, `mark_dormant`, `mark_invalid` |
 | `dormant` | `reactivate`, `mark_invalid` |
 | `contracted` | 暂无动作 |
@@ -68,4 +69,4 @@ Content-Type: application/json
 
 ## 兼容说明
 
-短期内 `PATCH /customers/:id` 传 `status` 仍兼容，但后端会推断动作并走状态机校验。`mark_dormant`、`mark_invalid` 缺少原因会返回 400，所以新的小程序代码必须使用动作接口。
+短期内 `PATCH /customers/:id` 传 `status` 仍兼容，但后端会推断动作并走状态机校验。`start_design` 会要求客户已有主房产，并同步创建或复用项目；`mark_dormant`、`mark_invalid` 缺少原因会返回 400，所以新的小程序代码必须使用动作接口。

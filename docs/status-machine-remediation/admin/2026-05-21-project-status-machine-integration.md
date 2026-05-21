@@ -88,9 +88,9 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `start_measure` | `lead` | `measure` | 主按钮 |
 | `start_negotiation` | `measure` | `negotiating` | 主按钮 |
-| `sign_contract` | `negotiating` | `signed` | 主按钮，要求金额 |
-| `start_design` | `signed` | `designing` | 主按钮 |
-| `start_construction` | `signed/designing` | `constructing` | 主按钮 |
+| `start_design` | `negotiating` | `designing` | 主按钮 |
+| `sign_contract` | `negotiating/designing` | `signed` | 主按钮，要求金额 |
+| `start_construction` | `signed` | `constructing` | 主按钮 |
 | `pause_project` | 多个进行中状态 | `on_hold` | 危险按钮，要求原因 |
 | `resume_project` | `on_hold` | 暂停前状态 | 主按钮 |
 | `start_acceptance` | `constructing` | `acceptance` | 主按钮 |
@@ -228,7 +228,7 @@ Admin 端需要处理以下 400 错误：
 - 当前项目状态不允许执行该动作。
 - 该状态动作必须填写原因。
 - 项目签约时必须提供有效的 `signed_amount`。
-- 项目签约前，关联客户状态必须为跟进中、已到店或已下定。
+- 项目签约前，关联客户状态必须为已下定。
 - 当前项目状态不允许直接变更为目标状态。
 
 常见处理：

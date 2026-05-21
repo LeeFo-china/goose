@@ -561,7 +561,10 @@ export function ProjectAcceptancesPanel({
   }, [occupiedStages]);
   const firstAvailableStage = selectableStageOptions.find((item) => !item.acceptance);
   const selectedStageBlocked = Boolean(occupiedStages.get(stageCode));
-  const canCreateAcceptance = Boolean(firstAvailableStage) && !selectedStageBlocked;
+  const canCreateByProjectStatus = project.status === "constructing" || project.status === "acceptance";
+  const canCreateAcceptance = canCreateByProjectStatus &&
+    Boolean(firstAvailableStage) &&
+    !selectedStageBlocked;
 
   const loadAcceptances = async () => {
     setLoading(true);
@@ -851,7 +854,11 @@ export function ProjectAcceptancesPanel({
                     发起验收
                   </Button>
                 </div>
-                {!firstAvailableStage ? (
+                {!canCreateByProjectStatus ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    仅施工中或验收中的项目可发起工序验收
+                  </p>
+                ) : !firstAvailableStage ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     当前无可发起的工序验收
                   </p>

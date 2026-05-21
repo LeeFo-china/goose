@@ -1,6 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import { customerCoreRepository } from "@/repositories/customer-core";
+import { customerPropertyRepository } from "@/repositories/customer-properties";
 import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
+import { projectRepository } from "@/repositories/projects";
 import type {
   CustomerStatusTransitionInput,
   CustomerStatusTransitionListQuery,
@@ -26,6 +28,83 @@ type TransitionCustomerStatusInput = {
 };
 
 class CustomerStatusService {
+  private buildAutoDesignProjectName(input: {
+    customerName?: unknown;
+    customerPhone?: unknown;
+    community?: string | null;
+    buildingInfo?: string | null;
+  }) {
+    const customerLabel = typeof input.customerName === "string" && input.customerName.trim()
+      ? input.customerName.trim()
+      : typeof input.customerPhone === "string" && input.customerPhone.trim()
+        ? input.customerPhone.trim()
+        : "未命名客户";
+    const propertyLabel = [input.community, input.buildingInfo]
+      .map((item) => item?.trim())
+      .filter(Boolean)
+      .join(" ");
+    const name = propertyLabel
+      ? `${customerLabel} - ${propertyLabel}设计项目`
+      : `${customerLabel}设计项目`;
+
+    return name.slice(0, 100);
+  }
+
+  private async ensureDesignProject(input: {
+    authContext: AuthContext;
+    tenantId: string;
+    customerId: string;
+    customer: Record<string, unknown>;
+  }) {
+    accessPolicyService.assertPermission(input.authContext, "project.create");
+
+    const property = await customerPropertyRepository.getPrimarySummary({
+      customerId: input.customerId,
+      tenantId: input.tenantId,
+    });
+    if (!property?.id) {
+      throw Errors.badRequest("客户进入设计前必须先维护房产信息");
+    }
+
+    const existing = await projectRepository.findActiveByCustomerProperty({
+      customerId: input.customerId,
+      propertyId: property.id,
+      tenantId: input.tenantId,
+    });
+    if (existing) {
+      return {
+        project: existing,
+        created: false,
+      };
+    }
+
+    const project = await projectRepository.create({
+      tenant_id: input.tenantId,
+      customer_id: input.customerId,
+      property_id: property.id,
+      name: this.buildAutoDesignProjectName({
+        customerName: input.customer.name,
+        customerPhone: input.customer.phone,
+        community: property.community,
+        buildingInfo: property.building_info,
+      }),
+      address: [property.community, property.building_info].filter(Boolean).join(" ") || null,
+      status: "designing",
+      visibility_status: "inherit",
+      budget: null,
+      signed_amount: null,
+      start_date: null,
+      designer_id: null,
+      supervisor_id: null,
+      style_tags: [],
+    });
+
+    return {
+      project,
+      created: true,
+    };
+  }
+
   async transitionCustomerStatus(input: TransitionCustomerStatusInput) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     const existing = input.existing ??
@@ -67,6 +146,15 @@ class CustomerStatusService {
       throw Errors.badRequest("该状态动作必须填写原因");
     }
 
+    const designProjectResult = input.payload.action === "start_design"
+      ? await this.ensureDesignProject({
+        authContext: input.authContext,
+        tenantId,
+        customerId: input.customerId,
+        customer: existing,
+      })
+      : null;
+
     const patch = { ...(input.patch ?? {}) };
     delete patch.status;
     const customer = await customerCoreRepository.updateById({
@@ -87,7 +175,15 @@ class CustomerStatusService {
       operatorEmployeeId: input.authContext.employeeId ?? null,
       operatorAuthUserId: input.authContext.authUserId,
       reason,
-      metadata: input.payload.metadata,
+      metadata: {
+        ...input.payload.metadata,
+        ...(designProjectResult?.project.id
+          ? {
+            project_id: designProjectResult.project.id,
+            project_auto_created: designProjectResult.created,
+          }
+          : {}),
+      },
     });
 
     return customer;
@@ -124,7 +220,7 @@ class CustomerStatusService {
       fromStatus,
     });
     if (!transition) {
-      throw Errors.badRequest("项目签约前，关联客户状态必须为跟进中、已到店或已下定");
+      throw Errors.badRequest("项目签约前，关联客户状态必须为已下定");
     }
 
     return {

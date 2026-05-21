@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState, useTransition } from
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   CUSTOMER_SOURCE_VALUES,
+  CustomerStatusActionConfig,
   CUSTOMER_STATUS_VALUES,
   CustomerSourceConfig,
   CustomerStatusConfig,
@@ -15,8 +16,10 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import {
   CalendarClock,
+  ArrowRight,
   Edit3,
   Eye,
+  History,
   Loader2,
   MessageSquareText,
   MoreHorizontal,
@@ -182,6 +185,31 @@ type EmployeeOption = {
 
 type CustomerMode = "create" | "edit";
 
+type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
+
+type CustomerStatusActionItem = {
+  action: string;
+  label: string;
+  from_status: string;
+  to_status: string;
+  requires_reason?: boolean;
+};
+
+type CustomerStatusActionsResponse = {
+  current_status: string;
+  actions: CustomerStatusActionItem[];
+};
+
+type CustomerStatusTransitionRecord = {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  action: string;
+  reason: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
 const statusOptions = CUSTOMER_STATUS_VALUES.map((value) => [
   value,
   CustomerStatusConfig[value].label,
@@ -327,6 +355,30 @@ function sourceActorName(source: CustomerSourceRecord) {
     || source.source_employee?.phone
     || source.assigned_by?.phone
     || "-";
+}
+
+function statusVariant(type: string | null | undefined): BadgeVariant {
+  if (type === "success") return "success";
+  if (type === "warning") return "warning";
+  if (type === "danger") return "danger";
+  if (type === "primary") return "default";
+  return "secondary";
+}
+
+function customerStatusLabel(status: string | null | undefined) {
+  return isCustomerStatus(status) ? CustomerStatusConfig[status].label : status || "-";
+}
+
+function customerStatusBadgeVariant(status: string | null | undefined) {
+  return isCustomerStatus(status)
+    ? statusVariant(CustomerStatusConfig[status].type)
+    : "outline";
+}
+
+function customerActionLabel(action: string) {
+  return action in CustomerStatusActionConfig
+    ? CustomerStatusActionConfig[action as keyof typeof CustomerStatusActionConfig].label
+    : action;
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -603,7 +655,7 @@ function CustomerDialog({
       name: string;
       avatar?: string | null;
       phone: string;
-      status: CustomerFormValues["status"];
+      status?: CustomerFormValues["status"];
       source: CustomerFormValues["source"];
       owner_id: string | null;
       douyin_screenshot_images: string[];
@@ -616,7 +668,6 @@ function CustomerDialog({
     } = {
       name: values.name.trim(),
       phone: values.phone.trim(),
-      status: values.status,
       source: values.source,
       owner_id: values.owner_id || null,
       douyin_screenshot_images: values.source === "douyin" ? images : [],
@@ -631,6 +682,9 @@ function CustomerDialog({
     };
     if (mode === "create" || avatarDirty) {
       payload.avatar = avatar || null;
+    }
+    if (mode === "create") {
+      payload.status = values.status;
     }
 
     setError("");
@@ -760,23 +814,25 @@ function CustomerDialog({
                 </Field>
               )}
             />
-            <Controller
-              name="status"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-status`}>状态</FieldLabel>
-                  <SelectField
-                    id={`${mode}-customer-status`}
-                    value={field.value}
-                    options={statusOptions}
-                    disabled={pending}
-                    onChange={field.onChange}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
+            {mode === "create" ? (
+              <Controller
+                name="status"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor={`${mode}-customer-status`}>初始状态</FieldLabel>
+                    <SelectField
+                      id={`${mode}-customer-status`}
+                      value={field.value}
+                      options={statusOptions}
+                      disabled={pending}
+                      onChange={field.onChange}
+                    />
+                    <FieldError errors={[fieldState.error]} />
+                  </Field>
+                )}
+              />
+            ) : null}
             <Controller
               name="source"
               control={form.control}
@@ -931,19 +987,235 @@ function CustomerDialog({
   );
 }
 
-function CustomerDetailDialog({
+function CustomerStatusPanel({
   customer,
+  onChanged,
+}: {
+  customer: CustomerRecord;
+  onChanged: () => Promise<void>;
+}) {
+  const [actionsData, setActionsData] = useState<CustomerStatusActionsResponse | null>(null);
+  const [transitions, setTransitions] = useState<CustomerStatusTransitionRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [selectedAction, setSelectedAction] = useState<CustomerStatusActionItem | null>(null);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    Promise.all([
+      requestCustomer({ path: `/customers/${customer.id}/status-actions` }),
+      requestCustomer({ path: `/customers/${customer.id}/status-transitions?page=1&pageSize=20` }),
+    ])
+      .then(([actions, timeline]) => {
+        if (cancelled) return;
+        setActionsData(actions as CustomerStatusActionsResponse);
+        setTransitions((timeline?.rows || []) as CustomerStatusTransitionRecord[]);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "状态信息加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customer.id, customer.status]);
+
+  function closeActionDialog() {
+    if (pending) return;
+    setSelectedAction(null);
+    setReason("");
+  }
+
+  function submitAction() {
+    if (!selectedAction) return;
+    const normalizedReason = reason.trim();
+    if (selectedAction.requires_reason && !normalizedReason) {
+      setError("该状态动作必须填写原因");
+      return;
+    }
+
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestCustomer({
+          path: `/customers/${customer.id}/status-transition`,
+          method: "POST",
+          payload: {
+            action: selectedAction.action,
+            reason: normalizedReason || undefined,
+            metadata: { source: "admin" },
+          },
+        });
+        setSelectedAction(null);
+        setReason("");
+        await onChanged();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "状态变更失败");
+      }
+    });
+  }
+
+  const currentStatus = actionsData?.current_status || customer.status;
+  const actions = actionsData?.actions || [];
+
+  return (
+    <section className="rounded-md border bg-muted/20 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold">状态流转</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant={customerStatusBadgeVariant(currentStatus)}>
+              {customerStatusLabel(currentStatus)}
+            </Badge>
+            {loading ? (
+              <Badge variant="secondary">
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                正在加载
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) => (
+            <Button
+              key={action.action}
+              type="button"
+              size="sm"
+              variant={action.action === "mark_invalid" ? "destructive" : "outline"}
+              disabled={loading || pending}
+              onClick={() => {
+                setError("");
+                setSelectedAction(action);
+              }}
+            >
+              {action.label}
+            </Button>
+          ))}
+          {!loading && actions.length === 0 ? (
+            <Badge variant="outline">暂无可执行动作</Badge>
+          ) : null}
+        </div>
+      </div>
+      {error ? (
+        <div className="mt-3">
+          <StatusAlert>{error}</StatusAlert>
+        </div>
+      ) : null}
+      <div className="mt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <History />
+            状态时间线
+          </div>
+          <Badge variant="outline">最近 20 条</Badge>
+        </div>
+        {transitions.length > 0 ? (
+          <div className="relative ml-3 flex flex-col gap-3 border-l pl-5">
+            {transitions.map((item) => (
+              <div key={item.id} className="relative rounded-md border bg-background p-3">
+                <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-primary" />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <Badge variant={customerStatusBadgeVariant(item.from_status)}>
+                      {customerStatusLabel(item.from_status)}
+                    </Badge>
+                    <ArrowRight />
+                    <Badge variant={customerStatusBadgeVariant(item.to_status)}>
+                      {customerStatusLabel(item.to_status)}
+                    </Badge>
+                    <span>{customerActionLabel(item.action)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(item.created_at)}
+                  </span>
+                </div>
+                {item.reason ? (
+                  <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
+            暂无状态流转记录。
+          </div>
+        )}
+      </div>
+      <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && closeActionDialog()}>
+        <DialogContent className="max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>{selectedAction?.label || "状态变更"}</DialogTitle>
+            <DialogDescription>
+              {selectedAction
+                ? `${customerStatusLabel(selectedAction.from_status)} -> ${customerStatusLabel(selectedAction.to_status)}`
+                : "确认执行该状态动作。"}
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="customer-status-reason">
+              {selectedAction?.requires_reason ? "原因" : "备注"}
+            </FieldLabel>
+            <Textarea
+              id="customer-status-reason"
+              value={reason}
+              disabled={pending}
+              placeholder={selectedAction?.requires_reason ? "请输入原因" : "可选"}
+              className="min-h-[96px]"
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={closeActionDialog}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant={selectedAction?.action === "mark_invalid" ? "destructive" : "default"}
+              disabled={pending}
+              onClick={submitAction}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认执行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+function CustomerDetailDialog({
+  customer: initialCustomer,
   onClose,
 }: {
   customer: CustomerRecord;
   onClose: () => void;
 }) {
+  const router = useRouter();
+  const [customer, setCustomer] = useState(initialCustomer);
   const [followUps, setFollowUps] = useState<CustomerFollowUpRecord[]>([]);
   const [sources, setSources] = useState<CustomerSourceRecord[]>([]);
   const [followUpsLoading, setFollowUpsLoading] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [followUpsError, setFollowUpsError] = useState("");
   const [sourcesError, setSourcesError] = useState("");
+
+  useEffect(() => {
+    setCustomer(initialCustomer);
+  }, [initialCustomer]);
+
+  async function refreshCustomer() {
+    const data = await requestCustomer({ path: `/customers/${customer.id}/detail` });
+    setCustomer(data as CustomerRecord);
+    router.refresh();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1004,6 +1276,7 @@ function CustomerDetailDialog({
             <InfoItem label="面积" value={customer.area != null ? `${customer.area}㎡` : "-"} />
             <InfoItem label="户型" value={customer.layout || "-"} />
           </div>
+          <CustomerStatusPanel customer={customer} onChanged={refreshCustomer} />
           {customer.latest_source || getSourceBadges(customer).length > 0 ? (
             <section className="rounded-md border bg-muted/20 p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

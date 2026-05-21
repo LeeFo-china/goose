@@ -455,6 +455,29 @@ class ProjectRepository {
     return data as Record<string, unknown>;
   }
 
+  async findActiveByCustomerProperty(input: {
+    customerId: string;
+    propertyId: string;
+    tenantId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("*")
+      .eq("tenant_id", input.tenantId)
+      .eq("customer_id", input.customerId)
+      .eq("property_id", input.propertyId)
+      .neq("status", "invalid")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户设计项目失败", error);
+    }
+
+    return (data as Record<string, unknown> | null) ?? null;
+  }
+
   async findCustomerInTenant(input: { customerId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")

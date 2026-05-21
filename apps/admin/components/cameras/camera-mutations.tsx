@@ -187,11 +187,20 @@ function getProjectOptionLabel(project: CameraProjectOption | null | undefined) 
 
 function getProjectOptionDescription(project: CameraProjectOption) {
   const parts = [
+    project.status === "invalid"
+      ? "无效项目不可绑定摄像头"
+      : project.status === "completed"
+        ? "已完工项目不可绑定摄像头"
+        : null,
     project.phone_masked ? `电话 ${project.phone_masked}` : null,
     project.property?.layout || null,
     project.property?.area ? `${project.property.area}㎡` : null,
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+function canBindCameraToProject(project: CameraProjectOption | null | undefined) {
+  return project?.status !== "invalid" && project?.status !== "completed";
 }
 
 function readAssetChannelNo(asset: TenantDeviceAsset) {
@@ -616,6 +625,10 @@ function CameraDialog({
       setError("请选择要绑定的房产项目");
       return;
     }
+    if (mode === "create" && !canBindCameraToProject(selectedProject)) {
+      setError("无效或已完工项目不能新增摄像头");
+      return;
+    }
     if (mode === "create" && !values.device_key) {
       setError(`请选择一个未绑定的${getVendorLabel(values.vendor)}设备通道`);
       return;
@@ -724,12 +737,13 @@ function CameraDialog({
                     {projectOptions.map((project) => {
                       const selected = project.id === selectedProjectId;
                       const description = getProjectOptionDescription(project);
+                      const disabled = pending || !canBindCameraToProject(project);
                       return (
                         <Button
                           key={project.id}
                           type="button"
                           variant="ghost"
-                          disabled={pending}
+                          disabled={disabled}
                           className={cn(
                             "h-auto w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left font-normal",
                             selected && "bg-accent text-accent-foreground",

@@ -13,6 +13,7 @@
 | `potential` | 潜在客户 | 新进入 CRM、还没有稳定跟进动作 |
 | `following` | 跟进中 | 已进入销售跟进 |
 | `arrived` | 已到店 | 客户已到店或完成等价到访动作 |
+| `designing` | 设计中 | 已基于客户和房产信息进入设计方案阶段 |
 | `ordered` | 已下定 | 已支付定金或形成下定意向 |
 | `contracted` | 已签约 | 已完成签约 |
 | `dormant` | 沉睡客户 | 暂无进展，后续可重新激活 |
@@ -52,9 +53,9 @@
 | --- | --- | --- | --- | --- |
 | `start_measure` | `lead` | `measure` | 项目存在，未作废 | 写状态日志 |
 | `start_negotiation` | `measure` | `negotiating` | 项目存在，未作废 | 写状态日志 |
-| `sign_contract` | `negotiating` | `signed` | `signed_amount > 0` | 写状态日志，必要时同步客户为 `contracted` |
-| `start_design` | `signed` | `designing` | 项目已签约 | 写状态日志 |
-| `start_construction` | `designing`, `signed` | `constructing` | 项目未暂停 / 未作废 | 写状态日志 |
+| `start_design` | `negotiating` | `designing` | 项目未作废 | 写状态日志 |
+| `sign_contract` | `negotiating`, `designing` | `signed` | `signed_amount > 0` | 写状态日志，必要时同步客户为 `contracted` |
+| `start_construction` | `signed` | `constructing` | 项目已签约、未暂停、未作废 | 写状态日志 |
 | `pause_project` | `measure`, `negotiating`, `signed`, `designing`, `constructing`, `acceptance`, `after_sale` | `on_hold` | 必须传 `reason` | 记录 `paused_from_status` |
 | `resume_project` | `on_hold` | 暂停前状态 | 存在 `paused_from_status` | 清理或归档暂停上下文 |
 | `start_acceptance` | `constructing` | `acceptance` | 施工阶段有效 | 可触发验收流程 |
@@ -68,9 +69,10 @@
 | --- | --- | --- | --- | --- |
 | `start_following` | `potential` | `following` | 客户有效 | 写状态日志 |
 | `mark_arrived` | `following` | `arrived` | 客户有效 | 写状态日志 |
-| `place_order` | `arrived`, `following` | `ordered` | 客户有效 | 写状态日志 |
-| `sign_contract` | `ordered`, `arrived`, `following` | `contracted` | 客户有效 | 可要求关联或创建项目 |
-| `mark_dormant` | `potential`, `following`, `arrived`, `ordered` | `dormant` | 必须传 `reason` | 写状态日志 |
+| `start_design` | `arrived` | `designing` | 客户有效，已有主房产 | 写状态日志，同步创建或复用项目 |
+| `place_order` | `designing` | `ordered` | 客户有效 | 写状态日志 |
+| `sign_contract` | `ordered` | `contracted` | 客户有效 | 推荐通过项目签约触发联动 |
+| `mark_dormant` | `potential`, `following`, `arrived`, `designing`, `ordered` | `dormant` | 必须传 `reason` | 写状态日志 |
 | `reactivate` | `dormant` | `following` | 客户有效，避免和开始跟进动作语义重叠 | 写状态日志 |
 | `mark_invalid` | 非 `contracted`, 非 `invalid` | `invalid` | 必须传 `reason` | 写状态日志 |
 

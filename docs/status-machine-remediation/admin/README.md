@@ -9,7 +9,7 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 本次对接覆盖：
 
 - 客户状态机：`potential -> following -> arrived / ordered / contracted` 等生命周期动作。
-- 项目状态机：`lead -> measure -> negotiating -> signed -> designing / constructing / acceptance / completed` 等工程动作。
+- 项目状态机：`lead -> measure -> negotiating -> designing -> signed -> constructing / acceptance / completed` 等工程动作。
 - 客户项目联动：项目签约成功后，同步关联客户为 `contracted`。
 
 ## 文档索引
@@ -18,6 +18,19 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 - [项目状态机对接](./2026-05-21-project-status-machine-integration.md)
 - [客户项目状态联动对接](./2026-05-21-customer-project-status-linkage.md)
 - [状态动作和时间线对接](./2026-05-21-status-actions-and-transition-timeline.md)
+- [Admin 动作化落地记录](./2026-05-21-admin-status-machine-implementation.md)
+
+## 当前落地状态
+
+状态：已完成 Admin 端最小闭环
+
+已落地：
+
+- 客户 / 项目编辑表单在编辑模式下不再提交 `status`。
+- 客户 / 项目详情弹窗展示当前状态、可执行动作和最近 20 条状态时间线。
+- 状态变更统一调用 `POST /customers/:id/status-transition` / `POST /projects/:id/status-transition`。
+- 项目签约动作要求填写 `signed_amount > 0`。
+- Admin 端根据项目状态禁用发起验收和新增摄像头入口。
 
 ## 当前 Admin 代码影响点
 

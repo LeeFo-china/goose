@@ -2,14 +2,17 @@
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
+  ProjectStatusActionConfig,
   PROJECT_STATUS_VALUES,
   ProjectStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ArrowRight,
   Edit3,
   Eye,
+  History,
   Loader2,
   Plus,
   Trash2,
@@ -121,6 +124,31 @@ type EmployeeOption = {
 
 type ProjectMode = "create" | "edit";
 type ProjectDetailTab = "overview" | "members" | "logs" | "acceptances";
+type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
+
+type ProjectStatusActionItem = {
+  action: string;
+  label: string;
+  from_status: string;
+  to_status: string;
+  requires_reason?: boolean;
+};
+
+type ProjectStatusActionsResponse = {
+  current_status: string;
+  paused_from_status?: string | null;
+  actions: ProjectStatusActionItem[];
+};
+
+type ProjectStatusTransitionRecord = {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  action: string;
+  reason: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
 
 type ProjectFormState = {
   name: string;
@@ -187,6 +215,32 @@ function formatDate(value: string | null | undefined) {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+function statusVariant(type: string | null | undefined): BadgeVariant {
+  if (type === "success") return "success";
+  if (type === "warning") return "warning";
+  if (type === "danger") return "danger";
+  if (type === "primary") return "default";
+  return "secondary";
+}
+
+function projectStatusLabel(status: string | null | undefined) {
+  return status && status in ProjectStatusConfig
+    ? ProjectStatusConfig[status as keyof typeof ProjectStatusConfig].label
+    : status || "-";
+}
+
+function projectStatusBadgeVariant(status: string | null | undefined) {
+  return status && status in ProjectStatusConfig
+    ? statusVariant(ProjectStatusConfig[status as keyof typeof ProjectStatusConfig].type)
+    : "outline";
+}
+
+function projectActionLabel(action: string) {
+  return action in ProjectStatusActionConfig
+    ? ProjectStatusActionConfig[action as keyof typeof ProjectStatusActionConfig].label
+    : action;
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -314,6 +368,251 @@ function useSelectOptions(open: boolean, project?: ProjectRecord) {
 function mergeFallback(options: Option[], fallback: Option | null) {
   if (!fallback || options.some((item) => item.id === fallback.id)) return options;
   return [fallback, ...options];
+}
+
+function ProjectStatusPanel({
+  project,
+  onChanged,
+}: {
+  project: ProjectRecord;
+  onChanged: () => Promise<void>;
+}) {
+  const [actionsData, setActionsData] = useState<ProjectStatusActionsResponse | null>(null);
+  const [transitions, setTransitions] = useState<ProjectStatusTransitionRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
+  const [reason, setReason] = useState("");
+  const [signedAmount, setSignedAmount] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    Promise.all([
+      requestProject({ path: `/projects/${project.id}/status-actions` }),
+      requestProject({ path: `/projects/${project.id}/status-transitions?page=1&pageSize=20` }),
+    ])
+      .then(([actions, timeline]) => {
+        if (cancelled) return;
+        setActionsData(actions as ProjectStatusActionsResponse);
+        setTransitions((timeline?.rows || []) as ProjectStatusTransitionRecord[]);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "状态信息加载失败");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, project.status]);
+
+  function closeActionDialog() {
+    if (pending) return;
+    setSelectedAction(null);
+    setReason("");
+    setSignedAmount("");
+  }
+
+  function openActionDialog(action: ProjectStatusActionItem) {
+    setError("");
+    setSelectedAction(action);
+    setReason("");
+    setSignedAmount(action.action === "sign_contract" && project.signed_amount
+      ? String(project.signed_amount)
+      : "");
+  }
+
+  function submitAction() {
+    if (!selectedAction) return;
+    const normalizedReason = reason.trim();
+    const normalizedSignedAmount = Number(signedAmount);
+    if (selectedAction.requires_reason && !normalizedReason) {
+      setError("该状态动作必须填写原因");
+      return;
+    }
+    if (
+      selectedAction.action === "sign_contract" &&
+      (!Number.isFinite(normalizedSignedAmount) || normalizedSignedAmount <= 0)
+    ) {
+      setError("项目签约时必须填写有效签约金额");
+      return;
+    }
+
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestProject({
+          path: `/projects/${project.id}/status-transition`,
+          method: "POST",
+          payload: {
+            action: selectedAction.action,
+            reason: normalizedReason || undefined,
+            signed_amount: selectedAction.action === "sign_contract"
+              ? normalizedSignedAmount
+              : undefined,
+            metadata: { source: "admin" },
+          },
+        });
+        setSelectedAction(null);
+        setReason("");
+        setSignedAmount("");
+        await onChanged();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "状态变更失败");
+      }
+    });
+  }
+
+  const currentStatus = actionsData?.current_status || project.status;
+  const actions = actionsData?.actions || [];
+
+  return (
+    <section className="rounded-md border bg-muted/20 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold">状态流转</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant={projectStatusBadgeVariant(currentStatus)}>
+              {projectStatusLabel(currentStatus)}
+            </Badge>
+            {actionsData?.paused_from_status ? (
+              <Badge variant="outline">
+                暂停前：{projectStatusLabel(actionsData.paused_from_status)}
+              </Badge>
+            ) : null}
+            {loading ? (
+              <Badge variant="secondary">
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                正在加载
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) => (
+            <Button
+              key={action.action}
+              type="button"
+              size="sm"
+              variant={action.action === "mark_invalid" ? "destructive" : "outline"}
+              disabled={loading || pending}
+              onClick={() => openActionDialog(action)}
+            >
+              {action.label}
+            </Button>
+          ))}
+          {!loading && actions.length === 0 ? (
+            <Badge variant="outline">暂无可执行动作</Badge>
+          ) : null}
+        </div>
+      </div>
+      {error ? (
+        <div className="mt-3">
+          <StatusAlert>{error}</StatusAlert>
+        </div>
+      ) : null}
+      <div className="mt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <History />
+            状态时间线
+          </div>
+          <Badge variant="outline">最近 20 条</Badge>
+        </div>
+        {transitions.length > 0 ? (
+          <div className="relative ml-3 flex flex-col gap-3 border-l pl-5">
+            {transitions.map((item) => (
+              <div key={item.id} className="relative rounded-md border bg-background p-3">
+                <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-primary" />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <Badge variant={projectStatusBadgeVariant(item.from_status)}>
+                      {projectStatusLabel(item.from_status)}
+                    </Badge>
+                    <ArrowRight />
+                    <Badge variant={projectStatusBadgeVariant(item.to_status)}>
+                      {projectStatusLabel(item.to_status)}
+                    </Badge>
+                    <span>{projectActionLabel(item.action)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDate(item.created_at)}
+                  </span>
+                </div>
+                {item.reason ? (
+                  <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
+            暂无状态流转记录。
+          </div>
+        )}
+      </div>
+      <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && closeActionDialog()}>
+        <DialogContent className="max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>{selectedAction?.label || "状态变更"}</DialogTitle>
+            <DialogDescription>
+              {selectedAction
+                ? `${projectStatusLabel(selectedAction.from_status)} -> ${projectStatusLabel(selectedAction.to_status)}`
+                : "确认执行该状态动作。"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            {selectedAction?.action === "sign_contract" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="project-status-signed-amount">签约金额</Label>
+                <Input
+                  id="project-status-signed-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={signedAmount}
+                  disabled={pending}
+                  onChange={(event) => setSignedAmount(event.target.value)}
+                />
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-status-reason">
+                {selectedAction?.requires_reason ? "原因" : "备注"}
+              </Label>
+              <Textarea
+                id="project-status-reason"
+                value={reason}
+                disabled={pending}
+                placeholder={selectedAction?.requires_reason ? "请输入原因" : "可选"}
+                className="min-h-[96px]"
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={closeActionDialog}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant={selectedAction?.action === "mark_invalid" ? "destructive" : "default"}
+              disabled={pending}
+              onClick={submitAction}
+            >
+              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              确认执行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
 }
 
 function OptionSelect({
@@ -580,9 +879,20 @@ function ProjectDialog({
       .split(/[,，\n]/)
       .map((item) => item.trim())
       .filter(Boolean);
-    const payload = {
+    const payload: {
+      name: string;
+      status?: string;
+      customer_id: string | null;
+      designer_id: string | null;
+      supervisor_id: string | null;
+      budget: number | null;
+      signed_amount: number | null;
+      start_date: string | null;
+      address: string | null;
+      visibility_status: string;
+      style_tags: string[];
+    } = {
       name: formState.name.trim(),
-      status: formState.status,
       customer_id: formState.customer_id || null,
       designer_id: formState.designer_id || null,
       supervisor_id: formState.supervisor_id || null,
@@ -593,6 +903,9 @@ function ProjectDialog({
       visibility_status: formState.visibility_status,
       style_tags: styleTags,
     };
+    if (mode === "create") {
+      payload.status = formState.status;
+    }
 
     setError("");
     startTransition(async () => {
@@ -636,22 +949,24 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`${mode}-project-status`}>状态</Label>
-              <FormSelect
-                id={`${mode}-project-status`}
-                value={formState.status}
-                disabled={pending}
-                options={statusOptions.map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-                onChange={(value) => setFormState((current) => ({
-                  ...current,
-                  status: value,
-                }))}
-              />
-            </div>
+            {mode === "create" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${mode}-project-status`}>初始状态</Label>
+                <FormSelect
+                  id={`${mode}-project-status`}
+                  value={formState.status}
+                  disabled={pending}
+                  options={statusOptions.map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                  onChange={(value) => setFormState((current) => ({
+                    ...current,
+                    status: value,
+                  }))}
+                />
+              </div>
+            ) : null}
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-visibility`}>展示状态</Label>
               <FormSelect
@@ -810,6 +1125,7 @@ function ProjectDetailDialog({
   initialTab: ProjectDetailTab;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
   const [currentProject, setCurrentProject] = useState(project);
   const [refreshing, setRefreshing] = useState(false);
@@ -827,6 +1143,7 @@ function ProjectDetailDialog({
     try {
       const data = await requestProject({ path: `/projects/${currentProject.id}` });
       setCurrentProject(data as ProjectRecord);
+      router.refresh();
     } finally {
       setRefreshing(false);
     }
@@ -875,6 +1192,7 @@ function ProjectDetailDialog({
             )}
           >
             <TabsContent value="overview" className="flex flex-col gap-5">
+              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
               <div className="grid gap-3 md:grid-cols-4">
                 <InfoItem label="客户" value={customerName(currentProject.customer)} />
                 <InfoItem label="房产" value={propertyLabel(currentProject.property)} />

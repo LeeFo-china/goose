@@ -52,16 +52,14 @@ Content-Type: application/json
 
 项目签约时，关联客户必须处于以下状态之一：
 
-- `following`
-- `arrived`
 - `ordered`
 - `contracted`
 
-如果客户仍是 `potential / dormant / invalid`，后端返回 400：
+如果客户仍是 `potential / following / arrived / designing / dormant / invalid`，后端返回 400：
 
 ```json
 {
-  "message": "项目签约前，关联客户状态必须为跟进中、已到店或已下定"
+  "message": "项目签约前，关联客户状态必须为已下定"
 }
 ```
 
@@ -141,7 +139,7 @@ Admin 展示建议：
 | 后端 message | Admin 处理 |
 | --- | --- |
 | `项目签约时必须提供有效的 signed_amount` | 保持签约弹窗打开，提示填写大于 0 的签约金额 |
-| `项目签约前，关联客户状态必须为跟进中、已到店或已下定` | 提示先推进客户状态，提供查看客户入口 |
+| `项目签约前，关联客户状态必须为已下定` | 提示先推进客户到已下定，提供查看客户入口 |
 | 当前项目状态不允许执行该动作 | 刷新项目详情，重新计算动作按钮 |
 
 ## 验收清单

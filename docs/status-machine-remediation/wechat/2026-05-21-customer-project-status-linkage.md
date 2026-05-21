@@ -44,11 +44,11 @@ Content-Type: application/json
 - `ordered`
 - `contracted`
 
-如果客户仍是 `potential / dormant / invalid`，后端返回 400：
+如果客户仍是 `potential / following / arrived / designing / dormant / invalid`，后端返回 400：
 
 ```json
 {
-  "message": "项目签约前，关联客户状态必须为跟进中、已到店或已下定"
+  "message": "项目签约前，关联客户状态必须为已下定"
 }
 ```
 

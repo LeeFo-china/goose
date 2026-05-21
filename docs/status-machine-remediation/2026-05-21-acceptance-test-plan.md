@@ -19,9 +19,9 @@ git diff --check
 
 - `lead -> measure` 使用 `start_measure` 成功。
 - `measure -> negotiating` 使用 `start_negotiation` 成功。
-- `negotiating -> signed` 使用 `sign_contract` 且 `signed_amount > 0` 成功。
-- `signed -> designing` 使用 `start_design` 成功。
-- `designing -> constructing` 使用 `start_construction` 成功。
+- `negotiating -> designing` 使用 `start_design` 成功。
+- `designing -> signed` 使用 `sign_contract` 且 `signed_amount > 0` 成功。
+- `signed -> constructing` 使用 `start_construction` 成功。
 
 ### 非法流转
 
@@ -58,7 +58,8 @@ git diff --check
 
 - `potential -> following` 使用 `start_following` 成功。
 - `following -> arrived` 使用 `mark_arrived` 成功。
-- `arrived -> ordered` 使用 `place_order` 成功。
+- `arrived -> designing` 使用 `start_design` 成功，并同步创建或复用项目。
+- `designing -> ordered` 使用 `place_order` 成功。
 - `ordered -> contracted` 使用 `sign_contract` 成功。
 - `dormant -> following` 使用 `reactivate` 成功。
 
