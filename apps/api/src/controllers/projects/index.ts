@@ -481,7 +481,9 @@ class ProjectController extends TenantBaseController<
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
+    const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
     const result = await projectSer.listProjects({
       authContext,
       query: queryResult.data,
@@ -492,6 +494,7 @@ class ProjectController extends TenantBaseController<
           requestId: request.id,
           employeeId: authContext.employeeId ?? null,
           tenantId: authContext.tenantId,
+          authContextMs,
           timings: result.debugTimings ?? null,
         },
         "[project-home-list] timings",
@@ -757,7 +760,9 @@ class ProjectController extends TenantBaseController<
   async getProjectsBystatus(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
     const result = await projectSer.listProjects({
       authContext,
       query: queryResult.data,
@@ -768,6 +773,7 @@ class ProjectController extends TenantBaseController<
           requestId: request.id,
           employeeId: authContext.employeeId ?? null,
           tenantId: authContext.tenantId,
+          authContextMs,
           timings: result.debugTimings ?? null,
         },
         "[project-home-list] timings",

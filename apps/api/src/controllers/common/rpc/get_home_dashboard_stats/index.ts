@@ -16,13 +16,29 @@ export class RpcController extends BaseController {
         request: FastifyRequest,
         reply: FastifyReply,
     ) {
+        const authContextStartedAt = Date.now();
         const authContext = await authorizationService.getRequiredAuthContext(
             request.user?.sub,
         );
+        const authContextMs = Date.now() - authContextStartedAt;
         request.authContext = authContext;
 
+        const serviceStartedAt = Date.now();
+        const data = await homeDashboardService.getStats(authContext) as HomeStatsResponse;
+        const serviceMs = Date.now() - serviceStartedAt;
+
+        request.log.info(
+            {
+                employeeId: authContext.employeeId,
+                tenantId: authContext.tenantId,
+                authContextMs,
+                serviceMs,
+            },
+            "[home-stats] timings",
+        );
+
         return ResponseHandler.success<HomeStatsResponse>(
-            await homeDashboardService.getStats(authContext) as HomeStatsResponse,
+            data,
         );
     }
 }

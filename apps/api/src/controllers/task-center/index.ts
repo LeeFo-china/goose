@@ -43,12 +43,26 @@ class TaskCenterController extends TenantBaseController {
 
   @Get("/task-center/todos/summary")
   async getSummary(request: FastifyRequest, reply: FastifyReply) {
+    const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
     this.assertTaskCenterReadable(authContext);
 
-    return ResponseHandler.success(
-      await taskCenterService.getSummary(authContext),
+    const serviceStartedAt = Date.now();
+    const data = await taskCenterService.getSummary(authContext);
+    const serviceMs = Date.now() - serviceStartedAt;
+
+    request.log.info(
+      {
+        employeeId: authContext.employeeId,
+        tenantId: authContext.tenantId,
+        authContextMs,
+        serviceMs,
+      },
+      "[task-summary] timings",
     );
+
+    return ResponseHandler.success(data);
   }
 }
 

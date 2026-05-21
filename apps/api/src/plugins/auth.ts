@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import { verifyToken } from "@/utils/jwt";
+import { verifyToken, verifyTokenDetailed } from "@/utils/jwt";
 import { fail } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { userIdentityService } from "@/services/user-identities";
@@ -266,6 +266,23 @@ function getTokenError(reason: "missing" | "expired" | "invalid") {
   return Errors.unauthorized("登录凭证无效", ErrorCodes.TOKEN_INVALID);
 }
 
+function logAuthReject(
+  request: FastifyRequest,
+  reason: "missing" | "expired" | "invalid" | "unsupported_visitor_route" | "unsupported_token_type",
+  details: Record<string, unknown> = {},
+) {
+  request.log.warn(
+    {
+      requestId: request.id,
+      path: request.url.split("?")[0] ?? "/",
+      method: request.method,
+      reason,
+      ...details,
+    },
+    "[auth-plugin] request rejected",
+  );
+}
+
 function getWechatIdentityCheckCacheTtlMs() {
   const parsed = Number(process.env.WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -494,18 +511,25 @@ const authPlugin = (app: FastifyInstance) => {
 
     if (!authorization?.startsWith("Bearer ")) {
       const error = getTokenError("missing");
+      logAuthReject(request, "missing", { hasAuthorization: Boolean(authorization) });
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
     const token = authorization.slice(7).trim();
     if (!token) {
       const error = getTokenError("missing");
+      logAuthReject(request, "missing", { hasAuthorization: true });
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
-    const payload = await logAuthStage(request, "verify_token", async () => verifyToken(token));
+    const tokenResult = await logAuthStage(request, "verify_token", async () =>
+      verifyTokenDetailed(token)
+    );
+    const payload = tokenResult.payload;
     if (!payload) {
-      const error = getTokenError("invalid");
+      const reason = tokenResult.reason === "expired" ? "expired" : "invalid";
+      const error = getTokenError(reason);
+      logAuthReject(request, reason);
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 
@@ -515,6 +539,10 @@ const authPlugin = (app: FastifyInstance) => {
           "访客会话不支持该操作，请先完成身份验证",
           ErrorCodes.TOKEN_INVALID,
         );
+        logAuthReject(request, "unsupported_visitor_route", {
+          tokenType: payload.token_type,
+          visitorId: payload.visitor_id,
+        });
         return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
       }
 
@@ -524,6 +552,7 @@ const authPlugin = (app: FastifyInstance) => {
 
     if (payload.token_type && payload.token_type !== "auth") {
       const error = getTokenError("invalid");
+      logAuthReject(request, "unsupported_token_type", { tokenType: payload.token_type });
       return reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
     }
 

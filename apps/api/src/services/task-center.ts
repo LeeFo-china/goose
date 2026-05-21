@@ -8,7 +8,7 @@ import type {
 } from "@/schema/task-center";
 
 type TaskPriority = "high" | "medium";
-const TASK_CENTER_SUMMARY_CACHE_TTL_MS = 10_000;
+const TASK_CENTER_SUMMARY_CACHE_TTL_MS = 60_000;
 
 export type TaskCenterTodoItem = {
   id: string;
@@ -62,8 +62,11 @@ class TaskCenterService {
     return [
       authContext.tenantId ?? "",
       authContext.employeeId ?? "",
-      authContext.roleCodes.join(","),
-      authContext.permissions.map((item) => `${item.code}:${item.scope}`).join(","),
+      [...authContext.roleCodes].sort().join(","),
+      authContext.permissions
+        .map((item) => `${item.code}:${item.scope}`)
+        .sort()
+        .join(","),
     ].join(":");
   }
 

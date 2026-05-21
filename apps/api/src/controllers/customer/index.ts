@@ -445,7 +445,9 @@ class CustomerController extends TenantBaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
     const queryResult = CustomerListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -459,6 +461,7 @@ class CustomerController extends TenantBaseController<
           requestId: request.id,
           employeeId: authContext.employeeId ?? null,
           tenantId: authContext.tenantId,
+          authContextMs,
           timings: listResult.debugTimings ?? null,
         },
         "[customer-home-list] timings",

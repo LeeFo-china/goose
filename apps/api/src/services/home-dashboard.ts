@@ -4,7 +4,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { homeDashboardRepository } from "@/repositories/home-dashboard";
 
-const HOME_DASHBOARD_CACHE_TTL_MS = 10_000;
+const HOME_DASHBOARD_CACHE_TTL_MS = 60_000;
 
 function getMonthRange(now = new Date()) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -27,8 +27,11 @@ class HomeDashboardService {
     return [
       authContext.tenantId ?? "",
       authContext.employeeId ?? "",
-      authContext.roleCodes.join(","),
-      authContext.permissions.map((item) => `${item.code}:${item.scope}`).join(","),
+      [...authContext.roleCodes].sort().join(","),
+      authContext.permissions
+        .map((item) => `${item.code}:${item.scope}`)
+        .sort()
+        .join(","),
     ].join(":");
   }
 

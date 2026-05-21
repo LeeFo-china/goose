@@ -1586,6 +1586,419 @@ API 行为：
 - 普通进入或连续返回首页时，API 日志里的 `[customer-home-list] timings` 和 `[project-home-list] timings` 应优先出现 `cache: "hit"`；首轮冷启动允许出现 `cache: "miss"`，但请求必须是后台非阻塞。
 - 如果小程序端把客户/项目列表延迟到 `4s - 5s` 后仍稳定出现首轮 `cache: "miss"`，再回到 API 侧继续看远端查询耗时。
 
+## 2026-05-21 10:25 visitor TOKEN_INVALID 对接要求
+
+本轮 visitor 复测中，后端未看到新的 `POST /auth`，但连续看到访客首屏接口返回 `401`：
+
+```text
+GET /projects/frontend-visible
+GET /ai/decoration-qa/suggestions?scene=visitor
+```
+
+API 鉴权日志显示：
+
+```text
+[auth-plugin] request rejected
+reason: "invalid"
+```
+
+这说明端上不是没带 token，也不是 token 过期，而是带了一个后端验签失败的 token。常见原因包括：
+
+- 本地缓存残留旧环境、旧 `JWT_SECRET` 或旧格式 token。
+- 退出登录后没有清理 visitor/customer/employee token 的统一存储位。
+- 请求拦截器把 `undefined`、`null`、`[object Object]` 或错误字段拼成 `Authorization: Bearer ...`。
+- visitor 页复用了 customer/employee 的旧 token 字段。
+
+API 当前错误码语义：
+
+| HTTP | code | message | 小程序处理 |
+| --- | --- | --- | --- |
+| 401 | `TOKEN_MISSING` | 缺少登录凭证 | 当前接口需要登录态时，进入 `authenticating`；公共接口不要补假 token |
+| 401 | `TOKEN_EXPIRED` | 登录已过期，请重新登录 | 清本地 session，重新 `wx.login()` + `POST /auth` |
+| 401 | `TOKEN_INVALID` | 登录凭证无效 | 清本地 session，重新 `wx.login()` + `POST /auth` |
+| 401 | `WECHAT_BINDING_NOT_MATCHED` | 当前微信绑定关系已变化，请重新登录 | 清本地 session，重新 `wx.login()` + `POST /auth`，必要时回到身份选择/绑定 |
+
+小程序端必须对接：
+
+- 收到 `401 TOKEN_INVALID` 时，不要重试原请求，不要继续使用当前 token。
+- 立即清空本地所有登录态缓存：
+  - `token`
+  - `authToken`
+  - `visitorToken`
+  - `employeeToken`
+  - `customerToken`
+  - `authUser`
+  - `employeeContext`
+  - `customerContext`
+  - 当前登录态内存变量和 in-flight promise
+- 递增本地 `loginEpoch` 或等价版本号，废弃所有旧请求回调。
+- 重新调用 `wx.login()`，再请求 `POST /auth`。
+- `/auth` 成功返回后，先保存新 token，再进入对应状态：
+  - `mode: "platform_visitor"` -> `visitor_ready`
+  - `mode: "customer"` -> `customer_ready`
+  - `mode: "employee"` -> `employee_ready`
+- 只有进入 `visitor_ready` 后，才允许请求：
+  - `GET /projects/frontend-visible`
+  - `GET /front/projects`
+  - `GET /front/projects/:id`
+  - `GET /ai/decoration-qa/suggestions?scene=visitor`
+  - `POST /ai/decoration-qa`
+  - `POST /ai/decoration-qa/stream`
+
+请求拦截器要求：
+
+- `Authorization` 只能在 token 是非空字符串且形态像 JWT 时注入。
+- token 不是字符串、为空字符串、`undefined`、`null`、`[object Object]` 时，不得注入 `Authorization`。
+- `GET /ai/decoration-qa/suggestions` 是公共可读接口；如果没有有效 token，可以不带 `Authorization` 请求。带上无效 token 会被后端按 `TOKEN_INVALID` 拒绝。
+- `GET /projects/frontend-visible` 需要有效 visitor/customer/employee token；没有有效 token 时，应先走 `/auth`，不要直接请求。
+- visitor token 只允许访问访客接口和 `POST /auth/verify-role`，不能访问员工、客户或管理接口。
+
+建议伪代码：
+
+```ts
+function shouldAttachAuth(token: unknown): token is string {
+  if (typeof token !== "string") return false;
+  const value = token.trim();
+  if (!value || value === "undefined" || value === "null" || value === "[object Object]") return false;
+  return value.split(".").length === 3;
+}
+
+async function handleApiUnauthorized(error: ApiError) {
+  if (
+    error.statusCode !== 401 ||
+    !["TOKEN_INVALID", "TOKEN_EXPIRED", "WECHAT_BINDING_NOT_MATCHED"].includes(error.code)
+  ) {
+    throw error;
+  }
+
+  logoutLocalOnly();
+  bumpLoginEpoch();
+  return ensureSessionReady({ forceAuth: true });
+}
+```
+
+复测验收口径：
+
+- 清缓存后重新进入 visitor 页，日志中应先看到 `POST /auth`，再看到 visitor 首屏接口。
+- 正常 visitor 首屏不应再连续出现 `reason: "invalid"`。
+- 如果继续出现 `TOKEN_INVALID`，小程序端需要打印本地诊断字段：
+  - 当前请求 URL
+  - 是否注入了 Authorization
+  - token 类型：`typeof token`
+  - token 长度
+  - token 分段数：`token.split(".").length`
+  - 当前 `authState`
+  - 当前 `loginEpoch`
+- 诊断日志不得打印 token 明文。
+
+## 2026-05-21 10:45 visitor 首屏请求顺序复测结论
+
+小程序端按上一节文档对接后，visitor 链路已经能在 `/auth` 成功后正常进入首屏，但复测日志仍暴露两个端上问题。
+
+本轮实际日志顺序：
+
+```text
+GET /projects/frontend-visible                 -> 401 TOKEN_INVALID, reason="invalid"
+GET /ai/decoration-qa/suggestions?scene=visitor -> 401 TOKEN_INVALID, reason="invalid"
+POST /auth                                      -> 200, mode="platform_visitor"
+GET /projects/frontend-visible                 -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+结论：
+
+- visitor token 成功签发后，后端鉴权和访客接口是正常的。
+- `TOKEN_INVALID` 仍然发生在 `/auth` 成功前，说明端上还有旧请求抢跑。
+- `suggestions` 在同一轮首屏中被重复触发多次，冷请求阶段出现多个并发慢请求，随后才命中缓存变成毫秒级。
+
+本轮关键耗时：
+
+- `POST /auth` 总耗时约 `6590ms`。
+- 微信 `jscode2session` 约 `3362ms`。
+- openid 登录态查询约 `1303ms`。
+- active OAuth lookup 约 `1909ms`。
+- `/projects/frontend-visible` 首个冷请求约 `1757ms`，后续缓存命中约 `0ms - 2ms`。
+- `/ai/decoration-qa/suggestions?scene=visitor` 首轮重复请求出现 `8453ms / 6729ms / 3165ms / 1815ms`，后续缓存命中约 `0ms - 1ms`。
+
+小程序端必须继续调整：
+
+- 进入 visitor 首页前，必须等待 `POST /auth` 成功、保存新 token、状态进入 `visitor_ready`。
+- `authState !== "visitor_ready"` 时，不允许请求：
+  - `GET /projects/frontend-visible`
+  - `GET /front/projects`
+  - `GET /front/projects/:id`
+  - `GET /ai/decoration-qa/suggestions?scene=visitor`
+  - `POST /ai/decoration-qa`
+  - `POST /ai/decoration-qa/stream`
+- 收到 `TOKEN_INVALID` 后，旧请求链路必须终止；清 token 后不能让旧页面生命周期继续发首屏接口。
+- `loginEpoch` 必须参与所有 visitor 首屏请求：
+  - 请求发起时记录 `requestEpoch`。
+  - 响应回来时如果 `requestEpoch !== currentLoginEpoch`，直接丢弃响应。
+  - 如果已进入新一轮 `/auth`，旧 epoch 的 pending 请求不得再重试或刷新页面状态。
+- `suggestions` 必须做同一 scene 的 in-flight 去重：
+  - cache key 至少包含 `scene`。
+  - 同一 `scene=visitor` 已有请求未完成时，后续入口直接复用同一个 Promise。
+  - 页面 `onLoad`、`onShow`、下拉刷新、组件初始化不得各自独立触发一轮 suggestions。
+- `/projects/frontend-visible` 也建议做同一轮 in-flight 去重，避免页面和组件各打一遍。
+
+建议状态机口径：
+
+```text
+anonymous
+  -> authenticating
+  -> visitor_ready
+  -> loading_visitor_home
+```
+
+禁止的顺序：
+
+```text
+anonymous
+  -> loading_visitor_home
+  -> authenticating
+```
+
+推荐伪代码：
+
+```ts
+let visitorHomePromise: Promise<void> | null = null;
+const suggestionPromises = new Map<string, Promise<Suggestion[]>>();
+
+async function enterVisitorHome() {
+  const session = await ensureSessionReady({ target: "visitor" });
+  if (session.mode !== "platform_visitor") return;
+
+  const requestEpoch = getLoginEpoch();
+  return loadVisitorHomeOnce(requestEpoch);
+}
+
+function loadVisitorHomeOnce(requestEpoch: number) {
+  if (visitorHomePromise) return visitorHomePromise;
+
+  visitorHomePromise = Promise.all([
+    fetchFrontendVisibleProjects({ requestEpoch }),
+    fetchVisitorSuggestionsOnce("visitor", requestEpoch),
+  ]).then(() => undefined).finally(() => {
+    visitorHomePromise = null;
+  });
+
+  return visitorHomePromise;
+}
+
+function fetchVisitorSuggestionsOnce(scene: string, requestEpoch: number) {
+  const key = scene || "visitor";
+  const existing = suggestionPromises.get(key);
+  if (existing) return existing;
+
+  const promise = request({
+    url: "/ai/decoration-qa/suggestions",
+    data: { scene: key },
+    requestEpoch,
+  }).finally(() => {
+    suggestionPromises.delete(key);
+  });
+
+  suggestionPromises.set(key, promise);
+  return promise;
+}
+```
+
+下一轮验收口径：
+
+- 日志中必须先出现 `POST /auth 200`，再出现 visitor 首屏接口。
+- `/auth` 成功前不得再出现 visitor 首屏接口的 `401 TOKEN_INVALID`。
+- 同一轮 visitor 首页中，`/ai/decoration-qa/suggestions?scene=visitor` 只允许 1 个冷请求。
+- 如果用户快速返回、刷新、重复进入 visitor 页，后续请求应复用 in-flight 或命中缓存，不能重新并发多次。
+- 如果继续出现 `reason="invalid"`，小程序端需要同时提供该请求的 `authState`、`loginEpoch`、`requestEpoch` 和是否注入 Authorization。
+
+## 2026-05-21 11:05 visitor 已有 token 恢复复测结论
+
+小程序端继续对接后，本轮 visitor 复测没有再出现：
+
+```text
+[auth-plugin] request rejected
+reason: "invalid"
+```
+
+已有有效 visitor token 的恢复链路已经正常：
+
+```text
+GET /projects/frontend-visible                  -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+观察到的耗时：
+
+- `/projects/frontend-visible` 首轮冷请求约 `1691ms`，后续缓存命中约 `1ms - 2ms`。
+- `/ai/decoration-qa/suggestions?scene=visitor` 首轮冷请求约 `1416ms`，后续缓存命中约 `0ms - 2ms`。
+- 约 60 秒缓存窗口过后，`suggestions` 又出现一次冷请求约 `1224ms`，符合当前服务端缓存 TTL。
+
+结论：
+
+- “已有 visitor token 恢复进入 visitor 首页”链路通过。
+- visitor 首屏接口已能正确携带 visitor token，后端按 `roles=["visitor"]` 放行。
+- 之前 `/auth` 前抢跑导致的 `TOKEN_INVALID` 本轮没有复现。
+- `suggestions` 同一轮并发 4 个冷请求的问题本轮没有复现。
+
+小程序端下一步必须补做“清空本地缓存后的冷启动回归”：
+
+1. 清空本地所有 token 和登录态缓存。
+2. 重新打开小程序进入 visitor 场景。
+3. 日志顺序必须是：
+
+```text
+POST /auth -> 200, mode="platform_visitor"
+GET /projects/frontend-visible -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+冷启动验收要求：
+
+- `/auth` 完成前不得出现 visitor 首屏接口。
+- 不得出现 `401 TOKEN_INVALID` 或 `[auth-plugin] request rejected reason="invalid"`。
+- 首屏接口只允许各 1 个冷请求：
+  - `/projects/frontend-visible`
+  - `/ai/decoration-qa/suggestions?scene=visitor`
+- 后续返回、刷新、重复进入 visitor 页时，应复用 in-flight 或命中缓存。
+- 如果用户主动下拉刷新并带 `refresh=true`，允许重新请求 suggestions，但同一轮 refresh 仍只能有 1 个 in-flight。
+
+小程序端需要保留的诊断日志：
+
+- `authState`
+- `loginEpoch`
+- `requestEpoch`
+- `sessionRestoreSource`: `storage` / `auth` / `none`
+- `hasToken`
+- `tokenDotCount`
+- `willAttachAuthorization`
+- 请求 URL
+
+诊断日志仍不得打印 token 明文。
+
+## 2026-05-21 11:25 visitor 冷启动仍未覆盖
+
+小程序端继续对接后，本轮 API 日志仍没有看到新的：
+
+```text
+POST /auth
+```
+
+因此这轮仍然只能证明“已有有效 visitor token 恢复”链路正常，不能证明“清空本地缓存后的 visitor 冷启动”已经收敛。
+
+本轮 visitor 相关接口表现：
+
+```text
+GET /projects/frontend-visible                  -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+观察到的耗时：
+
+- `/projects/frontend-visible` 首个冷请求约 `1357ms`，后续约 `1ms`。
+- `/ai/decoration-qa/suggestions?scene=visitor` 首个冷请求约 `1214ms`，后续约 `0ms - 1ms`。
+
+本轮已通过：
+
+- 未出现 `[auth-plugin] request rejected`。
+- 未出现 `reason="invalid"`。
+- 未出现 `401 TOKEN_INVALID`。
+- `suggestions` 没有再出现一轮 4 个冷请求并发。
+
+但仍未验收：
+
+- 清空本地 token/session 后，是否一定先 `POST /auth`。
+- `/auth` 完成前，是否仍可能抢跑 visitor 首屏接口。
+- 冷启动首屏接口是否仍只各打一轮。
+
+小程序端下一轮必须按以下步骤执行冷启动回归：
+
+1. 调用本地退出/清缓存逻辑，确认清空所有登录态字段：
+   - `token`
+   - `authToken`
+   - `visitorToken`
+   - `employeeToken`
+   - `customerToken`
+   - `authUser`
+   - `employeeContext`
+   - `customerContext`
+   - 所有 auth / visitor home / suggestions in-flight promise
+2. 关闭并重新进入小程序，或至少重新进入 visitor 入口并确保 `sessionRestoreSource="none"`。
+3. 进入 visitor 首页前打印一次本地诊断：
+
+```text
+authState
+loginEpoch
+sessionRestoreSource
+hasToken
+tokenDotCount
+willAttachAuthorization
+```
+
+4. 预期 API 日志顺序必须是：
+
+```text
+POST /auth                                      -> 200, mode="platform_visitor"
+GET /projects/frontend-visible                  -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+5. 如果没有出现 `POST /auth`，说明端上仍然从 storage 或内存恢复了旧 visitor token，本轮不能算冷启动验收。
+
+冷启动失败判定：
+
+- `/auth` 之前出现任意 visitor 首屏接口。
+- 出现 `401 TOKEN_INVALID`。
+- 出现 `[auth-plugin] request rejected reason="invalid"`。
+- `suggestions` 同一轮出现多个冷请求。
+- 本地诊断显示 `sessionRestoreSource!="none"` 或 `hasToken=true`。
+
+## 2026-05-21 11:45 visitor 清缓存冷启动验收通过
+
+小程序端按上一节要求清空本地 token/session 后重新进入 visitor 场景，本轮 API 日志已经看到完整冷启动顺序：
+
+```text
+POST /auth                                      -> 200
+GET /projects/frontend-visible                  -> 200
+GET /ai/decoration-qa/suggestions?scene=visitor -> 200
+```
+
+验收结果：
+
+- `/auth` 前没有抢跑 visitor 首屏接口。
+- 未出现 `401 TOKEN_INVALID`。
+- 未出现 `[auth-plugin] request rejected`。
+- `/auth` 后首屏接口携带有效 visitor token。
+- auth plugin 命中纯 visitor 快路径：
+
+```text
+[auth-plugin] skip visitor oauth credential check
+```
+
+本轮耗时：
+
+- `/auth`：约 `4065ms`。
+  - 微信 `jscode2session`：约 `1617ms`。
+  - openid 登录态查询：约 `2438ms`。
+  - existing visitor context：约 `4057ms`。
+- `/projects/frontend-visible`：首轮约 `1905ms`，后续缓存命中约 `2ms`。
+- `/ai/decoration-qa/suggestions?scene=visitor`：首轮约 `1965ms`，后续缓存命中约 `2ms`。
+
+结论：
+
+- visitor 清缓存冷启动顺序已通过。
+- `/auth` 前抢跑导致 `TOKEN_INVALID` 的问题关闭。
+- visitor 首页首屏接口并发去重已基本收敛，没有再出现同一轮多次冷请求叠加。
+- 当前 visitor 链路剩余慢点转为性能优化问题：
+  - `/auth` 中 openid 登录态查询约 `2.4s`。
+  - visitor 首页两个冷请求各约 `1.9s`。
+  - visitor 项目详情页曾出现 `/front/projects/:id` 约 `6.3s`、`/front/projects/:id/logs` 约 `2.8s`。
+
+下一阶段建议优先级：
+
+1. 优先优化 `/auth` 的 openid 登录态查询链路。
+2. 再优化 visitor 首页冷请求 `/projects/frontend-visible` 和 `/ai/decoration-qa/suggestions`。
+3. 最后处理 visitor 项目详情 `/front/projects/:id` 和 `/front/projects/:id/logs` 慢查询。
+
 ## 验收标准
 
 ### API 验收
