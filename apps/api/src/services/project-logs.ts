@@ -9,6 +9,7 @@ import type {
 } from "@/schema/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { projectSer } from "@/services/projects";
 
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
@@ -42,11 +43,13 @@ class ProjectLogService {
       throw Errors.forbidden();
     }
 
-    return projectLogRepository.create({
+    const row = await projectLogRepository.create({
       ...input.payload,
       tenant_id: project.tenant_id,
       employee_id: input.authContext.employeeId,
     });
+    projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
+    return row;
   }
 
   async getProjectLogDetail(input: {
@@ -142,11 +145,19 @@ class ProjectLogService {
       payload.tenant_id = project.tenant_id;
     }
 
-    return projectLogRepository.update({
+    const row = await projectLogRepository.update({
       id: input.id,
       tenantId,
       payload,
     });
+    projectSer.invalidatePublicProjectLogsCache(existingProjectId);
+    if (
+      typeof payload.project_id === "string" &&
+      payload.project_id !== existingProjectId
+    ) {
+      projectSer.invalidatePublicProjectLogsCache(payload.project_id);
+    }
+    return row;
   }
 
   async listProjectLogsByProject(input: {

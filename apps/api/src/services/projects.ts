@@ -15,7 +15,18 @@ import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
+const PUBLIC_PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60_000;
+const PUBLIC_PROJECT_LOGS_CACHE_TTL_MS = 5 * 60_000;
+const PUBLIC_PROJECT_MEMBERS_CACHE_TTL_MS = 5 * 60_000;
+const PUBLIC_PROJECT_DETAIL_PREWARM_LIMIT = 3;
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+
+type CacheEntry<T> = {
+    expiresAt: number;
+    value: T;
+};
+
+type PublicProjectMembers = Awaited<ReturnType<typeof projectMemberService.listProjectMembers>>;
 
 type ProjectListResult = {
     rows: Array<Record<string, unknown>>;
@@ -35,6 +46,12 @@ class ProjectService {
         rows: Array<Record<string, unknown>>;
     } | null = null;
     private publicProjectsInFlight: Promise<Array<Record<string, unknown>>> | null = null;
+    private publicProjectDetailCache = new Map<string, CacheEntry<Record<string, unknown>>>();
+    private publicProjectDetailInFlight = new Map<string, Promise<Record<string, unknown>>>();
+    private publicProjectLogsCache = new Map<string, CacheEntry<Array<Record<string, unknown>>>>();
+    private publicProjectLogsInFlight = new Map<string, Promise<Array<Record<string, unknown>>>>();
+    private publicProjectMembersCache = new Map<string, CacheEntry<PublicProjectMembers>>();
+    private publicProjectMembersInFlight = new Map<string, Promise<PublicProjectMembers>>();
     private projectListCache = new Map<string, {
         expiresAt: number;
         value: ProjectListResult;
@@ -249,6 +266,7 @@ class ProjectService {
         if (!this.publicProjectsInFlight) {
             this.publicProjectsInFlight = projectRepository.listPublicProjects()
                 .then((rows) => {
+                    rows.forEach((row) => this.seedPublicProjectDetailCache(row));
                     this.publicProjectsCache = {
                         rows,
                         expiresAt: Date.now() + PUBLIC_PROJECTS_CACHE_TTL_MS,
@@ -268,6 +286,100 @@ class ProjectService {
         this.publicProjectsInFlight = null;
     }
 
+    private getCachedValue<T>(
+        cache: Map<string, CacheEntry<T>>,
+        key: string,
+    ) {
+        const cached = cache.get(key);
+        if (!cached) {
+            return null;
+        }
+
+        if (cached.expiresAt <= Date.now()) {
+            cache.delete(key);
+            return null;
+        }
+
+        return cached.value;
+    }
+
+    private setCachedValue<T>(
+        cache: Map<string, CacheEntry<T>>,
+        key: string,
+        value: T,
+        ttlMs: number,
+    ) {
+        if (cache.size >= 500) {
+            const now = Date.now();
+            for (const [cacheKey, item] of cache.entries()) {
+                if (item.expiresAt <= now) {
+                    cache.delete(cacheKey);
+                }
+            }
+
+            if (cache.size >= 500) {
+                cache.clear();
+            }
+        }
+
+        cache.set(key, {
+            expiresAt: Date.now() + ttlMs,
+            value,
+        });
+    }
+
+    private seedPublicProjectDetailCache(row: Record<string, unknown>) {
+        if (!this.isPublicProjectVisible(row) || typeof row.id !== "string") {
+            return;
+        }
+
+        this.setCachedValue(
+            this.publicProjectDetailCache,
+            row.id,
+            row,
+            PUBLIC_PROJECT_DETAIL_CACHE_TTL_MS,
+        );
+    }
+
+    invalidatePublicProjectDetailCache(projectId?: string) {
+        if (!projectId) {
+            this.publicProjectDetailCache.clear();
+            this.publicProjectDetailInFlight.clear();
+            return;
+        }
+
+        this.publicProjectDetailCache.delete(projectId);
+        this.publicProjectDetailInFlight.delete(projectId);
+    }
+
+    invalidatePublicProjectLogsCache(projectId?: string) {
+        if (!projectId) {
+            this.publicProjectLogsCache.clear();
+            this.publicProjectLogsInFlight.clear();
+            return;
+        }
+
+        this.publicProjectLogsCache.delete(projectId);
+        this.publicProjectLogsInFlight.delete(projectId);
+    }
+
+    invalidatePublicProjectMembersCache(projectId?: string) {
+        if (!projectId) {
+            this.publicProjectMembersCache.clear();
+            this.publicProjectMembersInFlight.clear();
+            return;
+        }
+
+        this.publicProjectMembersCache.delete(projectId);
+        this.publicProjectMembersInFlight.delete(projectId);
+    }
+
+    invalidatePublicProjectCache(projectId?: string) {
+        this.invalidatePublicProjectDetailCache(projectId);
+        this.invalidatePublicProjectLogsCache(projectId);
+        this.invalidatePublicProjectMembersCache(projectId);
+    }
+
     async getRequiredPublicProjectVisibility(projectId: string) {
         const project = await projectRepository.findPublicVisibilityById(projectId);
         if (!project || !this.isPublicProjectVisible(project)) {
@@ -278,17 +390,131 @@ class ProjectService {
     }
 
     async getPublicProjectDetail(projectId: string) {
-        const project = await projectRepository.findPublicDetailById(projectId);
-        if (!project || !this.isPublicProjectVisible(project)) {
-            throw Errors.notFound("项目不存在");
+        const cached = this.getCachedValue(
+            this.publicProjectDetailCache,
+            projectId,
+        );
+        if (cached) {
+            return cached;
         }
 
-        return project;
+        const inFlight = this.publicProjectDetailInFlight.get(projectId);
+        if (inFlight) {
+            return inFlight;
+        }
+
+        const request = projectRepository.findPublicDetailById(projectId)
+            .then((project) => {
+                if (!project || !this.isPublicProjectVisible(project)) {
+                    throw Errors.notFound("项目不存在");
+                }
+
+                this.setCachedValue(
+                    this.publicProjectDetailCache,
+                    projectId,
+                    project,
+                    PUBLIC_PROJECT_DETAIL_CACHE_TTL_MS,
+                );
+                return project;
+            })
+            .finally(() => {
+                if (this.publicProjectDetailInFlight.get(projectId) === request) {
+                    this.publicProjectDetailInFlight.delete(projectId);
+                }
+            });
+        this.publicProjectDetailInFlight.set(projectId, request);
+        return request;
     }
 
     async listPublicProjectLogs(projectId: string) {
-        await this.getRequiredPublicProjectVisibility(projectId);
-        return projectRepository.listPublicProjectLogs(projectId);
+        await this.getPublicProjectDetail(projectId);
+
+        const cached = this.getCachedValue(
+            this.publicProjectLogsCache,
+            projectId,
+        );
+        if (cached) {
+            return cached;
+        }
+
+        const inFlight = this.publicProjectLogsInFlight.get(projectId);
+        if (inFlight) {
+            return inFlight;
+        }
+
+        const request = projectRepository.listPublicProjectLogs(projectId)
+            .then((rows) => {
+                this.setCachedValue(
+                    this.publicProjectLogsCache,
+                    projectId,
+                    rows,
+                    PUBLIC_PROJECT_LOGS_CACHE_TTL_MS,
+                );
+                return rows;
+            })
+            .finally(() => {
+                if (this.publicProjectLogsInFlight.get(projectId) === request) {
+                    this.publicProjectLogsInFlight.delete(projectId);
+                }
+            });
+        this.publicProjectLogsInFlight.set(projectId, request);
+        return request;
+    }
+
+    async listPublicProjectMembers(projectId: string) {
+        await this.getPublicProjectDetail(projectId);
+
+        const cached = this.getCachedValue(
+            this.publicProjectMembersCache,
+            projectId,
+        );
+        if (cached) {
+            return cached;
+        }
+
+        const inFlight = this.publicProjectMembersInFlight.get(projectId);
+        if (inFlight) {
+            return inFlight;
+        }
+
+        const request = projectMemberService.listProjectMembers(projectId)
+            .then((members) => {
+                this.setCachedValue(
+                    this.publicProjectMembersCache,
+                    projectId,
+                    members,
+                    PUBLIC_PROJECT_MEMBERS_CACHE_TTL_MS,
+                );
+                return members;
+            })
+            .finally(() => {
+                if (this.publicProjectMembersInFlight.get(projectId) === request) {
+                    this.publicProjectMembersInFlight.delete(projectId);
+                }
+            });
+        this.publicProjectMembersInFlight.set(projectId, request);
+        return request;
+    }
+
+    async prewarmPublicProjectDetailData(input?: {
+        projects?: Array<Record<string, unknown>>;
+        limit?: number;
+    }) {
+        const projects = input?.projects ?? await this.listPublicProjects();
+        const projectIds = projects
+            .map((item) => typeof item.id === "string" ? item.id : null)
+            .filter((item): item is string => Boolean(item))
+            .slice(0, input?.limit ?? PUBLIC_PROJECT_DETAIL_PREWARM_LIMIT);
+
+        await Promise.allSettled(
+            projectIds.map(async (projectId) => {
+                await this.getPublicProjectDetail(projectId);
+                await Promise.allSettled([
+                    this.listPublicProjectLogs(projectId),
+                    this.listPublicProjectMembers(projectId),
+                ]);
+            }),
+        );
     }
 
     async listProjectCreateCustomers(input: {
@@ -399,6 +625,7 @@ class ProjectService {
             tenantId,
         );
         this.invalidatePublicProjectsCache();
+        this.invalidatePublicProjectCache(String(project.id));
 
         return project;
     }
@@ -425,6 +652,7 @@ class ProjectService {
 
         const project = await projectRepository.update(id, input, tenantId);
         this.invalidatePublicProjectsCache();
+        this.invalidatePublicProjectCache(id);
         return project;
     }
 
@@ -453,6 +681,7 @@ class ProjectService {
             designer_id: input.payload.designer_id,
             supervisor_id: input.payload.supervisor_id,
         }, tenantId);
+        this.invalidatePublicProjectMembersCache(input.projectId);
 
         return project;
     }
@@ -468,6 +697,7 @@ class ProjectService {
             status: "invalid",
         }, tenantId);
         this.invalidatePublicProjectsCache();
+        this.invalidatePublicProjectCache(id);
         return project;
     }
 

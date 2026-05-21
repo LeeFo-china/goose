@@ -148,20 +148,34 @@ API 当前处理步骤：
 
 访客登录后的首屏接口已经加服务端短 TTL 缓存：
 
-- `/projects/frontend-visible`：60 秒内存缓存，项目创建 / 更新 / 删除时主动失效；缓存过期时使用 in-flight Promise 合并并发远端查询。
-- `/ai/decoration-qa/suggestions`：60 秒内存缓存，复用已有 DB / AI cache 结果；同一 cache key 的并发请求复用同一个 in-flight Promise。
+- `/projects/frontend-visible`：5 分钟内存缓存，项目创建 / 更新 / 删除时主动失效；缓存过期时使用 in-flight Promise 合并并发远端查询。
+- `/ai/decoration-qa/suggestions`：5 分钟内存缓存，复用已有 DB / AI cache 结果；同一 cache key 的并发请求复用同一个 in-flight Promise。
+- `/front/projects/:id`：公开项目详情 5 分钟内存缓存，缓存过期时使用 in-flight Promise 合并同项目并发查询。
+- `/front/projects/:id/logs`：公开项目日志 5 分钟内存缓存，详情接口生成封面图和日志接口共用同一份日志结果；项目日志新增 / 更新时主动失效。
+- 公开项目成员：项目详情里的成员查询 5 分钟内存缓存，项目成员新增 / 更新 / 删除时主动失效。
+- `/auth` 收到 code 后会后台预热 visitor 首页项目列表、推荐问题，并预热前 3 个公开项目的详情、日志和成员数据。
 
 实测结果：
 
 - `/projects/frontend-visible`：冷请求约 `1.720s`，缓存命中约 `0.002s`。
 - `/ai/decoration-qa/suggestions?scene=visitor`：冷请求约 `1.076s`，缓存命中约 `0.002s`。
+- visitor 首页预热提前到 `/auth` 收到 code 后启动，最近一次冷登录中首页项目列表约 `0.004s`、推荐问题约 `0.002s`。
 
 小程序端接入要求：
 
 - visitor 登录成功不能依赖 `user_id` 判断登录态；新 visitor session 可能返回 `user_id: null` 和 `visitor_id`。
 - 保存 `/auth` 返回的 token 后立即渲染 visitor 首页基础 UI。
 - `/projects/frontend-visible` 与 `/ai/decoration-qa/suggestions` 并发请求。
+- `/ai/decoration-qa/suggestions` 默认不要带 `refresh=true` 或空 `refresh` 参数；只有用户主动下拉刷新时才允许带 `refresh=true`，否则会绕过服务端缓存并导致首屏等待变长。
+- 进入 visitor 项目详情时，`/front/projects/:id` 和 `/front/projects/:id/logs` 可以并发请求；后端会合并同项目日志查询，小程序端不需要串行等待详情后再请求日志。
+- 切换项目或从列表反复进入同一项目时，不要主动追加随机参数绕过缓存。
 - 小程序本地保留上次项目列表和推荐问题，二次进入先展示本地缓存，再静默刷新服务端数据。
+
+服务端诊断日志：
+
+- `/front/projects/:id` 会输出 `[public-project-detail] timings`，包含 `detailMs / logsFetchMs / logsSerializeMs / membersFetchMs / membersSerializeMs / serializeMs / totalMs`。
+- `/front/projects/:id/logs` 会输出 `[public-project-logs] timings`，包含 `visibilityMs / logsFetchMs / serializeMs / totalMs`。
+- 如果同一项目第二次打开仍为秒级，优先根据上述阶段日志定位是详情查询、日志查询、成员查询，还是图片 URL 解析慢。
 
 ### 阶段 0.3：已补建 visitor auth user 快路径
 

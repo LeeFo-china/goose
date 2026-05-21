@@ -201,7 +201,7 @@ class ProjectController extends TenantBaseController<
   }
 
   private async getPublicProjectMembers(projectId: string) {
-    const members = await projectMemberService.listProjectMembers(projectId);
+    const members = await projectSer.listPublicProjectMembers(projectId);
     return members
       .filter((item) => item.role_code !== "customer_owner")
       .map((item) => this.serializePublicProjectMember(item));
@@ -240,7 +240,13 @@ class ProjectController extends TenantBaseController<
     ).slice(0, 6);
   }
 
-  private async serializePublicProjectDetailItem(row: Record<string, unknown>) {
+  private async serializePublicProjectDetailItem(
+    row: Record<string, unknown>,
+    related?: {
+      publicLogs?: PublicProjectLogSummary[];
+      members?: PublicProjectMemberSummary[];
+    },
+  ) {
     const normalizedProperty = this.normalizeRelation(row.property, {
       id: null,
       community: null,
@@ -254,8 +260,10 @@ class ProjectController extends TenantBaseController<
       name: null,
     });
     const projectId = typeof row.id === "string" ? row.id : "";
-    const publicLogs = projectId ? await this.getPublicProjectLogs(projectId) : [];
-    const members = projectId ? await this.getPublicProjectMembers(projectId) : [];
+    const publicLogs = related?.publicLogs ??
+      (projectId ? await this.getPublicProjectLogs(projectId) : []);
+    const members = related?.members ??
+      (projectId ? await this.getPublicProjectMembers(projectId) : []);
     const rawStatus = typeof row.status === "string" ? row.status : null;
     const status = isProjectStatus(rawStatus) ? rawStatus : null;
 
@@ -647,6 +655,7 @@ class ProjectController extends TenantBaseController<
       result.data,
       authContext.tenantId,
     );
+    projectSer.invalidatePublicProjectMembersCache(idVerify.data.id);
 
     return ResponseHandler.success(this.serializeProjectMember(data));
   }
@@ -675,6 +684,7 @@ class ProjectController extends TenantBaseController<
       result.data,
       authContext.tenantId,
     );
+    projectSer.invalidatePublicProjectMembersCache(paramsResult.data.id);
 
     return ResponseHandler.success(this.serializeProjectMember(data));
   }
@@ -699,6 +709,7 @@ class ProjectController extends TenantBaseController<
       paramsResult.data.memberId,
       authContext.tenantId,
     );
+    projectSer.invalidatePublicProjectMembersCache(paramsResult.data.id);
 
     return ResponseHandler.success({ success: true });
   }
@@ -732,28 +743,106 @@ class ProjectController extends TenantBaseController<
 
   @Get("/front/projects/:id/logs")
   async getPublicProjectLogsById(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const projectId = idVerify.data.id;
 
-    return ResponseHandler.success(
-      (await projectSer.listPublicProjectLogs(idVerify.data.id)).map((item) =>
-        this.serializePublicProjectLog(item)
-      ),
+    const visibilityStartedAt = Date.now();
+    await projectSer.getPublicProjectDetail(projectId);
+    const visibilityMs = Date.now() - visibilityStartedAt;
+
+    const logsStartedAt = Date.now();
+    const rows = await projectSer.listPublicProjectLogs(projectId);
+    const logsFetchMs = Date.now() - logsStartedAt;
+
+    const serializeStartedAt = Date.now();
+    const logs = rows.map((item) => this.serializePublicProjectLog(item));
+    const serializeMs = Date.now() - serializeStartedAt;
+
+    request.log.info(
+      {
+        requestId: request.id,
+        projectId,
+        visibilityMs,
+        logsFetchMs,
+        serializeMs,
+        totalMs: Date.now() - startedAt,
+        logCount: logs.length,
+        imageCount: logs.reduce((count, item) => count + item.images.length, 0),
+      },
+      "[public-project-logs] timings",
     );
+
+    return ResponseHandler.success(logs);
   }
 
   @Get("/front/projects/:id")
   async getPublicProjectById(request: FastifyRequest, reply: FastifyReply) {
+    const startedAt = Date.now();
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const projectId = idVerify.data.id;
 
-    const project = await projectSer.getPublicProjectDetail(idVerify.data.id);
+    const detailStartedAt = Date.now();
+    const project = await projectSer.getPublicProjectDetail(projectId);
+    const detailMs = Date.now() - detailStartedAt;
 
-    return ResponseHandler.success(
-      await this.serializePublicProjectDetailItem(
-        project,
-      ),
+    const [publicLogResult, publicMemberResult] = await Promise.all([
+      (async () => {
+        const startedAt = Date.now();
+        const rows = await projectSer.listPublicProjectLogs(projectId);
+        return { rows, durationMs: Date.now() - startedAt };
+      })(),
+      (async () => {
+        const startedAt = Date.now();
+        const rows = await projectSer.listPublicProjectMembers(projectId);
+        return { rows, durationMs: Date.now() - startedAt };
+      })(),
+    ]);
+    const publicLogRows = publicLogResult.rows;
+    const logsFetchMs = publicLogResult.durationMs;
+    const publicMemberRows = publicMemberResult.rows;
+    const membersFetchMs = publicMemberResult.durationMs;
+
+    const logsSerializeStartedAt = Date.now();
+    const publicLogs = publicLogRows.map((item) =>
+      this.serializePublicProjectLog(item)
     );
+    const logsSerializeMs = Date.now() - logsSerializeStartedAt;
+
+    const membersSerializeStartedAt = Date.now();
+    const members = publicMemberRows
+      .filter((item) => item.role_code !== "customer_owner")
+      .map((item) => this.serializePublicProjectMember(item));
+    const membersSerializeMs = Date.now() - membersSerializeStartedAt;
+
+    const serializeStartedAt = Date.now();
+    const data = await this.serializePublicProjectDetailItem(project, {
+      publicLogs,
+      members,
+    });
+    const serializeMs = Date.now() - serializeStartedAt;
+
+    request.log.info(
+      {
+        requestId: request.id,
+        projectId,
+        detailMs,
+        logsFetchMs,
+        logsSerializeMs,
+        membersFetchMs,
+        membersSerializeMs,
+        serializeMs,
+        totalMs: Date.now() - startedAt,
+        logCount: publicLogs.length,
+        memberCount: members.length,
+        coverImageCount: data.cover_images.length,
+      },
+      "[public-project-detail] timings",
+    );
+
+    return ResponseHandler.success(data);
   }
 
   @Get("/projects/status")

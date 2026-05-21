@@ -198,13 +198,18 @@ export class WeChatController extends BaseController {
 
   private prewarmVisitorHomeData(request: FastifyRequest) {
     this.runAuthBackgroundTask(request, "prewarm_visitor_home_data", async () => {
+      const publicProjectsPromise = projectSer.listPublicProjects();
+      const suggestionsPromise = getDecorationQaSuggestions({
+        query: {
+          scene: "visitor",
+          refresh: false,
+        },
+      });
+      const publicProjects = await publicProjectsPromise;
       await Promise.allSettled([
-        projectSer.listPublicProjects(),
-        getDecorationQaSuggestions({
-          query: {
-            scene: "visitor",
-            refresh: false,
-          },
+        suggestionsPromise,
+        projectSer.prewarmPublicProjectDetailData({
+          projects: publicProjects,
         }),
       ]);
     });
