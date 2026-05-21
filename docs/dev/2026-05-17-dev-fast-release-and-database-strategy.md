@@ -4,7 +4,7 @@
 
 ## 1. 结论
 
-当前生产发布链路已经跑通：GitHub Actions 可以在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
+当前生产发布链路已经跑通：代码 push 后 GitHub Actions 在腾讯云 self-hosted runner 构建 `api`、`admin`、`social-video-worker` 镜像，推送腾讯 CCR，再部署到新服务器。
 
 但这条链路不适合高频开发验证。开发阶段要解决两个问题：
 
@@ -16,7 +16,7 @@
 | 环境 | 用途 | API/Admin | 数据库 | 发布方式 |
 | --- | --- | --- | --- | --- |
 | 本地开发 | 单人编码、自测 | 本机端口 | 本地 Supabase 或远程 dev DB | 本地启动 |
-| 共享开发环境 | 前后端、小程序联调 | `api-dev.goodcms.cn` / `admin-dev.goodcms.cn` | 独立 dev Supabase/Postgres | 代码 push 自动按服务部署，必要时手动部署 |
+| 共享开发环境 | 前后端、小程序联调 | `api-dev.goodcms.cn` / `admin-dev.goodcms.cn` | 独立 dev Supabase/Postgres | 手动快速部署 |
 | 生产环境 | 客户真实使用 | `api.goodcms.cn` / `admin.goodcms.cn` | 生产 Supabase/Postgres | 验收后完整发布 |
 
 第一阶段先做“共享开发环境”，这是收益最高的改造。
@@ -49,14 +49,14 @@
 | 动作 | 分支/触发 | 目标环境 | 是否自动 |
 | --- | --- | --- | --- |
 | 普通开发提交 | 任意功能分支 | 不发布 | 否 |
-| 开发环境验证 | `push` 代码路径或 `workflow_dispatch` 手动选择服务 | dev | 代码路径自动；必要时手动 |
+| 开发环境验证 | `workflow_dispatch` 手动选择服务 | dev | 是，手动触发 |
 | 生产发布 | 验收通过后手动触发或受保护分支 | prod | 需要确认 |
 
 短期不建议继续让所有开发 push 自动上生产。更合理的是：
 
-- 生产 workflow 改成手动触发，避免普通开发 push 影响生产。
-- `Deploy Dev` workflow 支持自动识别变更路径，也支持手动选择发布服务。
-- 开发者修改 API 时自动发布 dev API；修改 admin 时自动发布 dev Admin；修改 worker 时自动发布对应 dev worker。
+- 保留当前生产 workflow，但改成手动触发或受保护触发。
+- 新增一个 `Deploy Dev` workflow，支持选择发布服务。
+- 开发者修改 API 时，只发布 API；修改 admin 时，只发布 admin；修改 worker 时，只发布对应 worker。
 
 ### 3.2 开发环境域名
 
@@ -98,13 +98,6 @@ h5-dev.goodcms.cn
 | H5 | 3000 或静态服务 | 13020 | `h5-dev.goodcms.cn` |
 | Worker | 无公网 | 无 | 内部运行 |
 
-H5 dev 注意事项：
-
-- `h5-dev.goodcms.cn` 的页面服务端口 `13020` 是预留位。
-- 小程序开发版活动列表依赖 `https://h5-dev.goodcms.cn/public/marketing-pages?scene=home`。
-- 因此 dev Nginx 必须把 `h5-dev.goodcms.cn/public/marketing-pages*` 和 `h5-dev.goodcms.cn/public/tenants/*` 代理到 API dev：`127.0.0.1:13000`。
-- 不能只配置 `h5-dev.goodcms.cn -> 127.0.0.1:13020`，否则公开活动接口会返回 `502 Bad Gateway`。
-
 dev 镜像 tag 建议：
 
 ```text
@@ -121,22 +114,9 @@ ccr.ccs.tencentyun.com/gooes-goodcms/goose-api:<GITHUB_SHA>
 
 `dev` 用于快速覆盖，`<GITHUB_SHA>` 用于排查和临时回退。
 
-### 3.4 Dev workflow 触发
+### 3.4 Dev workflow 输入
 
-已新增 `.github/workflows/deploy-dev.yml`。
-
-push 自动发布规则：
-
-| 变更路径 | 自动发布 dev 服务 |
-| --- | --- |
-| `apps/api/**`、`docker/api.Dockerfile` | `api` |
-| `apps/admin/**`、`docker/admin.Dockerfile` | `admin` |
-| `apps/api` 中短视频 worker 相关代码、`docker/social-video-worker.Dockerfile` | `social-video-worker` |
-| COS 对账 worker、上传/文件服务相关代码 | `cos-reconcile-worker` |
-| `packages/domain/**`、lockfile、workspace 配置、`.dockerignore`、`deploy/docker-compose.dev.yml` | 全部 dev 服务 |
-| `docs/**`、`scripts/dev/**`、`supabase/migrations/**` | 不自动部署 |
-
-手动触发仍保留，用于强制重发单个服务：
+建议新增 `.github/workflows/deploy-dev.yml`，使用手动触发：
 
 ```yaml
 workflow_dispatch:
@@ -149,24 +129,27 @@ workflow_dispatch:
         - admin
         - social-video-worker
         - cos-reconcile-worker
+    run_migration:
+      description: "是否执行 dev 数据库 migration"
+      type: boolean
+      default: false
 ```
 
 行为：
 
 - `service=api`：只构建并重启 dev API。
 - `service=admin`：只构建并重启 dev admin。
-- `service=social-video-worker`：只构建并重启 dev 短视频 worker。
-- `service=cos-reconcile-worker`：复用 API 镜像并重启 dev COS 对账 worker。
+- `run_migration=true`：只允许执行 dev 数据库，不允许指向生产库。
 
-第一阶段不开放手动 `all`。开发验证应该明确选择单个服务，避免一次性全量重启导致排查边界变大。自动路径命中共享构建文件时才会发布全部 dev 服务。
+第一阶段不建议开放 `all`。开发验证应该明确选择单个服务，避免一次性全量重启导致排查边界变大。等 dev 链路稳定后，如果确实需要 `all`，再增加独立确认输入，例如 `confirm_all=yes`。不要用交互式 `read` 等待确认，GitHub Actions 手动 workflow 不适合等待终端输入。
 
 这样开发验证通常可以控制在：
 
 | 类型 | 预期耗时 |
 | --- | --- |
-| 只发 API | 1 到 2 分钟 |
-| 只发 Worker | 1 到 2 分钟 |
-| 只发 Admin | 5 到 10 分钟 |
+| 只发 API | 30 秒到 1 分钟 |
+| 只发 Worker | 30 秒到 1 分钟 |
+| 只发 Admin | 1 到 2 分钟 |
 
 ### 3.5 Dev 镜像更新规则
 
@@ -256,37 +239,11 @@ dev 数据库不建议长期直接复制完整生产数据，原因是：
 - 必要时从生产抽样数据，但必须脱敏。
 - seed 脚本必须可重复执行，不能因为重复插入导致失败。
 
-当前已落地的 dev seed：
-
-```text
-scripts/dev/seed-dev.sql
-```
-
-固定登录与测试数据：
-
-| 数据 | 值 |
-| --- | --- |
-| 默认租户 | 默认装修公司 |
-| 平台超管手机号 | `19900000001` |
-| 租户管理员手机号 | `19900000002` |
-| dev 客户手机号 | `19900001001`、`19900001002` |
-| dev 积分账户 | `is_test=true`，测试积分 `1000000` |
-
-执行 seed：
-
-```bash
-ssh -i docs/360video/goose.pem ubuntu@43.165.126.30 \
-  'set -a; . /opt/gooes-dev/docker/.env.dev.db; psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1' \
-  < scripts/dev/seed-dev.sql
-```
-
-seed 已验证可重复执行。后台 dev 环境开启 `AUTH_PHONE_LOGIN_WITHOUT_CODE=true`，首次用 `19900000001` 或 `19900000002` 登录时 API 会自动创建后台登录用的 `auth.users`，不需要 seed 直接写入 Supabase Auth 表。
-
-后续扩展固定测试数据建议：
+固定测试数据建议：
 
 | 数据 | 建议 |
 | --- | --- |
-| 租户 | 第一版复用 migration 创建的 `gooes_default`；如需多租户联调，再增加 `dev_decoration_a` |
+| 租户 | `dev_default`、`dev_decoration_a` |
 | 员工手机号 | 使用 `190/191` 段内部测试号 |
 | 客户手机号 | 使用内部测试号，不使用真实客户手机号 |
 | 微信 openid | dev 环境单独绑定，不复用生产映射 |
@@ -433,31 +390,19 @@ services:
 
 生产 compose 继续使用生产 env 文件。dev env 必须包含明确的环境标识，例如 `APP_ENV=development`、`NODE_ENV=development`、`BILLING_CHARGE_ENABLED=false`。
 
-API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管后台系统配置中的密钥类字段加密，必须在保存 WeChat、COS、短信、AI 等密钥前固定下来；如果已经存在密文配置，更换该变量会导致旧密文无法解密。
-
-### 阶段 2：新增 dev 发布 workflow
+### 阶段 2：新增手动 dev 发布 workflow
 
 目标：
 
 - 新增 `Deploy Dev` workflow。
-- 支持 push 自动按路径发布 `api/admin/worker`。
-- 支持手动选择 `api/admin/worker`，第一阶段不开放 `all`。
+- 支持选择 `api/admin/worker`，第一阶段不开放 `all`。
 - dev 镜像 tag 使用 `dev` + `GITHUB_SHA`。
 
 验收：
 
 - 只改 API 时，可以只发布 API。
 - 只改 admin 时，可以只发布 admin。
-- 只改 docs、seed、migration 时，不触发 dev 部署。
 - workflow 日志能看到部署的 commit sha。
-- GitHub Actions Summary 能看到本次服务、commit、镜像 tag、健康状态、部署耗时、磁盘清理前后空间。
-
-清理策略：
-
-- dev 构建仍发生在 `gooes-prod-vm-0-3` runner，因此构建后必须清理退出容器、dangling 镜像和 24 小时以前的 build cache。
-- dev 服务器 `VM-0-11-ubuntu` 只负责运行和拉取镜像，每次部署验收后清理未被运行容器引用的旧镜像和旧 build cache。
-- 两端都不执行 `docker volume prune`，避免误删持久化数据。
-- dev 回滚如果需要旧 SHA 镜像，优先从腾讯 CCR 重新拉取，不依赖服务器本地长期保留镜像。
 
 ### 阶段 3：数据库 migration dev 预演
 
@@ -466,16 +411,12 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 - dev DB 可以执行 migration。
 - migration 执行不影响生产。
 - 建立 dev seed 数据。
-- 新增手动 workflow `Migrate Dev Database`，统一承载 dev migration 的计划、执行和验收摘要。
 
 验收：
 
 - 从空 dev DB 执行全部 migration 成功。
 - seed 后能登录 dev admin。
 - 小程序开发版能登录 dev API。
-- `plan` 模式能列出待执行 migration 且不改库。
-- `apply` 模式只执行 dev 库缺失的 migration，并写入 `supabase_migrations.schema_migrations`。
-- workflow 会校验 dev project ref，不能误连生产库。
 
 ### 阶段 4：生产发布收口
 
@@ -487,7 +428,7 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 
 验收：
 
-- 普通开发 push 不会自动影响生产，只会按代码路径影响 dev。
+- 普通开发 push 不会自动影响生产。
 - 生产发布有明确版本和回滚点。
 - 生产 DB 操作有备份和执行记录。
 
@@ -497,7 +438,7 @@ API 环境还必须包含 `APP_CONFIG_ENCRYPTION_KEY`。这个变量用于超管
 
 1. 先开 `api-dev.goodcms.cn` 和 `admin-dev.goodcms.cn`，让 admin、小程序、后端有稳定联调地址。
 2. 新增 dev 数据库，禁止开发调试直接写生产库。
-3. 新增 `Deploy Dev` workflow，支持按服务自动发布和手动补发，生产 workflow 改为验收后触发。
+3. 新增手动 `Deploy Dev` workflow，支持按服务发布，生产 workflow 改为验收后触发。
 
 这样开发速度会明显提升，同时不会牺牲生产稳定性。
 

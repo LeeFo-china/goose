@@ -206,64 +206,6 @@ apps/api/src/services/tenant-devices.ts
 - 校验项目租户。
 - 统一做设备资产归属判断。
 - 处理第三方设备和本地资产的合并展示。
-- 平台超管可按租户、厂商、状态、绑定状态检索全量设备资产。
-
-### 平台设备资产视图
-
-新增平台超管接口：
-
-```http
-GET /platform/tenant-devices?page=1&pageSize=20
-```
-
-支持参数：
-
-| 参数 | 说明 |
-| --- | --- |
-| `tenant_id` | 按租户过滤 |
-| `vendor` | 按厂商过滤：`ezviz` / `tencent_iotvideo_industry` |
-| `status` | 按设备状态过滤：`online` / `offline` / `unknown` |
-| `only_unbound` | 仅看未绑定项目摄像头的资产 |
-| `keyword` | 搜索设备名、设备 ID、通道 ID |
-
-返回中补充租户、来源项目、绑定项目、绑定摄像头的轻量信息，便于平台排查设备归属：
-
-```json
-{
-  "tenant": { "id": "租户ID", "name": "装修公司", "slug": "tenant-slug" },
-  "source_project": { "id": "项目ID", "name": "来源项目" },
-  "bound_project": { "id": "项目ID", "name": "当前绑定项目" },
-  "bound_camera": { "id": "摄像头ID", "name": "当前摄像头" }
-}
-```
-
-Admin 新增页面：
-
-```text
-/platform/devices
-```
-
-用于查看全平台设备资产归属，并提供第一版平台侧设备运维能力。租户侧仍在工地监控页维护自己的设备资产池。
-
-第一版平台设备运维能力：
-
-- 对单个设备资产执行同步。
-- 查看腾讯云设备接入信息和 SIP 服务器配置。
-- 查询腾讯云设备当前 SIP 密码。
-- 重置腾讯云设备 SIP 密码。
-- 所有写操作记录到 `platform_audit_logs`。
-
-第一版仍不开放平台侧归属修改、删除资产、直接绑定项目。
-
-### 租户端设备接入页
-
-租户工地监控页的“设备接入”tab 只保留“设备资产池”作为主入口：
-
-- 资产池头部展示总数、未绑定数、在线数。
-- “新增设备”放在资产池头部，当前创建腾讯云设备。
-- “同步资产”放在资产池头部，用于补齐当前租户已有设备的第三方通道。
-- 不再常驻展示“腾讯云设备与通道”和“萤石设备通道”底层列表。
-- 第三方通道列表接口保留给运维排查或后续弹窗式纳入资产使用。
 
 ### 腾讯云创建设备
 
@@ -278,15 +220,14 @@ POST /projects/:project_id/cameras/tencent-devices
 1. `resolveActor` 校验员工有 `project.update`。
 2. 读取项目并确认 `project.tenant_id = actor.tenantId`。
 3. 调腾讯云 `CreateDevice`。
-4. 如果云端已有同名设备，后端自动追加 4 位短后缀后再创建，例如 `客厅IPC` -> `客厅IPC-1234`。
-5. 写入 `tenant_devices`：
+4. 写入 `tenant_devices`：
    - `tenant_id = actor.tenantId`
    - `source_project_id = project_id`
    - `vendor = tencent_iotvideo_industry`
    - `vendor_device_serial = DeviceId`
    - `vendor_device_code = DeviceCode`
    - `created_by = actor.employeeId`
-6. 返回设备接入信息；如发生自动改名，返回 `original_device_name` 和 `name_adjusted=true`，Admin 在成功弹窗提示最终名称。
+5. 返回设备接入信息。
 
 ### 腾讯云/萤石设备列表
 
@@ -301,13 +242,6 @@ POST /projects/:project_id/cameras/tencent-devices
    - 已绑定到其他租户的设备：展示为已占用，隐藏详情。
    - 不在 `tenant_devices` 且未绑定的第三方设备：默认不展示给租户端。
 4. 平台超管可以查看全部。
-
-已落地补充：
-
-- 第三方设备列表同时读取 `project_cameras` 和 `tenant_devices`。
-- 已纳入当前租户资产池但未绑定项目的通道，展示为“已纳入资产”。
-- 已纳入其他租户资产池的通道，展示为“其他租户资产”，不允许再次纳入。
-- 只有既未绑定项目、也未纳入任何租户资产池的通道，才显示“纳入资产”。
 
 ### 绑定项目摄像头
 
@@ -458,36 +392,6 @@ project.update
 - 删除为软删除。
 - 已绑定项目的设备资产不能直接删除，需要先解绑项目摄像头。
 - 删除本地资产不等于删除腾讯云/萤石远端设备。
-
-### 同步租户设备资产
-
-```http
-POST /tenant-devices/sync
-Authorization: Bearer <admin-token>
-```
-
-权限：
-
-```text
-project.update
-```
-
-说明：
-
-- 后端只同步当前租户已经拥有的设备资产对应的第三方通道。
-- 不会把平台共享第三方设备池里的陌生设备自动纳入租户。
-- 腾讯云设备创建后如果先只有设备级资产，待通道上报后可通过该接口补齐通道资产。
-- 萤石会按当前租户已有设备序列号同步通道状态和通道信息。
-
-返回：
-
-```json
-{
-  "created_count": 1,
-  "updated_count": 2,
-  "total_count": 3
-}
-```
 
 ### 手动纳入设备资产
 
@@ -654,15 +558,12 @@ Admin：
   - `POST /tenant-devices`
   - `PATCH /tenant-devices/:id`
   - `DELETE /tenant-devices/:id`
-  - `POST /tenant-devices/sync`
 - 腾讯云创建设备成功后，会立即写入一条当前租户的设备级资产。
 - 项目摄像头绑定成功后，会写入或更新对应通道资产，并记录 `bound_project_id`、`bound_camera_id`。
 - 项目摄像头解绑后，不删除设备资产，只清空绑定字段。
 - 摄像头状态刷新时，同步更新 `tenant_devices.status`、`raw_status`、`last_synced_at`。
-- Admin 设备资产区已提供“同步资产”，用于把当前租户已有设备的第三方通道补齐到资产池。
 
 暂未切换：
 
-- Admin 工地监控绑定弹窗已切换为优先读取 `tenant_devices?only_unbound=true`。
-- 第三方设备通道列表保留为“纳入资产”入口；通道纳入资产后，再进入绑定弹窗绑定项目。
-- 小程序仍不直接接入 `tenant_devices`，只读取项目下已绑定摄像头。
+- Admin 工地监控绑定弹窗仍沿用现有第三方设备通道列表，避免上线后租户看不到未同步设备。
+- 第三方设备列表暂未强制只展示 `tenant_devices` 内资产；后续可在 admin 完成资产池交互后切换。
