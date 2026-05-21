@@ -19,6 +19,7 @@
 - [Admin 客户状态机对接文档](./admin/2026-05-21-customer-status-machine-integration.md)
 - [小程序客户项目状态联动对接文档](./wechat/2026-05-21-customer-project-status-linkage.md)
 - [Admin 客户项目状态联动对接文档](./admin/2026-05-21-customer-project-status-linkage.md)
+- [Admin 状态机对接总览](./admin/README.md)
 - [小程序状态动作和时间线对接文档](./wechat/2026-05-21-status-actions-and-transition-timeline.md)
 - [Admin 状态动作和时间线对接文档](./admin/2026-05-21-status-actions-and-transition-timeline.md)
 
