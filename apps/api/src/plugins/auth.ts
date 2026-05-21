@@ -5,6 +5,8 @@ import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { userIdentityService } from "@/services/user-identities";
+import { customerCoreService } from "@/services/customer-core";
+import { projectSer } from "@/services/projects";
 
 type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
 
@@ -186,6 +188,53 @@ function prewarmEmployeeAuthContextForRequest(
       },
       "[auth-plugin] background stage completed",
     );
+
+    const homeStartedAt = Date.now();
+    void Promise.allSettled([
+      projectSer.listProjects({
+        authContext,
+        query: {
+          page: 1,
+          pageSize: 20,
+          ownership: "self",
+          mode: "home",
+        },
+      }),
+      customerCoreService.listCustomers({
+        authContext,
+        query: {
+          page: 1,
+          pageSize: 20,
+          mode: "home",
+        },
+      }),
+    ]).then((results) => {
+      request.log.info(
+        {
+          requestId: request.id,
+          stage: "prewarm_employee_home_lists",
+          durationMs: Date.now() - homeStartedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+          rejectedCount: results.filter((item) => item.status === "rejected").length,
+        },
+        "[auth-plugin] background stage completed",
+      );
+    }).catch((error) => {
+      request.log.warn(
+        {
+          requestId: request.id,
+          stage: "prewarm_employee_home_lists",
+          durationMs: Date.now() - homeStartedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+          error: error instanceof Error
+            ? { name: error.name, message: error.message }
+            : { message: String(error) },
+        },
+        "[auth-plugin] background stage failed",
+      );
+    });
   }).catch((error) => {
     request.log.warn(
       {

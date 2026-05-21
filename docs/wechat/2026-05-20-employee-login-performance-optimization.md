@@ -1569,6 +1569,7 @@ API 行为：
 - home 模式分页使用 `pageSize + 1` lookahead 判断是否还有下一页，`pagination.total` 是轻量估算值，只能用于首页判断是否还有更多，不应展示为精确总数。
 - `/employee/bootstrap` 和 `/auth` 后台预热已改为预热 home 模式缓存；小程序端延迟请求必须带同样的 `mode=home` 才能命中预热/in-flight/cache。
 - home 模式列表服务端短缓存已延长到 60 秒，缓存 key 会标准化角色和权限数组，减少 bootstrap 预热与页面延迟请求之间的缓存错位。
+- `/employee/bootstrap` 的 auth plugin 阶段会在 auth context 预热完成后立即启动 home 列表预热，让小程序延迟请求更容易复用 in-flight/cache。
 
 小程序端需要对接：
 
