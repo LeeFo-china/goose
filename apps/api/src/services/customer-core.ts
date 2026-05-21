@@ -8,6 +8,8 @@ import type { CustomerListQueryType } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerFollowUpService } from "@/services/customer-follow-ups";
+import { customerStatusService } from "@/services/customer-status";
+import type { CustomerStatusTransitionInput } from "@/schema/customer";
 
 const CUSTOMER_LIST_CACHE_TTL_MS = 60_000;
 
@@ -126,6 +128,11 @@ class CustomerCoreService {
       expiresAt: now + CUSTOMER_LIST_CACHE_TTL_MS,
       value,
     });
+  }
+
+  private invalidateListCache() {
+    this.listCache.clear();
+    this.listInFlight.clear();
   }
 
   async listCustomers(input: {
@@ -284,7 +291,9 @@ class CustomerCoreService {
   }
 
   async createCustomer(payload: Record<string, unknown>) {
-    return customerCoreRepository.create(payload);
+    const customer = await customerCoreRepository.create(payload);
+    this.invalidateListCache();
+    return customer;
   }
 
   async getRequiredCustomerAccess(input: {
@@ -319,6 +328,51 @@ class CustomerCoreService {
     payload: Record<string, unknown>;
   }) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const hasStatusChange = Object.prototype.hasOwnProperty.call(
+      input.payload,
+      "status",
+    );
+    if (hasStatusChange) {
+      const existing = await customerCoreRepository.findById({
+        customerId: input.customerId,
+        tenantId,
+      });
+
+      if (!existing) {
+        throw Errors.badRequest("客户不存在");
+      }
+
+      const transitionPayload = customerStatusService.buildTransitionPayloadFromStatus({
+        existing,
+        nextStatus: input.payload.status,
+      });
+      if (!transitionPayload) {
+        const patch = { ...input.payload };
+        delete patch.status;
+        if (Object.keys(patch).length === 0) {
+          return existing;
+        }
+
+        const customer = await customerCoreRepository.updateById({
+          customerId: input.customerId,
+          tenantId,
+          payload: patch,
+        });
+        this.invalidateListCache();
+        return customer;
+      }
+
+      const customer = await customerStatusService.transitionCustomerStatus({
+        authContext: input.authContext,
+        customerId: input.customerId,
+        payload: transitionPayload,
+        patch: input.payload,
+        existing,
+      });
+      this.invalidateListCache();
+      return customer;
+    }
+
     if (Object.keys(input.payload).length === 0) {
       const customer = await customerCoreRepository.findById({
         customerId: input.customerId,
@@ -332,11 +386,23 @@ class CustomerCoreService {
       return customer;
     }
 
-    return customerCoreRepository.updateById({
+    const customer = await customerCoreRepository.updateById({
       customerId: input.customerId,
       tenantId,
       payload: input.payload,
     });
+    this.invalidateListCache();
+    return customer;
+  }
+
+  async transitionCustomerStatus(input: {
+    authContext: AuthContext;
+    customerId: string;
+    payload: CustomerStatusTransitionInput;
+  }) {
+    const customer = await customerStatusService.transitionCustomerStatus(input);
+    this.invalidateListCache();
+    return customer;
   }
 
   async getCustomerDetail(input: {
@@ -383,10 +449,20 @@ class CustomerCoreService {
       "customer.update",
     );
 
-    return customerCoreRepository.markInvalid({
+    const invalidatedCustomer = await customerStatusService.transitionCustomerStatus({
+      authContext: input.authContext,
       customerId: input.customerId,
-      tenantId,
+      payload: {
+        action: "mark_invalid",
+        reason: "通过删除客户接口作废",
+        metadata: {
+          source: "DELETE /customers/:id",
+        },
+      },
+      existing: customer,
     });
+    this.invalidateListCache();
+    return invalidatedCustomer;
   }
 
   private async assertCanAccessCustomer(

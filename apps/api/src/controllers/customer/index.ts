@@ -5,6 +5,7 @@ import {
   BatchAssignCustomerOwnerSchema,
   CreateCustomerSchema,
   CustomerListQuerySchema,
+  CustomerStatusTransitionSchema,
   UpdateCustomerSchema,
 } from "@/schema/customer";
 import {
@@ -708,6 +709,31 @@ class CustomerController extends TenantBaseController<
         customer,
         await customerPhonePrivacyService.createPrivacyContext(authContext),
       ),
+    );
+  }
+
+  @Post("/customers/:id/status-transition")
+  async transitionCustomerStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const result = CustomerStatusTransitionSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const customer = await customerCoreService.transitionCustomerStatus({
+      authContext,
+      customerId: idVerify.data.id,
+      payload: result.data,
+    });
+
+    return ResponseHandler.success(
+      await this.buildCustomerDetailResponse(customer, {
+        phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+          authContext,
+        ),
+        tenantId: authContext.tenantId,
+      }),
     );
   }
 

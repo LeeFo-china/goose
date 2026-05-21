@@ -93,3 +93,43 @@ bun run api:build
 bun run check:permission-boundaries
 git diff --check
 ```
+
+## 2026-05-21 阶段 3 客户状态机最小闭环
+
+已完成：
+
+- 在 `packages/domain/src/customer.ts` 增加客户状态动作、动作配置、流转解析、旧 status 目标推断和可执行动作枚举能力。
+- 增加 `CustomerStatusTransitionSchema`，客户状态变更请求改为动作驱动。
+- 新增 `customer_status_transition_logs` migration，用于记录客户状态流转日志。
+- 新增 `customerStatusTransitionRepository`，负责写入客户状态流转日志。
+- 新增 `customerStatusService.transitionCustomerStatus()`，集中处理状态动作校验、原因必填校验、客户更新和日志写入。
+- 新增 `POST /customers/:id/status-transition`。
+- 改造 `PATCH /customers/:id`：如果 payload 包含 `status`，会根据当前状态和目标状态推断动作并走状态机；不包含 `status` 时保持原有更新行为。
+- 改造 `DELETE /customers/:id`：保留作废接口语义，内部改为 `mark_invalid` 状态动作并写流转日志。
+- 补充小程序对接文档：
+  - `docs/status-machine-remediation/wechat/2026-05-21-customer-status-machine-integration.md`
+- 补充 Admin 对接文档：
+  - `docs/status-machine-remediation/admin/2026-05-21-customer-status-machine-integration.md`
+
+当前规则：
+
+- `invalid` 是终态，默认不允许恢复。
+- `contracted` 默认不允许作废或回退。
+- `mark_dormant` 和 `mark_invalid` 必须传 `reason`。
+- 历史 `PATCH /customers/:id` 直接传 `status` 仍兼容，但非法跳转和缺少原因会返回 400。
+
+待后续阶段处理：
+
+- 项目签约和客户 `contracted` 状态联动。
+- 客户签约动作是否必须创建或关联项目。
+- 状态流转日志列表接口和 Admin 展示。
+
+阶段 3 验证命令：
+
+```bash
+bun run api:typecheck
+cd packages/domain && bun run build
+bun run api:build
+bun run check:permission-boundaries
+git diff --check
+```

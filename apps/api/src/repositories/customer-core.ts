@@ -34,6 +34,7 @@ export type CustomerCoreAccessRow = {
   property_id?: string | null;
   tenant_id?: string | null;
   source?: string | null;
+  status?: string | null;
   douyin_screenshot_images?: unknown;
 };
 
@@ -244,7 +245,7 @@ class CustomerCoreRepository {
   async findAccessById(input: { customerId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, owner_id, property_id, tenant_id, source, douyin_screenshot_images")
+      .select("id, owner_id, property_id, tenant_id, source, status, douyin_screenshot_images")
       .eq("id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();

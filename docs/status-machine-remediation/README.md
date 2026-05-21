@@ -15,6 +15,8 @@
 - [执行记录](./2026-05-21-execution-record.md)
 - [小程序对接文档](./wechat/2026-05-21-project-status-machine-integration.md)
 - [Admin 对接文档](./admin/2026-05-21-project-status-machine-integration.md)
+- [小程序客户状态机对接文档](./wechat/2026-05-21-customer-status-machine-integration.md)
+- [Admin 客户状态机对接文档](./admin/2026-05-21-customer-status-machine-integration.md)
 
 ## 分阶段计划
 
@@ -66,7 +68,7 @@
 
 ### 阶段 3：客户状态机最小闭环
 
-状态：待执行
+状态：已完成
 
 交付物：
 
@@ -75,6 +77,12 @@
 - `customer_status_transition_logs` migration。
 - 专用接口 `POST /customers/:id/status-transition`。
 - 旧 `PATCH /customers/:id` 中的 `status` 更新收口到状态机。
+
+实现入口：
+
+- `POST /customers/:id/status-transition`
+- `PATCH /customers/:id`，当 payload 包含 `status` 时自动推断状态动作并走状态机校验。
+- `DELETE /customers/:id`，保留作废语义，内部改走 `mark_invalid` 动作并写日志。
 
 ### 阶段 4：客户和项目状态联动
 

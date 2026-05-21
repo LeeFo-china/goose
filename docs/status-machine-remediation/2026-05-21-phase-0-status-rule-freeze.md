@@ -66,12 +66,12 @@
 
 | Action | From | To | 前置条件 | 副作用 |
 | --- | --- | --- | --- | --- |
-| `start_following` | `potential`, `dormant` | `following` | 客户有效 | 写状态日志 |
+| `start_following` | `potential` | `following` | 客户有效 | 写状态日志 |
 | `mark_arrived` | `following` | `arrived` | 客户有效 | 写状态日志 |
 | `place_order` | `arrived`, `following` | `ordered` | 客户有效 | 写状态日志 |
 | `sign_contract` | `ordered`, `arrived`, `following` | `contracted` | 客户有效 | 可要求关联或创建项目 |
 | `mark_dormant` | `potential`, `following`, `arrived`, `ordered` | `dormant` | 必须传 `reason` | 写状态日志 |
-| `reactivate` | `dormant` | `following` | 客户有效 | 写状态日志 |
+| `reactivate` | `dormant` | `following` | 客户有效，避免和开始跟进动作语义重叠 | 写状态日志 |
 | `mark_invalid` | 非 `contracted`, 非 `invalid` | `invalid` | 必须传 `reason` | 写状态日志 |
 
 ## 待业务确认问题
@@ -88,4 +88,3 @@
 - 终态和恢复策略已明确。
 - 待确认问题有业务结论后，才能进入阶段 1 代码实现。
 - 后续每次规则变化都必须先改本文档，再改代码。
-

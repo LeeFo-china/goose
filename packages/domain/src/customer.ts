@@ -82,6 +82,128 @@ export const isCustomerStatus = (
   typeof value === 'string' &&
   CUSTOMER_STATUS_VALUES.includes(value as CustomerStatus);
 
+export const CUSTOMER_STATUS_ACTION_VALUES = [
+  'start_following',
+  'mark_arrived',
+  'place_order',
+  'sign_contract',
+  'mark_dormant',
+  'reactivate',
+  'mark_invalid',
+] as const;
+
+export type CustomerStatusAction = (typeof CUSTOMER_STATUS_ACTION_VALUES)[number];
+
+export interface CustomerStatusActionConfigItem {
+  label: string;
+  from: readonly CustomerStatus[];
+  to: CustomerStatus;
+  requiresReason?: boolean;
+}
+
+export const CustomerStatusActionConfig: Record<
+  CustomerStatusAction,
+  CustomerStatusActionConfigItem
+> = {
+  start_following: {
+    label: '开始跟进',
+    from: ['potential'],
+    to: 'following',
+  },
+  mark_arrived: {
+    label: '标记到店',
+    from: ['following'],
+    to: 'arrived',
+  },
+  place_order: {
+    label: '客户下定',
+    from: ['arrived', 'following'],
+    to: 'ordered',
+  },
+  sign_contract: {
+    label: '客户签约',
+    from: ['ordered', 'arrived', 'following'],
+    to: 'contracted',
+  },
+  mark_dormant: {
+    label: '标记沉睡',
+    from: ['potential', 'following', 'arrived', 'ordered'],
+    to: 'dormant',
+    requiresReason: true,
+  },
+  reactivate: {
+    label: '重新激活',
+    from: ['dormant'],
+    to: 'following',
+  },
+  mark_invalid: {
+    label: '作废客户',
+    from: ['potential', 'following', 'arrived', 'ordered', 'dormant'],
+    to: 'invalid',
+    requiresReason: true,
+  },
+};
+
+export const isCustomerStatusAction = (
+  value: string | null | undefined,
+): value is CustomerStatusAction =>
+  typeof value === 'string' &&
+  CUSTOMER_STATUS_ACTION_VALUES.includes(value as CustomerStatusAction);
+
+export function resolveCustomerStatusTransition(input: {
+  action: CustomerStatusAction;
+  fromStatus: CustomerStatus;
+}): { fromStatus: CustomerStatus; toStatus: CustomerStatus } | null {
+  const config = CustomerStatusActionConfig[input.action];
+  if (!config.from.includes(input.fromStatus)) {
+    return null;
+  }
+
+  return {
+    fromStatus: input.fromStatus,
+    toStatus: config.to,
+  };
+}
+
+export function inferCustomerStatusAction(input: {
+  fromStatus: CustomerStatus;
+  toStatus: CustomerStatus;
+}): CustomerStatusAction | null {
+  const matches = CUSTOMER_STATUS_ACTION_VALUES.filter((action) => {
+    const transition = resolveCustomerStatusTransition({
+      action,
+      fromStatus: input.fromStatus,
+    });
+
+    return transition?.toStatus === input.toStatus;
+  });
+
+  return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+export function listCustomerStatusActions(input: {
+  fromStatus: CustomerStatus;
+}) {
+  return CUSTOMER_STATUS_ACTION_VALUES
+    .map((action) => {
+      const transition = resolveCustomerStatusTransition({
+        action,
+        fromStatus: input.fromStatus,
+      });
+
+      return transition
+        ? {
+            action,
+            label: CustomerStatusActionConfig[action].label,
+            from_status: transition.fromStatus,
+            to_status: transition.toStatus,
+            requires_reason: Boolean(CustomerStatusActionConfig[action].requiresReason),
+          }
+        : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
 export const isCustomerSource = (
   value: string | null | undefined,
 ): value is CustomerSource =>

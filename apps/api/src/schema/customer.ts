@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   CUSTOMER_ORIGIN_VALUES,
   CUSTOMER_SOURCE_VALUES,
+  CUSTOMER_STATUS_ACTION_VALUES,
   CUSTOMER_STATUS_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
@@ -127,9 +128,23 @@ export const UpdateCustomerSchema = CustomerSchema.partial().extend({
   property: CustomerEmbeddedPropertySchema.optional(),
 });
 
+export const CustomerStatusTransitionSchema = z.object({
+  action: z.enum(CUSTOMER_STATUS_ACTION_VALUES, {
+    message: "无效的客户状态动作",
+  }),
+  reason: z.preprocess(
+    normalizeOptionalText,
+    z.string().max(500, "状态变更原因过长").nullable().optional(),
+  ),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+});
+
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
 export type CreateCustomerSchemaType = z.infer<typeof CreateCustomerSchema>;
 export type UpdateCustomerSchemaType = z.infer<typeof UpdateCustomerSchema>;
+export type CustomerStatusTransitionInput = z.infer<
+  typeof CustomerStatusTransitionSchema
+>;
 
 export const CustomerListQuerySchema = PaginationQuerySchema.extend({
   status: optionalQueryValue(z.enum(CUSTOMER_STATUS_VALUES, {
