@@ -54,7 +54,7 @@
 | `start_measure` | `lead` | `measure` | 项目存在，未作废 | 写状态日志 |
 | `start_negotiation` | `measure` | `negotiating` | 项目存在，未作废 | 写状态日志 |
 | `start_design` | `negotiating` | `designing` | 项目未作废 | 写状态日志 |
-| `sign_contract` | `negotiating`, `designing` | `signed` | `signed_amount > 0` | 写状态日志，必要时同步客户为 `contracted` |
+| `sign_contract` | `designing` | `signed` | `signed_amount > 0`，必须已开始设计 | 写状态日志，必要时同步客户为 `contracted` |
 | `start_construction` | `signed` | `constructing` | 项目已签约、未暂停、未作废 | 写状态日志 |
 | `pause_project` | `measure`, `negotiating`, `signed`, `designing`, `constructing`, `acceptance`, `after_sale` | `on_hold` | 必须传 `reason` | 记录 `paused_from_status` |
 | `resume_project` | `on_hold` | 暂停前状态 | 存在 `paused_from_status` | 清理或归档暂停上下文 |

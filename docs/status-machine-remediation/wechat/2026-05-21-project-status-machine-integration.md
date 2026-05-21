@@ -43,8 +43,8 @@ Content-Type: application/json
 | --- | --- |
 | `start_measure` | 开始量房 |
 | `start_negotiation` | 开始谈单 |
-| `sign_contract` | 项目签约 |
 | `start_design` | 开始设计 |
+| `sign_contract` | 项目签约 |
 | `start_construction` | 开始施工 |
 | `pause_project` | 暂停项目 |
 | `resume_project` | 恢复项目 |
@@ -56,6 +56,7 @@ Content-Type: application/json
 ## 必填规则
 
 - `sign_contract` 必须传 `signed_amount > 0`。
+- `sign_contract` 仅允许项目处于 `designing` 时执行，不能从 `negotiating` 跳过设计直接签约。
 - `sign_contract` 如果项目有关联客户，会同步客户为 `contracted`。
 - 关联客户必须处于 `designing / contracted`；如果仍是 `potential / following / arrived / ordered / dormant / invalid`，后端返回 400。
 - `pause_project` 必须传 `reason`。

@@ -89,7 +89,7 @@ Content-Type: application/json
 | `start_measure` | `lead` | `measure` | 主按钮 |
 | `start_negotiation` | `measure` | `negotiating` | 主按钮 |
 | `start_design` | `negotiating` | `designing` | 主按钮 |
-| `sign_contract` | `negotiating/designing` | `signed` | 主按钮，要求金额 |
+| `sign_contract` | `designing` | `signed` | 主按钮，要求金额 |
 | `start_construction` | `signed` | `constructing` | 主按钮 |
 | `pause_project` | 多个进行中状态 | `on_hold` | 危险按钮，要求原因 |
 | `resume_project` | `on_hold` | 暂停前状态 | 主按钮 |
@@ -106,7 +106,7 @@ Content-Type: application/json
 
 动作按钮建议排序：
 
-1. 主推进动作：`start_measure`、`start_negotiation`、`sign_contract`、`start_design`、`start_construction`、`start_acceptance`、`complete_project`、`start_after_sale`、`resume_project`。
+1. 主推进动作：`start_measure`、`start_negotiation`、`start_design`、`sign_contract`、`start_construction`、`start_acceptance`、`complete_project`、`start_after_sale`、`resume_project`。
 2. 暂停动作：`pause_project`。
 3. 危险动作：`mark_invalid`。
 
@@ -273,7 +273,8 @@ Admin 端需要处理以下 400 错误：
 - 编辑已有项目保存时，请求 payload 不包含 `status`。
 - 项目详情页能看到当前状态标签和动作按钮。
 - `lead` 项目能执行 `start_measure`。
-- `negotiating` 项目签约时必须填写 `signed_amount > 0`。
+- `negotiating` 项目只能先执行 `start_design`，不能直接签约。
+- `designing` 项目签约时必须填写 `signed_amount > 0`。
 - 项目签约成功后，项目状态变为 `signed`。
 - 项目有关联客户且客户状态满足要求时，签约成功后客户状态变为 `contracted`。
 - `pause_project` 未填写原因不能提交。

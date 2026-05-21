@@ -243,6 +243,27 @@ function projectActionLabel(action: string) {
     : action;
 }
 
+function blockedProjectActions(currentStatus: string | null | undefined) {
+  if (currentStatus === "negotiating") {
+    return [
+      {
+        action: "sign_contract",
+        label: "项目签约",
+        reason: "需先开始设计",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function isProjectStatusActionVisible(
+  actions: ProjectStatusActionItem[],
+  action: string,
+) {
+  return actions.some((item) => item.action === action);
+}
+
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
@@ -470,6 +491,9 @@ function ProjectStatusPanel({
 
   const currentStatus = actionsData?.current_status || project.status;
   const actions = actionsData?.actions || [];
+  const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
+    !isProjectStatusActionVisible(actions, item.action)
+  );
 
   return (
     <section className="rounded-md border bg-muted/20 p-4">
@@ -504,6 +528,19 @@ function ProjectStatusPanel({
               onClick={() => openActionDialog(action)}
             >
               {action.label}
+            </Button>
+          ))}
+          {blockedActions.map((action) => (
+            <Button
+              key={action.action}
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled
+              title={action.reason}
+            >
+              {action.label}
+              <span className="text-xs text-muted-foreground">({action.reason})</span>
             </Button>
           ))}
           {!loading && actions.length === 0 ? (

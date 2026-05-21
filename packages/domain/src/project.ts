@@ -45,8 +45,8 @@ export const isProjectStatus = (
 export const PROJECT_STATUS_ACTION_VALUES = [
   'start_measure',
   'start_negotiation',
-  'sign_contract',
   'start_design',
+  'sign_contract',
   'start_construction',
   'pause_project',
   'resume_project',
@@ -79,15 +79,15 @@ export const ProjectStatusActionConfig: Record<
     from: ['measure'],
     to: 'negotiating',
   },
-  sign_contract: {
-    label: '项目签约',
-    from: ['negotiating', 'designing'],
-    to: 'signed',
-  },
   start_design: {
     label: '开始设计',
     from: ['negotiating'],
     to: 'designing',
+  },
+  sign_contract: {
+    label: '项目签约',
+    from: ['designing'],
+    to: 'signed',
   },
   start_construction: {
     label: '开始施工',

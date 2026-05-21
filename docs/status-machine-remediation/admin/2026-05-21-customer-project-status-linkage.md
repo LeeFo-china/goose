@@ -144,10 +144,10 @@ Admin 展示建议：
 
 ## 验收清单
 
-- `negotiating` 项目详情页展示“项目签约”按钮。
-- 点击“项目签约”弹出签约弹窗，要求填写签约金额。
+- `negotiating` 项目详情页展示“开始设计”按钮，不展示“项目签约”按钮。
+- `designing` 项目详情页展示“项目签约”按钮，点击后弹出签约弹窗，要求填写签约金额。
 - 未填写 `signed_amount` 或金额小于等于 0 时不能提交。
-- 关联客户为 `potential / dormant / invalid` 时，前端禁用或提示不能签约。
+- 关联客户为 `potential / following / arrived / ordered / dormant / invalid` 时，前端禁用或提示不能签约。
 - 关联客户为 `designing` 时，签约成功后客户变为 `contracted`。
 - 关联客户已是 `contracted` 时，项目签约成功且不重复写客户状态日志。
 - 项目无关联客户时，当前阶段签约不被阻断。

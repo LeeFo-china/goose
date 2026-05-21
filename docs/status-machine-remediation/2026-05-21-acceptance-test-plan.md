@@ -82,7 +82,8 @@ git diff --check
 - 项目 `sign_contract` 成功后，客户可同步为 `contracted`。
 - 客户已是 `contracted` 时，项目签约不重复写无意义客户状态日志。
 - 多项目客户中，一个项目 `invalid` 不得自动把客户改为 `invalid`。
-- 关联客户处于 `potential / dormant / invalid` 时，项目签约返回 400，提示先推进客户状态。
+- 项目处于 `negotiating` 时不能直接签约，必须先执行 `start_design`。
+- 关联客户处于 `potential / following / arrived / ordered / dormant / invalid` 时，项目签约返回 400，提示先推进客户到设计中。
 - 客户 `sign_contract` 如后续要求项目关联，未传项目信息时返回 400；当前阶段暂不强制。
 
 ## 阶段 5：端侧动作化验收

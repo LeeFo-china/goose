@@ -229,7 +229,7 @@ git diff --check
 - 客户 `sign_contract` 收口为仅 `designing -> contracted`。
 - 项目状态流转调整为：
   - `negotiating -> designing` 使用 `start_design`。
-  - `designing / negotiating -> signed` 使用 `sign_contract`。
+  - `designing -> signed` 使用 `sign_contract`，不能从 `negotiating` 跳过设计直接签约。
   - `signed -> constructing` 使用 `start_construction`。
 - 项目签约联动客户签约时，关联客户必须为 `designing / contracted`。
 - 远端 Supabase 已更新 `customer_status_transition_logs` 约束，允许 `start_design` 和 `designing`。
