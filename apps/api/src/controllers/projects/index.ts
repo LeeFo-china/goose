@@ -1,5 +1,9 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
-import { CreateProjectSchema, UpdateProjectSchema } from "@/schema/projects";
+import {
+  CreateProjectSchema,
+  ProjectStatusTransitionSchema,
+  UpdateProjectSchema,
+} from "@/schema/projects";
 import { Errors } from "@/errors/error-factory";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -591,6 +595,24 @@ class ProjectController extends TenantBaseController<
       authContext,
       projectId: idVerify.data.id,
     });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/projects/:id/status-transition")
+  async transitionProjectStatus(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const result = ProjectStatusTransitionSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectSer.transitionProjectStatusForTenant({
+      authContext,
+      projectId: idVerify.data.id,
+      payload: result.data,
+    });
+
     return ResponseHandler.success(data);
   }
 

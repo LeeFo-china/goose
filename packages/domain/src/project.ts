@@ -42,6 +42,186 @@ export const isProjectStatus = (
   typeof value === 'string' &&
   PROJECT_STATUS_VALUES.includes(value as ProjectStatus);
 
+export const PROJECT_STATUS_ACTION_VALUES = [
+  'start_measure',
+  'start_negotiation',
+  'sign_contract',
+  'start_design',
+  'start_construction',
+  'pause_project',
+  'resume_project',
+  'start_acceptance',
+  'complete_project',
+  'start_after_sale',
+  'mark_invalid',
+] as const;
+
+export type ProjectStatusAction = (typeof PROJECT_STATUS_ACTION_VALUES)[number];
+
+export interface ProjectStatusActionConfigItem {
+  label: string;
+  from: readonly ProjectStatus[];
+  to: ProjectStatus | 'paused_from_status';
+  requiresReason?: boolean;
+}
+
+export const ProjectStatusActionConfig: Record<
+  ProjectStatusAction,
+  ProjectStatusActionConfigItem
+> = {
+  start_measure: {
+    label: '开始量房',
+    from: ['lead'],
+    to: 'measure',
+  },
+  start_negotiation: {
+    label: '开始谈单',
+    from: ['measure'],
+    to: 'negotiating',
+  },
+  sign_contract: {
+    label: '项目签约',
+    from: ['negotiating'],
+    to: 'signed',
+  },
+  start_design: {
+    label: '开始设计',
+    from: ['signed'],
+    to: 'designing',
+  },
+  start_construction: {
+    label: '开始施工',
+    from: ['signed', 'designing'],
+    to: 'constructing',
+  },
+  pause_project: {
+    label: '暂停项目',
+    from: [
+      'measure',
+      'negotiating',
+      'signed',
+      'designing',
+      'constructing',
+      'acceptance',
+      'after_sale',
+    ],
+    to: 'on_hold',
+    requiresReason: true,
+  },
+  resume_project: {
+    label: '恢复项目',
+    from: ['on_hold'],
+    to: 'paused_from_status',
+  },
+  start_acceptance: {
+    label: '开始验收',
+    from: ['constructing'],
+    to: 'acceptance',
+  },
+  complete_project: {
+    label: '项目完工',
+    from: ['constructing', 'acceptance'],
+    to: 'completed',
+  },
+  start_after_sale: {
+    label: '进入售后',
+    from: ['completed'],
+    to: 'after_sale',
+  },
+  mark_invalid: {
+    label: '作废项目',
+    from: [
+      'lead',
+      'measure',
+      'negotiating',
+      'signed',
+      'designing',
+      'constructing',
+      'on_hold',
+      'acceptance',
+      'after_sale',
+    ],
+    to: 'invalid',
+    requiresReason: true,
+  },
+};
+
+export const isProjectStatusAction = (
+  value: string | null | undefined,
+): value is ProjectStatusAction =>
+  typeof value === 'string' &&
+  PROJECT_STATUS_ACTION_VALUES.includes(value as ProjectStatusAction);
+
+export function resolveProjectStatusTransition(input: {
+  action: ProjectStatusAction;
+  fromStatus: ProjectStatus;
+  pausedFromStatus?: ProjectStatus | null;
+}): { fromStatus: ProjectStatus; toStatus: ProjectStatus } | null {
+  const config = ProjectStatusActionConfig[input.action];
+  if (!config.from.includes(input.fromStatus)) {
+    return null;
+  }
+
+  if (config.to === 'paused_from_status') {
+    if (!input.pausedFromStatus || input.pausedFromStatus === 'on_hold') {
+      return null;
+    }
+
+    return {
+      fromStatus: input.fromStatus,
+      toStatus: input.pausedFromStatus,
+    };
+  }
+
+  return {
+    fromStatus: input.fromStatus,
+    toStatus: config.to,
+  };
+}
+
+export function inferProjectStatusAction(input: {
+  fromStatus: ProjectStatus;
+  toStatus: ProjectStatus;
+  pausedFromStatus?: ProjectStatus | null;
+}): ProjectStatusAction | null {
+  const matches = PROJECT_STATUS_ACTION_VALUES.filter((action) => {
+    const transition = resolveProjectStatusTransition({
+      action,
+      fromStatus: input.fromStatus,
+      pausedFromStatus: input.pausedFromStatus,
+    });
+
+    return transition?.toStatus === input.toStatus;
+  });
+
+  return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+export function listProjectStatusActions(input: {
+  fromStatus: ProjectStatus;
+  pausedFromStatus?: ProjectStatus | null;
+}) {
+  return PROJECT_STATUS_ACTION_VALUES
+    .map((action) => {
+      const transition = resolveProjectStatusTransition({
+        action,
+        fromStatus: input.fromStatus,
+        pausedFromStatus: input.pausedFromStatus,
+      });
+
+      return transition
+        ? {
+            action,
+            label: ProjectStatusActionConfig[action].label,
+            from_status: transition.fromStatus,
+            to_status: transition.toStatus,
+            requires_reason: Boolean(ProjectStatusActionConfig[action].requiresReason),
+          }
+        : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
 export const PROJECT_VISIBILITY_STATUS_VALUES = [
   'inherit',
   'public',

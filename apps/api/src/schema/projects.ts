@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PaginationQuerySchema } from "./request";
 import {
   PROJECT_MEMBER_ROLE_CODE_VALUES,
+  PROJECT_STATUS_ACTION_VALUES,
   PROJECT_STATUS_VALUES,
   PROJECT_REFERRAL_RATE_BPS_MAX,
   PROJECT_REFERRAL_RATE_BPS_MIN,
@@ -103,10 +104,24 @@ export const CreateProjectSchema = ProjectBaseSchema.omit({
  */
 export const UpdateProjectSchema = CreateProjectSchema.partial();
 
+export const ProjectStatusTransitionSchema = z.object({
+  action: z.enum(PROJECT_STATUS_ACTION_VALUES, {
+    message: "无效的项目状态动作",
+  }),
+  reason: z.string().trim().max(500, "原因不能超过 500 个字符").nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  signed_amount: z.coerce
+    .number("签约金额必须是数字")
+    .min(0, "签约金额不能为负数")
+    .nullable()
+    .optional(),
+});
+
 // 导出类型
 export type ProjectType = z.infer<typeof ProjectBaseSchema>;
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
+export type ProjectStatusTransitionInput = z.infer<typeof ProjectStatusTransitionSchema>;
 
 // 3. 从 Zod 自动推导出 TypeScript 类型 (这样你就不需要手动写 type ProjectStatus = ...)
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;

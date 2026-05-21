@@ -1,5 +1,6 @@
 import {
     type CreateProjectInput,
+    type ProjectStatusTransitionInput,
     type ProjectListQuery,
     type UpdateProjectInput,
 } from "@/schema/projects";
@@ -13,6 +14,7 @@ import { projectRepository } from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
+import { projectStatusService } from "@/services/project-status";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60_000;
@@ -672,17 +674,55 @@ class ProjectService {
         }
 
         await this.assertProjectRelationsInTenant(input.payload, tenantId);
-        const project = await this.updateProject(
-            input.projectId,
+        const existing = await projectRepository.findById(input.projectId, tenantId);
+        if (!existing) {
+            throw Errors.badRequest("项目不存在");
+        }
+
+        const hasStatusChange = Object.prototype.hasOwnProperty.call(
             input.payload,
-            tenantId,
+            "status",
         );
+        const transitionPayload = hasStatusChange
+            ? projectStatusService.buildTransitionPayloadFromStatus({
+                existing,
+                nextStatus: input.payload.status,
+                signedAmount: input.payload.signed_amount ?? null,
+            })
+            : null;
+
+        const project = transitionPayload
+            ? await projectStatusService.transitionProjectStatus({
+                authContext: input.authContext,
+                projectId: input.projectId,
+                payload: transitionPayload,
+                patch: input.payload,
+                existing,
+            })
+            : await this.updateProject(
+                input.projectId,
+                input.payload,
+                tenantId,
+            );
         await projectMemberService.syncLegacyProjectMembers(input.projectId, {
             designer_id: input.payload.designer_id,
             supervisor_id: input.payload.supervisor_id,
         }, tenantId);
+        this.invalidatePublicProjectsCache();
+        this.invalidatePublicProjectCache(input.projectId);
         this.invalidatePublicProjectMembersCache(input.projectId);
 
+        return project;
+    }
+
+    async transitionProjectStatusForTenant(input: {
+        authContext: AuthContext;
+        projectId: string;
+        payload: ProjectStatusTransitionInput;
+    }) {
+        const project = await projectStatusService.transitionProjectStatus(input);
+        this.invalidatePublicProjectsCache();
+        this.invalidatePublicProjectCache(input.projectId);
         return project;
     }
 

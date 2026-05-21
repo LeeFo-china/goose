@@ -18,7 +18,7 @@
 
 ### 阶段 0：状态盘点和规则冻结
 
-状态：进行中
+状态：已完成
 
 交付物：
 
@@ -30,7 +30,7 @@
 
 ### 阶段 1：项目状态机最小闭环
 
-状态：待执行
+状态：已完成
 
 交付物：
 
@@ -39,6 +39,11 @@
 - `project_status_transition_logs` migration。
 - 专用接口 `POST /projects/:id/status-transition`。
 - 旧 `PATCH /projects/:id` 中的 `status` 更新收口到状态机。
+
+实现入口：
+
+- `POST /projects/:id/status-transition`
+- `PATCH /projects/:id`，当 payload 包含 `status` 时自动推断状态动作并走状态机校验。
 
 ### 阶段 2：项目状态副作用收口
 
@@ -90,4 +95,3 @@
 - 旧接口短期兼容，但不得绕过状态机。
 - repository 只负责数据读写，状态规则落在 domain/service。
 - 错误响应必须经过 `Errors.*` 包装。
-
