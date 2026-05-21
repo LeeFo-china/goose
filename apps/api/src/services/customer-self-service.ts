@@ -167,6 +167,17 @@ class CustomerSelfServiceService {
     return this.getCachedEntry(this.userProfileCache, authUserId)?.value ?? null;
   }
 
+  getCachedUserProfileEntryByAuthUserId(authUserId: string) {
+    const entry = this.getCachedEntry(this.userProfileCache, authUserId);
+    if (!entry) {
+      return null;
+    }
+
+    return {
+      value: entry.value,
+    };
+  }
+
   prewarmCustomerContext(input: {
     authUserId: string;
     customer: CustomerSelfServiceCustomerContextRow;

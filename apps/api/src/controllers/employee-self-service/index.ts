@@ -42,9 +42,11 @@ const EmployeeBootstrapQuerySchema = z.object({
 });
 
 const EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS = 15_000;
+const EMPLOYEE_BOOTSTRAP_PROFILE_WAIT_MS = 250;
 const MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE = 1_000;
 
 type EmployeeBootstrapQuery = z.infer<typeof EmployeeBootstrapQuerySchema>;
+type EmployeeBootstrapUserProfile = Awaited<ReturnType<typeof customerSelfServiceService.getUserProfileByAuthUserId>>;
 type EmployeeBootstrapProfile = ReturnType<EmployeeSelfServiceController["serializeAuthProfile"]>;
 type EmployeeBootstrapResponse = {
   context: AuthContext & { tenantId: string };
@@ -242,7 +244,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
 
   private serializeAuthProfile(
     authContext: AuthContext,
-    userProfile: Awaited<ReturnType<typeof customerSelfServiceService.getUserProfileByAuthUserId>>,
+    userProfile: EmployeeBootstrapUserProfile,
   ) {
     return {
       auth_user_id: authContext.authUserId,
@@ -253,6 +255,75 @@ class EmployeeSelfServiceController extends TenantBaseController {
       profile_completed_at: userProfile?.profile_completed_at ?? null,
       roles: authContext.roleCodes,
     };
+  }
+
+  private async getUserProfileForBootstrap(
+    request: FastifyRequest,
+    authContext: AuthContext & { tenantId: string },
+  ): Promise<{
+    userProfile: EmployeeBootstrapUserProfile;
+    source: "cache" | "remote" | "timeout" | "error";
+  }> {
+    const cached = customerSelfServiceService.getCachedUserProfileEntryByAuthUserId(
+      authContext.authUserId,
+    );
+    if (cached) {
+      return {
+        userProfile: cached.value,
+        source: "cache",
+      };
+    }
+
+    const profileRequest = customerSelfServiceService.getUserProfileByAuthUserId(
+      authContext.authUserId,
+    );
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<{ source: "timeout"; userProfile: null }>((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve({ source: "timeout", userProfile: null });
+      }, EMPLOYEE_BOOTSTRAP_PROFILE_WAIT_MS);
+    });
+
+    const result = await Promise.race([
+      profileRequest.then((userProfile) => ({
+        source: "remote" as const,
+        userProfile,
+      })).catch((error) => {
+        request.log.warn(
+          {
+            requestId: request.id,
+            employeeId: authContext.employeeId,
+            tenantId: authContext.tenantId,
+            error,
+          },
+          "[employee-bootstrap] user profile load failed",
+        );
+        return {
+          source: "error" as const,
+          userProfile: null,
+        };
+      }),
+      timeout,
+    ]);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    if (result.source === "timeout") {
+      void profileRequest.catch((error) => {
+        request.log.warn(
+          {
+            requestId: request.id,
+            employeeId: authContext.employeeId,
+            tenantId: authContext.tenantId,
+            error,
+          },
+          "[employee-bootstrap] deferred user profile load failed",
+        );
+      });
+    }
+
+    return result;
   }
 
   private async buildEmployeeBootstrapResponse(
@@ -269,10 +340,10 @@ class EmployeeSelfServiceController extends TenantBaseController {
     });
 
     const profileStartedAt = Date.now();
-    const [homeStats, taskSummary, userProfile] = await Promise.all([
+    const [homeStats, taskSummary, profileResult] = await Promise.all([
       homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
       tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
-      customerSelfServiceService.getUserProfileByAuthUserId(authContext.authUserId),
+      this.getUserProfileForBootstrap(request, authContext),
     ]);
 
     request.log.info(
@@ -283,14 +354,15 @@ class EmployeeSelfServiceController extends TenantBaseController {
         tenantId: authContext.tenantId,
         homeMode,
         tasksMode,
-        hasUserProfile: Boolean(userProfile),
+        profileSource: profileResult.source,
+        hasUserProfile: Boolean(profileResult.userProfile),
       },
       "[employee-bootstrap] synchronous data resolved",
     );
 
     const response = {
       context: authContext,
-      profile: this.serializeAuthProfile(authContext, userProfile),
+      profile: this.serializeAuthProfile(authContext, profileResult.userProfile),
       home_stats: homeStats,
       home_mode: homeMode,
       task_summary: taskSummary,

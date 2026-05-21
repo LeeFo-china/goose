@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { verifyToken } from "@/utils/jwt";
 import { fail } from "@/utils/response";
+import { authorizationService } from "@/services/authorization";
 import { userIdentityService } from "@/services/user-identities";
 
 type VerifiedJwtPayload = NonNullable<ReturnType<typeof verifyToken>>;
@@ -152,6 +153,52 @@ function isPureVisitorPayload(payload: VerifiedJwtPayload) {
     !payload.customer_id &&
     !payload.employee_id
   );
+}
+
+function shouldPrewarmEmployeeAuthContext(url: string, payload: VerifiedJwtPayload) {
+  return (
+    url === "/employee/bootstrap" &&
+    Boolean(payload.sub) &&
+    Boolean(payload.employee_id)
+  );
+}
+
+function prewarmEmployeeAuthContextForRequest(
+  request: FastifyRequest,
+  payload: VerifiedJwtPayload,
+) {
+  if (!payload.sub || !payload.employee_id) {
+    return;
+  }
+
+  const startedAt = Date.now();
+  void authorizationService.prewarmEmployeeAuthContext({
+    authUserId: payload.sub,
+    employeeId: payload.employee_id,
+  }).then((authContext) => {
+    request.log.info(
+      {
+        requestId: request.id,
+        stage: "prewarm_employee_auth_context",
+        durationMs: Date.now() - startedAt,
+        employeeId: authContext.employeeId,
+        tenantId: authContext.tenantId,
+      },
+      "[auth-plugin] background stage completed",
+    );
+  }).catch((error) => {
+    request.log.warn(
+      {
+        requestId: request.id,
+        stage: "prewarm_employee_auth_context",
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { message: String(error) },
+      },
+      "[auth-plugin] background stage failed",
+    );
+  });
 }
 
 function sendUnauthorized(appError: ReturnType<typeof Errors.unauthorized>, requestId: string) {
@@ -438,6 +485,10 @@ const authPlugin = (app: FastifyInstance) => {
       );
       request.user = payload;
       return;
+    }
+
+    if (shouldPrewarmEmployeeAuthContext(url, payload)) {
+      prewarmEmployeeAuthContextForRequest(request, payload);
     }
 
     await Promise.all([

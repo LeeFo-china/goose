@@ -1500,6 +1500,58 @@ GET /employee/bootstrap
 - 如果第二条仍慢且没有 cache hit，说明请求间隔超过 15 秒、query mode 不一致，或端上触发了不同 token / 不同员工上下文。
 - 如果 cache hit 已生效但用户仍体感慢，下一步继续看 `/customers` 和 `/projects/status` 是否还在首屏阻塞。
 
+## 2026-05-21 09:18 API bootstrap profile 短等待优化
+
+上一轮复测显示，token cache 命中后重复 bootstrap 已经降到 `1ms`，但冷 bootstrap 里 `[employee-bootstrap] synchronous data resolved` 仍可能等待用户 profile 约 `1s+`。
+
+本轮 API 已调整：
+
+- `/employee/bootstrap` 读取用户 profile 时优先使用 `customerSelfServiceService` 的 profile 短缓存。
+- 如果没有 profile 缓存，API 最多同步等待 `250ms`。
+- 超过 `250ms` 时，bootstrap 先返回：
+  - `nickname: null`
+  - `avatar: null`
+  - `profile_completed: false`
+- 原 profile 查询继续在后台完成，并写入服务端短缓存。
+- 下次 bootstrap 或个人资料页读取时可命中 profile 缓存。
+- 新增同步数据日志字段：
+  - `profileSource: "cache" | "remote" | "timeout" | "error"`
+
+预期效果：
+
+- 冷 bootstrap 不再因为 profile 远端读阻塞 `1s+`。
+- 员工首页首屏可先用 `context` 渲染；昵称和头像不是进入首页的阻塞条件。
+- 如果小程序端需要更完整个人资料，应在个人资料页或非首屏时再刷新 profile。
+
+复测重点：
+
+- `[employee-bootstrap] synchronous data resolved` 应从约 `1s+` 降到 `0ms - 250ms`。
+- 如果出现 `profileSource: "timeout"`，说明 profile 被后台补齐，首屏不等它。
+- 首条 bootstrap 剩余慢点应主要来自 auth-plugin 校验和 auth context。
+
+## 2026-05-21 09:25 API bootstrap auth context 并行预热
+
+上一轮复测显示，profile 同步等待已经压到约 `250ms`，首条 bootstrap 剩余慢点集中在：
+
+- auth-plugin 微信 OAuth / business binding 校验。
+- controller 内 `auth context resolved`。
+
+本轮 API 已调整：
+
+- auth 插件只针对 `GET /employee/bootstrap` 提前启动 `authorizationService.prewarmEmployeeAuthContext()`。
+- 预热使用 JWT 中的 `sub` 和 `employee_id`。
+- 预热与 `assert_wechat_oauth_credential`、`assert_wechat_business_binding` 并行执行。
+- controller 随后调用 `getRequiredTenantContext()` 时，会复用 authorizationService 的 in-flight / cache。
+- 预热完成会打印：
+  - `[auth-plugin] background stage completed`
+  - `stage: "prewarm_employee_auth_context"`
+
+预期效果：
+
+- 冷 bootstrap 的 auth context 等待可以和微信绑定校验重叠。
+- 如果微信校验耗时约 `1.5s`、auth context 约 `2s`，总等待应从串行约 `3.5s` 降到接近两者最大值。
+- 如果日志里 `auth context resolved` 接近 `0ms`，说明 controller 已复用预热结果。
+
 ## 验收标准
 
 ### API 验收
