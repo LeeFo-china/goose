@@ -106,6 +106,7 @@ export type ProjectAcceptanceProjectRow = {
   name: string | null;
   customer_id: string | null;
   supervisor_id: string | null;
+  status: string | null;
 };
 
 export type ProjectAcceptanceEmployeeRow = {
@@ -208,7 +209,7 @@ class ProjectAcceptanceRepository {
   async getProject(projectId: string, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, tenant_id, name, customer_id, supervisor_id")
+      .select("id, tenant_id, name, customer_id, supervisor_id, status")
       .eq("id", projectId);
 
     if (tenantId) {
@@ -226,7 +227,7 @@ class ProjectAcceptanceRepository {
 
     let query = SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, tenant_id, name, customer_id, supervisor_id")
+      .select("id, tenant_id, name, customer_id, supervisor_id, status")
       .in("id", Array.from(new Set(projectIds)));
 
     if (tenantId) {

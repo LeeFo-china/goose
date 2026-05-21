@@ -27,6 +27,7 @@ import { systemSettingsService } from "@/services/system-settings";
 import { sendSmsTemplate } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
+import { projectStatusService } from "@/services/project-status";
 import type {
   ProjectAcceptanceActionRow,
   ProjectAcceptanceCustomerRow,
@@ -1549,6 +1550,7 @@ class ProjectAcceptanceService {
     if (!project) {
       throw Errors.badRequest("项目不存在");
     }
+    projectStatusService.assertCanCreateProjectAcceptance(project);
 
     const open = await projectAcceptanceRepository.hasOpenAcceptance(
       input.project_id,

@@ -15,7 +15,9 @@ import {
   type CameraAccessLogAction,
   type ProjectCameraRow,
 } from "@/repositories/project-cameras";
+import { projectRepository } from "@/repositories/projects";
 import { tenantDeviceRepository, type TenantDeviceRow } from "@/repositories/tenant-devices";
+import { projectStatusService } from "@/services/project-status";
 import type {
   CreateProjectCameraInput,
   ProjectCameraBindOptionsQueryInput,
@@ -1080,6 +1082,12 @@ class ProjectCameraService {
     if (!actor.tenantId) {
       throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
     }
+    const project = await projectRepository.findById(input.projectId, actor.tenantId);
+    if (!project) {
+      throw Errors.business(404, "项目不存在", "PROJECT_NOT_FOUND");
+    }
+    projectStatusService.assertCanBindProjectCamera(project);
+
     const existingDevice = await tenantDeviceRepository.findByVendorDeviceChannel({
       vendor: input.payload.vendor,
       vendor_device_serial: input.payload.vendor_device_serial,

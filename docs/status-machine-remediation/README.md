@@ -13,6 +13,8 @@
 - [阶段 0：状态盘点与规则冻结](./2026-05-21-phase-0-status-rule-freeze.md)
 - [验收测试方案](./2026-05-21-acceptance-test-plan.md)
 - [执行记录](./2026-05-21-execution-record.md)
+- [小程序对接文档](./wechat/2026-05-21-project-status-machine-integration.md)
+- [Admin 对接文档](./admin/2026-05-21-project-status-machine-integration.md)
 
 ## 分阶段计划
 
@@ -47,13 +49,20 @@
 
 ### 阶段 2：项目状态副作用收口
 
-状态：待执行
+状态：已完成
 
 交付物：
 
 - 项目状态对施工日志、摄像头、验收、公开展示、首页统计的显式规则。
 - 非法状态下写操作拦截。
 - 状态变更后的缓存失效和通知边界。
+
+首批已收口规则：
+
+- `invalid / on_hold / completed` 项目禁止新增施工日志。
+- `invalid / completed` 项目禁止新增摄像头。
+- 只有 `constructing / acceptance` 项目允许发起验收。
+- 状态变更后的公开项目和首页项目缓存已在阶段 1 收口。
 
 ### 阶段 3：客户状态机最小闭环
 

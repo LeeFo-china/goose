@@ -10,6 +10,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { projectSer } from "@/services/projects";
+import { projectStatusService } from "@/services/project-status";
 
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
@@ -34,6 +35,7 @@ class ProjectLogService {
       projectId: input.payload.project_id,
       tenantId,
     });
+    projectStatusService.assertCanCreateProjectLog(project);
     const canWriteLog = await accessPolicyService.canAccessProject(
       input.authContext,
       input.payload.project_id,
@@ -134,6 +136,7 @@ class ProjectLogService {
         projectId: payload.project_id,
         tenantId,
       });
+      projectStatusService.assertCanCreateProjectLog(project);
       const canUpdateTarget = await accessPolicyService.canAccessProject(
         input.authContext,
         payload.project_id,

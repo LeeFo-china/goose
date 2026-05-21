@@ -25,6 +25,36 @@ type TransitionProjectStatusInput = {
 };
 
 class ProjectStatusService {
+  assertCanCreateProjectLog(project: { status?: unknown }) {
+    const status = this.getRequiredCurrentStatus(project.status);
+    if (status === "invalid") {
+      throw Errors.badRequest("无效项目不能新增施工日志");
+    }
+    if (status === "on_hold") {
+      throw Errors.badRequest("暂停项目不能新增施工日志");
+    }
+    if (status === "completed") {
+      throw Errors.badRequest("已完工项目不能新增施工日志");
+    }
+  }
+
+  assertCanBindProjectCamera(project: { status?: unknown }) {
+    const status = this.getRequiredCurrentStatus(project.status);
+    if (status === "invalid") {
+      throw Errors.badRequest("无效项目不能新增摄像头");
+    }
+    if (status === "completed") {
+      throw Errors.badRequest("已完工项目不能新增摄像头");
+    }
+  }
+
+  assertCanCreateProjectAcceptance(project: { status?: unknown }) {
+    const status = this.getRequiredCurrentStatus(project.status);
+    if (status !== "constructing" && status !== "acceptance") {
+      throw Errors.badRequest("当前项目状态不能发起验收");
+    }
+  }
+
   async transitionProjectStatus(input: TransitionProjectStatusInput) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     const hasAccess = await accessPolicyService.canAccessProject(

@@ -56,3 +56,40 @@ bun run api:build
 bun run check:permission-boundaries
 git diff --check
 ```
+
+## 2026-05-21 阶段 2 项目状态副作用收口
+
+已完成：
+
+- 新增项目状态副作用 guard：
+  - `assertCanCreateProjectLog`
+  - `assertCanBindProjectCamera`
+  - `assertCanCreateProjectAcceptance`
+- 施工日志创建和修改目标项目时，校验项目状态：
+  - `invalid`：禁止新增施工日志。
+  - `on_hold`：禁止新增施工日志。
+  - `completed`：禁止新增施工日志。
+- 摄像头绑定时，校验项目状态：
+  - `invalid`：禁止新增摄像头。
+  - `completed`：禁止新增摄像头。
+- 验收单创建时，校验项目状态：
+  - 仅允许 `constructing` 和 `acceptance`。
+- 补充小程序对接文档：
+  - `docs/status-machine-remediation/wechat/2026-05-21-project-status-machine-integration.md`
+- 补充 Admin 对接文档：
+  - `docs/status-machine-remediation/admin/2026-05-21-project-status-machine-integration.md`
+
+当前保守策略：
+
+- 仍允许更新 / 删除已有摄像头，用于运维纠错。
+- 仍允许读取历史施工日志和验收单。
+- 完工项目的售后日志暂未复用施工日志接口，后续如要支持，需要单独定义售后日志动作和字段。
+
+阶段 2 验证命令：
+
+```bash
+bun run api:typecheck
+bun run api:build
+bun run check:permission-boundaries
+git diff --check
+```

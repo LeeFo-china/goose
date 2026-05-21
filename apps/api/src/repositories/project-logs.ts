@@ -9,6 +9,7 @@ export const PROJECT_LOG_SELECT = `
 export type ProjectLogProjectRecord = {
   id: string;
   tenant_id: string | null;
+  status: string | null;
 };
 
 export type ProjectLogCalendarRow = {
@@ -22,7 +23,7 @@ class ProjectLogRepository {
   async findProjectById(input: { projectId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, tenant_id")
+      .select("id, tenant_id, status")
       .eq("id", input.projectId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
