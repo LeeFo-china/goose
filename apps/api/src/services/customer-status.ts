@@ -220,7 +220,7 @@ class CustomerStatusService {
       fromStatus,
     });
     if (!transition) {
-      throw Errors.badRequest("项目签约前，关联客户状态必须为已下定");
+      throw Errors.badRequest("项目签约前，关联客户状态必须为设计中");
     }
 
     return {
@@ -267,6 +267,16 @@ class CustomerStatusService {
     };
   }
 
+  listCustomerStatusActionsForCustomer(customer: { status?: unknown }) {
+    const fromStatus = this.getRequiredCurrentStatus(customer.status);
+    return {
+      current_status: fromStatus,
+      actions: listCustomerStatusActions({
+        fromStatus,
+      }),
+    };
+  }
+
   async listCustomerStatusTransitions(input: {
     authContext: AuthContext;
     customerId: string;
@@ -293,6 +303,31 @@ class CustomerStatusService {
     const result = await customerStatusTransitionRepository.listByCustomer({
       customerId: input.customerId,
       tenantId,
+      page: input.query.page,
+      pageSize: input.query.pageSize,
+    });
+
+    return {
+      rows: result.rows,
+      pagination: {
+        page: input.query.page,
+        pageSize: input.query.pageSize,
+        total: result.total,
+        totalPages: result.total > 0
+          ? Math.ceil(result.total / input.query.pageSize)
+          : 0,
+      },
+    };
+  }
+
+  async listCustomerStatusTransitionsForCustomer(input: {
+    tenantId: string;
+    customerId: string;
+    query: CustomerStatusTransitionListQuery;
+  }) {
+    const result = await customerStatusTransitionRepository.listByCustomer({
+      customerId: input.customerId,
+      tenantId: input.tenantId,
       page: input.query.page,
       pageSize: input.query.pageSize,
     });

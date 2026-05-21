@@ -98,6 +98,35 @@ class CustomerFollowUpService {
     };
   }
 
+  async listAccessibleCustomerFollowUps(input: {
+    authContext: AuthContext;
+    customer: CustomerFollowUpAccessCustomer;
+    page: number;
+    pageSize: number;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const result = await customerFollowUpRepository.listByCustomer({
+      customerId: input.customer.id,
+      from,
+      to,
+    });
+
+    return {
+      list: await this.enrichFollowUpsWithComments(
+        input.authContext,
+        input.customer,
+        result.list,
+      ),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: result.count,
+        totalPages: result.count ? Math.ceil(result.count / input.pageSize) : 0,
+      },
+    };
+  }
+
   async createCustomerFollowUp(input: {
     authContext: AuthContext;
     customerId: string;

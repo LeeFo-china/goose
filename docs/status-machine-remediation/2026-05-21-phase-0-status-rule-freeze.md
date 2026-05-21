@@ -69,9 +69,9 @@
 | --- | --- | --- | --- | --- |
 | `start_following` | `potential` | `following` | 客户有效 | 写状态日志 |
 | `mark_arrived` | `following` | `arrived` | 客户有效 | 写状态日志 |
-| `start_design` | `arrived` | `designing` | 客户有效，已有主房产 | 写状态日志，同步创建或复用项目 |
-| `place_order` | `designing` | `ordered` | 客户有效 | 写状态日志 |
-| `sign_contract` | `ordered` | `contracted` | 客户有效 | 推荐通过项目签约触发联动 |
+| `place_order` | `arrived` | `ordered` | 客户有效 | 写状态日志 |
+| `start_design` | `ordered` | `designing` | 客户有效，已有主房产 | 写状态日志，同步创建或复用项目 |
+| `sign_contract` | `designing` | `contracted` | 客户有效 | 推荐通过项目签约触发联动 |
 | `mark_dormant` | `potential`, `following`, `arrived`, `designing`, `ordered` | `dormant` | 必须传 `reason` | 写状态日志 |
 | `reactivate` | `dormant` | `following` | 客户有效，避免和开始跟进动作语义重叠 | 写状态日志 |
 | `mark_invalid` | 非 `contracted`, 非 `invalid` | `invalid` | 必须传 `reason` | 写状态日志 |

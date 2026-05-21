@@ -32,6 +32,18 @@ class CustomerSourceService {
     });
   }
 
+  async listAccessibleCustomerSources(input: {
+    tenantId: string;
+    customerId: string;
+    query: CustomerSourceListQuery;
+  }) {
+    return customerSourceRepository.listByCustomer({
+      tenantId: input.tenantId,
+      customerId: input.customerId,
+      query: input.query,
+    });
+  }
+
   async getCustomerSourceSummaryMap(input: {
     authContext: AuthContext;
     customerIds: string[];

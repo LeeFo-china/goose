@@ -66,7 +66,7 @@ Content-Type: application/json
 - 需要原因的动作弹出确认框并要求填写原因。
 - `sign_contract` 动作要求填写 `signed_amount`。
 - `sign_contract` 如果项目有关联客户，会同步客户为 `contracted`。
-- 关联客户必须处于 `following / arrived / ordered / contracted`，否则后端返回 400。
+- 关联客户必须处于 `designing / contracted`，否则后端返回 400。
 
 项目编辑页：
 
@@ -228,7 +228,7 @@ Admin 端需要处理以下 400 错误：
 - 当前项目状态不允许执行该动作。
 - 该状态动作必须填写原因。
 - 项目签约时必须提供有效的 `signed_amount`。
-- 项目签约前，关联客户状态必须为已下定。
+- 项目签约前，关联客户状态必须为设计中。
 - 当前项目状态不允许直接变更为目标状态。
 
 常见处理：

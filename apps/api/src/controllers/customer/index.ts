@@ -53,6 +53,7 @@ import {
   customerCoreService,
   type CustomerCoreRow,
 } from "@/services/customer-core";
+import { customerStatusService } from "@/services/customer-status";
 import { ErrorCodes } from "@/errors/error-codes";
 import {
   resolveStoredFileUrl,
@@ -70,6 +71,10 @@ type CustomerFollowFilter = "due" | "overdue";
 const CustomerPhoneActionBodySchema = z.object({
   scene: z.string().trim().max(80, "场景过长").optional(),
   reason: z.string().trim().max(200, "原因过长").optional(),
+});
+
+const CustomerDetailQuerySchema = z.object({
+  include_activity: z.string().trim().optional(),
 });
 
 function buildPagination(page: number, pageSize: number, total: number) {
@@ -317,21 +322,29 @@ class CustomerController extends TenantBaseController<
     },
   ) {
     const tenantId = options.tenantId;
-    const primaryProperty = options.primaryProperty ?? await customerPropertyService
-      .getPrimaryCustomerPropertySummary(customer.id, tenantId);
-    const properties = options.includeProperties
-      ? await customerPropertyService.getCustomerPropertySummaries(customer.id, tenantId)
-      : undefined;
-    const followUpMap = await customerFollowUpService.getLatestFollowUpMap({
-      customerIds: [customer.id],
-      tenantId,
-    });
-    const sourceSummaryMap = options.phonePrivacyContext
-      ? await customerSourceService.getCustomerSourceSummaryMap({
-        authContext: options.phonePrivacyContext.authContext,
+    const [
+      primaryProperty,
+      properties,
+      followUpMap,
+      sourceSummaryMap,
+    ] = await Promise.all([
+      options.primaryProperty !== undefined
+        ? Promise.resolve(options.primaryProperty)
+        : customerPropertyService.getPrimaryCustomerPropertySummary(customer.id, tenantId),
+      options.includeProperties
+        ? customerPropertyService.getCustomerPropertySummaries(customer.id, tenantId)
+        : Promise.resolve(undefined),
+      customerFollowUpService.getLatestFollowUpMap({
         customerIds: [customer.id],
-      })
-      : new Map<string, CustomerSourceSummary>();
+        tenantId,
+      }),
+      options.phonePrivacyContext
+        ? customerSourceService.getCustomerSourceSummaryMap({
+          authContext: options.phonePrivacyContext.authContext,
+          customerIds: [customer.id],
+        })
+        : Promise.resolve(new Map<string, CustomerSourceSummary>()),
+    ]);
 
     return {
       ...this.serializeCustomer(
@@ -483,17 +496,18 @@ class CustomerController extends TenantBaseController<
       });
     }
 
-    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
-      authContext,
-    );
-    const propertyMap = await customerPropertyService.getCustomerPropertySummaryMap(
-      listResult.rows.map((item) => item.id),
-      authContext.tenantId,
-    );
-    const sourceSummaryMap = await customerSourceService.getCustomerSourceSummaryMap({
-      authContext,
-      customerIds: listResult.rows.map((item) => item.id),
-    });
+    const customerIds = listResult.rows.map((item) => item.id);
+    const [phonePrivacyContext, propertyMap, sourceSummaryMap] = await Promise.all([
+      customerPhonePrivacyService.createPrivacyContext(authContext),
+      customerPropertyService.getCustomerPropertySummaryMap(
+        customerIds,
+        authContext.tenantId,
+      ),
+      customerSourceService.getCustomerSourceSummaryMap({
+        authContext,
+        customerIds,
+      }),
+    ]);
     return ResponseHandler.success({
       list: listResult.rows.map((item) =>
         this.serializeCustomer(
@@ -798,6 +812,11 @@ class CustomerController extends TenantBaseController<
     const authContext = await this.getRequiredTenantContext(request);
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const queryResult = CustomerDetailQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const includeActivity = ["1", "true", "yes"].includes(
+      queryResult.data.include_activity?.toLowerCase() ?? "",
+    );
 
     const customer = await customerCoreService.getCustomerDetail({
       authContext,
@@ -805,18 +824,63 @@ class CustomerController extends TenantBaseController<
       notFoundAs: "not_found",
     });
 
-    return ResponseHandler.success(
-      await this.buildCustomerDetailResponse(
-        customer,
-        {
-          includeProperties: true,
-          phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
-            authContext,
-          ),
-          tenantId: authContext.tenantId,
-        },
-      ),
+    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+      authContext,
     );
+    const detail = await this.buildCustomerDetailResponse(
+      customer,
+      {
+        includeProperties: true,
+        phonePrivacyContext,
+        tenantId: authContext.tenantId,
+      },
+    );
+
+    if (!includeActivity) {
+      return ResponseHandler.success(detail);
+    }
+
+    const [followUps, sources, statusActions, statusTransitions] = await Promise.all([
+      customerFollowUpService.listAccessibleCustomerFollowUps({
+        authContext,
+        customer: {
+          id: customer.id,
+          owner_id: customer.owner_id,
+          tenant_id: authContext.tenantId,
+        },
+        page: 1,
+        pageSize: 10,
+      }),
+      customerSourceService.listAccessibleCustomerSources({
+        tenantId: authContext.tenantId,
+        customerId: customer.id,
+        query: {
+          page: 1,
+          pageSize: 20,
+        },
+      }),
+      Promise.resolve(
+        customerStatusService.listCustomerStatusActionsForCustomer(customer),
+      ),
+      customerStatusService.listCustomerStatusTransitionsForCustomer({
+        tenantId: authContext.tenantId,
+        customerId: customer.id,
+        query: {
+          page: 1,
+          pageSize: 20,
+        },
+      }),
+    ]);
+
+    return ResponseHandler.success({
+      ...detail,
+      detail_activity: {
+        follow_ups: followUps,
+        sources,
+        status_actions: statusActions,
+        status_transitions: statusTransitions,
+      },
+    });
   }
 
   private async handleCustomerPhoneAction(

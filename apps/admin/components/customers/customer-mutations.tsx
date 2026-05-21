@@ -175,6 +175,7 @@ export type CustomerRecord = {
   has_old_customer_new_lead?: boolean;
   has_platform_new_lead?: boolean;
   has_employee_share?: boolean;
+  detail_activity?: CustomerDetailActivity;
 };
 
 type EmployeeOption = {
@@ -208,6 +209,19 @@ type CustomerStatusTransitionRecord = {
   reason: string | null;
   metadata?: Record<string, unknown>;
   created_at: string;
+};
+
+type CustomerDetailActivity = {
+  follow_ups?: {
+    list?: CustomerFollowUpRecord[];
+  };
+  sources?: {
+    list?: CustomerSourceRecord[];
+  };
+  status_actions?: CustomerStatusActionsResponse;
+  status_transitions?: {
+    rows?: CustomerStatusTransitionRecord[];
+  };
 };
 
 const statusOptions = CUSTOMER_STATUS_VALUES.map((value) => [
@@ -989,13 +1003,21 @@ function CustomerDialog({
 
 function CustomerStatusPanel({
   customer,
+  initialActionsData,
+  initialTransitions,
   onChanged,
 }: {
   customer: CustomerRecord;
+  initialActionsData?: CustomerStatusActionsResponse | null;
+  initialTransitions?: CustomerStatusTransitionRecord[];
   onChanged: () => Promise<void>;
 }) {
-  const [actionsData, setActionsData] = useState<CustomerStatusActionsResponse | null>(null);
-  const [transitions, setTransitions] = useState<CustomerStatusTransitionRecord[]>([]);
+  const [actionsData, setActionsData] = useState<CustomerStatusActionsResponse | null>(
+    initialActionsData ?? null,
+  );
+  const [transitions, setTransitions] = useState<CustomerStatusTransitionRecord[]>(
+    initialTransitions ?? [],
+  );
   const [loading, setLoading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -1003,6 +1025,14 @@ function CustomerStatusPanel({
   const [reason, setReason] = useState("");
 
   useEffect(() => {
+    if (initialActionsData || initialTransitions) {
+      setActionsData(initialActionsData ?? null);
+      setTransitions(initialTransitions ?? []);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError("");
@@ -1025,7 +1055,7 @@ function CustomerStatusPanel({
     return () => {
       cancelled = true;
     };
-  }, [customer.id, customer.status]);
+  }, [customer.id, customer.status, initialActionsData, initialTransitions]);
 
   function closeActionDialog() {
     if (pending) return;
@@ -1200,8 +1230,13 @@ function CustomerDetailDialog({
 }) {
   const router = useRouter();
   const [customer, setCustomer] = useState(initialCustomer);
-  const [followUps, setFollowUps] = useState<CustomerFollowUpRecord[]>([]);
-  const [sources, setSources] = useState<CustomerSourceRecord[]>([]);
+  const initialActivity = initialCustomer.detail_activity;
+  const [followUps, setFollowUps] = useState<CustomerFollowUpRecord[]>(
+    initialActivity?.follow_ups?.list || [],
+  );
+  const [sources, setSources] = useState<CustomerSourceRecord[]>(
+    initialActivity?.sources?.list || [],
+  );
   const [followUpsLoading, setFollowUpsLoading] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [followUpsError, setFollowUpsError] = useState("");
@@ -1209,15 +1244,30 @@ function CustomerDetailDialog({
 
   useEffect(() => {
     setCustomer(initialCustomer);
+    setFollowUps(initialCustomer.detail_activity?.follow_ups?.list || []);
+    setSources(initialCustomer.detail_activity?.sources?.list || []);
   }, [initialCustomer]);
 
   async function refreshCustomer() {
-    const data = await requestCustomer({ path: `/customers/${customer.id}/detail` });
+    const data = await requestCustomer({
+      path: `/customers/${customer.id}/detail?include_activity=1`,
+    });
     setCustomer(data as CustomerRecord);
     router.refresh();
   }
 
   useEffect(() => {
+    const activity = customer.detail_activity;
+    if (activity) {
+      setFollowUps(activity.follow_ups?.list || []);
+      setSources(activity.sources?.list || []);
+      setFollowUpsLoading(false);
+      setSourcesLoading(false);
+      setFollowUpsError("");
+      setSourcesError("");
+      return;
+    }
+
     let cancelled = false;
     setFollowUpsLoading(true);
     setSourcesLoading(true);
@@ -1251,7 +1301,7 @@ function CustomerDetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [customer.id]);
+  }, [customer.id, customer.detail_activity]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -1276,7 +1326,12 @@ function CustomerDetailDialog({
             <InfoItem label="面积" value={customer.area != null ? `${customer.area}㎡` : "-"} />
             <InfoItem label="户型" value={customer.layout || "-"} />
           </div>
-          <CustomerStatusPanel customer={customer} onChanged={refreshCustomer} />
+          <CustomerStatusPanel
+            customer={customer}
+            initialActionsData={customer.detail_activity?.status_actions}
+            initialTransitions={customer.detail_activity?.status_transitions?.rows}
+            onChanged={refreshCustomer}
+          />
           {customer.latest_source || getSourceBadges(customer).length > 0 ? (
             <section className="rounded-md border bg-muted/20 p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -1479,7 +1534,9 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
     setError("");
     startTransition(async () => {
       try {
-        const data = await requestCustomer({ path: `/customers/${customer.id}/detail` });
+        const data = await requestCustomer({
+          path: `/customers/${customer.id}/detail?include_activity=1`,
+        });
         setDetail(data as CustomerRecord);
       } catch (err) {
         setError(err instanceof Error ? err.message : "详情加载失败");

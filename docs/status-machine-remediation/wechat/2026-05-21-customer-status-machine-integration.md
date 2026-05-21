@@ -60,9 +60,9 @@ Content-Type: application/json
 | --- | --- |
 | `potential` | `start_following`, `mark_dormant`, `mark_invalid` |
 | `following` | `mark_arrived`, `mark_dormant`, `mark_invalid` |
-| `arrived` | `start_design`, `mark_dormant`, `mark_invalid` |
-| `designing` | `place_order`, `mark_dormant`, `mark_invalid` |
-| `ordered` | `sign_contract`, `mark_dormant`, `mark_invalid` |
+| `arrived` | `place_order`, `mark_dormant`, `mark_invalid` |
+| `ordered` | `start_design`, `mark_dormant`, `mark_invalid` |
+| `designing` | `sign_contract`, `mark_dormant`, `mark_invalid` |
 | `dormant` | `reactivate`, `mark_invalid` |
 | `contracted` | 暂无动作 |
 | `invalid` | 暂无动作 |

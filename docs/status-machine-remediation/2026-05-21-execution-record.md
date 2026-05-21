@@ -141,8 +141,8 @@ git diff --check
 - 项目 `sign_contract` 状态动作成功时，如果项目有关联客户，会同步客户状态为 `contracted`。
 - 客户同步仍复用 `customerStatusService.transitionCustomerStatus()`，因此会写入 `customer_status_transition_logs`。
 - 关联客户已是 `contracted` 时，不重复写客户状态日志。
-- 关联客户如果不是 `ordered / contracted`，项目签约会返回 400：
-  - `项目签约前，关联客户状态必须为已下定`
+- 关联客户如果不是 `designing / contracted`，项目签约会返回 400：
+  - `项目签约前，关联客户状态必须为设计中`
 - 项目未关联客户时，暂不阻断项目签约。
 - 项目作废、暂停、完工不会反向自动修改客户状态，避免多项目客户被单项目状态误伤。
 - 补充小程序对接文档：
@@ -219,19 +219,19 @@ git diff --check
 
 已完成：
 
-- 客户状态新增 `designing`，位置调整为 `arrived -> designing -> ordered`。
+- 客户状态新增 `designing`，位置调整为 `ordered -> designing -> contracted`。
 - 客户动作新增 `start_design`：
-  - 仅 `arrived` 可执行。
+  - 仅 `ordered` 可执行。
   - 执行前必须已有客户主房产。
   - 成功后自动创建或复用客户主房产对应的有效项目。
   - 自动项目状态为 `designing`。
-- 客户 `place_order` 收口为仅 `designing -> ordered`。
-- 客户 `sign_contract` 收口为仅 `ordered -> contracted`。
+- 客户 `place_order` 收口为仅 `arrived -> ordered`。
+- 客户 `sign_contract` 收口为仅 `designing -> contracted`。
 - 项目状态流转调整为：
   - `negotiating -> designing` 使用 `start_design`。
   - `designing / negotiating -> signed` 使用 `sign_contract`。
   - `signed -> constructing` 使用 `start_construction`。
-- 项目签约联动客户签约时，关联客户必须为 `ordered / contracted`。
+- 项目签约联动客户签约时，关联客户必须为 `designing / contracted`。
 - 远端 Supabase 已更新 `customer_status_transition_logs` 约束，允许 `start_design` 和 `designing`。
 
 验证命令：

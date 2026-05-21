@@ -25,6 +25,7 @@ const statusMeta: Record<string, {
   following: { label: "跟进中", variant: "default" },
   arrived: { label: "已到店", variant: "warning" },
   ordered: { label: "已下定", variant: "success" },
+  designing: { label: "设计中", variant: "default" },
   contracted: { label: "已签约", variant: "success" },
   dormant: { label: "沉睡客户", variant: "secondary" },
   invalid: { label: "无效客户", variant: "danger" },

@@ -39,16 +39,14 @@ Content-Type: application/json
 
 项目签约时，关联客户必须处于以下状态之一：
 
-- `following`
-- `arrived`
-- `ordered`
+- `designing`
 - `contracted`
 
-如果客户仍是 `potential / following / arrived / designing / dormant / invalid`，后端返回 400：
+如果客户仍是 `potential / following / arrived / ordered / dormant / invalid`，后端返回 400：
 
 ```json
 {
-  "message": "项目签约前，关联客户状态必须为已下定"
+  "message": "项目签约前，关联客户状态必须为设计中"
 }
 ```
 

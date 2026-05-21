@@ -1,11 +1,12 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { buildBackendUrl, parseBackendJson, type AdminSession, ADMIN_TOKEN_COOKIE } from "@/lib/backend";
 
-export async function getAdminToken() {
+export const getAdminToken = cache(async function getAdminToken() {
   return (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value || null;
-}
+});
 
-export async function getAdminSession() {
+export const getAdminSession = cache(async function getAdminSession() {
   const token = await getAdminToken();
   if (!token) {
     return null;
@@ -23,4 +24,4 @@ export async function getAdminSession() {
   } catch {
     return null;
   }
-}
+});

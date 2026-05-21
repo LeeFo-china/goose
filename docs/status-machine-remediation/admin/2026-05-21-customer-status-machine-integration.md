@@ -83,9 +83,9 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `start_following` | `potential` | `following` | 主按钮 |
 | `mark_arrived` | `following` | `arrived` | 主按钮 |
-| `start_design` | `arrived` | `designing` | 主按钮，后端同步创建或复用项目 |
-| `place_order` | `designing` | `ordered` | 主按钮 |
-| `sign_contract` | `ordered` | `contracted` | 主按钮，二次确认；推荐通过项目签约触发 |
+| `place_order` | `arrived` | `ordered` | 主按钮 |
+| `start_design` | `ordered` | `designing` | 主按钮，后端同步创建或复用项目 |
+| `sign_contract` | `designing` | `contracted` | 主按钮，二次确认；推荐通过项目签约触发 |
 | `mark_dormant` | `potential/following/arrived/designing/ordered` | `dormant` | 普通按钮，要求原因 |
 | `reactivate` | `dormant` | `following` | 主按钮 |
 | `mark_invalid` | `potential/following/arrived/designing/ordered/dormant` | `invalid` | 危险按钮，要求原因 |

@@ -52,14 +52,14 @@ Content-Type: application/json
 
 项目签约时，关联客户必须处于以下状态之一：
 
-- `ordered`
+- `designing`
 - `contracted`
 
-如果客户仍是 `potential / following / arrived / designing / dormant / invalid`，后端返回 400：
+如果客户仍是 `potential / following / arrived / ordered / dormant / invalid`，后端返回 400：
 
 ```json
 {
-  "message": "项目签约前，关联客户状态必须为已下定"
+  "message": "项目签约前，关联客户状态必须为设计中"
 }
 ```
 
@@ -87,7 +87,7 @@ Admin 处理方式：
 提交前校验：
 
 - `signed_amount > 0`。
-- 如果项目有关联客户，客户状态必须是 `following / arrived / ordered / contracted`。
+- 如果项目有关联客户，客户状态必须是 `designing / contracted`。
 - 如果关联客户状态不满足，提示“请先在客户详情中推进客户状态，再进行项目签约”。
 
 提交 payload：
@@ -139,7 +139,7 @@ Admin 展示建议：
 | 后端 message | Admin 处理 |
 | --- | --- |
 | `项目签约时必须提供有效的 signed_amount` | 保持签约弹窗打开，提示填写大于 0 的签约金额 |
-| `项目签约前，关联客户状态必须为已下定` | 提示先推进客户到已下定，提供查看客户入口 |
+| `项目签约前，关联客户状态必须为设计中` | 提示先推进客户到设计中，提供查看客户入口 |
 | 当前项目状态不允许执行该动作 | 刷新项目详情，重新计算动作按钮 |
 
 ## 验收清单
@@ -148,6 +148,6 @@ Admin 展示建议：
 - 点击“项目签约”弹出签约弹窗，要求填写签约金额。
 - 未填写 `signed_amount` 或金额小于等于 0 时不能提交。
 - 关联客户为 `potential / dormant / invalid` 时，前端禁用或提示不能签约。
-- 关联客户为 `following / arrived / ordered` 时，签约成功后客户变为 `contracted`。
+- 关联客户为 `designing` 时，签约成功后客户变为 `contracted`。
 - 关联客户已是 `contracted` 时，项目签约成功且不重复写客户状态日志。
 - 项目无关联客户时，当前阶段签约不被阻断。

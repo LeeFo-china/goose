@@ -8,7 +8,7 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 
 本次对接覆盖：
 
-- 客户状态机：`potential -> following -> arrived / ordered / contracted` 等生命周期动作。
+- 客户状态机：`potential -> following -> arrived -> ordered -> designing -> contracted` 等生命周期动作。
 - 项目状态机：`lead -> measure -> negotiating -> designing -> signed -> constructing / acceptance / completed` 等工程动作。
 - 客户项目联动：项目签约成功后，同步关联客户为 `contracted`。
 
