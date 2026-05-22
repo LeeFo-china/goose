@@ -534,9 +534,9 @@ function ProjectStatusPanel({
     if (
       action.action === "sign_contract" &&
       project.customer_id &&
-      customerStatus(project.customer) !== "designing"
+      !["designing", "signed"].includes(customerStatus(project.customer) || "")
     ) {
-      setError("项目签约前，关联客户状态必须为设计中");
+      setError("项目签约前，关联客户销售状态必须为设计中或已签约");
       return;
     }
     setSelectedAction(action);
@@ -605,15 +605,41 @@ function ProjectStatusPanel({
   );
   const actionViews = buildProjectActionViews(actions, blockedActions);
   const latestTransitions = transitions.slice(0, 3);
+  const amountSummary = project.signed_amount
+    ? `签约 ¥${formatMoney(project.signed_amount)}`
+    : project.budget
+      ? `预算 ¥${formatMoney(project.budget)}`
+      : "-";
+  const headerSummaryRows = [
+    [
+      ["客户", customerName(project.customer)],
+      ["房产", propertyLabel(project.property)],
+      ["金额", amountSummary],
+    ],
+    [
+      ["设计", personName(project.designer)],
+      ["工程", personName(project.supervisor)],
+      ["开工", formatDate(project.start_date)],
+      ...(project.address ? [["地址", project.address]] : []),
+    ],
+  ];
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <CardTitle>项目概览</CardTitle>
-            <CardDescription className="mt-2 truncate">
-              {propertyLabel(project.property)}
+            <CardTitle className="truncate">{project.name || "项目概览"}</CardTitle>
+            <CardDescription className="mt-3 flex flex-col gap-1.5">
+              {headerSummaryRows.map((row, rowIndex) => (
+                <span key={rowIndex} className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+                  {row.map(([label, value]) => (
+                    <span key={label} className="min-w-0 truncate">
+                      {label}：{value}
+                    </span>
+                  ))}
+                </span>
+              ))}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -636,72 +662,6 @@ function ProjectStatusPanel({
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-5">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        <section className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">下一步</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                只展示当前可执行的推进动作。
-              </p>
-            </div>
-            <TooltipProvider>
-              <div className="flex flex-wrap items-center gap-2">
-                {actionViews.map((item) =>
-                  item.kind === "enabled" ? (
-                    <Button
-                      key={item.action.action}
-                      type="button"
-                      size="sm"
-                      variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
-                      disabled={actionsLoading || pending}
-                      onClick={() => openActionDialog(item.action)}
-                    >
-                      {item.action.label}
-                    </Button>
-                  ) : (
-                    <Tooltip key={item.action.action}>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled
-                          >
-                            {item.action.label}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{item.action.reason}</TooltipContent>
-                    </Tooltip>
-                  )
-                )}
-                {!actionsLoading && actions.length === 0 ? (
-                  <Badge variant="outline">暂无可执行动作</Badge>
-                ) : null}
-              </div>
-            </TooltipProvider>
-          </div>
-        </section>
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoItem label="客户" value={customerName(project.customer)} />
-          <InfoItem label="房产" value={propertyLabel(project.property)} />
-          <InfoItem label="金额" value={project.signed_amount
-            ? `签约 ¥${formatMoney(project.signed_amount)}`
-            : project.budget
-              ? `预算 ¥${formatMoney(project.budget)}`
-              : "-"}
-          />
-          <InfoItem label="设计师" value={personName(project.designer)} />
-          <InfoItem label="工程负责人" value={personName(project.supervisor)} />
-          <InfoItem label="开工日期" value={formatDate(project.start_date)} />
-        </section>
-        {project.address ? (
-          <section className="rounded-md border bg-background p-3">
-            <div className="text-xs text-muted-foreground">项目地址</div>
-            <div className="mt-1 text-sm">{project.address}</div>
-          </section>
-        ) : null}
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
@@ -752,6 +712,53 @@ function ProjectStatusPanel({
               暂无状态流转记录。
             </div>
           )}
+        </section>
+        <section className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">下一步</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                只展示当前可执行的推进动作。
+              </p>
+            </div>
+            <TooltipProvider>
+              <div className="flex flex-wrap items-center gap-2">
+                {actionViews.map((item) =>
+                  item.kind === "enabled" ? (
+                    <Button
+                      key={item.action.action}
+                      type="button"
+                      size="sm"
+                      variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
+                      disabled={actionsLoading || pending}
+                      onClick={() => openActionDialog(item.action)}
+                    >
+                      {item.action.label}
+                    </Button>
+                  ) : (
+                    <Tooltip key={item.action.action}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                          >
+                            {item.action.label}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{item.action.reason}</TooltipContent>
+                    </Tooltip>
+                  )
+                )}
+                {!actionsLoading && actions.length === 0 ? (
+                  <Badge variant="outline">暂无可执行动作</Badge>
+                ) : null}
+              </div>
+            </TooltipProvider>
+          </div>
         </section>
       </CardContent>
       <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && closeActionDialog()}>
@@ -1368,10 +1375,9 @@ function ProjectDetailDialog({
           <div>
             <DialogTitle>{currentProject.name}</DialogTitle>
             <DialogDescription>
-              {currentProject.id}
               {currentProject.customer_id
-                ? ` · 关联客户状态：${customerStatusLabel(customerStatus(currentProject.customer))}`
-                : ""}
+                ? `客户：${customerName(currentProject.customer)} · 客户销售状态：${customerStatusLabel(customerStatus(currentProject.customer))}`
+                : "未关联客户"}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -1460,15 +1466,6 @@ function ProjectDetailDialog({
         </Tabs>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium">{value}</div>
-    </div>
   );
 }
 

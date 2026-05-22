@@ -21,6 +21,7 @@ git diff --check
 - `potential -> following` 使用 `start_following` 成功。
 - `following -> arrived` 使用 `mark_arrived` 成功。
 - `arrived -> designing` 前先创建/确认项目，项目成功后使用 `start_design` 成功。
+- 项目签约成功后，关联客户从 `designing -> signed` 自动成功。
 - `dormant -> following` 使用 `reactivate` 成功。
 
 ### 非法流转
@@ -82,7 +83,7 @@ git diff --check
 - 项目创建/确认成功后，客户执行 `start_design` 成功并进入 `designing`。
 - 项目处于 `designing` 时不能直接签约，必须先执行 `confirm_proposal`。
 - 项目签约成功后项目进入 `signed`。
-- 项目签约成功后客户仍保持 `designing`。
+- 项目签约成功后关联客户销售状态进入 `signed`，并写入客户状态流转日志 `mark_signed`。
 - 多项目客户中，一个项目 `invalid` 不得自动把客户改为 `invalid`。
 
 ## 端侧动作化验收

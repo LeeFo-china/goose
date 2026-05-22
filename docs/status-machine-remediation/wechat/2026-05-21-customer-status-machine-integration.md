@@ -4,13 +4,15 @@
 
 ## 背景
 
-客户状态只表达销售推进，小程序员工端不要再把 `status` 当普通字段提交。状态按钮应从后端动作接口读取。
+客户状态只表达销售推进，不表达施工交付进度。小程序员工端不要再把 `status` 当普通字段提交。状态按钮应从后端动作接口读取。
 
 当前有效主路径：
 
-`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中
+`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中 -> `signed` 已签约
 
 客户点击 `start_design` 时，小程序端必须先完成项目创建/确认；项目存在后才调用客户状态动作进入 `designing`。后端要求客户已有主房产信息，并会复用同客户同房产的有效项目作为兜底。
+
+`signed` 是销售终态，由项目 `sign_contract` 成功后后端自动写入；小程序客户详情不需要额外展示手动“客户签约”按钮。
 
 ## 开始设计两步接入
 
@@ -80,6 +82,7 @@ Content-Type: application/json
 | `arrived` | `start_design`, `mark_dormant`, `mark_invalid` |
 | `designing` | `mark_dormant`, `mark_invalid` |
 | `dormant` | `reactivate`, `mark_invalid` |
+| `signed` | 暂无动作 |
 | `invalid` | 暂无动作 |
 
 ## 必填规则

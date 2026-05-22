@@ -140,6 +140,9 @@ class CustomerStatusService {
     if (!transition) {
       throw Errors.badRequest("当前客户状态不允许执行该动作");
     }
+    if (CustomerStatusActionConfig[input.payload.action].internalOnly) {
+      throw Errors.badRequest("该客户状态动作不能直接执行");
+    }
 
     const reason = input.payload.reason?.trim() || null;
     if (CustomerStatusActionConfig[input.payload.action].requiresReason && !reason) {
@@ -319,6 +322,9 @@ class CustomerStatusService {
     });
     if (!action) {
       throw Errors.badRequest("当前客户状态不允许直接变更为目标状态");
+    }
+    if (CustomerStatusActionConfig[action].internalOnly) {
+      throw Errors.badRequest("该客户状态只能由项目签约自动同步");
     }
 
     return {

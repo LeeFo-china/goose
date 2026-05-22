@@ -4,7 +4,7 @@
 
 ## 背景
 
-客户状态只表达销售推进，项目状态只表达交付推进。两者唯一强联动点是客户进入 `designing`。
+客户状态只表达销售推进，项目状态只表达交付推进。两者强联动点是客户进入 `designing` 和项目签约成功。
 
 联动方向：
 
@@ -14,6 +14,7 @@
 4. Admin 再调用 `POST /projects` 创建/确认一个 `designing` 项目。
 5. 项目创建/确认成功后，Admin 再调用客户 `start_design`。
 6. 后续方案确认、签约、施工、验收全部走项目状态机。
+7. 项目 `sign_contract` 成功后，后端自动把关联客户销售状态从 `designing` 推进到 `signed`。
 
 项目签约不再反向把客户改成 `contracted`，因为客户侧已下线 `contracted` 状态。
 
@@ -122,8 +123,9 @@ Content-Type: application/json
 
 - 项目当前状态必须是 `proposal_confirmed`。
 - 必须填写 `signed_amount > 0`。
-- 项目有关联客户时，关联客户应处于 `designing`。
-- 签约成功后只更新项目为 `signed`，不写客户 `contracted`。
+- 项目有关联客户时，关联客户销售状态应处于 `designing` 或 `signed`。
+- 关联客户为 `designing` 时，签约成功后后端同步写入客户状态 `signed`，并追加客户状态流转日志 `mark_signed`。
+- 签约成功后不写旧客户状态 `contracted`。
 
 ## Admin 交互建议
 
@@ -150,7 +152,7 @@ Content-Type: application/json
 | 客户开始设计前必须已有主房产信息 | 保持开始设计 card 打开，在 card 内补齐主房产 |
 | 项目创建失败或项目必填信息不完整 | 保持项目创建 card 打开，提示修正后重试 |
 | 项目签约时必须提供有效的 signed_amount | 保持签约弹窗打开，提示填写大于 0 的签约金额 |
-| 项目签约前，关联客户状态必须为设计中 | 提示先从客户详情执行开始设计 |
+| 项目签约前，关联客户销售状态必须为设计中或已签约 | 提示先从客户详情执行开始设计，或刷新客户详情确认签约状态 |
 | 当前状态不允许执行该动作 | 刷新详情，重新计算动作按钮 |
 
 ## 验收清单
@@ -161,4 +163,4 @@ Content-Type: application/json
 - 项目创建/确认成功后，`start_design` 成功，客户进入 `designing`，并出现 `designing` 项目。
 - `designing` 项目不能直接签约，必须先 `confirm_proposal`。
 - `proposal_confirmed` 项目签约成功后进入 `signed`。
-- 签约成功后客户仍保持 `designing`，不出现 `contracted`。
+- 签约成功后客户进入 `signed`，不出现 `contracted`。

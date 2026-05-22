@@ -8,8 +8,9 @@ Admin 端状态流转统一改为动作驱动，普通编辑表单只维护基�
 
 当前有效流程：
 
-- 客户销售阶段：`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中。
+- 客户销售阶段：`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中 -> `signed` 已签约。
 - 销售到项目衔接：客户点击 `start_design` 时，Admin 必须先完成项目创建/确认；项目存在后才调用客户状态动作进入 `designing`。
+- 项目执行 `sign_contract` 成功后，后端自动把关联客户从 `designing` 推进到 `signed`；客户已是 `signed` 时保持不变。
 - 项目交付阶段：`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收。
 
 已下线内容：
@@ -87,4 +88,4 @@ Admin 端状态流转统一改为动作驱动，普通编辑表单只维护基�
 - `arrived` 客户点击 `start_design` 后先弹出项目创建 card；缺主房产时在 card 内补齐主房产，项目创建/确认成功后才进入 `designing`。
 - 项目详情状态顺序显示为：开始设计、方案已确认、项目签约、设计定稿、待开工、已开工、施工中、竣工验收。
 - 项目处于 `designing` 时，只能先执行 `confirm_proposal`，不能直接 `sign_contract`。
-- 项目签约成功后项目进入 `signed`，不再反向把客户改成 `contracted`。
+- 项目签约成功后项目进入 `signed`，并自动把关联客户销售状态推进到 `signed`；不再使用旧 `contracted`。

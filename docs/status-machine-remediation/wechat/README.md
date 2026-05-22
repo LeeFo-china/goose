@@ -8,8 +8,9 @@
 
 当前有效流程：
 
-- 客户销售阶段：`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中。
+- 客户销售阶段：`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中 -> `signed` 已签约。
 - 客户点击 `start_design` 时，小程序端必须先完成项目创建/确认；项目存在后才调用客户状态动作进入 `designing`。
+- 项目执行 `sign_contract` 成功后，后端自动把关联客户从 `designing` 推进到 `signed`；客户已是 `signed` 时保持不变。
 - 项目交付阶段：`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收。
 
 已下线内容：

@@ -73,7 +73,8 @@ Content-Type: application/json
 
 - `sign_contract` 必须传 `signed_amount > 0`。
 - `sign_contract` 仅允许项目处于 `proposal_confirmed` 时执行，不能从 `designing` 跳过方案确认直接签约。
-- 项目签约不再反向修改客户为 `contracted`。
+- 项目签约成功后，后端自动把关联客户销售状态从 `designing` 推进到 `signed`；关联客户已是 `signed` 时保持不变。
+- 项目签约不再写旧客户状态 `contracted`。
 - `schedule_construction` 必须传 `start_date`，没有开工日期不能进入 `pending_start`。
 - `schedule_construction` 仅允许项目处于 `design_finalized` 时执行。
 - `pause_project` 必须传 `reason`。

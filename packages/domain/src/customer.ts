@@ -3,6 +3,7 @@ export const CUSTOMER_STATUS_VALUES = [
   'following',
   'arrived',
   'designing',
+  'signed',
   'dormant',
   'invalid',
 ] as const;
@@ -48,6 +49,7 @@ export const CustomerStatusConfig: Record<
   following: { label: '跟进中', type: 'primary' },
   arrived: { label: '已到店', type: 'warning' },
   designing: { label: '设计中', type: 'primary' },
+  signed: { label: '已签约', type: 'success' },
   dormant: { label: '沉睡客户', type: 'default' },
   invalid: { label: '无效客户', type: 'danger' },
 };
@@ -84,6 +86,7 @@ export const CUSTOMER_STATUS_ACTION_VALUES = [
   'start_following',
   'mark_arrived',
   'start_design',
+  'mark_signed',
   'mark_dormant',
   'reactivate',
   'mark_invalid',
@@ -96,6 +99,7 @@ export interface CustomerStatusActionConfigItem {
   from: readonly CustomerStatus[];
   to: CustomerStatus;
   requiresReason?: boolean;
+  internalOnly?: boolean;
 }
 
 export const CustomerStatusActionConfig: Record<
@@ -116,6 +120,12 @@ export const CustomerStatusActionConfig: Record<
     label: '开始设计',
     from: ['arrived'],
     to: 'designing',
+  },
+  mark_signed: {
+    label: '客户签约',
+    from: ['designing'],
+    to: 'signed',
+    internalOnly: true,
   },
   mark_dormant: {
     label: '标记沉睡',
@@ -183,7 +193,7 @@ export function listCustomerStatusActions(input: {
         fromStatus: input.fromStatus,
       });
 
-      return transition
+      return transition && !CustomerStatusActionConfig[action].internalOnly
         ? {
             action,
             label: CustomerStatusActionConfig[action].label,

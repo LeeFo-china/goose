@@ -48,7 +48,8 @@ Content-Type: application/json
 - 编辑项目基础信息时，`PATCH /projects/:id` payload 不包含 `status`。
 - 项目详情页新增状态区域，展示当前状态、动作按钮和状态时间线。
 - `sign_contract` 使用独立弹窗填写 `signed_amount > 0`。
-- 项目签约只推进项目状态，不再反向写客户 `contracted`。
+- 项目签约成功后，后端自动把关联客户销售状态从 `designing` 推进到 `signed`；关联客户已是 `signed` 时保持不变。
+- 项目签约不再写旧客户状态 `contracted`。
 
 ## 当前动作
 
@@ -98,7 +99,8 @@ Content-Type: application/json
 
 - 当前项目状态必须是 `proposal_confirmed`。
 - 必须填写 `signed_amount > 0`。
-- 如果项目有关联客户，关联客户应处于 `designing`；后端不会再把客户同步为 `contracted`。
+- 如果项目有关联客户，关联客户销售状态应处于 `designing` 或 `signed`。
+- 关联客户为 `designing` 时，签约成功后后端同步写入客户状态 `signed`，并追加客户状态流转日志 `mark_signed`。
 
 排期开工动作：
 

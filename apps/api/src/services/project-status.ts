@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { customerCoreRepository } from "@/repositories/customer-core";
+import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
 import { projectRepository } from "@/repositories/projects";
 import { projectStatusTransitionRepository } from "@/repositories/project-status-transitions";
 import type {
@@ -15,6 +16,7 @@ import {
   listProjectStatusActions,
   ProjectStatusActionConfig,
   resolveProjectStatusTransition,
+  type CustomerStatus,
   type ProjectStatus,
   type ProjectStatusAction,
 } from "@gooes/domain";
@@ -145,6 +147,14 @@ class ProjectStatusService {
       metadata,
     });
 
+    if (input.payload.action === "sign_contract") {
+      await this.syncCustomerSignedStatus({
+        tenantId,
+        project: existing,
+        authContext: input.authContext,
+      });
+    }
+
     return project;
   }
 
@@ -260,14 +270,14 @@ class ProjectStatusService {
     return value;
   }
 
-  private async assertSignContractCustomerStatus(input: {
+  private async getSignContractCustomer(input: {
     tenantId: string;
     project: Record<string, unknown>;
   }) {
     const customerId = typeof input.project.customer_id === "string"
       ? input.project.customer_id
       : null;
-    if (!customerId) return;
+    if (!customerId) return null;
 
     const customer = await customerCoreRepository.findById({
       customerId,
@@ -276,9 +286,56 @@ class ProjectStatusService {
     if (!customer) {
       throw Errors.badRequest("关联客户不存在");
     }
-    if (customer.status !== "designing") {
-      throw Errors.badRequest("项目签约前，关联客户状态必须为设计中");
+    if (customer.status !== "designing" && customer.status !== "signed") {
+      throw Errors.badRequest("项目签约前，关联客户销售状态必须为设计中或已签约");
     }
+
+    return customer;
+  }
+
+  private async assertSignContractCustomerStatus(input: {
+    tenantId: string;
+    project: Record<string, unknown>;
+  }) {
+    await this.getSignContractCustomer(input);
+  }
+
+  private async syncCustomerSignedStatus(input: {
+    tenantId: string;
+    project: Record<string, unknown>;
+    authContext: AuthContext;
+  }) {
+    const customer = await this.getSignContractCustomer({
+      tenantId: input.tenantId,
+      project: input.project,
+    });
+    if (!customer || customer.status === "signed") return;
+
+    const customerId = typeof customer.id === "string" ? customer.id : null;
+    if (!customerId) return;
+
+    const fromStatus = customer.status as CustomerStatus;
+    await customerCoreRepository.updateById({
+      customerId,
+      tenantId: input.tenantId,
+      payload: { status: "signed" },
+    });
+
+    await customerStatusTransitionRepository.create({
+      tenantId: input.tenantId,
+      customerId,
+      fromStatus,
+      toStatus: "signed",
+      action: "mark_signed",
+      operatorEmployeeId: input.authContext.employeeId ?? null,
+      operatorAuthUserId: input.authContext.authUserId,
+      reason: null,
+      metadata: {
+        source: "project_status",
+        project_id: input.project.id,
+        project_action: "sign_contract",
+      },
+    });
   }
 
   private async getOptionalPausedFromStatus(projectId: string, tenantId: string) {

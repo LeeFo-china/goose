@@ -25,7 +25,7 @@
 
 客户销售阶段：
 
-`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中
+`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中 -> `signed` 已签约
 
 项目交付阶段：
 
@@ -36,7 +36,7 @@
 - 客户执行 `start_design` 前，端侧必须先创建/确认一个同客户同房产的 `designing` 项目；后端校验主房产并复用已有有效项目作为兜底。
 - 项目处于 `designing` 时，下一步只能执行 `confirm_proposal`。
 - 项目执行 `sign_contract` 时必须处于 `proposal_confirmed`，且必须提供 `signed_amount > 0`。
-- 项目签约只推进项目状态，不再反向写客户签约状态。
+- 项目签约成功后，后端自动把关联客户销售状态从 `designing` 推进到 `signed`；不再写旧 `contracted` 状态。
 - 项目 `on_hold` 状态动作列表会读取最近一次暂停日志里的 `paused_from_status`；缺少暂停上下文时不会返回恢复动作。
 - 状态流转日志接口按 `created_at desc` 排序，并返回统一分页结构。
 

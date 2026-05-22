@@ -4,13 +4,15 @@
 
 ## 背景
 
-客户状态只表达销售阶段，不再承载下定、签约等交付含义。Admin 客户详情页应展示当前状态和可执行动作，状态变更统一调用动作接口。
+客户状态只表达销售阶段，不承载施工交付进度。Admin 客户详情页应展示当前状态和可执行动作，状态变更统一调用动作接口。
 
 当前有效主路径：
 
-`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中
+`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中 -> `signed` 已签约
 
 `designing` 是销售到项目的衔接节点。客户点击 `start_design` 时，Admin 必须先完成项目创建/确认；项目存在后才调用客户状态动作。后端要求客户已有主房产信息，并会复用同客户同房产的有效项目作为兜底。
+
+`signed` 是销售终态，由项目 `sign_contract` 成功后后端自动写入；Admin 客户详情不需要额外展示手动“客户签约”按钮。
 
 ## 开始设计两步接入
 
@@ -88,6 +90,12 @@ Content-Type: application/json
 | `mark_dormant` | `potential/following/arrived/designing` | `dormant` | 普通按钮，要求原因 |
 | `reactivate` | `dormant` | `following` | 主按钮 |
 | `mark_invalid` | `potential/following/arrived/designing/dormant` | `invalid` | 危险按钮，要求原因 |
+
+内部动作：
+
+| Action | From | To | 说明 |
+| --- | --- | --- | --- |
+| `mark_signed` | `designing` | `signed` | 项目 `sign_contract` 成功后由后端自动写入客户状态和流转日志，不通过客户详情按钮触发 |
 
 按钮渲染：
 
