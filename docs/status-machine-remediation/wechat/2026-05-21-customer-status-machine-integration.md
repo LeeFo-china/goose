@@ -14,6 +14,10 @@
 
 `signed` 是销售终态，由项目 `sign_contract` 成功后后端自动写入；小程序客户详情不需要额外展示手动“客户签约”按钮。
 
+## 共享包要求
+
+小程序端如果依赖 `@gooes/domain`，需要升级到 `@gooes/domain@1.11.0` 或更高版本。不要继续使用包含 `ordered / contracted`、`place_order / sign_contract` 客户状态和动作的旧版本。
+
 ## 开始设计两步接入
 
 小程序端不能把 `start_design` 作为普通状态按钮直接提交，应按下面顺序执行：

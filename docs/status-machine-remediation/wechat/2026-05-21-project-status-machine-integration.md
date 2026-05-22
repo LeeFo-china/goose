@@ -10,6 +10,10 @@
 
 `designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收
 
+## 共享包要求
+
+小程序端如果依赖 `@gooes/domain`，需要升级到 `@gooes/domain@1.11.0` 或更高版本。不要继续使用包含 `lead / measure / negotiating / completed / after_sale` 项目状态和旧工程动作的版本。
+
 ## 状态变更接口
 
 ```http

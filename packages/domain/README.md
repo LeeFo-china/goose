@@ -5,7 +5,7 @@ Shared domain constants, literal unions, config maps, and type guards for Gooes.
 ## Install
 
 ```bash
-npm install @gooes/domain
+npm install @gooes/domain@1.11.0
 ```
 
 ## Usage

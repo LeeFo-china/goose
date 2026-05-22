@@ -13,6 +13,16 @@
 - 项目执行 `sign_contract` 成功后，后端自动把关联客户从 `designing` 推进到 `signed`；客户已是 `signed` 时保持不变。
 - 项目交付阶段：`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收。
 
+## 共享包版本
+
+小程序端如果依赖 `@gooes/domain`，必须升级到 `@gooes/domain@1.11.0` 或更高版本。本版本包含：
+
+- 客户状态 `designing / signed` 和动作 `start_design / mark_signed`。
+- 项目状态 `designing / proposal_confirmed / signed / design_finalized / pending_start / started / constructing / on_hold / acceptance / invalid`。
+- 项目动作 `confirm_proposal / sign_contract / finalize_design / schedule_construction / start_project / start_construction / pause_project / resume_project / start_acceptance / mark_invalid`。
+
+升级后需要清理端侧写死的旧状态和旧动作，避免继续展示下线入口。
+
 已下线内容：
 
 - 客户 `ordered / contracted` 状态。
