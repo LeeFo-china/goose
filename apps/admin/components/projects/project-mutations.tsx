@@ -463,7 +463,9 @@ function ProjectStatusPanel({
 }) {
   const [actionsData, setActionsData] = useState<ProjectStatusActionsResponse | null>(null);
   const [transitions, setTransitions] = useState<ProjectStatusTransitionRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [transitionsLoading, setTransitionsLoading] = useState(false);
+  const [transitionsLoaded, setTransitionsLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
@@ -473,28 +475,51 @@ function ProjectStatusPanel({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setActionsLoading(true);
     setError("");
-    Promise.all([
-      requestProject({ path: `/projects/${project.id}/status-actions` }),
-      requestProject({ path: `/projects/${project.id}/status-transitions?page=1&pageSize=20` }),
-    ])
-      .then(([actions, timeline]) => {
+    setTransitions([]);
+    setTransitionsLoaded(false);
+    requestProject({ path: `/projects/${project.id}/status-actions` })
+      .then((actions) => {
         if (cancelled) return;
         setActionsData(actions as ProjectStatusActionsResponse);
-        setTransitions((timeline?.rows || []) as ProjectStatusTransitionRecord[]);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "状态信息加载失败");
+        if (!cancelled) setError(err instanceof Error ? err.message : "状态动作加载失败");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setActionsLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
   }, [project.id, project.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setTransitionsLoading(true);
+      requestProject({ path: `/projects/${project.id}/status-transitions?page=1&pageSize=3` })
+        .then((timeline) => {
+          if (cancelled) return;
+          setTransitions((timeline?.rows || []) as ProjectStatusTransitionRecord[]);
+          setTransitionsLoaded(true);
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : "状态时间线加载失败");
+        })
+        .finally(() => {
+          if (!cancelled) setTransitionsLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [project.id, project.status]);
+
 
   function closeActionDialog() {
     if (pending) return;
@@ -600,10 +625,10 @@ function ProjectStatusPanel({
                 暂停前：{projectStatusLabel(actionsData.paused_from_status)}
               </Badge>
             ) : null}
-            {loading ? (
+            {actionsLoading ? (
               <Badge variant="secondary">
                 <Loader2 className="animate-spin" data-icon="inline-start" />
-                正在加载
+                动作加载中
               </Badge>
             ) : null}
           </div>
@@ -628,7 +653,7 @@ function ProjectStatusPanel({
                       type="button"
                       size="sm"
                       variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
-                      disabled={loading || pending}
+                      disabled={actionsLoading || pending}
                       onClick={() => openActionDialog(item.action)}
                     >
                       {item.action.label}
@@ -651,7 +676,7 @@ function ProjectStatusPanel({
                     </Tooltip>
                   )
                 )}
-                {!loading && actions.length === 0 ? (
+                {!actionsLoading && actions.length === 0 ? (
                   <Badge variant="outline">暂无可执行动作</Badge>
                 ) : null}
               </div>
@@ -685,9 +710,18 @@ function ProjectStatusPanel({
             </div>
             {transitions.length > latestTransitions.length ? (
               <Badge variant="outline">显示最近 {latestTransitions.length} 条</Badge>
+            ) : transitionsLoading ? (
+              <Badge variant="secondary">
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                加载中
+              </Badge>
             ) : null}
           </div>
-          {latestTransitions.length > 0 ? (
+          {!transitionsLoaded ? (
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
+              最近流转正在后台同步。
+            </div>
+          ) : latestTransitions.length > 0 ? (
             <div className="flex flex-col divide-y rounded-md border bg-background">
               {latestTransitions.map((item) => (
                 <div key={item.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">

@@ -197,16 +197,12 @@ class ProjectStatusService {
       throw Errors.forbidden();
     }
 
-    const project = await projectRepository.findById(input.projectId, tenantId);
-    if (!project) {
-      throw Errors.badRequest("项目不存在");
-    }
-
     const result = await projectStatusTransitionRepository.listByProject({
       projectId: input.projectId,
       tenantId,
       page: input.query.page,
       pageSize: input.query.pageSize,
+      includeCount: false,
     });
 
     return {
@@ -214,10 +210,12 @@ class ProjectStatusService {
       pagination: {
         page: input.query.page,
         pageSize: input.query.pageSize,
-        total: result.total,
-        totalPages: result.total > 0
+        total: result.total ?? result.rows.length,
+        totalPages: result.total != null && result.total > 0
           ? Math.ceil(result.total / input.query.pageSize)
-          : 0,
+          : result.rows.length > 0
+            ? input.query.page
+            : 0,
       },
     };
   }
