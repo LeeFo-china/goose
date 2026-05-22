@@ -11,7 +11,7 @@ import {
 import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { ProjectsTable } from "@/components/projects/projects-table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 type Pagination = {
   page: number;
@@ -53,13 +53,7 @@ export function ProjectsClientShell({
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>项目列表</CardTitle>
-              <CardDescription>
-                筛选条件作用于下方项目表格，当前共 {pagination.total} 条记录。
-              </CardDescription>
-            </div>
+          <div className="flex justify-end">
             {pending ? (
               <Badge variant="secondary">
                 <Loader2 className="animate-spin" data-icon="inline-start" />

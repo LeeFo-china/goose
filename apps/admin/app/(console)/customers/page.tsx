@@ -1,11 +1,9 @@
-import { ListFilter, PhoneCall, UserRound, UsersRound } from "lucide-react";
 import { CustomersClientShell } from "@/components/customers/customers-client-shell";
 import {
   CreateCustomerButton,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
-import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -100,11 +98,6 @@ export default async function CustomersPage({
   const keyword = params.keyword?.trim() || "";
   const follow = params.follow?.trim() || "";
   const { list, pagination, error } = await getCustomers(params);
-  const activeCount = list.filter((item) => item.status !== "invalid").length;
-  const followingCount = list.filter((item) =>
-    item.status === "following" || item.status === "arrived"
-  ).length;
-  const phoneVisibleCount = list.filter((item) => item.can_view_phone).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -116,53 +109,6 @@ export default async function CustomersPage({
           </p>
         </div>
         <CreateCustomerButton />
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ListFilter className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选客户</div>
-              <div className="text-xl font-semibold">{pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <UsersRound className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页有效客户</div>
-              <div className="text-xl font-semibold">{activeCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <UserRound className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页跟进/到店</div>
-              <div className="text-xl font-semibold">{followingCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <PhoneCall className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页可见号码</div>
-              <div className="text-xl font-semibold">{phoneVisibleCount}</div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <CustomersClientShell

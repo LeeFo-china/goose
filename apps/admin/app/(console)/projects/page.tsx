@@ -1,11 +1,9 @@
-import { BriefcaseBusiness, CalendarDays, House, ListFilter } from "lucide-react";
 import {
   CreateProjectButton,
   type ProjectRecord,
 } from "@/components/projects/project-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectsClientShell } from "@/components/projects/projects-client-shell";
-import { Card, CardContent } from "@/components/ui/card";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -31,14 +29,6 @@ type ProjectPageSearchParams = {
 function normalizePage(value: string | undefined) {
   const page = Number(value || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function formatMoney(value: number | string | null | undefined) {
-  const amount = Number(value || 0);
-  return amount.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 async function getProjects(params: ProjectPageSearchParams) {
@@ -100,13 +90,6 @@ export default async function ProjectsPage({
   const ownership = params.ownership?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const { list, pagination, error } = await getProjects(params);
-  const activeCount = list.filter((item) => item.status !== "invalid").length;
-  const deliveryCount = list.filter((item) =>
-    item.status === "started" ||
-    item.status === "constructing" ||
-    item.status === "acceptance"
-  ).length;
-  const pageBudget = list.reduce((sum, item) => sum + Number(item.budget || 0), 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -118,53 +101,6 @@ export default async function ProjectsPage({
           </p>
         </div>
         <CreateProjectButton />
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ListFilter className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选项目</div>
-              <div className="text-xl font-semibold">{pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <BriefcaseBusiness className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页有效项目</div>
-              <div className="text-xl font-semibold">{activeCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <CalendarDays className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页交付中</div>
-              <div className="text-xl font-semibold">{deliveryCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <House className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页预算</div>
-              <div className="text-xl font-semibold">¥{formatMoney(pageBudget)}</div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <ProjectsClientShell

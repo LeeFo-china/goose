@@ -11,26 +11,9 @@ export default function ProjectsLoading() {
         </div>
         <Skeleton className="h-9 w-24" />
       </div>
-      <div className="grid gap-3 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Card key={index}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <Skeleton className="size-10" />
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-6 w-28" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-4 w-72" />
-            </div>
+          <div className="flex justify-end">
             <Skeleton className="h-6 w-28" />
           </div>
           <div className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px]">
