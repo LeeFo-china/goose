@@ -27,6 +27,7 @@ const statusMeta: Record<string, {
   following: { label: CustomerStatusConfig.following.label, variant: "default" },
   arrived: { label: CustomerStatusConfig.arrived.label, variant: "warning" },
   designing: { label: CustomerStatusConfig.designing.label, variant: "default" },
+  signed: { label: CustomerStatusConfig.signed.label, variant: "success" },
   dormant: { label: CustomerStatusConfig.dormant.label, variant: "secondary" },
   invalid: { label: CustomerStatusConfig.invalid.label, variant: "danger" },
 };
@@ -221,7 +222,12 @@ const columns: ColumnDef<CustomerRecord>[] = [
             variant: "outline" as const,
           };
 
-      return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
+      const badgeMeta = meta ?? {
+        label: status || "未知",
+        variant: "outline" as const,
+      };
+
+      return <Badge className="whitespace-nowrap" variant={badgeMeta.variant}>{badgeMeta.label}</Badge>;
     },
     meta: {
       cellClassName: "whitespace-nowrap",
