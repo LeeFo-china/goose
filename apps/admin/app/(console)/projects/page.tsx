@@ -101,8 +101,10 @@ export default async function ProjectsPage({
   const keyword = params.keyword?.trim() || "";
   const { list, pagination, error } = await getProjects(params);
   const activeCount = list.filter((item) => item.status !== "invalid").length;
-  const constructingCount = list.filter((item) =>
-    item.status === "constructing" || item.status === "acceptance"
+  const deliveryCount = list.filter((item) =>
+    item.status === "started" ||
+    item.status === "constructing" ||
+    item.status === "acceptance"
   ).length;
   const pageBudget = list.reduce((sum, item) => sum + Number(item.budget || 0), 0);
 
@@ -147,8 +149,8 @@ export default async function ProjectsPage({
               <CalendarDays className="size-5" />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">本页施工/验收</div>
-              <div className="text-xl font-semibold">{constructingCount}</div>
+              <div className="text-sm text-muted-foreground">本页交付中</div>
+              <div className="text-xl font-semibold">{deliveryCount}</div>
             </div>
           </CardContent>
         </Card>

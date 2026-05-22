@@ -15,17 +15,16 @@ const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
 }> = {
-  lead: { label: "线索客户", variant: "outline" },
-  measure: { label: "量房中", variant: "warning" },
-  negotiating: { label: "谈单中", variant: "warning" },
-  signed: { label: "已签约", variant: "success" },
   designing: { label: "设计中", variant: "default" },
+  proposal_confirmed: { label: "方案已确认", variant: "warning" },
+  signed: { label: "已签约", variant: "success" },
+  design_finalized: { label: "设计定稿", variant: "default" },
+  pending_start: { label: "待开工", variant: "warning" },
+  started: { label: "已开工", variant: "warning" },
   constructing: { label: "施工中", variant: "warning" },
   on_hold: { label: "已暂停", variant: "danger" },
-  acceptance: { label: "验收中", variant: "warning" },
-  completed: { label: "已完工", variant: "success" },
-  after_sale: { label: "售后中", variant: "danger" },
-  invalid: { label: "无效客户", variant: "secondary" },
+  acceptance: { label: "竣工验收", variant: "success" },
+  invalid: { label: "无效项目", variant: "secondary" },
 };
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {

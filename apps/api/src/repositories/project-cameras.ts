@@ -212,7 +212,7 @@ class ProjectCameraRepository {
     }
 
     const status = projectRow.status;
-    if (status === "completed" || status === "invalid") {
+    if (status === "acceptance" || status === "invalid") {
       return null;
     }
 

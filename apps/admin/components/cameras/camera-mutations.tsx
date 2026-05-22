@@ -189,8 +189,8 @@ function getProjectOptionDescription(project: CameraProjectOption) {
   const parts = [
     project.status === "invalid"
       ? "无效项目不可绑定摄像头"
-      : project.status === "completed"
-        ? "已完工项目不可绑定摄像头"
+      : project.status === "acceptance"
+        ? "竣工验收项目不可绑定摄像头"
         : null,
     project.phone_masked ? `电话 ${project.phone_masked}` : null,
     project.property?.layout || null,
@@ -200,7 +200,7 @@ function getProjectOptionDescription(project: CameraProjectOption) {
 }
 
 function canBindCameraToProject(project: CameraProjectOption | null | undefined) {
-  return project?.status !== "invalid" && project?.status !== "completed";
+  return project?.status !== "invalid" && project?.status !== "acceptance";
 }
 
 function readAssetChannelNo(asset: TenantDeviceAsset) {
@@ -626,7 +626,7 @@ function CameraDialog({
       return;
     }
     if (mode === "create" && !canBindCameraToProject(selectedProject)) {
-      setError("无效或已完工项目不能新增摄像头");
+      setError("无效或竣工验收项目不能新增摄像头");
       return;
     }
     if (mode === "create" && !values.device_key) {

@@ -78,13 +78,15 @@ Authorization: Bearer <employee_token>
   "rows": [
     {
       "id": "uuid",
-      "from_status": "following",
-      "to_status": "contracted",
-      "action": "sign_contract",
+      "from_status": "arrived",
+      "to_status": "designing",
+      "action": "start_design",
       "operator_employee_id": "uuid",
       "operator_auth_user_id": "uuid",
-      "reason": "项目签约后同步客户签约状态",
-      "metadata": {},
+      "reason": null,
+      "metadata": {
+        "source": "miniprogram"
+      },
       "created_at": "2026-05-21T12:00:00Z"
     }
   ],

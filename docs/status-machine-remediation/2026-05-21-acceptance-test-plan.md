@@ -10,65 +10,26 @@
 bun run api:typecheck
 bun run api:build
 bun run check:permission-boundaries
+pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit
 git diff --check
 ```
 
-## 阶段 1：项目状态机验收
-
-### 成功流转
-
-- `lead -> measure` 使用 `start_measure` 成功。
-- `measure -> negotiating` 使用 `start_negotiation` 成功。
-- `negotiating -> designing` 使用 `start_design` 成功。
-- `designing -> signed` 使用 `sign_contract` 且 `signed_amount > 0` 成功。
-- `signed -> constructing` 使用 `start_construction` 成功。
-
-### 非法流转
-
-- `lead -> completed` 失败，返回 400。
-- `lead -> signed` 且没有 `signed_amount` 失败，返回 400。
-- `invalid -> measure` 失败，返回 400。
-- 直接传未知 action 失败，返回 400。
-
-### 旧接口兼容
-
-- `PATCH /projects/:id` 不传 `status` 时保持现有更新行为。
-- `PATCH /projects/:id` 传 `status` 时不得绕过状态机。
-- 非法 `status` 变更返回明确中文错误。
-
-### 日志和副作用
-
-- 成功流转后 `project_status_transition_logs` 写入一条记录。
-- 日志包含 `project_id / from_status / to_status / action / operator_employee_id / reason / metadata / created_at`。
-- 状态变化后公开项目缓存失效。
-- 状态变化后首页项目列表缓存失效。
-
-## 阶段 2：项目副作用验收
-
-- `invalid` 项目不能新增施工日志。
-- `invalid` 项目不能新增摄像头。
-- `completed` 项目按业务规则禁止新增施工日志，或只允许售后日志。
-- `on_hold` 项目恢复后回到暂停前状态。
-- `acceptance` 状态可触发验收流程。
-- 首页统计、任务中心、公开项目列表不出现作废项目。
-
-## 阶段 3：客户状态机验收
+## 客户状态机验收
 
 ### 成功流转
 
 - `potential -> following` 使用 `start_following` 成功。
 - `following -> arrived` 使用 `mark_arrived` 成功。
-- `arrived -> ordered` 使用 `place_order` 成功。
-- `ordered -> designing` 使用 `start_design` 成功，并同步创建或复用项目。
-- `designing -> contracted` 使用 `sign_contract` 成功。
+- `arrived -> designing` 前先创建/确认项目，项目成功后使用 `start_design` 成功。
 - `dormant -> following` 使用 `reactivate` 成功。
 
 ### 非法流转
 
-- `potential -> contracted` 失败。
+- `potential -> designing` 失败。
+- `arrived -> designing` 但客户缺少主房产时失败。
 - `invalid -> following` 失败。
-- `contracted -> invalid` 默认失败，除非业务确认独立动作。
 - 未传必填 `reason` 的 `mark_invalid` / `mark_dormant` 失败。
+- 客户侧不再接受下定或客户签约动作。
 
 ### 日志和兼容
 
@@ -77,16 +38,54 @@ git diff --check
 - `PATCH /customers/:id` 传 `status` 时不得绕过状态机。
 - 客户列表筛选、客户详情、小程序客户登录不受影响。
 
-## 阶段 4：客户项目联动验收
+## 项目状态机验收
 
-- 项目 `sign_contract` 成功后，客户可同步为 `contracted`。
-- 客户已是 `contracted` 时，项目签约不重复写无意义客户状态日志。
+### 成功流转
+
+- `designing -> proposal_confirmed` 使用 `confirm_proposal` 成功。
+- `proposal_confirmed -> signed` 使用 `sign_contract` 且 `signed_amount > 0` 成功。
+- `signed -> design_finalized` 使用 `finalize_design` 成功。
+- `design_finalized -> pending_start` 使用 `schedule_construction` 成功，且必须先确认开工日期。
+- `pending_start -> started` 使用 `start_project` 成功。
+- `started -> constructing` 使用 `start_construction` 成功。
+- `constructing -> acceptance` 使用 `start_acceptance` 成功。
+
+### 非法流转
+
+- `designing -> signed` 失败，必须先确认方案。
+- `proposal_confirmed -> signed` 但没有 `signed_amount` 失败。
+- `design_finalized -> pending_start` 但没有 `start_date` 失败。
+- `invalid -> constructing` 失败。
+- 直接传未知 action 失败。
+
+### 日志和副作用
+
+- 成功流转后 `project_status_transition_logs` 写入一条记录。
+- 日志包含 `project_id / from_status / to_status / action / operator_employee_id / reason / metadata / created_at`。
+- 状态变化后公开项目缓存失效。
+- 状态变化后首页项目列表缓存失效。
+
+## 项目写操作限制验收
+
+- `invalid` 项目不能新增施工日志。
+- `on_hold` 项目不能新增施工日志。
+- `acceptance` 项目不能新增施工日志。
+- `invalid` 项目不能新增摄像头。
+- `acceptance` 项目不能新增摄像头。
+- `on_hold` 项目恢复后回到暂停前状态。
+- 首页统计、任务中心、公开项目列表不出现作废项目。
+
+## 客户项目联动验收
+
+- 客户点击 `start_design` 后，端侧先完成项目创建/确认。
+- 项目创建/确认失败时，不得调用客户 `start_design`，客户仍保持 `arrived`。
+- 项目创建/确认成功后，客户执行 `start_design` 成功并进入 `designing`。
+- 项目处于 `designing` 时不能直接签约，必须先执行 `confirm_proposal`。
+- 项目签约成功后项目进入 `signed`。
+- 项目签约成功后客户仍保持 `designing`。
 - 多项目客户中，一个项目 `invalid` 不得自动把客户改为 `invalid`。
-- 项目处于 `negotiating` 时不能直接签约，必须先执行 `start_design`。
-- 关联客户处于 `potential / following / arrived / ordered / dormant / invalid` 时，项目签约返回 400，提示先推进客户到设计中。
-- 客户 `sign_contract` 如后续要求项目关联，未传项目信息时返回 400；当前阶段暂不强制。
 
-## 阶段 5：端侧动作化验收
+## 端侧动作化验收
 
 - Admin 项目详情只展示当前状态可执行动作。
 - Admin 客户详情只展示当前状态可执行动作。

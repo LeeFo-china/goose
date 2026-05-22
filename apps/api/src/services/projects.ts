@@ -43,7 +43,14 @@ type ProjectListResult = {
 };
 
 class ProjectService {
-    private publicProjectVisibleStatuses = ["signed", "constructing", "completed"] as const;
+    private publicProjectVisibleStatuses = [
+        "signed",
+        "design_finalized",
+        "pending_start",
+        "started",
+        "constructing",
+        "acceptance",
+    ] as const;
     private publicProjectsCache: {
         expiresAt: number;
         rows: Array<Record<string, unknown>>;
@@ -614,6 +621,17 @@ class ProjectService {
         const tenantId = accessPolicyService.assertTenantContext(input.authContext);
         accessPolicyService.assertPermission(input.authContext, "project.create");
         await this.assertProjectRelationsInTenant(input.payload, tenantId);
+
+        if (input.payload.customer_id && input.payload.property_id) {
+            const existingProject = await projectRepository.findActiveByCustomerProperty({
+                customerId: input.payload.customer_id,
+                propertyId: input.payload.property_id,
+                tenantId,
+            });
+            if (existingProject) {
+                return existingProject;
+            }
+        }
 
         const project = await projectRepository.create({
             ...input.payload,

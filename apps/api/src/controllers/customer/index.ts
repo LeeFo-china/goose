@@ -579,6 +579,9 @@ class CustomerController extends TenantBaseController<
     if (payload.source === "douyin") {
       this.assertDouyinScreenshotRequired(payload.douyin_screenshot_images);
     }
+    if (payload.status && payload.status !== "potential") {
+      throw Errors.badRequest("新建客户只能使用潜在客户状态，后续状态请在详情页通过状态动作推进");
+    }
 
     if (
       scope !== "all" &&
@@ -687,17 +690,28 @@ class CustomerController extends TenantBaseController<
       });
     }
 
+    const shouldPreparePropertyBeforeStatusTransition =
+      payload.status === "designing" && propertyPayload !== undefined;
+    const preparedPrimaryProperty = shouldPreparePropertyBeforeStatusTransition
+      ? await customerPropertyService.upsertCustomerPrimaryProperty({
+        customerId: idVerify.data.id,
+        propertyPayload,
+        tenantId: authContext.tenantId,
+      })
+      : undefined;
+
     const customer = await customerCoreService.updateCustomer({
       authContext,
       customerId: idVerify.data.id,
       payload,
     });
 
-    const primaryProperty = await customerPropertyService.upsertCustomerPrimaryProperty({
-      customerId: customer.id,
-      propertyPayload,
-      tenantId: authContext.tenantId,
-    });
+    const primaryProperty = preparedPrimaryProperty ??
+      await customerPropertyService.upsertCustomerPrimaryProperty({
+        customerId: customer.id,
+        propertyPayload,
+        tenantId: authContext.tenantId,
+      });
     return ResponseHandler.success(
       await this.buildCustomerDetailResponse(customer, {
         primaryProperty,

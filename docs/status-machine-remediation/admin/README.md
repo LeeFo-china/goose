@@ -4,13 +4,20 @@
 
 ## 对接目标
 
-Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为“在详情页展示当前状态和可执行动作，用户点击动作后调用状态流转接口”。
+Admin 端状态流转统一改为动作驱动，普通编辑表单只维护基础资料，不再把 `status` 当作普通字段保存。
 
-本次对接覆盖：
+当前有效流程：
 
-- 客户状态机：`potential -> following -> arrived -> ordered -> designing -> contracted` 等生命周期动作。
-- 项目状态机：`lead -> measure -> negotiating -> designing -> signed -> constructing / acceptance / completed` 等工程动作。
-- 客户项目联动：项目签约成功后，同步关联客户为 `contracted`。
+- 客户销售阶段：`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中。
+- 销售到项目衔接：客户点击 `start_design` 时，Admin 必须先完成项目创建/确认；项目存在后才调用客户状态动作进入 `designing`。
+- 项目交付阶段：`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收。
+
+已下线内容：
+
+- 客户 `ordered / contracted` 状态。
+- 客户 `place_order / sign_contract` 动作。
+- 项目 `lead / measure / negotiating / completed / after_sale` 状态。
+- 项目 `start_measure / start_negotiation / start_design / complete_project / start_after_sale` 动作。
 
 ## 文档索引
 
@@ -20,74 +27,7 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 - [状态动作和时间线对接](./2026-05-21-status-actions-and-transition-timeline.md)
 - [Admin 动作化落地记录](./2026-05-21-admin-status-machine-implementation.md)
 
-## 当前落地状态
-
-状态：已完成 Admin 端最小闭环
-
-已落地：
-
-- 客户 / 项目编辑表单在编辑模式下不再提交 `status`。
-- 客户 / 项目详情弹窗展示当前状态、可执行动作和最近 20 条状态时间线。
-- 状态变更统一调用 `POST /customers/:id/status-transition` / `POST /projects/:id/status-transition`。
-- 项目签约动作要求填写 `signed_amount > 0`。
-- Admin 端根据项目状态禁用发起验收和新增摄像头入口。
-
-## 当前 Admin 代码影响点
-
-### 客户
-
-当前文件：
-
-- `apps/admin/components/customers/customer-mutations.tsx`
-
-现状：
-
-- 客户新增 / 编辑表单包含 `status` 字段。
-- 保存客户时，`PATCH /customers/:id` payload 会携带 `status`。
-- 客户详情页只展示基础信息、来源时间线、跟进记录、房产列表，没有状态动作区域。
-- 作废客户当前调用 `DELETE /customers/:id`，后端已保留兼容并内部走 `mark_invalid`。
-
-目标：
-
-- 新增客户时可以保留初始状态，默认 `potential`。
-- 编辑客户基础信息时不再提交 `status`。
-- 客户详情页新增状态区域，展示当前状态和动作按钮。
-- 状态变更统一调用 `POST /customers/:id/status-transition`。
-
-### 项目
-
-当前文件：
-
-- `apps/admin/components/projects/project-mutations.tsx`
-
-现状：
-
-- 项目新增 / 编辑表单包含 `status` 字段。
-- 保存项目时，`POST /projects` / `PATCH /projects/:id` payload 会携带 `status`。
-- 项目编辑表单包含 `signed_amount`，但签约动作没有独立弹窗。
-- 项目详情页只展示概览、成员、施工日志、工序验收，没有状态动作区域。
-- 作废项目当前调用 `DELETE /projects/:id`，后端已保留兼容。
-
-目标：
-
-- 新增项目时可以保留初始状态，默认 `lead`。
-- 编辑项目基础信息时不再提交 `status`。
-- 项目详情页新增状态区域，展示当前状态和动作按钮。
-- 项目签约动作弹窗要求填写 `signed_amount > 0`。
-- 状态变更统一调用 `POST /projects/:id/status-transition`。
-
-## 推荐接入顺序
-
-1. 客户 / 项目编辑表单先停止在编辑模式下提交 `status`。
-2. 详情页增加状态展示区，调用 `GET /status-actions` 渲染可执行动作。
-3. 接入 `POST /customers/:id/status-transition` 和 `POST /projects/:id/status-transition`。
-4. 项目签约弹窗补 `signed_amount`，并展示关联客户状态前置校验。
-5. 根据项目状态禁用施工日志、摄像头、验收等写入口。
-6. 接入 `GET /status-transitions`，在客户 / 项目详情展示状态时间线。
-
 ## 接口可用性
-
-已可用：
 
 - `POST /customers/:id/status-transition`
 - `POST /projects/:id/status-transition`
@@ -95,7 +35,8 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 - `GET /projects/:id/status-actions`
 - `GET /customers/:id/status-transitions?page=1&pageSize=20`
 - `GET /projects/:id/status-transitions?page=1&pageSize=20`
-- 旧 `PATCH /customers/:id` / `PATCH /projects/:id` 传 `status` 时仍会进入状态机校验。
+
+旧 `PATCH /customers/:id` / `PATCH /projects/:id` 传 `status` 的兼容路径不再作为新代码接入依据。
 
 ## 通用请求格式
 
@@ -124,21 +65,26 @@ Admin 端需要从“在编辑表单里直接修改 `status` 字段”调整为�
 
 ## 通用 UI 规则
 
-- 普通编辑表单负责基础资料，不负责状态流转。
+- 普通编辑表单不展示或不提交 `status`。
 - 状态动作放在详情页显式触发。
+- 状态按钮以 `GET /status-actions` 返回值为准。
 - `requires_reason=true` 的动作必须弹窗填写原因。
-- 危险动作使用二次确认，包括作废、暂停。
-- 成功后刷新当前详情、列表和首页统计相关数据。
+- `sign_contract` 必须弹窗填写 `signed_amount > 0`。
+- 危险动作使用二次确认，包括 `pause_project` 和 `mark_invalid`。
+- 成功后刷新当前详情、列表、动作列表、状态时间线和相关统计。
 - 前端可以提前禁用明显非法动作，但后端 400 仍是最终准入。
+
+## 写操作限制
+
+- `invalid / on_hold / acceptance` 项目不能新增施工日志。
+- `invalid / acceptance` 项目不能新增摄像头。
+- 只有 `constructing / acceptance` 项目能发起或查看验收相关流程。
 
 ## 验收口径
 
-- 编辑客户保存基础信息时，网络请求不再包含 `status`。
-- 编辑项目保存基础信息时，网络请求不再包含 `status`。
-- 客户状态动作成功后，客户详情和客户列表状态同步刷新。
-- 项目状态动作成功后，项目详情和项目列表状态同步刷新。
-- 项目签约时未填写有效 `signed_amount`，前端阻止提交；后端仍返回 400。
-- 项目签约成功且有关联客户时，关联客户状态变为 `contracted`。
-- `invalid / on_hold / completed` 项目不能新增施工日志。
-- `invalid / completed` 项目不能新增摄像头。
-- 只有 `constructing / acceptance` 项目能发起验收。
+- 编辑客户保存基础信息时，网络请求不包含 `status`。
+- 编辑项目保存基础信息时，网络请求不包含 `status`。
+- `arrived` 客户点击 `start_design` 后先弹出项目创建 card；缺主房产时在 card 内补齐主房产，项目创建/确认成功后才进入 `designing`。
+- 项目详情状态顺序显示为：开始设计、方案已确认、项目签约、设计定稿、待开工、已开工、施工中、竣工验收。
+- 项目处于 `designing` 时，只能先执行 `confirm_proposal`，不能直接 `sign_contract`。
+- 项目签约成功后项目进入 `signed`，不再反向把客户改成 `contracted`。

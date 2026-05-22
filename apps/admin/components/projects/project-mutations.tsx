@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
+  CustomerStatusConfig,
+  isCustomerStatus,
   ProjectStatusActionConfig,
-  PROJECT_STATUS_VALUES,
   ProjectStatusConfig,
 } from "@gooes/domain";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,13 @@ import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Command,
   CommandEmpty,
@@ -50,6 +58,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type RelationPerson = {
@@ -66,6 +80,7 @@ type CustomerRelation = {
   name?: string | null;
   phone?: string | null;
   phone_masked?: string | null;
+  status?: string | null;
   owner?: RelationPerson | RelationPerson[] | null;
 };
 
@@ -152,24 +167,15 @@ type ProjectStatusTransitionRecord = {
 
 type ProjectFormState = {
   name: string;
-  status: string;
   customer_id: string;
   designer_id: string;
   supervisor_id: string;
   budget: string;
-  signed_amount: string;
   start_date: string;
   address: string;
   visibility_status: string;
   style_tags: string;
 };
-
-const statusOptions = [
-  ...PROJECT_STATUS_VALUES.map((value) => [
-    value,
-    ProjectStatusConfig[value].label,
-  ] as const),
-];
 
 const visibilityOptions = [
   ["inherit", "跟随状态"],
@@ -190,6 +196,14 @@ function personName(value: RelationPerson | RelationPerson[] | null | undefined)
 function customerName(value: CustomerRelation | CustomerRelation[] | null | undefined) {
   const item = relationOne(value);
   return item?.name || item?.phone_masked || item?.phone || "-";
+}
+
+function customerStatus(value: CustomerRelation | CustomerRelation[] | null | undefined) {
+  return relationOne(value)?.status || null;
+}
+
+function customerStatusLabel(status: string | null | undefined) {
+  return isCustomerStatus(status) ? CustomerStatusConfig[status].label : status || "-";
 }
 
 function propertyLabel(value: PropertyRelation | PropertyRelation[] | null | undefined) {
@@ -214,6 +228,18 @@ function formatDate(value: string | null | undefined) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+  });
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -244,12 +270,12 @@ function projectActionLabel(action: string) {
 }
 
 function blockedProjectActions(currentStatus: string | null | undefined) {
-  if (currentStatus === "negotiating") {
+  if (currentStatus === "designing") {
     return [
       {
         action: "sign_contract",
         label: "项目签约",
-        reason: "需先开始设计",
+        reason: "需先确认方案",
       },
     ];
   }
@@ -262,6 +288,45 @@ function isProjectStatusActionVisible(
   action: string,
 ) {
   return actions.some((item) => item.action === action);
+}
+
+type ProjectStatusActionView =
+  | { kind: "enabled"; action: ProjectStatusActionItem }
+  | {
+    kind: "blocked";
+    action: {
+      action: string;
+      label: string;
+      reason: string;
+    };
+  };
+
+function buildProjectActionViews(
+  actions: ProjectStatusActionItem[],
+  blockedActions: ReturnType<typeof blockedProjectActions>,
+) {
+  const blockedByAction = new Map(
+    blockedActions.map((item) => [item.action, item]),
+  );
+  const views: ProjectStatusActionView[] = [];
+
+  for (const action of actions) {
+    views.push({ kind: "enabled", action });
+
+    if (action.action === "confirm_proposal") {
+      const nextAction = blockedByAction.get("sign_contract");
+      if (nextAction) {
+        views.push({ kind: "blocked", action: nextAction });
+        blockedByAction.delete("sign_contract");
+      }
+    }
+  }
+
+  for (const action of blockedByAction.values()) {
+    views.push({ kind: "blocked", action });
+  }
+
+  return views;
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -292,12 +357,10 @@ async function requestProject(input: {
 function buildDefaults(project?: ProjectRecord): ProjectFormState {
   return {
     name: project?.name || "",
-    status: project?.status || "lead",
     customer_id: project?.customer_id || relationOne(project?.customer)?.id || "",
     designer_id: project?.designer_id || relationOne(project?.designer)?.id || "",
     supervisor_id: project?.supervisor_id || relationOne(project?.supervisor)?.id || "",
     budget: project?.budget != null ? String(project.budget) : "",
-    signed_amount: project?.signed_amount != null ? String(project.signed_amount) : "",
     start_date: project?.start_date ? project.start_date.slice(0, 10) : "",
     address: project?.address || "",
     visibility_status: project?.visibility_status || "inherit",
@@ -406,6 +469,7 @@ function ProjectStatusPanel({
   const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
   const [reason, setReason] = useState("");
   const [signedAmount, setSignedAmount] = useState("");
+  const [constructionStartDate, setConstructionStartDate] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -437,14 +501,26 @@ function ProjectStatusPanel({
     setSelectedAction(null);
     setReason("");
     setSignedAmount("");
+    setConstructionStartDate("");
   }
 
   function openActionDialog(action: ProjectStatusActionItem) {
     setError("");
+    if (
+      action.action === "sign_contract" &&
+      project.customer_id &&
+      customerStatus(project.customer) !== "designing"
+    ) {
+      setError("项目签约前，关联客户状态必须为设计中");
+      return;
+    }
     setSelectedAction(action);
     setReason("");
     setSignedAmount(action.action === "sign_contract" && project.signed_amount
       ? String(project.signed_amount)
+      : "");
+    setConstructionStartDate(action.action === "schedule_construction" && project.start_date
+      ? project.start_date.slice(0, 10)
       : "");
   }
 
@@ -463,6 +539,10 @@ function ProjectStatusPanel({
       setError("项目签约时必须填写有效签约金额");
       return;
     }
+    if (selectedAction.action === "schedule_construction" && !constructionStartDate) {
+      setError("项目排期开工前必须先确定开工日期");
+      return;
+    }
 
     setError("");
     startTransition(async () => {
@@ -476,12 +556,16 @@ function ProjectStatusPanel({
             signed_amount: selectedAction.action === "sign_contract"
               ? normalizedSignedAmount
               : undefined,
+            start_date: selectedAction.action === "schedule_construction"
+              ? constructionStartDate
+              : undefined,
             metadata: { source: "admin" },
           },
         });
         setSelectedAction(null);
         setReason("");
         setSignedAmount("");
+        setConstructionStartDate("");
         await onChanged();
       } catch (err) {
         setError(err instanceof Error ? err.message : "状态变更失败");
@@ -494,13 +578,20 @@ function ProjectStatusPanel({
   const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
     !isProjectStatusActionVisible(actions, item.action)
   );
+  const actionViews = buildProjectActionViews(actions, blockedActions);
+  const latestTransitions = transitions.slice(0, 3);
 
   return (
-    <section className="rounded-md border bg-muted/20 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="text-sm font-semibold">状态流转</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle>项目概览</CardTitle>
+            <CardDescription className="mt-2 truncate">
+              {propertyLabel(project.property)}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant={projectStatusBadgeVariant(currentStatus)}>
               {projectStatusLabel(currentStatus)}
             </Badge>
@@ -517,82 +608,118 @@ function ProjectStatusPanel({
             ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {actions.map((action) => (
-            <Button
-              key={action.action}
-              type="button"
-              size="sm"
-              variant={action.action === "mark_invalid" ? "destructive" : "outline"}
-              disabled={loading || pending}
-              onClick={() => openActionDialog(action)}
-            >
-              {action.label}
-            </Button>
-          ))}
-          {blockedActions.map((action) => (
-            <Button
-              key={action.action}
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled
-              title={action.reason}
-            >
-              {action.label}
-              <span className="text-xs text-muted-foreground">({action.reason})</span>
-            </Button>
-          ))}
-          {!loading && actions.length === 0 ? (
-            <Badge variant="outline">暂无可执行动作</Badge>
-          ) : null}
-        </div>
-      </div>
-      {error ? (
-        <div className="mt-3">
-          <StatusAlert>{error}</StatusAlert>
-        </div>
-      ) : null}
-      <div className="mt-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <History />
-            状态时间线
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 p-5">
+        {error ? <StatusAlert>{error}</StatusAlert> : null}
+        <section className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">下一步</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                只展示当前可执行的推进动作。
+              </p>
+            </div>
+            <TooltipProvider>
+              <div className="flex flex-wrap items-center gap-2">
+                {actionViews.map((item) =>
+                  item.kind === "enabled" ? (
+                    <Button
+                      key={item.action.action}
+                      type="button"
+                      size="sm"
+                      variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
+                      disabled={loading || pending}
+                      onClick={() => openActionDialog(item.action)}
+                    >
+                      {item.action.label}
+                    </Button>
+                  ) : (
+                    <Tooltip key={item.action.action}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                          >
+                            {item.action.label}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{item.action.reason}</TooltipContent>
+                    </Tooltip>
+                  )
+                )}
+                {!loading && actions.length === 0 ? (
+                  <Badge variant="outline">暂无可执行动作</Badge>
+                ) : null}
+              </div>
+            </TooltipProvider>
           </div>
-          <Badge variant="outline">最近 20 条</Badge>
-        </div>
-        {transitions.length > 0 ? (
-          <div className="relative ml-3 flex flex-col gap-3 border-l pl-5">
-            {transitions.map((item) => (
-              <div key={item.id} className="relative rounded-md border bg-background p-3">
-                <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-primary" />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+        </section>
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <InfoItem label="客户" value={customerName(project.customer)} />
+          <InfoItem label="房产" value={propertyLabel(project.property)} />
+          <InfoItem label="金额" value={project.signed_amount
+            ? `签约 ¥${formatMoney(project.signed_amount)}`
+            : project.budget
+              ? `预算 ¥${formatMoney(project.budget)}`
+              : "-"}
+          />
+          <InfoItem label="设计师" value={personName(project.designer)} />
+          <InfoItem label="工程负责人" value={personName(project.supervisor)} />
+          <InfoItem label="开工日期" value={formatDate(project.start_date)} />
+        </section>
+        {project.address ? (
+          <section className="rounded-md border bg-background p-3">
+            <div className="text-xs text-muted-foreground">项目地址</div>
+            <div className="mt-1 text-sm">{project.address}</div>
+          </section>
+        ) : null}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <History className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">最近流转</h3>
+            </div>
+            {transitions.length > latestTransitions.length ? (
+              <Badge variant="outline">显示最近 {latestTransitions.length} 条</Badge>
+            ) : null}
+          </div>
+          {latestTransitions.length > 0 ? (
+            <div className="flex flex-col divide-y rounded-md border bg-background">
+              {latestTransitions.map((item) => (
+                <div key={item.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">{projectActionLabel(item.action)}</span>
                     <Badge variant={projectStatusBadgeVariant(item.from_status)}>
                       {projectStatusLabel(item.from_status)}
                     </Badge>
-                    <ArrowRight />
+                    <ArrowRight className="size-4 text-muted-foreground" />
                     <Badge variant={projectStatusBadgeVariant(item.to_status)}>
                       {projectStatusLabel(item.to_status)}
                     </Badge>
-                    <span>{projectActionLabel(item.action)}</span>
+                    {item.reason ? (
+                      <span className="truncate text-muted-foreground">{item.reason}</span>
+                    ) : null}
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate(item.created_at)}
-                  </span>
+                  <time
+                    dateTime={item.created_at}
+                    className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                  >
+                    {formatDateTime(item.created_at)}
+                  </time>
                 </div>
-                {item.reason ? (
-                  <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
-            暂无状态流转记录。
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
+              暂无状态流转记录。
+            </div>
+          )}
+        </section>
+      </CardContent>
       <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && closeActionDialog()}>
         <DialogContent className="max-w-[480px]">
           <DialogHeader>
@@ -615,6 +742,18 @@ function ProjectStatusPanel({
                   value={signedAmount}
                   disabled={pending}
                   onChange={(event) => setSignedAmount(event.target.value)}
+                />
+              </div>
+            ) : null}
+            {selectedAction?.action === "schedule_construction" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="project-status-start-date">开工日期</Label>
+                <Input
+                  id="project-status-start-date"
+                  type="date"
+                  value={constructionStartDate}
+                  disabled={pending}
+                  onChange={(event) => setConstructionStartDate(event.target.value)}
                 />
               </div>
             ) : null}
@@ -648,7 +787,7 @@ function ProjectStatusPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </Card>
   );
 }
 
@@ -923,7 +1062,6 @@ function ProjectDialog({
       designer_id: string | null;
       supervisor_id: string | null;
       budget: number | null;
-      signed_amount: number | null;
       start_date: string | null;
       address: string | null;
       visibility_status: string;
@@ -934,14 +1072,13 @@ function ProjectDialog({
       designer_id: formState.designer_id || null,
       supervisor_id: formState.supervisor_id || null,
       budget: formState.budget ? Number(formState.budget) : null,
-      signed_amount: formState.signed_amount ? Number(formState.signed_amount) : null,
       start_date: formState.start_date || null,
       address: formState.address.trim() || null,
       visibility_status: formState.visibility_status,
       style_tags: styleTags,
     };
     if (mode === "create") {
-      payload.status = formState.status;
+      payload.status = "designing";
     }
 
     setError("");
@@ -986,24 +1123,6 @@ function ProjectDialog({
                 }))}
               />
             </div>
-            {mode === "create" ? (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor={`${mode}-project-status`}>初始状态</Label>
-                <FormSelect
-                  id={`${mode}-project-status`}
-                  value={formState.status}
-                  disabled={pending}
-                  options={statusOptions.map(([value, label]) => ({
-                    value,
-                    label,
-                  }))}
-                  onChange={(value) => setFormState((current) => ({
-                    ...current,
-                    status: value,
-                  }))}
-                />
-              </div>
-            ) : null}
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${mode}-project-visibility`}>展示状态</Label>
               <FormSelect
@@ -1074,21 +1193,6 @@ function ProjectDialog({
                 onChange={(event) => setFormState((current) => ({
                   ...current,
                   budget: event.target.value,
-                }))}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`${mode}-project-signed-amount`}>签约金额</Label>
-              <Input
-                id={`${mode}-project-signed-amount`}
-                type="number"
-                min="0"
-                step="0.01"
-                value={formState.signed_amount}
-                disabled={pending}
-                onChange={(event) => setFormState((current) => ({
-                  ...current,
-                  signed_amount: event.target.value,
                 }))}
               />
             </div>
@@ -1166,6 +1270,7 @@ function ProjectDetailDialog({
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
   const [currentProject, setCurrentProject] = useState(project);
   const [refreshing, setRefreshing] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const members = currentProject.members || [];
   const existingEmployeeIds = members
     .map((member) => member.employee?.id || member.employee_id)
@@ -1175,12 +1280,37 @@ function ProjectDetailDialog({
     setCurrentProject(project);
   }, [project]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setRefreshing(true);
+    setDetailError("");
+    requestProject({ path: `/projects/${project.id}` })
+      .then((data) => {
+        if (!cancelled) setCurrentProject(data as ProjectRecord);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setDetailError(err instanceof Error ? err.message : "详情刷新失败");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   async function refreshProject() {
     setRefreshing(true);
+    setDetailError("");
     try {
       const data = await requestProject({ path: `/projects/${currentProject.id}` });
       setCurrentProject(data as ProjectRecord);
       router.refresh();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "详情刷新失败");
     } finally {
       setRefreshing(false);
     }
@@ -1200,12 +1330,16 @@ function ProjectDetailDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex h-[88vh] max-w-[920px] flex-col overflow-hidden p-0">
-        <DialogHeader className="flex-row items-start justify-between gap-4 border-b p-5 text-left">
+        <DialogHeader className="border-b p-5 text-left">
           <div>
             <DialogTitle>{currentProject.name}</DialogTitle>
-            <DialogDescription>{currentProject.id}</DialogDescription>
+            <DialogDescription>
+              {currentProject.id}
+              {currentProject.customer_id
+                ? ` · 关联客户状态：${customerStatusLabel(customerStatus(currentProject.customer))}`
+                : ""}
+            </DialogDescription>
           </div>
-          <Button type="button" variant="outline" onClick={onClose}>关闭</Button>
         </DialogHeader>
         <Tabs
           value={activeTab}
@@ -1228,24 +1362,11 @@ function ProjectDetailDialog({
                 : "overflow-y-auto [scrollbar-gutter:stable]",
             )}
           >
+            {detailError ? (
+              <StatusAlert>{detailError}</StatusAlert>
+            ) : null}
             <TabsContent value="overview" className="flex flex-col gap-5">
               <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
-              <div className="grid gap-3 md:grid-cols-4">
-                <InfoItem label="客户" value={customerName(currentProject.customer)} />
-                <InfoItem label="房产" value={propertyLabel(currentProject.property)} />
-                <InfoItem label="预算" value={`¥${formatMoney(currentProject.budget)}`} />
-                <InfoItem label="签约金额" value={`¥${formatMoney(currentProject.signed_amount)}`} />
-                <InfoItem label="设计师" value={personName(currentProject.designer)} />
-                <InfoItem label="工程负责人" value={personName(currentProject.supervisor)} />
-                <InfoItem label="开工日期" value={formatDate(currentProject.start_date)} />
-                <InfoItem label="展示状态" value={currentProject.visibility_status || "inherit"} />
-              </div>
-              <section>
-                <h3 className="mb-3 text-sm font-semibold">项目地址</h3>
-                <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                  {currentProject.address || "-"}
-                </div>
-              </section>
             </TabsContent>
             <TabsContent value="members">
               <section className="flex flex-col gap-3">
@@ -1345,16 +1466,9 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
 
   function openDetail(initialTab: ProjectDetailTab = "overview") {
     setError("");
-    startTransition(async () => {
-      try {
-        const data = await requestProject({ path: `/projects/${project.id}` });
-        setDetail({
-          project: data as ProjectRecord,
-          initialTab,
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "详情加载失败");
-      }
+    setDetail({
+      project,
+      initialTab,
     });
   }
 

@@ -13,7 +13,7 @@
 - Admin 端根据项目状态禁用发起验收入口：
   - 仅 `constructing / acceptance` 允许发起工序验收。
 - Admin 端根据项目状态禁用新增摄像头入口：
-  - `invalid / completed` 项目不可新增摄像头。
+  - `invalid / acceptance` 项目不可新增摄像头。
 
 ## 验证命令
 

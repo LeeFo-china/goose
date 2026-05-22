@@ -115,6 +115,7 @@ export const ProjectStatusTransitionSchema = z.object({
     .min(0, "签约金额不能为负数")
     .nullable()
     .optional(),
+  start_date: z.string().trim().min(1, "开工日期不能为空").nullable().optional(),
 });
 
 export const ProjectStatusTransitionListQuerySchema = PaginationQuerySchema;

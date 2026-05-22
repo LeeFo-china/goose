@@ -2,12 +2,15 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 
 const ACTIVE_PROJECT_STATUSES = [
-  "signed",
   "designing",
+  "proposal_confirmed",
+  "signed",
+  "design_finalized",
+  "pending_start",
+  "started",
   "constructing",
   "on_hold",
   "acceptance",
-  "after_sale",
 ];
 
 type CustomerRelation = { name: string | null } | Array<{ name: string | null }> | null;

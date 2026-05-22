@@ -1,14 +1,13 @@
 export const PROJECT_STATUS_VALUES = [
-  'lead',
-  'measure',
-  'negotiating',
-  'signed',
   'designing',
+  'proposal_confirmed',
+  'signed',
+  'design_finalized',
+  'pending_start',
+  'started',
   'constructing',
   'on_hold',
   'acceptance',
-  'completed',
-  'after_sale',
   'invalid',
 ] as const;
 
@@ -23,17 +22,16 @@ export const ProjectStatusConfig: Record<
   ProjectStatus,
   ProjectStatusConfigItem
 > = {
-  lead: { label: '线索客户', type: 'default' },
-  measure: { label: '量房中', type: 'warning' },
-  negotiating: { label: '谈单中', type: 'warning' },
-  signed: { label: '已签约', type: 'success' },
   designing: { label: '设计中', type: 'primary' },
+  proposal_confirmed: { label: '方案已确认', type: 'warning' },
+  signed: { label: '已签约', type: 'success' },
+  design_finalized: { label: '设计定稿', type: 'primary' },
+  pending_start: { label: '待开工', type: 'warning' },
+  started: { label: '已开工', type: 'warning' },
   constructing: { label: '施工中', type: 'warning' },
   on_hold: { label: '已暂停', type: 'danger' },
-  acceptance: { label: '验收中', type: 'warning' },
-  completed: { label: '已完工', type: 'success' },
-  after_sale: { label: '售后中', type: 'danger' },
-  invalid: { label: '无效客户', type: 'default' },
+  acceptance: { label: '竣工验收', type: 'success' },
+  invalid: { label: '无效项目', type: 'default' },
 };
 
 export const isProjectStatus = (
@@ -43,16 +41,15 @@ export const isProjectStatus = (
   PROJECT_STATUS_VALUES.includes(value as ProjectStatus);
 
 export const PROJECT_STATUS_ACTION_VALUES = [
-  'start_measure',
-  'start_negotiation',
-  'start_design',
+  'confirm_proposal',
   'sign_contract',
+  'finalize_design',
+  'schedule_construction',
+  'start_project',
   'start_construction',
   'pause_project',
   'resume_project',
   'start_acceptance',
-  'complete_project',
-  'start_after_sale',
   'mark_invalid',
 ] as const;
 
@@ -69,41 +66,47 @@ export const ProjectStatusActionConfig: Record<
   ProjectStatusAction,
   ProjectStatusActionConfigItem
 > = {
-  start_measure: {
-    label: '开始量房',
-    from: ['lead'],
-    to: 'measure',
-  },
-  start_negotiation: {
-    label: '开始谈单',
-    from: ['measure'],
-    to: 'negotiating',
-  },
-  start_design: {
-    label: '开始设计',
-    from: ['negotiating'],
-    to: 'designing',
+  confirm_proposal: {
+    label: '方案已确认',
+    from: ['designing'],
+    to: 'proposal_confirmed',
   },
   sign_contract: {
     label: '项目签约',
-    from: ['designing'],
+    from: ['proposal_confirmed'],
     to: 'signed',
   },
-  start_construction: {
-    label: '开始施工',
+  finalize_design: {
+    label: '设计定稿',
     from: ['signed'],
+    to: 'design_finalized',
+  },
+  schedule_construction: {
+    label: '排期开工',
+    from: ['design_finalized'],
+    to: 'pending_start',
+  },
+  start_project: {
+    label: '确认开工',
+    from: ['pending_start'],
+    to: 'started',
+  },
+  start_construction: {
+    label: '正式进场',
+    from: ['started'],
     to: 'constructing',
   },
   pause_project: {
     label: '暂停项目',
     from: [
-      'measure',
-      'negotiating',
-      'signed',
       'designing',
+      'proposal_confirmed',
+      'signed',
+      'design_finalized',
+      'pending_start',
+      'started',
       'constructing',
       'acceptance',
-      'after_sale',
     ],
     to: 'on_hold',
     requiresReason: true,
@@ -114,32 +117,22 @@ export const ProjectStatusActionConfig: Record<
     to: 'paused_from_status',
   },
   start_acceptance: {
-    label: '开始验收',
+    label: '竣工验收',
     from: ['constructing'],
     to: 'acceptance',
-  },
-  complete_project: {
-    label: '项目完工',
-    from: ['constructing', 'acceptance'],
-    to: 'completed',
-  },
-  start_after_sale: {
-    label: '进入售后',
-    from: ['completed'],
-    to: 'after_sale',
   },
   mark_invalid: {
     label: '作废项目',
     from: [
-      'lead',
-      'measure',
-      'negotiating',
-      'signed',
       'designing',
+      'proposal_confirmed',
+      'signed',
+      'design_finalized',
+      'pending_start',
+      'started',
       'constructing',
       'on_hold',
       'acceptance',
-      'after_sale',
     ],
     to: 'invalid',
     requiresReason: true,

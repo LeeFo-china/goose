@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { customerCoreRepository } from "@/repositories/customer-core";
 import { projectRepository } from "@/repositories/projects";
 import { projectStatusTransitionRepository } from "@/repositories/project-status-transitions";
 import type {
@@ -8,8 +9,6 @@ import type {
 } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { customerCoreService } from "@/services/customer-core";
-import { customerStatusService } from "@/services/customer-status";
 import {
   inferProjectStatusAction,
   isProjectStatus,
@@ -37,8 +36,8 @@ class ProjectStatusService {
     if (status === "on_hold") {
       throw Errors.badRequest("暂停项目不能新增施工日志");
     }
-    if (status === "completed") {
-      throw Errors.badRequest("已完工项目不能新增施工日志");
+    if (status === "acceptance") {
+      throw Errors.badRequest("竣工验收项目不能新增施工日志");
     }
   }
 
@@ -47,8 +46,8 @@ class ProjectStatusService {
     if (status === "invalid") {
       throw Errors.badRequest("无效项目不能新增摄像头");
     }
-    if (status === "completed") {
-      throw Errors.badRequest("已完工项目不能新增摄像头");
+    if (status === "acceptance") {
+      throw Errors.badRequest("竣工验收项目不能新增摄像头");
     }
   }
 
@@ -103,20 +102,21 @@ class ProjectStatusService {
       if (nextSignedAmount == null || Number(nextSignedAmount) <= 0) {
         throw Errors.badRequest("项目签约时必须提供有效的 signed_amount");
       }
+      await this.assertSignContractCustomerStatus({
+        tenantId,
+        project: existing,
+      });
       patch.signed_amount = Number(nextSignedAmount);
     }
-
-    const targetCustomerId = this.getTargetCustomerId({
-      existing,
-      patch,
-    });
-    const customerContractSync = input.payload.action === "sign_contract"
-      ? await customerStatusService.buildProjectContractSync({
-        authContext: input.authContext,
-        customerId: targetCustomerId,
-        projectId: input.projectId,
-      })
-      : null;
+    if (input.payload.action === "schedule_construction") {
+      const nextStartDate = input.payload.start_date ??
+        patch.start_date ??
+        existing.start_date;
+      if (typeof nextStartDate !== "string" || !nextStartDate.trim()) {
+        throw Errors.badRequest("项目排期开工前必须先确定开工日期");
+      }
+      patch.start_date = nextStartDate.trim();
+    }
 
     const metadata = {
       ...input.payload.metadata,
@@ -144,16 +144,6 @@ class ProjectStatusService {
       reason,
       metadata,
     });
-
-    if (customerContractSync && targetCustomerId) {
-      await customerCoreService.transitionCustomerStatus({
-        authContext: input.authContext,
-        customerId: targetCustomerId,
-        payload: customerContractSync.payload,
-        existing: customerContractSync.existing,
-        skipAccessCheck: true,
-      });
-    }
 
     return project;
   }
@@ -266,27 +256,31 @@ class ProjectStatusService {
 
   private getRequiredCurrentStatus(value: unknown): ProjectStatus {
     if (typeof value !== "string" || !isProjectStatus(value)) {
-      return "lead";
+      return "designing";
     }
 
     return value;
   }
 
-  private getTargetCustomerId(input: {
-    existing: Record<string, unknown>;
-    patch: Record<string, unknown>;
+  private async assertSignContractCustomerStatus(input: {
+    tenantId: string;
+    project: Record<string, unknown>;
   }) {
-    if (typeof input.patch.customer_id === "string") {
-      return input.patch.customer_id;
-    }
-
-    if (input.patch.customer_id === null) {
-      return null;
-    }
-
-    return typeof input.existing.customer_id === "string"
-      ? input.existing.customer_id
+    const customerId = typeof input.project.customer_id === "string"
+      ? input.project.customer_id
       : null;
+    if (!customerId) return;
+
+    const customer = await customerCoreRepository.findById({
+      customerId,
+      tenantId: input.tenantId,
+    });
+    if (!customer) {
+      throw Errors.badRequest("关联客户不存在");
+    }
+    if (customer.status !== "designing") {
+      throw Errors.badRequest("项目签约前，关联客户状态必须为设计中");
+    }
   }
 
   private async getOptionalPausedFromStatus(projectId: string, tenantId: string) {

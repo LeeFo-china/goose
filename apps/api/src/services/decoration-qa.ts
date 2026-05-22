@@ -326,14 +326,23 @@ const PROJECT_STATUS_REMINDER_PROMPTS: Partial<Record<string, string[]>> = {
   designing: [
     "提醒客户尽快确认平面方案、主材方向和预算边界，减少进入施工后的变更成本。",
   ],
+  proposal_confirmed: [
+    "提醒客户在签约前复核平面方案和预算范围，避免合同后再大幅调整。",
+  ],
+  design_finalized: [
+    "提醒客户确认施工图、节点图和主材清单已经定稿，开工前变更要重新评估工期。",
+  ],
+  pending_start: [
+    "提醒客户确认开工日期、材料到场计划和现场交底时间。",
+  ],
+  started: [
+    "提醒客户关注正式进场前的成品保护、物业报备和施工告知。",
+  ],
   constructing: [
     "提醒客户关注当前施工节点的验收和材料到场衔接，避免因为确认不及时影响工期。",
   ],
   acceptance: [
     "提醒客户按验收清单逐项确认，并把遗留问题记录清楚后再安排收尾。",
-  ],
-  after_sale: [
-    "提醒客户把具体问题、发生位置和时间记录清楚，方便售后快速定位处理。",
   ],
 };
 
@@ -1148,8 +1157,7 @@ function formatCustomerProjectSuggestionContext(
         ].filter(Boolean).join(" - ") || "未同步"
       }`
       : "最近施工节点：未同步",
-    context.status === "acceptance" ||
-      latestLog?.stage_code === "completion"
+    context.status === "acceptance" || latestLog?.stage_code === "completion"
       ? "当前可能临近验收"
       : null,
   ].filter(Boolean);

@@ -21,12 +21,15 @@ type DateRange = {
 };
 
 const ACTIVE_PROJECT_STATUSES = new Set([
-  "signed",
   "designing",
+  "proposal_confirmed",
+  "signed",
+  "design_finalized",
+  "pending_start",
+  "started",
   "constructing",
   "on_hold",
   "acceptance",
-  "after_sale",
 ]);
 
 function toDateOnly(value: Date) {

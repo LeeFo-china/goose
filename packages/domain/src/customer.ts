@@ -2,9 +2,7 @@ export const CUSTOMER_STATUS_VALUES = [
   'potential',
   'following',
   'arrived',
-  'ordered',
   'designing',
-  'contracted',
   'dormant',
   'invalid',
 ] as const;
@@ -49,9 +47,7 @@ export const CustomerStatusConfig: Record<
   potential: { label: '潜在客户', type: 'default' },
   following: { label: '跟进中', type: 'primary' },
   arrived: { label: '已到店', type: 'warning' },
-  ordered: { label: '已下定', type: 'success' },
   designing: { label: '设计中', type: 'primary' },
-  contracted: { label: '已签约', type: 'success' },
   dormant: { label: '沉睡客户', type: 'default' },
   invalid: { label: '无效客户', type: 'danger' },
 };
@@ -88,8 +84,6 @@ export const CUSTOMER_STATUS_ACTION_VALUES = [
   'start_following',
   'mark_arrived',
   'start_design',
-  'place_order',
-  'sign_contract',
   'mark_dormant',
   'reactivate',
   'mark_invalid',
@@ -120,22 +114,12 @@ export const CustomerStatusActionConfig: Record<
   },
   start_design: {
     label: '开始设计',
-    from: ['ordered'],
-    to: 'designing',
-  },
-  place_order: {
-    label: '客户下定',
     from: ['arrived'],
-    to: 'ordered',
-  },
-  sign_contract: {
-    label: '客户签约',
-    from: ['designing'],
-    to: 'contracted',
+    to: 'designing',
   },
   mark_dormant: {
     label: '标记沉睡',
-    from: ['potential', 'following', 'arrived', 'designing', 'ordered'],
+    from: ['potential', 'following', 'arrived', 'designing'],
     to: 'dormant',
     requiresReason: true,
   },
@@ -146,7 +130,7 @@ export const CustomerStatusActionConfig: Record<
   },
   mark_invalid: {
     label: '作废客户',
-    from: ['potential', 'following', 'arrived', 'designing', 'ordered', 'dormant'],
+    from: ['potential', 'following', 'arrived', 'designing', 'dormant'],
     to: 'invalid',
     requiresReason: true,
   },

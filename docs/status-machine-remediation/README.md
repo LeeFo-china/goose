@@ -4,13 +4,19 @@
 
 ## 目标
 
-把客户业务状态和工程项目施工状态从“枚举字段可更新”升级为“动作驱动、规则校验、日志可审计、可渐进收口”的领域状态机。
+把客户业务状态和工程项目状态从“枚举字段可更新”升级为“动作驱动、规则校验、日志可审计”的领域状态机。
 
-本次整改不先引入通用工作流引擎，不改掉现有 `customers.status` / `projects.status` 字段。第一阶段以 service 层规则和日志表收口写入口，确保现有列表、详情、筛选、小程序和 Admin 查询链路稳定。
+当前最终口径：
+
+- 客户状态只表达销售阶段。
+- 项目状态只表达交付阶段。
+- 客户到店后点击 `start_design`，端侧先创建/确认项目，再切换客户到 `designing`。
+- 项目从 `designing` 开始推进到方案确认、签约、设计定稿、开工、施工和竣工验收。
 
 ## 文档索引
 
 - [阶段 0：状态盘点与规则冻结](./2026-05-21-phase-0-status-rule-freeze.md)
+- [销售到交付状态流](./2026-05-21-sales-to-delivery-status-flow.md)
 - [验收测试方案](./2026-05-21-acceptance-test-plan.md)
 - [执行记录](./2026-05-21-execution-record.md)
 - [Admin 状态机对接总览](./admin/README.md)
@@ -22,107 +28,71 @@
 - 微信小程序对接文档统一放在 `docs/status-machine-remediation/wechat/`。
 - 根目录只保留状态机规则、验收方案、执行台账和总览索引。
 
-## 分阶段计划
+## 当前有效状态流
+
+客户销售阶段：
+
+`potential` 线索 -> `following` 跟进中 -> `arrived` 已到店 -> `designing` 设计中
+
+项目交付阶段：
+
+`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收
+
+## 已下线旧流程
+
+- 客户下线状态：`ordered / contracted`。
+- 客户下线动作：`place_order / sign_contract`。
+- 项目下线状态：`lead / measure / negotiating / completed / after_sale`。
+- 项目下线动作：`start_measure / start_negotiation / start_design / complete_project / start_after_sale`。
+
+## 已落地接口
+
+- `POST /customers/:id/status-transition`
+- `POST /projects/:id/status-transition`
+- `GET /customers/:id/status-actions`
+- `GET /projects/:id/status-actions`
+- `GET /customers/:id/status-transitions?page=1&pageSize=20`
+- `GET /projects/:id/status-transitions?page=1&pageSize=20`
+
+## 分阶段状态
 
 ### 阶段 0：状态盘点和规则冻结
 
-状态：已完成
-
-交付物：
-
-- 当前客户 / 项目状态清单。
-- 目标状态机动作表。
-- 允许流转矩阵。
-- 终态、恢复、作废、暂停策略。
-- 副作用和验收口径。
+状态：已完成，已按当前销售到交付流程更新。
 
 ### 阶段 1：项目状态机最小闭环
 
-状态：已完成
-
-交付物：
-
-- `packages/domain` 项目状态动作和流转规则。
-- API `projectStatusService.transitionProjectStatus()`。
-- `project_status_transition_logs` migration。
-- 专用接口 `POST /projects/:id/status-transition`。
-- 旧 `PATCH /projects/:id` 中的 `status` 更新收口到状态机。
-
-实现入口：
-
-- `POST /projects/:id/status-transition`
-- `PATCH /projects/:id`，当 payload 包含 `status` 时自动推断状态动作并走状态机校验。
+状态：已完成，当前项目主路径从 `designing` 开始。
 
 ### 阶段 2：项目状态副作用收口
 
-状态：已完成
-
-交付物：
-
-- 项目状态对施工日志、摄像头、验收、公开展示、首页统计的显式规则。
-- 非法状态下写操作拦截。
-- 状态变更后的缓存失效和通知边界。
+状态：已完成。
 
 首批已收口规则：
 
-- `invalid / on_hold / completed` 项目禁止新增施工日志。
-- `invalid / completed` 项目禁止新增摄像头。
-- 只有 `constructing / acceptance` 项目允许发起验收。
-- 状态变更后的公开项目和首页项目缓存已在阶段 1 收口。
+- `invalid / on_hold / acceptance` 项目禁止新增施工日志。
+- `invalid / acceptance` 项目禁止新增摄像头。
+- 只有 `constructing / acceptance` 项目允许发起或查看验收相关流程。
 
 ### 阶段 3：客户状态机最小闭环
 
-状态：已完成
-
-交付物：
-
-- `packages/domain` 客户状态动作和流转规则。
-- API `customerStatusService.transitionCustomerStatus()`。
-- `customer_status_transition_logs` migration。
-- 专用接口 `POST /customers/:id/status-transition`。
-- 旧 `PATCH /customers/:id` 中的 `status` 更新收口到状态机。
-
-实现入口：
-
-- `POST /customers/:id/status-transition`
-- `PATCH /customers/:id`，当 payload 包含 `status` 时自动推断状态动作并走状态机校验。
-- `DELETE /customers/:id`，保留作废语义，内部改走 `mark_invalid` 动作并写日志。
+状态：已完成，当前客户主路径到 `designing` 结束销售阶段。
 
 ### 阶段 4：客户和项目状态联动
 
-状态：已完成最小闭环
-
-交付物：
-
-- 项目签约同步客户签约状态。
-- 客户签约动作和项目创建 / 关联规则。
-- 多项目客户的状态聚合策略。
+状态：已完成。
 
 已落地规则：
 
-- 客户执行 `start_design` 时，必须已有主房产，并会同步创建或复用一个 `designing` 项目。
-- 项目执行 `sign_contract` 时，如果有关联客户，会同步客户为 `contracted`。
-- 关联客户已是 `contracted` 时，不重复写客户状态日志。
-- 关联客户必须处于 `designing / contracted`，否则项目签约返回 400，提示先推进客户到设计中。
-- 项目作废不会自动作废客户，避免多项目客户被误伤。
-- 端侧应优先通过客户开始设计创建项目，再通过项目签约完成客户签约联动。
+- 客户执行 `start_design` 前，端侧必须先创建/确认一个同客户同房产的 `designing` 项目。
+- 后端仍校验客户必须已有主房产，并复用已有有效项目作为兜底，防止重复项目。
+- 项目执行 `sign_contract` 时只推进项目状态，不再反向写客户签约状态。
+- 项目暂停、作废、竣工验收不会反向自动修改客户状态。
+- 端侧应在客户开始设计前显式创建/确认项目，再通过项目状态机完成交付。
 
 ### 阶段 5：前端和小程序动作式对接
 
-状态：已完成后端接口和 Admin 端最小闭环
-
-交付物：
-
-- Admin / 小程序不再直接传 `status`。
-- 后端返回当前状态可执行动作列表。
-- 状态流转日志可在客户 / 项目详情查看。
-
-已落地接口：
-
-- `GET /projects/:id/status-actions`
-- `GET /projects/:id/status-transitions?page=1&pageSize=20`
-- `GET /customers/:id/status-actions`
-- `GET /customers/:id/status-transitions?page=1&pageSize=20`
+状态：已完成后端接口和 Admin 端最小闭环。
 
 端侧对接文档：
 
@@ -131,7 +101,6 @@
 
 ## 执行原则
 
-- 优先项目状态机，再客户状态机。
 - 状态变更必须通过 `action`，不能只传 `to_status`。
 - 成功状态变更必须写日志。
 - 旧接口短期兼容，但不得绕过状态机。

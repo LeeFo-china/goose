@@ -39,6 +39,7 @@ export const PROJECT_DETAIL_SELECT = `
     id,
     name,
     phone,
+    status,
     owner_id,
     owner:employees!customers_owner_id_fkey(
       id,
@@ -380,7 +381,7 @@ class ProjectRepository {
   private applyPublicProjectVisibilityQuery(query: any) {
     return query
       .neq("visibility_status", "hidden")
-      .or("status.in.(signed,constructing,completed),visibility_status.eq.public");
+      .or("status.in.(signed,design_finalized,pending_start,started,constructing,acceptance),visibility_status.eq.public");
   }
 
   async listPublicProjects() {

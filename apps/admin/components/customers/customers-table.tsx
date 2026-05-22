@@ -3,7 +3,9 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   CustomerOriginConfig,
+  CustomerStatusConfig,
   isCustomerOrigin,
+  isCustomerStatus,
 } from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
@@ -21,14 +23,12 @@ const statusMeta: Record<string, {
   label: string;
   variant: "success" | "warning" | "secondary" | "outline" | "danger" | "default";
 }> = {
-  potential: { label: "潜在客户", variant: "outline" },
-  following: { label: "跟进中", variant: "default" },
-  arrived: { label: "已到店", variant: "warning" },
-  ordered: { label: "已下定", variant: "success" },
-  designing: { label: "设计中", variant: "default" },
-  contracted: { label: "已签约", variant: "success" },
-  dormant: { label: "沉睡客户", variant: "secondary" },
-  invalid: { label: "无效客户", variant: "danger" },
+  potential: { label: CustomerStatusConfig.potential.label, variant: "outline" },
+  following: { label: CustomerStatusConfig.following.label, variant: "default" },
+  arrived: { label: CustomerStatusConfig.arrived.label, variant: "warning" },
+  designing: { label: CustomerStatusConfig.designing.label, variant: "default" },
+  dormant: { label: CustomerStatusConfig.dormant.label, variant: "secondary" },
+  invalid: { label: CustomerStatusConfig.invalid.label, variant: "danger" },
 };
 
 const sourceMeta: Record<string, string> = {
@@ -213,10 +213,13 @@ const columns: ColumnDef<CustomerRecord>[] = [
     accessorKey: "status",
     header: "状态",
     cell: ({ row }) => {
-      const meta = statusMeta[row.original.status || ""] || {
-        label: row.original.status || "未知",
-        variant: "outline" as const,
-      };
+      const status = row.original.status;
+      const meta = status && isCustomerStatus(status)
+        ? statusMeta[status]
+        : {
+            label: status || "未知",
+            variant: "outline" as const,
+          };
 
       return <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>;
     },

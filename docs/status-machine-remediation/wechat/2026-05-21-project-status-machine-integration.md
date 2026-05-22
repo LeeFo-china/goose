@@ -4,7 +4,11 @@
 
 ## 背景
 
-项目状态已从直接写 `status` 逐步切换为动作驱动状态机。小程序员工端后续涉及项目状态变更时，应优先调用专用状态动作接口，而不是直接提交目标 `status`。
+项目状态只表达交付推进。小程序员工端涉及项目状态变更时，应调用专用状态动作接口，不要直接提交目标 `status`。
+
+当前有效主路径：
+
+`designing` 设计中 -> `proposal_confirmed` 方案已确认 -> `signed` 已签约 -> `design_finalized` 设计定稿 -> `pending_start` 待开工 -> `started` 已开工 -> `constructing` 施工中 -> `acceptance` 竣工验收
 
 ## 状态变更接口
 
@@ -18,9 +22,10 @@ Content-Type: application/json
 
 ```json
 {
-  "action": "start_construction",
-  "reason": "现场已具备施工条件",
-  "metadata": {}
+  "action": "confirm_proposal",
+  "metadata": {
+    "source": "miniprogram"
+  }
 }
 ```
 
@@ -37,50 +42,64 @@ Content-Type: application/json
 }
 ```
 
+排期开工动作需要开工日期：
+
+```json
+{
+  "action": "schedule_construction",
+  "start_date": "2026-06-01",
+  "metadata": {
+    "source": "miniprogram"
+  }
+}
+```
+
 ## 当前支持动作
 
 | Action | 说明 |
 | --- | --- |
-| `start_measure` | 开始量房 |
-| `start_negotiation` | 开始谈单 |
-| `start_design` | 开始设计 |
+| `confirm_proposal` | 方案已确认 |
 | `sign_contract` | 项目签约 |
-| `start_construction` | 开始施工 |
+| `finalize_design` | 设计定稿 |
+| `schedule_construction` | 排期开工 |
+| `start_project` | 确认开工 |
+| `start_construction` | 正式进场 |
+| `start_acceptance` | 竣工验收 |
 | `pause_project` | 暂停项目 |
 | `resume_project` | 恢复项目 |
-| `start_acceptance` | 开始验收 |
-| `complete_project` | 项目完工 |
-| `start_after_sale` | 进入售后 |
 | `mark_invalid` | 作废项目 |
 
 ## 必填规则
 
 - `sign_contract` 必须传 `signed_amount > 0`。
-- `sign_contract` 仅允许项目处于 `designing` 时执行，不能从 `negotiating` 跳过设计直接签约。
-- `sign_contract` 如果项目有关联客户，会同步客户为 `contracted`。
-- 关联客户必须处于 `designing / contracted`；如果仍是 `potential / following / arrived / ordered / dormant / invalid`，后端返回 400。
+- `sign_contract` 仅允许项目处于 `proposal_confirmed` 时执行，不能从 `designing` 跳过方案确认直接签约。
+- 项目签约不再反向修改客户为 `contracted`。
+- `schedule_construction` 必须传 `start_date`，没有开工日期不能进入 `pending_start`。
+- `schedule_construction` 仅允许项目处于 `design_finalized` 时执行。
 - `pause_project` 必须传 `reason`。
 - `mark_invalid` 必须传 `reason`。
 - 非法状态动作会返回 400。
 - 无权限会返回 403。
 
-## 阶段 2 写操作限制
+## 阶段写操作限制
 
 小程序端需要根据接口返回处理错误提示：
 
-- `invalid / on_hold / completed` 项目不能新增施工日志。
-- `invalid / completed` 项目不能新增摄像头。
-- 只有 `constructing / acceptance` 项目能发起验收。
+- `invalid / on_hold / acceptance` 项目不能新增施工日志。
+- `invalid / acceptance` 项目不能新增摄像头。
+- 只有 `constructing / acceptance` 项目能发起或查看验收相关流程。
 - 历史施工日志、历史摄像头、历史验收单仍可读取。
 
 ## 对接要求
 
 - 员工端不要再直接通过 `PATCH /projects/:id` 提交 `status`。
-- 状态按钮应按当前项目状态展示合法动作。
+- 状态按钮按 `GET /projects/:id/status-actions` 返回值展示。
+- `designing` 项目的下一步按钮是 `confirm_proposal`，视觉上应紧挨当前“开始设计”状态右侧。
+- `design_finalized` 项目点击“排期开工”时，应弹出开工日期确认组件；员工未选择开工日期时，不调用状态变更接口。
 - 暂无可执行动作时，不展示状态操作按钮。
 - 服务端返回 400 时，直接展示后端中文错误信息。
-- 状态变更成功后，重新拉取项目详情、项目列表和首页统计。
+- 状态变更成功后，重新拉取项目详情、项目列表、动作列表、时间线和首页统计。
 
-## 兼容说明
+## 下线说明
 
-短期内 `PATCH /projects/:id` 传 `status` 仍兼容，但后端会推断动作并走状态机校验。该兼容入口后续会逐步收口，新的小程序代码不要依赖它。
+项目 `lead / measure / negotiating / completed / after_sale` 状态，以及 `start_measure / start_negotiation / start_design / complete_project / start_after_sale` 动作已下线。小程序端不要再展示量房、谈单、完工、售后等旧工程流入口。
