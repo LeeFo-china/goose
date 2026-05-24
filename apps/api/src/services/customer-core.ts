@@ -32,7 +32,15 @@ class CustomerCoreService {
   }>();
   private listInFlight = new Map<string, Promise<CustomerListResult>>();
 
-  getFollowUpState(nextFollowAt: string | null | undefined) {
+  getFollowUpState(input: {
+    nextFollowAt: string | null | undefined;
+    customerStatus?: string | null | undefined;
+  }) {
+    if (input.customerStatus === "signed") {
+      return "none";
+    }
+
+    const nextFollowAt = input.nextFollowAt;
     if (!nextFollowAt) {
       return "none";
     }
@@ -61,12 +69,16 @@ class CustomerCoreService {
   }
 
   private matchesFollowFilter(
+    customerStatus: string | null | undefined,
     summary: Awaited<ReturnType<typeof customerFollowUpService.getLatestFollowUpMap>> extends Map<string, infer T>
       ? T | undefined
       : never,
     followFilter: "due" | "overdue",
   ) {
-    const state = this.getFollowUpState(summary?.next_follow_at);
+    const state = this.getFollowUpState({
+      nextFollowAt: summary?.next_follow_at,
+      customerStatus,
+    });
     if (followFilter === "overdue") {
       return state === "overdue";
     }
@@ -272,8 +284,12 @@ class CustomerCoreService {
         customerIds,
         tenantId,
       });
+      const customerStatuses = await customerCoreRepository.listStatusesByIds({
+        customerIds,
+        tenantId,
+      });
       const filteredCustomerIds = customerIds.filter((id) =>
-        this.matchesFollowFilter(followUpMap.get(id), follow)
+        this.matchesFollowFilter(customerStatuses.get(id), followUpMap.get(id), follow)
       );
       const total = filteredCustomerIds.length;
       const pageCustomerIds = filteredCustomerIds.slice(from, to + 1);

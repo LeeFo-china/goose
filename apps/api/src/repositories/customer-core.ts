@@ -251,6 +251,29 @@ class CustomerCoreRepository {
     );
   }
 
+  async listStatusesByIds(input: { customerIds: string[]; tenantId: string }) {
+    if (input.customerIds.length === 0) {
+      return new Map<string, string | null>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customers")
+      .select("id, status")
+      .in("id", input.customerIds)
+      .eq("tenant_id", input.tenantId);
+
+    if (error) {
+      throw Errors.dbError("列表查询失败", error);
+    }
+
+    return new Map(
+      ((data || []) as Array<{ id: string; status: string | null }>).map((item) => [
+        item.id,
+        item.status,
+      ]),
+    );
+  }
+
   async create(payload: Record<string, unknown>) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")

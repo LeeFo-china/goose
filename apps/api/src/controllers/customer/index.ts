@@ -308,7 +308,10 @@ class CustomerController extends TenantBaseController<
       latest_follow_up: serialized,
       last_follow_at: latest?.created_at ?? null,
       next_follow_at: latest?.next_follow_at ?? null,
-      follow_up_state: customerCoreService.getFollowUpState(latest?.next_follow_at),
+      follow_up_state: customerCoreService.getFollowUpState({
+        nextFollowAt: latest?.next_follow_at,
+        customerStatus: customer.status,
+      }),
     };
   }
 
