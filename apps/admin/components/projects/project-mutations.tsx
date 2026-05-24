@@ -156,6 +156,16 @@ type ProjectStatusActionsResponse = {
   actions: ProjectStatusActionItem[];
 };
 
+type ConstructionStageSummaryItem = {
+  stage_code: string;
+  stage_label: string;
+};
+
+type ProjectConstructionStagesResponse = {
+  required_completed: boolean;
+  missing_required_stages?: ConstructionStageSummaryItem[];
+};
+
 type ProjectStatusTransitionRecord = {
   id: string;
   from_status: string | null;
@@ -463,8 +473,11 @@ function ProjectStatusPanel({
   onChanged: () => Promise<void>;
 }) {
   const [actionsData, setActionsData] = useState<ProjectStatusActionsResponse | null>(null);
+  const [constructionStages, setConstructionStages] =
+    useState<ProjectConstructionStagesResponse | null>(null);
   const [transitions, setTransitions] = useState<ProjectStatusTransitionRecord[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
+  const [constructionStagesLoading, setConstructionStagesLoading] = useState(false);
   const [transitionsLoading, setTransitionsLoading] = useState(false);
   const [transitionsLoaded, setTransitionsLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -499,6 +512,26 @@ function ProjectStatusPanel({
 
   useEffect(() => {
     let cancelled = false;
+    setConstructionStagesLoading(true);
+    requestProject({ path: `/projects/${project.id}/construction-stages` })
+      .then((stages) => {
+        if (cancelled) return;
+        setConstructionStages(stages as ProjectConstructionStagesResponse);
+      })
+      .catch(() => {
+        if (!cancelled) setConstructionStages(null);
+      })
+      .finally(() => {
+        if (!cancelled) setConstructionStagesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, project.status]);
+
+  useEffect(() => {
+    let cancelled = false;
     const timer = window.setTimeout(() => {
       setTransitionsLoading(true);
       requestProject({ path: `/projects/${project.id}/status-transitions?page=1&pageSize=3` })
@@ -521,6 +554,17 @@ function ProjectStatusPanel({
     };
   }, [project.id, project.status]);
 
+  const currentStatus = actionsData?.current_status || project.status;
+  const missingConstructionStages = constructionStages?.missing_required_stages || [];
+  const missingConstructionStageLabels = missingConstructionStages
+    .map((stage) => stage.stage_label)
+    .join("、");
+  const startAcceptanceBlockedReason =
+    currentStatus === "constructing" &&
+    constructionStages &&
+    !constructionStages.required_completed
+      ? `进入竣工验收前，还需完成：${missingConstructionStageLabels || "必需施工阶段验收"}`
+      : "";
 
   function closeActionDialog() {
     if (pending) return;
@@ -538,6 +582,10 @@ function ProjectStatusPanel({
       !["designing", "signed"].includes(customerStatus(project.customer) || "")
     ) {
       setError("项目签约前，关联客户销售状态必须为设计中或已签约");
+      return;
+    }
+    if (action.action === "start_acceptance" && startAcceptanceBlockedReason) {
+      setError(startAcceptanceBlockedReason);
       return;
     }
     setSelectedAction(action);
@@ -599,7 +647,6 @@ function ProjectStatusPanel({
     });
   }
 
-  const currentStatus = actionsData?.current_status || project.status;
   const actions = actionsData?.actions || [];
   const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
     !isProjectStatusActionVisible(actions, item.action)
@@ -658,11 +705,20 @@ function ProjectStatusPanel({
                 动作加载中
               </Badge>
             ) : null}
+            {constructionStagesLoading ? (
+              <Badge variant="secondary">
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                工序同步中
+              </Badge>
+            ) : null}
           </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 p-5">
         {error ? <StatusAlert>{error}</StatusAlert> : null}
+        {!error && startAcceptanceBlockedReason ? (
+          <StatusAlert>{startAcceptanceBlockedReason}</StatusAlert>
+        ) : null}
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
@@ -724,19 +780,30 @@ function ProjectStatusPanel({
             </div>
             <TooltipProvider>
               <div className="flex flex-wrap items-center gap-2">
-                {actionViews.map((item) =>
-                  item.kind === "enabled" ? (
-                    <Button
-                      key={item.action.action}
-                      type="button"
-                      size="sm"
-                      variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
-                      disabled={actionsLoading || pending}
-                      onClick={() => openActionDialog(item.action)}
-                    >
-                      {item.action.label}
-                    </Button>
-                  ) : (
+                {actionViews.map((item) => {
+                  const actionBlockedReason =
+                    item.action.action === "start_acceptance"
+                      ? startAcceptanceBlockedReason
+                      : "";
+                  if (item.kind === "enabled" && !actionBlockedReason) {
+                    return (
+                      <Button
+                        key={item.action.action}
+                        type="button"
+                        size="sm"
+                        variant={item.action.action === "mark_invalid" ? "destructive" : "outline"}
+                        disabled={actionsLoading || pending}
+                        onClick={() => openActionDialog(item.action)}
+                      >
+                        {item.action.label}
+                      </Button>
+                    );
+                  }
+
+                  const tooltipReason = actionBlockedReason ||
+                    (item.kind === "blocked" ? item.action.reason : "当前不能执行该动作");
+
+                  return (
                     <Tooltip key={item.action.action}>
                       <TooltipTrigger asChild>
                         <span className="inline-flex">
@@ -750,10 +817,12 @@ function ProjectStatusPanel({
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent>{item.action.reason}</TooltipContent>
+                      <TooltipContent>
+                        {tooltipReason}
+                      </TooltipContent>
                     </Tooltip>
-                  )
-                )}
+                  );
+                })}
                 {!actionsLoading && actions.length === 0 ? (
                   <Badge variant="outline">暂无可执行动作</Badge>
                 ) : null}

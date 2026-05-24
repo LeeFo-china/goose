@@ -40,7 +40,7 @@ project_acceptances.status = customer_confirmed
 
 ## Admin UI 对接要求
 
-当前第一版已完成项目概览和施工日志 Tab 的施工阶段进度展示，以及工序验收创建入口的阶段禁用。Admin 当前没有新增施工日志入口，因此施工日志 Tab 先展示可写阶段和阻塞原因，不新增写入口。
+当前第一版已完成项目概览和施工日志 Tab 的施工阶段进度展示、工序验收创建入口的阶段禁用，以及项目状态卡 `start_acceptance` 的前置阻塞提示。Admin 当前没有新增施工日志入口，因此施工日志 Tab 先展示可写阶段和阻塞原因，不新增写入口。
 
 阶段 3 完整对接要求：
 
@@ -48,8 +48,16 @@ project_acceptances.status = customer_confirmed
 2. 新增施工日志时，阶段选择只展示后端允许进入的阶段。
 3. 发起工序验收时，默认选中当前可验收阶段。
 4. 被阻塞阶段展示阻塞原因，例如“拆改验收未通过，不能进入水电”。
-5. 项目状态按钮 `start_acceptance` 如果被后端拒绝，直接展示后端错误。
+5. 项目状态按钮 `start_acceptance` 前先读取 `GET /projects/:id/construction-stages`；`required_completed=false` 时禁用按钮，并展示 `missing_required_stages`。
 6. 状态变更、验收提交、客户确认后刷新项目详情、验收列表、施工阶段进度和项目状态动作。
+
+## 项目竣工验收按钮
+
+项目处于 `constructing` 且 `GET /projects/:id/status-actions` 返回 `start_acceptance` 时，Admin 仍必须同时检查施工阶段状态：
+
+- `required_completed=true`：允许点击 `start_acceptance`。
+- `required_completed=false`：按钮置灰，Tooltip 和卡片提示展示缺失阶段，例如“进入竣工验收前，还需完成：水电、瓦工”。
+- 读取施工阶段失败时，不在前端伪造放行判断；最终仍以后端 `POST /projects/:id/status-transition` 的硬校验为准。
 
 ## 错误处理
 
@@ -127,3 +135,17 @@ GET /projects/:id/construction-stages
   ]
 }
 ```
+
+## 一致性检查
+
+上线或回填历史数据后，Admin 不直接修数据，后端通过脚本输出待处理清单：
+
+```bash
+bun run api:construction-stage-check
+```
+
+输出 JSON 包含：
+
+- `project_log_stage_prerequisite_missing`
+- `project_acceptance_stage_prerequisite_missing`
+- `project_acceptance_status_missing_required_stage`

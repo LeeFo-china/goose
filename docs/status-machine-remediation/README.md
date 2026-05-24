@@ -104,13 +104,15 @@
 
 ### 阶段 6：施工阶段子状态机
 
-状态：执行中，已完成总方案、Admin 对接文档、微信小程序对接文档、第一批后端硬门禁、施工阶段状态查询接口增强、Admin 项目详情阶段进度展示、Admin 验收入口第一版对接和小程序验收入口第一版对接。
+状态：执行中，已完成总方案、Admin 对接文档、微信小程序对接文档、第一批后端硬门禁、施工阶段状态查询接口增强、Admin 项目详情阶段进度展示、Admin 验收入口第一版对接、小程序验收入口第一版对接、Admin 竣工验收按钮前置阻塞和历史数据一致性检查脚本。
 
 目标：
 
 - 施工日志 `stage_code / node_name` 从展示分类升级为受控施工阶段。
 - 前一必需施工阶段未验收通过，不允许进入下一阶段。
 - 必需施工阶段未全部完成，不允许项目执行 `start_acceptance` 进入竣工验收。
+- 项目详情的 `start_acceptance` 入口应读取 `missing_required_stages`，未完成时置灰并展示缺失阶段。
+- 历史数据可通过 `bun run api:construction-stage-check` 输出一致性检查清单。
 
 执行计划见 `docs/status-machine-remediation/2026-05-24-construction-stage-status-machine-plan.md`。
 

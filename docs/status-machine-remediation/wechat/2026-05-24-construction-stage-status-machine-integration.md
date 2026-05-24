@@ -40,7 +40,7 @@ project_acceptances.status = customer_confirmed
 
 ## 小程序 UI 对接要求
 
-当前第一版已完成工序验收创建入口的阶段禁用。后续由小程序团队继续补项目详情施工阶段进度区和新增施工日志阶段过滤。
+当前第一版已完成工序验收创建入口的阶段禁用。后续由小程序团队继续补项目详情施工阶段进度区、新增施工日志阶段过滤，以及项目竣工验收入口的前置禁用。
 
 阶段 4 完整对接要求：
 
@@ -50,6 +50,14 @@ project_acceptances.status = customer_confirmed
 4. 阻塞阶段展示原因，例如“拆改验收未通过，不能进入水电”。
 5. 施工日志创建、验收单创建、验收提交、客户确认后刷新项目详情、验收列表、施工阶段进度和项目状态动作。
 6. API 返回 400 / 403 时，直接展示后端中文错误。
+
+## 项目竣工验收入口
+
+小程序项目处于 `constructing` 且状态动作返回 `start_acceptance` 时，应同步读取施工阶段状态：
+
+- `required_completed=true`：允许用户点击竣工验收。
+- `required_completed=false`：入口置灰或阻断点击，展示 `missing_required_stages`，例如“进入竣工验收前，还需完成：水电、瓦工”。
+- 即使前端漏拦截，`POST /projects/:id/status-transition` 仍会返回中文 400，端侧直接展示。
 
 ## 需要继续使用的现有接口
 
@@ -127,3 +135,13 @@ GET /projects/:id/construction-stages
   ]
 }
 ```
+
+## 一致性检查结果消费
+
+后端提供历史数据一致性检查脚本：
+
+```bash
+bun run api:construction-stage-check
+```
+
+小程序不直接执行脚本，只需要按后端输出的修复结果同步刷新项目详情、施工阶段进度、验收列表和状态动作。

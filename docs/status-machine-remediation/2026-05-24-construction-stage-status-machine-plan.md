@@ -53,7 +53,7 @@ demolition -> plumbing_electrical -> tiling -> woodwork -> painting -> installat
 
 ### 阶段 0：规则冻结和对接文档
 
-状态：执行中。
+状态：已完成。
 
 交付物：
 
@@ -82,7 +82,7 @@ demolition -> plumbing_electrical -> tiling -> woodwork -> painting -> installat
 
 ### 阶段 2：阶段状态查询接口
 
-状态：已完成第一版。
+状态：已完成第一版，已补项目状态卡 `start_acceptance` 前置阻塞提示。
 
 交付物：
 
@@ -135,6 +135,7 @@ GET /projects/:id/construction-stages
 - 验收列表刷新时同步刷新施工阶段状态。
 - Admin 项目概览和施工日志 Tab 展示施工阶段进度。
 - 施工日志 Tab 展示当前可写日志阶段和阻塞原因；当前 Admin 无新增施工日志入口，因此只做读取态提示。
+- 项目状态卡执行 `start_acceptance` 前读取 `GET /projects/:id/construction-stages`，必需施工阶段未全部完成时禁用竣工验收按钮并展示缺失阶段。
 
 ### 阶段 4：微信小程序对接
 
@@ -159,13 +160,25 @@ GET /projects/:id/construction-stages
 
 ### 阶段 5：数据回填和一致性检查
 
-状态：待执行。
+状态：已完成第一版检查脚本。
 
 交付物：
 
 - 检查已有项目中已跳过前置工序的验收单和日志。
 - 输出修复 SQL 或人工处理清单。
 - 补充一致性检查脚本。
+
+已落地脚本：
+
+```bash
+bun run api:construction-stage-check
+```
+
+脚本输出 JSON，包含问题类型统计和明细。检查范围包括：
+
+- 施工日志进入后续必需阶段，但前置阶段未 `customer_confirmed`。
+- 工序验收进入后续必需阶段，但前置阶段未 `customer_confirmed`。
+- 项目已处于 `acceptance`，但任一必需施工阶段未 `customer_confirmed`。
 
 ## 验收标准
 
