@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   customerCoreRepository,
   type CustomerCoreAccessRow,
+  type CustomerLatestProjectSummary,
   type CustomerCoreRow,
 } from "@/repositories/customer-core";
 import type {
@@ -20,6 +21,7 @@ type CustomerListResult = {
   rows: CustomerCoreRow[];
   total: number;
   followUpMap: Awaited<ReturnType<typeof customerFollowUpService.getLatestFollowUpMap>>;
+  latestProjectMap: Map<string, CustomerLatestProjectSummary>;
   page: number;
   pageSize: number;
   debugTimings?: Record<string, number | string | null>;
@@ -249,19 +251,30 @@ class CustomerCoreService {
       const rowsDurationMs = Date.now() - rowsStartedAt;
       const pagedRows = rowsWithLookahead.slice(0, pageSize);
       const hasMore = rowsWithLookahead.length > pageSize;
+      const pageCustomerIds = pagedRows.map((item) => item.id);
+      const signedCustomerIds = pagedRows
+        .filter((item) => item.status === "signed")
+        .map((item) => item.id);
       const followUpStartedAt = Date.now();
-      const followUpMap = mode === "compact"
-        ? await customerFollowUpService.getLatestFollowUpMap({
-          customerIds: pagedRows.map((item) => item.id),
-          tenantId,
-        })
-        : new Map();
+      const [followUpMap, latestProjectMap] = mode === "compact"
+        ? await Promise.all([
+          customerFollowUpService.getLatestFollowUpMap({
+            customerIds: pageCustomerIds,
+            tenantId,
+          }),
+          customerCoreRepository.listLatestProjectsByCustomerIds({
+            customerIds: signedCustomerIds,
+            tenantId,
+          }),
+        ])
+        : [new Map(), new Map()];
       const followUpDurationMs = Date.now() - followUpStartedAt;
 
       return {
         rows: pagedRows,
         total: from + pagedRows.length + (hasMore ? 1 : 0),
         followUpMap,
+        latestProjectMap,
         page,
         pageSize,
         debugTimings: {
@@ -302,6 +315,7 @@ class CustomerCoreService {
         rows,
         total,
         followUpMap,
+        latestProjectMap: new Map(),
         page,
         pageSize,
       };
@@ -321,6 +335,7 @@ class CustomerCoreService {
       rows: pagedRows,
       total,
       followUpMap,
+      latestProjectMap: new Map(),
       page,
       pageSize,
     };

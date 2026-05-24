@@ -138,6 +138,14 @@ export type CustomerFollowUpRecord = {
   } | null;
 };
 
+export type CustomerLatestProjectSummary = {
+  id: string;
+  customer_id?: string | null;
+  name: string | null;
+  status: string | null;
+  created_at?: string | null;
+};
+
 export type CustomerRecord = {
   id: string;
   name: string | null;
@@ -168,6 +176,7 @@ export type CustomerRecord = {
   last_follow_at?: string | null;
   next_follow_at?: string | null;
   follow_up_state?: "none" | "upcoming" | "due" | "overdue" | string;
+  latest_project?: CustomerLatestProjectSummary | null;
   source_summary?: CustomerSourceSummary;
   latest_source?: CustomerSourceRecord | null;
   source_tags?: string[];

@@ -63,6 +63,14 @@ export type CustomerCoreRow = CustomerCoreAccessRow & {
   douyin_screenshot_images?: unknown;
 };
 
+export type CustomerLatestProjectSummary = {
+  id: string;
+  customer_id: string | null;
+  name: string | null;
+  status: string | null;
+  created_at: string | null;
+};
+
 export type CustomerListFilters = {
   tenantId: string;
   visibleOwnerIds: string[] | null;
@@ -272,6 +280,37 @@ class CustomerCoreRepository {
         item.status,
       ]),
     );
+  }
+
+  async listLatestProjectsByCustomerIds(input: {
+    customerIds: string[];
+    tenantId: string;
+  }) {
+    if (input.customerIds.length === 0) {
+      return new Map<string, CustomerLatestProjectSummary>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, customer_id, name, status, created_at")
+      .in("customer_id", input.customerIds)
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客户项目摘要失败", error);
+    }
+
+    const projectMap = new Map<string, CustomerLatestProjectSummary>();
+    for (const project of (data || []) as CustomerLatestProjectSummary[]) {
+      if (!project.customer_id || projectMap.has(project.customer_id)) {
+        continue;
+      }
+
+      projectMap.set(project.customer_id, project);
+    }
+
+    return projectMap;
   }
 
   async create(payload: Record<string, unknown>) {

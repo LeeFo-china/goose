@@ -3,8 +3,10 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   CustomerOriginConfig,
+  ProjectStatusConfig,
   CustomerStatusConfig,
   isCustomerOrigin,
+  isProjectStatus,
   isCustomerStatus,
 } from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +102,27 @@ function followUpBadge(state: string | null | undefined) {
     return <Badge className="whitespace-nowrap" variant="success">已计划</Badge>;
   }
   return <Badge className="whitespace-nowrap" variant="secondary">无计划</Badge>;
+}
+
+function statusVariant(type: string | null | undefined) {
+  if (type === "success") return "success";
+  if (type === "warning") return "warning";
+  if (type === "danger") return "danger";
+  if (type === "primary") return "default";
+  return "secondary";
+}
+
+function projectStatusBadge(status: string | null | undefined) {
+  if (!isProjectStatus(status)) {
+    return <Badge className="whitespace-nowrap" variant="outline">{status || "未知项目状态"}</Badge>;
+  }
+
+  const meta = ProjectStatusConfig[status];
+  return (
+    <Badge className="whitespace-nowrap" variant={statusVariant(meta.type)}>
+      {meta.label}
+    </Badge>
+  );
 }
 
 function sourceBadges(customer: CustomerRecord) {
@@ -235,25 +258,43 @@ const columns: ColumnDef<CustomerRecord>[] = [
   },
   {
     id: "followUp",
-    header: "跟进",
-    cell: ({ row }) => (
-      <div className="min-w-[180px]">
-        <div className="flex items-center gap-2">
-          {followUpBadge(row.original.follow_up_state)}
-          <span className="text-xs text-muted-foreground">
-            最近 {formatDateTime(row.original.last_follow_at)}
-          </span>
-        </div>
-        <div className="mt-1 truncate text-xs text-muted-foreground">
-          下次 {formatDateTime(row.original.next_follow_at)}
-        </div>
-        {row.original.latest_follow_up?.content ? (
-          <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
-            {row.original.latest_follow_up.content}
+    header: "跟进/项目",
+    cell: ({ row }) => {
+      if (row.original.status === "signed") {
+        const project = row.original.latest_project;
+        return (
+          <div className="min-w-[180px]">
+            <div className="flex items-center gap-2">
+              {project ? projectStatusBadge(project.status) : (
+                <Badge className="whitespace-nowrap" variant="secondary">暂无项目</Badge>
+              )}
+            </div>
+            <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
+              {project?.name || "已签约，暂无关联项目摘要"}
+            </div>
           </div>
-        ) : null}
-      </div>
-    ),
+        );
+      }
+
+      return (
+        <div className="min-w-[180px]">
+          <div className="flex items-center gap-2">
+            {followUpBadge(row.original.follow_up_state)}
+            <span className="text-xs text-muted-foreground">
+              最近 {formatDateTime(row.original.last_follow_at)}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            下次 {formatDateTime(row.original.next_follow_at)}
+          </div>
+          {row.original.latest_follow_up?.content ? (
+            <div className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground">
+              {row.original.latest_follow_up.content}
+            </div>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "created_at",

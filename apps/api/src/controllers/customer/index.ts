@@ -489,12 +489,13 @@ class CustomerController extends TenantBaseController<
         : undefined;
 
       return ResponseHandler.success({
-        list: listResult.rows.map((item) =>
-          this.serializeCustomer(
-            this.attachFollowUpSummary(item, listResult.followUpMap),
-            phonePrivacyContext,
-          )
-        ),
+        list: listResult.rows.map((item) => {
+          const customer = this.attachFollowUpSummary(item, listResult.followUpMap);
+          return this.serializeCustomer({
+            ...customer,
+            latest_project: listResult.latestProjectMap.get(item.id) ?? null,
+          }, phonePrivacyContext);
+        }),
         pagination: buildPagination(
           listResult.page,
           listResult.pageSize,
