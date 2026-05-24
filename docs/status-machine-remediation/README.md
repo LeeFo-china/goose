@@ -18,6 +18,7 @@
 
 - [阶段 0：状态盘点与规则冻结](./2026-05-21-phase-0-status-rule-freeze.md)
 - [销售到交付状态流](./2026-05-21-sales-to-delivery-status-flow.md)
+- [施工阶段子状态机整改计划](./2026-05-24-construction-stage-status-machine-plan.md)
 - [验收测试方案](./2026-05-21-acceptance-test-plan.md)
 - [执行记录](./2026-05-21-execution-record.md)
 - [Admin 状态机对接总览](./admin/README.md)
@@ -100,6 +101,18 @@
 
 - Admin：见 `docs/status-machine-remediation/admin/`。
 - 微信小程序：见 `docs/status-machine-remediation/wechat/`。
+
+### 阶段 6：施工阶段子状态机
+
+状态：执行中，已完成总方案、Admin 对接文档、微信小程序对接文档、第一批后端硬门禁、施工阶段状态查询接口、Admin 验收入口第一版对接和小程序验收入口第一版对接。
+
+目标：
+
+- 施工日志 `stage_code / node_name` 从展示分类升级为受控施工阶段。
+- 前一必需施工阶段未验收通过，不允许进入下一阶段。
+- 必需施工阶段未全部完成，不允许项目执行 `start_acceptance` 进入竣工验收。
+
+执行计划见 `docs/status-machine-remediation/2026-05-24-construction-stage-status-machine-plan.md`。
 
 ## 执行原则
 

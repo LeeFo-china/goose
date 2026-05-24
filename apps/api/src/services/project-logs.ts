@@ -9,8 +9,10 @@ import type {
 } from "@/schema/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
+import { isProjectLogStageCode } from "@gooes/domain";
 
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
@@ -36,6 +38,11 @@ class ProjectLogService {
       tenantId,
     });
     projectStatusService.assertCanCreateProjectLog(project);
+    await constructionStageStatusService.assertCanCreateProjectLog({
+      projectId: project.id,
+      tenantId,
+      stageCode: input.payload.stage_code,
+    });
     const canWriteLog = await accessPolicyService.canAccessProject(
       input.authContext,
       input.payload.project_id,
@@ -131,6 +138,13 @@ class ProjectLogService {
     }
 
     const payload = { ...input.payload } as Record<string, unknown>;
+    const targetProjectId = typeof payload.project_id === "string"
+      ? payload.project_id
+      : existingProjectId;
+    const targetStageCode = typeof payload.stage_code === "string" &&
+        isProjectLogStageCode(payload.stage_code)
+      ? payload.stage_code
+      : null;
     if (typeof payload.project_id === "string") {
       const project = await this.getRequiredProject({
         projectId: payload.project_id,
@@ -146,6 +160,18 @@ class ProjectLogService {
         throw Errors.forbidden();
       }
       payload.tenant_id = project.tenant_id;
+    }
+    if (targetStageCode) {
+      const targetProject = await this.getRequiredProject({
+        projectId: targetProjectId,
+        tenantId,
+      });
+      projectStatusService.assertCanCreateProjectLog(targetProject);
+      await constructionStageStatusService.assertCanCreateProjectLog({
+        projectId: targetProject.id,
+        tenantId,
+        stageCode: targetStageCode,
+      });
     }
 
     const row = await projectLogRepository.update({

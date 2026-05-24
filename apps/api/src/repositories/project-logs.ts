@@ -19,6 +19,10 @@ export type ProjectLogCalendarRow = {
   node_name: string | null;
 };
 
+export type ProjectLogStageSummaryRow = {
+  stage_code: string | null;
+};
+
 class ProjectLogRepository {
   async findProjectById(input: { projectId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -149,6 +153,28 @@ class ProjectLogRepository {
     }
 
     return (data || []) as ProjectLogCalendarRow[];
+  }
+
+  async listStageCodesByProject(input: {
+    projectId: string;
+    tenantId?: string | null;
+  }) {
+    let query = SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("stage_code")
+      .eq("project_id", input.projectId);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询项目施工日志阶段失败", error);
+    }
+
+    return (data || []) as ProjectLogStageSummaryRow[];
   }
 }
 

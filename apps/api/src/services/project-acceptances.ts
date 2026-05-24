@@ -28,6 +28,7 @@ import { sendSmsTemplate } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import type {
   ProjectAcceptanceActionRow,
   ProjectAcceptanceCustomerRow,
@@ -1551,6 +1552,10 @@ class ProjectAcceptanceService {
       throw Errors.badRequest("项目不存在");
     }
     projectStatusService.assertCanCreateProjectAcceptance(project);
+    await constructionStageStatusService.assertCanCreateAcceptance({
+      project,
+      stageCode: input.stage_code,
+    });
 
     const open = await projectAcceptanceRepository.hasOpenAcceptance(
       input.project_id,

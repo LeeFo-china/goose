@@ -278,6 +278,40 @@ class ProjectAcceptanceRepository {
     return (data || null) as Pick<ProjectAcceptanceRow, "id" | "status"> | null;
   }
 
+  async listLatestAcceptancesByStages(input: {
+    projectId: string;
+    stageCodes: readonly ProjectLogStageCode[];
+    tenantId?: string | null;
+  }) {
+    if (input.stageCodes.length === 0) {
+      return [] as ProjectAcceptanceRow[];
+    }
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_acceptances")
+      .select("*")
+      .eq("project_id", input.projectId)
+      .in("stage_code", [...input.stageCodes])
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false });
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw Errors.dbError("查询项目工序验收状态失败", error);
+
+    const latest = new Map<string, ProjectAcceptanceRow>();
+    for (const row of (data || []) as ProjectAcceptanceRow[]) {
+      if (!latest.has(row.stage_code)) {
+        latest.set(row.stage_code, row);
+      }
+    }
+
+    return [...latest.values()];
+  }
+
   async createAcceptance(input: Partial<ProjectAcceptanceRow>) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_acceptances")

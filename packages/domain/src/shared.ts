@@ -109,12 +109,20 @@ export type {
 } from './project-acceptance';
 
 export {
+  PROJECT_CONSTRUCTION_AUXILIARY_STAGE_CODE_VALUES,
+  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
+  PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
+  PROJECT_CONSTRUCTION_STAGE_STATUS_VALUES,
   PROJECT_LOG_COMMENT_AUTHOR_TYPE_VALUES,
   PROJECT_LOG_STAGE_CODE_VALUES,
   PROJECT_LOG_STAGE_CONFIG,
+  getPreviousProjectConstructionStage,
+  isProjectConstructionStageCode,
   isProjectLogStageCode,
 } from './project-log';
 export type {
+  ProjectConstructionStageCode,
+  ProjectConstructionStageStatus,
   ProjectLogCommentAuthorType,
   ProjectLogStageCode,
   ProjectLogStageConfigItem,

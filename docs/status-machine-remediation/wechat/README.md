@@ -36,6 +36,7 @@
 - [项目状态机对接](./2026-05-21-project-status-machine-integration.md)
 - [客户项目状态联动对接](./2026-05-21-customer-project-status-linkage.md)
 - [状态动作和时间线对接](./2026-05-21-status-actions-and-transition-timeline.md)
+- [施工阶段子状态机对接](./2026-05-24-construction-stage-status-machine-integration.md)
 
 ## 当前代码状态
 
@@ -49,4 +50,6 @@
 - 状态时间线来自 `GET /status-transitions?page=1&pageSize=20`。
 - 客户开始设计时，如果缺少主房产，应在项目创建/确认表单内先补齐主房产。
 - 项目执行 `schedule_construction` 进入待开工前，必须先确认开工日期 `start_date`。
+- 施工阶段必须按拆改、水电、瓦工、木工、油工、安装顺序推进，前置阶段未验收通过时不能进入下一阶段。
+- 必需施工阶段未全部完成时，项目不能执行 `start_acceptance` 进入竣工验收。
 - 服务端返回 400 / 403 时直接展示后端中文错误。

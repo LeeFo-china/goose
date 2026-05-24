@@ -14,6 +14,7 @@ import { Errors } from "@/errors/error-factory";
 import { projectRepository } from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { projectMemberService } from "@/services/project-members";
 import { projectStatusService } from "@/services/project-status";
 
@@ -750,6 +751,13 @@ class ProjectService {
         projectId: string;
     }) {
         return projectStatusService.listProjectStatusActions(input);
+    }
+
+    async listProjectConstructionStagesForTenant(input: {
+        authContext: AuthContext;
+        projectId: string;
+    }) {
+        return constructionStageStatusService.listProjectConstructionStages(input);
     }
 
     async listProjectStatusTransitionsForTenant(input: {

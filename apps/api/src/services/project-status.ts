@@ -10,6 +10,7 @@ import type {
 } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import {
   inferProjectStatusAction,
   isProjectStatus,
@@ -118,6 +119,12 @@ class ProjectStatusService {
         throw Errors.badRequest("项目排期开工前必须先确定开工日期");
       }
       patch.start_date = nextStartDate.trim();
+    }
+    if (input.payload.action === "start_acceptance") {
+      await constructionStageStatusService.assertProjectReadyForAcceptance({
+        projectId: input.projectId,
+        tenantId,
+      });
     }
 
     const metadata = {

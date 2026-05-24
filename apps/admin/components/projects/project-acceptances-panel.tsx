@@ -119,6 +119,26 @@ type ProjectAcceptance = {
   latest_customer_notification?: AcceptanceNotification | null;
 };
 
+type ConstructionStageItem = {
+  stage_code: ProjectLogStageCode;
+  stage_label: string;
+  status: string;
+  acceptance_id: string | null;
+  acceptance_status: string | null;
+  blocked_reason: string | null;
+};
+
+type ConstructionStagePayload = {
+  project_status: string | null;
+  required_completed: boolean;
+  current_stage: ProjectLogStageCode | null;
+  missing_required_stages: Array<{
+    stage_code: ProjectLogStageCode;
+    stage_label: string;
+  }>;
+  stages: ConstructionStageItem[];
+};
+
 type AcceptanceNotification = {
   id: string;
   status: "active" | "used" | "expired" | "revoked" | string;
@@ -520,6 +540,7 @@ export function ProjectAcceptancesPanel({
   const [uploadingItemId, setUploadingItemId] = useState("");
   const [error, setError] = useState("");
   const [acceptances, setAcceptances] = useState<ProjectAcceptance[]>([]);
+  const [constructionStages, setConstructionStages] = useState<ConstructionStageItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
@@ -553,14 +574,23 @@ export function ProjectAcceptancesPanel({
         .map((item) => [item.stage_code, item]),
     );
   }, [acceptances]);
+  const constructionStageMap = useMemo(() => {
+    return new Map(constructionStages.map((item) => [item.stage_code, item]));
+  }, [constructionStages]);
   const selectableStageOptions = useMemo(() => {
     return stageOptions.map((item) => ({
       ...item,
       acceptance: occupiedStages.get(item.value),
+      constructionStage: constructionStageMap.get(item.value),
     }));
-  }, [occupiedStages]);
-  const firstAvailableStage = selectableStageOptions.find((item) => !item.acceptance);
-  const selectedStageBlocked = Boolean(occupiedStages.get(stageCode));
+  }, [constructionStageMap, occupiedStages]);
+  const firstAvailableStage = selectableStageOptions.find((item) =>
+    !item.acceptance && !item.constructionStage?.blocked_reason
+  );
+  const selectedStageBlockedReason = occupiedStages.get(stageCode)
+    ? "该工序已有进行中的验收单"
+    : constructionStageMap.get(stageCode)?.blocked_reason || "";
+  const selectedStageBlocked = Boolean(selectedStageBlockedReason);
   const canCreateByProjectStatus = project.status === "constructing" || project.status === "acceptance";
   const canCreateAcceptance = canCreateByProjectStatus &&
     Boolean(firstAvailableStage) &&
@@ -570,11 +600,17 @@ export function ProjectAcceptancesPanel({
     setLoading(true);
     setError("");
     try {
-      const data = await requestBackend<AcceptanceListData>(
-        `/project-acceptances?project_id=${project.id}&page=1&pageSize=20`,
-      );
+      const [data, stageData] = await Promise.all([
+        requestBackend<AcceptanceListData>(
+          `/project-acceptances?project_id=${project.id}&page=1&pageSize=20`,
+        ),
+        requestBackend<ConstructionStagePayload>(
+          `/projects/${project.id}/construction-stages`,
+        ),
+      ]);
       const list = data.list || [];
       setAcceptances(list);
+      setConstructionStages(stageData.stages || []);
       setSelectedId((current) =>
         current && list.some((item) => item.id === current)
           ? current
@@ -583,6 +619,7 @@ export function ProjectAcceptancesPanel({
     } catch (err) {
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
+      setConstructionStages([]);
       setSelectedId("");
     } finally {
       setLoading(false);
@@ -832,10 +869,12 @@ export function ProjectAcceptancesPanel({
                         <SelectItem
                           key={item.value}
                           value={item.value}
-                          disabled={Boolean(item.acceptance)}
+                          disabled={Boolean(item.acceptance || item.constructionStage?.blocked_reason)}
                         >
                           {item.acceptance
                             ? `${item.label}（${item.acceptance.status_label}）`
+                            : item.constructionStage?.blocked_reason
+                              ? `${item.label}（未解锁）`
                             : item.label}
                         </SelectItem>
                       ))}
@@ -864,7 +903,7 @@ export function ProjectAcceptancesPanel({
                   </p>
                 ) : selectedStageBlocked ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    该工序已有进行中的验收单
+                    {selectedStageBlockedReason}
                   </p>
                 ) : null}
               </div>

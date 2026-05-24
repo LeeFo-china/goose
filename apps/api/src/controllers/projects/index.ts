@@ -631,6 +631,23 @@ class ProjectController extends TenantBaseController<
     return ResponseHandler.success(data);
   }
 
+  @Get("/projects/:id/construction-stages")
+  async listProjectConstructionStages(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const data = await projectSer.listProjectConstructionStagesForTenant({
+      authContext,
+      projectId: idVerify.data.id,
+    });
+
+    return ResponseHandler.success(data);
+  }
+
   @Get("/projects/:id/status-transitions")
   async listProjectStatusTransitions(
     request: FastifyRequest,

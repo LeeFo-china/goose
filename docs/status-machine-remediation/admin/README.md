@@ -27,6 +27,7 @@ Admin 端状态流转统一改为动作驱动，普通编辑表单只维护基�
 - [客户项目状态联动对接](./2026-05-21-customer-project-status-linkage.md)
 - [状态动作和时间线对接](./2026-05-21-status-actions-and-transition-timeline.md)
 - [Admin 动作化落地记录](./2026-05-21-admin-status-machine-implementation.md)
+- [施工阶段子状态机对接](./2026-05-24-construction-stage-status-machine-integration.md)
 
 ## 接口可用性
 
@@ -89,3 +90,5 @@ Admin 端状态流转统一改为动作驱动，普通编辑表单只维护基�
 - 项目详情状态顺序显示为：开始设计、方案已确认、项目签约、设计定稿、待开工、已开工、施工中、竣工验收。
 - 项目处于 `designing` 时，只能先执行 `confirm_proposal`，不能直接 `sign_contract`。
 - 项目签约成功后项目进入 `signed`，并自动把关联客户销售状态推进到 `signed`；不再使用旧 `contracted`。
+- 施工阶段必须按拆改、水电、瓦工、木工、油工、安装顺序推进，前置阶段未验收通过时不能进入下一阶段。
+- 必需施工阶段未全部完成时，项目不能执行 `start_acceptance` 进入竣工验收。
