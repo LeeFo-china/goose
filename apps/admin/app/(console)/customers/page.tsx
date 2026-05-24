@@ -52,6 +52,7 @@ async function getCustomers(params: CustomerPageSearchParams) {
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
+    mode: "compact",
   });
   if (status) query.set("status", status);
   if (source) query.set("source", source);
@@ -105,7 +106,7 @@ export default async function CustomersPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">客户管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            客户资料、负责人、来源状态、主房产和跟进计划。当前筛选共 {pagination.total} 条记录。
+            客户资料、负责人、来源状态和跟进计划。
           </p>
         </div>
         <CreateCustomerButton />

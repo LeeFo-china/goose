@@ -470,7 +470,7 @@ class CustomerController extends TenantBaseController<
       authContext,
       query: queryResult.data,
     });
-    if (queryResult.data.mode === "home") {
+    if (queryResult.data.mode === "home" || queryResult.data.mode === "compact") {
       request.log.info(
         {
           requestId: request.id,
@@ -481,11 +481,15 @@ class CustomerController extends TenantBaseController<
         },
         "[customer-home-list] timings",
       );
+      const phonePrivacyContext = queryResult.data.mode === "compact"
+        ? await customerPhonePrivacyService.createPrivacyContext(authContext)
+        : undefined;
 
       return ResponseHandler.success({
         list: listResult.rows.map((item) =>
           this.serializeCustomer(
             this.attachFollowUpSummary(item, listResult.followUpMap),
+            phonePrivacyContext,
           )
         ),
         pagination: buildPagination(

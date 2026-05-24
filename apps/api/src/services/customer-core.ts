@@ -219,27 +219,44 @@ class CustomerCoreService {
       customerIds: todayCustomerIds,
     };
 
-    if (mode === "home" && !follow) {
+    if ((mode === "home" || mode === "compact") && !follow) {
       const rowsStartedAt = Date.now();
-      const rowsWithLookahead = await customerCoreRepository.listHomeRows({
-        filters,
-        from,
-        to: from + pageSize,
-      });
+      const rowsWithLookahead = await (
+        mode === "compact"
+          ? customerCoreRepository.listCompactRows({
+            filters,
+            from,
+            to: from + pageSize,
+          })
+          : customerCoreRepository.listHomeRows({
+            filters,
+            from,
+            to: from + pageSize,
+          })
+      );
       const rowsDurationMs = Date.now() - rowsStartedAt;
       const pagedRows = rowsWithLookahead.slice(0, pageSize);
       const hasMore = rowsWithLookahead.length > pageSize;
+      const followUpStartedAt = Date.now();
+      const followUpMap = mode === "compact"
+        ? await customerFollowUpService.getLatestFollowUpMap({
+          customerIds: pagedRows.map((item) => item.id),
+          tenantId,
+        })
+        : new Map();
+      const followUpDurationMs = Date.now() - followUpStartedAt;
 
       return {
         rows: pagedRows,
         total: from + pagedRows.length + (hasMore ? 1 : 0),
-        followUpMap: new Map(),
+        followUpMap,
         page,
         pageSize,
         debugTimings: {
           cache: "miss",
           scopeMs: scopeDurationMs,
           rowsMs: rowsDurationMs,
+          followUpMs: followUpDurationMs,
           totalMs: Date.now() - startedAt,
           visibleOwnerCount: visibleOwnerIds?.length ?? null,
           todayCustomerCount: todayCustomerIds?.length ?? null,

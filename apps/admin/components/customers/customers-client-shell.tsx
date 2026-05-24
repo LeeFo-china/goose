@@ -65,7 +65,7 @@ export function CustomersClientShell({
               </Badge>
             ) : (
               <Badge variant="outline">
-                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+                第 {pagination.page} 页
               </Badge>
             )}
           </div>
@@ -91,7 +91,7 @@ export function CustomersClientShell({
           ) : null}
           <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
             <div className="text-sm text-muted-foreground">
-              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+              每页 {pagination.pageSize} 条，当前显示 {customers.length} 条
             </div>
             <CustomersPagination
               pagination={pagination}
