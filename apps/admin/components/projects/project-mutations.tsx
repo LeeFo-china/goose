@@ -52,6 +52,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
 import { ProjectAcceptancesPanel } from "@/components/projects/project-acceptances-panel";
+import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
 import {
   Tabs,
   TabsContent,
@@ -1406,6 +1407,10 @@ function ProjectDetailDialog({
               <StatusAlert>{detailError}</StatusAlert>
             ) : null}
             <TabsContent value="overview" className="flex flex-col gap-5">
+              <ProjectConstructionStagesPanel
+                projectId={currentProject.id}
+                active={activeTab === "overview"}
+              />
               <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
             </TabsContent>
             <TabsContent value="members">
@@ -1454,7 +1459,14 @@ function ProjectDetailDialog({
               </section>
             </TabsContent>
             <TabsContent value="logs">
-              <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
+              <div className="flex flex-col gap-5">
+                <ProjectConstructionStagesPanel
+                  projectId={currentProject.id}
+                  active={activeTab === "logs"}
+                  compact
+                />
+                <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
+              </div>
             </TabsContent>
             <TabsContent value="acceptances" className="h-full min-h-0">
               <ProjectAcceptancesPanel

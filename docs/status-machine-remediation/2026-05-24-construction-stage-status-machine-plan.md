@@ -102,9 +102,21 @@ GET /projects/:id/construction-stages
 - `required_stage_codes`
 - `required_completed`
 - `current_stage`
+- `next_stage`
 - `missing_required_stages`
 - `stages[]`
 - `all_stage_codes`
+
+`stages[]` 每项包含：
+
+- `stage_code / stage_label`
+- `status`
+- `is_required / is_completion`
+- `can_create_log`
+- `can_create_acceptance`
+- `acceptance_id / acceptance_status`
+- `latest_log`
+- `blocked_reason`
 
 ### 阶段 3：Admin 对接
 
@@ -121,6 +133,8 @@ GET /projects/:id/construction-stages
 - Admin 项目验收面板调用 `GET /projects/:id/construction-stages`。
 - 发起工序验收时，阻塞工序禁用并显示后端 `blocked_reason`。
 - 验收列表刷新时同步刷新施工阶段状态。
+- Admin 项目概览和施工日志 Tab 展示施工阶段进度。
+- 施工日志 Tab 展示当前可写日志阶段和阻塞原因；当前 Admin 无新增施工日志入口，因此只做读取态提示。
 
 ### 阶段 4：微信小程序对接
 
@@ -132,11 +146,16 @@ GET /projects/:id/construction-stages
 - 新增施工日志和发起验收时，阶段选择按后端返回的可用阶段过滤。
 - 后端 400 直接展示中文错误。
 
-已落地：
+已落地第一版：
 
 - 小程序工序验收弹层调用 `GET /projects/:id/construction-stages`。
 - 发起工序验收时，阻塞工序禁用并展示后端 `blocked_reason`。
 - 创建验收失败仍直接展示后端中文错误。
+
+后续由小程序团队继续完成：
+
+- 项目详情展示施工阶段进度。
+- 新增施工日志页按 `can_create_log / blocked_reason` 过滤阶段。
 
 ### 阶段 5：数据回填和一致性检查
 

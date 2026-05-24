@@ -5,6 +5,7 @@ import {
   type ProjectAcceptanceRow,
 } from "@/repositories/project-acceptances";
 import { projectLogRepository } from "@/repositories/project-logs";
+import type { ProjectLogLatestStageRow } from "@/repositories/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
@@ -47,7 +48,7 @@ class ConstructionStageStatusService {
       ...PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
       PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
     ];
-    const [acceptanceRows, logRows] = await Promise.all([
+    const [acceptanceRows, logRows, latestLogRows] = await Promise.all([
       projectAcceptanceRepository.listLatestAcceptancesByStages({
         projectId: input.projectId,
         stageCodes,
@@ -57,9 +58,19 @@ class ConstructionStageStatusService {
         projectId: input.projectId,
         tenantId,
       }),
+      projectLogRepository.listLatestLogsByStages({
+        projectId: input.projectId,
+        stageCodes,
+        tenantId,
+      }),
     ]);
     const acceptanceMap = new Map(
       acceptanceRows.map((item) => [item.stage_code, item]),
+    );
+    const latestLogMap = new Map(
+      latestLogRows
+        .filter((item) => item.stage_code)
+        .map((item) => [item.stage_code as string, item]),
     );
     const logStageSet = new Set(
       logRows
@@ -83,8 +94,10 @@ class ConstructionStageStatusService {
       return this.buildStageItem({
         stageCode,
         acceptance: acceptanceMap.get(stageCode),
+        latestLog: latestLogMap.get(stageCode),
         hasLog: logStageSet.has(stageCode),
         blockedReason,
+        projectStatus: project.status,
       });
     });
     const missingRequiredStages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter(
@@ -102,8 +115,10 @@ class ConstructionStageStatusService {
     const completionStage = this.buildStageItem({
       stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
       acceptance: acceptanceMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
+      latestLog: latestLogMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
       hasLog: logStageSet.has(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
       blockedReason: completionBlockedReason,
+      projectStatus: project.status,
     });
 
     return {
@@ -115,6 +130,10 @@ class ConstructionStageStatusService {
         stages.find((item) =>
           item.status !== "accepted" && item.status !== "locked"
         )?.stage_code ?? null,
+      next_stage:
+        stages.find((item) =>
+          item.status !== "accepted" && item.status !== "locked"
+        ) ?? null,
       missing_required_stages: missingRequiredStages.map((stageCode) => ({
         stage_code: stageCode,
         stage_label: this.getStageLabel(stageCode),
@@ -225,10 +244,13 @@ class ConstructionStageStatusService {
   private buildStageItem(input: {
     stageCode: ProjectLogStageCode;
     acceptance?: ProjectAcceptanceRow | null;
+    latestLog?: ProjectLogLatestStageRow | null;
     hasLog: boolean;
     blockedReason: string | null;
+    projectStatus?: string | null;
   }) {
     const acceptance = input.acceptance ?? null;
+    const latestLog = input.latestLog ?? null;
     const status: ProjectConstructionStageStatus = input.blockedReason
       ? "locked"
       : acceptance?.status === "customer_confirmed"
@@ -240,13 +262,41 @@ class ConstructionStageStatusService {
             : input.hasLog
               ? "in_progress"
               : "not_started";
+    const isCompletion =
+      input.stageCode === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE;
+    const isRequired = isProjectConstructionStageCode(input.stageCode);
+    const isAcceptanceWritableStatus = input.projectStatus === "constructing" ||
+      input.projectStatus === "acceptance";
+    const canCreateLog = isRequired &&
+      !input.blockedReason &&
+      (input.projectStatus === "started" || input.projectStatus === "constructing") &&
+      status !== "accepted" &&
+      status !== "pending_acceptance";
+    const canCreateAcceptance = !input.blockedReason &&
+      status !== "accepted" &&
+      status !== "pending_acceptance" &&
+      (isCompletion
+        ? input.projectStatus === "acceptance"
+        : isRequired && isAcceptanceWritableStatus);
 
     return {
       stage_code: input.stageCode,
       stage_label: this.getStageLabel(input.stageCode),
       status,
+      is_required: isRequired,
+      is_completion: isCompletion,
+      can_create_log: canCreateLog,
+      can_create_acceptance: canCreateAcceptance,
       acceptance_id: acceptance?.id ?? null,
       acceptance_status: acceptance?.status ?? null,
+      latest_log: latestLog
+        ? {
+          id: latestLog.id,
+          node_name: latestLog.node_name,
+          content: latestLog.content,
+          created_at: latestLog.created_at,
+        }
+        : null,
       blocked_reason: input.blockedReason,
     };
   }

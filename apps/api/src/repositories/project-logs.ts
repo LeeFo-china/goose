@@ -23,6 +23,14 @@ export type ProjectLogStageSummaryRow = {
   stage_code: string | null;
 };
 
+export type ProjectLogLatestStageRow = {
+  id: string;
+  stage_code: string | null;
+  node_name: string | null;
+  content: string | null;
+  created_at: string | null;
+};
+
 class ProjectLogRepository {
   async findProjectById(input: { projectId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -175,6 +183,42 @@ class ProjectLogRepository {
     }
 
     return (data || []) as ProjectLogStageSummaryRow[];
+  }
+
+  async listLatestLogsByStages(input: {
+    projectId: string;
+    stageCodes: readonly string[];
+    tenantId?: string | null;
+  }) {
+    if (input.stageCodes.length === 0) {
+      return [] as ProjectLogLatestStageRow[];
+    }
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select("id, stage_code, node_name, content, created_at")
+      .eq("project_id", input.projectId)
+      .in("stage_code", [...input.stageCodes])
+      .order("created_at", { ascending: false });
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询项目施工阶段最近日志失败", error);
+    }
+
+    const latest = new Map<string, ProjectLogLatestStageRow>();
+    for (const row of (data || []) as ProjectLogLatestStageRow[]) {
+      if (row.stage_code && !latest.has(row.stage_code)) {
+        latest.set(row.stage_code, row);
+      }
+    }
+
+    return [...latest.values()];
   }
 }
 

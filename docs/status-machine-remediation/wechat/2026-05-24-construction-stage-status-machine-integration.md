@@ -40,7 +40,7 @@ project_acceptances.status = customer_confirmed
 
 ## 小程序 UI 对接要求
 
-当前第一版已完成工序验收创建入口的阶段禁用。后续继续补项目详情施工阶段进度区和新增施工日志阶段过滤。
+当前第一版已完成工序验收创建入口的阶段禁用。后续由小程序团队继续补项目详情施工阶段进度区和新增施工日志阶段过滤。
 
 阶段 4 完整对接要求：
 
@@ -78,6 +78,14 @@ GET /projects/:id/construction-stages
   "project_status": "constructing",
   "required_completed": false,
   "current_stage": "plumbing_electrical",
+  "next_stage": {
+    "stage_code": "plumbing_electrical",
+    "stage_label": "水电",
+    "status": "in_progress",
+    "can_create_log": true,
+    "can_create_acceptance": true,
+    "blocked_reason": null
+  },
   "missing_required_stages": [
     {
       "stage_code": "plumbing_electrical",
@@ -89,16 +97,31 @@ GET /projects/:id/construction-stages
       "stage_code": "demolition",
       "stage_label": "拆改",
       "status": "accepted",
+      "is_required": true,
+      "is_completion": false,
+      "can_create_log": false,
+      "can_create_acceptance": false,
       "acceptance_id": "uuid",
       "acceptance_status": "customer_confirmed",
+      "latest_log": {
+        "id": "uuid",
+        "node_name": "墙体拆改",
+        "content": "现场拆改完成",
+        "created_at": "2026-05-24T10:00:00.000Z"
+      },
       "blocked_reason": null
     },
     {
       "stage_code": "plumbing_electrical",
       "stage_label": "水电",
       "status": "in_progress",
+      "is_required": true,
+      "is_completion": false,
+      "can_create_log": true,
+      "can_create_acceptance": true,
       "acceptance_id": null,
       "acceptance_status": null,
+      "latest_log": null,
       "blocked_reason": null
     }
   ]
