@@ -230,7 +230,7 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     key: "CUSTOMER_SERVICE_WORKING_HOURS",
     groupCode: "customer_service",
     name: "客服工作时间",
-    description: "客户侧展示的客服工作时间文案。",
+    description: "客户侧展示的客服工作时间文案。示例：周一至周日 09:00-18:00。",
     valueType: "string",
     envNames: ["CUSTOMER_SERVICE_WORKING_HOURS"],
   },

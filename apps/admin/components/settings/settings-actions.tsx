@@ -83,6 +83,14 @@ function formatValue(value: string | null) {
   return value && value.trim() ? value : "-";
 }
 
+function getSettingPlaceholder(setting: SystemSetting) {
+  if (setting.key === "CUSTOMER_SERVICE_WORKING_HOURS") {
+    return "例如：周一至周日 09:00-18:00";
+  }
+
+  return setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值";
+}
+
 const smsChannelModeLabels: Record<string, string> = {
   platform: "继承平台短信通道",
   tenant_aliyun: "自有阿里云短信通道",
@@ -423,7 +431,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             type={setting.value_type === "number" ? "number" : "text"}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值"}
+            placeholder={getSettingPlaceholder(setting)}
           />
         )}
         {error ? <StatusAlert>{error}</StatusAlert> : null}
