@@ -19,9 +19,15 @@ import {
   CustomerProjectAcceptanceOpenTicketQuerySchema,
   VerifyProjectAcceptanceOpenTicketSchema,
 } from "@/schema/project-acceptances";
+import {
+  CreateCustomerServiceTicketSchema,
+  CustomerServiceTicketListQuerySchema,
+  CustomerServiceTicketParamsSchema,
+} from "@/schema/customer-service";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { userIdentityService } from "@/services/user-identities";
+import { customerServiceTicketService } from "@/services/customer-service-tickets";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { IdParamSchema, PaginationQuerySchema } from "@/schema/request";
 import {
@@ -929,6 +935,9 @@ class CustomerSelfServiceController extends BaseController {
 
     const response = {
       context: this.serializeCustomerContext(authUserId, customer!, cachedUserProfile),
+      customer_service: await customerServiceTicketService.getCustomerServiceConfig(
+        customer!.tenant_id,
+      ),
       projects,
       projects_mode: projectsMode,
     };
@@ -962,6 +971,56 @@ class CustomerSelfServiceController extends BaseController {
         pageSize,
         include,
         request,
+      }),
+    );
+  }
+
+  @Get("/customer/service-tickets")
+  async listCustomerServiceTickets(request: FastifyRequest, reply: FastifyReply) {
+    const customer = await this.getCustomerProfileFromRequest(request, {
+      required: true,
+    });
+    const queryResult = CustomerServiceTicketListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    return ResponseHandler.success(
+      await customerServiceTicketService.listCustomerTickets({
+        customer: customer!,
+        query: queryResult.data,
+      }),
+    );
+  }
+
+  @Post("/customer/service-tickets")
+  async createCustomerServiceTicket(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = await this.getRequiredAuthUserId(request);
+    const customer = await this.getCustomerProfileFromRequest(request, {
+      required: true,
+    });
+    const bodyResult = CreateCustomerServiceTicketSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    return ResponseHandler.success(
+      await customerServiceTicketService.createCustomerTicket({
+        authUserId,
+        customer: customer!,
+        payload: bodyResult.data,
+      }),
+    );
+  }
+
+  @Get("/customer/service-tickets/:id")
+  async getCustomerServiceTicket(request: FastifyRequest, reply: FastifyReply) {
+    const customer = await this.getCustomerProfileFromRequest(request, {
+      required: true,
+    });
+    const params = CustomerServiceTicketParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+
+    return ResponseHandler.success(
+      await customerServiceTicketService.getCustomerTicketDetail({
+        customer: customer!,
+        ticketId: params.data.id,
       }),
     );
   }

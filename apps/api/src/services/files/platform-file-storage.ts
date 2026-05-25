@@ -25,6 +25,7 @@ export type PlatformUploadScene =
   | "project_log"
   | "project_log_comment"
   | "customer_follow_up_comment"
+  | "customer_service"
   | "expense_request"
   | "referral_payment"
   | "employee_avatar"
@@ -307,6 +308,7 @@ class PlatformFileStorageService {
       project_log: input.projectId?.trim() || "unassigned",
       project_log_comment: "project-log-comment",
       customer_follow_up_comment: "customer-follow-up-comment",
+      customer_service: "customer-service",
       expense_request: "expense-request",
       referral_payment: "referral-payment",
       employee_avatar: "employee-avatar",

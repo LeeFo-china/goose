@@ -210,6 +210,39 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
     envNames: ["TENCENT_SMS_TEMPLATE_ID_PROJECT_ACCEPTANCE"],
   },
   {
+    key: "CUSTOMER_SERVICE_ENABLED",
+    groupCode: "customer_service",
+    name: "客服入口开关",
+    description: "控制微信小程序客户侧是否展示客服入口并允许提交客服问题。",
+    valueType: "boolean",
+    envNames: ["CUSTOMER_SERVICE_ENABLED"],
+    defaultValue: "false",
+  },
+  {
+    key: "CUSTOMER_SERVICE_PHONE",
+    groupCode: "customer_service",
+    name: "客服电话",
+    description: "客户侧一键拨打的客服电话，按租户配置。",
+    valueType: "string",
+    envNames: ["CUSTOMER_SERVICE_PHONE"],
+  },
+  {
+    key: "CUSTOMER_SERVICE_WORKING_HOURS",
+    groupCode: "customer_service",
+    name: "客服工作时间",
+    description: "客户侧展示的客服工作时间文案。",
+    valueType: "string",
+    envNames: ["CUSTOMER_SERVICE_WORKING_HOURS"],
+  },
+  {
+    key: "CUSTOMER_SERVICE_NOTICE",
+    groupCode: "customer_service",
+    name: "客服提示文案",
+    description: "客户侧客服入口展示的说明文案。",
+    valueType: "string",
+    envNames: ["CUSTOMER_SERVICE_NOTICE"],
+  },
+  {
     key: "EZVIZ_API_BASE_URL",
     groupCode: "ezviz",
     name: "萤石开放平台地址",
@@ -404,6 +437,10 @@ const SETTING_DEFINITIONS: SettingDefinition[] = [
           signed_url_ttl_seconds: 1800,
         },
         customer_follow_up_comment: {
+          access_mode: "signed",
+          signed_url_ttl_seconds: 1800,
+        },
+        customer_service: {
           access_mode: "signed",
           signed_url_ttl_seconds: 1800,
         },
@@ -904,10 +941,18 @@ const TENANT_TENCENT_SMS_SETTING_KEYS = new Set([
   "PROJECT_ACCEPTANCE_SMS_EXPIRE_HOURS",
 ]);
 
+const TENANT_CUSTOMER_SERVICE_SETTING_KEYS = new Set([
+  "CUSTOMER_SERVICE_ENABLED",
+  "CUSTOMER_SERVICE_PHONE",
+  "CUSTOMER_SERVICE_WORKING_HOURS",
+  "CUSTOMER_SERVICE_NOTICE",
+]);
+
 const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
   ...TENANT_SMS_BASE_SETTING_KEYS,
   ...TENANT_ALIYUN_SMS_SETTING_KEYS,
   ...TENANT_TENCENT_SMS_SETTING_KEYS,
+  ...TENANT_CUSTOMER_SERVICE_SETTING_KEYS,
 ]);
 
 const TENANT_SETTING_KEYS_HIDE_PLATFORM_VALUE = new Set([
@@ -1216,6 +1261,7 @@ class SystemSettingsService {
 
     for (const key of TENANT_ALIYUN_SMS_SETTING_KEYS) visibleKeys.add(key);
     for (const key of TENANT_TENCENT_SMS_SETTING_KEYS) visibleKeys.add(key);
+    for (const key of TENANT_CUSTOMER_SERVICE_SETTING_KEYS) visibleKeys.add(key);
 
     return platformRecords
       .filter((platformRecord) => visibleKeys.has(platformRecord.key))

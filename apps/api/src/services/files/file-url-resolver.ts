@@ -28,6 +28,10 @@ const DEFAULT_FILE_ACCESS_POLICY: PlatformFileAccessPolicy = {
       access_mode: "signed",
       signed_url_ttl_seconds: 1800,
     },
+    customer_service: {
+      access_mode: "signed",
+      signed_url_ttl_seconds: 1800,
+    },
     customer_douyin_screenshot: {
       access_mode: "signed",
       signed_url_ttl_seconds: 1800,

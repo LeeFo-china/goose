@@ -27,6 +27,7 @@ const ALLOWED_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
   "customer_follow_up_comment",
+  "customer_service",
   "expense_request",
   "referral_payment",
   "employee_avatar",
@@ -46,6 +47,7 @@ const UploadImageFieldSchema = z.object({
 const DIRECT_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
+  "customer_service",
   "employee_avatar",
   "customer_avatar",
   "project_acceptance",

@@ -15,6 +15,7 @@ import ProjectController from "@/controllers/projects";
 import DepartmentController from "@/controllers/departments";
 import EmployeeController from "@/controllers/employee";
 import CustomerController from "@/controllers/customer";
+import CustomerServiceController from "@/controllers/customer-service";
 import PostsController from "@/controllers/posts";
 import WeChatController from "@/controllers/wechat";
 import RpcController from "@/controllers/common/rpc/get_home_dashboard_stats";
@@ -122,6 +123,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   EmployeeSelfServiceController.registerExtraRoutes(app);
   TaskCenterController.registerExtraRoutes(app);
   CustomerSelfServiceController.registerExtraRoutes(app);
+  CustomerServiceController.registerExtraRoutes(app);
   CustomerProjectLogSharesController.registerExtraRoutes(app);
   CustomerFollowUpCommentsController.registerExtraRoutes(app);
   ProjectCameraController.registerExtraRoutes(app);
