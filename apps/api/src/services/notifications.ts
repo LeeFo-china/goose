@@ -121,6 +121,82 @@ class NotificationService {
     });
   }
 
+  async createEmployeeNotification(input: {
+    tenantId: string;
+    recipientEmployeeId: string;
+    scene: string;
+    title: string;
+    content: string;
+    targetType?: string | null;
+    targetId?: string | null;
+    targetUrl?: string | null;
+    payload?: Record<string, unknown>;
+  }) {
+    return notificationRepository.createMany([{
+      tenantId: input.tenantId,
+      recipientEmployeeId: input.recipientEmployeeId,
+      scene: input.scene,
+      title: input.title,
+      content: input.content,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      targetUrl: input.targetUrl,
+      payload: input.payload,
+    }]);
+  }
+
+  async notifyCustomerServiceTicketCreated(input: {
+    tenantId: string;
+    ticketId: string;
+    ticketNo: string;
+    customerName?: string | null;
+    title?: string | null;
+  }) {
+    const customerLabel = input.customerName || "客户";
+    const title = input.title || "客户提交了客服问题";
+
+    return this.createTenantAdminNotifications({
+      tenantId: input.tenantId,
+      scene: "customer_service_ticket_created",
+      title: "新的客服问题",
+      content: `${customerLabel} 提交了客服问题「${title}」，请及时处理。`,
+      targetType: "customer_service_ticket",
+      targetId: input.ticketId,
+      targetUrl: `/customer-service?ticketId=${input.ticketId}`,
+      payload: {
+        ticket_id: input.ticketId,
+        ticket_no: input.ticketNo,
+      },
+    });
+  }
+
+  async notifyCustomerServiceTicketAssigned(input: {
+    tenantId: string;
+    ticketId: string;
+    ticketNo: string;
+    recipientEmployeeId: string;
+    customerName?: string | null;
+    title?: string | null;
+  }) {
+    const customerLabel = input.customerName || "客户";
+    const title = input.title || "客服问题";
+
+    return this.createEmployeeNotification({
+      tenantId: input.tenantId,
+      recipientEmployeeId: input.recipientEmployeeId,
+      scene: "customer_service_ticket_assigned",
+      title: "客服问题已分配给你",
+      content: `${customerLabel} 的客服问题「${title}」已分配给你，请及时处理。`,
+      targetType: "customer_service_ticket",
+      targetId: input.ticketId,
+      targetUrl: `/customer-service?ticketId=${input.ticketId}`,
+      payload: {
+        ticket_id: input.ticketId,
+        ticket_no: input.ticketNo,
+      },
+    });
+  }
+
   async tryNotifyPlatformLeadAssigned(input: Parameters<NotificationService["notifyPlatformLeadAssigned"]>[0]) {
     try {
       return await this.notifyPlatformLeadAssigned(input);
@@ -132,6 +208,22 @@ class NotificationService {
   async tryNotifyEmployeeShareCustomerBound(input: Parameters<NotificationService["notifyEmployeeShareCustomerBound"]>[0]) {
     try {
       return await this.notifyEmployeeShareCustomerBound(input);
+    } catch {
+      return [];
+    }
+  }
+
+  async tryNotifyCustomerServiceTicketCreated(input: Parameters<NotificationService["notifyCustomerServiceTicketCreated"]>[0]) {
+    try {
+      return await this.notifyCustomerServiceTicketCreated(input);
+    } catch {
+      return [];
+    }
+  }
+
+  async tryNotifyCustomerServiceTicketAssigned(input: Parameters<NotificationService["notifyCustomerServiceTicketAssigned"]>[0]) {
+    try {
+      return await this.notifyCustomerServiceTicketAssigned(input);
     } catch {
       return [];
     }

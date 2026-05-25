@@ -259,6 +259,27 @@ GET /task-center/todos/summary
 
 小程序员工端可以先只展示该类型；详情处理可以跳转到后续员工端客服问题详情页。如果员工端暂不处理客服问题，可以隐藏该类型，让 Admin 承接处理。
 
+## 员工端站内通知
+
+后端已写入员工站内通知，但微信小程序是否展示由员工端通知页决定。
+
+通知接口：
+
+```http
+GET /notifications?page=1&pageSize=20
+GET /notifications/summary
+POST /notifications/read
+```
+
+需要识别的场景：
+
+| scene | 说明 |
+| --- | --- |
+| `customer_service_ticket_created` | 客户提交新问题，通知租户管理员 |
+| `customer_service_ticket_assigned` | 问题分配给当前员工 |
+
+通知 `target_type=customer_service_ticket`，`target_id` 为客服问题 ID。员工端暂未实现客服问题详情页时，可以只展示通知内容，不做跳转。
+
 ## 项目选择
 
 提交问题时 `project_id` 可选。

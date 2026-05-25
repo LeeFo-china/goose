@@ -13,6 +13,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
+import { notificationService } from "@/services/notifications";
 import { systemSettingsService } from "@/services/system-settings";
 import {
   CustomerServiceTicketActionConfig,
@@ -49,6 +50,11 @@ function normalizeRelation(value: unknown): RelationObject | null {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function getTicketCustomerName(row: CustomerServiceTicketRecord) {
+  const customer = normalizeRelation(row.customer);
+  return asString(customer?.name) || asString(customer?.phone);
 }
 
 function maskPhone(value: string | null | undefined) {
@@ -343,6 +349,13 @@ class CustomerServiceTicketService {
         source: "customer",
       },
     });
+    await notificationService.tryNotifyCustomerServiceTicketCreated({
+      tenantId: ticket.tenant_id,
+      ticketId: ticket.id,
+      ticketNo: ticket.ticket_no,
+      customerName: getTicketCustomerName(ticket),
+      title: ticket.title,
+    });
 
     const actions = await customerServiceTicketRepository.listActions({
       tenantId: ticket.tenant_id,
@@ -473,6 +486,16 @@ class CustomerServiceTicketService {
         assigned_employee_id: payload.assigned_employee_id,
       },
     });
+    if (updated.assigned_employee_id) {
+      await notificationService.tryNotifyCustomerServiceTicketAssigned({
+        tenantId: ticket.tenant_id,
+        ticketId: ticket.id,
+        ticketNo: ticket.ticket_no,
+        recipientEmployeeId: updated.assigned_employee_id,
+        customerName: getTicketCustomerName(updated),
+        title: updated.title,
+      });
+    }
 
     const actions = await customerServiceTicketRepository.listActions({
       tenantId: ticket.tenant_id,

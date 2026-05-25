@@ -140,7 +140,7 @@
 
 ## 阶段 4：任务中心和通知增强
 
-状态：任务中心第一版已完成，通知增强待执行。
+状态：任务中心和员工站内通知第一版已完成，客户侧通知增强待执行。
 
 交付物：
 
@@ -154,6 +154,8 @@
 - `apps/api/src/schema/task-center.ts`
 - `apps/api/src/repositories/task-center.ts`
 - `apps/api/src/services/task-center.ts`
+- `apps/api/src/services/notifications.ts`
+- `apps/api/src/services/customer-service-tickets.ts`
 - `apps/admin/app/(console)/customer-service/page.tsx`
 - `apps/admin/components/customer-service/customer-service-client-shell.tsx`
 
@@ -170,6 +172,8 @@
 - 拥有 `customer.update` 且 scope 为 `all` 的员工可以看到租户内所有未完成客服问题。
 - 非全量 scope 员工可以看到分配给自己的客服问题，以及未分配的 `open` 问题。
 - `target_url` 指向 Admin：`/customer-service?ticketId={id}`。
+- 客户提交客服问题后，向租户管理员写入 `customer_service_ticket_created` 员工站内通知。
+- 分配负责人后，向被分配员工写入 `customer_service_ticket_assigned` 员工站内通知。
 
 ## 阶段 5：回归和发布
 

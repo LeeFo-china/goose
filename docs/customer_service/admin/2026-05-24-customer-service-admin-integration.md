@@ -34,6 +34,9 @@ Admin 需要承接客户提交的问题，完成查看、分配、处理、关�
 - 详情弹窗：基础信息、客户、项目、图片、负责人、状态动作、处理记录。
 - 操作：分配负责人、开始处理、解决、关闭、取消、重开。
 - 支持从任务中心跳转：`/customer-service?ticketId={id}` 会自动打开详情弹窗。
+- 员工站内通知：
+  - `customer_service_ticket_created`：客户提交新问题后通知租户管理员。
+  - `customer_service_ticket_assigned`：分配负责人后通知被分配员工。
 
 ## 页面入口
 
@@ -310,3 +313,22 @@ GET /task-center/todos/summary
 ```
 
 Admin 点击任务时直接跳转 `target_url`。
+
+## 站内通知
+
+客服问题已接入现有通知接口：
+
+```http
+GET /notifications?page=1&pageSize=20
+GET /notifications/summary
+POST /notifications/read
+```
+
+通知场景：
+
+| scene | 触发时机 | 接收人 | target_url |
+| --- | --- | --- | --- |
+| `customer_service_ticket_created` | 客户提交新客服问题 | 租户管理员 | `/customer-service?ticketId={id}` |
+| `customer_service_ticket_assigned` | Admin 分配负责人 | 被分配员工 | `/customer-service?ticketId={id}` |
+
+Admin 通知入口点击 `target_url` 后会自动打开对应客服问题详情。
