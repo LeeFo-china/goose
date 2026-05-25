@@ -35,6 +35,7 @@ export function DataTable<TData, TValue>({
   emptyText = "暂无数据",
   minWidth,
   rowClassName,
+  onRowClick,
   tableMeta,
 }: {
   columns: ColumnDef<TData, TValue>[];
@@ -42,6 +43,7 @@ export function DataTable<TData, TValue>({
   emptyText?: string;
   minWidth?: string;
   rowClassName?: (row: TData) => string | undefined;
+  onRowClick?: (row: TData) => void;
   tableMeta?: Record<string, unknown>;
 }) {
   const table = useReactTable({
@@ -78,8 +80,24 @@ export function DataTable<TData, TValue>({
             table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
-                className={rowClassName?.(row.original)}
+                className={cn(
+                  onRowClick && "cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  rowClassName?.(row.original),
+                )}
                 data-state={row.getIsSelected() && "selected"}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? "button" : undefined}
+                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onRowClick(row.original);
+                      }
+                    }
+                    : undefined
+                }
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell

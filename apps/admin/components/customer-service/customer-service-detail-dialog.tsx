@@ -73,6 +73,22 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function normalizeSummaryText(value: string | null | undefined) {
+  return value?.replace(/\s+/g, " ").trim() || "";
+}
+
+function hasDistinctSummaryTitle(title: string | null | undefined, content: string | null | undefined) {
+  const normalizedTitle = normalizeSummaryText(title);
+  const normalizedContent = normalizeSummaryText(content);
+
+  return Boolean(
+    normalizedTitle &&
+      normalizedContent &&
+      normalizedTitle !== normalizedContent &&
+      !normalizedContent.startsWith(normalizedTitle)
+  );
+}
+
 export function CustomerServiceDetailDialog({
   ticketId,
   open,
@@ -226,12 +242,20 @@ export function CustomerServiceDetailDialog({
                     <Badge variant="outline">{ticket.category_label}</Badge>
                     <Badge variant="secondary">{ticket.priority_label}</Badge>
                   </div>
-                  <h2 className="mt-3 text-base font-semibold tracking-normal">
-                    {ticket.title || ticket.content}
-                  </h2>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {ticket.content}
-                  </p>
+                  {hasDistinctSummaryTitle(ticket.title, ticket.content) ? (
+                    <>
+                      <h2 className="mt-3 text-base font-semibold tracking-normal">
+                        {ticket.title}
+                      </h2>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                        {ticket.content}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-3 whitespace-pre-wrap text-base font-semibold tracking-normal">
+                      {ticket.content || ticket.title}
+                    </p>
+                  )}
                 </div>
                 <Button
                   type="button"

@@ -35,6 +35,22 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function normalizeSummaryText(value: string | null | undefined) {
+  return value?.replace(/\s+/g, " ").trim() || "";
+}
+
+function hasDistinctSummaryTitle(title: string | null | undefined, content: string | null | undefined) {
+  const normalizedTitle = normalizeSummaryText(title);
+  const normalizedContent = normalizeSummaryText(content);
+
+  return Boolean(
+    normalizedTitle &&
+      normalizedContent &&
+      normalizedTitle !== normalizedContent &&
+      !normalizedContent.startsWith(normalizedTitle)
+  );
+}
+
 const columns: ColumnDef<CustomerServiceTicket>[] = [
   {
     accessorKey: "ticket_no",
@@ -117,14 +133,22 @@ const columns: ColumnDef<CustomerServiceTicket>[] = [
   {
     id: "summary",
     header: "问题摘要",
-    cell: ({ row }) => (
-      <div className="min-w-[260px] max-w-[360px]">
-        <div className="truncate font-medium">{row.original.title || row.original.content}</div>
-        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-          {row.original.content}
+    cell: ({ row }) => {
+      const title = row.original.title?.trim() || "";
+      const content = row.original.content?.trim() || "";
+      const showTitle = hasDistinctSummaryTitle(title, content);
+
+      return (
+        <div className="min-w-[260px] max-w-[360px]">
+          {showTitle ? (
+            <div className="truncate font-medium">{title}</div>
+          ) : null}
+          <div className={showTitle ? "mt-1 line-clamp-2 text-xs text-muted-foreground" : "line-clamp-2 text-sm font-medium"}>
+            {content || title || "-"}
+          </div>
         </div>
-      </div>
-    ),
+      );
+    },
   },
   {
     id: "images",
@@ -164,7 +188,8 @@ const columns: ColumnDef<CustomerServiceTicket>[] = [
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             if (typeof openDetail === "function") {
               openDetail(row.original.id);
             }
@@ -195,6 +220,7 @@ export function CustomerServiceTable({
       data={tickets}
       emptyText="没有符合条件的客服问题"
       minWidth="min-w-[1280px]"
+      onRowClick={(ticket) => onOpenDetail(ticket.id)}
       tableMeta={{ openDetail: onOpenDetail }}
     />
   );
