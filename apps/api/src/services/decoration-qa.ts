@@ -9,6 +9,7 @@ import type {
 import type { Tables } from "@/types/database";
 import { authorizationService } from "@/services/authorization";
 import { aiGateway } from "@/services/ai-gateway";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
 import { systemSettingsService } from "@/services/system-settings";
 import {
@@ -17,6 +18,7 @@ import {
   isProjectLogStageCode,
   isProjectStatus,
   PROJECT_LOG_STAGE_CONFIG,
+  type ProjectConstructionStageStatus,
   type ProjectLogStageCode,
   ProjectStatusConfig,
 } from "@gooes/domain";
@@ -229,6 +231,33 @@ type ProjectQaLogRow = {
   created_at: string | null;
 };
 
+type CustomerProjectQaConstructionStageItem = {
+  stage_code: ProjectLogStageCode;
+  stage_label: string;
+  status: ProjectConstructionStageStatus;
+  is_required: boolean;
+  is_completion: boolean;
+  acceptance_status: string | null;
+  latest_log: {
+    node_name: string | null;
+    content: string | null;
+    created_at: string | null;
+  } | null;
+  blocked_reason: string | null;
+};
+
+type CustomerProjectQaConstructionStageContext = {
+  current_stage: CustomerProjectQaConstructionStageItem | null;
+  next_stage: CustomerProjectQaConstructionStageItem | null;
+  required_completed: boolean;
+  required_stage_codes: ProjectLogStageCode[];
+  missing_required_stages: Array<{
+    stage_code: ProjectLogStageCode;
+    stage_label: string;
+  }>;
+  stages: CustomerProjectQaConstructionStageItem[];
+};
+
 type CustomerProjectQaContext = {
   customer_id: string;
   customer_name: string | null;
@@ -248,6 +277,7 @@ type CustomerProjectQaContext = {
   } | null;
   designer_name: string | null;
   supervisor_name: string | null;
+  construction_stages: CustomerProjectQaConstructionStageContext | null;
   recent_logs: Array<{
     stage_code: ProjectLogStageCode | null;
     stage_label: string | null;
@@ -260,6 +290,12 @@ type CustomerProjectQaContext = {
 type ProjectQaProjectRowWithTenant = ProjectQaProjectRow & {
   tenant_id: string | null;
 };
+
+type ProjectConstructionStagesResult = Awaited<
+  ReturnType<
+    typeof constructionStageStatusService.listProjectConstructionStagesForProject
+  >
+>;
 
 type DecorationQaUsageSource =
   | "customer_miniprogram"
@@ -786,6 +822,7 @@ async function inferDecorationQaUsageContextFromAuth(
       const context = await buildCustomerProjectQaContext(
         input.authUserId,
         input.projectId,
+        { includeConstructionStages: false },
       );
       if (!context.tenant_id) {
         return null;
@@ -875,6 +912,7 @@ async function resolveDecorationQaUsageContext(
       const context = await buildCustomerProjectQaContext(
         input.authUserId,
         input.projectId,
+        { includeConstructionStages: false },
       );
       if (!context.tenant_id) {
         throw Errors.business(
@@ -949,6 +987,9 @@ async function resolveDecorationQaUsageContext(
 async function buildCustomerProjectQaContext(
   authUserId: string,
   projectId: string,
+  options: {
+    includeConstructionStages?: boolean;
+  } = {},
 ): Promise<CustomerProjectQaContext> {
   const customer = await getCustomerContextByAuthUserId(authUserId);
   const { data: projectData, error: projectError } = await SupabaseDB
@@ -1003,6 +1044,9 @@ async function buildCustomerProjectQaContext(
   }
 
   const project = projectData as unknown as ProjectQaProjectRowWithTenant;
+  const constructionStages = options.includeConstructionStages === false
+    ? null
+    : await getCustomerProjectQaConstructionStages(project.id, project.tenant_id);
   const property = normalizeRelation(project.property, {
     community: null,
     building_info: null,
@@ -1046,6 +1090,7 @@ async function buildCustomerProjectQaContext(
     supervisor_name: typeof supervisor.name === "string"
       ? supervisor.name
       : null,
+    construction_stages: constructionStages,
     recent_logs: ((logsData || []) as ProjectQaLogRow[]).map((item) => {
       const stageCode = isProjectLogStageCode(item.stage_code)
         ? item.stage_code
@@ -1064,12 +1109,95 @@ async function buildCustomerProjectQaContext(
   };
 }
 
+async function getCustomerProjectQaConstructionStages(
+  projectId: string,
+  tenantId: string | null,
+): Promise<CustomerProjectQaConstructionStageContext | null> {
+  try {
+    const payload = await constructionStageStatusService
+      .listProjectConstructionStagesForProject({
+        projectId,
+        tenantId,
+      });
+
+    return normalizeCustomerProjectQaConstructionStages(payload);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCustomerProjectQaConstructionStages(
+  payload: ProjectConstructionStagesResult,
+): CustomerProjectQaConstructionStageContext {
+  const stages = payload.stages
+    .map(normalizeCustomerProjectQaConstructionStageItem)
+    .filter((item): item is CustomerProjectQaConstructionStageItem =>
+      Boolean(item)
+    );
+  const stageMap = new Map(stages.map((item) => [item.stage_code, item]));
+  const currentStageCode = payload.current_stage;
+  const currentStage = isProjectLogStageCode(currentStageCode)
+    ? stageMap.get(currentStageCode) ?? null
+    : null;
+  const nextStageCode = payload.next_stage?.stage_code ?? null;
+  const nextStage = isProjectLogStageCode(nextStageCode)
+    ? stageMap.get(nextStageCode) ?? null
+    : null;
+
+  return {
+    current_stage: currentStage,
+    next_stage: nextStage,
+    required_completed: payload.required_completed,
+    required_stage_codes: payload.required_stage_codes.filter(isProjectLogStageCode),
+    missing_required_stages: payload.missing_required_stages.reduce<
+      CustomerProjectQaConstructionStageContext["missing_required_stages"]
+    >((list, item) => {
+      if (!isProjectLogStageCode(item.stage_code)) {
+        return list;
+      }
+
+      list.push({
+        stage_code: item.stage_code,
+        stage_label: item.stage_label,
+      });
+      return list;
+    }, []),
+    stages,
+  };
+}
+
+function normalizeCustomerProjectQaConstructionStageItem(
+  item: ProjectConstructionStagesResult["stages"][number],
+): CustomerProjectQaConstructionStageItem | null {
+  if (!isProjectLogStageCode(item.stage_code)) {
+    return null;
+  }
+
+  return {
+    stage_code: item.stage_code,
+    stage_label: item.stage_label,
+    status: item.status,
+    is_required: item.is_required,
+    is_completion: item.is_completion,
+    acceptance_status: item.acceptance_status,
+    latest_log: item.latest_log
+      ? {
+        node_name: item.latest_log.node_name,
+        content: item.latest_log.content,
+        created_at: item.latest_log.created_at,
+      }
+      : null,
+    blocked_reason: item.blocked_reason,
+  };
+}
+
 function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
-  const latestLogWithStage = context.recent_logs.find((item) =>
-    item.stage_code
-  );
-  const reminderPrompts = latestLogWithStage?.stage_code
-    ? (PROJECT_STAGE_REMINDER_PROMPTS[latestLogWithStage.stage_code] || [])
+  const currentStageCode =
+    context.construction_stages?.current_stage?.stage_code ??
+      context.recent_logs.find((item) => item.stage_code)?.stage_code ??
+      null;
+  const reminderPrompts = currentStageCode
+    ? (PROJECT_STAGE_REMINDER_PROMPTS[currentStageCode] || [])
     : (context.status
       ? (PROJECT_STATUS_REMINDER_PROMPTS[context.status] || [])
       : []);
@@ -1077,6 +1205,7 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
     "以下是当前客户项目上下文，仅可基于这些已同步资料回答项目相关问题。",
     "如果上下文不足，请明确说明“根据当前已同步的项目资料，暂时无法确认更多细节”。",
     "不要虚构施工进度、团队成员、时间计划或未发生的项目节点。",
+    "回答当前施工进度、下一步工序、是否能进入下一阶段时，必须优先使用“施工阶段状态机”，不要只根据最近日志推断。",
     "如果用户在询问当前项目相关问题，除直接回答外，请尽量结合当前施工进度或项目状态，自然补充 1-3 条温馨提醒事项。",
     "温馨提醒必须贴近当前阶段，不能脱离当前项目上下文泛泛而谈。",
     "",
@@ -1106,6 +1235,54 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
     );
   } else {
     lines.push("- 房产信息：未同步");
+  }
+
+  if (context.construction_stages) {
+    const stages = context.construction_stages;
+    lines.push(
+      `- 当前施工工序：${
+        formatConstructionStageBrief(stages.current_stage) || "未同步"
+      }`,
+      `- 下一步施工工序：${
+        formatConstructionStageBrief(stages.next_stage) || "暂无下一步工序"
+      }`,
+      `- 必需工序是否全部完成：${
+        stages.required_completed ? "是" : "否"
+      }`,
+    );
+
+    if (stages.missing_required_stages.length > 0) {
+      lines.push(
+        `- 尚未完成的必需工序：${
+          stages.missing_required_stages
+            .map((item) => item.stage_label)
+            .join("、")
+        }`,
+      );
+    }
+
+    lines.push("- 施工阶段状态机：");
+    stages.stages.forEach((item, index) => {
+      const parts = [
+        `${item.stage_label}(${formatConstructionStageStatus(item.status)})`,
+        item.is_required ? "必需工序" : "辅助/收尾工序",
+        item.acceptance_status ? `验收状态：${item.acceptance_status}` : null,
+        item.latest_log
+          ? `最近记录：${
+            [
+              item.latest_log.created_at?.slice(0, 10) ?? null,
+              item.latest_log.node_name,
+              item.latest_log.content,
+            ].filter(Boolean).join(" - ")
+          }`
+          : null,
+        item.blocked_reason ? `阻塞原因：${item.blocked_reason}` : null,
+      ].filter(Boolean);
+
+      lines.push(`  ${index + 1}. ${parts.join("；")}`);
+    });
+  } else {
+    lines.push("- 施工阶段状态机：未同步");
   }
 
   if (context.recent_logs.length > 0) {
@@ -1138,13 +1315,55 @@ function formatCustomerProjectQaContext(context: CustomerProjectQaContext) {
   return lines.join("\n");
 }
 
+function formatConstructionStageBrief(
+  stage?: CustomerProjectQaConstructionStageItem | null,
+) {
+  if (!stage) {
+    return "";
+  }
+
+  const parts = [
+    stage.stage_label,
+    formatConstructionStageStatus(stage.status),
+    stage.blocked_reason ? `阻塞原因：${stage.blocked_reason}` : null,
+  ].filter(Boolean);
+
+  return parts.join("，");
+}
+
+function formatConstructionStageStatus(status: ProjectConstructionStageStatus) {
+  const statusMap: Record<ProjectConstructionStageStatus, string> = {
+    locked: "未解锁",
+    not_started: "未开始",
+    in_progress: "施工中",
+    pending_acceptance: "待验收",
+    rework_required: "整改中",
+    accepted: "已验收通过",
+  };
+
+  return statusMap[status] ?? status;
+}
+
 function formatCustomerProjectSuggestionContext(
   context: CustomerProjectQaContext,
 ) {
   const latestLog = context.recent_logs[0];
+  const currentStage = context.construction_stages?.current_stage;
+  const nextStage = context.construction_stages?.next_stage;
   const parts = [
     context.status_label || context.status
       ? `项目阶段：${context.status_label || context.status}`
+      : null,
+    currentStage
+      ? `当前工序：${formatConstructionStageBrief(currentStage)}`
+      : null,
+    nextStage ? `下一步工序：${formatConstructionStageBrief(nextStage)}` : null,
+    context.construction_stages?.missing_required_stages.length
+      ? `未完成工序：${
+        context.construction_stages.missing_required_stages
+          .map((item) => item.stage_label)
+          .join("、")
+      }`
       : null,
     context.property?.area ? `房屋面积：${context.property.area}㎡` : null,
     context.property?.layout ? `户型：${context.property.layout}` : null,
