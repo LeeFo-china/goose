@@ -11,6 +11,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Megaphone,
+  MessageSquareWarning,
   ScrollText,
   SearchCheck,
   Shield,
@@ -69,6 +70,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     items: [
       { href: "/dashboard", label: "概览", icon: LayoutDashboard },
       { href: "/customers", label: "客户", icon: Users },
+      { href: "/customer-service", label: "客服问题", icon: MessageSquareWarning },
       { href: "/projects", label: "项目", icon: BriefcaseBusiness },
       { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
       { href: "/marketing", label: "营销活动", icon: Megaphone },

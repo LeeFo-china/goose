@@ -106,7 +106,7 @@
 
 ## 阶段 3：Admin 对接
 
-状态：待执行。
+状态：已完成第一版。
 
 交付物：
 
@@ -118,6 +118,17 @@
 - 状态动作：开始处理、解决、关闭、取消、重开。
 - 客服配置入口复用系统设置页。
 
+已落地文件：
+
+- `apps/admin/app/(console)/customer-service/page.tsx`
+- `apps/admin/app/(console)/customer-service/loading.tsx`
+- `apps/admin/components/customer-service/customer-service-client-shell.tsx`
+- `apps/admin/components/customer-service/customer-service-list-actions.tsx`
+- `apps/admin/components/customer-service/customer-service-table.tsx`
+- `apps/admin/components/customer-service/customer-service-detail-dialog.tsx`
+- `apps/admin/components/customer-service/customer-service-types.ts`
+- `apps/admin/components/layout/menu-config.ts`
+
 验收标准：
 
 - 列表首屏可用，默认按创建时间倒序。
@@ -125,6 +136,7 @@
 - 动作按钮只展示当前可执行动作。
 - 处理结果必填。
 - 操作后刷新列表和详情。
+- Admin 类型检查和构建通过。
 
 ## 阶段 4：任务中心和通知增强
 
