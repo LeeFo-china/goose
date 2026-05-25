@@ -222,6 +222,43 @@ GET /customer/service-tickets/:id
 - 客户确认关闭。
 - 客户追加留言。
 
+## 员工端任务中心
+
+如果微信小程序员工端对接现有任务中心，需要识别客服问题待办类型。
+
+接口：
+
+```http
+GET /task-center/todos?type=customer_service_ticket&page=1&pageSize=20
+GET /task-center/todos/summary
+```
+
+任务字段：
+
+```json
+{
+  "id": "customer_service_ticket:uuid",
+  "type": "customer_service_ticket",
+  "title": "客服问题待处理",
+  "subtitle": "问题摘要",
+  "status": "pending",
+  "status_label": "待处理",
+  "priority": "high",
+  "priority_label": "高优先级",
+  "action_label": "去处理",
+  "target_type": "customer_service_ticket",
+  "target_id": "uuid",
+  "metadata": {
+    "ticket_no": "CS20260525120000ABCD",
+    "customer_name": "张三",
+    "project_name": "张三装修项目",
+    "ticket_status": "open"
+  }
+}
+```
+
+小程序员工端可以先只展示该类型；详情处理可以跳转到后续员工端客服问题详情页。如果员工端暂不处理客服问题，可以隐藏该类型，让 Admin 承接处理。
+
 ## 项目选择
 
 提交问题时 `project_id` 可选。

@@ -9,6 +9,7 @@ type CustomerServicePageSearchParams = {
   status?: string;
   category?: string;
   keyword?: string;
+  ticketId?: string;
 };
 
 function normalizePage(value: string | undefined) {
@@ -74,6 +75,7 @@ export default async function CustomerServicePage({
   const status = params.status?.trim() || "";
   const category = params.category?.trim() || "";
   const keyword = params.keyword?.trim() || "";
+  const ticketId = params.ticketId?.trim() || "";
   const { list, pagination, error } = await getCustomerServiceTickets(params);
 
   return (
@@ -91,6 +93,7 @@ export default async function CustomerServicePage({
         status={status}
         category={category}
         keyword={keyword}
+        initialTicketId={ticketId}
         error={error}
       />
     </div>

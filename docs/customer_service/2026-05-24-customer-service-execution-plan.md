@@ -140,7 +140,7 @@
 
 ## 阶段 4：任务中心和通知增强
 
-状态：待执行。
+状态：任务中心第一版已完成，通知增强待执行。
 
 交付物：
 
@@ -149,11 +149,27 @@
 - 可选：处理完成后通知客户。
 - 可选：统计处理时长。
 
+已落地文件：
+
+- `apps/api/src/schema/task-center.ts`
+- `apps/api/src/repositories/task-center.ts`
+- `apps/api/src/services/task-center.ts`
+- `apps/admin/app/(console)/customer-service/page.tsx`
+- `apps/admin/components/customer-service/customer-service-client-shell.tsx`
+
 验收标准：
 
 - 客服主管能看到待处理数量。
 - 被分配客服能看到自己的待处理问题。
 - 不影响现有客户、项目、验收状态机。
+
+当前第一版规则：
+
+- 任务类型：`customer_service_ticket`。
+- 待处理状态：客服问题 `open` / `in_progress`。
+- 拥有 `customer.update` 且 scope 为 `all` 的员工可以看到租户内所有未完成客服问题。
+- 非全量 scope 员工可以看到分配给自己的客服问题，以及未分配的 `open` 问题。
+- `target_url` 指向 Admin：`/customer-service?ticketId={id}`。
 
 ## 阶段 5：回归和发布
 

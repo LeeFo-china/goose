@@ -33,6 +33,7 @@ Admin 需要承接客户提交的问题，完成查看、分配、处理、关�
 - 列表字段：工单、客户、项目、分类、状态、优先级、问题摘要、图片数、负责人。
 - 详情弹窗：基础信息、客户、项目、图片、负责人、状态动作、处理记录。
 - 操作：分配负责人、开始处理、解决、关闭、取消、重开。
+- 支持从任务中心跳转：`/customer-service?ticketId={id}` 会自动打开详情弹窗。
 
 ## 页面入口
 
@@ -281,3 +282,31 @@ Admin 需要：
 - 能执行开始处理、解决、关闭。
 - 已关闭问题不可继续解决，只能重开。
 - 操作历史完整展示。
+
+## 任务中心对接
+
+客服问题已经纳入现有任务中心接口：
+
+```http
+GET /task-center/todos?type=customer_service_ticket&page=1&pageSize=20
+GET /task-center/todos/summary
+```
+
+任务字段：
+
+```json
+{
+  "id": "customer_service_ticket:uuid",
+  "type": "customer_service_ticket",
+  "title": "客服问题待处理",
+  "subtitle": "客户或问题摘要",
+  "status": "pending",
+  "priority": "high",
+  "action_label": "去处理",
+  "target_url": "/customer-service?ticketId=uuid",
+  "target_type": "customer_service_ticket",
+  "target_id": "uuid"
+}
+```
+
+Admin 点击任务时直接跳转 `target_url`。

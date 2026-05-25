@@ -80,6 +80,29 @@ export type ProjectAcceptanceTodoSource = {
   } | null;
 };
 
+export type CustomerServiceTicketTodoSource = {
+  id: string;
+  ticket_no: string;
+  title: string | null;
+  content: string;
+  status: string;
+  priority: string;
+  category: string;
+  assigned_employee_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  customer: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+  } | null;
+  project: {
+    id: string;
+    name: string | null;
+    status: string | null;
+  } | null;
+};
+
 class TaskCenterRepository {
   async listOwnedCustomerIds(employeeId: string, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
@@ -275,6 +298,46 @@ class TaskCenterRepository {
     }
 
     return (data || []) as unknown as ProjectAcceptanceTodoSource[];
+  }
+
+  async listCustomerServiceTicketTodos(tenantId?: string | null) {
+    let query = SupabaseDB.getAdminClient()
+      .from("customer_service_tickets")
+      .select(`
+        id,
+        ticket_no,
+        title,
+        content,
+        status,
+        priority,
+        category,
+        assigned_employee_id,
+        created_at,
+        updated_at,
+        customer:customers!customer_service_tickets_customer_id_fkey(
+          id,
+          name,
+          phone
+        ),
+        project:projects!customer_service_tickets_project_id_fkey(
+          id,
+          name,
+          status
+        )
+      `)
+      .in("status", ["open", "in_progress"]);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+
+    if (error) {
+      throw Errors.dbError("查询客服问题待处理失败", error);
+    }
+
+    return (data || []) as unknown as CustomerServiceTicketTodoSource[];
   }
 }
 

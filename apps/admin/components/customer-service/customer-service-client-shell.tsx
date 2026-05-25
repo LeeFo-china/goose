@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
@@ -23,6 +23,7 @@ export function CustomerServiceClientShell({
   status,
   category,
   keyword,
+  initialTicketId,
   error,
 }: {
   tickets: CustomerServiceTicket[];
@@ -30,11 +31,18 @@ export function CustomerServiceClientShell({
   status: string;
   category: string;
   keyword: string;
+  initialTicketId: string;
   error: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialTicketId) {
+      setDetailTicketId(initialTicketId);
+    }
+  }, [initialTicketId]);
 
   function navigate(href: string) {
     startTransition(() => {
