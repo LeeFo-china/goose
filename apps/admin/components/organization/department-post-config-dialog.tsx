@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
-import { BriefcaseBusiness, Loader2, Plus, Save } from "lucide-react";
+import { BriefcaseBusiness, Loader2, Plus, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
@@ -35,6 +35,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 
 function sortCodes(values: string[]) {
@@ -56,6 +62,10 @@ function getDepartmentSelectedPostCodes(
 
 function getPostSearchText(post: DepartmentPostRulePostOption) {
   return `${post.name} ${post.code}`.toLowerCase();
+}
+
+function normalizePostName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 async function saveDepartmentPostCodes(
@@ -173,6 +183,10 @@ export function DepartmentPostConfigDialog({
   const dirty =
     JSON.stringify(sortCodes(selectedCodes)) !==
     JSON.stringify(sortCodes(baselineCodes));
+  const selectedPosts = useMemo(() => {
+    const selectedCodeSet = new Set(selectedCodes);
+    return localConfig.post_options.filter((post) => selectedCodeSet.has(post.code));
+  }, [localConfig.post_options, selectedCodes]);
 
   useEffect(() => {
     if (!open) return;
@@ -209,6 +223,21 @@ export function DepartmentPostConfigDialog({
     );
   }
 
+  function selectExistingPost(post: DepartmentPostRulePostOption) {
+    const alreadySelected = selectedCodes.includes(post.code);
+    if (!alreadySelected) {
+      setSelectedCodes((current) => Array.from(new Set([...current, post.code])));
+    }
+    setKeyword(post.name);
+    setPostName("");
+    setError("");
+    toast.success(
+      alreadySelected
+        ? `岗位「${post.name}」已在当前配置中`
+        : `已选中已有岗位「${post.name}」`,
+    );
+  }
+
   function save() {
     if (!departmentCode) return;
 
@@ -241,6 +270,13 @@ export function DepartmentPostConfigDialog({
     }
     if (!departmentId) {
       setError("请先选择有效部门");
+      return;
+    }
+    const existingPost = localConfig.post_options.find((post) =>
+      normalizePostName(post.name) === normalizePostName(name)
+    );
+    if (existingPost) {
+      selectExistingPost(existingPost);
       return;
     }
 
@@ -291,14 +327,29 @@ export function DepartmentPostConfigDialog({
                   新增岗位
                 </FieldLabel>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    id={`create-post-${department.id}`}
-                    value={postName}
-                    placeholder="填写岗位名称"
-                    maxLength={50}
-                    disabled={pending || !departmentId}
-                    onChange={(event) => setPostName(event.target.value)}
-                  />
+                  <InputGroup>
+                    <InputGroupInput
+                      id={`create-post-${department.id}`}
+                      value={postName}
+                      placeholder="填写岗位名称"
+                      maxLength={50}
+                      disabled={pending || !departmentId}
+                      onChange={(event) => setPostName(event.target.value)}
+                    />
+                    {postName ? (
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          type="button"
+                          aria-label="清空岗位名称"
+                          size="icon-xs"
+                          disabled={pending}
+                          onClick={() => setPostName("")}
+                        >
+                          <X aria-hidden="true" />
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    ) : null}
+                  </InputGroup>
                   <Button
                     type="submit"
                     variant="outline"
@@ -325,15 +376,39 @@ export function DepartmentPostConfigDialog({
             <span className="text-sm text-muted-foreground">
               已选 {selectedCodes.length} 个岗位
             </span>
+            {selectedPosts.length > 0 ? (
+              <div className="flex min-w-0 flex-wrap gap-1">
+                {selectedPosts.map((post) => (
+                  <Badge key={post.code} variant="outline">
+                    {post.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <Command shouldFilter={false} className="rounded-md border">
-            <CommandInput
-              value={keyword}
-              placeholder="搜索岗位名称或编码"
-              disabled={pending}
-              onValueChange={setKeyword}
-            />
+            <div className="flex items-center border-b pr-2">
+              <CommandInput
+                value={keyword}
+                placeholder="搜索岗位名称或编码"
+                disabled={pending}
+                onValueChange={setKeyword}
+              />
+              {keyword ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  aria-label="清空岗位搜索"
+                  disabled={pending}
+                  onClick={() => setKeyword("")}
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              ) : null}
+            </div>
             <CommandList className="max-h-[360px]">
               <CommandEmpty>没有匹配的岗位</CommandEmpty>
               <CommandGroup>
