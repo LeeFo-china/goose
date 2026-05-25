@@ -1157,6 +1157,37 @@ class SystemSettingsService {
     return records.find((item) => item.key === key && item.tenant_id === tenantId) || null;
   }
 
+  private buildDefinitionRecord(
+    definition: SettingDefinition,
+    tenantId: string | null = null,
+  ): SystemSettingRecord {
+    return {
+      id: `definition:${tenantId || "platform"}:${definition.key}`,
+      tenant_id: tenantId,
+      key: definition.key,
+      group_code: definition.groupCode,
+      name: definition.name,
+      description: definition.description,
+      value_type: definition.valueType,
+      value_text: null,
+      is_secret: definition.isSecret ?? false,
+      status: "active",
+      updated_by_employee_id: null,
+      created_at: "",
+      updated_at: "",
+    };
+  }
+
+  private getPlatformRecordOrDefinition(records: SystemSettingRecord[], key: string) {
+    const platformRecord = this.getPlatformRecord(records, key);
+    if (platformRecord) {
+      return platformRecord;
+    }
+
+    const definition = definitionByKey.get(key);
+    return definition ? this.buildDefinitionRecord(definition) : null;
+  }
+
   private resolveEffectiveRecord(input: {
     key: string;
     tenantId?: string | null;
@@ -1250,7 +1281,6 @@ class SystemSettingsService {
     tenantId: string;
     records: SystemSettingRecord[];
   }) {
-    const platformRecords = input.records.filter((record) => !record.tenant_id);
     const tenantModeRecord = this.getTenantRecord(
       input.records,
       TENANT_SMS_CHANNEL_MODE_KEY,
@@ -1263,8 +1293,10 @@ class SystemSettingsService {
     for (const key of TENANT_TENCENT_SMS_SETTING_KEYS) visibleKeys.add(key);
     for (const key of TENANT_CUSTOMER_SERVICE_SETTING_KEYS) visibleKeys.add(key);
 
-    return platformRecords
-      .filter((platformRecord) => visibleKeys.has(platformRecord.key))
+    return SETTING_DEFINITIONS
+      .filter((definition) => visibleKeys.has(definition.key))
+      .map((definition) => this.getPlatformRecordOrDefinition(input.records, definition.key))
+      .filter((platformRecord): platformRecord is SystemSettingRecord => Boolean(platformRecord))
       .map((platformRecord) => {
         const tenantRecord = this.getTenantRecord(
           input.records,
@@ -1388,7 +1420,9 @@ class SystemSettingsService {
       );
     }
 
-    const platformRecord = await systemSettingRepository.findByKey(key, null);
+    const definition = definitionByKey.get(key);
+    const platformRecord = await systemSettingRepository.findByKey(key, null)
+      || (definition ? this.buildDefinitionRecord(definition) : null);
     const record = tenantId
       ? await systemSettingRepository.findByKey(key, tenantId) || platformRecord
       : platformRecord;
