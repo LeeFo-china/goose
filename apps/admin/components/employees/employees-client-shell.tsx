@@ -69,6 +69,12 @@ export function EmployeesClientShell({
       router.refresh();
     });
   }
+
+  function refreshEmployees() {
+    startTransition(() => {
+      router.refresh();
+    });
+  }
   const activeCount = employees.filter((employee) => employee.status === "active").length;
   const pendingCount = employees.filter((employee) => employee.status === "pending").length;
   const loginEnabledCount = employees.filter(hasLoginBinding).length;
@@ -167,6 +173,7 @@ export function EmployeesClientShell({
             employees={employees}
             departments={departments}
             posts={posts}
+            onEmployeeChanged={refreshEmployees}
           />
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">

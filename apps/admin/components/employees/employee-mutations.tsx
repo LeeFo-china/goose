@@ -273,6 +273,7 @@ function EmployeeDialog({
   posts,
   open,
   onOpenChange,
+  onSaved,
 }: {
   mode: MutationMode;
   employee?: EmployeeMutationRecord;
@@ -280,6 +281,7 @@ function EmployeeDialog({
   posts: EmployeePostOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -435,7 +437,11 @@ function EmployeeDialog({
           payload,
         });
         onOpenChange(false);
-        router.refresh();
+        if (onSaved) {
+          onSaved();
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "操作失败");
       }
@@ -603,8 +609,10 @@ function EmployeeDialog({
 
 function ManageEmployeeRolesButton({
   employee,
+  onSaved,
 }: {
   employee: EmployeeMutationRecord;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -680,7 +688,11 @@ function ManageEmployeeRolesButton({
           body: JSON.stringify({ role_ids: selectedRoleIds }),
         });
         setOpen(false);
-        router.refresh();
+        if (onSaved) {
+          onSaved();
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存员工角色失败");
       }
@@ -808,10 +820,12 @@ export function EmployeeRowActions({
   employee,
   departments,
   posts,
+  onChanged,
 }: {
   employee: EmployeeMutationRecord;
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -828,7 +842,11 @@ export function EmployeeRowActions({
           id: employee.id,
         });
         setDeleteOpen(false);
-        router.refresh();
+        if (onChanged) {
+          onChanged();
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "删除失败");
       }
@@ -837,7 +855,7 @@ export function EmployeeRowActions({
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <ManageEmployeeRolesButton employee={employee} />
+      <ManageEmployeeRolesButton employee={employee} onSaved={onChanged} />
       <Button
         type="button"
         variant="outline"
@@ -865,6 +883,7 @@ export function EmployeeRowActions({
         posts={posts}
         open={editOpen}
         onOpenChange={setEditOpen}
+        onSaved={onChanged}
       />
       <ConfirmActionDialog
         open={deleteOpen}

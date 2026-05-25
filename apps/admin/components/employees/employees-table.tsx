@@ -137,10 +137,12 @@ export function EmployeesTable({
   employees,
   departments,
   posts,
+  onEmployeeChanged,
 }: {
   employees: EmployeeRecord[];
   departments: EmployeeDepartmentOption[];
   posts: EmployeePostOption[];
+  onEmployeeChanged?: () => void;
 }) {
   const departmentMap = new Map(
     departments.flatMap((department) => [
@@ -255,6 +257,7 @@ export function EmployeesTable({
                       employee={employee}
                       departments={departments}
                       posts={posts}
+                      onChanged={onEmployeeChanged}
                     />
                   </td>
                 </tr>
