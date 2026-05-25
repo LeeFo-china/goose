@@ -28,6 +28,7 @@ import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { userIdentityService } from "@/services/user-identities";
 import { customerServiceTicketService } from "@/services/customer-service-tickets";
+import { constructionStageStatusService } from "@/services/construction-stage-status";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { IdParamSchema, PaginationQuerySchema } from "@/schema/request";
 import {
@@ -1037,6 +1038,31 @@ class CustomerSelfServiceController extends BaseController {
       await this.serializeCustomerProjectDetailItem(
         await this.getOwnedProject(idVerify.data.id, customer!.id, customer!.tenant_id),
       ),
+    );
+  }
+
+  @Get("/customer/projects/:id/construction-stages")
+  async listCustomerProjectConstructionStages(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const customer = await this.getCustomerProfileFromRequest(request, {
+      required: true,
+    });
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const project = await this.getOwnedProject(
+      idVerify.data.id,
+      customer!.id,
+      customer!.tenant_id,
+    );
+
+    return ResponseHandler.success(
+      await constructionStageStatusService.listProjectConstructionStagesForProject({
+        projectId: project.id,
+        tenantId: project.tenant_id,
+      }),
     );
   }
 

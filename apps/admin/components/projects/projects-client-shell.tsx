@@ -64,6 +64,8 @@ export function ProjectsClientShell({
           ? { ...current[project.id], ...project }
           : project,
       }));
+    } else {
+      setProjectOverrides({});
     }
 
     startTransition(() => {

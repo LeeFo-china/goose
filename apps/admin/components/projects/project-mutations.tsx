@@ -1658,13 +1658,17 @@ export function ProjectRowActions({
     setError("");
     startTransition(async () => {
       try {
-        await requestProject({
+        const deletedProject = await requestProject({
           path: `/projects/${project.id}`,
           method: "DELETE",
-        });
+        }) as Partial<ProjectRecord>;
         setDeleteOpen(false);
         if (onChanged) {
-          onChanged();
+          onChanged({
+            ...project,
+            ...deletedProject,
+            status: "invalid",
+          });
         } else {
           router.refresh();
         }

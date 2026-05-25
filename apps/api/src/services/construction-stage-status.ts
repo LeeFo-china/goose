@@ -36,9 +36,19 @@ class ConstructionStageStatusService {
       throw Errors.forbidden();
     }
 
+    return this.listProjectConstructionStagesForProject({
+      projectId: input.projectId,
+      tenantId,
+    });
+  }
+
+  async listProjectConstructionStagesForProject(input: {
+    projectId: string;
+    tenantId?: string | null;
+  }) {
     const project = await projectAcceptanceRepository.getProject(
       input.projectId,
-      tenantId,
+      input.tenantId,
     );
     if (!project) {
       throw Errors.badRequest("项目不存在");
@@ -52,16 +62,16 @@ class ConstructionStageStatusService {
       projectAcceptanceRepository.listLatestAcceptancesByStages({
         projectId: input.projectId,
         stageCodes,
-        tenantId,
+        tenantId: input.tenantId,
       }),
       projectLogRepository.listStageCodesByProject({
         projectId: input.projectId,
-        tenantId,
+        tenantId: input.tenantId,
       }),
       projectLogRepository.listLatestLogsByStages({
         projectId: input.projectId,
         stageCodes,
-        tenantId,
+        tenantId: input.tenantId,
       }),
     ]);
     const acceptanceMap = new Map(
