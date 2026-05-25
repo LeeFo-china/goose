@@ -14,6 +14,7 @@ type SettingsData = {
 
 const groupLabels: Record<string, string> = {
   sms: "短信配置",
+  customer_service: "客服配置",
   ezviz: "萤石监控",
   tencent_iot_video: "腾讯云监控",
   storage: "平台存储",
@@ -80,20 +81,22 @@ export default async function SettingsPage() {
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "storage", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
-      return order.indexOf(left.code) - order.indexOf(right.code);
+      const order = ["sms", "customer_service", "storage", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
+      const leftOrder = order.indexOf(left.code);
+      const rightOrder = order.indexOf(right.code);
+      return (leftOrder === -1 ? order.length : leftOrder) - (rightOrder === -1 ? order.length : rightOrder);
     });
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">
-          {isPlatformMode ? "平台系统配置" : "租户短信配置"}
+          {isPlatformMode ? "平台系统配置" : "租户系统配置"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isPlatformMode
             ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
-            : "租户端可选择继承平台短信通道，或配置自有阿里云/腾讯云短信通道。继承平台时不展示平台密钥、签名和模板信息。"}
+            : "租户端可维护短信通道、客服入口等租户配置。继承平台配置时不展示平台密钥、签名和模板信息。"}
         </p>
       </div>
 

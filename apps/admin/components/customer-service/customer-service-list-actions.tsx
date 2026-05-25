@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import {
   CUSTOMER_SERVICE_TICKET_CATEGORY_VALUES,
@@ -7,7 +8,7 @@ import {
   CustomerServiceTicketCategoryConfig,
   CustomerServiceTicketStatusConfig,
 } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, Settings2, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,7 +93,7 @@ export function CustomerServiceFilters({
   }
 
   return (
-    <form className="grid gap-3 md:grid-cols-[160px_160px_1fr_72px]" onSubmit={submit}>
+    <form className="grid gap-3 md:grid-cols-[160px_160px_1fr_72px_auto]" onSubmit={submit}>
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="category" value={selectedCategory} />
       <FormSelect
@@ -150,6 +151,12 @@ export function CustomerServiceFilters({
       <Button type="submit" variant="outline" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
+      </Button>
+      <Button asChild variant="outline">
+        <Link href="/settings?group=customer_service">
+          <Settings2 data-icon="inline-start" />
+          客服配置
+        </Link>
       </Button>
     </form>
   );
