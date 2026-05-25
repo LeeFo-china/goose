@@ -215,6 +215,7 @@ class CustomerServiceTicketService {
       ? row.metadata as Record<string, unknown>
       : {};
     const images = resolveStoredFileUrlList(metadata.images);
+    const operatorEmployee = normalizeRelation(row.operator_employee);
 
     return {
       id: row.id,
@@ -230,6 +231,14 @@ class CustomerServiceTicketService {
         : null,
       operator_employee_id: row.operator_employee_id,
       operator_auth_user_id: row.operator_auth_user_id,
+      operator_employee: operatorEmployee
+        ? {
+          id: asString(operatorEmployee.id) ?? row.operator_employee_id,
+          name: asString(operatorEmployee.name),
+          phone_masked: maskPhone(asString(operatorEmployee.phone)),
+          status: asString(operatorEmployee.status),
+        }
+        : null,
       content: row.content,
       metadata,
       images,

@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   CustomerServiceTicket,
+  CustomerServiceTicketAction,
   EmployeeOption,
 } from "@/components/customer-service/customer-service-types";
 
@@ -87,6 +88,20 @@ function hasDistinctSummaryTitle(title: string | null | undefined, content: stri
       normalizedTitle !== normalizedContent &&
       !normalizedContent.startsWith(normalizedTitle)
   );
+}
+
+function getActionOperatorLabel(action: CustomerServiceTicketAction) {
+  if (action.operator_employee?.name) {
+    return action.operator_employee.phone_masked
+      ? `${action.operator_employee.name} · ${action.operator_employee.phone_masked}`
+      : action.operator_employee.name;
+  }
+
+  if (action.operator_employee_id) {
+    return `员工 ${action.operator_employee_id.slice(0, 8)}`;
+  }
+
+  return "客户提交";
 }
 
 export function CustomerServiceDetailDialog({
@@ -380,9 +395,10 @@ export function CustomerServiceDetailDialog({
                               </span>
                             ) : null}
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDateTime(action.created_at)}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span>{getActionOperatorLabel(action)}</span>
+                            <span>{formatDateTime(action.created_at)}</span>
+                          </div>
                         </div>
                         {action.content ? (
                           <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">

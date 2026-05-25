@@ -65,6 +65,7 @@ export type CustomerServiceTicketActionRecord = {
   content: string | null;
   metadata: unknown;
   created_at: string;
+  operator_employee?: unknown;
 };
 
 type TicketPatch = {
@@ -327,7 +328,16 @@ class CustomerServiceTicketRepository {
 
   async listActions(input: { ticketId: string; tenantId: string }) {
     const { data, error } = await this.from("customer_service_ticket_actions")
-      .select("*")
+      .select(`
+        *,
+        operator_employee:employees!customer_service_ticket_actions_operator_employee_id_fkey(
+          id,
+          name,
+          phone,
+          status,
+          tenant_id
+        )
+      `)
       .eq("ticket_id", input.ticketId)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false });

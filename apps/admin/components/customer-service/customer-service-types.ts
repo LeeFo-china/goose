@@ -15,8 +15,20 @@ export type CustomerServiceTicketAction = {
   to_status_label: string | null;
   operator_employee_id: string | null;
   operator_auth_user_id: string | null;
+  operator_employee: {
+    id: string | null;
+    name: string | null;
+    phone_masked: string | null;
+    status: string | null;
+  } | null;
   content: string | null;
   metadata: Record<string, unknown>;
+  images?: string[];
+  image_items?: Array<{
+    url: string;
+    thumb_url: string;
+  }>;
+  image_count?: number;
   created_at: string | null;
 };
 
