@@ -6,6 +6,7 @@
 - [分阶段执行计划](./2026-05-24-customer-service-execution-plan.md)
 - [Admin 对接文档](./admin/2026-05-24-customer-service-admin-integration.md)
 - [微信小程序对接文档](./wechat/2026-05-24-customer-service-wechat-integration.md)
+- [微信小程序员工端客服问题任务对接](./wechat/2026-05-25-employee-customer-service-ticket-integration.md)
 
 ## 当前状态
 
@@ -16,7 +17,8 @@
 - 总方案文档。
 - 分阶段执行计划。
 - Admin 对接文档。
-- 微信小程序对接文档。
+- 微信小程序客户侧对接文档。
+- 微信小程序员工端客服问题任务对接文档。
 - `@gooes/domain` 客服问题分类、状态、动作常量。
 - Supabase 客服问题表和操作日志表 migration。
 - API 客户侧创建/列表/详情接口。
@@ -30,4 +32,5 @@
 下一步：
 
 - 阶段 2：微信小程序客服入口、拨号、提交问题、我的问题列表对接。
+- 阶段 4 补齐：微信小程序员工端客服待办跳转、详情和状态动作对接。
 - 通知增强：客户侧处理完成通知。

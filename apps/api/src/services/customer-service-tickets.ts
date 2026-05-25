@@ -211,6 +211,10 @@ class CustomerServiceTicketService {
     const actionConfig = row.action === "create"
       ? { label: "提交问题" }
       : CustomerServiceTicketActionConfig[row.action as CustomerServiceTicketAction];
+    const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata as Record<string, unknown>
+      : {};
+    const images = resolveStoredFileUrlList(metadata.images);
 
     return {
       id: row.id,
@@ -227,7 +231,13 @@ class CustomerServiceTicketService {
       operator_employee_id: row.operator_employee_id,
       operator_auth_user_id: row.operator_auth_user_id,
       content: row.content,
-      metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
+      metadata,
+      images,
+      image_items: images.map((url) => ({
+        url,
+        thumb_url: url,
+      })),
+      image_count: images.length,
       created_at: row.created_at,
     };
   }
@@ -524,6 +534,9 @@ class CustomerServiceTicketService {
     if (actionConfig.requiresContent && !payload.content) {
       throw Errors.badRequest("处理结果不能为空");
     }
+    if (payload.action !== "resolve" && payload.images.length > 0) {
+      throw Errors.badRequest("只有标记解决时可以上传处理附件");
+    }
 
     const toStatus = actionConfig.to ?? ticket.status;
     const now = new Date().toISOString();
@@ -559,7 +572,15 @@ class CustomerServiceTicketService {
       operatorEmployeeId: authContext.employeeId,
       operatorAuthUserId: authContext.authUserId,
       content: payload.content,
-      metadata: payload.metadata,
+      metadata: {
+        ...payload.metadata,
+        ...(payload.images.length > 0
+          ? {
+            images: payload.images,
+            image_count: payload.images.length,
+          }
+          : {}),
+      },
     });
 
     const actions = await customerServiceTicketRepository.listActions({

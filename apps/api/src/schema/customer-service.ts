@@ -94,6 +94,7 @@ export const CustomerServiceTicketActionSchema = z.object({
     normalizeOptionalText,
     z.string().max(1000, "处理内容不能超过1000字").nullable().optional(),
   ),
+  images: z.array(ImagePathSchema).max(9, "图片最多上传9张").optional().default([]),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
@@ -109,4 +110,3 @@ export type AssignCustomerServiceTicketInput = z.infer<
 export type CustomerServiceTicketActionInput = z.infer<
   typeof CustomerServiceTicketActionSchema
 >;
-
