@@ -8,10 +8,7 @@ import {
   ProjectFilters,
   ProjectsPagination,
 } from "@/components/projects/project-list-actions";
-import {
-  CreateProjectButton,
-  type ProjectRecord,
-} from "@/components/projects/project-mutations";
+import { type ProjectRecord } from "@/components/projects/project-mutations";
 import { ProjectsTable } from "@/components/projects/projects-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -56,9 +53,6 @@ export function ProjectsClientShell({
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex justify-end">
-            <CreateProjectButton />
-          </div>
           <ProjectFilters
             status={status}
             ownership={ownership}

@@ -7,6 +7,7 @@ import {
 } from "@gooes/domain";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
+import { CreateProjectButton } from "@/components/projects/project-mutations";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -98,7 +99,7 @@ export function ProjectFilters({
   return (
     <form
       onSubmit={submit}
-      className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px]"
+      className="grid gap-3 lg:grid-cols-[150px_150px_1fr_72px_auto]"
     >
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="ownership" value={selectedOwnership} />
@@ -146,6 +147,7 @@ export function ProjectFilters({
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
+      <CreateProjectButton />
     </form>
   );
 }
