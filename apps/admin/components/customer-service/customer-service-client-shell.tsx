@@ -65,18 +65,6 @@ export function CustomerServiceClientShell({
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="flex justify-end">
-            {pending ? (
-              <Badge variant="secondary">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                正在更新
-              </Badge>
-            ) : (
-              <Badge variant="outline">
-                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-              </Badge>
-            )}
-          </div>
           <CustomerServiceFilters
             status={status}
             category={category}
@@ -99,8 +87,18 @@ export function CustomerServiceClientShell({
             </div>
           ) : null}
           <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-muted-foreground">
-              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>每页 {pagination.pageSize} 条，共 {pagination.total} 条</span>
+              {pending ? (
+                <Badge variant="secondary">
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
+                  正在更新
+                </Badge>
+              ) : (
+                <Badge variant="outline">
+                  第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+                </Badge>
+              )}
             </div>
             <CustomerServicePagination
               pagination={pagination}

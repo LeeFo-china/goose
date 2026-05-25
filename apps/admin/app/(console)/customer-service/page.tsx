@@ -80,13 +80,6 @@ export default async function CustomerServicePage({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">客服问题</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          客户提交的问题、图片、负责人和处理状态。当前筛选共 {pagination.total} 条记录。
-        </p>
-      </div>
-
       <CustomerServiceClientShell
         tickets={list}
         pagination={pagination}
