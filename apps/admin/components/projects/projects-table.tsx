@@ -102,8 +102,10 @@ function ProjectIdentityCell({
 
 export function ProjectsTable({
   projects,
+  onProjectChanged,
 }: {
   projects: ProjectRecord[];
+  onProjectChanged: (project?: ProjectRecord) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -160,7 +162,7 @@ export function ProjectsTable({
                   <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.supervisor)}</td>
                   <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{formatDate(project.start_date)}</td>
                   <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted">
-                    <ProjectRowActions project={project} />
+                    <ProjectRowActions project={project} onChanged={onProjectChanged} />
                   </td>
                 </tr>
               );

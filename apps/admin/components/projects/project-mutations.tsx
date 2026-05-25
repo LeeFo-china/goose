@@ -357,6 +357,7 @@ async function requestProject(input: {
     method: input.method || "GET",
     headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
+    cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
@@ -376,6 +377,46 @@ function buildDefaults(project?: ProjectRecord): ProjectFormState {
     address: project?.address || "",
     visibility_status: project?.visibility_status || "inherit",
     style_tags: (project?.style_tags || []).join(","),
+  };
+}
+
+function optionRelation(
+  value: string,
+  options: Option[],
+): RelationPerson | null {
+  if (!value) return null;
+  const option = options.find((item) => item.id === value);
+  return {
+    id: value,
+    name: option?.label || null,
+    phone: null,
+    avatar: null,
+    department_name: null,
+    post_name: option?.description || null,
+  };
+}
+
+function buildOptimisticProject(
+  project: ProjectRecord,
+  formState: ProjectFormState,
+  options: ReturnType<typeof useSelectOptions>,
+): ProjectRecord {
+  return {
+    ...project,
+    name: formState.name.trim() || project.name,
+    customer_id: formState.customer_id || null,
+    designer_id: formState.designer_id || null,
+    supervisor_id: formState.supervisor_id || null,
+    designer: optionRelation(formState.designer_id, options.designers),
+    supervisor: optionRelation(formState.supervisor_id, options.supervisors),
+    budget: formState.budget ? Number(formState.budget) : null,
+    start_date: formState.start_date || null,
+    address: formState.address.trim() || null,
+    visibility_status: formState.visibility_status,
+    style_tags: formState.style_tags
+      .split(/[,，\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
   };
 }
 
@@ -1135,11 +1176,13 @@ function ProjectDialog({
   project,
   open,
   onOpenChange,
+  onSaved,
 }: {
   mode: ProjectMode;
   project?: ProjectRecord;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSaved?: (project?: ProjectRecord) => void;
 }) {
   const router = useRouter();
   const defaults = useMemo(() => buildDefaults(project), [project]);
@@ -1195,13 +1238,23 @@ function ProjectDialog({
     setError("");
     startTransition(async () => {
       try {
-        await requestProject({
+        const savedProject = await requestProject({
           path: mode === "create" ? "/projects" : `/projects/${project?.id}`,
           method: mode === "create" ? "POST" : "PATCH",
           payload,
-        });
+        }) as ProjectRecord;
+        if (mode === "edit" && project && onSaved) {
+          onSaved(buildOptimisticProject(project, formState, options));
+        }
+        const nextProject = mode === "edit" && project?.id
+          ? await requestProject({ path: `/projects/${project.id}` }) as ProjectRecord
+          : savedProject;
         onOpenChange(false);
-        router.refresh();
+        if (onSaved) {
+          onSaved(nextProject);
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");
       }
@@ -1372,10 +1425,12 @@ function ProjectDetailDialog({
   project,
   initialTab,
   onClose,
+  onChanged,
 }: {
   project: ProjectRecord;
   initialTab: ProjectDetailTab;
   onClose: () => void;
+  onChanged?: (project?: ProjectRecord) => void;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>(initialTab);
@@ -1418,8 +1473,13 @@ function ProjectDetailDialog({
     setDetailError("");
     try {
       const data = await requestProject({ path: `/projects/${currentProject.id}` });
-      setCurrentProject(data as ProjectRecord);
-      router.refresh();
+      const nextProject = data as ProjectRecord;
+      setCurrentProject(nextProject);
+      if (onChanged) {
+        onChanged(nextProject);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : "详情刷新失败");
     } finally {
@@ -1550,7 +1610,11 @@ function ProjectDetailDialog({
   );
 }
 
-export function CreateProjectButton() {
+export function CreateProjectButton({
+  onSaved,
+}: {
+  onSaved?: (project?: ProjectRecord) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1559,12 +1623,18 @@ export function CreateProjectButton() {
         <Plus />
         新增项目
       </Button>
-      <ProjectDialog mode="create" open={open} onOpenChange={setOpen} />
+      <ProjectDialog mode="create" open={open} onOpenChange={setOpen} onSaved={onSaved} />
     </>
   );
 }
 
-export function ProjectRowActions({ project }: { project: ProjectRecord }) {
+export function ProjectRowActions({
+  project,
+  onChanged,
+}: {
+  project: ProjectRecord;
+  onChanged?: (project?: ProjectRecord) => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -1593,7 +1663,11 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
           method: "DELETE",
         });
         setDeleteOpen(false);
-        router.refresh();
+        if (onChanged) {
+          onChanged();
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "作废失败");
       }
@@ -1619,12 +1693,14 @@ export function ProjectRowActions({ project }: { project: ProjectRecord }) {
         project={project}
         open={editOpen}
         onOpenChange={setEditOpen}
+        onSaved={onChanged}
       />
       {detail ? (
         <ProjectDetailDialog
           project={detail.project}
           initialTab={detail.initialTab}
           onClose={() => setDetail(null)}
+          onChanged={onChanged}
         />
       ) : null}
       <ConfirmActionDialog

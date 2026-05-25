@@ -7,7 +7,10 @@ import {
 } from "@gooes/domain";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
-import { CreateProjectButton } from "@/components/projects/project-mutations";
+import {
+  CreateProjectButton,
+  type ProjectRecord,
+} from "@/components/projects/project-mutations";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -59,12 +62,14 @@ export function ProjectFilters({
   keyword,
   pending,
   onNavigate,
+  onChanged,
 }: {
   status: string;
   ownership: string;
   keyword: string;
   pending: boolean;
   onNavigate: Navigate;
+  onChanged: (project?: ProjectRecord) => void;
 }) {
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [selectedOwnership, setSelectedOwnership] = useState(ownership);
@@ -147,7 +152,7 @@ export function ProjectFilters({
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
-      <CreateProjectButton />
+      <CreateProjectButton onSaved={onChanged} />
     </form>
   );
 }
