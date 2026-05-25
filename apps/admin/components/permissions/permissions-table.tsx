@@ -89,15 +89,21 @@ const columns: ColumnDef<PermissionRecord>[] = [
 
 export function PermissionsTable({
   permissions,
+  canManageDefinitions = false,
 }: {
   permissions: PermissionRecord[];
+  canManageDefinitions?: boolean;
 }) {
+  const visibleColumns = canManageDefinitions
+    ? columns
+    : columns.filter((column) => column.id !== "actions");
+
   return (
     <DataTable
-      columns={columns}
+      columns={visibleColumns}
       data={permissions}
       emptyText="没有符合条件的权限"
-      minWidth="min-w-[1120px]"
+      minWidth={canManageDefinitions ? "min-w-[1120px]" : "min-w-[900px]"}
     />
   );
 }

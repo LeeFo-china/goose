@@ -1,5 +1,4 @@
 import {
-  CreatePermissionButton,
   type PermissionRecord,
 } from "@/components/permissions/permission-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -100,7 +99,6 @@ export default async function PermissionsPage({
             权限编码、模块、资源和动作维护。当前共 {pagination.total} 条记录。
           </p>
         </div>
-        <CreatePermissionButton />
       </div>
 
       <PermissionsClientShell
@@ -110,6 +108,7 @@ export default async function PermissionsPage({
         module={module}
         keyword={keyword}
         error={error}
+        canManageDefinitions={false}
       />
     </div>
   );

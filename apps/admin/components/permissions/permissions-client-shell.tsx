@@ -27,6 +27,7 @@ export function PermissionsClientShell({
   module,
   keyword,
   error,
+  canManageDefinitions = false,
 }: {
   permissions: PermissionRecord[];
   pagination: Pagination;
@@ -34,6 +35,7 @@ export function PermissionsClientShell({
   module: string;
   keyword: string;
   error: string | null;
+  canManageDefinitions?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -130,7 +132,10 @@ export function PermissionsClientShell({
           />
         </CardHeader>
         <CardContent className="relative flex flex-col gap-4 p-0">
-          <PermissionsTable permissions={permissions} />
+          <PermissionsTable
+            permissions={permissions}
+            canManageDefinitions={canManageDefinitions}
+          />
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">

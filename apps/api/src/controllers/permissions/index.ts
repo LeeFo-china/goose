@@ -5,6 +5,7 @@ import {
   PermissionListQuerySchema,
   UpdatePermissionSchema,
 } from "@/schema/permissions";
+import { accessPolicyService } from "@/services/access-policy";
 import { permissionService } from "@/services/permissions";
 import { Delete } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -18,8 +19,19 @@ class PermissionsController extends PlatformBaseController<
     super("permissions", CreatePermissionSchema, UpdatePermissionSchema);
   }
 
+  private async getRequiredPermissionReadContext(request: FastifyRequest) {
+    const authContext = await this.getRequiredAuthContext(request);
+    if (authContext.isPlatformAdmin) {
+      return authContext;
+    }
+
+    accessPolicyService.assertTenantContext(authContext);
+    accessPolicyService.assertPermission(authContext, "employee.permission_manage");
+    return authContext;
+  }
+
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getRequiredPermissionReadContext(request);
 
     const result = PermissionListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
@@ -29,7 +41,7 @@ class PermissionsController extends PlatformBaseController<
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getRequiredPermissionReadContext(request);
 
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
