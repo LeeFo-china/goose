@@ -58,12 +58,13 @@ const toTimestamp = (value: string | null) => {
 };
 
 class EmployeePersonalizationService {
-  private emptyPayload(scene: string): EmployeePersonalizationPayload {
+  getEmptyPayload(scene: string): EmployeePersonalizationPayload {
+    const normalizedScene = normalizeScene(scene) || "default";
     return {
       version: EMPTY_VERSION,
       matched_rule: null,
       scenes: {
-        [scene]: {
+        [normalizedScene]: {
           blocks: [],
           quick_actions: [],
         },
@@ -177,7 +178,7 @@ class EmployeePersonalizationService {
   ): Promise<EmployeePersonalizationPayload> {
     const normalizedScene = normalizeScene(scene);
     if (!normalizedScene || !authContext.tenantId) {
-      return this.emptyPayload(normalizedScene || "default");
+      return this.getEmptyPayload(normalizedScene || "default");
     }
 
     const rules = await employeePersonalizationRepository.listActiveRulesForScene({
@@ -187,7 +188,7 @@ class EmployeePersonalizationService {
     const matched = this.pickBestRule(rules, authContext, Date.now());
 
     if (!matched) {
-      return this.emptyPayload(normalizedScene);
+      return this.getEmptyPayload(normalizedScene);
     }
 
     return {

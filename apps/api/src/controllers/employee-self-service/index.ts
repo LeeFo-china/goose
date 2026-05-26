@@ -5,6 +5,10 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerCoreService } from "@/services/customer-core";
 import { customerSelfServiceService } from "@/services/customer-self-service";
+import {
+  employeePersonalizationService,
+  type EmployeePersonalizationPayload,
+} from "@/services/employee-personalization";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { projectSer } from "@/services/projects";
@@ -41,6 +45,10 @@ const EmployeeBootstrapQuerySchema = z.object({
   tasks_mode: optionalEmployeeQueryValue(z.enum(["inline", "defer"])).default("defer"),
 });
 
+const EmployeePersonalizationQuerySchema = z.object({
+  scene: optionalEmployeeQueryValue(z.string().trim().min(1).max(64)).default("employee_home"),
+});
+
 const EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS = 15_000;
 const EMPLOYEE_BOOTSTRAP_PROFILE_WAIT_MS = 250;
 const MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE = 1_000;
@@ -55,6 +63,7 @@ type EmployeeBootstrapResponse = {
   home_mode: EmployeeBootstrapQuery["home_mode"];
   task_summary: Awaited<ReturnType<typeof taskCenterService.getSummary>> | null;
   tasks_mode: EmployeeBootstrapQuery["tasks_mode"];
+  personalization: EmployeePersonalizationPayload;
   projects_mode: "defer";
   projects: null;
   customers_mode: "defer";
@@ -328,6 +337,50 @@ class EmployeeSelfServiceController extends TenantBaseController {
     return result;
   }
 
+  private async resolveBootstrapPersonalization(
+    request: FastifyRequest,
+    authContext: AuthContext & { tenantId: string },
+    scene: string,
+  ) {
+    const startedAt = Date.now();
+
+    try {
+      const payload = await employeePersonalizationService.resolveForEmployee(
+        authContext,
+        scene,
+      );
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - startedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+          scene,
+          matchedRuleId: payload.matched_rule?.id ?? null,
+          matchedScope: payload.matched_rule?.scope ?? null,
+          version: payload.version,
+        },
+        "[employee-bootstrap] personalization resolved",
+      );
+
+      return payload;
+    } catch (error) {
+      request.log.warn(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - startedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+          scene,
+          error,
+        },
+        "[employee-bootstrap] personalization load failed",
+      );
+
+      return employeePersonalizationService.getEmptyPayload(scene);
+    }
+  }
+
   private async buildEmployeeBootstrapResponse(
     request: FastifyRequest,
     authContext: AuthContext & { tenantId: string },
@@ -342,10 +395,11 @@ class EmployeeSelfServiceController extends TenantBaseController {
     });
 
     const profileStartedAt = Date.now();
-    const [homeStats, taskSummary, profileResult] = await Promise.all([
+    const [homeStats, taskSummary, profileResult, personalization] = await Promise.all([
       homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
       tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
       this.getUserProfileForBootstrap(request, authContext),
+      this.resolveBootstrapPersonalization(request, authContext, "employee_home"),
     ]);
 
     request.log.info(
@@ -369,6 +423,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
       home_mode: homeMode,
       task_summary: taskSummary,
       tasks_mode: tasksMode,
+      personalization,
       projects_mode: "defer" as const,
       projects: null,
       customers_mode: "defer" as const,
@@ -562,6 +617,27 @@ class EmployeeSelfServiceController extends TenantBaseController {
       startedAt,
     );
     return ResponseHandler.success(response);
+  }
+
+  @Get("/employee/personalization")
+  async getEmployeePersonalization(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = EmployeePersonalizationQuerySchema.safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
+
+    const authContext = await this.getRequiredTenantContext(request);
+    if (!authContext.employeeId) {
+      throw Errors.business(403, "员工身份缺失，无法加载个性化配置", "EMPLOYEE_MISSING");
+    }
+
+    this.assertPermission(authContext, "dashboard.read");
+
+    const payload = await employeePersonalizationService.resolveForEmployee(
+      authContext,
+      queryResult.data.scene,
+    );
+    return ResponseHandler.success(payload);
   }
 }
 
