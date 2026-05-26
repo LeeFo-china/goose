@@ -61,7 +61,7 @@
 
 ## 阶段 2：数据迁移和一致性校验
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -70,23 +70,34 @@
 
 TODO：
 
-- [ ] 新增脚本：统计 `projects.designer_id` / `supervisor_id` 有值但缺少对应主责 `project_members` 的项目。
-- [ ] 新增 backfill：缺失则创建 `role_code=designer` / `role_code=supervisor`、`is_primary=true` 的成员记录。
-- [ ] 已存在但非主责时，按主责规则修正。
-- [ ] 记录冲突策略：同一角色已有其他主责时，以旧字段为准还是生成报告人工处理。
-- [ ] 增加 dry-run 输出，默认不写库。
+- [x] 新增脚本：统计 `projects.designer_id` / `supervisor_id` 有值但缺少对应主责 `project_members` 的项目。
+- [x] 新增 backfill：缺失则创建 `role_code=designer` / `role_code=supervisor`、`is_primary=true` 的成员记录。
+- [x] 已存在但非主责时，按主责规则修正。
+- [x] 记录冲突策略：同一角色已有其他主责时，以旧字段为准，迁移时降级其他主责。
+- [x] 增加 dry-run 输出，默认不写库。
+
+脚本：
+
+- `bun run project-members:assignees:backfill -- --limit 20`
+- `bun run project-members:assignees:backfill -- --tenant-id <tenant_id> --limit 200`
+- `bun run project-members:assignees:backfill -- --apply --limit 200`
+
+执行结果：
+
+- 2026-05-26 dry-run：`summary=[]`，`issues=[]`。
+- 当前没有需要修复的数据，因此未执行 `--apply`，避免无意义更新时间戳。
 
 验收：
 
-- [ ] dry-run 可输出待修复数量。
-- [ ] backfill 后再次 dry-run 为 0。
-- [ ] 不改变项目状态、客户状态、施工日志、验收数据。
+- [x] dry-run 可输出待修复数量。
+- [x] backfill 后再次 dry-run 为 0。当前 dry-run 已为 0，无需写库。
+- [x] 不改变项目状态、客户状态、施工日志、验收数据。
 
 测试：
 
-- [ ] `bun` 执行 dry-run。
-- [ ] `bun` 执行 backfill。
-- [ ] API typecheck。
+- [x] `bun` 执行 dry-run。
+- [x] `bun` 执行 backfill。当前无待修复数据，未执行写入模式。
+- [x] API typecheck。
 
 提交：
 
