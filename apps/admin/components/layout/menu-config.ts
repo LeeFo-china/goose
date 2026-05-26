@@ -15,6 +15,7 @@ import {
   ScrollText,
   SearchCheck,
   Shield,
+  Sparkles,
   SlidersHorizontal,
   TerminalSquare,
   Users,
@@ -92,6 +93,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       { href: "/organization", label: "组织架构", icon: Building2 },
       { href: "/roles", label: "角色", icon: Shield },
       { href: "/permissions", label: "权限点", icon: KeyRound },
+      {
+        href: "/employee-personalization",
+        label: "员工个性化",
+        icon: Sparkles,
+        permission: "employee.permission_manage",
+      },
     ],
   },
   {
