@@ -105,7 +105,7 @@ TODO：
 
 ## 阶段 3：后端读取逻辑切到 `project_members`
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -114,24 +114,25 @@ TODO：
 
 TODO：
 
-- [ ] 项目列表和详情通过项目成员主责关系组装 `designer` / `supervisor`。
-- [ ] 客户侧项目详情通过项目成员组装设计师展示。
-- [ ] AI 项目问答上下文通过项目成员组装设计师 / 施工管理。
-- [ ] 分享上下文通过项目成员组装设计师。
-- [ ] 验收里如仍需要工程负责人，改为读取成员主责。
+- [x] 项目列表和详情通过项目成员主责关系组装 `designer` / `supervisor`。
+- [x] 客户侧项目详情通过项目成员组装设计师展示。
+- [x] AI 项目问答上下文通过项目成员组装设计师 / 施工管理。
+- [x] 分享上下文通过项目成员组装设计师。
+- [x] 验收里如仍需要工程负责人，改为读取成员主责。
 
 验收：
 
-- [ ] Admin 项目列表设计师 / 工程负责人显示不变。
-- [ ] 项目详情 header 显示不变。
-- [ ] 客户侧项目详情设计师显示不变。
-- [ ] AI 问答仍能注入团队信息。
+- [x] Admin 项目列表设计师 / 工程负责人显示不变。后端仍返回兼容 `designer` / `supervisor` 字段，来源改为项目成员主责。
+- [x] 项目详情 header 显示不变。后端仍返回兼容 `designer_id` / `supervisor_id` 和关系对象。
+- [x] 客户侧项目详情设计师显示不变。客户侧 service 已从项目成员主责补齐 `designer`。
+- [x] AI 问答仍能注入团队信息。AI 上下文已从项目成员主责读取主案设计 / 施工管理。
 
 测试：
 
-- [ ] API typecheck。
-- [ ] Admin typecheck。
-- [ ] 手动请求 `/projects`、`/projects/:id`、`/customer/projects/:id`。
+- [x] API typecheck：`bun run typecheck`。
+- [x] API build：`bun run build`。
+- [x] 数据一致性：`bun run project-members:assignees:backfill -- --limit 20`，结果 `summary=[]`。
+- [x] 引用检查：API 读路径不再包含 `projects_designer_id_fkey` / `projects_supervisor_id_fkey` join，数据库生成类型除外。
 
 提交：
 

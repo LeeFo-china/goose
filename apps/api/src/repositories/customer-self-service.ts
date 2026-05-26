@@ -167,11 +167,6 @@ class CustomerSelfServiceRepository {
     address,
     start_date,
     style_tags,
-    designer:employees!projects_designer_id_fkey(
-      id,
-      name,
-      avatar
-    ),
     property:properties!projects_property_id_fkey(
       id,
       community,

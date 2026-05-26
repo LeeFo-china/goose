@@ -22,14 +22,6 @@ export const PROJECT_LIST_SELECT = `
   property:properties!projects_property_id_fkey(
     community,
     building_info
-  ),
-  designer:employees!projects_designer_id_fkey(
-    id,
-    name
-  ),
-  supervisor:employees!projects_supervisor_id_fkey(
-    id,
-    name
   )
 `;
 
@@ -56,18 +48,6 @@ export const PROJECT_DETAIL_SELECT = `
     area,
     latitude,
     longitude
-  ),
-  designer:employees!projects_designer_id_fkey(
-    id,
-    name,
-    avatar,
-    phone
-  ),
-  supervisor:employees!projects_supervisor_id_fkey(
-    id,
-    name,
-    avatar,
-    phone
   )
 `;
 
@@ -93,16 +73,6 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
     layout,
     latitude,
     longitude
-  ),
-  designer:employees!projects_designer_id_fkey(
-    id,
-    name,
-    avatar
-  ),
-  supervisor:employees!projects_supervisor_id_fkey(
-    id,
-    name,
-    avatar
   )
 `;
 

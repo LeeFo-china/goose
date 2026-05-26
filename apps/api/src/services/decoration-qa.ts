@@ -11,6 +11,7 @@ import { authorizationService } from "@/services/authorization";
 import { aiGateway } from "@/services/ai-gateway";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { decorationQaSuggestionCacheRepository } from "@/repositories/decoration-qa-suggestion-cache";
+import { projectMemberService } from "@/services/project-members";
 import { systemSettingsService } from "@/services/system-settings";
 import {
   type AiMessageRole,
@@ -212,12 +213,12 @@ type ProjectQaProjectRow = {
     layout?: string | null;
     area?: number | null;
   }[] | null;
-  designer: {
+  designer?: {
     name: string | null;
   } | {
     name: string | null;
   }[] | null;
-  supervisor: {
+  supervisor?: {
     name: string | null;
   } | {
     name: string | null;
@@ -1008,12 +1009,6 @@ async function buildCustomerProjectQaContext(
         building_info,
         layout,
         area
-      ),
-      designer:employees!projects_designer_id_fkey(
-        name
-      ),
-      supervisor:employees!projects_supervisor_id_fkey(
-        name
       )
     `)
     .eq("id", projectId)
@@ -1028,7 +1023,9 @@ async function buildCustomerProjectQaContext(
     throw Errors.forbidden();
   }
 
-  const { data: logsData, error: logsError } = await SupabaseDB.getAdminClient()
+  const [assignees, logsResult] = await Promise.all([
+    projectMemberService.listPrimaryAssigneesByProjectId(projectId),
+    SupabaseDB.getAdminClient()
     .from("project_logs")
     .select("stage_code, node_name, content, created_at")
     .eq("project_id", projectId)
@@ -1037,7 +1034,9 @@ async function buildCustomerProjectQaContext(
       (projectData as unknown as ProjectQaProjectRowWithTenant).tenant_id,
     )
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(5),
+  ]);
+  const { data: logsData, error: logsError } = logsResult;
 
   if (logsError) {
     throw Errors.dbError("查询客户项目日志上下文失败", logsError);
@@ -1053,12 +1052,8 @@ async function buildCustomerProjectQaContext(
     layout: null,
     area: null,
   });
-  const designer = normalizeRelation(project.designer, {
-    name: null,
-  });
-  const supervisor = normalizeRelation(project.supervisor, {
-    name: null,
-  });
+  const designer = assignees.find((item) => item.role_code === "designer");
+  const supervisor = assignees.find((item) => item.role_code === "supervisor");
   const status = isProjectStatus(project.status) ? project.status : null;
 
   return {
@@ -1086,10 +1081,8 @@ async function buildCustomerProjectQaContext(
           area: typeof property.area === "number" ? property.area : null,
         }
         : null,
-    designer_name: typeof designer.name === "string" ? designer.name : null,
-    supervisor_name: typeof supervisor.name === "string"
-      ? supervisor.name
-      : null,
+    designer_name: designer?.employee?.name ?? null,
+    supervisor_name: supervisor?.employee?.name ?? null,
     construction_stages: constructionStages,
     recent_logs: ((logsData || []) as ProjectQaLogRow[]).map((item) => {
       const stageCode = isProjectLogStageCode(item.stage_code)

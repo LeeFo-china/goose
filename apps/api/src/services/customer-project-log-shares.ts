@@ -4,6 +4,7 @@ import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import { aiGateway } from "@/services/ai-gateway";
 import type { AuthContext } from "@/services/authorization";
+import { projectMemberService } from "@/services/project-members";
 import { systemSettingsService } from "@/services/system-settings";
 import { userIdentityService } from "@/services/user-identities";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
@@ -92,7 +93,7 @@ type CustomerProjectRow = {
     community: string | null;
     building_info: string | null;
   }[] | null;
-  designer: {
+  designer?: {
     name: string | null;
   } | {
     name: string | null;
@@ -1602,9 +1603,6 @@ class CustomerProjectLogShareService {
         property:properties!projects_property_id_fkey(
           community,
           building_info
-        ),
-        designer:employees!projects_designer_id_fkey(
-          name
         )
       `)
       .eq("id", projectId)
@@ -1619,13 +1617,17 @@ class CustomerProjectLogShareService {
       throw Errors.forbidden();
     }
 
-    const { data: logData, error: logError } = await SupabaseDB.getAdminClient()
+    const [assignees, logResult] = await Promise.all([
+      projectMemberService.listPrimaryAssigneesByProjectId(projectId),
+      SupabaseDB.getAdminClient()
       .from("project_logs")
       .select("id, tenant_id, project_id, stage_code, node_name, content, images, created_at")
       .eq("id", logId)
       .eq("project_id", projectId)
       .eq("tenant_id", (projectData as unknown as CustomerProjectRow).tenant_id)
-      .maybeSingle();
+      .maybeSingle(),
+    ]);
+    const { data: logData, error: logError } = logResult;
 
     if (logError) {
       throw Errors.dbError("查询施工日志失败", logError);
@@ -1641,9 +1643,7 @@ class CustomerProjectLogShareService {
       community: null,
       building_info: null,
     });
-    const designer = normalizeRelation(project.designer, {
-      name: null,
-    });
+    const designer = assignees.find((item) => item.role_code === "designer");
     const status = isProjectStatus(project.status) ? project.status : null;
     const stageCode = isProjectLogStageCode(log.stage_code) ? log.stage_code : null;
 
@@ -1661,7 +1661,7 @@ class CustomerProjectLogShareService {
       property_building_info: typeof property.building_info === "string"
         ? property.building_info
         : null,
-      designer_name: typeof designer.name === "string" ? designer.name : null,
+      designer_name: designer?.employee?.name ?? null,
       log_id: log.id,
       stage_code: stageCode,
       stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,

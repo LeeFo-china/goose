@@ -11,6 +11,7 @@ import {
   type CustomerSelfServiceUserProfileRow,
 } from "@/repositories/customer-self-service";
 import type { AuthMeProfileUpdateInput } from "@/schema/user-profile";
+import { projectMemberService } from "@/services/project-members";
 
 const CUSTOMER_SELF_SERVICE_CACHE_TTL_MS = 10_000;
 const MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE = 4_000;
@@ -105,6 +106,49 @@ class CustomerSelfServiceService {
       input.tenantId ?? "",
       input.projectId,
     ].join(":");
+  }
+
+  private async attachDesigner<T extends CustomerSelfServiceProjectListItem>(
+    projects: T[],
+  ) {
+    const projectIds = projects.map((project) => project.id);
+    if (projectIds.length === 0) {
+      return projects;
+    }
+
+    const assignees = await projectMemberService.listPrimaryAssigneesByProjectIds(
+      projectIds,
+    );
+    const designers = new Map(
+      assignees
+        .filter((item) => item.role_code === "designer")
+        .map((item) => [item.project_id, item]),
+    );
+
+    return projects.map((project) => {
+      const designer = designers.get(project.id);
+      return {
+        ...project,
+        designer: designer
+          ? {
+              id: designer.employee?.id ?? designer.employee_id,
+              name: designer.employee?.name ?? null,
+              avatar: designer.employee?.avatar ?? null,
+            }
+          : null,
+      };
+    });
+  }
+
+  private async attachDesignerToProject<T extends CustomerSelfServiceProjectListItem | null>(
+    project: T,
+  ) {
+    if (!project) {
+      return project;
+    }
+
+    const [item] = await this.attachDesigner([project]);
+    return item as T;
   }
 
   listCustomerProfilesByIds(customerIds: string[]) {
@@ -254,6 +298,10 @@ class CustomerSelfServiceService {
     }
 
     const request = customerSelfServiceRepository.listOwnedProjects(input)
+      .then(async (result) => ({
+        ...result,
+        list: await this.attachDesigner(result.list),
+      }))
       .then((result) => {
         this.setCachedValue(this.ownedProjectsCache, cacheKey, result);
         for (const project of result.list) {
@@ -295,6 +343,7 @@ class CustomerSelfServiceService {
     }
 
     const request = customerSelfServiceRepository.findOwnedProject(input)
+      .then((result) => this.attachDesignerToProject(result))
       .then((result) => {
         this.setCachedValue(this.ownedProjectCache, cacheKey, result);
         return result;

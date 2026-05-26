@@ -51,6 +51,18 @@ type CustomerOwnerMember = {
   is_virtual: true;
 };
 
+export type ProjectPrimaryAssignee = {
+  project_id: string;
+  employee_id: string;
+  role_code: "designer" | "supervisor";
+  employee: {
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    phone: string | null;
+  } | null;
+};
+
 const LEGACY_PROJECT_MEMBER_ROLE_CODES: ProjectMemberRoleCode[] = [
   "designer",
   "supervisor",
@@ -198,6 +210,40 @@ class ProjectMemberService {
   async listProjectMembers(projectId: string) {
     const rows = await projectMemberRepository.listActiveByProjectId(projectId);
     return rows.map((item) => this.serializeMember(item));
+  }
+
+  async listPrimaryAssigneesByProjectIds(projectIds: string[]) {
+    const rows = await projectMemberRepository.listPrimaryAssigneesByProjectIds(
+      projectIds,
+      ["designer", "supervisor"],
+    );
+
+    return rows
+      .map((row): ProjectPrimaryAssignee | null => {
+        if (row.role_code !== "designer" && row.role_code !== "supervisor") {
+          return null;
+        }
+
+        const employee = this.normalizeEmployee(row.employee);
+        return {
+          project_id: row.project_id,
+          employee_id: row.employee_id,
+          role_code: row.role_code,
+          employee: employee
+            ? {
+                id: employee.id,
+                name: employee.name,
+                avatar: employee.avatar,
+                phone: employee.phone,
+              }
+            : null,
+        };
+      })
+      .filter((item): item is ProjectPrimaryAssignee => Boolean(item));
+  }
+
+  async listPrimaryAssigneesByProjectId(projectId: string) {
+    return this.listPrimaryAssigneesByProjectIds([projectId]);
   }
 
   buildDerivedCustomerOwnerMember(input: {

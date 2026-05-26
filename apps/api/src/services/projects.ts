@@ -15,7 +15,10 @@ import { projectRepository } from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
-import { projectMemberService } from "@/services/project-members";
+import {
+    type ProjectPrimaryAssignee,
+    projectMemberService,
+} from "@/services/project-members";
 import { projectStatusService } from "@/services/project-status";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
@@ -187,6 +190,74 @@ class ProjectService {
         });
     }
 
+    private buildAssigneeIndex(assignees: ProjectPrimaryAssignee[]) {
+        const index = new Map<string, Partial<Record<"designer" | "supervisor", ProjectPrimaryAssignee>>>();
+        for (const assignee of assignees) {
+            const item = index.get(assignee.project_id) || {};
+            if (!item[assignee.role_code]) {
+                item[assignee.role_code] = assignee;
+                index.set(assignee.project_id, item);
+            }
+        }
+
+        return index;
+    }
+
+    private serializeAssignee(assignee?: ProjectPrimaryAssignee) {
+        if (!assignee) {
+            return null;
+        }
+
+        return {
+            id: assignee.employee?.id ?? assignee.employee_id,
+            name: assignee.employee?.name ?? null,
+            avatar: assignee.employee?.avatar ?? null,
+            phone: assignee.employee?.phone ?? null,
+        };
+    }
+
+    private async attachPrimaryAssignees<T extends Record<string, unknown>>(
+        rows: T[],
+    ): Promise<T[]> {
+        const projectIds = rows
+            .map((row) => typeof row.id === "string" ? row.id : null)
+            .filter((item): item is string => Boolean(item));
+
+        if (projectIds.length === 0) {
+            return rows;
+        }
+
+        const assigneeIndex = this.buildAssigneeIndex(
+            await projectMemberService.listPrimaryAssigneesByProjectIds(projectIds),
+        );
+
+        return rows.map((row) => {
+            if (typeof row.id !== "string") {
+                return row;
+            }
+
+            const assignees = assigneeIndex.get(row.id) || {};
+            return {
+                ...row,
+                designer_id: assignees.designer?.employee_id ?? row.designer_id ?? null,
+                supervisor_id: assignees.supervisor?.employee_id ?? row.supervisor_id ?? null,
+                designer: this.serializeAssignee(assignees.designer),
+                supervisor: this.serializeAssignee(assignees.supervisor),
+            };
+        });
+    }
+
+    private async attachPrimaryAssigneesToProject<T extends Record<string, unknown> | null>(
+        row: T,
+    ): Promise<T> {
+        if (!row) {
+            return row;
+        }
+
+        const [project] = await this.attachPrimaryAssignees([row]);
+        return project as T;
+    }
+
     private async loadProjects(input: {
         tenantId: string;
         authContext: AuthContext;
@@ -224,7 +295,9 @@ class ProjectService {
                 to: from + pageSize,
             });
             const rowsDurationMs = Date.now() - rowsStartedAt;
-            const rows = rowsWithLookahead.slice(0, pageSize);
+            const rows = await this.attachPrimaryAssignees(
+                rowsWithLookahead.slice(0, pageSize),
+            );
             const hasMore = rowsWithLookahead.length > pageSize;
             const total = from + rows.length + (hasMore ? 1 : 0);
 
@@ -249,13 +322,14 @@ class ProjectService {
             };
         }
 
-        const [total, rows] = await Promise.all([
+        const [total, rawRows] = await Promise.all([
             projectRepository.count(filters),
             projectRepository.listRows({ filters, from, to }),
         ]);
+        const rows = from >= total ? [] : await this.attachPrimaryAssignees(rawRows);
 
         return {
-            rows: from >= total ? [] : rows,
+            rows,
             pagination: {
                 page,
                 pageSize,
@@ -276,6 +350,7 @@ class ProjectService {
 
         if (!this.publicProjectsInFlight) {
             this.publicProjectsInFlight = projectRepository.listPublicProjects()
+                .then((rows) => this.attachPrimaryAssignees(rows))
                 .then((rows) => {
                     rows.forEach((row) => this.seedPublicProjectDetailCache(row));
                     this.publicProjectsCache = {
@@ -415,6 +490,7 @@ class ProjectService {
         }
 
         const request = projectRepository.findPublicDetailById(projectId)
+            .then((project) => this.attachPrimaryAssigneesToProject(project))
             .then((project) => {
                 if (!project || !this.isPublicProjectVisible(project)) {
                     throw Errors.notFound("项目不存在");
@@ -612,7 +688,7 @@ class ProjectService {
             throw Errors.dbError("查询记录不存在");
         }
 
-        return project;
+        return this.attachPrimaryAssigneesToProject(project);
     }
 
     async createProject(input: {

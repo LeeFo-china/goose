@@ -53,6 +53,26 @@ type ProjectMemberRow = {
     | null;
 };
 
+type ProjectPrimaryAssigneeRow = {
+  project_id: string;
+  employee_id: string;
+  role_code: string;
+  employee:
+    | {
+        id: string;
+        name: string | null;
+        avatar: string | null;
+        phone: string | null;
+      }
+    | Array<{
+        id: string;
+        name: string | null;
+        avatar: string | null;
+        phone: string | null;
+      }>
+    | null;
+};
+
 const projectMemberSelect = `
   id,
   project_id,
@@ -91,6 +111,41 @@ class ProjectMemberRepository {
     }
 
     return (data || []) as unknown as ProjectMemberRow[];
+  }
+
+  async listPrimaryAssigneesByProjectIds(
+    projectIds: string[],
+    roleCodes: ProjectMemberRoleCode[],
+  ) {
+    if (projectIds.length === 0 || roleCodes.length === 0) {
+      return [] as ProjectPrimaryAssigneeRow[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_members")
+      .select(`
+        project_id,
+        employee_id,
+        role_code,
+        employee:employees!project_members_employee_id_fkey(
+          id,
+          name,
+          avatar,
+          phone
+        )
+      `)
+      .in("project_id", Array.from(new Set(projectIds)))
+      .in("role_code", roleCodes)
+      .eq("is_primary", true)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询项目主责成员失败", error);
+    }
+
+    return (data || []) as unknown as ProjectPrimaryAssigneeRow[];
   }
 
   async create(input: {
