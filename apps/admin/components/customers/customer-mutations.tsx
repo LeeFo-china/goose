@@ -428,6 +428,79 @@ async function requestCustomer(input: {
   return payload.data;
 }
 
+type ProjectPrimaryRoleCode = "designer" | "supervisor";
+
+type ProjectMemberRecord = {
+  id: string;
+  employee_id: string;
+  role_code: string;
+  is_primary?: boolean;
+  is_virtual?: boolean;
+};
+
+async function syncProjectPrimaryMember(input: {
+  projectId: string;
+  roleCode: ProjectPrimaryRoleCode;
+  employeeId: string | null;
+}) {
+  const members = await requestCustomer({
+    path: `/projects/${input.projectId}/members`,
+  }) as ProjectMemberRecord[];
+  const roleMembers = members.filter((item) =>
+    !item.is_virtual && item.role_code === input.roleCode
+  );
+  const primaryMembers = roleMembers.filter((item) => item.is_primary);
+
+  if (!input.employeeId) {
+    await Promise.all(primaryMembers.map((item) =>
+      requestCustomer({
+        path: `/projects/${input.projectId}/members/${item.id}`,
+        method: "DELETE",
+      })
+    ));
+    return;
+  }
+
+  const existing = roleMembers.find((item) => item.employee_id === input.employeeId);
+  if (existing) {
+    if (!existing.is_primary) {
+      await requestCustomer({
+        path: `/projects/${input.projectId}/members/${existing.id}`,
+        method: "PATCH",
+        payload: { is_primary: true },
+      });
+    }
+    return;
+  }
+
+  await requestCustomer({
+    path: `/projects/${input.projectId}/members`,
+    method: "POST",
+    payload: {
+      employee_id: input.employeeId,
+      role_code: input.roleCode,
+      is_primary: true,
+    },
+  });
+}
+
+async function syncProjectPrimaryMembers(input: {
+  projectId: string;
+  designerId: string | null;
+  supervisorId: string | null;
+}) {
+  await syncProjectPrimaryMember({
+    projectId: input.projectId,
+    roleCode: "designer",
+    employeeId: input.designerId,
+  });
+  await syncProjectPrimaryMember({
+    projectId: input.projectId,
+    roleCode: "supervisor",
+    employeeId: input.supervisorId,
+  });
+}
+
 async function uploadCustomerAvatarDirect(file: File) {
   const init = await requestCustomer({
     path: "/uploads/cos/direct-init",
@@ -1413,15 +1486,13 @@ function DesignProjectBeforeStatusDialog({
           .split(/[,，\n]/)
           .map((item) => item.trim())
           .filter(Boolean);
-        await requestCustomer({
+        const project = await requestCustomer({
           path: "/projects",
           method: "POST",
           payload: {
             name: normalizedName,
             customer_id: customer.id,
             property_id: propertyId,
-            designer_id: designerId === "__none__" ? null : designerId,
-            supervisor_id: supervisorId === "__none__" ? null : supervisorId,
             budget: budget ? Number(budget) : null,
             start_date: startDate || null,
             address: deriveProjectAddress(),
@@ -1429,6 +1500,14 @@ function DesignProjectBeforeStatusDialog({
             style_tags: tags,
             status: "designing",
           },
+        });
+        if (!project?.id) {
+          throw new Error("项目创建成功但未返回项目 ID");
+        }
+        await syncProjectPrimaryMembers({
+          projectId: project.id as string,
+          designerId: designerId === "__none__" ? null : designerId,
+          supervisorId: supervisorId === "__none__" ? null : supervisorId,
         });
         await onProjectCreated();
         onOpenChange(false);

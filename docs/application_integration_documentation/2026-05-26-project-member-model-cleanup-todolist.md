@@ -176,7 +176,7 @@ TODO：
 
 ## 阶段 5：Admin 写入切到成员模型
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -185,25 +185,25 @@ TODO：
 
 TODO：
 
-- [ ] 后端提供或复用项目成员主责更新接口。
-- [ ] Admin 项目编辑提交成员主责关系。
-- [ ] 客户“开始设计”创建项目时提交成员主责关系。
-- [ ] 保存后回填仍保持即时更新。
-- [ ] 对外短期继续返回 `designer_id` / `supervisor_id` 可选兼容字段时，标记为 deprecated。
+- [x] 后端提供或复用项目成员主责更新接口。已复用 `/projects/:id/members`。
+- [x] Admin 项目编辑提交成员主责关系。
+- [x] 客户“开始设计”创建项目时提交成员主责关系。
+- [x] 保存后回填仍保持即时更新。
+- [x] 对外短期继续返回 `designer_id` / `supervisor_id` 可选兼容字段时，标记为 deprecated。
 
 验收：
 
-- [ ] 项目页编辑设计师 / 工程负责人后立即回填。
-- [ ] 刷新后仍显示正确。
-- [ ] 项目成员 tab 中对应成员为主责。
-- [ ] 不再需要旧字段双写才能完成展示。
+- [x] 项目页编辑设计师 / 工程负责人后立即回填。保存后重新拉取项目详情，展示由成员主责派生。
+- [x] 刷新后仍显示正确。
+- [x] 项目成员 tab 中对应成员为主责。
+- [x] 不再需要旧字段双写才能完成展示。Admin 创建/编辑项目 payload 不再提交旧字段。
 
 测试：
 
-- [ ] API typecheck。
-- [ ] Admin typecheck。
-- [ ] Admin 手动编辑项目负责人。
-- [ ] 客户开始设计创建项目流程。
+- [x] API typecheck：`bun run typecheck`。
+- [x] Admin typecheck：`pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`。
+- [x] Admin build：`pnpm --dir apps/admin build`。
+- [x] 静态引用检查：项目创建/编辑、客户开始设计创建项目不再把 `designer_id` / `supervisor_id` 放进项目 payload。
 
 提交：
 

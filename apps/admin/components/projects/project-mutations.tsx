@@ -348,6 +348,8 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+type ProjectAssigneeRoleCode = "designer" | "supervisor";
+
 async function requestProject(input: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
@@ -364,6 +366,71 @@ async function requestProject(input: {
     throw new Error(getPayloadMessage(payload, "操作失败"));
   }
   return payload.data;
+}
+
+async function syncProjectPrimaryAssignee(input: {
+  projectId: string;
+  roleCode: ProjectAssigneeRoleCode;
+  employeeId: string | null;
+}) {
+  const members = await requestProject({
+    path: `/projects/${input.projectId}/members`,
+  }) as NonNullable<ProjectRecord["members"]>;
+  const roleMembers = members.filter((item) =>
+    !item.is_virtual && item.role_code === input.roleCode
+  );
+  const primaryMembers = roleMembers.filter((item) => item.is_primary);
+
+  if (!input.employeeId) {
+    await Promise.all(primaryMembers.map((item) =>
+      requestProject({
+        path: `/projects/${input.projectId}/members/${item.id}`,
+        method: "DELETE",
+      })
+    ));
+    return;
+  }
+
+  const existing = roleMembers.find((item) => item.employee_id === input.employeeId);
+  if (existing) {
+    if (!existing.is_primary) {
+      await requestProject({
+        path: `/projects/${input.projectId}/members/${existing.id}`,
+        method: "PATCH",
+        payload: {
+          is_primary: true,
+        },
+      });
+    }
+    return;
+  }
+
+  await requestProject({
+    path: `/projects/${input.projectId}/members`,
+    method: "POST",
+    payload: {
+      employee_id: input.employeeId,
+      role_code: input.roleCode,
+      is_primary: true,
+    },
+  });
+}
+
+async function syncProjectPrimaryAssignees(input: {
+  projectId: string;
+  designerId: string | null;
+  supervisorId: string | null;
+}) {
+  await syncProjectPrimaryAssignee({
+    projectId: input.projectId,
+    roleCode: "designer",
+    employeeId: input.designerId,
+  });
+  await syncProjectPrimaryAssignee({
+    projectId: input.projectId,
+    roleCode: "supervisor",
+    employeeId: input.supervisorId,
+  });
 }
 
 function buildDefaults(project?: ProjectRecord): ProjectFormState {
@@ -1213,8 +1280,6 @@ function ProjectDialog({
       name: string;
       status?: string;
       customer_id: string | null;
-      designer_id: string | null;
-      supervisor_id: string | null;
       budget: number | null;
       start_date: string | null;
       address: string | null;
@@ -1223,8 +1288,6 @@ function ProjectDialog({
     } = {
       name: formState.name.trim(),
       customer_id: formState.customer_id || null,
-      designer_id: formState.designer_id || null,
-      supervisor_id: formState.supervisor_id || null,
       budget: formState.budget ? Number(formState.budget) : null,
       start_date: formState.start_date || null,
       address: formState.address.trim() || null,
@@ -1243,11 +1306,19 @@ function ProjectDialog({
           method: mode === "create" ? "POST" : "PATCH",
           payload,
         }) as ProjectRecord;
+        const projectId = mode === "create" ? savedProject.id : project?.id;
+        if (projectId) {
+          await syncProjectPrimaryAssignees({
+            projectId,
+            designerId: formState.designer_id || null,
+            supervisorId: formState.supervisor_id || null,
+          });
+        }
         if (mode === "edit" && project && onSaved) {
           onSaved(buildOptimisticProject(project, formState, options));
         }
-        const nextProject = mode === "edit" && project?.id
-          ? await requestProject({ path: `/projects/${project.id}` }) as ProjectRecord
+        const nextProject = projectId
+          ? await requestProject({ path: `/projects/${projectId}` }) as ProjectRecord
           : savedProject;
         onOpenChange(false);
         if (onSaved) {
