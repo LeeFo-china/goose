@@ -283,6 +283,42 @@ class AccessPolicyService {
     return visibleProjectIds.includes(projectId);
   }
 
+  async canWriteProjectLog(authContext: AuthContext, projectId: string) {
+    const scope = this.assertPermission(authContext, "project_log.create");
+    if (!scope || !authContext.employeeId) {
+      return false;
+    }
+
+    const project = await permissionRepository.findProjectTenantById(projectId);
+    if (!project || !this.matchesTenant(authContext, project)) {
+      return false;
+    }
+
+    if (scope === "all") {
+      return true;
+    }
+
+    if (scope === "department") {
+      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
+      const employeeIds = departmentScopeId
+        ? await permissionRepository.listEmployeeIdsByDepartmentId(
+          departmentScopeId,
+          authContext.tenantId,
+        )
+        : [];
+
+      return permissionRepository.hasActiveProjectMember({
+        projectId,
+        employeeIds,
+      });
+    }
+
+    return permissionRepository.hasActiveProjectMember({
+      projectId,
+      employeeIds: [authContext.employeeId],
+    });
+  }
+
   async getVisibleCustomerOwnerIds(
     authContext: AuthContext,
     permissionCode: string,

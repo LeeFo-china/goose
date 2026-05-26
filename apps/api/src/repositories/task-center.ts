@@ -22,8 +22,6 @@ export type ProjectLogTodoSource = {
   status: string | null;
   address: string | null;
   created_at: string | null;
-  designer_id: string | null;
-  supervisor_id: string | null;
   property: {
     community: string | null;
     building_info: string | null;
@@ -156,34 +154,42 @@ class TaskCenterRepository {
 
   async listOwnedActiveProjects(employeeId: string, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
-      .from("projects")
+      .from("project_members")
       .select(`
-        id,
-        name,
-        status,
-        address,
-        created_at,
-        designer_id,
-        supervisor_id,
-        property:properties!projects_property_id_fkey(
-          community,
-          building_info
+        project:projects!inner(
+          id,
+          name,
+          status,
+          address,
+          created_at,
+          property:properties!projects_property_id_fkey(
+            community,
+            building_info
+          )
         )
       `)
-      .eq("status", "constructing")
-      .or(`designer_id.eq.${employeeId},supervisor_id.eq.${employeeId}`);
+      .eq("employee_id", employeeId)
+      .eq("project.status", "constructing")
+      .is("deleted_at", null);
 
     if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
+      query = query.eq("project.tenant_id", tenantId);
     }
 
-    const { data, error } = await query.order("created_at", { ascending: false });
+    const { data, error } = await query.order("created_at", {
+      referencedTable: "projects",
+      ascending: false,
+    });
 
     if (error) {
       throw Errors.dbError("查询项目日志待处理范围失败", error);
     }
 
-    return (data || []) as unknown as ProjectLogTodoSource[];
+    return ((data || []) as unknown as Array<{
+      project: ProjectLogTodoSource | ProjectLogTodoSource[] | null;
+    }>)
+      .map((item) => Array.isArray(item.project) ? item.project[0] : item.project)
+      .filter((item): item is ProjectLogTodoSource => Boolean(item?.id));
   }
 
   async listTodayProjectLogs(

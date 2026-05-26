@@ -796,6 +796,31 @@ class PermissionRepository {
     return data as { id: string; tenant_id: string | null } | null;
   }
 
+  async hasActiveProjectMember(input: {
+    projectId: string;
+    employeeIds: string[];
+  }) {
+    const employeeIds = Array.from(new Set(input.employeeIds.filter(Boolean)));
+    if (employeeIds.length === 0) {
+      return false;
+    }
+
+    const { data, error } = await this.adminClient
+      .from("project_members")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .in("employee_id", employeeIds)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目成员权限失败", error);
+    }
+
+    return Boolean(data);
+  }
+
   async listRolePermissions(roleIds: string[]) {
     if (roleIds.length === 0) {
       return [] as Array<{ code: string; scope: string }>;

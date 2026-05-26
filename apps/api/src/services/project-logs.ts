@@ -43,10 +43,9 @@ class ProjectLogService {
       tenantId,
       stageCode: input.payload.stage_code,
     });
-    const canWriteLog = await accessPolicyService.canAccessProject(
+    const canWriteLog = await accessPolicyService.canWriteProjectLog(
       input.authContext,
       input.payload.project_id,
-      "project_log.create",
     );
     if (!canWriteLog) {
       throw Errors.forbidden();
@@ -128,10 +127,9 @@ class ProjectLogService {
     const existingProjectId = typeof existing.project_id === "string"
       ? existing.project_id
       : "";
-    const canUpdateExisting = await accessPolicyService.canAccessProject(
+    const canUpdateExisting = await accessPolicyService.canWriteProjectLog(
       input.authContext,
       existingProjectId,
-      "project_log.create",
     );
     if (!canUpdateExisting) {
       throw Errors.forbidden();
@@ -151,10 +149,9 @@ class ProjectLogService {
         tenantId,
       });
       projectStatusService.assertCanCreateProjectLog(project);
-      const canUpdateTarget = await accessPolicyService.canAccessProject(
+      const canUpdateTarget = await accessPolicyService.canWriteProjectLog(
         input.authContext,
         payload.project_id,
-        "project_log.create",
       );
       if (!canUpdateTarget) {
         throw Errors.forbidden();

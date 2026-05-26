@@ -430,10 +430,9 @@ class UploadController extends BaseController {
     }
 
     const authContext = await authorizationService.getRequiredAuthContext(user.sub);
-    const canWriteLog = await accessPolicyService.canAccessProject(
+    const canWriteLog = await accessPolicyService.canWriteProjectLog(
       authContext,
       projectId,
-      "project_log.create",
     );
     if (!canWriteLog) {
       throw Errors.forbidden();

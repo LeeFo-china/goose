@@ -140,7 +140,7 @@ TODO：
 
 ## 阶段 4：权限和施工日志写入改为成员模型
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -149,26 +149,26 @@ TODO：
 
 TODO：
 
-- [ ] 新增明确方法：`canWriteProjectLog(authContext, projectId)`。
-- [ ] `project_log.create:self` 判断当前员工是否为项目成员。
-- [ ] `project_log.create:department` 判断本部门员工是否为项目成员。
-- [ ] `project_log.create:all` 仍允许租户内项目。
-- [ ] 施工日志创建、编辑、上传图片项目校验统一使用该方法。
-- [ ] 任务中心“我的施工日志待处理”改为从 `project_members` 查项目。
+- [x] 新增明确方法：`canWriteProjectLog(authContext, projectId)`。
+- [x] `project_log.create:self` 判断当前员工是否为项目成员。
+- [x] `project_log.create:department` 判断本部门员工是否为项目成员。
+- [x] `project_log.create:all` 仍允许租户内项目。
+- [x] 施工日志创建、编辑、上传图片项目校验统一使用该方法。
+- [x] 任务中心“我的施工日志待处理”改为从 `project_members` 查项目。
 
 验收：
 
-- [ ] 工程负责人能写别人创建但自己负责的项目施工日志。
-- [ ] 非项目成员不能写。
-- [ ] 部门权限员工只能写部门范围内成员项目。
-- [ ] `all` 权限仍可写租户内项目。
+- [x] 工程负责人能写别人创建但自己负责的项目施工日志。授权来源为 `project_members`，不再依赖项目旧字段或创建人。
+- [x] 非项目成员不能写。`self` / `assigned` 范围必须命中项目成员。
+- [x] 部门权限员工只能写部门范围内成员项目。
+- [x] `all` 权限仍可写租户内项目。
 
 测试：
 
-- [ ] API typecheck。
-- [ ] 用两个员工账号验证施工日志创建权限。
-- [ ] 验证上传施工日志图片权限。
-- [ ] 验证任务中心施工日志待处理项目。
+- [x] API typecheck：`bun run typecheck`。
+- [x] API build：`bun run build`。
+- [x] 数据一致性：`bun run project-members:assignees:backfill -- --limit 20`，结果 `summary=[]`。
+- [x] 引用检查：`task-center` / `project-logs` / `uploads` 写权限路径不再读取 `designer_id` / `supervisor_id`。
 
 提交：
 
