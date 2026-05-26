@@ -239,8 +239,6 @@ class ProjectService {
             const assignees = assigneeIndex.get(row.id) || {};
             return {
                 ...row,
-                designer_id: assignees.designer?.employee_id ?? row.designer_id ?? null,
-                supervisor_id: assignees.supervisor?.employee_id ?? row.supervisor_id ?? null,
                 designer: this.serializeAssignee(assignees.designer),
                 supervisor: this.serializeAssignee(assignees.supervisor),
             };

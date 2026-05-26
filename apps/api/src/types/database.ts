@@ -4056,7 +4056,6 @@ export type Database = {
           budget: number | null
           created_at: string | null
           customer_id: string | null
-          designer_id: string | null
           id: string
           name: string | null
           property_id: string | null
@@ -4064,7 +4063,6 @@ export type Database = {
           start_date: string | null
           status: string | null
           style_tags: Json
-          supervisor_id: string | null
           tenant_id: string | null
           updated_at: string
           visibility_status: string
@@ -4074,7 +4072,6 @@ export type Database = {
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
-          designer_id?: string | null
           id?: string
           name?: string | null
           property_id?: string | null
@@ -4082,7 +4079,6 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           style_tags?: Json
-          supervisor_id?: string | null
           tenant_id?: string | null
           updated_at?: string
           visibility_status?: string
@@ -4092,7 +4088,6 @@ export type Database = {
           budget?: number | null
           created_at?: string | null
           customer_id?: string | null
-          designer_id?: string | null
           id?: string
           name?: string | null
           property_id?: string | null
@@ -4100,7 +4095,6 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           style_tags?: Json
-          supervisor_id?: string | null
           tenant_id?: string | null
           updated_at?: string
           visibility_status?: string
@@ -4114,24 +4108,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "projects_designer_id_fkey"
-            columns: ["designer_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "projects_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "projects_supervisor_id_fkey"
-            columns: ["supervisor_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
           {

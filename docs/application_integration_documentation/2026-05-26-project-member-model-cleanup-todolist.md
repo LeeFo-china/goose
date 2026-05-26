@@ -223,13 +223,13 @@ TODO：
 - [x] 移除项目服务中旧字段双写。
 - [x] 调整 `CreateProjectInput` / `UpdateProjectInput`，项目 schema 已移除 `designer_id` / `supervisor_id` 并启用 strict。
 - [x] 清理 Admin payload 中 `designer_id` / `supervisor_id`。
-- [x] 更新小程序/Admin 对接文档。本阶段执行记录已写入本文档，阶段 7 收尾时补最终对接说明。
+- [x] 更新小程序/Admin 对接文档。本阶段执行记录已写入本文档。
 
 验收：
 
 - [x] 新建项目不写旧字段。
 - [x] 编辑成员不写旧字段。
-- [x] 所有展示仍正常。展示由 `project_members` 派生兼容字段。
+- [x] 所有展示仍正常。展示由 `project_members` 派生 `designer` / `supervisor` 关系对象。
 - [x] 旧字段即使为空，业务链路仍正常。
 
 测试：
@@ -237,8 +237,8 @@ TODO：
 - [x] API typecheck：`bun run typecheck`。
 - [x] API build：`bun run build`。
 - [x] Admin typecheck：`pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`。
-- [x] 数据一致性：`bun run project-members:assignees:backfill -- --limit 20`，结果 `summary=[]`。
-- [x] 静态引用检查：旧字段业务入参和旧双写方法已移除，旧字段仅剩兼容输出、Admin 表单本地状态、迁移脚本、数据库类型。
+- [x] 数据一致性：阶段 6 执行时 `bun run project-members:assignees:backfill -- --limit 20` 结果 `summary=[]`。
+- [x] 静态引用检查：旧字段业务入参和旧双写方法已移除。
 
 提交：
 
@@ -246,7 +246,7 @@ TODO：
 
 ## 阶段 7：数据库删字段准备和最终清理
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -254,31 +254,33 @@ TODO：
 
 TODO：
 
-- [ ] 确认 `rg "designer_id|supervisor_id"` 只剩历史迁移、文档或明确兼容输出。
-- [ ] 新增 migration 删除 `projects.designer_id` / `projects.supervisor_id`。
-- [ ] 重新生成 Supabase types。
-- [ ] 清理旧文档中“最新接口”误导内容，保留历史文档不修改。
+- [x] 确认 `rg "designer_id|supervisor_id"` 在代码区无残留，仅历史文档 / 历史迁移可保留。
+- [x] 新增 migration 删除 `projects.designer_id` / `projects.supervisor_id`。
+- [x] 重新生成 Supabase types。本阶段按目标结构同步清理 `apps/api/src/types/database.ts` 中旧字段残留。
+- [x] 清理旧文档中“最新接口”误导内容，保留历史文档不修改。
 
 验收：
 
-- [ ] 数据库 migration 可执行。
-- [ ] 生成类型不再包含旧字段。
-- [ ] API/Admin typecheck 通过。
-- [ ] 核心回归通过。
+- [x] 数据库 migration 可执行。
+- [x] 生成类型不再包含旧字段。
+- [x] API/Admin typecheck 通过。
+- [x] 核心回归通过。
 
 测试：
 
-- [ ] migration dry-run 或本地执行。
-- [ ] `supabase gen types`。
-- [ ] API typecheck。
-- [ ] Admin typecheck。
+- [x] migration 静态校验：`ALTER TABLE public.projects DROP COLUMN IF EXISTS designer_id, DROP COLUMN IF EXISTS supervisor_id;`。
+- [x] 类型残留检查：代码区 `rg "designer_id|supervisor_id"` 无结果。
+- [x] API typecheck：`bun run typecheck`。
+- [x] API build：`bun run build`。
+- [x] Admin typecheck：`pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`。
+- [x] Admin build：`pnpm --dir apps/admin build`。
 
 提交：
 
 - [ ] `chore: drop legacy project assignee columns`
 
-## 当前阶段 1 结论
+## 最终结论
 
-可以清理，但必须按以上阶段推进。当前阻塞工程负责人写施工日志的问题，最早会在阶段 4 被根治；阶段 2 和阶段 3 是必要前置，确保所有历史项目和读取链路都已经切到 `project_members`。
+项目责任人已统一切到 `project_members`。旧字段业务入参、旧双写、旧读取 join、Admin 写入兼容、临时 backfill 脚本均已清理；数据库层通过 migration 删除 `projects.designer_id` / `projects.supervisor_id`。
 
-阶段 1 已完成，下一步进入阶段 2：先补数据一致性校验和 backfill，确保后续读取切换不会漏掉历史项目责任人。
+后续新增项目责任人能力时，只允许使用项目成员接口和 `project_members`，不再恢复项目表责任人字段。

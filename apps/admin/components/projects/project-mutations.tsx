@@ -104,8 +104,6 @@ export type ProjectRecord = {
   address: string | null;
   customer_id?: string | null;
   property_id?: string | null;
-  designer_id?: string | null;
-  supervisor_id?: string | null;
   style_tags?: string[];
   visibility_status?: string | null;
   customer?: CustomerRelation | CustomerRelation[] | null;
@@ -179,8 +177,8 @@ type ProjectStatusTransitionRecord = {
 type ProjectFormState = {
   name: string;
   customer_id: string;
-  designer_id: string;
-  supervisor_id: string;
+  designer_employee_id: string;
+  supervisor_employee_id: string;
   budget: string;
   start_date: string;
   address: string;
@@ -437,8 +435,8 @@ function buildDefaults(project?: ProjectRecord): ProjectFormState {
   return {
     name: project?.name || "",
     customer_id: project?.customer_id || relationOne(project?.customer)?.id || "",
-    designer_id: project?.designer_id || relationOne(project?.designer)?.id || "",
-    supervisor_id: project?.supervisor_id || relationOne(project?.supervisor)?.id || "",
+    designer_employee_id: relationOne(project?.designer)?.id || "",
+    supervisor_employee_id: relationOne(project?.supervisor)?.id || "",
     budget: project?.budget != null ? String(project.budget) : "",
     start_date: project?.start_date ? project.start_date.slice(0, 10) : "",
     address: project?.address || "",
@@ -472,10 +470,8 @@ function buildOptimisticProject(
     ...project,
     name: formState.name.trim() || project.name,
     customer_id: formState.customer_id || null,
-    designer_id: formState.designer_id || null,
-    supervisor_id: formState.supervisor_id || null,
-    designer: optionRelation(formState.designer_id, options.designers),
-    supervisor: optionRelation(formState.supervisor_id, options.supervisors),
+    designer: optionRelation(formState.designer_employee_id, options.designers),
+    supervisor: optionRelation(formState.supervisor_employee_id, options.supervisors),
     budget: formState.budget ? Number(formState.budget) : null,
     start_date: formState.start_date || null,
     address: formState.address.trim() || null,
@@ -1310,8 +1306,8 @@ function ProjectDialog({
         if (projectId) {
           await syncProjectPrimaryAssignees({
             projectId,
-            designerId: formState.designer_id || null,
-            supervisorId: formState.supervisor_id || null,
+            designerId: formState.designer_employee_id || null,
+            supervisorId: formState.supervisor_employee_id || null,
           });
         }
         if (mode === "edit" && project && onSaved) {
@@ -1392,13 +1388,13 @@ function ProjectDialog({
               <Label htmlFor={`${mode}-project-designer`}>设计师</Label>
               <OptionSelect
                 id={`${mode}-project-designer`}
-                value={formState.designer_id}
+                value={formState.designer_employee_id}
                 options={options.designers}
                 disabled={pending || options.loading}
                 placeholder={options.loading ? "设计师加载中" : "未选择"}
                 onChange={(value) => setFormState((current) => ({
                   ...current,
-                  designer_id: value,
+                  designer_employee_id: value,
                 }))}
               />
             </div>
@@ -1406,13 +1402,13 @@ function ProjectDialog({
               <Label htmlFor={`${mode}-project-supervisor`}>工程负责人</Label>
               <OptionSelect
                 id={`${mode}-project-supervisor`}
-                value={formState.supervisor_id}
+                value={formState.supervisor_employee_id}
                 options={options.supervisors}
                 disabled={pending || options.loading}
                 placeholder={options.loading ? "负责人加载中" : "未选择"}
                 onChange={(value) => setFormState((current) => ({
                   ...current,
-                  supervisor_id: value,
+                  supervisor_employee_id: value,
                 }))}
               />
             </div>
