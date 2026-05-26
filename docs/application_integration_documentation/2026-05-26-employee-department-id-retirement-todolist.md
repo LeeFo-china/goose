@@ -83,7 +83,7 @@
 
 ## 阶段 2：数据一致性校验和 backfill
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -92,27 +92,40 @@
 
 TODO：
 
-- [ ] 新增只读校验脚本，统计：
+- [x] 新增只读校验脚本，统计：
   - `employee_missing_tenant_department`
   - `employee_tenant_department_tenant_mismatch`
   - `employee_tenant_department_disabled`
   - `employee_with_old_department_only`
   - `employee_old_new_department_mismatch`
-- [ ] 如仍有可从旧字段映射的员工，新增显式 `--apply` backfill。
-- [ ] 对无法映射的员工输出异常清单，不自动猜测部门。
-- [ ] dry-run 默认不写库。
+- [x] 如仍有可从旧字段映射的员工，新增显式 `--apply` backfill。
+- [x] 对无法映射的员工输出异常清单，不自动猜测部门。
+- [x] dry-run 默认不写库。
+
+脚本：
+
+- `bun run employee:tenant-department:check -- --limit 50`
+- `bun run employee:tenant-department:check -- --tenant-id <tenant_id> --limit 200`
+- `bun run employee:tenant-department:check -- --apply --limit 200`
+
+执行结果：
+
+- 2026-05-26 dry-run：`summary=[]`，`issues=[]`。
+- 平台无租户员工不参与租户部门清理门禁；脚本只检查 `tenant_id is not null` 的在职员工。
+- 当前没有需要修复的数据，因此未执行 `--apply`。
 
 验收：
 
-- [ ] dry-run 可输出问题数量和明细。
-- [ ] blocker 项为 0，或有明确人工处理结论。
-- [ ] backfill 后再次 dry-run 为 0。
+- [x] dry-run 可输出问题数量和明细。
+- [x] blocker 项为 0，或有明确人工处理结论。
+- [x] backfill 后再次 dry-run 为 0。当前 dry-run 已为 0，无需写库。
 
 测试：
 
-- [ ] API typecheck。
-- [ ] 执行 dry-run。
-- [ ] 必要时执行 backfill 并复跑 dry-run。
+- [x] API typecheck：`bun run typecheck`。
+- [x] API build：`bun run build`。
+- [x] 执行 dry-run：`bun run employee:tenant-department:check -- --limit 50`。
+- [x] 必要时执行 backfill 并复跑 dry-run。当前无待修复数据，未执行写入模式。
 
 提交：
 

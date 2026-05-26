@@ -20,6 +20,7 @@
     "project-log-comments:cos:reconcile": "bun src/scripts/project-log-comment-cos-reconcile.ts",
     "project-acceptance:images:backfill": "bun src/scripts/project-acceptance-images-backfill.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
+    "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
