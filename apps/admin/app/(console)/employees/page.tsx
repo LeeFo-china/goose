@@ -17,7 +17,6 @@ type Employee = {
   phone: string | null;
   role?: string | null;
   status: EmployeeStatus | string | null;
-  department_id: string | null;
   tenant_department_id?: string | null;
   department_name?: string | null;
   department_code?: string | null;

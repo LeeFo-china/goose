@@ -17,7 +17,6 @@ import type { AuthContext } from "@/services/authorization";
 import { departmentPostRuleService } from "@/services/department-post-rules";
 
 type NormalizedEmployeeDepartment = {
-  departmentId: string | null;
   tenantDepartmentId: string | null;
 };
 
@@ -76,19 +75,17 @@ class EmployeeCoreService {
     accessPolicyService.assertPermission(input.authContext, "employee.create");
     const department = await this.normalizeDepartmentForWrite({
       tenantId,
-      departmentId: input.payload.department_id,
       tenantDepartmentId: input.payload.tenant_department_id,
     });
 
     await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
-      departmentId: department.departmentId,
+      departmentId: department.tenantDepartmentId,
       postId: input.payload.post_id,
       tenantId,
     });
 
     return employeeCoreRepository.create({
       ...input.payload,
-      department_id: department.departmentId,
       tenant_department_id: department.tenantDepartmentId,
       tenant_id: tenantId,
     });
@@ -115,33 +112,27 @@ class EmployeeCoreService {
     }
 
     const shouldUpdateDepartment =
-      input.payload.department_id !== undefined ||
       input.payload.tenant_department_id !== undefined;
     const department = shouldUpdateDepartment
       ? await this.normalizeDepartmentForWrite({
         tenantId,
-        departmentId: input.payload.department_id,
         tenantDepartmentId: input.payload.tenant_department_id,
       })
       : {
-        departmentId: existing.department_id,
         tenantDepartmentId: existing.tenant_department_id ?? null,
       };
     const postId = input.payload.post_id !== undefined
       ? input.payload.post_id
       : existing.post_id;
     const departmentChanged = shouldUpdateDepartment &&
-      (
-        department.departmentId !== existing.department_id ||
-        department.tenantDepartmentId !== existing.tenant_department_id
-      );
+      department.tenantDepartmentId !== existing.tenant_department_id;
     const postChanged =
       input.payload.post_id !== undefined &&
       input.payload.post_id !== existing.post_id;
 
     if (departmentChanged || postChanged) {
       await departmentPostRuleService.assertEmployeeDepartmentPostAllowed({
-        departmentId: department.departmentId,
+        departmentId: department.tenantDepartmentId,
         postId,
         tenantId,
       });
@@ -154,7 +145,6 @@ class EmployeeCoreService {
         ...input.payload,
         ...(shouldUpdateDepartment
           ? {
-            department_id: department.departmentId,
             tenant_department_id: department.tenantDepartmentId,
           }
           : {}),
@@ -273,29 +263,18 @@ class EmployeeCoreService {
 
   private async normalizeDepartmentForWrite(input: {
     tenantId: string;
-    departmentId?: string | null;
     tenantDepartmentId?: string | null;
   }): Promise<NormalizedEmployeeDepartment> {
-    const hasDepartmentId = input.departmentId !== undefined;
     const hasTenantDepartmentId = input.tenantDepartmentId !== undefined;
 
-    if (!hasDepartmentId && !hasTenantDepartmentId) {
+    if (!hasTenantDepartmentId) {
       return {
-        departmentId: null,
         tenantDepartmentId: null,
       };
     }
 
-    if (input.departmentId === null || input.tenantDepartmentId === null) {
-      if (
-        (input.departmentId ?? null) !== null ||
-        (input.tenantDepartmentId ?? null) !== null
-      ) {
-        throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
-      }
-
+    if (input.tenantDepartmentId === null) {
       return {
-        departmentId: null,
         tenantDepartmentId: null,
       };
     }
@@ -307,26 +286,7 @@ class EmployeeCoreService {
       throw Errors.badRequest("部门不存在或未启用");
     }
 
-    if (!department.legacy_department_id) {
-      throw Errors.badRequest("部门缺少旧部门映射，暂不能分配员工");
-    }
-
-    if (
-      input.departmentId &&
-      department.legacy_department_id !== input.departmentId
-    ) {
-      throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
-    }
-
-    if (
-      input.tenantDepartmentId &&
-      department.id !== input.tenantDepartmentId
-    ) {
-      throw Errors.badRequest("department_id 与 tenant_department_id 不匹配");
-    }
-
     return {
-      departmentId: department.legacy_department_id,
       tenantDepartmentId: department.id,
     };
   }

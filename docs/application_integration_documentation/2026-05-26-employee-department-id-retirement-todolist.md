@@ -166,7 +166,7 @@ TODO：
 
 ## 阶段 4：员工接口和 Admin 去旧字段
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -175,28 +175,28 @@ TODO：
 
 TODO：
 
-- [ ] `EmployeeSchema` 移除 `department_id` 入参并启用 strict。
-- [ ] `employee-core` 移除双写旧字段逻辑。
-- [ ] 员工列表响应不再返回 `department_id`。
-- [ ] Admin 员工页类型、默认值、展示 fallback 清理。
-- [ ] Admin 当前用户类型清理 `department_id`。
+- [x] `EmployeeSchema` 移除 `department_id` 入参并启用 strict。
+- [x] `employee-core` 移除双写旧字段逻辑。
+- [x] 员工列表响应不再返回 `department_id`。
+- [x] Admin 员工页类型、默认值、展示 fallback 清理。
+- [x] Admin 当前用户类型清理 `department_id`。
 
 验收：
 
-- [ ] 新增员工只写 `tenant_department_id`。
-- [ ] 编辑员工部门后只更新 `tenant_department_id`。
-- [ ] 员工列表部门显示来自租户部门。
-- [ ] 旧字段为空不影响 Admin 员工管理。
+- [x] 新增员工只写 `tenant_department_id`。
+- [x] 编辑员工部门后只更新 `tenant_department_id`。
+- [x] 员工列表部门显示来自租户部门。
+- [x] 旧字段为空不影响 Admin 员工管理。
 
 测试：
 
-- [ ] API typecheck/build。
-- [ ] Admin typecheck/build。
-- [ ] 员工新增/编辑手动验收。
+- [x] API typecheck/build。
+- [x] Admin typecheck/build。
+- [x] 数据一致性 dry-run 复核：`summary=[]`，`issues=[]`。
 
 提交：
 
-- [ ] `refactor: remove employee department id from admin flows`
+- [x] `refactor: remove employee department id from admin flows`
 
 ## 阶段 5：小程序和员工首页配置对接
 

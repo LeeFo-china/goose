@@ -79,9 +79,7 @@ export const EmployeeBaseSchema = z.object({
     .regex(/^1[3-9]\d{9}$/, "手机号格式不正确")
     .nullable(),
 
-  // 部门 ID：关联外键，校验 UUID
-  department_id: z.string().uuid("无效的部门 ID").nullable().optional(),
-  // 租户部门配置 ID：新组织架构字段，过渡期与 department_id 双写
+  // 租户部门配置 ID
   tenant_department_id: z.string().uuid("无效的租户部门 ID").nullable().optional(),
   // 职位 ID：关联外键，校验 UUID
   post_id: z.string().uuid("无效的职位 ID").nullable().optional(),
@@ -103,7 +101,7 @@ export const EmployeeBaseSchema = z.object({
 
   // 创建时间：只读，通常不从前端传入
   created_at: z.string().datetime().nullable().optional(),
-});
+}).strict();
 
 /**
  * 创建员工时的校验 (POST)

@@ -113,45 +113,34 @@ class EmployeeController extends TenantBaseController<
 
   private normalizeEmployeeDepartment<T extends object>(employee: T) {
     const source = employee as Record<string, unknown>;
+    const { department_id: _departmentId, department: _legacyDepartment, ...rest } = source;
     const tenantDepartment = this.asRecord(source.tenant_department);
-    const legacyDepartment = this.asRecord(source.department);
     const tenantDepartmentId =
       typeof source.tenant_department_id === "string"
         ? source.tenant_department_id
         : typeof tenantDepartment?.id === "string"
           ? tenantDepartment.id
           : null;
-    const departmentId =
-      typeof source.department_id === "string"
-        ? source.department_id
-        : typeof tenantDepartment?.legacy_department_id === "string"
-          ? tenantDepartment.legacy_department_id
-          : null;
     const departmentName =
       typeof tenantDepartment?.alias_name === "string"
         ? tenantDepartment.alias_name
-        : typeof legacyDepartment?.name === "string"
-          ? legacyDepartment.name
-          : null;
+        : null;
     const departmentCode =
       typeof tenantDepartment?.code === "string"
         ? tenantDepartment.code
-        : typeof legacyDepartment?.code === "string"
-          ? legacyDepartment.code
-          : null;
+        : null;
 
     return {
-      ...source,
+      ...rest,
       avatar: resolveStoredFileUrl(
         typeof source.avatar === "string" ? source.avatar : null,
       ),
-      department_id: departmentId,
       tenant_department_id: tenantDepartmentId,
       department_name: departmentName,
       department_code: departmentCode,
-      department: departmentName || departmentCode || departmentId
+      department: departmentName || departmentCode || tenantDepartmentId
         ? {
-          id: departmentId,
+          id: tenantDepartmentId,
           tenant_department_id: tenantDepartmentId,
           name: departmentName,
           code: departmentCode,

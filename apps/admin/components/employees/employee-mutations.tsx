@@ -37,7 +37,6 @@ export type EmployeeMutationRecord = {
   name: string | null;
   phone: string | null;
   status: EmployeeStatus | string | null;
-  department_id: string | null;
   tenant_department_id?: string | null;
   department_name?: string | null;
   department_code?: string | null;
@@ -294,10 +293,7 @@ function EmployeeDialog({
     phone: employee?.phone || "",
     avatar: employee?.avatar || "",
     status: isEmployeeStatus(employee?.status) ? employee.status : "active",
-    tenantDepartmentId: employee?.tenant_department_id ||
-      departments.find((department) => department.id === employee?.department_id)
-        ?.tenant_department_id ||
-      "",
+    tenantDepartmentId: employee?.tenant_department_id || "",
     postId: employee?.post_id || "",
   }), [departments, employee]);
   const [status, setStatus] = useState<EmployeeStatus>(defaults.status);

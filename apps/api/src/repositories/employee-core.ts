@@ -37,7 +37,6 @@ export type EmployeeListFilters = {
 export type EmployeeCoreAccessRow = {
   id: string;
   user_id?: string | null;
-  department_id?: string | null;
   tenant_department_id?: string | null;
   post_id?: string | null;
   tenant_id?: string | null;
@@ -46,7 +45,6 @@ export type EmployeeCoreAccessRow = {
 export type EmployeeCoreRow = EmployeeCoreAccessRow & {
   avatar?: string | null;
   tenant_department?: unknown;
-  department?: unknown;
 };
 
 export type EmployeeLoginBindingRow = {
@@ -63,7 +61,6 @@ export type TenantDepartmentWriteRow = {
   code: string;
   alias_name: string;
   enabled: boolean;
-  legacy_department_id: string | null;
 };
 
 function escapeSupabaseOrValue(value: string) {
@@ -268,7 +265,7 @@ class EmployeeCoreRepository {
   async findAccessById(input: { employeeId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
-      .select("id, user_id, department_id, tenant_department_id, post_id, tenant_id")
+      .select("id, user_id, tenant_department_id, post_id, tenant_id")
       .eq("id", input.employeeId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
@@ -321,19 +318,16 @@ class EmployeeCoreRepository {
 
   async findTenantDepartmentForEmployee(input: {
     tenantId: string;
-    departmentId?: string | null;
     tenantDepartmentId?: string | null;
   }) {
     let query = SupabaseDB.getAdminClient()
       .from("tenant_departments")
-      .select("id, tenant_id, code, alias_name, enabled, legacy_department_id")
+      .select("id, tenant_id, code, alias_name, enabled")
       .eq("tenant_id", input.tenantId)
       .eq("enabled", true);
 
     if (input.tenantDepartmentId) {
       query = query.eq("id", input.tenantDepartmentId);
-    } else if (input.departmentId) {
-      query = query.eq("legacy_department_id", input.departmentId);
     } else {
       return null;
     }

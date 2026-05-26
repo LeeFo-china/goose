@@ -13,7 +13,7 @@ export type AdminEmployee = {
   name: string | null;
   phone?: string | null;
   status: string | null;
-  department_id: string | null;
+  tenant_department_id: string | null;
   department_name: string | null;
   post_id: string | null;
   post_name: string | null;
