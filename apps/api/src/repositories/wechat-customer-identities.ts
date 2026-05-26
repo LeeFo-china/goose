@@ -55,12 +55,9 @@ export type WechatLoginMembershipRow = {
   employee_user_id: string | null;
   employee_name: string | null;
   employee_status: string | null;
-  employee_department_id: string | null;
   employee_tenant_department_id: string | null;
   employee_post_id: string | null;
   employee_avatar: string | null;
-  department_name: string | null;
-  department_code: string | null;
   tenant_department_alias_name: string | null;
   tenant_department_code: string | null;
   post_name: string | null;

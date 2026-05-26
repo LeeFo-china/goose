@@ -200,7 +200,7 @@ TODO：
 
 ## 阶段 5：小程序和员工首页配置对接
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -209,10 +209,10 @@ TODO：
 
 TODO：
 
-- [ ] 后端员工首页配置 resolver 不写 `department_id` fallback。
-- [ ] 员工身份接口、微信登录上下文不再返回旧部门 ID。
-- [ ] 新增或更新小程序对接文档，明确字段和优先级。
-- [ ] 如 RPC 返回员工身份字段，新增替换 RPC migration。
+- [x] 后端员工首页配置 resolver 不写 `department_id` fallback。
+- [x] 员工身份接口、微信登录上下文不再返回旧部门 ID。
+- [x] 新增或更新小程序对接文档，明确字段和优先级。
+- [x] 如 RPC 返回员工身份字段，新增替换 RPC migration。
 
 首页配置优先级：
 
@@ -225,19 +225,20 @@ employee_id
 
 验收：
 
-- [ ] 员工首页不同租户部门可命中不同默认配置。
-- [ ] 没有 `tenant_department_id` 的员工只能走岗位或租户默认，不走旧字段。
-- [ ] 小程序对接文档完整。
+- [x] 员工首页不同租户部门可命中不同默认配置。
+- [x] 没有 `tenant_department_id` 的员工只能走岗位或租户默认，不走旧字段。
+- [x] 小程序对接文档完整。
 
 测试：
 
-- [ ] API typecheck/build。
-- [ ] 微信登录/员工身份接口响应检查。
-- [ ] 小程序对接文档验收。
+- [x] API typecheck/build。
+- [x] 微信登录/员工身份接口响应检查。
+- [x] 小程序对接文档验收。
+- [x] 数据一致性 dry-run 复核：`summary=[]`，`issues=[]`。
 
 提交：
 
-- [ ] `feat: resolve employee home config by tenant department`
+- [x] `feat: resolve employee home config by tenant department`
 
 ## 阶段 6：数据库删字段和类型清理
 
