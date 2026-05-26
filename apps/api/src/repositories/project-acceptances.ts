@@ -302,8 +302,25 @@ class ProjectAcceptanceRepository {
     const { data, error } = await query;
     if (error) throw Errors.dbError("查询项目工序验收状态失败", error);
 
+    const statusPriority: Record<ProjectAcceptanceStatus, number> = {
+      draft: 1,
+      rejected: 1,
+      submitted: 2,
+      leader_approved: 2,
+      customer_confirmed: 3,
+      cancelled: 99,
+    };
+    const rows = ((data || []) as ProjectAcceptanceRow[])
+      .sort((left, right) => {
+        const priorityDiff =
+          statusPriority[left.status] - statusPriority[right.status];
+        if (priorityDiff !== 0) return priorityDiff;
+
+        return new Date(right.updated_at || right.created_at).getTime() -
+          new Date(left.updated_at || left.created_at).getTime();
+      });
     const latest = new Map<string, ProjectAcceptanceRow>();
-    for (const row of (data || []) as ProjectAcceptanceRow[]) {
+    for (const row of rows) {
       if (!latest.has(row.stage_code)) {
         latest.set(row.stage_code, row);
       }

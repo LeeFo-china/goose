@@ -13,6 +13,7 @@ import {
   PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
   PROJECT_LOG_STAGE_CODE_VALUES,
   PROJECT_LOG_STAGE_CONFIG,
+  ProjectAcceptanceStatusConfig,
   getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
   isProjectLogStageCode,
@@ -36,15 +37,32 @@ class ConstructionStageStatusService {
       throw Errors.forbidden();
     }
 
+    const [canReadAcceptance, hasCreateAcceptancePermission] = await Promise.all([
+      this.canAccessProjectByOptionalPermission(
+        input.authContext,
+        input.projectId,
+        ["project_acceptance.read", "project_acceptance.manage"],
+      ),
+      this.canAccessProjectByOptionalPermission(
+        input.authContext,
+        input.projectId,
+        ["project_acceptance.create"],
+      ),
+    ]);
+
     return this.listProjectConstructionStagesForProject({
       projectId: input.projectId,
       tenantId,
+      canReadAcceptance,
+      canCreateAcceptance: canReadAcceptance && hasCreateAcceptancePermission,
     });
   }
 
   async listProjectConstructionStagesForProject(input: {
     projectId: string;
     tenantId?: string | null;
+    canReadAcceptance?: boolean;
+    canCreateAcceptance?: boolean;
   }) {
     const project = await projectAcceptanceRepository.getProject(
       input.projectId,
@@ -103,11 +121,14 @@ class ConstructionStageStatusService {
 
       return this.buildStageItem({
         stageCode,
-        acceptance: acceptanceMap.get(stageCode),
+        acceptance: input.canReadAcceptance === false
+          ? null
+          : acceptanceMap.get(stageCode),
         latestLog: latestLogMap.get(stageCode),
         hasLog: logStageSet.has(stageCode),
         blockedReason,
         projectStatus: project.status,
+        canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
       });
     });
     const missingRequiredStages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter(
@@ -124,11 +145,14 @@ class ConstructionStageStatusService {
         : null;
     const completionStage = this.buildStageItem({
       stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
-      acceptance: acceptanceMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
+      acceptance: input.canReadAcceptance === false
+        ? null
+        : acceptanceMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
       latestLog: latestLogMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
       hasLog: logStageSet.has(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE),
       blockedReason: completionBlockedReason,
       projectStatus: project.status,
+      canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
     });
 
     return {
@@ -251,6 +275,30 @@ class ConstructionStageStatusService {
     return `${this.getStageLabel(stageCode)}验收`;
   }
 
+  private async canAccessProjectByOptionalPermission(
+    authContext: AuthContext,
+    projectId: string,
+    permissionCodes: string[],
+  ) {
+    for (const permissionCode of permissionCodes) {
+      if (!accessPolicyService.hasPermission(authContext, permissionCode)) {
+        continue;
+      }
+
+      if (
+        await accessPolicyService.canAccessProject(
+          authContext,
+          projectId,
+          permissionCode,
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private buildStageItem(input: {
     stageCode: ProjectLogStageCode;
     acceptance?: ProjectAcceptanceRow | null;
@@ -258,6 +306,7 @@ class ConstructionStageStatusService {
     hasLog: boolean;
     blockedReason: string | null;
     projectStatus?: string | null;
+    canCreateAcceptanceByPermission: boolean;
   }) {
     const acceptance = input.acceptance ?? null;
     const latestLog = input.latestLog ?? null;
@@ -283,11 +332,19 @@ class ConstructionStageStatusService {
       status !== "accepted" &&
       status !== "pending_acceptance";
     const canCreateAcceptance = !input.blockedReason &&
+      !acceptance &&
+      input.canCreateAcceptanceByPermission &&
       status !== "accepted" &&
       status !== "pending_acceptance" &&
       (isCompletion
         ? input.projectStatus === "acceptance"
         : isRequired && isAcceptanceWritableStatus);
+    const acceptanceAction = this.buildAcceptanceAction({
+      acceptance,
+      canCreateAcceptance,
+      blockedReason: input.blockedReason,
+      canCreateAcceptanceByPermission: input.canCreateAcceptanceByPermission,
+    });
 
     return {
       stage_code: input.stageCode,
@@ -299,6 +356,19 @@ class ConstructionStageStatusService {
       can_create_acceptance: canCreateAcceptance,
       acceptance_id: acceptance?.id ?? null,
       acceptance_status: acceptance?.status ?? null,
+      acceptance: acceptance
+        ? {
+          id: acceptance.id,
+          status: acceptance.status,
+          status_label: ProjectAcceptanceStatusConfig[acceptance.status].label,
+          stage_code: input.stageCode,
+          stage_label: this.getStageLabel(input.stageCode),
+          reviewed_at: acceptance.reviewed_at,
+          customer_confirmed_at: acceptance.customer_confirmed_at,
+          updated_at: acceptance.updated_at,
+        }
+        : null,
+      acceptance_action: acceptanceAction,
       latest_log: latestLog
         ? {
           id: latestLog.id,
@@ -308,6 +378,49 @@ class ConstructionStageStatusService {
         }
         : null,
       blocked_reason: input.blockedReason,
+    };
+  }
+
+  private buildAcceptanceAction(input: {
+    acceptance: ProjectAcceptanceRow | null;
+    canCreateAcceptance: boolean;
+    blockedReason: string | null;
+    canCreateAcceptanceByPermission: boolean;
+  }) {
+    if (input.acceptance) {
+      if (input.acceptance.status === "draft" || input.acceptance.status === "rejected") {
+        return {
+          type: "edit" as const,
+          label: "处理验收",
+          enabled: true,
+          reason: null,
+        };
+      }
+
+      return {
+        type: "view" as const,
+        label: "查看",
+        enabled: true,
+        reason: null,
+      };
+    }
+
+    if (input.canCreateAcceptance) {
+      return {
+        type: "create" as const,
+        label: "发起验收",
+        enabled: true,
+        reason: null,
+      };
+    }
+
+    return {
+      type: "none" as const,
+      label: "",
+      enabled: false,
+      reason: input.canCreateAcceptanceByPermission
+        ? input.blockedReason
+        : "当前员工无验收创建权限",
     };
   }
 }
