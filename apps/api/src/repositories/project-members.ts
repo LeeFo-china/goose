@@ -19,10 +19,6 @@ type ProjectMemberRow = {
         name: string | null;
         avatar: string | null;
         phone: string | null;
-        department:
-          | { id: string; name: string | null; code: string | null }
-          | Array<{ id: string; name: string | null; code: string | null }>
-          | null;
         tenant_department:
           | { id: string; alias_name: string | null; code: string | null }
           | Array<{ id: string; alias_name: string | null; code: string | null }>
@@ -37,10 +33,6 @@ type ProjectMemberRow = {
         name: string | null;
         avatar: string | null;
         phone: string | null;
-        department:
-          | { id: string; name: string | null; code: string | null }
-          | Array<{ id: string; name: string | null; code: string | null }>
-          | null;
         tenant_department:
           | { id: string; alias_name: string | null; code: string | null }
           | Array<{ id: string; alias_name: string | null; code: string | null }>
@@ -89,7 +81,6 @@ const projectMemberSelect = `
     name,
     avatar,
     phone,
-    department:departments!employees_department_id_fkey(id, name, code),
     tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
     post:posts!employees_post_id_fkey(id, name, code)
   )

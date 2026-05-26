@@ -15,14 +15,12 @@ class AccessPolicyService {
   private buildProjectScopeCacheKey(input: {
     scope: EffectivePermission["scope"];
     employeeId: string;
-    departmentId: string | null;
     tenantDepartmentId?: string | null;
     tenantId?: string | null;
   }) {
     return JSON.stringify({
       scope: input.scope,
       employeeId: input.employeeId,
-      departmentId: input.departmentId ?? null,
       tenantDepartmentId: input.tenantDepartmentId ?? null,
       tenantId: input.tenantId ?? null,
     });
@@ -66,7 +64,6 @@ class AccessPolicyService {
   private async listVisibleProjectIdsCached(input: {
     scope: EffectivePermission["scope"];
     employeeId: string;
-    departmentId: string | null;
     tenantDepartmentId?: string | null;
     tenantId?: string | null;
   }) {
@@ -152,16 +149,12 @@ class AccessPolicyService {
 
   private matchesDepartmentScope(
     authContext: AuthContext,
-    target: { department_id?: string | null; tenant_department_id?: string | null },
+    target: { tenant_department_id?: string | null },
   ) {
-    if (authContext.tenantDepartmentId && target.tenant_department_id) {
-      return authContext.tenantDepartmentId === target.tenant_department_id;
-    }
-
     return Boolean(
-      authContext.departmentId &&
-        target.department_id &&
-        authContext.departmentId === target.department_id,
+      authContext.tenantDepartmentId &&
+        target.tenant_department_id &&
+        authContext.tenantDepartmentId === target.tenant_department_id,
     );
   }
 
@@ -169,7 +162,6 @@ class AccessPolicyService {
     authContext: AuthContext,
     target: {
       id: string;
-      department_id: string | null;
       tenant_department_id?: string | null;
       tenant_id?: string | null;
     },
@@ -211,7 +203,6 @@ class AccessPolicyService {
     return this.listVisibleProjectIdsCached({
       scope,
       employeeId: authContext.employeeId,
-      departmentId: authContext.departmentId,
       tenantDepartmentId: authContext.tenantDepartmentId,
       tenantId: authContext.tenantId,
     });
@@ -225,7 +216,6 @@ class AccessPolicyService {
     return (await this.listVisibleProjectIdsCached({
       scope: "self",
       employeeId: authContext.employeeId,
-      departmentId: authContext.departmentId,
       tenantDepartmentId: authContext.tenantDepartmentId,
       tenantId: authContext.tenantId,
     })) ?? [];
@@ -299,10 +289,9 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
-      const employeeIds = departmentScopeId
+      const employeeIds = authContext.tenantDepartmentId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
-          departmentScopeId,
+          authContext.tenantDepartmentId,
           authContext.tenantId,
         )
         : [];
@@ -333,13 +322,12 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
-      if (!departmentScopeId) {
+      if (!authContext.tenantDepartmentId) {
         return [];
       }
 
       return permissionRepository.listEmployeeIdsByDepartmentId(
-        departmentScopeId,
+        authContext.tenantDepartmentId,
         authContext.tenantId,
       );
     }
@@ -377,7 +365,6 @@ class AccessPolicyService {
     customer: { owner_id: string | null; tenant_id?: string | null },
     targetEmployee: {
       id: string;
-      department_id: string | null;
       tenant_department_id?: string | null;
       status: string | null;
       tenant_id?: string | null;
@@ -401,7 +388,6 @@ class AccessPolicyService {
     authContext: AuthContext,
     targetEmployee: {
       id: string;
-      department_id: string | null;
       tenant_department_id?: string | null;
       status: string | null;
       tenant_id?: string | null;
@@ -451,10 +437,9 @@ class AccessPolicyService {
     }
 
     if (scope === "department") {
-      const departmentScopeId = authContext.tenantDepartmentId || authContext.departmentId;
-      const employeeIds = departmentScopeId
+      const employeeIds = authContext.tenantDepartmentId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
-          departmentScopeId,
+          authContext.tenantDepartmentId,
           authContext.tenantId,
         )
         : [];

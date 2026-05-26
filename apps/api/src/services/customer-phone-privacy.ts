@@ -81,9 +81,9 @@ class CustomerPhonePrivacyService {
 
     const needsDepartmentScope = scopes.includes("department");
     const departmentEmployeeIds =
-      needsDepartmentScope && authContext.departmentId
+      needsDepartmentScope && authContext.tenantDepartmentId
         ? await permissionRepository.listEmployeeIdsByDepartmentId(
-          authContext.departmentId,
+          authContext.tenantDepartmentId,
           authContext.tenantId,
         )
         : [];

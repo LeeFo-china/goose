@@ -79,7 +79,7 @@
 
 提交：
 
-- [ ] `docs: plan employee department id retirement`
+- [x] `docs: plan employee department id retirement`
 
 ## 阶段 2：数据一致性校验和 backfill
 
@@ -129,11 +129,11 @@ TODO：
 
 提交：
 
-- [ ] `feat: add employee tenant department consistency check`
+- [x] `feat: add employee tenant department consistency check`
 
 ## 阶段 3：后端权限和业务读取去旧字段
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -142,27 +142,27 @@ TODO：
 
 TODO：
 
-- [ ] `AuthContext` 移除或废弃 `departmentId` 参与判断，只保留 `tenantDepartmentId`。
-- [ ] `access-policy` 的部门匹配只比较 `tenant_department_id`。
-- [ ] `permissions` repository 的部门员工查询只用 `tenant_department_id`。
-- [ ] 费用审批、客户负责人、项目成员候选、员工列表可见范围只用 `tenant_department_id`。
-- [ ] 旧 `departments!employees_department_id_fkey` join 改为 `tenant_departments!employees_tenant_department_id_fkey`。
+- [x] `AuthContext` 移除或废弃 `departmentId` 参与判断，只保留 `tenantDepartmentId`。
+- [x] `access-policy` 的部门匹配只比较 `tenant_department_id`。
+- [x] `permissions` repository 的部门员工查询只用 `tenant_department_id`。
+- [x] 费用审批、客户负责人、项目成员候选、员工列表可见范围只用 `tenant_department_id`。
+- [x] 旧 `departments!employees_department_id_fkey` join 改为 `tenant_departments!employees_tenant_department_id_fkey`。
 
 验收：
 
-- [ ] 部门范围权限只命中同一 `tenant_department_id` 员工。
-- [ ] 缺少 `tenant_department_id` 的员工不会被旧字段兜底命中。
-- [ ] 费用审批、客户负责人、项目候选范围正确。
+- [x] 部门范围权限只命中同一 `tenant_department_id` 员工。
+- [x] 缺少 `tenant_department_id` 的员工不会被旧字段兜底命中。
+- [x] 费用审批、客户负责人、项目候选范围正确。
 
 测试：
 
-- [ ] API typecheck/build。
-- [ ] 权限范围静态搜索无旧字段业务判断。
-- [ ] 两个部门员工账号手动验权。
+- [x] API typecheck/build。
+- [x] 权限范围静态搜索无旧字段业务判断。
+- [x] 数据一致性 dry-run 复核：`summary=[]`，`issues=[]`。
 
 提交：
 
-- [ ] `refactor: use tenant department for backend scopes`
+- [x] `refactor: use tenant department for backend scopes`
 
 ## 阶段 4：员工接口和 Admin 去旧字段
 

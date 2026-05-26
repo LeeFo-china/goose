@@ -150,17 +150,13 @@ function normalizeTenantDepartmentName(value: unknown) {
 }
 
 function sameDepartmentScope(
-  left: { department_id: string | null; tenant_department_id?: string | null },
-  right: { department_id: string | null; tenant_department_id?: string | null },
+  left: { tenant_department_id?: string | null },
+  right: { tenant_department_id?: string | null },
 ) {
-  if (left.tenant_department_id && right.tenant_department_id) {
-    return left.tenant_department_id === right.tenant_department_id;
-  }
-
   return Boolean(
-    left.department_id &&
-      right.department_id &&
-      left.department_id === right.department_id,
+    left.tenant_department_id &&
+      right.tenant_department_id &&
+      left.tenant_department_id === right.tenant_department_id,
   );
 }
 
@@ -475,7 +471,6 @@ class ExpenseRequestService {
     candidate: ExpenseApprovalCandidateEmployee;
     applicant: {
       id: string;
-      department_id: string | null;
       tenant_department_id?: string | null;
     };
   }) {
@@ -707,7 +702,6 @@ class ExpenseRequestService {
       .filter((candidate) => {
         if (
           params.department_id &&
-          candidate.department_id !== params.department_id &&
           candidate.tenant_department_id !== params.department_id
         ) {
           return false;
@@ -731,11 +725,9 @@ class ExpenseRequestService {
         name: item.name,
         phone: item.phone,
         avatar: resolveStoredFileUrl(item.avatar),
-        department_id: item.department_id,
+        department_id: null,
         tenant_department_id: item.tenant_department_id,
-        department_name:
-          normalizeTenantDepartmentName(item.tenant_department) ??
-          normalizeRelationName(item.department),
+        department_name: normalizeTenantDepartmentName(item.tenant_department),
         post_name: normalizeRelationName(item.post),
         matched_permission: permissionCode,
         matched_scope: scopeMap.get(item.id) ?? null,

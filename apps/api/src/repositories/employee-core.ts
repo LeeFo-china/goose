@@ -7,13 +7,7 @@ export const EMPLOYEE_SELECT_WITH_DEPARTMENT = `
     id,
     code,
     alias_name,
-    enabled,
-    legacy_department_id
-  ),
-  department:departments!employees_department_id_fkey(
-    id,
-    code,
-    name
+    enabled
   )
 `;
 
@@ -43,7 +37,7 @@ export type EmployeeListFilters = {
 export type EmployeeCoreAccessRow = {
   id: string;
   user_id?: string | null;
-  department_id: string | null;
+  department_id?: string | null;
   tenant_department_id?: string | null;
   post_id?: string | null;
   tenant_id?: string | null;
@@ -90,9 +84,7 @@ class EmployeeCoreRepository {
         return query.eq("id", "00000000-0000-0000-0000-000000000000");
       }
 
-      return query.or(
-        `tenant_department_id.eq.${visibility.departmentScopeId},department_id.eq.${visibility.departmentScopeId}`,
-      );
+      return query.eq("tenant_department_id", visibility.departmentScopeId);
     }
 
     if (!visibility.employeeId) {

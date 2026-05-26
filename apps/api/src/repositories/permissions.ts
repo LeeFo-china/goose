@@ -46,16 +46,11 @@ export type EmployeePermissionContextRecord = {
     user_id: string | null;
     tenant_id: string | null;
     status: string | null;
-    department_id: string | null;
     tenant_department_id: string | null;
     post_id: string | null;
     name: string | null;
     phone: string | null;
     avatar: string | null;
-    department:
-      | { name: string | null; code?: string | null }
-      | Array<{ name: string | null; code?: string | null }>
-      | null;
     tenant_department:
       | {
         id: string | null;
@@ -455,7 +450,6 @@ class PermissionRepository {
         user_id,
         tenant_id,
         status,
-        department_id,
         tenant_department_id,
         post_id,
         name,
@@ -463,7 +457,6 @@ class PermissionRepository {
         avatar,
         tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
         tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
-        department:departments!employees_department_id_fkey(name, code),
         post:posts!employees_post_id_fkey(name)
       `)
       .eq("id", id)
@@ -484,7 +477,6 @@ class PermissionRepository {
         user_id,
         tenant_id,
         status,
-        department_id,
         tenant_department_id,
         post_id,
         name,
@@ -492,7 +484,6 @@ class PermissionRepository {
         avatar,
         tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
         tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
-        department:departments!employees_department_id_fkey(name, code),
         post:posts!employees_post_id_fkey(name)
       `)
       .eq("user_id", authUserId)
@@ -650,7 +641,7 @@ class PermissionRepository {
     let query = this.adminClient
       .from("employees")
       .select("id")
-      .or(`tenant_department_id.eq.${departmentId},department_id.eq.${departmentId}`);
+      .eq("tenant_department_id", departmentId);
 
     if (tenantId) {
       query = query.eq("tenant_id", tenantId);
@@ -668,7 +659,6 @@ class PermissionRepository {
   async listVisibleProjectIds(params: {
     scope: "self" | "department" | "assigned" | "all";
     employeeId: string;
-    departmentId: string | null;
     tenantDepartmentId?: string | null;
     tenantId?: string | null;
   }) {
@@ -691,12 +681,14 @@ class PermissionRepository {
     }
 
     let employeeIds = [params.employeeId];
-    const departmentScopeId = params.tenantDepartmentId || params.departmentId;
+    const departmentScopeId = params.tenantDepartmentId ?? null;
     if (params.scope === "department" && departmentScopeId) {
       employeeIds = await this.listEmployeeIdsByDepartmentId(
         departmentScopeId,
         params.tenantId,
       );
+    } else if (params.scope === "department") {
+      employeeIds = [];
     }
 
     const visibleIds = employeeIds.filter(Boolean);

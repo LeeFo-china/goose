@@ -33,8 +33,7 @@ class EmployeeCoreService {
     return {
       scope,
       employeeId: authContext.employeeId,
-      departmentScopeId: authContext.tenantDepartmentId ||
-        authContext.departmentId,
+      departmentScopeId: authContext.tenantDepartmentId,
     };
   }
 

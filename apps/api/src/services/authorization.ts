@@ -235,10 +235,8 @@ class AuthorizationService {
 
     const tenantDepartmentId = employee.tenant_department_id ?? null;
     const tenantDepartmentName = this.getTenantDepartmentName(employee.tenant_department);
-    const departmentCode =
-      this.getRelationValue(employee.tenant_department, "code") as string | null ??
-      this.getRelationValue(employee.department, "code") as string | null;
-    const departmentName = tenantDepartmentName ?? this.getRelationName(employee.department);
+    const departmentCode = this.getRelationValue(employee.tenant_department, "code") as string | null;
+    const departmentName = tenantDepartmentName;
     const postName = this.getRelationName(employee.post);
     const tenantContext = this.buildTenantContext(employee, roleCodes);
 
@@ -249,7 +247,7 @@ class AuthorizationService {
         ...tenantContext,
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
-        departmentId: employee.department_id,
+        departmentId: null,
         tenantDepartmentId,
         departmentCode,
         departmentName,
@@ -269,7 +267,7 @@ class AuthorizationService {
         ...tenantContext,
         employeeName: employee.name ?? null,
         employeeStatus: employee.status,
-        departmentId: employee.department_id,
+        departmentId: null,
         tenantDepartmentId,
         departmentCode,
         departmentName,
@@ -314,7 +312,7 @@ class AuthorizationService {
       ...tenantContext,
       employeeName: employee.name ?? null,
       employeeStatus: employee.status,
-      departmentId: employee.department_id,
+      departmentId: null,
       tenantDepartmentId,
       departmentCode,
       departmentName,

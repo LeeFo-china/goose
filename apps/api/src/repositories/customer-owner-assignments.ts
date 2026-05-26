@@ -4,7 +4,6 @@ import { SupabaseDB } from "@/utils/supabase";
 export type AssignableCustomerOwner = {
   id: string;
   name: string | null;
-  department_id: string | null;
   tenant_department_id?: string | null;
   status: string | null;
   tenant_id?: string | null;
@@ -20,7 +19,7 @@ class CustomerOwnerAssignmentRepository {
   async findTargetEmployee(input: { ownerId: string; tenantId: string }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
-      .select("id, name, department_id, tenant_department_id, status, tenant_id")
+      .select("id, name, tenant_department_id, status, tenant_id")
       .eq("id", input.ownerId)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
