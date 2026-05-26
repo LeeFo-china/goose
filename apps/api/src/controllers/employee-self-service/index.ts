@@ -125,6 +125,9 @@ class EmployeeSelfServiceController extends TenantBaseController {
       authContext.employeeId,
       query.home_mode,
       query.tasks_mode,
+      employeePersonalizationService.getRulesVersionForTenant(
+        authContext.tenantId,
+      ),
     ].join(":");
   }
 
@@ -142,6 +145,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
       user.employee_id,
       query.home_mode,
       query.tasks_mode,
+      employeePersonalizationService.getRulesVersionForTenant(user.tenant_id),
     ].join(":");
   }
 
@@ -359,6 +363,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
           matchedRuleId: payload.matched_rule?.id ?? null,
           matchedScope: payload.matched_rule?.scope ?? null,
           version: payload.version,
+          rulesVersion: payload.rules_version,
         },
         "[employee-bootstrap] personalization resolved",
       );

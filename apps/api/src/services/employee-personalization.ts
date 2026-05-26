@@ -32,6 +32,7 @@ export type EmployeePersonalizationScenePayload = {
 
 export type EmployeePersonalizationPayload = {
   version: string;
+  rules_version: string;
   matched_rule: EmployeePersonalizationMatchedRule | null;
   scenes: Record<string, EmployeePersonalizationScenePayload>;
 };
@@ -65,6 +66,19 @@ const toTimestamp = (value: string | null) => {
 };
 
 class EmployeePersonalizationService {
+  private rulesVersionByTenant = new Map<string, string>();
+
+  getRulesVersionForTenant(tenantId?: string | null) {
+    if (!tenantId) return EMPTY_VERSION;
+    return this.rulesVersionByTenant.get(tenantId) ?? "initial";
+  }
+
+  private bumpRulesVersion(tenantId: string) {
+    const version = new Date().toISOString();
+    this.rulesVersionByTenant.set(tenantId, version);
+    return version;
+  }
+
   private requireTenantId(tenantId?: string | null) {
     if (!tenantId) {
       throw Errors.business(
@@ -184,6 +198,7 @@ class EmployeePersonalizationService {
       record: this.toMutationRecord(input.body),
       operatorEmployeeId: input.authContext.employeeId,
     });
+    this.bumpRulesVersion(tenantId);
     return this.serializeRule(rule);
   }
 
@@ -201,6 +216,7 @@ class EmployeePersonalizationService {
       operatorEmployeeId: input.authContext.employeeId,
     });
     if (!rule) throw Errors.notFound("员工个性化规则不存在");
+    this.bumpRulesVersion(tenantId);
     return this.serializeRule(rule);
   }
 
@@ -217,6 +233,7 @@ class EmployeePersonalizationService {
       operatorEmployeeId: input.authContext.employeeId,
     });
     if (!rule) throw Errors.notFound("员工个性化规则不存在");
+    this.bumpRulesVersion(tenantId);
     return this.serializeRule(rule);
   }
 
@@ -255,10 +272,14 @@ class EmployeePersonalizationService {
     return this.resolveForEmployee(previewContext, input.body.scene);
   }
 
-  getEmptyPayload(scene: string): EmployeePersonalizationPayload {
+  getEmptyPayload(
+    scene: string,
+    rulesVersion = EMPTY_VERSION,
+  ): EmployeePersonalizationPayload {
     const normalizedScene = normalizeScene(scene) || "default";
     return {
       version: EMPTY_VERSION,
+      rules_version: rulesVersion,
       matched_rule: null,
       scenes: {
         [normalizedScene]: {
@@ -374,8 +395,9 @@ class EmployeePersonalizationService {
     scene: string,
   ): Promise<EmployeePersonalizationPayload> {
     const normalizedScene = normalizeScene(scene);
+    const rulesVersion = this.getRulesVersionForTenant(authContext.tenantId);
     if (!normalizedScene || !authContext.tenantId) {
-      return this.getEmptyPayload(normalizedScene || "default");
+      return this.getEmptyPayload(normalizedScene || "default", rulesVersion);
     }
 
     const rules = await employeePersonalizationRepository.listActiveRulesForScene({
@@ -385,11 +407,12 @@ class EmployeePersonalizationService {
     const matched = this.pickBestRule(rules, authContext, Date.now());
 
     if (!matched) {
-      return this.getEmptyPayload(normalizedScene);
+      return this.getEmptyPayload(normalizedScene, rulesVersion);
     }
 
     return {
       version: matched.rule.updated_at || matched.rule.id,
+      rules_version: rulesVersion,
       matched_rule: {
         id: matched.rule.id,
         scope: matched.scope,
