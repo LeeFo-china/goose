@@ -94,8 +94,6 @@ class CustomerStatusService {
       budget: null,
       signed_amount: null,
       start_date: null,
-      designer_id: null,
-      supervisor_id: null,
       style_tags: [],
     });
 

@@ -45,8 +45,6 @@ export const ProjectStatusSchema = z.enum(PROJECT_STATUS_VALUES, {
 export const ProjectBaseSchema = z.object({
   // ID 由数据库生成
   id: z.uuid("无效的项目 ID").optional(),
-  designer_id: z.string().trim().nullable().optional(),
-  supervisor_id: z.string().trim().nullable().optional(),
   start_date: z.string().trim().nullable().optional(),
   style_tags: z
     .array(z.string().trim().min(1, "风格标签不能为空"))
@@ -89,7 +87,7 @@ export const ProjectBaseSchema = z.object({
   status: ProjectStatusSchema,
   // 创建时间
   created_at: z.iso.datetime("无效的时间格式").nullable().optional(),
-});
+}).strict();
 
 /**
  * 创建项目校验 (POST)

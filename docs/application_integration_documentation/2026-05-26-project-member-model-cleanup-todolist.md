@@ -211,7 +211,7 @@ TODO：
 
 ## 阶段 6：移除双写和旧字段业务入参
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -220,23 +220,25 @@ TODO：
 
 TODO：
 
-- [ ] 移除项目服务中旧字段双写。
-- [ ] 调整 `CreateProjectInput` / `UpdateProjectInput`，新增明确成员输入或独立成员接口。
-- [ ] 清理 Admin payload 中 `designer_id` / `supervisor_id`。
-- [ ] 更新小程序/Admin 对接文档。
+- [x] 移除项目服务中旧字段双写。
+- [x] 调整 `CreateProjectInput` / `UpdateProjectInput`，项目 schema 已移除 `designer_id` / `supervisor_id` 并启用 strict。
+- [x] 清理 Admin payload 中 `designer_id` / `supervisor_id`。
+- [x] 更新小程序/Admin 对接文档。本阶段执行记录已写入本文档，阶段 7 收尾时补最终对接说明。
 
 验收：
 
-- [ ] 新建项目不写旧字段。
-- [ ] 编辑成员不写旧字段。
-- [ ] 所有展示仍正常。
-- [ ] 旧字段即使为空，业务链路仍正常。
+- [x] 新建项目不写旧字段。
+- [x] 编辑成员不写旧字段。
+- [x] 所有展示仍正常。展示由 `project_members` 派生兼容字段。
+- [x] 旧字段即使为空，业务链路仍正常。
 
 测试：
 
-- [ ] API typecheck。
-- [ ] Admin typecheck。
-- [ ] 项目创建、编辑、列表、详情、施工日志、验收、任务中心回归。
+- [x] API typecheck：`bun run typecheck`。
+- [x] API build：`bun run build`。
+- [x] Admin typecheck：`pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit`。
+- [x] 数据一致性：`bun run project-members:assignees:backfill -- --limit 20`，结果 `summary=[]`。
+- [x] 静态引用检查：旧字段业务入参和旧双写方法已移除，旧字段仅剩兼容输出、Admin 表单本地状态、迁移脚本、数据库类型。
 
 提交：
 

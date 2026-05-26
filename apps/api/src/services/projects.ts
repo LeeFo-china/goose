@@ -714,14 +714,6 @@ class ProjectService {
             ...input.payload,
             tenant_id: tenantId,
         });
-        await projectMemberService.createInitialLegacyProjectMembers(
-            String(project.id),
-            {
-                designer_id: input.payload.designer_id,
-                supervisor_id: input.payload.supervisor_id,
-            },
-            tenantId,
-        );
         this.invalidatePublicProjectsCache();
         this.invalidatePublicProjectCache(String(project.id));
 
@@ -800,10 +792,6 @@ class ProjectService {
                 input.payload,
                 tenantId,
             );
-        await projectMemberService.syncLegacyProjectMembers(input.projectId, {
-            designer_id: input.payload.designer_id,
-            supervisor_id: input.payload.supervisor_id,
-        }, tenantId);
         this.invalidatePublicProjectsCache();
         this.invalidatePublicProjectCache(input.projectId);
         this.invalidatePublicProjectMembersCache(input.projectId);
@@ -902,16 +890,6 @@ class ProjectService {
             }
         }
 
-        const employeeIds = [input.designer_id, input.supervisor_id]
-            .filter((item): item is string => Boolean(item));
-        const uniqueEmployeeIds = Array.from(new Set(employeeIds));
-        const employeeCount = await projectRepository.countEmployeesInTenant({
-            employeeIds: uniqueEmployeeIds,
-            tenantId,
-        });
-        if (employeeCount !== uniqueEmployeeIds.length) {
-            throw Errors.badRequest("设计师或监理不存在或不属于当前租户");
-        }
     }
 
     private async listEmployeeCandidates(input: {

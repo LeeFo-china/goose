@@ -479,24 +479,6 @@ class ProjectRepository {
     return data;
   }
 
-  async countEmployeesInTenant(input: { employeeIds: string[]; tenantId: string }) {
-    if (input.employeeIds.length === 0) {
-      return 0;
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("employees")
-      .select("id")
-      .in("id", input.employeeIds)
-      .eq("tenant_id", input.tenantId);
-
-    if (error) {
-      throw Errors.dbError("校验项目成员失败", error);
-    }
-
-    return (data || []).length;
-  }
-
   async listCreateCustomers(input: {
     filters: ProjectCreateCustomerFilters;
     from: number;

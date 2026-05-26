@@ -169,27 +169,6 @@ class ProjectMemberRepository {
     return data as unknown as ProjectMemberRow;
   }
 
-  async createMany(input: Array<{
-    project_id: string;
-    employee_id: string;
-    role_code: ProjectMemberRoleCode;
-    role_name: string | null;
-    is_primary: boolean;
-    sort_order: number | null;
-  }>) {
-    if (input.length === 0) {
-      return;
-    }
-
-    const { error } = await SupabaseDB.getAdminClient()
-      .from("project_members")
-      .insert(input);
-
-    if (error) {
-      throw Errors.dbError("创建项目成员失败", error);
-    }
-  }
-
   async getById(projectId: string, memberId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
@@ -272,27 +251,6 @@ class ProjectMemberRepository {
     }
   }
 
-  async findActiveByProjectRoleEmployee(
-    projectId: string,
-    roleCode: ProjectMemberRoleCode,
-    employeeId: string,
-  ) {
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("project_members")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("role_code", roleCode)
-      .eq("employee_id", employeeId)
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (error) {
-      throw Errors.dbError("查询项目成员失败", error);
-    }
-
-    return (data || null) as { id: string } | null;
-  }
-
   async findActiveByProjectEmployee(projectId: string, employeeId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_members")
@@ -310,27 +268,6 @@ class ProjectMemberRepository {
     return (data || null) as { id: string; role_code: string } | null;
   }
 
-  async softDeletePrimaryRoleMembers(
-    projectId: string,
-    roleCode: ProjectMemberRoleCode,
-  ) {
-    const now = new Date().toISOString();
-    const { error } = await SupabaseDB.getAdminClient()
-      .from("project_members")
-      .update({
-        deleted_at: now,
-        updated_at: now,
-      })
-      .eq("project_id", projectId)
-      .eq("role_code", roleCode)
-      .eq("is_primary", true)
-      .is("deleted_at", null)
-      .select("id");
-
-    if (error) {
-      throw Errors.dbError("删除项目主成员失败", error);
-    }
-  }
 }
 
 export const projectMemberRepository = new ProjectMemberRepository();

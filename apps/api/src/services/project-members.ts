@@ -63,11 +63,6 @@ export type ProjectPrimaryAssignee = {
   } | null;
 };
 
-const LEGACY_PROJECT_MEMBER_ROLE_CODES: ProjectMemberRoleCode[] = [
-  "designer",
-  "supervisor",
-];
-
 const DIRECT_PROJECT_MEMBER_FALLBACK_ROLE_CODE: ProjectMemberRoleCode =
   "construction_manager";
 
@@ -189,24 +184,6 @@ class ProjectMemberService {
       : PROJECT_MEMBER_ROLE_CONFIG[roleCode].sortOrder;
   }
 
-  private async syncLegacyProjectColumn(
-    projectId: string,
-    roleCode: ProjectMemberRoleCode,
-    employeeId: string | null,
-    tenantId?: string | null,
-  ) {
-    if (!LEGACY_PROJECT_MEMBER_ROLE_CODES.includes(roleCode)) {
-      return;
-    }
-
-    const patch =
-      roleCode === "designer"
-        ? { designer_id: employeeId }
-        : { supervisor_id: employeeId };
-
-    await projectRepository.update(projectId, patch, tenantId);
-  }
-
   async listProjectMembers(projectId: string) {
     const rows = await projectMemberRepository.listActiveByProjectId(projectId);
     return rows.map((item) => this.serializeMember(item));
@@ -314,15 +291,6 @@ class ProjectMemberService {
       sort_order: sortOrder,
     });
 
-    if (input.is_primary) {
-      await this.syncLegacyProjectColumn(
-        projectId,
-        roleCode,
-        input.employee_id,
-        tenantId,
-      );
-    }
-
     return this.serializeMember(row);
   }
 
@@ -378,41 +346,7 @@ class ProjectMemberService {
       ...(nextSortOrder !== undefined ? { sort_order: nextSortOrder } : {}),
     });
 
-    const serialized = this.serializeMember(row);
-
-    if (
-      serializedExisting.is_primary &&
-      serializedExisting.role_code !== serialized.role_code &&
-      (serializedExisting.role_code === "designer" ||
-        serializedExisting.role_code === "supervisor")
-    ) {
-      await this.syncLegacyProjectColumn(
-        projectId,
-        serializedExisting.role_code,
-        null,
-        tenantId,
-      );
-    }
-
-    if (serialized.role_code === "designer" || serialized.role_code === "supervisor") {
-      if (serialized.is_primary) {
-        await this.syncLegacyProjectColumn(
-          projectId,
-          serialized.role_code,
-          serialized.employee_id,
-          tenantId,
-        );
-      } else if (serializedExisting.is_primary) {
-        await this.syncLegacyProjectColumn(
-          projectId,
-          serialized.role_code,
-          null,
-          tenantId,
-        );
-      }
-    }
-
-    return serialized;
+    return this.serializeMember(row);
   }
 
   async deleteProjectMember(
@@ -437,127 +371,6 @@ class ProjectMemberService {
       throw Errors.badRequest("项目成员不存在");
     }
 
-    if (
-      (serialized.role_code === "designer" || serialized.role_code === "supervisor") &&
-      serialized.is_primary
-    ) {
-      await this.syncLegacyProjectColumn(
-        projectId,
-        serialized.role_code,
-        null,
-        tenantId,
-      );
-    }
-  }
-
-  async syncLegacyProjectMembers(projectId: string, input: {
-    designer_id?: string | null;
-    supervisor_id?: string | null;
-  }, tenantId?: string | null) {
-    await this.assertProjectExists(projectId, tenantId);
-
-    if (input.designer_id !== undefined) {
-      await this.syncPrimaryMemberByLegacyRole(
-        projectId,
-        "designer",
-        input.designer_id,
-        tenantId,
-      );
-    }
-
-    if (input.supervisor_id !== undefined) {
-      await this.syncPrimaryMemberByLegacyRole(
-        projectId,
-        "supervisor",
-        input.supervisor_id,
-        tenantId,
-      );
-    }
-  }
-
-  async createInitialLegacyProjectMembers(projectId: string, input: {
-    designer_id?: string | null;
-    supervisor_id?: string | null;
-  }, tenantId?: string | null) {
-    await this.assertProjectExists(projectId, tenantId);
-
-    const rows: Array<{
-      project_id: string;
-      employee_id: string;
-      role_code: ProjectMemberRoleCode;
-      role_name: string;
-      is_primary: boolean;
-      sort_order: number;
-    }> = [];
-
-    if (input.designer_id) {
-      await this.assertEmployeeOperable(input.designer_id, tenantId);
-      rows.push({
-        project_id: projectId,
-        employee_id: input.designer_id,
-        role_code: "designer",
-        role_name: this.getResolvedRoleName("designer", null),
-        is_primary: true,
-        sort_order: this.getResolvedSortOrder("designer", null),
-      });
-    }
-
-    if (input.supervisor_id) {
-      await this.assertEmployeeOperable(input.supervisor_id, tenantId);
-      rows.push({
-        project_id: projectId,
-        employee_id: input.supervisor_id,
-        role_code: "supervisor",
-        role_name: this.getResolvedRoleName("supervisor", null),
-        is_primary: true,
-        sort_order: this.getResolvedSortOrder("supervisor", null),
-      });
-    }
-
-    await projectMemberRepository.createMany(rows);
-  }
-
-  private async syncPrimaryMemberByLegacyRole(
-    projectId: string,
-    roleCode: "designer" | "supervisor",
-    employeeId: string | null,
-    tenantId?: string | null,
-  ) {
-    if (!employeeId) {
-      await projectMemberRepository.softDeletePrimaryRoleMembers(projectId, roleCode);
-      return;
-    }
-
-    await this.assertEmployeeOperable(employeeId, tenantId);
-
-    const roleName = this.getResolvedRoleName(roleCode, null);
-    const sortOrder = this.getResolvedSortOrder(roleCode, null);
-
-    await projectMemberRepository.setRoleMembersNonPrimary(projectId, roleCode);
-
-    const existing = await projectMemberRepository.findActiveByProjectRoleEmployee(
-      projectId,
-      roleCode,
-      employeeId,
-    );
-
-    if (existing) {
-      await projectMemberRepository.update(projectId, existing.id, {
-        role_name: roleName,
-        is_primary: true,
-        sort_order: sortOrder,
-      });
-      return;
-    }
-
-    await projectMemberRepository.create({
-      project_id: projectId,
-      employee_id: employeeId,
-      role_code: roleCode,
-      role_name: roleName,
-      is_primary: true,
-      sort_order: sortOrder,
-    });
   }
 }
 
