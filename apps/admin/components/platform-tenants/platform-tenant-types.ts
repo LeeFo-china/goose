@@ -32,7 +32,7 @@ export type PlatformTenantEmployeeLite = {
   name: string | null;
   phone: string | null;
   status: string | null;
-  department_id: string | null;
+  tenant_department_id: string | null;
   post_id: string | null;
   role: string | null;
   created_at: string | null;

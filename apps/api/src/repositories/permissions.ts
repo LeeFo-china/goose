@@ -56,13 +56,11 @@ export type EmployeePermissionContextRecord = {
         id: string | null;
         alias_name: string | null;
         code: string | null;
-        legacy_department_id: string | null;
       }
       | Array<{
         id: string | null;
         alias_name: string | null;
         code: string | null;
-        legacy_department_id: string | null;
       }>
       | null;
     post:
@@ -456,7 +454,7 @@ class PermissionRepository {
         phone,
         avatar,
         tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
         post:posts!employees_post_id_fkey(name)
       `)
       .eq("id", id)
@@ -483,7 +481,7 @@ class PermissionRepository {
         phone,
         avatar,
         tenant:tenants!employees_tenant_id_fkey(id, name, slug, status),
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code, legacy_department_id),
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
         post:posts!employees_post_id_fkey(name)
       `)
       .eq("user_id", authUserId)

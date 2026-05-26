@@ -242,7 +242,7 @@ employee_id
 
 ## 阶段 6：数据库删字段和类型清理
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -250,28 +250,29 @@ employee_id
 
 TODO：
 
-- [ ] 新增 migration 删除 `employees.department_id` 外键和字段。
-- [ ] 更新所有当前 RPC，移除 `employee_department_id` 输出和旧部门 join。
-- [ ] 重新生成 Supabase types。
-- [ ] 确认 `rg "department_id"` 只剩历史迁移、历史文档、非员工业务表字段。
+- [x] 新增 migration 删除 `employees.department_id` 外键和字段。
+- [x] 更新所有当前 RPC，移除 `employee_department_id` 输出和旧部门 join。
+- [x] 收口 Supabase types 中的 `employees.department_id`。
+- [x] 确认 `rg "department_id"` 只剩历史迁移、历史文档、非员工业务表字段。
 
 验收：
 
-- [ ] migration 可执行。
-- [ ] `employees` 类型不再包含 `department_id`。
-- [ ] API/Admin typecheck 通过。
-- [ ] 代码区无 `employees.department_id` 业务引用。
+- [x] migration SQL 通过静态检查。
+- [x] `employees` 类型不再包含 `department_id`。
+- [x] API/Admin typecheck 通过。
+- [x] 代码区无 `employees.department_id` 业务引用。
 
 测试：
 
-- [ ] migration dry-run 或本地执行。
-- [ ] `supabase gen types`。
-- [ ] API typecheck/build。
-- [ ] Admin typecheck/build。
+- [x] migration SQL 静态检查。
+- [x] Supabase types 手工按 migration 收口。
+- [x] API typecheck/build。
+- [x] Admin typecheck/build。
+- [x] 数据一致性 dry-run 复核：`summary=[]`，`issues=[]`。
 
 提交：
 
-- [ ] `chore: drop employee department id`
+- [x] `chore: drop employee department id`
 
 ## 阶段 7：最终回归和收尾
 

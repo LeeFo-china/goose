@@ -88,7 +88,7 @@ class PostsService {
   async createPost(input: CreateTenantPostInput, tenantId?: string | null) {
     const scopedTenantId = this.requireTenantId(tenantId);
     const code = await this.generateUniquePostCode(scopedTenantId);
-    const departmentId = input.tenant_department_id || input.department_id;
+    const departmentId = input.tenant_department_id;
     if (!departmentId) {
       throw Errors.badRequest("请先选择部门");
     }
@@ -97,7 +97,7 @@ class PostsService {
       tenantId: scopedTenantId,
     });
 
-    const { department_id, tenant_department_id, ...postInput } = input;
+    const { tenant_department_id, ...postInput } = input;
     const normalized = {
       ...postInput,
       code,

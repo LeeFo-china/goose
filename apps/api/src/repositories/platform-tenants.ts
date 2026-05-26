@@ -60,7 +60,7 @@ export type PlatformTenantEmployeeLite = {
   name: string | null;
   phone: string | null;
   status: string | null;
-  department_id: string | null;
+  tenant_department_id: string | null;
   post_id: string | null;
   role: string | null;
   created_at: string | null;
@@ -239,7 +239,7 @@ class PlatformTenantRepository {
         name: input.admin.name,
         phone: input.admin.phone,
         authUserId: input.admin.auth_user_id ?? null,
-        departmentId: department?.id ?? null,
+        departmentCode: department?.code ?? null,
         postId: post?.id ?? null,
       });
       adminEmployeeId = adminEmployee.id;
@@ -360,7 +360,7 @@ class PlatformTenantRepository {
     }
 
     const { data, error } = await this.from("employees")
-      .select("id,tenant_id,name,phone,status,department_id,post_id,created_at")
+      .select("id,tenant_id,name,phone,status,tenant_department_id,post_id,created_at")
       .in("id", uniqueIds);
 
     if (error) {
@@ -408,7 +408,7 @@ class PlatformTenantRepository {
     }
 
     const { data, error } = await this.from("employees")
-      .select("id,tenant_id,name,phone,status,department_id,post_id,created_at")
+      .select("id,tenant_id,name,phone,status,tenant_department_id,post_id,created_at")
       .eq("tenant_id", tenantId)
       .in("id", employeeIds)
       .order("created_at", { ascending: true });
@@ -649,16 +649,22 @@ class PlatformTenantRepository {
     name: string;
     phone: string;
     authUserId: string | null;
-    departmentId: string | null;
+    departmentCode: string | null;
     postId: string | null;
   }) {
+    const tenantDepartmentId = input.departmentCode
+      ? await this.findTenantDepartmentIdByCode({
+        tenantId: input.tenantId,
+        code: input.departmentCode,
+      })
+      : null;
     const { data, error } = await this.from("employees")
       .insert({
         tenant_id: input.tenantId,
         name: input.name,
         phone: input.phone,
         user_id: input.authUserId,
-        department_id: input.departmentId,
+        tenant_department_id: tenantDepartmentId,
         post_id: input.postId,
         status: "active",
         avatar: null,
@@ -671,6 +677,23 @@ class PlatformTenantRepository {
     }
 
     return data as { id: string };
+  }
+
+  private async findTenantDepartmentIdByCode(input: {
+    tenantId: string;
+    code: string;
+  }) {
+    const { data, error } = await this.from("tenant_departments")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("code", input.code)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询租户部门配置失败", error);
+    }
+
+    return (data as { id: string } | null)?.id ?? null;
   }
 
   private async assignEmployeeRole(employeeId: string, roleId: string) {

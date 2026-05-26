@@ -113,7 +113,6 @@ class EmployeeController extends TenantBaseController<
 
   private normalizeEmployeeDepartment<T extends object>(employee: T) {
     const source = employee as Record<string, unknown>;
-    const { department_id: _departmentId, department: _legacyDepartment, ...rest } = source;
     const tenantDepartment = this.asRecord(source.tenant_department);
     const tenantDepartmentId =
       typeof source.tenant_department_id === "string"
@@ -131,7 +130,7 @@ class EmployeeController extends TenantBaseController<
         : null;
 
     return {
-      ...rest,
+      ...source,
       avatar: resolveStoredFileUrl(
         typeof source.avatar === "string" ? source.avatar : null,
       ),

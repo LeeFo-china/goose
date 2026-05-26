@@ -1303,7 +1303,6 @@ export type Database = {
         Row: {
           avatar: string | null
           created_at: string | null
-          department_id: string | null
           id: string
           last_login_time: string | null
           name: string | null
@@ -1317,7 +1316,6 @@ export type Database = {
         Insert: {
           avatar?: string | null
           created_at?: string | null
-          department_id?: string | null
           id?: string
           last_login_time?: string | null
           name?: string | null
@@ -1331,7 +1329,6 @@ export type Database = {
         Update: {
           avatar?: string | null
           created_at?: string | null
-          department_id?: string | null
           id?: string
           last_login_time?: string | null
           name?: string | null
@@ -1343,13 +1340,6 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "employees_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "employees_post_id_fkey"
             columns: ["post_id"]

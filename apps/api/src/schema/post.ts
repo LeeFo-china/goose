@@ -47,10 +47,9 @@ export const CreatePostSchema = PostBaseSchema.omit({
 
 export const CreateTenantPostSchema = CreatePostSchema.extend({
   code: PostCodeValueSchema.optional(),
-  department_id: z.uuid("无效的部门 ID").optional(),
   tenant_department_id: z.uuid("无效的租户部门 ID").optional(),
 }).refine(
-  (value) => Boolean(value.tenant_department_id || value.department_id),
+  (value) => Boolean(value.tenant_department_id),
   "请先选择部门",
 );
 
