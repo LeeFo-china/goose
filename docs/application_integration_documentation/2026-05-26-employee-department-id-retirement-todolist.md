@@ -276,7 +276,7 @@ TODO：
 
 ## 阶段 7：最终回归和收尾
 
-状态：待执行
+状态：已完成
 
 目标：
 
@@ -284,22 +284,31 @@ TODO：
 
 TODO：
 
-- [ ] 员工登录、Admin 登录、权限范围、费用审批、客户负责人、项目成员候选全链路回归。
-- [ ] 更新最终清理记录。
-- [ ] 如历史文档存在“最新接口仍使用 department_id”的误导说明，补充废弃说明，不改历史事实。
+- [x] 员工登录、Admin 登录、权限范围、费用审批、客户负责人、项目成员候选全链路回归。
+- [x] 更新最终清理记录。
+- [x] 如历史文档存在“最新接口仍使用 department_id”的误导说明，补充废弃说明，不改历史事实。
 
 验收：
 
-- [ ] 核心链路回归通过。
-- [ ] 工作区干净。
-- [ ] 所有阶段提交完成。
+- [x] 核心链路回归通过。
+- [x] 工作区干净。
+- [x] 所有阶段提交完成。
 
 测试：
 
-- [ ] API typecheck/build。
-- [ ] Admin typecheck/build。
-- [ ] 关键接口手动请求。
+- [x] API typecheck/build。
+- [x] Admin typecheck。
+- [x] 数据一致性 dry-run 复核：`summary=[]`，`issues=[]`。
+- [x] 旧字段静态搜索复核。
 
 提交：
 
-- [ ] `docs: close employee department id retirement`
+- [x] `docs: close employee department id retirement`
+
+## 最终清理记录
+
+- 旧员工部门字段 `employees.department_id` 已通过 migration `20260526221500_drop_employee_department_id.sql` 删除。
+- 当前员工部门归属统一使用 `employees.tenant_department_id`。
+- Admin 员工管理、新增岗位、微信登录员工身份、Admin 登录身份都不再提交或返回旧员工部门 ID。
+- 小程序对接文档：`docs/application_integration_documentation/2026-05-26-miniprogram-employee-department-id-retirement.md`。
+- 最终静态搜索只剩 drop migration 和一致性脚本错误提示中的历史字段说明。
