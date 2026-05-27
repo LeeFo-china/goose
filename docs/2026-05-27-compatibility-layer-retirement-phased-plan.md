@@ -168,6 +168,17 @@ Admin 仍存在旧上传入口：
 - `bun run admin:build` 和 `bun run api:build` 通过。
 - 提交独立 commit。
 
+### 2026-05-27 复核结论
+
+暂不清理。
+
+- `/marketing-pages` 是租户后台“营销活动”页面的当前业务接口，不是只为兼容保留的旧入口。
+- `/platform/marketing-pages` 是平台超管 H5 活动页接口，与租户后台作用域不同。
+- `/public/marketing-pages` 仍服务无租户 slug 的平台 H5 页面。
+- `/public/tenants/:tenantSlug/marketing-pages` 服务租户 H5 页面。
+
+本阶段没有可安全删除项。若后续产品决定取消租户内 H5 活动页管理，应另立迁移阶段，先迁移 Admin `/marketing` 页面和历史分享链接。
+
 ## 阶段 5：资料接口别名清理
 
 ### 目标
@@ -185,6 +196,16 @@ Admin 仍存在旧上传入口：
 - 登录态资料页、客户自助资料页可用。
 - `bun run api:build` 通过。
 - 提交独立 commit。
+
+### 2026-05-27 复核结论
+
+暂不清理。
+
+- `/auth/me/profile` 返回通用登录用户资料和角色信息。
+- `/customer/profile` 返回客户身份资料。
+- 两者语义不同，不是同一接口的兼容别名。
+
+本阶段不删除接口，仅保留边界说明。
 
 ## 阶段 6：旧命名路由清理
 
@@ -208,6 +229,16 @@ Admin 仍存在旧上传入口：
 - `bun run api:build` 通过。
 - 提交独立 commit。
 
+### 2026-05-27 复核结论
+
+暂不清理。
+
+- `/project_log_comments` 仍是小程序项目详情文档中的当前评论接口。
+- `/customer_follow_ups/:id/comments` 仍对应客户跟进评论资源。
+- `/create_project_page` 是既有创建项目聚合数据入口。
+
+这些路由命名偏旧，但仍是业务入口。清理前必须先补新路由、发小程序/Admin 迁移文档，并确认客户端完成切换。
+
 ## 阶段 7：身份迁移遗留观测清理
 
 ### 目标
@@ -224,3 +255,13 @@ Admin 仍存在旧上传入口：
 - 认证主流程回归通过。
 - `bun run api:build` 通过。
 - 提交独立 commit。
+
+### 2026-05-27 复核结论
+
+暂不清理。
+
+- `AUTH_IDENTITY_SOURCE=membership` 仍有灰度验收和一个版本周期稳定运行要求。
+- `platform/identity-diagnostics` 仍用于排查旧字段与 membership 不一致。
+- 用户身份 dual-write 和 diagnostics 属于认证安全闭环，不在本轮兼容层清理中删除。
+
+后续需要单独执行身份模型退休阶段，包含生产观察窗口、回滚方案和认证主流程回归。
