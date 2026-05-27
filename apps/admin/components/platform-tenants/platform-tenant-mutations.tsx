@@ -255,7 +255,10 @@ function TenantDialog({
                       <Input
                         id="create-tenant-admin-phone"
                         name="admin_phone"
-                        pattern="^1[3-9]\\d{9}$"
+                        inputMode="tel"
+                        maxLength={11}
+                        pattern="1[3-9][0-9]{9}"
+                        placeholder="请输入 11 位手机号"
                         required
                         disabled={pending}
                       />
