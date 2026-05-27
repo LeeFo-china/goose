@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState, useTransition } from "react";
 import { BriefcaseBusiness, Loader2, Plus, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -16,7 +16,6 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -31,10 +30,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
-  FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -159,7 +156,6 @@ export function DepartmentPostConfigDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const [postName, setPostName] = useState("");
   const [error, setError] = useState("");
   const [localConfig, setLocalConfig] = useState(departmentPostRuleConfig);
   const [selectedCodes, setSelectedCodes] = useState<string[]>(() =>
@@ -170,6 +166,7 @@ export function DepartmentPostConfigDialog({
   const departmentCode = department.code || "";
   const departmentId = department.tenant_department_id || department.id || "";
   const disabled = !departmentCode;
+  const trimmedKeyword = keyword.trim();
   const normalizedKeyword = keyword.trim().toLowerCase();
   const filteredPosts = useMemo(
     () =>
@@ -180,6 +177,16 @@ export function DepartmentPostConfigDialog({
         : localConfig.post_options,
     [localConfig.post_options, normalizedKeyword],
   );
+  const exactNamePost = useMemo(
+    () =>
+      trimmedKeyword
+        ? localConfig.post_options.find((post) =>
+          normalizePostName(post.name) === normalizePostName(trimmedKeyword)
+        )
+        : undefined,
+    [localConfig.post_options, trimmedKeyword],
+  );
+  const canCreatePost = Boolean(trimmedKeyword && departmentId && !exactNamePost);
   const dirty =
     JSON.stringify(sortCodes(selectedCodes)) !==
     JSON.stringify(sortCodes(baselineCodes));
@@ -195,7 +202,6 @@ export function DepartmentPostConfigDialog({
     setSelectedCodes(nextCodes);
     setBaselineCodes(nextCodes);
     setKeyword("");
-    setPostName("");
     setError("");
   }, [department, departmentPostRuleConfig, open]);
 
@@ -229,13 +235,18 @@ export function DepartmentPostConfigDialog({
       setSelectedCodes((current) => Array.from(new Set([...current, post.code])));
     }
     setKeyword(post.name);
-    setPostName("");
     setError("");
     toast.success(
       alreadySelected
         ? `岗位「${post.name}」已在当前配置中`
         : `已选中已有岗位「${post.name}」`,
     );
+  }
+
+  function handleKeywordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || !canCreatePost) return;
+    event.preventDefault();
+    createPostFromKeyword();
   }
 
   function save() {
@@ -261,9 +272,8 @@ export function DepartmentPostConfigDialog({
     });
   }
 
-  function createPost(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const name = postName.trim();
+  function createPostFromKeyword() {
+    const name = trimmedKeyword;
     if (!name) {
       setError("请填写岗位名称");
       return;
@@ -292,7 +302,7 @@ export function DepartmentPostConfigDialog({
         setLocalConfig(nextConfig);
         setSelectedCodes(nextCodes);
         setBaselineCodes(nextCodes);
-        setPostName("");
+        setKeyword("");
         onSaved?.(nextConfig);
         toast.success("岗位已新增");
       } catch (err) {
@@ -320,55 +330,6 @@ export function DepartmentPostConfigDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3 px-5">
-          <form className="rounded-md border bg-muted/20 p-3" onSubmit={createPost}>
-            <FieldGroup className="gap-2">
-              <Field className="gap-2">
-                <FieldLabel htmlFor={`create-post-${department.id}`}>
-                  新增岗位
-                </FieldLabel>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <InputGroup>
-                    <InputGroupInput
-                      id={`create-post-${department.id}`}
-                      value={postName}
-                      placeholder="填写岗位名称"
-                      maxLength={50}
-                      disabled={pending || !departmentId}
-                      onChange={(event) => setPostName(event.target.value)}
-                    />
-                    {postName ? (
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupButton
-                          type="button"
-                          aria-label="清空岗位名称"
-                          size="icon-xs"
-                          disabled={pending}
-                          onClick={() => setPostName("")}
-                        >
-                          <X aria-hidden="true" />
-                        </InputGroupButton>
-                      </InputGroupAddon>
-                    ) : null}
-                  </InputGroup>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    className="sm:h-9 sm:w-[92px]"
-                    disabled={pending || !postName.trim() || !departmentId}
-                  >
-                    {pending ? (
-                      <Loader2 className="animate-spin" data-icon="inline-start" />
-                    ) : (
-                      <Plus data-icon="inline-start" />
-                    )}
-                    新增
-                  </Button>
-                </div>
-              </Field>
-            </FieldGroup>
-          </form>
-
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={dirty ? "warning" : "secondary"}>
               {dirty ? "未保存" : "已保存"}
@@ -388,29 +349,39 @@ export function DepartmentPostConfigDialog({
           </div>
 
           <Command shouldFilter={false} className="rounded-md border">
-            <div className="flex items-center border-b pr-2">
-              <CommandInput
-                value={keyword}
-                placeholder="搜索岗位名称或编码"
-                disabled={pending}
-                onValueChange={setKeyword}
-              />
-              {keyword ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 shrink-0"
-                  aria-label="清空岗位搜索"
-                  disabled={pending}
-                  onClick={() => setKeyword("")}
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              ) : null}
-            </div>
+            <Field className="gap-2 border-b p-3">
+              <FieldLabel htmlFor={`post-search-create-${department.id}`}>
+                搜索或新增岗位
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  id={`post-search-create-${department.id}`}
+                  value={keyword}
+                  placeholder="输入岗位名称或编码"
+                  disabled={pending || !departmentId}
+                  maxLength={50}
+                  onKeyDown={handleKeywordKeyDown}
+                  onChange={(event) => setKeyword(event.target.value)}
+                />
+                {keyword ? (
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      type="button"
+                      aria-label="清空岗位输入"
+                      size="icon-xs"
+                      disabled={pending}
+                      onClick={() => setKeyword("")}
+                    >
+                      <X aria-hidden="true" />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                ) : null}
+              </InputGroup>
+            </Field>
             <CommandList className="max-h-[360px]">
-              <CommandEmpty>没有匹配的岗位</CommandEmpty>
+              {!canCreatePost && filteredPosts.length === 0 ? (
+                <CommandEmpty>没有匹配的岗位</CommandEmpty>
+              ) : null}
               <CommandGroup>
                 {filteredPosts.map((post) => {
                   const checked = selectedCodes.includes(post.code);
@@ -445,6 +416,30 @@ export function DepartmentPostConfigDialog({
                     </CommandItem>
                   );
                 })}
+                {canCreatePost ? (
+                  <CommandItem
+                    value={`create ${trimmedKeyword}`}
+                    disabled={pending}
+                    className="cursor-pointer items-start gap-3 border-t py-3"
+                    onSelect={createPostFromKeyword}
+                  >
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                      {pending ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Plus className="size-3.5" aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        创建并加入当前部门：{trimmedKeyword}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {department.name}
+                      </span>
+                    </span>
+                  </CommandItem>
+                ) : null}
               </CommandGroup>
             </CommandList>
           </Command>
@@ -474,23 +469,23 @@ export function DepartmentPostConfigDialog({
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => setOpen(false)}
-          >
-            取消
-          </Button>
-          <Button type="button" size="sm" disabled={pending || !dirty} onClick={save}>
-            {pending ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Save data-icon="inline-start" />
-            )}
-            保存
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => setOpen(false)}
+            >
+              取消
+            </Button>
+            <Button type="button" size="sm" disabled={pending || !dirty} onClick={save}>
+              {pending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Save data-icon="inline-start" />
+              )}
+              保存
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
