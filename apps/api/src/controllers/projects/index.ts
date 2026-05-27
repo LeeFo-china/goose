@@ -791,22 +791,6 @@ class ProjectController extends TenantBaseController<
     return ResponseHandler.success({ success: true });
   }
 
-  @Get("/projects/frontend-visible")
-  //获取游客页可以展示的项目
-  async getFrontendVisibleProjects(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ) {
-    const projects = await projectSer.listPublicProjects();
-
-    return ResponseHandler.success(
-      projects.map((item) =>
-        this.serializeProjectListItem(item)
-      ),
-      "查询成功",
-    );
-  }
-
   @Get("/front/projects")
   async getPublicProjects(request: FastifyRequest, reply: FastifyReply) {
     const projects = await projectSer.listPublicProjects();

@@ -124,7 +124,7 @@ function isVisitorSessionRoute(method: string, url: string) {
 
   if (
     (method === "GET" || method === "HEAD")
-    && (url === "/projects/frontend-visible" || url === "/front/projects" || url.startsWith("/front/projects/"))
+    && (url === "/front/projects" || url.startsWith("/front/projects/"))
   ) {
     return true;
   }
