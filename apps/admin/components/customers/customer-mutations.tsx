@@ -270,7 +270,6 @@ const ALLOWED_AVATAR_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
-const DIRECT_COS_UPLOAD_ENABLED = true;
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -552,35 +551,6 @@ async function uploadCustomerAvatarDirect(file: File) {
   };
 }
 
-async function uploadCustomerAvatarFallback(file: File) {
-  const formData = new FormData();
-  formData.append("scene", "customer_avatar");
-  formData.append("files", file);
-
-  const response = await fetch("/api/backend/uploads/images", {
-    method: "POST",
-    body: formData,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "上传头像失败"));
-  }
-
-  const uploaded = payload.data?.list?.[0] || {};
-  const storageValue = uploaded.storage_path || uploaded.object_key || uploaded.path || uploaded.url;
-  const previewUrl = uploaded.url || storageValue;
-  if (typeof storageValue !== "string" || !storageValue) {
-    throw new Error("头像上传成功但未返回图片地址");
-  }
-
-  return {
-    value: storageValue,
-    previewUrl: buildAvatarPreviewUrl(
-      typeof previewUrl === "string" ? previewUrl : storageValue,
-    ),
-  };
-}
-
 async function uploadCustomerAvatar(file: File) {
   if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
     throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
@@ -590,11 +560,7 @@ async function uploadCustomerAvatar(file: File) {
     throw new Error("头像图片不能超过 2MB");
   }
 
-  if (DIRECT_COS_UPLOAD_ENABLED) {
-    return uploadCustomerAvatarDirect(file);
-  }
-
-  return uploadCustomerAvatarFallback(file);
+  return uploadCustomerAvatarDirect(file);
 }
 
 function buildDefaults(customer?: CustomerRecord): CustomerFormValues {

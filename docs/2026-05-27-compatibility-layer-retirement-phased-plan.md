@@ -74,6 +74,17 @@ Admin 仍存在旧上传入口：
 - `bun run api:build` 通过。
 - 提交独立 commit。
 
+### 执行记录
+
+2026-05-27：
+
+- 员工头像和客户头像已移除 `/api/backend/uploads/images` fallback。
+- H5 营销页图片已改为 COS direct upload。
+- API direct upload 场景已加入 `h5_marketing_page`。
+- `rg "/uploads/images" apps/admin` 无运行时代码命中。
+- `bun run admin:build` 通过。
+- `bun run api:build` 通过。
+
 ## 阶段 3：后端旧上传入口退休
 
 ### 目标
@@ -180,4 +191,3 @@ Admin 仍存在旧上传入口：
 - 认证主流程回归通过。
 - `bun run api:build` 通过。
 - 提交独立 commit。
-

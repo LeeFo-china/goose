@@ -26,7 +26,7 @@
 | Admin 客户头像 | COS 直传 | 已接入 | 预览走 `/uploads/public-url` |
 | 工序验收图片 | COS 直传 | Admin 已接入，小程序待对接 | 场景 `project_acceptance` |
 | 费用审批附件 | COS 直传 | Admin 已接入 | 场景 `expense_request` |
-| H5 活动图片 | 先保持 `/uploads/images` 兼容 | 待逐步切换 | 后续按页面逐个改为直传 |
+| H5 活动图片 | COS 直传 | Admin 已接入 | 场景 `h5_marketing_page` |
 | 360 全景图 | COS 对象存储 | 规划中 | 原图、拼接图、瓦片都应走 COS |
 
 ## URL 有效期建议
@@ -92,10 +92,10 @@ UPLOAD_TIMING_LOG_ENABLED=false
 
 ## 迁移推进顺序
 
-1. 已完成业务继续观察：评论图片、施工日志图片、员工头像、客户头像。
+1. 已完成业务继续观察：评论图片、施工日志图片、员工头像、客户头像、H5 活动图片。
 2. 工序验收图片改为 COS 直传。
 3. 费用审批附件改为 COS 直传。
-4. H5 活动图片改为 COS 直传。
+4. H5 活动图片观察直传稳定性。
 5. 360 全景原图、拼接图、瓦片统一落 COS。
 6. 对旧 Supabase Storage 和历史 URL 做 dry-run、迁移、校验、只读兼容。
 7. 关闭新业务 `/uploads/images` 写入，只保留历史兼容入口。

@@ -50,6 +50,7 @@ const DIRECT_UPLOAD_SCENES = [
   "customer_service",
   "employee_avatar",
   "customer_avatar",
+  "h5_marketing_page",
   "project_acceptance",
   "expense_request",
 ] as const;

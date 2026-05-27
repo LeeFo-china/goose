@@ -102,6 +102,21 @@ type ProjectCaseOptionPagination = {
   totalPages: number;
 };
 
+type DirectUploadInitResult = {
+  object_key: string;
+  storage_path?: string;
+  upload_url: string;
+  method?: "PUT";
+  headers?: Record<string, string>;
+};
+
+type DirectUploadCompleteResult = {
+  url?: string;
+  public_url?: string;
+  object_key?: string;
+  storage_path?: string;
+};
+
 type CaseListItem = {
   projectId?: string;
   title: string;
@@ -419,20 +434,45 @@ async function repairImageFile(input: {
 }
 
 async function uploadEditorImage(file: File) {
-  const formData = new FormData();
-  formData.append("scene", "h5_marketing_page");
-  formData.append("file", file);
-
-  const response = await fetch("/api/backend/uploads/images", {
+  const init = await requestEditor<DirectUploadInitResult>({
+    path: "/uploads/cos/direct-init",
     method: "POST",
-    body: formData,
+    payload: {
+      scene: "h5_marketing_page",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+    },
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "图片上传失败"));
+
+  const uploadResponse = await fetch(init.upload_url, {
+    method: init.method || "PUT",
+    headers: init.headers || { "content-type": file.type },
+    body: file,
+  });
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "");
+    throw new Error(
+      `上传图片到 COS 失败(${uploadResponse.status})${
+        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
+      }`,
+    );
   }
 
-  const url = payload?.data?.list?.[0]?.url;
+  const completed = await requestEditor<DirectUploadCompleteResult>({
+    path: "/uploads/cos/direct-complete",
+    method: "POST",
+    payload: {
+      scene: "h5_marketing_page",
+      filename: file.name,
+      mimetype: file.type,
+      size_bytes: file.size,
+      object_key: init.object_key,
+      etag: uploadResponse.headers.get("etag") || undefined,
+    },
+  });
+
+  const url = completed.url || completed.public_url;
   if (typeof url !== "string" || !url) {
     throw new Error("图片上传成功但未返回地址");
   }
