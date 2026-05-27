@@ -26,6 +26,17 @@ test.describe("admin smoke", () => {
 
     const searchInput = dialog.getByLabel("搜索或新增岗位");
     await expect(searchInput).toBeVisible();
+
+    const firstExistingPost = dialog.getByRole("option").first();
+    await expect(firstExistingPost).toBeVisible();
+    const existingPostName = (await firstExistingPost.innerText()).split("\n")[0]?.trim();
+    if (!existingPostName) {
+      throw new Error("没有找到可用于同名校验的已有岗位");
+    }
+
+    await searchInput.fill(existingPostName);
+    await expect(dialog.getByText(`创建并加入当前部门：${existingPostName}`)).toHaveCount(0);
+
     await searchInput.fill("临时验收岗位X");
 
     await expect(dialog.getByText("创建并加入当前部门：临时验收岗位X")).toBeVisible();

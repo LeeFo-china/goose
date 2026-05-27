@@ -16,7 +16,7 @@ export default defineConfig({
   },
   outputDir: "test-results",
   webServer: {
-    command: "pnpm exec next dev -H 127.0.0.1 -p 3011",
+    command: "node scripts/playwright-dev-server.mjs",
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
