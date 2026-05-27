@@ -125,6 +125,17 @@ scripts/audit-tenant-department-retirement.sh
 - `bun run api:build` 通过。
 - 提交独立 commit。
 
+### 执行记录
+
+2026-05-27：
+
+- 新租户默认部门初始化已改为直接 upsert `tenant_departments`。
+- 初始化不再写旧 `departments`，也不再设置 `legacy_department_id`。
+- 租户管理员员工仍通过 `tenant_department_id` 绑定部门。
+- `departments_count` 继续表示租户部门配置数。
+- `rg "from\\(\"departments\"\\)|from\\('departments'\\)|legacy_department_id" apps/api/src/repositories/platform-tenants.ts` 无命中。
+- `bun run api:build` 通过。
+
 ## 阶段 5：数据库遗留对象删除评估
 
 ### 目标

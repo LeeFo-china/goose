@@ -78,6 +78,12 @@ export type PlatformTenantRoleLite = {
   created_at: string | null;
 };
 
+type PlatformTenantDepartmentLite = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 const EMPTY_USAGE: PlatformTenantUsageStats = {
   employee_count: 0,
   customer_count: 0,
@@ -458,43 +464,10 @@ class PlatformTenantRepository {
   private async upsertDefaultDepartments(
     tenantId: string,
     enabledCodes: string[] = [],
-  ) {
-    const rows = DEPARTMENT_CODE_VALUES.map((code) => ({
-      tenant_id: tenantId,
-      code,
-      name: DepartmentConfig[code].label,
-    }));
-
-    const { data, error } = await this.from("departments")
-      .upsert(rows, { onConflict: "tenant_id,code" })
-      .select("*");
-
-    if (error) {
-      throw Errors.dbError("初始化租户部门失败", error);
-    }
-
-    const departments = (data || []) as Array<{ id: string; code: string; name: string }>;
-    await this.upsertTenantDepartmentConfigs({
-      tenantId,
-      departments,
-      enabledCodes,
-    });
-
-    return departments;
-  }
-
-  private async upsertTenantDepartmentConfigs(input: {
-    tenantId: string;
-    departments: Array<{ id: string; code: string; name: string }>;
-    enabledCodes?: string[];
-  }) {
-    if (input.departments.length === 0) {
-      return;
-    }
-
-    const codes = input.departments.map((department) => department.code);
+  ): Promise<PlatformTenantDepartmentLite[]> {
+    const codes = [...DEPARTMENT_CODE_VALUES];
     const { data: templates, error: templateError } = await this.from("department_templates")
-      .select("id, code, sort")
+      .select("id, code, default_name, sort")
       .in("code", codes);
 
     if (templateError) {
@@ -502,13 +475,18 @@ class PlatformTenantRepository {
     }
 
     const templateMap = new Map(
-      ((templates || []) as Array<{ id: string; code: string; sort: number | null }>)
+      ((templates || []) as Array<{
+        id: string;
+        code: string;
+        default_name: string;
+        sort: number | null;
+      }>)
         .map((template) => [template.code, template]),
     );
     const { data: existingTenantDepartments, error: existingTenantDepartmentsError } =
       await this.from("tenant_departments")
         .select("code, enabled")
-        .eq("tenant_id", input.tenantId)
+        .eq("tenant_id", tenantId)
         .in("code", codes);
 
     if (existingTenantDepartmentsError) {
@@ -519,37 +497,43 @@ class PlatformTenantRepository {
       ((existingTenantDepartments || []) as Array<{ code: string; enabled: boolean }>)
         .map((department) => [department.code, department.enabled]),
     );
-    const enabledCodeSet = new Set(input.enabledCodes ?? []);
-    const rows = input.departments
-      .map((department) => {
-        const template = templateMap.get(department.code);
+    const enabledCodeSet = new Set(enabledCodes);
+    const rows = codes
+      .map((code) => {
+        const template = templateMap.get(code);
         if (!template) {
           return null;
         }
 
         return {
-          tenant_id: input.tenantId,
+          tenant_id: tenantId,
           template_id: template.id,
-          code: department.code,
-          alias_name: department.name,
-          enabled: existingEnabledMap.get(department.code) ?? enabledCodeSet.has(department.code),
+          code,
+          alias_name: DepartmentConfig[code].label || template.default_name,
+          enabled: existingEnabledMap.get(code) ?? enabledCodeSet.has(code),
           sort: template.sort ?? 0,
-          legacy_department_id: department.id,
         };
       })
       .filter(Boolean);
 
     if (rows.length === 0) {
-      return;
+      return [];
     }
 
-    const { error } = await this.from("tenant_departments")
+    const { data, error } = await this.from("tenant_departments")
       .upsert(rows, { onConflict: "tenant_id,code" })
-      .select("id");
+      .select("id, code, alias_name");
 
     if (error) {
       throw Errors.dbError("初始化租户部门配置失败", error);
     }
+
+    return ((data || []) as Array<{ id: string; code: string; alias_name: string }>)
+      .map((department) => ({
+        id: department.id,
+        code: department.code,
+        name: department.alias_name,
+      }));
   }
 
   private async upsertDefaultPosts(tenantId: string) {
