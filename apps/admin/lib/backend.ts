@@ -56,6 +56,28 @@ export function buildBackendUrl(path: string) {
   return `${getBackendBaseUrl()}${normalizedPath}`;
 }
 
+export function shouldUseSecureAdminCookie(request: Request) {
+  const override = process.env.ADMIN_COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "true" || override === "1" || override === "yes") {
+    return true;
+  }
+  if (override === "false" || override === "0" || override === "no") {
+    return false;
+  }
+
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedProto?.split(",")[0]?.trim() === "https") {
+    return true;
+  }
+
+  const host = request.headers.get("host")?.split(":")[0] || "";
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return false;
+  }
+
+  return process.env.NODE_ENV === "production" || new URL(request.url).protocol === "https:";
+}
+
 export async function parseBackendJson<T>(response: Response) {
   const payload = await response.json().catch(() => ({})) as BackendResponse<T>;
 

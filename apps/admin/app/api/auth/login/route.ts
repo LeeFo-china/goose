@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   ADMIN_TOKEN_COOKIE,
   buildBackendUrl,
+  shouldUseSecureAdminCookie,
   type BackendResponse,
   type AdminSession,
 } from "@/lib/backend";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
       value: payload.data.token,
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: shouldUseSecureAdminCookie(request),
       path: "/",
       expires: payload.data.expires_at
         ? new Date(payload.data.expires_at)
