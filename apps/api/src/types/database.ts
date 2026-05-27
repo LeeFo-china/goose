@@ -39,6 +39,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_departments_20260527: {
+        Row: {
+          code: string | null
+          created_at: string | null
+          id: string | null
+          name: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string | null
+          id?: string | null
+          name?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          code?: string | null
+          created_at?: string | null
+          id?: string | null
+          name?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: []
+      }
+      _backup_tenant_department_legacy_20260527: {
+        Row: {
+          code: string | null
+          id: string | null
+          legacy_department_id: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          code?: string | null
+          id?: string | null
+          legacy_department_id?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          code?: string | null
+          id?: string | null
+          legacy_department_id?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: []
+      }
       ai_call_logs: {
         Row: {
           billable: boolean
@@ -930,6 +975,156 @@ export type Database = {
           },
         ]
       }
+      customer_service_ticket_actions: {
+        Row: {
+          action: string
+          content: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          operator_auth_user_id: string | null
+          operator_employee_id: string | null
+          tenant_id: string
+          ticket_id: string
+          to_status: string | null
+        }
+        Insert: {
+          action: string
+          content?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          tenant_id: string
+          ticket_id: string
+          to_status?: string | null
+        }
+        Update: {
+          action?: string
+          content?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          tenant_id?: string
+          ticket_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_service_ticket_actions_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_ticket_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_ticket_actions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "customer_service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_service_tickets: {
+        Row: {
+          assigned_employee_id: string | null
+          category: string
+          closed_at: string | null
+          content: string
+          created_at: string
+          customer_id: string
+          id: string
+          images: Json
+          priority: string
+          project_id: string | null
+          resolved_at: string | null
+          status: string
+          tenant_id: string
+          ticket_no: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_employee_id?: string | null
+          category?: string
+          closed_at?: string | null
+          content: string
+          created_at?: string
+          customer_id: string
+          id?: string
+          images?: Json
+          priority?: string
+          project_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          tenant_id: string
+          ticket_no: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_employee_id?: string | null
+          category?: string
+          closed_at?: string | null
+          content?: string
+          created_at?: string
+          customer_id?: string
+          id?: string
+          images?: Json
+          priority?: string
+          project_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          tenant_id?: string
+          ticket_no?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_service_tickets_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_tickets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_tickets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_service_tickets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_sources: {
         Row: {
           assigned_at: string | null
@@ -1024,6 +1219,70 @@ export type Database = {
           },
         ]
       }
+      customer_status_transition_logs: {
+        Row: {
+          action: string
+          created_at: string
+          customer_id: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          operator_auth_user_id: string | null
+          operator_employee_id: string | null
+          reason: string | null
+          tenant_id: string
+          to_status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          customer_id: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          reason?: string | null
+          tenant_id: string
+          to_status: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          customer_id?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          reason?: string | null
+          tenant_id?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_status_transition_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_status_transition_logs_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_status_transition_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           avatar: string | null
@@ -1036,6 +1295,7 @@ export type Database = {
           name: string | null
           owner_id: string | null
           phone: string | null
+          property_id: string | null
           self_registered_at: string | null
           source: string | null
           status: string | null
@@ -1054,6 +1314,7 @@ export type Database = {
           name?: string | null
           owner_id?: string | null
           phone?: string | null
+          property_id?: string | null
           self_registered_at?: string | null
           source?: string | null
           status?: string | null
@@ -1072,6 +1333,7 @@ export type Database = {
           name?: string | null
           owner_id?: string | null
           phone?: string | null
+          property_id?: string | null
           self_registered_at?: string | null
           source?: string | null
           status?: string | null
@@ -1085,6 +1347,13 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
           {
@@ -1183,7 +1452,7 @@ export type Database = {
         }
         Relationships: []
       }
-      departments: {
+      departments_retired_20260527: {
         Row: {
           code: string
           created_at: string | null
@@ -1259,6 +1528,106 @@ export type Database = {
             columns: ["permission_id"]
             isOneToOne: false
             referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_personalization_rules: {
+        Row: {
+          content_json: Json
+          created_at: string
+          created_by: string | null
+          employee_id: string | null
+          ends_at: string | null
+          id: string
+          post_id: string | null
+          priority: number
+          role_code: string | null
+          scene: string
+          starts_at: string | null
+          status: string
+          tenant_department_id: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          content_json?: Json
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string | null
+          ends_at?: string | null
+          id?: string
+          post_id?: string | null
+          priority?: number
+          role_code?: string | null
+          scene: string
+          starts_at?: string | null
+          status?: string
+          tenant_department_id?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          content_json?: Json
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string | null
+          ends_at?: string | null
+          id?: string
+          post_id?: string | null
+          priority?: number
+          role_code?: string | null
+          scene?: string
+          starts_at?: string | null
+          status?: string
+          tenant_department_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_personalization_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_tenant_department_id_fkey"
+            columns: ["tenant_department_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_personalization_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -4040,6 +4409,70 @@ export type Database = {
           },
         ]
       }
+      project_status_transition_logs: {
+        Row: {
+          action: string
+          created_at: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          operator_auth_user_id: string | null
+          operator_employee_id: string | null
+          project_id: string
+          reason: string | null
+          tenant_id: string
+          to_status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          project_id: string
+          reason?: string | null
+          tenant_id: string
+          to_status: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          operator_auth_user_id?: string | null
+          operator_employee_id?: string | null
+          project_id?: string
+          reason?: string | null
+          tenant_id?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_status_transition_logs_operator_employee_id_fkey"
+            columns: ["operator_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_status_transition_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_status_transition_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           address: string | null
@@ -5017,7 +5450,6 @@ export type Database = {
           created_at: string
           enabled: boolean
           id: string
-          legacy_department_id: string | null
           sort: number
           template_id: string
           tenant_id: string
@@ -5029,7 +5461,6 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           id?: string
-          legacy_department_id?: string | null
           sort?: number
           template_id: string
           tenant_id: string
@@ -5041,20 +5472,12 @@ export type Database = {
           created_at?: string
           enabled?: boolean
           id?: string
-          legacy_department_id?: string | null
           sort?: number
           template_id?: string
           tenant_id?: string
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "tenant_departments_legacy_department_id_fkey"
-            columns: ["legacy_department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "tenant_departments_template_id_fkey"
             columns: ["template_id"]
@@ -6300,6 +6723,15 @@ export type Database = {
           stage_code: string
         }[]
       }
+      get_employee_permission_context_fast: {
+        Args: { p_employee_id: string }
+        Returns: {
+          employee: Json
+          overrides: Json
+          role_permissions: Json
+          roles: Json
+        }[]
+      }
       get_project_log_calendar: {
         Args: { project_uuid: string; timezone_name?: string }
         Returns: {
@@ -6319,9 +6751,94 @@ export type Database = {
           wechat_openid_masked: string
         }[]
       }
+      list_wechat_login_memberships: {
+        Args: { p_user_id: string }
+        Returns: {
+          customer_claimed_at: string
+          customer_id: string
+          customer_name: string
+          customer_origin: string
+          customer_phone: string
+          customer_user_id: string
+          employee_avatar: string
+          employee_id: string
+          employee_name: string
+          employee_post_id: string
+          employee_status: string
+          employee_tenant_department_id: string
+          employee_user_id: string
+          identity_id: string
+          identity_type: string
+          is_default: boolean
+          membership_id: string
+          post_name: string
+          status: string
+          tenant_department_alias_name: string
+          tenant_department_code: string
+          tenant_id: string
+          tenant_name: string
+          tenant_slug: string
+          tenant_status: string
+          user_id: string
+        }[]
+      }
       recalculate_project_referral: {
         Args: { p_project_id: string }
         Returns: undefined
+      }
+      resolve_wechat_login_state_by_openid: {
+        Args: { p_openid: string }
+        Returns: {
+          active_oauth_id: string
+          auth_user_id: string
+          customer_claimed_at: string
+          customer_id: string
+          customer_name: string
+          customer_origin: string
+          customer_phone: string
+          customer_user_id: string
+          employee_avatar: string
+          employee_id: string
+          employee_name: string
+          employee_post_id: string
+          employee_status: string
+          employee_tenant_department_id: string
+          employee_user_id: string
+          identity_id: string
+          identity_type: string
+          is_default: boolean
+          membership_id: string
+          oauth_unionid: string
+          post_name: string
+          status: string
+          tenant_department_alias_name: string
+          tenant_department_code: string
+          tenant_id: string
+          tenant_name: string
+          tenant_slug: string
+          tenant_status: string
+          user_id: string
+        }[]
+      }
+      sync_user_oauth_identity: {
+        Args: {
+          p_openid: string
+          p_platform: string
+          p_unionid?: string
+          p_user_id: string
+        }
+        Returns: {
+          bound_at: string
+          created_at: string
+          id: string
+          openid: string
+          platform: string
+          status: string
+          unbound_at: string
+          unionid: string
+          updated_at: string
+          user_id: string
+        }[]
       }
     }
     Enums: {

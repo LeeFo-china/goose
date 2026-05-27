@@ -16,7 +16,7 @@ with runtime_function_refs as (
 audit_results as (
   select
     'departments_table_exists' as check_code,
-    '旧 departments 表仍存在，阶段 1 软删除前应为 true' as check_name,
+    '旧 departments 表存在状态：软退役前为 1，软退役后应为 0' as check_name,
     'info' as severity,
     case when to_regclass('public.departments') is null then 0 else 1 end::bigint as issue_count
 
@@ -24,7 +24,7 @@ audit_results as (
 
   select
     'tenant_departments_legacy_column_exists' as check_code,
-    'tenant_departments.legacy_department_id 仍存在，阶段 1 软删除前应为 true' as check_name,
+    'tenant_departments.legacy_department_id 存在状态：软退役前为 1，软退役后应为 0' as check_name,
     'info' as severity,
     count(*)::bigint as issue_count
   from information_schema.columns

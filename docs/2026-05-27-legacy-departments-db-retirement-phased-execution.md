@@ -129,6 +129,38 @@ where table_schema = 'public'
 - `GET /employee/bootstrap` 正常。
 - 项目权限和员工首页个性化命中正常。
 
+### 执行记录
+
+2026-05-27 linked dev：
+
+- `supabase db push --linked --dry-run` 通过，待推送 migration 为 `20260527210000_soft_retire_legacy_departments.sql`。
+- `supabase db push --linked` 已执行并应用 `20260527210000_soft_retire_legacy_departments.sql`。
+- 执行后结构验收：
+
+| check | actual |
+| --- | --- |
+| `to_regclass('public.departments')` | `null` |
+| `to_regclass('public.departments_retired_20260527')` | `departments_retired_20260527` |
+| `to_regclass('public._backup_departments_20260527')` | `_backup_departments_20260527` |
+| `to_regclass('public._backup_tenant_department_legacy_20260527')` | `_backup_tenant_department_legacy_20260527` |
+| `tenant_departments.legacy_department_id` | 不存在 |
+
+- `scripts/audit-legacy-departments-db-retirement.sh` 通过：
+
+| check_code | issue_count | status |
+| --- | ---: | --- |
+| `runtime_function_refs_legacy_department` | 0 | pass |
+| `rules_missing_tenant_department` | 0 | pass |
+| `departments_table_exists` | 0 | observe |
+| `tenant_departments_legacy_column_exists` | 0 | observe |
+
+- 已重新生成 `apps/api/src/types/database.ts`，`tenant_departments` 类型中不再包含 `legacy_department_id`。
+- `apps/api/src/types/database.ts` 中剩余的 `legacy_department_id` 仅来自 `_backup_tenant_department_legacy_20260527` 回滚备份表类型。
+- 已同步更新租户部门退场审计脚本，避免继续访问已软退役的旧列和旧表。
+- `scripts/audit-tenant-department-retirement.sh` 通过，所有 blocker 检查 issue_count 均为 0。
+- `rg "from\(['\"]departments['\"]\)|legacy_department_id" apps/api/src apps/admin packages/domain/src --glob '!apps/api/src/types/database.ts'` 无命中。
+- `bun run api:build` 通过。
+
 ## 阶段 3：软删除观察窗口
 
 ### 观察重点

@@ -46,30 +46,6 @@ with audit_results as (
   union all
 
   select
-    'enabled_tenant_department_missing_legacy' as check_code,
-    '已启用租户部门缺少 legacy_department_id' as check_name,
-    'warning' as severity,
-    count(*)::bigint as issue_count
-  from public.tenant_departments as tenant_department
-  where tenant_department.enabled = true
-    and tenant_department.legacy_department_id is null
-
-  union all
-
-  select
-    'tenant_department_legacy_missing_department' as check_code,
-    '租户部门 legacy_department_id 指向的旧部门不存在' as check_name,
-    'blocker' as severity,
-    count(*)::bigint as issue_count
-  from public.tenant_departments as tenant_department
-  left join public.departments as department
-    on department.id = tenant_department.legacy_department_id
-  where tenant_department.legacy_department_id is not null
-    and department.id is null
-
-  union all
-
-  select
     'tenant_department_code_template_mismatch' as check_code,
     '租户部门 code 与标准模板 code 不一致' as check_name,
     'blocker' as severity,
