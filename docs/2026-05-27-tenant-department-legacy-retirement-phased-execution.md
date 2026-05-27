@@ -95,6 +95,18 @@ scripts/audit-tenant-department-retirement.sh
 - `bun run admin:build` 通过。
 - 提交独立 commit。
 
+### 执行记录
+
+2026-05-27：
+
+- `/department-post-rules` 部门列表不再要求 `legacy_department_id`。
+- 部门岗位规则聚合不再用 `department_code` 兜底匹配缺失 `tenant_department_id` 的规则。
+- 部门查询、员工部门岗位归属校验已按 `tenant_departments.id` 查询。
+- 更新/停用规则已按 `tenant_department_id` 定位目标规则。
+- `scripts/audit-tenant-department-retirement.sh` 通过，`rules_missing_tenant_department = 0`。
+- `bun run api:build` 通过。
+- `bun run admin:build` 通过。
+
 ## 阶段 4：新租户初始化停止写旧 `departments`
 
 ### 目标

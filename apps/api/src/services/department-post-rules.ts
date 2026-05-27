@@ -29,9 +29,7 @@ class DepartmentPostRuleService {
     return {
       departments: departments.map((department) => {
         const departmentRules = rules.filter(
-          (rule) =>
-            rule.tenant_department_id === department.tenant_department_id ||
-            (!rule.tenant_department_id && rule.department_code === department.code),
+          (rule) => rule.tenant_department_id === department.tenant_department_id,
         );
         return {
           ...department,
