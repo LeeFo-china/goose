@@ -12,13 +12,6 @@ export type DepartmentTemplateRow = {
   sort: number | null;
 };
 
-export type LegacyDepartmentRow = {
-  id: string;
-  code: string;
-  name: string;
-  created_at: string | null;
-};
-
 export type TenantDepartmentRow = {
   id: string;
   tenant_id: string;
@@ -86,79 +79,9 @@ class DepartmentRepository {
     return (data || []) as DepartmentTemplateRow[];
   }
 
-  async listLegacyDepartments(input: {
-    tenantId: string;
-    codes: string[];
-  }) {
-    const { data, error } = await this.adminClient
-      .from("departments")
-      .select("id, code, name, created_at")
-      .eq("tenant_id", input.tenantId)
-      .in("code", input.codes);
-
-    if (error) throw Errors.dbError("查询兼容部门失败", error);
-    return (data || []) as LegacyDepartmentRow[];
-  }
-
-  async findLegacyDepartment(input: {
-    tenantId: string;
-    code: string;
-  }) {
-    const { data, error } = await this.adminClient
-      .from("departments")
-      .select("id, code, name, created_at")
-      .eq("tenant_id", input.tenantId)
-      .eq("code", input.code)
-      .maybeSingle();
-
-    if (error) throw Errors.dbError("查询兼容部门失败", error);
-    return data as LegacyDepartmentRow | null;
-  }
-
-  async createLegacyDepartment(input: {
-    tenantId: string;
-    code: string;
-    name: string;
-  }) {
-    const { data, error } = await this.adminClient
-      .from("departments")
-      .insert({
-        tenant_id: input.tenantId,
-        code: input.code,
-        name: input.name,
-      })
-      .select("id, code, name, created_at")
-      .single();
-
-    if (error) throw Errors.dbError("创建兼容部门失败", error);
-    return data as LegacyDepartmentRow;
-  }
-
-  async createLegacyDepartments(input: {
-    tenantId: string;
-    departments: Array<{ code: string; name: string }>;
-  }) {
-    if (input.departments.length === 0) {
-      return [] as LegacyDepartmentRow[];
-    }
-
-    const { data, error } = await this.adminClient
-      .from("departments")
-      .insert(input.departments.map((department) => ({
-        tenant_id: input.tenantId,
-        code: department.code,
-        name: department.name,
-      })))
-      .select("id, code, name, created_at");
-
-    if (error) throw Errors.dbError("创建兼容部门失败", error);
-    return (data || []) as LegacyDepartmentRow[];
-  }
-
   async upsertTenantDepartment(input: {
     tenantId: string;
     template: DepartmentTemplateRow;
-    department: Pick<LegacyDepartmentRow, "id" | "code" | "name">;
     aliasName?: string;
     enabled?: boolean;
     sort?: number | null;
@@ -166,11 +89,10 @@ class DepartmentRepository {
     const payload = {
       tenant_id: input.tenantId,
       template_id: input.template.id,
-      code: input.department.code,
-      alias_name: input.aliasName ?? input.department.name,
+      code: input.template.code,
+      alias_name: input.aliasName ?? input.template.default_name,
       enabled: input.enabled ?? true,
       sort: input.sort ?? input.template.sort ?? 0,
-      legacy_department_id: input.department.id,
     };
 
     const { data, error } = await this.adminClient
@@ -187,7 +109,6 @@ class DepartmentRepository {
     tenantId: string;
     departments: Array<{
       template: DepartmentTemplateRow;
-      department: Pick<LegacyDepartmentRow, "id" | "code" | "name">;
       aliasName: string;
       enabled?: boolean;
       sort?: number | null;
@@ -196,11 +117,10 @@ class DepartmentRepository {
     const rows = input.departments.map((item) => ({
       tenant_id: input.tenantId,
       template_id: item.template.id,
-      code: item.department.code,
+      code: item.template.code,
       alias_name: item.aliasName,
       enabled: item.enabled ?? true,
       sort: item.sort ?? item.template.sort ?? 0,
-      legacy_department_id: item.department.id,
     }));
 
     const { data, error } = await this.adminClient
@@ -248,14 +168,14 @@ class DepartmentRepository {
     };
   }
 
-  async findTenantDepartmentByLegacyId(input: {
+  async findTenantDepartmentById(input: {
     tenantId: string;
-    legacyDepartmentId: string;
+    id: string;
   }) {
     const { data, error } = await this.adminClient
       .from("tenant_departments")
       .select(TENANT_DEPARTMENT_SELECT)
-      .eq("legacy_department_id", input.legacyDepartmentId)
+      .eq("id", input.id)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
 
@@ -265,12 +185,12 @@ class DepartmentRepository {
 
   async findTenantDepartmentForUpdate(input: {
     tenantId: string;
-    legacyDepartmentId: string;
+    id: string;
   }) {
     const { data, error } = await this.adminClient
       .from("tenant_departments")
       .select("id, code, alias_name, enabled, sort, legacy_department_id")
-      .eq("legacy_department_id", input.legacyDepartmentId)
+      .eq("id", input.id)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
 
@@ -287,8 +207,7 @@ class DepartmentRepository {
 
   async updateTenantDepartment(input: {
     id: string;
-    payload: UpdateDepartmentInput & {
-      legacy_department_id: string;
+    payload: Omit<UpdateDepartmentInput, "code"> & {
       alias_name: string;
     };
   }) {

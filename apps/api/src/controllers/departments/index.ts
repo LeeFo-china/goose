@@ -53,7 +53,7 @@ class DepartmentController extends TenantBaseController<
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
-    return ResponseHandler.success(await departmentService.getByLegacyId({
+    return ResponseHandler.success(await departmentService.getById({
       tenantId,
       id: idVerify.data.id,
     }));

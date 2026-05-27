@@ -65,6 +65,16 @@ scripts/audit-tenant-department-retirement.sh
 - `bun run admin:build` 通过。
 - 提交独立 commit。
 
+### 执行记录
+
+2026-05-27：
+
+- `/departments` 响应 `id` 已切换为 `tenant_departments.id`。
+- `GET/PATCH /departments/:id` 已按 `tenant_departments.id` 查询。
+- 部门新增、批量启用、编辑不再创建或反写旧 `departments`。
+- `bun run api:build` 通过。
+- `bun run admin:build` 通过。
+
 ## 阶段 3：部门岗位规则移除旧部门 ID fallback
 
 ### 目标
@@ -123,4 +133,3 @@ scripts/audit-tenant-department-retirement.sh
 ### 本轮结论
 
 本阶段不在当前代码清理回合直接执行数据库删除。数据库删除属于破坏性迁移，需要单独发布窗口和回滚方案。
-

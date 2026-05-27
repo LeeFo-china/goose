@@ -2,7 +2,6 @@ import { Errors } from "@/errors/error-factory";
 import {
   departmentRepository,
   type DepartmentTemplateRow,
-  type LegacyDepartmentRow,
   type TenantDepartmentRow,
 } from "@/repositories/departments";
 import type {
@@ -28,7 +27,7 @@ class DepartmentService {
     const template = this.normalizeTemplate(row.department_templates);
 
     return {
-      id: row.legacy_department_id,
+      id: row.id,
       tenant_department_id: row.id,
       code: row.code,
       name: row.alias_name,
@@ -60,46 +59,6 @@ class DepartmentService {
     return templateMap;
   }
 
-  private async ensureLegacyDepartment(input: {
-    tenantId: string;
-    code: string;
-    name: string;
-  }) {
-    const existing = await departmentRepository.findLegacyDepartment(input);
-    if (existing) {
-      return existing;
-    }
-
-    return departmentRepository.createLegacyDepartment(input);
-  }
-
-  private async ensureLegacyDepartments(input: {
-    tenantId: string;
-    departments: Array<{ code: string; name: string }>;
-  }) {
-    const codes = Array.from(new Set(input.departments.map((department) => department.code)));
-    const existingDepartments = await departmentRepository.listLegacyDepartments({
-      tenantId: input.tenantId,
-      codes,
-    });
-    const departmentMap = new Map(existingDepartments.map((department) => [
-      department.code,
-      department,
-    ]));
-    const missingRows = input.departments.filter((department) =>
-      !departmentMap.has(department.code)
-    );
-    const inserted = await departmentRepository.createLegacyDepartments({
-      tenantId: input.tenantId,
-      departments: missingRows,
-    });
-    for (const department of inserted) {
-      departmentMap.set(department.code, department);
-    }
-
-    return departmentMap;
-  }
-
   async list(input: {
     tenantId: string;
     query: DepartmentListInput;
@@ -120,13 +79,13 @@ class DepartmentService {
     };
   }
 
-  async getByLegacyId(input: {
+  async getById(input: {
     tenantId: string;
     id: string;
   }) {
-    const row = await departmentRepository.findTenantDepartmentByLegacyId({
+    const row = await departmentRepository.findTenantDepartmentById({
       tenantId: input.tenantId,
-      legacyDepartmentId: input.id,
+      id: input.id,
     });
     if (!row) {
       throw Errors.badRequest("部门不存在");
@@ -141,16 +100,9 @@ class DepartmentService {
   }) {
     const template = await this.findRequiredTemplate(input.payload.code);
     const aliasName = input.payload.name || template.default_name;
-    const legacyDepartment = await this.ensureLegacyDepartment({
-      tenantId: input.tenantId,
-      code: template.code,
-      name: aliasName,
-    });
-
     const department = await departmentRepository.upsertTenantDepartment({
       tenantId: input.tenantId,
       template,
-      department: legacyDepartment,
       aliasName,
       enabled: input.payload.enabled ?? true,
       sort: input.payload.sort ?? template.sort ?? 0,
@@ -174,23 +126,14 @@ class DepartmentService {
     const departments = Array.from(departmentMap.values());
     const codes = departments.map((department) => department.code);
     const templateMap = await this.findRequiredTemplates(codes);
-    const legacyDepartmentMap = await this.ensureLegacyDepartments({
-      tenantId: input.tenantId,
-      departments: departments.map((department) => ({
-        code: department.code,
-        name: department.name || templateMap.get(department.code)?.default_name || department.code,
-      })),
-    });
 
     const rows = departments.map((department) => {
       const template = templateMap.get(department.code) as DepartmentTemplateRow | undefined;
-      const legacyDepartment = legacyDepartmentMap.get(department.code) as LegacyDepartmentRow | undefined;
-      if (!template || !legacyDepartment) {
+      if (!template) {
         throw Errors.badRequest(`部门启用失败：${department.code}`);
       }
       return {
         template,
-        department: legacyDepartment,
         aliasName: department.name || template.default_name,
         enabled: department.enabled ?? true,
         sort: department.sort ?? template.sort ?? 0,
@@ -216,26 +159,19 @@ class DepartmentService {
   }) {
     const current = await departmentRepository.findTenantDepartmentForUpdate({
       tenantId: input.tenantId,
-      legacyDepartmentId: input.id,
+      id: input.id,
     });
-    if (!current?.legacy_department_id) {
+    if (!current) {
       throw Errors.badRequest("部门不存在或更新失败");
     }
 
     const nextAliasName = input.payload.name ?? current.alias_name;
-    const legacyDepartment = await this.ensureLegacyDepartment({
-      tenantId: input.tenantId,
-      code: current.code,
-      name: nextAliasName,
-    });
-
     const row = await departmentRepository.updateTenantDepartment({
       id: current.id,
       payload: {
         alias_name: nextAliasName,
         enabled: input.payload.enabled ?? current.enabled,
         sort: input.payload.sort ?? current.sort,
-        legacy_department_id: legacyDepartment.id,
       },
     });
 
