@@ -138,7 +138,7 @@ Content-Type: application/json
 - 上传 URL host 为 `windwill-1259348056.cos.accelerate.myqcloud.com`。
 - 成功后 `platform_file_objects` 有 `scene=project_acceptance` 的记录。
 - 验收详情、流程记录、客户引用图片都能正常预览。
-- 正常链路不再走 `POST /uploads/images`。
+- 不再走 `POST /uploads/images`，旧接口已退休。
 - 失败时提示“图片上传失败，请重试”，不要让提交按钮一直 loading。
 
 ## 6. 注意事项

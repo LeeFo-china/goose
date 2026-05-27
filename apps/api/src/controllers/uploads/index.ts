@@ -13,7 +13,6 @@ import type { JwtPayload } from "@/utils/jwt";
 import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
 
-const MAX_UPLOAD_FILES = 9;
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -23,7 +22,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/heic",
   "image/heif",
 ]);
-const ALLOWED_UPLOAD_SCENES = [
+const DIRECT_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
   "customer_follow_up_comment",
@@ -35,24 +34,6 @@ const ALLOWED_UPLOAD_SCENES = [
   "customer_douyin_screenshot",
   "h5_marketing_page",
   "project_acceptance",
-] as const;
-
-const UploadImageFieldSchema = z.object({
-  scene: z.enum(ALLOWED_UPLOAD_SCENES, {
-    message: "无效的上传场景",
-  }).optional(),
-  project_id: z.string().uuid("无效的项目ID").optional(),
-});
-
-const DIRECT_UPLOAD_SCENES = [
-  "project_log",
-  "project_log_comment",
-  "customer_service",
-  "employee_avatar",
-  "customer_avatar",
-  "h5_marketing_page",
-  "project_acceptance",
-  "expense_request",
 ] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 
@@ -94,25 +75,7 @@ const UploadPublicUrlQuerySchema = z.object({
     .refine((value) => !value.startsWith("/"), "图片路径不合法"),
 });
 
-type UploadImageItem = {
-  url: string;
-  path: string;
-  file_id?: string;
-  provider?: string;
-  bucket?: string;
-  region?: string | null;
-  object_key?: string;
-  storage_path?: string;
-  public_url?: string;
-};
-
-type UploadScene = (typeof ALLOWED_UPLOAD_SCENES)[number];
-
-type PendingUploadFile = {
-  buffer: Buffer;
-  filename?: string;
-  mimetype: string;
-};
+type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
 
 type UploadActorContext = {
   tenantId: string | null;
@@ -133,127 +96,6 @@ const now = () => Date.now();
 class UploadController extends BaseController {
   constructor() {
     super("uploads");
-  }
-
-  @Post("/uploads/images")
-  async uploadImages(request: FastifyRequest, reply: FastifyReply) {
-    const requestStartedAt = now();
-    if (!request.user?.sub) {
-      throw Errors.unauthorized("未登录或登录状态无效");
-    }
-
-    if (!request.isMultipart()) {
-      throw Errors.badRequest("请求必须为 multipart/form-data");
-    }
-
-    const fields: Record<string, string> = {};
-    const files: PendingUploadFile[] = [];
-    let fileCount = 0;
-    const multipartStartedAt = now();
-
-    for await (const part of request.parts()) {
-      if (part.type === "field") {
-        fields[part.fieldname] = String(part.value ?? "");
-        continue;
-      }
-
-      fileCount += 1;
-      if (fileCount > MAX_UPLOAD_FILES) {
-        throw Errors.badRequest("最多上传9张图片");
-      }
-
-      const readStartedAt = now();
-      const buffer = await part.toBuffer();
-      logUploadImagesTiming("multipart-file-read", readStartedAt, {
-        request_id: request.id,
-        file_index: fileCount,
-        size_bytes: buffer.length,
-        mimetype: part.mimetype,
-      });
-      files.push({
-        buffer,
-        filename: part.filename,
-        mimetype: part.mimetype,
-      });
-    }
-    logUploadImagesTiming("multipart-read-total", multipartStartedAt, {
-      request_id: request.id,
-      file_count: files.length,
-      total_size_bytes: files.reduce((sum, file) => sum + file.buffer.length, 0),
-      raw_scene: fields.scene || null,
-    });
-
-    const fieldResult = UploadImageFieldSchema.safeParse(fields);
-    if (!fieldResult.success) {
-      const hasInvalidScene = fieldResult.error.issues.some((issue) =>
-        issue.path[0] === "scene"
-      );
-      if (hasInvalidScene) {
-        throw Errors.business(
-          400,
-          "不支持的上传场景",
-          ErrorCodes.UPLOAD_SCENE_INVALID,
-          fieldResult.error.issues,
-        );
-      }
-
-      throw Errors.fromZod(fieldResult.error);
-    }
-
-    const actorStartedAt = now();
-    const actorContext = await this.resolveUploadActorContext(request.user);
-    logUploadImagesTiming("actor-context", actorStartedAt, {
-      request_id: request.id,
-      tenant_id: actorContext.tenantId,
-      employee_id: actorContext.employeeId,
-      customer_id: actorContext.customerId,
-    });
-    request.log.warn(
-      {
-        request_id: request.id,
-        scene: fieldResult.data.scene ?? "project_log",
-        tenant_id: actorContext.tenantId,
-        employee_id: actorContext.employeeId,
-        customer_id: actorContext.customerId,
-        file_count: files.length,
-      },
-      "[compat] legacy uploads/images endpoint used",
-    );
-
-    const uploadedFiles = await Promise.all(
-      files.map(async (file, index) => {
-        const uploadStartedAt = now();
-        const uploaded = await this.uploadSingleFile(file, {
-          authUserId: request.user?.sub,
-          employeeId: actorContext.employeeId,
-          customerId: actorContext.customerId,
-          projectId: fieldResult.data.project_id,
-          scene: fieldResult.data.scene ?? "project_log",
-          tenantId: actorContext.tenantId,
-        });
-        logUploadImagesTiming("file-upload", uploadStartedAt, {
-          request_id: request.id,
-          file_index: index + 1,
-          file_count: files.length,
-          size_bytes: file.buffer.length,
-          scene: fieldResult.data.scene ?? "project_log",
-          provider: uploaded.provider,
-          object_key: uploaded.object_key,
-        });
-        return uploaded;
-      }),
-    );
-    logUploadImagesTiming("request-total", requestStartedAt, {
-      request_id: request.id,
-      file_count: files.length,
-      total_size_bytes: files.reduce((sum, file) => sum + file.buffer.length, 0),
-      scene: fieldResult.data.scene ?? "project_log",
-      tenant_id: actorContext.tenantId,
-    });
-
-    return ResponseHandler.success({
-      list: uploadedFiles,
-    });
   }
 
   @Get("/uploads/public-url")
@@ -369,32 +211,6 @@ class UploadController extends BaseController {
     });
 
     return ResponseHandler.success(uploaded);
-  }
-
-  private async uploadSingleFile(
-    file: PendingUploadFile,
-    options: {
-      authUserId?: string | null;
-      employeeId?: string | null;
-      customerId?: string | null;
-      projectId?: string;
-      scene: UploadScene;
-      tenantId?: string | null;
-    },
-  ): Promise<UploadImageItem> {
-    this.assertAllowedFile(file.mimetype, file.buffer.length, options.scene);
-
-    return platformFileStorageService.uploadImage({
-      buffer: file.buffer,
-      filename: file.filename,
-      mimetype: file.mimetype,
-      scene: options.scene,
-      projectId: options.projectId,
-      tenantId: options.tenantId,
-      authUserId: options.authUserId,
-      employeeId: options.employeeId,
-      customerId: options.customerId,
-    });
   }
 
   private assertAllowedFile(mimetype: string, sizeBytes: number, scene: UploadScene) {

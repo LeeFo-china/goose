@@ -120,7 +120,7 @@ Admin 仍存在旧上传入口：
 
 - Admin 已无 `/uploads/images` 调用。
 - 小程序端已确认施工日志、评论、验收图片不再回退 `/uploads/images`。
-- 访问日志中连续一个观察窗口无 `POST /uploads/images`。
+- 小程序端已确认客户头像、客户抖音截图、客服工单图片、费用附件、推荐付款凭证、客户端个人头像、员工头像均使用 COS 直传。
 
 ### 执行范围
 
@@ -133,6 +133,14 @@ Admin 仍存在旧上传入口：
 - `rg "/uploads/images" apps/api/src apps/admin` 无运行时代码命中。
 - `bun run api:build` 通过。
 - 提交独立 commit。
+
+### 执行记录
+
+2026-05-27：
+
+- 已删除 `POST /uploads/images`。
+- direct upload 白名单已补齐 `customer_follow_up_comment`、`customer_douyin_screenshot`、`referral_payment`。
+- 小程序退场文档已更新为接口已删除状态。
 
 ## 阶段 4：营销页新旧路由收敛
 

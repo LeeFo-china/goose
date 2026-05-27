@@ -2,7 +2,7 @@
 
 日期：2026-05-15  
 适用端：微信小程序客户/员工施工日志评论  
-状态：已对接，单图和多图直传均已人工验证通过；多图直传并发限制为 2。
+状态：已对接，单图和多图直传均已人工验证通过；多图直传并发限制为 2。2026-05-27 起旧接口 `POST /uploads/images` 已退休，不再允许 fallback。
 
 ## 1. 当前小程序流程
 
@@ -32,7 +32,7 @@
 - 评论发布不再等待 `direct-complete`。
 - `direct-complete` 失败只打 `direct-complete-async-failed` 日志，不阻塞用户。
 - 评论保存的 `images` 必须优先使用 `storage_path/object_key/path`，不能保存本地临时路径。
-- 多图 PUT COS 必须限制并发，当前固定并发为 2；直传失败时再回退 `/uploads/images`。
+- 多图 PUT COS 必须限制并发，当前固定并发为 2；直传失败时提示用户重试，不再回退 `/uploads/images`。
 
 ## 2. 环境变量
 
@@ -43,13 +43,7 @@ TARO_APP_DIRECT_COS_UPLOAD=true
 TARO_APP_UPLOAD_TIMING_LOG_ENABLED=false
 ```
 
-关闭时会回退到旧接口：
-
-```http
-POST /uploads/images
-```
-
-开启后单图和多图都会优先走 COS 直传；直传失败时回退 `/uploads/images`。
+单图和多图都必须走 COS 直传；直传失败时提示用户重试，不再回退 `/uploads/images`。
 
 `TARO_APP_UPLOAD_TIMING_LOG_ENABLED` 只控制排障日志，建议生产默认关闭。需要临时排查上传耗时时再改为：
 
