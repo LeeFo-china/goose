@@ -75,6 +75,15 @@
 - 回滚 SQL 可读且覆盖恢复路径。
 - 提交独立 commit。
 
+### 执行记录
+
+2026-05-27：
+
+- 已新增软删除 migration：`supabase/migrations/20260527210000_soft_retire_legacy_departments.sql`。
+- 已新增回滚脚本：`scripts/rollback-tenant-department-legacy-soft-retirement.sql`。
+- migration 只做备份、删除 `legacy_department_id`、重命名 `departments`，不硬删除 retired/backup 表。
+- `bun run api:build` 通过。
+
 ## 阶段 2：迁移窗口执行软删除
 
 ### 前置条件
