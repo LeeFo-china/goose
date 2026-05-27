@@ -8,7 +8,7 @@
 
 这一步不删除旧表和旧字段，只确认以下问题是否已经收口：
 
-- 员工是否仍依赖旧 `employees.department_id`
+- 员工 `tenant_department_id` 与租户部门归属是否一致
 - 部门岗位规则是否仍依赖旧 `department_post_rules.department_code`
 - `tenant_departments` 与旧 `departments` 的兼容映射是否一致
 - 租户部门是否与标准部门模板一致
@@ -33,8 +33,6 @@ scripts/audit-tenant-department-retirement.sql
 
 | check_code | 含义 | 严重级别 | 推进要求 |
 | --- | --- | --- | --- |
-| `employees_missing_tenant_department` | 员工有旧 `department_id`，但缺少 `tenant_department_id` | blocker | 必须为 0 |
-| `employee_department_mismatch` | 员工旧部门 ID 与租户部门 `legacy_department_id` 不一致 | blocker | 必须为 0 |
 | `employee_tenant_department_tenant_mismatch` | 员工 `tenant_id` 与租户部门 `tenant_id` 不一致 | blocker | 必须为 0 |
 | `rules_missing_tenant_department` | 部门岗位规则缺少 `tenant_department_id` | blocker | 必须为 0 |
 | `rule_department_code_mismatch` | 规则 `department_code` 与租户部门 `code` 不一致 | blocker | 必须为 0 |
@@ -65,7 +63,12 @@ scripts/audit-tenant-department-retirement.sql
 ## 不在本阶段处理
 
 - 不删除 `departments`
-- 不删除 `employees.department_id`
 - 不删除 `department_post_rules.department_code`
 - 不移除旧字段 fallback
 - 不新增 admin 可视化页面
+
+## 2026-05-27 更新
+
+- linked dev 库中 `employees.department_id` 已不存在。
+- 巡检脚本不再检查 `employees.department_id`。
+- 本阶段剩余兼容对象为 `departments`、`tenant_departments.legacy_department_id` 和 `department_post_rules.department_code`。

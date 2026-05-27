@@ -8,4 +8,4 @@ cd "$ROOT_DIR"
 supabase db query \
   --linked \
   --file scripts/audit-tenant-department-retirement.sql \
-  --output table
+  --output json

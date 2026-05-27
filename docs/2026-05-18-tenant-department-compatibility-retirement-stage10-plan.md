@@ -6,7 +6,7 @@
 
 租户部门重构已经进入阶段 10 的观察和退场准备期。
 
-当前不能直接删除旧 `departments` 表，也不能删除 `employees.department_id`、`department_post_rules.department_code`。
+当前不能直接删除旧 `departments` 表，也不能删除 `department_post_rules.department_code`。
 
 原因：
 
@@ -75,9 +75,7 @@ scripts/audit-tenant-department-retirement.sh
 
 | check_code | severity | issue_count | status |
 | --- | --- | ---: | --- |
-| `employee_department_mismatch` | blocker | 0 | pass |
 | `employee_tenant_department_tenant_mismatch` | blocker | 0 | pass |
-| `employees_missing_tenant_department` | blocker | 0 | pass |
 | `rule_department_code_mismatch` | blocker | 0 | pass |
 | `rule_tenant_department_tenant_mismatch` | blocker | 0 | pass |
 | `rules_missing_tenant_department` | blocker | 0 | pass |
@@ -98,7 +96,7 @@ scripts/audit-tenant-department-retirement.sh
 
 - 新增租户不再依赖旧 `departments` 作为主数据源。
 - 新增员工、编辑员工、新增岗位、新增规则都只主写 `tenant_department_id`。
-- 后端业务判断不再以 `department_id` 或 `department_code` 作为主判断条件。
+- 后端业务判断不再以 `department_code` 作为主判断条件。
 - admin 和小程序均不再新增旧字段主写入。
 - 巡检连续一个版本周期为 0。
 - 旧字段删除前有明确回滚方案和数据快照方案。
@@ -118,6 +116,12 @@ scripts/audit-tenant-department-retirement.sh
 - 所有 `blocker` 必须为 0。
 - `warning` 如果非 0，必须记录原因和处理结论。
 - 巡检结果写入发布记录或本文件的后续记录区。
+
+## 2026-05-27 更新
+
+- linked dev 库中 `employees.department_id` 已不存在。
+- 阶段 10 的员工旧字段兼容目标已完成，后续巡检只保留员工 `tenant_department_id` 与租户部门归属一致性检查。
+- 剩余退场目标集中在旧 `departments`、`tenant_departments.legacy_department_id`、`department_post_rules.department_code`。
 
 不通过处理：
 

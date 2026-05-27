@@ -1,28 +1,5 @@
 with audit_results as (
   select
-    'employees_missing_tenant_department' as check_code,
-    '员工有旧 department_id 但缺少 tenant_department_id' as check_name,
-    'blocker' as severity,
-    count(*)::bigint as issue_count
-  from public.employees as employee
-  where employee.department_id is not null
-    and employee.tenant_department_id is null
-
-  union all
-
-  select
-    'employee_department_mismatch' as check_code,
-    '员工旧部门 ID 与租户部门 legacy 映射不一致' as check_name,
-    'blocker' as severity,
-    count(*)::bigint as issue_count
-  from public.employees as employee
-  join public.tenant_departments as tenant_department
-    on tenant_department.id = employee.tenant_department_id
-  where employee.department_id is distinct from tenant_department.legacy_department_id
-
-  union all
-
-  select
     'employee_tenant_department_tenant_mismatch' as check_code,
     '员工 tenant_id 与租户部门 tenant_id 不一致' as check_name,
     'blocker' as severity,
