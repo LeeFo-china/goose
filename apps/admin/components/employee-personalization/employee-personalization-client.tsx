@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 const SCOPE_OPTIONS = Object.entries(EMPLOYEE_PERSONALIZATION_SCOPE_LABELS).map(
   ([value, label]) => ({ value, label }),
@@ -171,7 +172,7 @@ function RuleDialog({
           },
         );
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存规则失败");
       }

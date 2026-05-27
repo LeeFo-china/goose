@@ -42,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Field,
   FieldDescription,
@@ -405,7 +406,7 @@ function CampaignFormDialog({
           });
         }
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");
       }

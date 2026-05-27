@@ -17,6 +17,7 @@ import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { FormSelect, type SelectOption } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Dialog,
   DialogContent,
@@ -228,7 +229,7 @@ function PermissionDialog({
           payload,
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "操作失败");
       }
@@ -441,7 +442,7 @@ export function PermissionRowActions({
           });
         }
         setStatusAction(null);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "操作失败");
       }

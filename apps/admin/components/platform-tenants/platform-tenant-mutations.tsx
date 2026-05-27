@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Loader2, Pencil, Play, Plus, PowerOff, RefreshCcw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Dialog,
   DialogContent,
@@ -130,7 +131,7 @@ function TenantDialog({
           },
         );
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存租户失败");
       }
@@ -334,7 +335,7 @@ export function PlatformTenantStatusButton({ tenant }: { tenant: PlatformTenantR
           method: "POST",
         });
         setOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : `${label}租户失败`);
       }

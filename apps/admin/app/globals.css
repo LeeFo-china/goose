@@ -51,6 +51,10 @@ body {
   min-height: 100%;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));

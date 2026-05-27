@@ -21,6 +21,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Dialog,
   DialogContent,
@@ -673,7 +674,7 @@ function CameraDialog({
               },
             });
             onOpenChange(false);
-            router.refresh();
+            refreshAfterDialogClose(router);
             return;
           }
 
@@ -696,7 +697,7 @@ function CameraDialog({
         }
 
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");
       }
@@ -1315,7 +1316,7 @@ export function CameraRowActions({
           method: "DELETE",
         });
         setDeleteOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "解绑失败");
       }

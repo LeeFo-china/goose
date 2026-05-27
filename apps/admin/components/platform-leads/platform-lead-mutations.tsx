@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRightLeft, Loader2, Search } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -321,7 +322,7 @@ export function PlatformLeadDetailButton({ lead }: { lead: PlatformLeadRecord })
 
   function handleAssigned() {
     void loadDetail();
-    router.refresh();
+    refreshAfterDialogClose(router);
   }
 
   const current = detail || lead;

@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 const statusMeta: Record<string, {
   label: string;
@@ -146,7 +147,7 @@ function EditDeviceDialog({
           }),
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存设备资产失败");
       }
@@ -231,7 +232,7 @@ function DeleteDeviceButton({ asset }: { asset: TenantDeviceAsset }) {
           method: "DELETE",
         });
         setOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "删除设备资产失败");
       }

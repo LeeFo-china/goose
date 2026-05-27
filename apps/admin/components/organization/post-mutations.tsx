@@ -33,6 +33,7 @@ import type {
   DepartmentPostRuleDepartment,
   PostRecord,
 } from "@/components/organization/organization-types";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 type PostMode = "create" | "edit";
 type PostDepartmentOption = Pick<
@@ -182,7 +183,7 @@ function PostDialog({
           payload,
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存岗位失败");
       }

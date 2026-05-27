@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Tooltip,
   TooltipContent,
@@ -818,7 +819,7 @@ function H5PageSettingsButton({
         });
         toast.success("H5 活动页配置已保存");
         setOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (error) {
         setError(error instanceof Error ? error.message : "保存失败");
       }

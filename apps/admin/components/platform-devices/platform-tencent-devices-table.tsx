@@ -6,6 +6,7 @@ import { Eye, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { DataTable } from "@/components/admin/data-table";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   getPlatformDeviceStatusMeta,
   type PlatformTencentDeviceChannel,
@@ -156,7 +157,7 @@ function TencentDeviceDetailAction({ device }: { device: PlatformTencentDeviceRe
         });
         setDeleteOpen(false);
         toast.success("腾讯云空闲设备已删除");
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "删除云端设备失败");
       }

@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { SwitchSelect } from "@/components/billing/switch-select";
 import type { BillingPricingRule, BillingTenant } from "@/components/billing/billing-types";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 async function requestJson<T>(path: string, init?: RequestInit) {
   const response = await fetch(path, {
@@ -75,7 +76,7 @@ export function ManualRechargeButton({ tenant }: { tenant: BillingTenant }) {
           }),
         });
         setOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : "充值失败");
       }
@@ -164,7 +165,7 @@ export function PricingRuleCreateButton() {
           body: JSON.stringify(payload),
         });
         setOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : "创建价格规则失败");
       }

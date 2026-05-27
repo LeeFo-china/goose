@@ -17,6 +17,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   Dialog,
   DialogContent,
@@ -402,7 +403,7 @@ function EmployeeDialog({
         if (onSaved) {
           onSaved();
         } else {
-          router.refresh();
+          refreshAfterDialogClose(router);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "操作失败");
@@ -653,7 +654,7 @@ function ManageEmployeeRolesButton({
         if (onSaved) {
           onSaved();
         } else {
-          router.refresh();
+          refreshAfterDialogClose(router);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存员工角色失败");
@@ -807,7 +808,7 @@ export function EmployeeRowActions({
         if (onChanged) {
           onChanged();
         } else {
-          router.refresh();
+          refreshAfterDialogClose(router);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "删除失败");

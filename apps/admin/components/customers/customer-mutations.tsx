@@ -43,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -764,7 +765,7 @@ function CustomerDialog({
           payload,
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");
       }
@@ -2001,7 +2002,7 @@ export function CustomerRowActions({ customer }: { customer: CustomerRecord }) {
           method: "DELETE",
         });
         setDeleteOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "作废失败");
       }

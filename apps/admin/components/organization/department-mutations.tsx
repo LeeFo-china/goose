@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DepartmentRecord } from "@/components/organization/organization-types";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import { cn } from "@/lib/utils";
 
 const enabledOptions = [
@@ -173,7 +174,7 @@ function DepartmentDialog({
           payload,
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存部门失败");
       }
@@ -344,7 +345,7 @@ function EnableDepartmentsDialog({
         });
         onEnabled?.(selectedCodes);
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "启用部门失败");
       }
@@ -501,7 +502,7 @@ export function DepartmentRowActions({
           onDisabled?.(department.code);
         }
         setDisableOpen(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "停用部门失败");
       }

@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export type RoleRecord = {
   id: string;
@@ -145,7 +146,7 @@ function RoleDialog({
           },
         );
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存角色失败");
       }
@@ -320,7 +321,7 @@ function RolePermissionsDialog({
           body: JSON.stringify(payload),
         });
         onOpenChange(false);
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存角色权限失败");
       }
