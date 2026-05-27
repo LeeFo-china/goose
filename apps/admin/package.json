@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3010",
-    "build": "next build",
-    "start": "next start -p 3010",
+    "build": "next build && node scripts/sync-standalone-assets.mjs",
+    "start": "PORT=${PORT:-3010} HOSTNAME=${GOOES_ADMIN_HOSTNAME:-127.0.0.1} node .next/standalone/apps/admin/server.js",
     "lint": "next lint"
   },
   "dependencies": {
