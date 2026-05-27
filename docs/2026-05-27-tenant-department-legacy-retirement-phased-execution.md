@@ -156,3 +156,20 @@ scripts/audit-tenant-department-retirement.sh
 ### 本轮结论
 
 本阶段不在当前代码清理回合直接执行数据库删除。数据库删除属于破坏性迁移，需要单独发布窗口和回滚方案。
+
+### 2026-05-27 复核记录
+
+- `apps/api/src`、`apps/admin`、`packages/domain/src` 运行时代码不再读取 `tenant_departments.legacy_department_id`。
+- `apps/api/src`、`apps/admin`、`packages/domain/src` 运行时代码不再访问旧 `departments` 表。
+- `apps/api/src/types/database.ts` 仍保留由当前数据库生成的 `legacy_department_id` 类型。
+- `department_post_rules.department_code` 仍作为标准部门语义编码、路由参数和唯一约束组成部分使用，暂不删除。
+- `scripts/audit-tenant-department-retirement.sql` 仍保留数据库遗留对象检查，直到正式执行破坏性迁移。
+- `bun run api:build` 通过。
+
+后续数据库删除建议另开阶段：
+
+1. 新增迁移，删除 `tenant_departments.legacy_department_id` 外键、索引和列。
+2. 删除旧 `departments` 表。
+3. 如要删除 `department_post_rules.department_code`，需先把 `/department-post-rules/:department_code` 改为基于 `tenant_department_id` 的新路由，并调整唯一约束。
+4. 重新生成 `apps/api/src/types/database.ts`。
+5. 在灰度/生产窗口执行回滚预案和验收。

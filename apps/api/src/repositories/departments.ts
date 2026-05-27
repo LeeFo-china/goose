@@ -20,7 +20,6 @@ export type TenantDepartmentRow = {
   alias_name: string;
   enabled: boolean;
   sort: number | null;
-  legacy_department_id: string | null;
   created_at: string | null;
   updated_at: string | null;
   department_templates?: DepartmentTemplateRow | DepartmentTemplateRow[] | null;
@@ -42,7 +41,6 @@ const TENANT_DEPARTMENT_SELECT = `
   alias_name,
   enabled,
   sort,
-  legacy_department_id,
   created_at,
   updated_at,
   department_templates (
@@ -189,7 +187,7 @@ class DepartmentRepository {
   }) {
     const { data, error } = await this.adminClient
       .from("tenant_departments")
-      .select("id, code, alias_name, enabled, sort, legacy_department_id")
+      .select("id, code, alias_name, enabled, sort")
       .eq("id", input.id)
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
@@ -201,7 +199,6 @@ class DepartmentRepository {
       alias_name: string;
       enabled: boolean;
       sort: number | null;
-      legacy_department_id: string | null;
     } | null;
   }
 
