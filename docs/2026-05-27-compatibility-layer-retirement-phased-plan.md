@@ -85,7 +85,32 @@ Admin 仍存在旧上传入口：
 - `bun run admin:build` 通过。
 - `bun run api:build` 通过。
 
-## 阶段 3：后端旧上传入口退休
+## 阶段 3A：后端旧上传入口观察准备
+
+### 目标
+
+在删除 API `POST /uploads/images` 前，补齐旧入口访问观测和小程序退场口径。
+
+### 执行范围
+
+- 在 `POST /uploads/images` 入口输出兼容层使用日志。
+- 给小程序端补充上传旧接口退场文档。
+
+### 验收
+
+- `bun run api:build` 通过。
+- 小程序文档明确要求不再 fallback 到 `/uploads/images`。
+- 提交独立 commit。
+
+### 执行记录
+
+2026-05-27：
+
+- `POST /uploads/images` 已输出 `[compat] legacy uploads/images endpoint used`。
+- 已新增小程序图片上传旧接口退场文档。
+- `bun run api:build` 通过。
+
+## 阶段 3B：后端旧上传入口退休
 
 ### 目标
 

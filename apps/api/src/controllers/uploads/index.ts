@@ -208,6 +208,17 @@ class UploadController extends BaseController {
       employee_id: actorContext.employeeId,
       customer_id: actorContext.customerId,
     });
+    request.log.warn(
+      {
+        request_id: request.id,
+        scene: fieldResult.data.scene ?? "project_log",
+        tenant_id: actorContext.tenantId,
+        employee_id: actorContext.employeeId,
+        customer_id: actorContext.customerId,
+        file_count: files.length,
+      },
+      "[compat] legacy uploads/images endpoint used",
+    );
 
     const uploadedFiles = await Promise.all(
       files.map(async (file, index) => {
