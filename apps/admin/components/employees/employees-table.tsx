@@ -25,6 +25,7 @@ export type EmployeeRecord = {
   name: string | null;
   phone: string | null;
   role?: string | null;
+  roles?: EmployeeRoleSummary[];
   status: EmployeeStatus | string | null;
   tenant_department_id?: string | null;
   department_name?: string | null;
@@ -41,6 +42,13 @@ export type EmployeeRecord = {
     wechat_mini: boolean;
     wechat_openid_masked?: string | null;
   } | null;
+};
+
+type EmployeeRoleSummary = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
 };
 
 const statusMeta: Record<string, {
@@ -132,6 +140,39 @@ function getLoginBindingMeta(employee: EmployeeRecord): {
   };
 }
 
+function getRoleBadgeVariant(role: EmployeeRoleSummary) {
+  return role.status === "active" ? "outline" : "secondary";
+}
+
+function EmployeeRolesCell({ roles }: { roles?: EmployeeRoleSummary[] }) {
+  if (!roles?.length) {
+    return <span className="text-muted-foreground">未分配</span>;
+  }
+
+  const visibleRoles = roles.slice(0, 2);
+  const hiddenCount = roles.length - visibleRoles.length;
+
+  return (
+    <div className="flex max-w-[220px] flex-wrap gap-1.5">
+      {visibleRoles.map((role) => (
+        <Badge
+          key={role.id}
+          variant={getRoleBadgeVariant(role)}
+          className="max-w-[140px] truncate"
+          title={`${role.name} · ${role.code}`}
+        >
+          {role.name || role.code}
+        </Badge>
+      ))}
+      {hiddenCount > 0 ? (
+        <Badge variant="secondary" title={roles.map((role) => role.name || role.code).join("、")}>
+          +{hiddenCount}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
 export function EmployeesTable({
   employees,
   departments,
@@ -156,13 +197,14 @@ export function EmployeesTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1040px] border-t text-sm">
+      <table className="w-full min-w-[1180px] border-t text-sm">
         <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
           <tr>
             <th className="px-5 py-3">员工</th>
             <th className="px-5 py-3">手机号</th>
             <th className="px-5 py-3">状态</th>
             <th className="px-5 py-3">登录绑定</th>
+            <th className="px-5 py-3">角色</th>
             <th className="px-5 py-3">部门</th>
             <th className="px-5 py-3">职位</th>
             <th className="px-5 py-3">创建时间</th>
@@ -227,6 +269,9 @@ export function EmployeesTable({
                       </div>
                     </div>
                   </td>
+                  <td className="px-5 py-4">
+                    <EmployeeRolesCell roles={employee.roles} />
+                  </td>
                   <td className="px-5 py-4 whitespace-nowrap text-muted-foreground">
                     {departmentName || departmentCode ? (
                       <div>
@@ -263,7 +308,7 @@ export function EmployeesTable({
             })
           ) : (
             <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={8}>
+              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={9}>
                 没有符合条件的员工
               </td>
             </tr>

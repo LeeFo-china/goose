@@ -58,9 +58,15 @@ class EmployeeCoreService {
     const rows = from >= total
       ? []
       : await employeeCoreRepository.listRows({ filters, from, to });
+    const roleMap = await employeeCoreRepository.listEmployeeRoleMap(
+      rows.map((employee) => employee.id),
+    );
 
     return {
-      rows,
+      rows: rows.map((employee) => ({
+        ...employee,
+        roles: roleMap.get(employee.id) || [],
+      })),
       total,
       page,
       pageSize,

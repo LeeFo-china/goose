@@ -16,6 +16,7 @@ type Employee = {
   name: string | null;
   phone: string | null;
   role?: string | null;
+  roles?: EmployeeRoleSummary[];
   status: EmployeeStatus | string | null;
   tenant_department_id?: string | null;
   department_name?: string | null;
@@ -32,6 +33,13 @@ type Employee = {
     wechat_mini: boolean;
     wechat_openid_masked?: string | null;
   } | null;
+};
+
+type EmployeeRoleSummary = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
 };
 
 type EmployeeDepartmentOption = {

@@ -45,6 +45,7 @@ export type EmployeeCoreAccessRow = {
 export type EmployeeCoreRow = EmployeeCoreAccessRow & {
   avatar?: string | null;
   tenant_department?: unknown;
+  roles?: EmployeeRoleSummary[];
 };
 
 export type EmployeeLoginBindingRow = {
@@ -53,6 +54,13 @@ export type EmployeeLoginBindingRow = {
   has_admin_web: boolean | null;
   has_wechat_mini: boolean | null;
   wechat_openid_masked: string | null;
+};
+
+export type EmployeeRoleSummary = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
 };
 
 export type TenantDepartmentWriteRow = {
@@ -158,6 +166,46 @@ class EmployeeCoreRepository {
     }
 
     return (data || []) as unknown as EmployeeCoreRow[];
+  }
+
+  async listEmployeeRoleMap(employeeIds: string[]) {
+    if (employeeIds.length === 0) {
+      return new Map<string, EmployeeRoleSummary[]>();
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employee_roles")
+      .select(`
+        employee_id,
+        role:roles (
+          id,
+          code,
+          name,
+          status
+        )
+      `)
+      .in("employee_id", employeeIds)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询员工角色失败", error);
+    }
+
+    const roleMap = new Map<string, EmployeeRoleSummary[]>();
+    for (const row of (data || []) as unknown as Array<{
+      employee_id: string | null;
+      role: EmployeeRoleSummary | EmployeeRoleSummary[] | null;
+    }>) {
+      if (!row.employee_id || !row.role) continue;
+      const role = Array.isArray(row.role) ? row.role[0] : row.role;
+      if (!role?.id) continue;
+      roleMap.set(row.employee_id, [
+        ...(roleMap.get(row.employee_id) || []),
+        role,
+      ]);
+    }
+
+    return roleMap;
   }
 
   async create(payload: Record<string, unknown>) {
