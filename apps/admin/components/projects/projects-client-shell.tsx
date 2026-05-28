@@ -64,6 +64,7 @@ export function ProjectsClientShell({
           ? { ...current[project.id], ...project }
           : project,
       }));
+      return;
     } else {
       setProjectOverrides({});
     }
