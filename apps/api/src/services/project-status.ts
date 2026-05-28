@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import { customerCoreRepository } from "@/repositories/customer-core";
 import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
 import { projectRepository } from "@/repositories/projects";
@@ -11,6 +12,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { projectMemberService } from "@/services/project-members";
 import {
   inferProjectStatusAction,
   isProjectStatus,
@@ -21,6 +23,8 @@ import {
   type ProjectStatus,
   type ProjectStatusAction,
 } from "@gooes/domain";
+
+const PROJECT_START_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 type TransitionProjectStatusInput = {
   authContext: AuthContext;
@@ -88,7 +92,11 @@ class ProjectStatusService {
       pausedFromStatus,
     });
     if (!transition) {
-      throw Errors.badRequest("当前项目状态不允许执行该动作");
+      throw Errors.business(
+        409,
+        "项目状态已变化，请刷新后重试",
+        ErrorCodes.PROJECT_STATUS_CONFLICT,
+      );
     }
 
     const reason = input.payload.reason?.trim() || null;
@@ -112,12 +120,32 @@ class ProjectStatusService {
       patch.signed_amount = Number(nextSignedAmount);
     }
     if (input.payload.action === "schedule_construction") {
-      const nextStartDate = input.payload.start_date ??
-        patch.start_date ??
-        existing.start_date;
+      const nextStartDate = input.payload.start_date;
+      const constructionManagerEmployeeId =
+        input.payload.construction_manager_employee_id?.trim();
       if (typeof nextStartDate !== "string" || !nextStartDate.trim()) {
         throw Errors.badRequest("项目排期开工前必须先确定开工日期");
       }
+      if (!PROJECT_START_DATE_PATTERN.test(nextStartDate.trim())) {
+        throw Errors.badRequest("开工日期格式必须为 YYYY-MM-DD");
+      }
+      if (!constructionManagerEmployeeId) {
+        throw Errors.business(
+          400,
+          "请选择工程负责人",
+          ErrorCodes.CONSTRUCTION_MANAGER_REQUIRED,
+        );
+      }
+      await projectMemberService.assertEmployeeCanServeRole({
+        projectId: input.projectId,
+        employeeId: constructionManagerEmployeeId,
+        roleCode: "construction_manager",
+        tenantId,
+        invalidError: {
+          message: "所选员工不能作为工程负责人",
+          code: ErrorCodes.INVALID_CONSTRUCTION_MANAGER,
+        },
+      });
       patch.start_date = nextStartDate.trim();
     }
     if (input.payload.action === "start_acceptance") {
@@ -137,10 +165,39 @@ class ProjectStatusService {
         : {}),
     };
 
-    const project = await projectRepository.update(input.projectId, {
-      ...patch,
-      status: transition.toStatus,
-    }, tenantId);
+    if (input.payload.action === "schedule_construction") {
+      return projectRepository.scheduleConstructionTransition({
+        projectId: input.projectId,
+        tenantId,
+        expectedStatus: fromStatus,
+        toStatus: transition.toStatus,
+        startDate: String(patch.start_date),
+        constructionManagerEmployeeId: String(
+          input.payload.construction_manager_employee_id,
+        ).trim(),
+        operatorEmployeeId: input.authContext.employeeId ?? null,
+        operatorAuthUserId: input.authContext.authUserId,
+        reason,
+        metadata,
+      });
+    }
+
+    const project = await projectRepository.updateIfStatus({
+      id: input.projectId,
+      tenantId,
+      expectedStatus: fromStatus,
+      payload: {
+        ...patch,
+        status: transition.toStatus,
+      },
+    });
+    if (!project) {
+      throw Errors.business(
+        409,
+        "项目状态已变化，请刷新后重试",
+        ErrorCodes.PROJECT_STATUS_CONFLICT,
+      );
+    }
 
     await projectStatusTransitionRepository.create({
       tenantId,

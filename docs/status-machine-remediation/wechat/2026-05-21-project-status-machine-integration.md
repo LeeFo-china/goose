@@ -46,12 +46,13 @@ Content-Type: application/json
 }
 ```
 
-排期开工动作需要开工日期：
+排期开工动作需要开工日期和工程负责人：
 
 ```json
 {
   "action": "schedule_construction",
   "start_date": "2026-06-01",
+  "construction_manager_employee_id": "employee-id",
   "metadata": {
     "source": "miniprogram"
   }
@@ -79,12 +80,64 @@ Content-Type: application/json
 - `sign_contract` 仅允许项目处于 `proposal_confirmed` 时执行，不能从 `designing` 跳过方案确认直接签约。
 - 项目签约成功后，后端自动把关联客户销售状态从 `designing` 推进到 `signed`；关联客户已是 `signed` 时保持不变。
 - 项目签约不再写旧客户状态 `contracted`。
-- `schedule_construction` 必须传 `start_date`，没有开工日期不能进入 `pending_start`。
+- `schedule_construction` 必须传 `start_date` 和 `construction_manager_employee_id`，没有开工日期或工程负责人不能进入 `pending_start`。
+- `start_date` 必须为 `YYYY-MM-DD`。
+- 工程负责人必须来自 `GET /projects/:id/member-candidates?role_code=construction_manager` 返回的候选范围；小程序端不要写死部门或岗位编码。
+- 排期开工成功后，后端会把该员工写入项目成员 `role_code=construction_manager`，并作为该角色主负责人。
 - `schedule_construction` 仅允许项目处于 `design_finalized` 时执行。
 - `pause_project` 必须传 `reason`。
 - `mark_invalid` 必须传 `reason`。
-- 非法状态动作会返回 400。
+- 非法状态动作会返回 400；状态已被其他端推进时返回 409 和 `PROJECT_STATUS_CONFLICT`。
 - 无权限会返回 403。
+
+## 工程负责人候选接口
+
+```http
+GET /projects/:id/member-candidates?page=1&pageSize=10&role_code=construction_manager&keyword=张
+Authorization: Bearer <employee_token>
+```
+
+返回结构：
+
+```json
+{
+  "data": {
+    "list": [
+      {
+        "id": "employee-id",
+        "name": "张三",
+        "phone": "18800000000",
+        "department_name": "工程部",
+        "post_name": "项目经理",
+        "department": {
+          "id": "department-id",
+          "name": "工程部"
+        },
+        "post": {
+          "id": "post-id",
+          "name": "项目经理",
+          "code": "PROJECT_MANAGER"
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 10,
+      "total": 1,
+      "totalPages": 1
+    }
+  },
+  "message": "success"
+}
+```
+
+错误码：
+
+| HTTP | code | message | 处理建议 |
+| --- | --- | --- | --- |
+| 400 | `CONSTRUCTION_MANAGER_REQUIRED` | `请选择工程负责人` | 保持弹窗，提示选择负责人 |
+| 400 | `INVALID_CONSTRUCTION_MANAGER` | `所选员工不能作为工程负责人` | 重新拉候选人并要求重选 |
+| 409 | `PROJECT_STATUS_CONFLICT` | `项目状态已变化，请刷新后重试` | 关闭弹窗并刷新项目详情、动作列表 |
 
 ## 阶段写操作限制
 
@@ -100,7 +153,7 @@ Content-Type: application/json
 - 员工端不要再直接通过 `PATCH /projects/:id` 提交 `status`。
 - 状态按钮按 `GET /projects/:id/status-actions` 返回值展示。
 - `designing` 项目的下一步按钮是 `confirm_proposal`，视觉上应紧挨当前“开始设计”状态右侧。
-- `design_finalized` 项目点击“排期开工”时，应弹出开工日期确认组件；员工未选择开工日期时，不调用状态变更接口。
+- `design_finalized` 项目点击“排期开工”时，应弹出开工日期 + 工程负责人选择组件；员工未选择任一必填项时，不调用状态变更接口。
 - 暂无可执行动作时，不展示状态操作按钮。
 - 服务端返回 400 时，直接展示后端中文错误信息。
 - 状态变更成功后，重新拉取项目详情、项目列表、动作列表、时间线和首页统计。

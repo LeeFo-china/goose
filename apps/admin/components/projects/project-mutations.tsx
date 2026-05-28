@@ -590,6 +590,10 @@ function ProjectStatusPanel({
   const [reason, setReason] = useState("");
   const [signedAmount, setSignedAmount] = useState("");
   const [constructionStartDate, setConstructionStartDate] = useState("");
+  const [constructionManagerKeyword, setConstructionManagerKeyword] = useState("");
+  const [constructionManagerCandidates, setConstructionManagerCandidates] = useState<EmployeeOption[]>([]);
+  const [constructionManagerEmployeeId, setConstructionManagerEmployeeId] = useState("");
+  const [constructionManagerLoading, setConstructionManagerLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -669,6 +673,49 @@ function ProjectStatusPanel({
     !constructionStages.required_completed
       ? `进入竣工验收前，还需完成：${missingConstructionStageLabels || "必需施工阶段验收"}`
       : "";
+  const constructionManagerEmployee = constructionManagerCandidates.find(
+    (item) => item.id === constructionManagerEmployeeId,
+  );
+
+  useEffect(() => {
+    if (selectedAction?.action !== "schedule_construction") return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const query = new URLSearchParams({
+        page: "1",
+        pageSize: "20",
+        role_code: "construction_manager",
+      });
+      const normalizedKeyword = constructionManagerKeyword.trim();
+      if (normalizedKeyword) query.set("keyword", normalizedKeyword);
+
+      setConstructionManagerLoading(true);
+      fetch(`/api/backend/projects/${project.id}/member-candidates?${query.toString()}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      })
+        .then((response) => response.json().then((payload) => ({ response, payload })))
+        .then(({ response, payload }) => {
+          if (!response.ok || payload.success === false) {
+            throw new Error(getPayloadMessage(payload, "工程负责人候选加载失败"));
+          }
+          setConstructionManagerCandidates((payload.data?.list || []) as EmployeeOption[]);
+        })
+        .catch((err) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setConstructionManagerCandidates([]);
+          setError(err instanceof Error ? err.message : "工程负责人候选加载失败");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setConstructionManagerLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [constructionManagerKeyword, project.id, selectedAction?.action]);
 
   function closeActionDialog() {
     if (pending) return;
@@ -676,6 +723,9 @@ function ProjectStatusPanel({
     setReason("");
     setSignedAmount("");
     setConstructionStartDate("");
+    setConstructionManagerKeyword("");
+    setConstructionManagerCandidates([]);
+    setConstructionManagerEmployeeId("");
   }
 
   function openActionDialog(action: ProjectStatusActionItem) {
@@ -700,6 +750,13 @@ function ProjectStatusPanel({
     setConstructionStartDate(action.action === "schedule_construction" && project.start_date
       ? project.start_date.slice(0, 10)
       : "");
+    setConstructionManagerKeyword("");
+    setConstructionManagerCandidates([]);
+    setConstructionManagerEmployeeId(action.action === "schedule_construction"
+      ? project.members?.find((member) =>
+        member.role_code === "construction_manager" && member.is_primary !== false
+      )?.employee_id || ""
+      : "");
   }
 
   function submitAction() {
@@ -721,6 +778,13 @@ function ProjectStatusPanel({
       setError("项目排期开工前必须先确定开工日期");
       return;
     }
+    if (
+      selectedAction.action === "schedule_construction" &&
+      !constructionManagerEmployeeId
+    ) {
+      setError("请选择工程负责人");
+      return;
+    }
 
     setError("");
     startTransition(async () => {
@@ -737,6 +801,10 @@ function ProjectStatusPanel({
             start_date: selectedAction.action === "schedule_construction"
               ? constructionStartDate
               : undefined,
+            construction_manager_employee_id:
+              selectedAction.action === "schedule_construction"
+                ? constructionManagerEmployeeId
+                : undefined,
             metadata: { source: "admin" },
           },
         });
@@ -744,6 +812,9 @@ function ProjectStatusPanel({
         setReason("");
         setSignedAmount("");
         setConstructionStartDate("");
+        setConstructionManagerKeyword("");
+        setConstructionManagerCandidates([]);
+        setConstructionManagerEmployeeId("");
         await onChanged();
       } catch (err) {
         setError(err instanceof Error ? err.message : "状态变更失败");
@@ -961,16 +1032,67 @@ function ProjectStatusPanel({
               </div>
             ) : null}
             {selectedAction?.action === "schedule_construction" ? (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="project-status-start-date">开工日期</Label>
-                <Input
-                  id="project-status-start-date"
-                  type="date"
-                  value={constructionStartDate}
-                  disabled={pending}
-                  onChange={(event) => setConstructionStartDate(event.target.value)}
-                />
-              </div>
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="project-status-start-date">开工日期</Label>
+                  <Input
+                    id="project-status-start-date"
+                    type="date"
+                    value={constructionStartDate}
+                    disabled={pending}
+                    onChange={(event) => setConstructionStartDate(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>工程负责人</Label>
+                  <Command shouldFilter={false} className="rounded-md border">
+                    <CommandInput
+                      value={constructionManagerKeyword}
+                      onValueChange={setConstructionManagerKeyword}
+                      placeholder="搜索员工姓名或手机号"
+                      disabled={pending}
+                    />
+                    <CommandList className="max-h-[220px]">
+                      <CommandEmpty>
+                        {constructionManagerLoading ? "加载中..." : "没有可选工程负责人"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {constructionManagerCandidates.map((employee) => {
+                          const selected = employee.id === constructionManagerEmployeeId;
+                          return (
+                            <CommandItem
+                              key={employee.id}
+                              value={`${employee.name || ""} ${employee.phone || ""} ${employee.department_name || ""} ${employee.post_name || ""}`}
+                              onSelect={() => setConstructionManagerEmployeeId(employee.id)}
+                              className="cursor-pointer"
+                            >
+                              <span className="flex min-w-0 flex-1 flex-col">
+                                <span className="truncate text-sm font-medium">
+                                  {getEmployeeOptionLabel(employee)}
+                                </span>
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {getEmployeeMeta(employee) || "暂无部门岗位信息"}
+                                </span>
+                              </span>
+                              {selected ? <Check data-icon="inline-end" /> : null}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                  {constructionManagerEmployee ? (
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      <span className="font-medium">
+                        {getEmployeeOptionLabel(constructionManagerEmployee)}
+                      </span>
+                      <span className="ml-2 text-muted-foreground">
+                        {getEmployeeMeta(constructionManagerEmployee)}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </>
             ) : null}
             <div className="flex flex-col gap-2">
               <Label htmlFor="project-status-reason">

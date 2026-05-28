@@ -108,6 +108,7 @@ Content-Type: application/json
 {
   "action": "schedule_construction",
   "start_date": "2026-06-01",
+  "construction_manager_employee_id": "employee-id",
   "metadata": {
     "source": "admin"
   }
@@ -117,7 +118,8 @@ Content-Type: application/json
 排期开工前置规则：
 
 - 当前项目状态必须是 `design_finalized`。
-- 必须先确认 `start_date`。
+- 必须先确认 `start_date` 和 `construction_manager_employee_id`。
+- 工程负责人必须来自 `GET /projects/:id/member-candidates?role_code=construction_manager` 候选结果。
 - Admin 点击“排期开工”时弹出开工日期确认组件；用户未选择日期时不能提交状态动作。
 
 暂停项目：

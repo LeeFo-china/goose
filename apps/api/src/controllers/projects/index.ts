@@ -43,14 +43,25 @@ type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
   "id" | "name" | "phone" | "owner_id"
 >;
+type ProjectCreateEmployeeDepartmentRow = {
+  id: string;
+  name?: string | null;
+  alias_name?: string | null;
+  code: string | null;
+};
 type ProjectCreateSelectEmployeeRow =
   & Pick<
     Tables<"employees">,
     "id" | "name" | "phone" | "avatar"
   >
   & {
-    department:
-      | Array<Pick<Tables<"departments">, "id" | "name" | "code">>
+    department?:
+      | Array<ProjectCreateEmployeeDepartmentRow>
+      | ProjectCreateEmployeeDepartmentRow
+      | null;
+    tenant_department?:
+      | Array<ProjectCreateEmployeeDepartmentRow>
+      | ProjectCreateEmployeeDepartmentRow
       | null;
     post:
       | Array<Pick<Tables<"posts">, "id" | "name" | "code">>
@@ -1000,12 +1011,14 @@ class ProjectController extends TenantBaseController<
     const list: ProjectCreateEmployeeOption[] =
       (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
         .map((item) => {
-          const department = Array.isArray(item.department)
-            ? (item.department[0] ?? null)
-            : item.department;
+          const rawDepartment = item.department ?? item.tenant_department ?? null;
+          const department = Array.isArray(rawDepartment)
+            ? (rawDepartment[0] ?? null)
+            : rawDepartment;
           const post = Array.isArray(item.post)
             ? (item.post[0] ?? null)
             : item.post;
+          const departmentName = department?.name ?? department?.alias_name ?? null;
 
           return {
             id: item.id,
@@ -1016,10 +1029,10 @@ class ProjectController extends TenantBaseController<
             department: department
               ? {
                 id: department.id,
-                name: department.name,
+                name: departmentName ?? "",
               }
               : null,
-            department_name: department?.name || null,
+            department_name: departmentName,
             post: post
               ? {
                 id: post.id,
@@ -1059,12 +1072,14 @@ class ProjectController extends TenantBaseController<
     const list: ProjectCreateEmployeeOption[] =
       (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
         .map((item) => {
-          const department = Array.isArray(item.department)
-            ? (item.department[0] ?? null)
-            : item.department;
+          const rawDepartment = item.department ?? item.tenant_department ?? null;
+          const department = Array.isArray(rawDepartment)
+            ? (rawDepartment[0] ?? null)
+            : rawDepartment;
           const post = Array.isArray(item.post)
             ? (item.post[0] ?? null)
             : item.post;
+          const departmentName = department?.name ?? department?.alias_name ?? null;
 
           return {
             id: item.id,
@@ -1075,10 +1090,10 @@ class ProjectController extends TenantBaseController<
             department: department
               ? {
                 id: department.id,
-                name: department.name,
+                name: departmentName ?? "",
               }
               : null,
-            department_name: department?.name || null,
+            department_name: departmentName,
             post: post
               ? {
                 id: post.id,

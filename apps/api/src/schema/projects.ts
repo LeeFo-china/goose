@@ -113,7 +113,13 @@ export const ProjectStatusTransitionSchema = z.object({
     .min(0, "签约金额不能为负数")
     .nullable()
     .optional(),
-  start_date: z.string().trim().min(1, "开工日期不能为空").nullable().optional(),
+  start_date: z.string()
+    .trim()
+    .min(1, "开工日期不能为空")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "开工日期格式必须为 YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  construction_manager_employee_id: z.uuid("请选择有效的工程负责人").nullable().optional(),
 });
 
 export const ProjectStatusTransitionListQuerySchema = PaginationQuerySchema;

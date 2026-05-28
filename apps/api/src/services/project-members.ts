@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import { permissionRepository } from "@/repositories/permissions";
 import { projectMemberRepository } from "@/repositories/project-members";
 import { projectRepository } from "@/repositories/projects";
@@ -49,6 +50,11 @@ type CustomerOwnerMember = {
   deleted_at: null;
   employee: ProjectMemberEmployee | null;
   is_virtual: true;
+};
+
+type ProjectRoleValidationErrorInput = {
+  message?: string;
+  code?: string;
 };
 
 export type ProjectPrimaryAssignee = {
@@ -184,6 +190,45 @@ class ProjectMemberService {
       : PROJECT_MEMBER_ROLE_CONFIG[roleCode].sortOrder;
   }
 
+  private createRoleValidationError(input?: ProjectRoleValidationErrorInput) {
+    return Errors.business(
+      400,
+      input?.message ?? "所选员工不能作为该项目角色",
+      input?.code ?? ErrorCodes.VALIDATION_ERROR,
+    );
+  }
+
+  private async assertEmployeeCanServeRoleCandidate(input: {
+    employeeId: string;
+    roleCode: ProjectMemberRoleCode;
+    tenantId: string;
+    invalidError?: ProjectRoleValidationErrorInput;
+  }) {
+    const employee = await permissionRepository.findEmployeeById(input.employeeId);
+    if (!employee || employee.tenant_id !== input.tenantId) {
+      throw this.createRoleValidationError(input.invalidError);
+    }
+
+    if (!isEmployeeOperableStatus(employee.status)) {
+      throw this.createRoleValidationError(input.invalidError);
+    }
+
+    const postIds = await projectRepository.listProjectMemberRolePostIds({
+      tenantId: input.tenantId,
+      roleCode: input.roleCode,
+    });
+
+    if (
+      postIds.length === 0 ||
+      !employee.post_id ||
+      !postIds.includes(employee.post_id)
+    ) {
+      throw this.createRoleValidationError(input.invalidError);
+    }
+
+    return employee;
+  }
+
   async listProjectMembers(projectId: string) {
     const rows = await projectMemberRepository.listActiveByProjectId(projectId);
     return rows.map((item) => this.serializeMember(item));
@@ -292,6 +337,17 @@ class ProjectMemberService {
     });
 
     return this.serializeMember(row);
+  }
+
+  async assertEmployeeCanServeRole(input: {
+    projectId: string;
+    employeeId: string;
+    roleCode: ProjectMemberRoleCode;
+    tenantId: string;
+    invalidError?: ProjectRoleValidationErrorInput;
+  }) {
+    await this.assertProjectExists(input.projectId, input.tenantId);
+    return this.assertEmployeeCanServeRoleCandidate(input);
   }
 
   async updateProjectMember(

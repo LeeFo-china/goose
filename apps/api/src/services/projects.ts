@@ -805,6 +805,7 @@ class ProjectService {
         const project = await projectStatusService.transitionProjectStatus(input);
         this.invalidatePublicProjectsCache();
         this.invalidatePublicProjectCache(input.projectId);
+        this.invalidatePublicProjectMembersCache(input.projectId);
         return project;
     }
 
@@ -897,10 +898,31 @@ class ProjectService {
         const { page, pageSize, keyword } = input.query;
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
+        const roleCode = "role_code" in input.query ? input.query.role_code : undefined;
+        const postIds = roleCode
+            ? await projectRepository.listProjectMemberRolePostIds({
+                tenantId: input.tenantId,
+                roleCode,
+            })
+            : undefined;
+
+        if (roleCode && postIds?.length === 0) {
+            return {
+                rows: [],
+                pagination: {
+                    page,
+                    pageSize,
+                    total: 0,
+                    totalPages: 0,
+                },
+            };
+        }
+
         const result = await projectRepository.listCreateEmployees({
             filters: {
                 tenantId: input.tenantId,
                 keyword,
+                postIds,
             },
             from,
             to,

@@ -1,11 +1,13 @@
 import { SupabaseDB } from "@/utils/supabase/index";
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import type {
   CreateProjectInput,
   ProjectListQuery,
   UpdateProjectInput,
 } from "@/schema/projects";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
+import type { ProjectMemberRoleCode } from "@gooes/domain";
 
 export const PROJECT_LIST_SELECT = `
   id,
@@ -126,6 +128,15 @@ function escapeSupabaseOrValue(value: string) {
 }
 
 class ProjectRepository {
+  private rpc(name: string, params: Record<string, unknown>) {
+    return (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (functionName: string, parameters: Record<string, unknown>) => Promise<{
+        data: unknown;
+        error: { message?: string; code?: string; details?: string } | null;
+      }>;
+    }).rpc(name, params);
+  }
+
   private applyProjectIdsFilter(query: any, visibleProjectIds: string[] | null) {
     if (visibleProjectIds === null) {
       return query;
@@ -557,6 +568,47 @@ class ProjectRepository {
     };
   }
 
+  async listProjectMemberRolePostIds(input: {
+    tenantId: string;
+    roleCode: ProjectMemberRoleCode;
+  }) {
+    const { data: ruleRows, error: ruleError } = await SupabaseDB.getAdminClient()
+      .from("project_member_role_post_rules")
+      .select("post_code")
+      .eq("tenant_id", input.tenantId)
+      .eq("role_code", input.roleCode)
+      .eq("enabled", true)
+      .order("sort", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (ruleError) {
+      throw Errors.dbError("查询项目成员角色岗位规则失败", ruleError);
+    }
+
+    const postCodes = Array.from(
+      new Set(
+        ((ruleRows || []) as Array<{ post_code: string | null }>)
+          .map((item) => item.post_code)
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+    if (postCodes.length === 0) return [];
+
+    const { data: postRows, error: postError } = await SupabaseDB.getAdminClient()
+      .from("posts")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .in("code", postCodes);
+
+    if (postError) {
+      throw Errors.dbError("查询项目成员角色岗位失败", postError);
+    }
+
+    return ((postRows || []) as Array<{ id: string | null }>)
+      .map((item) => item.id)
+      .filter((item): item is string => Boolean(item));
+  }
+
   async update(id: string, input: UpdateProjectInput, tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("projects")
@@ -578,6 +630,85 @@ class ProjectRepository {
     }
 
     return data;
+  }
+
+  async updateIfStatus(input: {
+    id: string;
+    tenantId: string;
+    expectedStatus: string;
+    payload: UpdateProjectInput;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .update(input.payload)
+      .eq("id", input.id)
+      .eq("tenant_id", input.tenantId)
+      .eq("status", input.expectedStatus)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新项目状态失败", error);
+    }
+
+    return data;
+  }
+
+  async scheduleConstructionTransition(input: {
+    projectId: string;
+    tenantId: string;
+    expectedStatus: string;
+    toStatus: string;
+    startDate: string;
+    constructionManagerEmployeeId: string;
+    operatorEmployeeId?: string | null;
+    operatorAuthUserId?: string | null;
+    reason?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const { data, error } = await this.rpc(
+      "schedule_project_construction_transition",
+      {
+        p_project_id: input.projectId,
+        p_tenant_id: input.tenantId,
+        p_expected_status: input.expectedStatus,
+        p_to_status: input.toStatus,
+        p_start_date: input.startDate,
+        p_construction_manager_employee_id: input.constructionManagerEmployeeId,
+        p_operator_employee_id: input.operatorEmployeeId ?? null,
+        p_operator_auth_user_id: input.operatorAuthUserId ?? null,
+        p_reason: input.reason ?? null,
+        p_metadata: input.metadata ?? {},
+      },
+    );
+
+    if (error) {
+      const message = error.message || error.details || "";
+      if (message.includes("PROJECT_STATUS_CONFLICT")) {
+        throw Errors.business(
+          409,
+          "项目状态已变化，请刷新后重试",
+          ErrorCodes.PROJECT_STATUS_CONFLICT,
+        );
+      }
+      if (message.includes("INVALID_CONSTRUCTION_MANAGER")) {
+        throw Errors.business(
+          400,
+          "所选员工不能作为工程负责人",
+          ErrorCodes.INVALID_CONSTRUCTION_MANAGER,
+        );
+      }
+      if (message.includes("PROJECT_NOT_FOUND")) {
+        throw Errors.badRequest("项目不存在");
+      }
+      throw Errors.dbError("排期开工状态流转失败", error);
+    }
+
+    if (!data) {
+      throw Errors.dbError("排期开工状态流转失败");
+    }
+
+    return data as Record<string, unknown>;
   }
 }
 
