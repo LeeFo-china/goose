@@ -7,7 +7,7 @@ import type {
   UpdateProjectInput,
 } from "@/schema/projects";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
-import type { ProjectMemberRoleCode } from "@gooes/domain";
+import type { DepartmentCode, ProjectMemberRoleCode } from "@gooes/domain";
 
 export const PROJECT_LIST_SELECT = `
   id,
@@ -117,6 +117,7 @@ export type ProjectCreateCustomerFilters = {
 export type ProjectCreateEmployeeFilters = {
   tenantId: string;
   keyword?: string;
+  departmentCodes?: DepartmentCode[];
   postIds?: string[];
 };
 
@@ -526,6 +527,31 @@ class ProjectRepository {
     from: number;
     to: number;
   }) {
+    let departmentIds: string[] | undefined;
+    if (input.filters.departmentCodes && input.filters.departmentCodes.length > 0) {
+      const { data: departmentRows, error: departmentError } = await SupabaseDB.getAdminClient()
+        .from("tenant_departments")
+        .select("id")
+        .eq("tenant_id", input.filters.tenantId)
+        .eq("enabled", true)
+        .in("code", input.filters.departmentCodes);
+
+      if (departmentError) {
+        throw Errors.dbError("查询项目创建员工部门失败", departmentError);
+      }
+
+      departmentIds = ((departmentRows || []) as Array<{ id: string | null }>)
+        .map((item) => item.id)
+        .filter((item): item is string => Boolean(item));
+
+      if (departmentIds.length === 0) {
+        return {
+          rows: [],
+          total: 0,
+        };
+      }
+    }
+
     let query = SupabaseDB.getAdminClient()
       .from("employees")
       .select(
@@ -543,6 +569,10 @@ class ProjectRepository {
       .eq("status", "active")
       .eq("tenant_id", input.filters.tenantId)
       .order("created_at", { ascending: false });
+
+    if (departmentIds && departmentIds.length > 0) {
+      query = query.in("tenant_department_id", departmentIds);
+    }
 
     if (input.filters.postIds && input.filters.postIds.length > 0) {
       query = query.in("post_id", input.filters.postIds);

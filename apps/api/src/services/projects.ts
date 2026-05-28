@@ -8,6 +8,7 @@ import {
 import type {
     ProjectCreateSelectCustomerQueryType,
     ProjectCreateSelectEmployeeQueryType,
+    ProjectCreateSelectEmployeeScene,
     ProjectMemberCandidateQueryType,
 } from "@/schema/project-create-select";
 import { Errors } from "@/errors/error-factory";
@@ -20,6 +21,7 @@ import {
     projectMemberService,
 } from "@/services/project-members";
 import { projectStatusService } from "@/services/project-status";
+import type { DepartmentCode, ProjectMemberRoleCode } from "@gooes/domain";
 
 const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_DETAIL_CACHE_TTL_MS = 5 * 60_000;
@@ -27,6 +29,21 @@ const PUBLIC_PROJECT_LOGS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_MEMBERS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_DETAIL_PREWARM_LIMIT = 3;
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+
+const PROJECT_CREATE_EMPLOYEE_SCENE_DEPARTMENTS: Record<
+    ProjectCreateSelectEmployeeScene,
+    DepartmentCode[]
+> = {
+    project_designer: ["DESIGN"],
+    project_supervisor: ["PROJECT"],
+    project_construction_manager: ["PROJECT"],
+};
+
+const PROJECT_MEMBER_ROLE_DEPARTMENTS: Partial<Record<ProjectMemberRoleCode, DepartmentCode[]>> = {
+    designer: ["DESIGN"],
+    supervisor: ["PROJECT"],
+    construction_manager: ["PROJECT"],
+};
 
 type CacheEntry<T> = {
     expiresAt: number;
@@ -899,6 +916,11 @@ class ProjectService {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
         const roleCode = "role_code" in input.query ? input.query.role_code : undefined;
+        const departmentCodes = "scene" in input.query
+            ? PROJECT_CREATE_EMPLOYEE_SCENE_DEPARTMENTS[input.query.scene]
+            : roleCode
+                ? PROJECT_MEMBER_ROLE_DEPARTMENTS[roleCode]
+                : undefined;
         const postIds = roleCode
             ? await projectRepository.listProjectMemberRolePostIds({
                 tenantId: input.tenantId,
@@ -922,6 +944,7 @@ class ProjectService {
             filters: {
                 tenantId: input.tenantId,
                 keyword,
+                departmentCodes,
                 postIds,
             },
             from,
