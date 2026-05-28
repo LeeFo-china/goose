@@ -16,10 +16,14 @@ class WechatAuthRoleService {
     return value ?? null;
   }
 
-  private hasActiveEmployee(rows: WechatAuthEmployeeRoleRow[]) {
+  private hasActiveEmployee(userId: string, rows: WechatAuthEmployeeRoleRow[]) {
     return rows.some((item) => {
       const tenant = this.normalizeTenantRelation(item.tenant);
-      return item.status === "active" && tenant?.status === "active";
+      return (
+        item.user_id === userId &&
+        item.status === "active" &&
+        tenant?.status === "active"
+      );
     });
   }
 
@@ -55,7 +59,7 @@ class WechatAuthRoleService {
     ]);
 
     const roles = new Set<string>();
-    if (this.hasActiveEmployee(employees)) {
+    if (this.hasActiveEmployee(input.userId, employees)) {
       roles.add("employee");
     }
 

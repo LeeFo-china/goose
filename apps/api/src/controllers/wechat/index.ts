@@ -421,6 +421,15 @@ export class WeChatController extends BaseController {
       return null;
     }
 
+    const isBound = await authorizationService.isEmployeeBoundToAuthUser({
+      authUserId,
+      employeeId: employeeMembership.identity_id,
+      tenantId: employeeMembership.tenant_id,
+    });
+    if (!isBound) {
+      return null;
+    }
+
     let authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
       employeeMembership.identity_id,
     );
@@ -443,6 +452,14 @@ export class WeChatController extends BaseController {
     openid?: string | null;
     roles?: string[];
   }) {
+    const isBound = await authorizationService.isEmployeeBoundToAuthUser({
+      authUserId: input.authUserId,
+      employeeId: input.employeeId,
+    });
+    if (!isBound) {
+      return null;
+    }
+
     let authContext = await authorizationService.getEmployeeLoginContextByEmployeeId(
       input.employeeId,
     );
@@ -459,13 +476,29 @@ export class WeChatController extends BaseController {
     });
   }
 
-  private buildEmployeeLoginContextFromMembership(input: {
+  private async buildEmployeeLoginContextFromMembership(input: {
     authUserId: string;
     row: WechatLoginMembershipRow;
     openid?: string | null;
     roles?: string[];
   }) {
     const row = input.row;
+    if (row.employee_user_id !== input.authUserId) {
+      return null;
+    }
+    if (!row.employee_id) {
+      return null;
+    }
+
+    const isBound = await authorizationService.isEmployeeBoundToAuthUser({
+      authUserId: input.authUserId,
+      employeeId: row.employee_id,
+      tenantId: row.tenant_id,
+    });
+    if (!isBound) {
+      return null;
+    }
+
     const authContext: AuthContext = {
       authUserId: input.authUserId,
       employeeId: row.employee_id,
@@ -668,7 +701,7 @@ export class WeChatController extends BaseController {
         item.identity_id === employeeMembership.identity_id
       );
       const employeeLogin = employeeLoginRow
-        ? this.buildEmployeeLoginContextFromMembership({
+        ? await this.buildEmployeeLoginContextFromMembership({
           authUserId: userId,
           row: employeeLoginRow,
           openid: wxData.openid,

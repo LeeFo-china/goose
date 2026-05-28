@@ -440,6 +440,33 @@ class AuthorizationService {
     }, employee?.user_id || "");
   }
 
+  async isEmployeeBoundToAuthUser(input: {
+    authUserId: string;
+    employeeId: string;
+    tenantId?: string | null;
+  }) {
+    const employee = await permissionRepository.findEmployeeById(input.employeeId);
+    return Boolean(
+      employee &&
+        employee.user_id === input.authUserId &&
+        (!input.tenantId || employee.tenant_id === input.tenantId),
+    );
+  }
+
+  async assertEmployeeBoundToAuthUser(input: {
+    authUserId: string;
+    employeeId: string;
+    tenantId?: string | null;
+  }) {
+    const isBound = await this.isEmployeeBoundToAuthUser(input);
+    if (!isBound) {
+      throw Errors.unauthorized(
+        "当前员工身份已失效，请重新登录",
+        ErrorCodes.EMPLOYEE_CONTEXT_MISSING,
+      );
+    }
+  }
+
   invalidateAuthContext(input: {
     authUserId?: string | null;
     employeeId?: string | null;

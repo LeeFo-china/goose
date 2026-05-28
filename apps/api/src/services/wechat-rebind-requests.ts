@@ -15,6 +15,7 @@ import type { AuthContext } from "@/services/authorization";
 import { authorizationService } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { userIdentityService } from "@/services/user-identities";
+import { wechatCustomerIdentityService } from "@/services/wechat-customer-identities";
 import { SupabaseDB } from "@/utils/supabase";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { isEmployeeOperableStatus, type SmsScene, type SmsVerificationStatus } from "@gooes/domain";
@@ -336,6 +337,14 @@ class WechatRebindRequestService {
       );
     }
 
+    if (employee.user_id !== user.sub) {
+      throw Errors.business(
+        409,
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
     this.assertHasPhoneRecovery(employee);
     await this.assertBusinessIdentityBelongsToUser({
       userId: user.sub,
@@ -344,6 +353,26 @@ class WechatRebindRequestService {
       identityId: user.employee_id,
     });
     await this.assertActiveWechatOauth(user);
+    const unboundEmployee = await wechatRebindRequestRepository.unbindEmployee({
+      employeeId: user.employee_id,
+      tenantId: user.tenant_id,
+      authUserId: user.sub,
+    });
+    if (!unboundEmployee) {
+      throw Errors.business(
+        409,
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
+    await userIdentityService.unbindBusinessMembershipBestEffort({
+      userId: user.sub,
+      tenantId: user.tenant_id,
+      identityType: "employee",
+      identityId: user.employee_id,
+      source: "employee_unbind_wechat",
+    });
     await userIdentityService.unbindOauthIdentityBestEffort({
       userId: user.sub,
       platform: "wechat_mini",
@@ -354,6 +383,11 @@ class WechatRebindRequestService {
     authorizationService.invalidateAuthContext({
       authUserId: user.sub,
       employeeId: user.employee_id,
+    });
+    wechatCustomerIdentityService.invalidateCustomerTenantOptions(user.sub);
+    wechatCustomerIdentityService.invalidateWechatLoginState({
+      authUserId: user.sub,
+      openid: user.openid,
     });
     return { success: true, message: "微信绑定已解除" };
   }

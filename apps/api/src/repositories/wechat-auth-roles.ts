@@ -3,6 +3,7 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type WechatAuthEmployeeRoleRow = {
   id: string;
+  user_id: string | null;
   status: string | null;
   tenant:
     | { id?: string | null; status?: string | null }
@@ -30,6 +31,7 @@ class WechatAuthRoleRepository {
       .from("employees")
       .select(`
         id,
+        user_id,
         status,
         tenant:tenants!employees_tenant_id_fkey(
           id,

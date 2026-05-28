@@ -438,6 +438,14 @@ async function assertWechatBusinessBinding(payload: ReturnType<typeof verifyToke
   const tenantId = payload.tenant_id;
   const customerId = payload.customer_id ?? null;
   const employeeId = payload.employee_id ?? null;
+  if (employeeId) {
+    await authorizationService.assertEmployeeBoundToAuthUser({
+      authUserId: userId,
+      employeeId,
+      tenantId,
+    });
+  }
+
   const cacheKey = buildWechatIdentityCheckCacheKey("business", payload);
   await runWechatIdentityCheckOnce(cacheKey, payload, async () => {
     if (customerId) {

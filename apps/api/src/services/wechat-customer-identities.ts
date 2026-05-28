@@ -347,6 +347,8 @@ class WechatCustomerIdentityService {
     const employeeLoginRows = rows.filter((row) => (
       row.identity_type === "employee" &&
       row.employee_id === row.identity_id &&
+      row.employee_user_id === authUserId &&
+      row.employee_status === "active" &&
       row.tenant_id &&
       row.tenant_status === "active"
     ));
@@ -416,6 +418,8 @@ class WechatCustomerIdentityService {
     const employeeLoginRows = rows.filter((row) => (
       row.identity_type === "employee" &&
       row.employee_id === row.identity_id &&
+      row.employee_user_id === authUserId &&
+      row.employee_status === "active" &&
       row.tenant_id &&
       row.tenant_status === "active"
     ));
