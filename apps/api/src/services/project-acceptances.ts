@@ -113,6 +113,15 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
   } | null;
 };
 
+type CreateAcceptanceResponseMode = "summary" | "detail";
+
+type AcceptanceCreateSummary = Pick<
+  ProjectAcceptanceRow,
+  "id" | "project_id" | "stage_code" | "status" | "created_at"
+> & {
+  stage_label: string | null;
+};
+
 type CustomerAcceptanceListResult = {
   list: AcceptanceDetail[];
   pagination: {
@@ -1539,6 +1548,9 @@ class ProjectAcceptanceService {
   async createAcceptance(
     authContext: AuthContext,
     input: CreateProjectAcceptanceInput,
+    options: {
+      response?: CreateAcceptanceResponseMode;
+    } = {},
   ) {
     const employeeId = this.assertCurrentEmployee(authContext);
     const tenantId = this.requireTenantId(authContext);
@@ -1615,7 +1627,22 @@ class ProjectAcceptanceService {
       operatorId: employeeId,
     });
 
-    return this.buildDetail(row);
+    if (options.response === "detail") {
+      return this.buildDetail(row);
+    }
+
+    return this.buildCreateSummary(row);
+  }
+
+  private buildCreateSummary(row: ProjectAcceptanceRow): AcceptanceCreateSummary {
+    return {
+      id: row.id,
+      project_id: row.project_id,
+      stage_code: row.stage_code,
+      stage_label: this.getStageLabel(row.stage_code),
+      status: row.status,
+      created_at: row.created_at,
+    };
   }
 
   private async applyUpdate(

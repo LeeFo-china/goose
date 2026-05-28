@@ -6,6 +6,7 @@ import {
   CreateProjectAcceptanceSchema,
   CustomerConfirmProjectAcceptanceSchema,
   CustomerDisputeProjectAcceptanceSchema,
+  ProjectAcceptanceCreateQuerySchema,
   NotifyProjectAcceptanceCustomerSchema,
   ProjectAcceptanceListQuerySchema,
   ProjectAcceptanceTemplateListQuerySchema,
@@ -56,12 +57,20 @@ class ProjectAcceptancesController extends TenantBaseController<
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
     const authContext = await this.getRequiredTenantContext(request);
+    const queryResult = ProjectAcceptanceCreateQuerySchema.safeParse(
+      request.query ?? {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
     const result = CreateProjectAcceptanceSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await projectAcceptanceService.createAcceptance(
       authContext,
       result.data,
+      {
+        response: queryResult.data.response,
+      },
     );
     return ResponseHandler.success(data);
   };

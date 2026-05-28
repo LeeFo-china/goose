@@ -35,6 +35,12 @@ export const ProjectAcceptanceTemplateListQuerySchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
 });
 
+export const ProjectAcceptanceCreateQuerySchema = z.object({
+  response: z.enum(["summary", "detail"], {
+    message: "response must be one of: summary, detail",
+  }).optional().default("summary"),
+});
+
 export const CreateProjectAcceptanceSchema = z.object({
   project_id: z.uuid("请选择有效的项目"),
   stage_code: z.enum(PROJECT_LOG_STAGE_CODE_VALUES, {
@@ -132,6 +138,9 @@ export type ProjectAcceptanceListQuery = z.infer<
 >;
 export type ProjectAcceptanceTemplateListQuery = z.infer<
   typeof ProjectAcceptanceTemplateListQuerySchema
+>;
+export type ProjectAcceptanceCreateQuery = z.infer<
+  typeof ProjectAcceptanceCreateQuerySchema
 >;
 export type CreateProjectAcceptanceInput = z.infer<
   typeof CreateProjectAcceptanceSchema
