@@ -20,6 +20,7 @@ export const PROJECT_ACCEPTANCE_ACTION_VALUES = [
   'leader_reject',
   'customer_confirm',
   'customer_dispute',
+  'employee_rectify',
   'cancel',
 ] as const;
 

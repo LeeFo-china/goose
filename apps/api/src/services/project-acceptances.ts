@@ -11,6 +11,7 @@ import type {
   ProjectAcceptanceListQuery,
   ProjectAcceptanceTemplateListQuery,
   RejectProjectAcceptanceInput,
+  RectifyProjectAcceptanceInput,
   SubmitProjectAcceptanceInput,
   UpdateProjectAcceptanceInput,
   VerifyProjectAcceptanceOpenTicketInput,
@@ -73,6 +74,8 @@ type AcceptanceImageItem = {
 type ActionMetadata = {
   images: string[];
   image_items: AcceptanceImageItem[];
+  referenced_action_id: string | null;
+  referenced_item_ids: string[];
   referenced_image_ids: string[];
   referenced_image_paths: string[];
   referenced_images: AcceptanceImageItem[];
@@ -93,6 +96,10 @@ type AcceptanceDetail = ProjectAcceptanceRow & {
     operator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceCustomerRow | null;
     images: string[];
     image_items: AcceptanceImageItem[];
+    referenced_action_id: string | null;
+    referenced_item_ids: string[];
+    referenced_image_ids: string[];
+    referenced_image_paths: string[];
     referenced_images: AcceptanceImageItem[];
   }>;
   project: ProjectAcceptanceProjectRow | null;
@@ -139,7 +146,7 @@ class ProjectAcceptanceWorkflowService {
   }) {
     const allowed: Record<ProjectAcceptanceStatus, ProjectAcceptanceAction[]> = {
       draft: ["update", "submit", "cancel"],
-      rejected: ["update", "submit", "cancel"],
+      rejected: ["update", "submit", "employee_rectify", "cancel"],
       submitted: ["leader_approve", "leader_reject", "cancel"],
       leader_approved: ["customer_confirm", "customer_dispute", "cancel"],
       customer_confirmed: [],
@@ -400,6 +407,14 @@ class ProjectAcceptanceService {
         typeof item === "string"
       )
       : [];
+    const referencedActionId = typeof raw.referenced_action_id === "string"
+      ? raw.referenced_action_id
+      : null;
+    const referencedItemIds = Array.isArray(raw.referenced_item_ids)
+      ? raw.referenced_item_ids.filter((item): item is string =>
+        typeof item === "string"
+      )
+      : [];
     const referencedImages = Array.isArray(raw.referenced_images)
       ? raw.referenced_images
         .filter((item): item is Record<string, unknown> =>
@@ -412,6 +427,8 @@ class ProjectAcceptanceService {
     return {
       images,
       image_items: this.normalizeImageItems(images),
+      referenced_action_id: referencedActionId,
+      referenced_item_ids: referencedItemIds,
       referenced_image_ids: referencedImageIds,
       referenced_image_paths: referencedImagePaths,
       referenced_images: referencedImages,
@@ -594,6 +611,10 @@ class ProjectAcceptanceService {
             : null,
           images: metadata.images,
           image_items: metadata.image_items,
+          referenced_action_id: metadata.referenced_action_id,
+          referenced_item_ids: metadata.referenced_item_ids,
+          referenced_image_ids: metadata.referenced_image_ids,
+          referenced_image_paths: metadata.referenced_image_paths,
           referenced_images: metadata.referenced_images,
         };
       }),
@@ -1691,6 +1712,33 @@ class ProjectAcceptanceService {
     return nextRow;
   }
 
+  private getLatestReturnActionIndex(actions: ProjectAcceptanceActionRow[]) {
+    for (let index = actions.length - 1; index >= 0; index -= 1) {
+      const action = actions[index];
+      if (!action) continue;
+      if (action.action === "leader_reject" || action.action === "customer_dispute") {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  private getLatestEmployeeRectifyActionAfter(
+    actions: ProjectAcceptanceActionRow[],
+    returnActionIndex: number,
+  ) {
+    const lowerBoundIndex = Math.max(returnActionIndex, -1);
+    for (let index = actions.length - 1; index > lowerBoundIndex; index -= 1) {
+      const action = actions[index];
+      if (action?.action === "employee_rectify") {
+        return action;
+      }
+    }
+
+    return null;
+  }
+
   async updateAcceptance(
     authContext: AuthContext,
     id: string,
@@ -1743,11 +1791,15 @@ class ProjectAcceptanceService {
     beforeItems: ProjectAcceptanceItemRow[];
     afterItems: ProjectAcceptanceItemRow[];
     isResubmit: boolean;
+    actionLevelRectification: ProjectAcceptanceActionRow | null;
   }) {
     const beforeFailIds = new Set(
       input.beforeItems
         .filter((item) => item.result === "fail")
         .map((item) => item.id),
+    );
+    const beforeFailedItems = input.beforeItems.filter((item) =>
+      beforeFailIds.has(item.id)
     );
 
     const failedItems: ProjectAcceptanceItemRow[] = [];
@@ -1779,19 +1831,37 @@ class ProjectAcceptanceService {
         if (item.result !== "pass" && item.result !== "not_applicable") {
           throw Errors.badRequest(`整改项「${item.title}」必须重新验证通过`);
         }
-        if (!item.rectification_remark?.trim()) {
-          throw Errors.badRequest(`整改项「${item.title}」必须填写整改说明`);
-        }
-        const rectificationImages = this.normalizeImageArray(
-          item.rectification_images,
-        );
-        if (item.photo_required && rectificationImages.length === 0) {
-          throw Errors.badRequest(`整改项「${item.title}」必须上传整改后照片`);
+        if (!input.actionLevelRectification) {
+          if (!item.rectification_remark?.trim()) {
+            throw Errors.badRequest(`整改项「${item.title}」必须填写整改说明`);
+          }
+          const rectificationImages = this.normalizeImageArray(
+            item.rectification_images,
+          );
+          if (item.photo_required && rectificationImages.length === 0) {
+            throw Errors.badRequest(`整改项「${item.title}」必须上传整改后照片`);
+          }
         }
       }
 
       if (item.result === "fail") {
         failedItems.push(item);
+      }
+    }
+
+    if (input.isResubmit) {
+      if (!input.actionLevelRectification && beforeFailedItems.length === 0) {
+        throw Errors.badRequest("请先提交整改说明");
+      }
+
+      if (input.actionLevelRectification) {
+        const rectificationMetadata = this.normalizeActionMetadata(
+          input.actionLevelRectification.metadata,
+        );
+        const requiresPhoto = beforeFailedItems.some((item) => item.photo_required);
+        if (requiresPhoto && rectificationMetadata.images.length === 0) {
+          throw Errors.badRequest("整改项存在需拍照项，必须上传整改后照片");
+        }
       }
     }
 
@@ -1815,6 +1885,15 @@ class ProjectAcceptanceService {
       row.id,
       row.tenant_id,
     );
+    const actions = await projectAcceptanceRepository.listActions(
+      row.id,
+      row.tenant_id,
+    );
+    const latestReturnActionIndex = this.getLatestReturnActionIndex(actions);
+    const actionLevelRectification = this.getLatestEmployeeRectifyActionAfter(
+      actions,
+      latestReturnActionIndex,
+    );
     row = await this.applyUpdate(row, input);
     const afterItems = await projectAcceptanceRepository.listItems(
       row.id,
@@ -1825,6 +1904,7 @@ class ProjectAcceptanceService {
       beforeItems,
       afterItems,
       isResubmit: row.status === "rejected",
+      actionLevelRectification,
     });
 
     if (failedItems.length > 0) {
@@ -2066,6 +2146,89 @@ class ProjectAcceptanceService {
     });
 
     return this.buildDetail(nextRow);
+  }
+
+  async rectifyAcceptance(
+    authContext: AuthContext,
+    id: string,
+    input: RectifyProjectAcceptanceInput,
+  ) {
+    const tenantId = this.requireTenantId(authContext);
+    const row = await this.getRequiredAcceptance(id, tenantId);
+    projectAcceptanceWorkflowService.assertTransition({
+      currentStatus: row.status,
+      action: "employee_rectify",
+    });
+    this.assertCanSubmit(authContext, row);
+
+    const [items, actions] = await Promise.all([
+      projectAcceptanceRepository.listItems(row.id, row.tenant_id),
+      projectAcceptanceRepository.listActions(row.id, row.tenant_id),
+    ]);
+    const latestReturnActionIndex = this.getLatestReturnActionIndex(actions);
+    const latestReturnAction = latestReturnActionIndex >= 0
+      ? actions[latestReturnActionIndex] ?? null
+      : null;
+
+    if (input.referenced_action_id) {
+      const referencedAction = actions.find((item) =>
+        item.id === input.referenced_action_id
+      );
+      if (
+        !referencedAction ||
+        (referencedAction.action !== "leader_reject" &&
+          referencedAction.action !== "customer_dispute")
+      ) {
+        throw Errors.badRequest("关联的驳回或疑问记录不存在");
+      }
+    }
+
+    const itemIds = new Set(items.map((item) => item.id));
+    const invalidReferencedItemId = input.referenced_item_ids.find((item) =>
+      !itemIds.has(item)
+    );
+    if (invalidReferencedItemId) {
+      throw Errors.badRequest("关联的验收项不属于当前验收单");
+    }
+
+    const failedItems = items.filter((item) => item.result === "fail");
+    const requiresPhoto = failedItems.some((item) => item.photo_required);
+    if (requiresPhoto && input.images.length === 0) {
+      throw Errors.badRequest("整改项存在需拍照项，必须上传整改后照片");
+    }
+
+    const imageReferenceCatalog = this.buildImageReferenceCatalog(row.id, items);
+    const referencedImages = this.resolveReferencedImages({
+      ids: input.referenced_image_ids,
+      paths: input.referenced_image_paths,
+      catalog: imageReferenceCatalog,
+    });
+    await this.recordAction({
+      row,
+      action: "employee_rectify",
+      fromStatus: row.status,
+      toStatus: row.status,
+      operatorType: "employee",
+      operatorId: authContext.employeeId,
+      comment: input.comment,
+      metadata: {
+        images: input.images,
+        image_items: this.normalizeImageItems(input.images),
+        referenced_action_id: input.referenced_action_id ??
+          latestReturnAction?.id ??
+          null,
+        referenced_item_ids: input.referenced_item_ids,
+        referenced_image_ids: referencedImages
+          .map((item) => item.id)
+          .filter((item): item is string => Boolean(item)),
+        referenced_image_paths: referencedImages.map((item) =>
+          item.path || item.url
+        ),
+        referenced_images: referencedImages,
+      },
+    });
+
+    return this.buildDetail(row);
   }
 
   async cancelAcceptance(

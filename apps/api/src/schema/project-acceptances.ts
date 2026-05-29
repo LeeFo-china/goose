@@ -111,6 +111,21 @@ export const CustomerDisputeProjectAcceptanceSchema = z.object({
   project_id: z.uuid("无效的项目 ID").optional(),
 });
 
+export const RectifyProjectAcceptanceSchema = z.object({
+  comment: z.string().trim().min(1, "整改说明不能为空").max(
+    500,
+    "整改说明不能超过500个字符",
+  ),
+  images: ImageListSchema.optional().default([]),
+  referenced_action_id: z.uuid("无效的关联操作 ID").nullable().optional(),
+  referenced_item_ids: z.array(z.uuid("无效的验收项 ID")).max(
+    50,
+    "最多关联50个验收项",
+  ).optional().default([]),
+  referenced_image_ids: ReferencedImageListSchema.optional().default([]),
+  referenced_image_paths: ReferencedImageListSchema.optional().default([]),
+});
+
 export const CancelProjectAcceptanceSchema = z.object({
   comment: z.string().trim().max(1000, "作废说明不能超过1000个字符")
     .nullable()
@@ -162,6 +177,9 @@ export type CustomerConfirmProjectAcceptanceInput = z.infer<
 >;
 export type CustomerDisputeProjectAcceptanceInput = z.infer<
   typeof CustomerDisputeProjectAcceptanceSchema
+>;
+export type RectifyProjectAcceptanceInput = z.infer<
+  typeof RectifyProjectAcceptanceSchema
 >;
 export type CancelProjectAcceptanceInput = z.infer<
   typeof CancelProjectAcceptanceSchema

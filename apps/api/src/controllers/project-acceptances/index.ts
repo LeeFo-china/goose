@@ -11,6 +11,7 @@ import {
   ProjectAcceptanceListQuerySchema,
   ProjectAcceptanceTemplateListQuerySchema,
   RejectProjectAcceptanceSchema,
+  RectifyProjectAcceptanceSchema,
   SubmitProjectAcceptanceSchema,
   UpdateProjectAcceptanceSchema,
 } from "@/schema/project-acceptances";
@@ -229,6 +230,22 @@ class ProjectAcceptancesController extends TenantBaseController<
         tenantId: request.user?.tenant_id ?? null,
         customerId: request.user?.customer_id ?? null,
       },
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/project-acceptances/:id/rectification")
+  async rectify(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = RectifyProjectAcceptanceSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.rectifyAcceptance(
+      authContext,
+      idVerify.data.id,
+      result.data,
     );
     return ResponseHandler.success(data);
   }
