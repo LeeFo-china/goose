@@ -9,6 +9,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { uploadService } from "@/services/uploads";
+import { customerSelfServiceService } from "@/services/customer-self-service";
 import type { JwtPayload } from "@/utils/jwt";
 import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
@@ -36,6 +37,17 @@ const DIRECT_UPLOAD_SCENES = [
   "project_acceptance",
 ] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
+const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>([
+  "project_log",
+  "project_acceptance",
+]);
+const PUBLIC_STORED_FILE_SCENES = new Set([
+  "h5_marketing_page",
+  "panorama_tiles",
+]);
+const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
+  "h5_marketing_page",
+]);
 
 const DirectUploadInitSchema = z.object({
   scene: z.enum(DIRECT_UPLOAD_SCENES, {
@@ -70,9 +82,11 @@ const UploadPublicUrlQuerySchema = z.object({
   path: z.string()
     .trim()
     .min(1, "缺少图片路径")
-    .max(500, "图片路径过长")
+    .max(1000, "图片路径过长")
+    .refine((value) => !/^https?:\/\//i.test(value), "图片路径不支持绝对 URL")
     .refine((value) => !value.includes(".."), "图片路径不合法")
-    .refine((value) => !value.startsWith("/"), "图片路径不合法"),
+    .refine((value) => !value.startsWith("/"), "图片路径不合法")
+    .refine((value) => !value.includes("\\"), "图片路径不合法"),
 });
 
 type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
@@ -81,6 +95,14 @@ type UploadActorContext = {
   tenantId: string | null;
   employeeId: string | null;
   customerId: string | null;
+  isPlatformAdmin: boolean;
+};
+
+type ParsedStoredObjectKey = {
+  tenantId: string | null;
+  scene: string | null;
+  projectId: string | null;
+  isPlatformObjectKey: boolean;
 };
 
 function logUploadImagesTiming(
@@ -92,6 +114,38 @@ function logUploadImagesTiming(
 }
 
 const now = () => Date.now();
+
+function normalizeSceneCode(value: string | null | undefined) {
+  return value?.trim().replace(/-/g, "_") || null;
+}
+
+function parseStoredObjectKey(path: string): ParsedStoredObjectKey {
+  const parts = path.trim().replace(/^\/+/, "").split("/").filter(Boolean);
+  if (parts[0] === "tenants" && parts.length >= 3) {
+    return {
+      tenantId: parts[1] || null,
+      scene: normalizeSceneCode(parts[2]),
+      projectId: parts[3] === "projects" && parts[4] ? parts[4] : null,
+      isPlatformObjectKey: true,
+    };
+  }
+
+  if ((parts[0] === "public" || parts[0] === "system") && parts.length >= 2) {
+    return {
+      tenantId: null,
+      scene: normalizeSceneCode(parts[1]),
+      projectId: parts[2] === "projects" && parts[3] ? parts[3] : null,
+      isPlatformObjectKey: true,
+    };
+  }
+
+  return {
+    tenantId: null,
+    scene: null,
+    projectId: null,
+    isPlatformObjectKey: false,
+  };
+}
 
 class UploadController extends BaseController {
   constructor() {
@@ -108,6 +162,9 @@ class UploadController extends BaseController {
     if (!queryResult.success) {
       throw Errors.fromZod(queryResult.error);
     }
+
+    const actorContext = await this.resolveUploadActorContext(request.user);
+    this.assertStoredFileAccess(queryResult.data.path, actorContext);
 
     const publicUrl = resolveStoredFileUrl(queryResult.data.path);
     if (!publicUrl) {
@@ -185,6 +242,7 @@ class UploadController extends BaseController {
       result.data.object_key,
       scene,
       actorContext,
+      result.data.project_id,
     );
 
     const uploaded = await platformFileStorageService.completeDirectUpload({
@@ -230,6 +288,7 @@ class UploadController extends BaseController {
     objectKey: string,
     scene: UploadScene,
     actorContext: UploadActorContext,
+    projectId: string | undefined,
   ) {
     const scenePrefix = scene.replace(/_/g, "-");
     const expectedPrefix = actorContext.tenantId
@@ -239,6 +298,13 @@ class UploadController extends BaseController {
     if (!objectKey.startsWith(expectedPrefix)) {
       throw Errors.business(403, "上传对象不属于当前登录身份", ErrorCodes.FORBIDDEN);
     }
+
+    if (PROJECT_REQUIRED_UPLOAD_SCENES.has(scene)) {
+      const expectedProjectSegment = `/projects/${projectId}/`;
+      if (!projectId || !objectKey.includes(expectedProjectSegment)) {
+        throw Errors.business(403, "上传对象不属于当前项目", ErrorCodes.FORBIDDEN);
+      }
+    }
   }
 
   private async assertDirectUploadProjectAccess(
@@ -247,23 +313,71 @@ class UploadController extends BaseController {
     projectId: string | undefined,
     actorContext: UploadActorContext,
   ) {
-    if (scene !== "project_log") return;
+    if (!actorContext.tenantId && !PUBLIC_DIRECT_UPLOAD_SCENES.has(scene)) {
+      throw Errors.forbidden();
+    }
+
+    if (!PROJECT_REQUIRED_UPLOAD_SCENES.has(scene)) return;
 
     if (!projectId) {
       throw Errors.badRequest("缺少项目ID");
+    }
+
+    if (scene === "project_log" && !actorContext.employeeId) {
+      throw Errors.forbidden();
+    }
+
+    const authContext = await authorizationService.getRequiredAuthContext(user.sub);
+    if (scene === "project_acceptance" && actorContext.customerId) {
+      const project = await customerSelfServiceService.findOwnedProject({
+        projectId,
+        customerId: actorContext.customerId,
+        tenantId: actorContext.tenantId,
+      });
+      if (!project) {
+        throw Errors.forbidden();
+      }
+      return;
     }
 
     if (!actorContext.employeeId) {
       throw Errors.forbidden();
     }
 
-    const authContext = await authorizationService.getRequiredAuthContext(user.sub);
-    const canWriteLog = await accessPolicyService.canWriteProjectLog(
-      authContext,
-      projectId,
-    );
+    const canWriteLog = scene === "project_log"
+      ? await accessPolicyService.canWriteProjectLog(
+        authContext,
+        projectId,
+      )
+      : await accessPolicyService.canAccessProject(
+        authContext,
+        projectId,
+        "project_acceptance.create",
+      );
     if (!canWriteLog) {
       throw Errors.forbidden();
+    }
+  }
+
+  private assertStoredFileAccess(path: string, actorContext: UploadActorContext) {
+    const parsed = parseStoredObjectKey(path);
+    if (!parsed.isPlatformObjectKey) {
+      return;
+    }
+
+    if (actorContext.isPlatformAdmin) {
+      return;
+    }
+
+    if (parsed.tenantId) {
+      if (!actorContext.tenantId || parsed.tenantId !== actorContext.tenantId) {
+        throw Errors.business(403, "图片不属于当前登录身份", ErrorCodes.FORBIDDEN);
+      }
+      return;
+    }
+
+    if (!parsed.scene || !PUBLIC_STORED_FILE_SCENES.has(parsed.scene)) {
+      throw Errors.business(403, "图片不属于当前登录身份", ErrorCodes.FORBIDDEN);
     }
   }
 
@@ -277,6 +391,7 @@ class UploadController extends BaseController {
         tenantId: tokenTenantId,
         employeeId: tokenEmployeeId,
         customerId: null,
+        isPlatformAdmin: false,
       };
     }
 
@@ -285,6 +400,7 @@ class UploadController extends BaseController {
         tenantId: tokenTenantId,
         employeeId: null,
         customerId: tokenCustomerId,
+        isPlatformAdmin: false,
       };
     }
 
@@ -298,6 +414,7 @@ class UploadController extends BaseController {
         tenantId: authContext.tenantId,
         employeeId: authContext.employeeId,
         customerId: null,
+        isPlatformAdmin: authContext.isPlatformAdmin,
       };
     }
 
@@ -307,6 +424,7 @@ class UploadController extends BaseController {
         tenantId: membership.tenant_id,
         employeeId: null,
         customerId: membership.identity_id,
+        isPlatformAdmin: false,
       };
     }
 
@@ -315,6 +433,7 @@ class UploadController extends BaseController {
       tenantId: customer?.tenant_id ?? null,
       employeeId: null,
       customerId: customer?.id ?? null,
+      isPlatformAdmin: false,
     };
   }
 

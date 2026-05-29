@@ -14,5 +14,10 @@ export const CreateCustomerFollowUpCommentSchema = z.object({
 
 export const CustomerFollowUpCommentsListQuerySchema = PaginationQuerySchema;
 
+export const CustomerFollowUpCommentsParamsSchema = z.object({
+  followUpId: z.uuid("无效的跟进记录 ID"),
+});
+
 export type CreateCustomerFollowUpCommentInput = z.infer<typeof CreateCustomerFollowUpCommentSchema>;
 export type CustomerFollowUpCommentsListQuery = z.infer<typeof CustomerFollowUpCommentsListQuerySchema>;
+export type CustomerFollowUpCommentsParams = z.infer<typeof CustomerFollowUpCommentsParamsSchema>;

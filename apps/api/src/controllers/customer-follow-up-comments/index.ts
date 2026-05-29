@@ -4,8 +4,10 @@ import { Errors } from "@/errors/error-factory";
 import {
   CreateCustomerFollowUpCommentSchema,
   CustomerFollowUpCommentsListQuerySchema,
+  CustomerFollowUpCommentsParamsSchema,
   type CreateCustomerFollowUpCommentInput,
   type CustomerFollowUpCommentsListQuery,
+  type CustomerFollowUpCommentsParams,
 } from "@/schema/customer-follow-up-comments";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -19,12 +21,19 @@ class CustomerFollowUpCommentsController extends TenantBaseController {
   @Get("/customer_follow_ups/:followUpId/comments")
   async listComments(
     request: FastifyRequest<{
-      Params: { followUpId: string };
+      Params: CustomerFollowUpCommentsParams;
       Querystring: CustomerFollowUpCommentsListQuery;
     }>,
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = CustomerFollowUpCommentsParamsSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) {
+      throw Errors.fromZod(paramsResult.error);
+    }
+
     const queryResult = CustomerFollowUpCommentsListQuerySchema.safeParse(
       request.query,
     );
@@ -35,7 +44,7 @@ class CustomerFollowUpCommentsController extends TenantBaseController {
     const result = await customerFollowUpCommentService.listComments(
       authContext,
       {
-        followUpId: request.params.followUpId,
+        followUpId: paramsResult.data.followUpId,
         page: queryResult.data.page,
         pageSize: queryResult.data.pageSize,
       },
@@ -47,12 +56,19 @@ class CustomerFollowUpCommentsController extends TenantBaseController {
   @Post("/customer_follow_ups/:followUpId/comments")
   async createComment(
     request: FastifyRequest<{
-      Params: { followUpId: string };
+      Params: CustomerFollowUpCommentsParams;
       Body: CreateCustomerFollowUpCommentInput;
     }>,
     reply: FastifyReply,
   ) {
     const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = CustomerFollowUpCommentsParamsSchema.safeParse(
+      request.params,
+    );
+    if (!paramsResult.success) {
+      throw Errors.fromZod(paramsResult.error);
+    }
+
     const result = CreateCustomerFollowUpCommentSchema.safeParse(request.body);
     if (!result.success) {
       throw Errors.fromZod(result.error);
@@ -61,7 +77,7 @@ class CustomerFollowUpCommentsController extends TenantBaseController {
     const created = await customerFollowUpCommentService.createComment(
       authContext,
       {
-        followUpId: request.params.followUpId,
+        followUpId: paramsResult.data.followUpId,
         payload: result.data,
       },
     );
