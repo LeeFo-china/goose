@@ -73,6 +73,7 @@ export type ExpenseRequestMutationPayload = {
 type ExpenseRequestApprovalPayload = {
   tenant_id?: string | null;
   expense_request_id: string;
+  approval_round?: number;
   step: string;
   action: string;
   approver_id?: string | null;
@@ -225,6 +226,7 @@ class ExpenseRequestRepository {
       id,
       step,
       action,
+      approval_round,
       approver_id,
       comment,
       created_at,
@@ -503,19 +505,59 @@ class ExpenseRequestRepository {
   async appendApproval(payload: ExpenseRequestApprovalPayload) {
     const { error } = await SupabaseDB.getAdminClient()
       .from("expense_request_approvals")
-      .insert({
+      .upsert({
         tenant_id: payload.tenant_id ?? null,
         expense_request_id: payload.expense_request_id,
+        approval_round: payload.approval_round ?? 1,
         step: payload.step,
         action: payload.action,
         approver_id: payload.approver_id ?? null,
         comment: payload.comment ?? null,
+      }, {
+        onConflict:
+          "tenant_id,expense_request_id,approval_round,step,action,approver_id",
+        ignoreDuplicates: true,
       })
       .select("id");
 
     if (error) {
       throw Errors.dbError("写入费用审批记录失败", error);
     }
+  }
+
+  async findApprovalByBusinessKey(
+    payload: Required<Pick<
+      ExpenseRequestApprovalPayload,
+      "expense_request_id" | "approval_round" | "step" | "action"
+    >> & {
+      tenant_id?: string | null;
+      approver_id?: string | null;
+    },
+  ) {
+    let query = SupabaseDB.getAdminClient()
+      .from("expense_request_approvals")
+      .select("id")
+      .eq("expense_request_id", payload.expense_request_id)
+      .eq("approval_round", payload.approval_round)
+      .eq("step", payload.step)
+      .eq("action", payload.action);
+
+    if (payload.tenant_id) {
+      query = query.eq("tenant_id", payload.tenant_id);
+    }
+
+    if (payload.approver_id) {
+      query = query.eq("approver_id", payload.approver_id);
+    } else {
+      query = query.is("approver_id", null);
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle();
+    if (error) {
+      throw Errors.dbError("查询费用审批记录失败", error);
+    }
+
+    return Boolean(data?.id);
   }
 
   async replaceApprovalChain(

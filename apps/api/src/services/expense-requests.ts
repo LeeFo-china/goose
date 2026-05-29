@@ -87,6 +87,14 @@ type ResolvedExpenseRequestItemInput = ExpenseRequestItemInput & {
   category_remark: string | null;
 };
 
+type ExpenseApprovalRecordLike = {
+  approval_round?: number | null;
+  step?: string | null;
+  action?: string | null;
+  approver_id?: string | null;
+  created_at?: string | null;
+};
+
 function calculateTotalAmount(items: Array<ExpenseRequestItemInput | ResolvedExpenseRequestItemInput>) {
   return Number(
     items.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(2),
@@ -254,6 +262,37 @@ function resolveApprovalChainRelations(value: unknown): unknown {
   });
 }
 
+function dedupeApprovalRecords(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  const seen = new Set<string>();
+  const rows: unknown[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      rows.push(item);
+      continue;
+    }
+
+    const row = item as ExpenseApprovalRecordLike;
+    const key = [
+      row.approval_round ?? 1,
+      row.step ?? "",
+      row.action ?? "",
+      row.approver_id ?? "",
+    ].join(":");
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    rows.push(item);
+  }
+
+  return rows;
+}
+
 class ExpenseRequestService {
   private requireTenantId(authContext: AuthContext) {
     return accessPolicyService.assertTenantContext(authContext);
@@ -275,6 +314,9 @@ class ExpenseRequestService {
     }
     if ("settlement" in row) {
       serialized.settlement = resolveEvidenceImagesRelation(row.settlement);
+    }
+    if ("approvals" in row) {
+      serialized.approvals = dedupeApprovalRecords(row.approvals);
     }
     if ("employee" in row) {
       serialized.employee = resolveAvatarRelation(row.employee);
@@ -666,6 +708,97 @@ class ExpenseRequestService {
       null;
   }
 
+  private getApprovalRound(record: { approvals?: unknown }) {
+    const rows = Array.isArray(record.approvals)
+      ? record.approvals as ExpenseApprovalRecordLike[]
+      : [];
+    return rows.reduce((max, item) => {
+      const round = Number(item.approval_round ?? 1);
+      return Number.isFinite(round) && round > max ? round : max;
+    }, 1);
+  }
+
+  private hasRecentApprovalAction(
+    record: { approvals?: unknown },
+    input: {
+      approvalRound: number;
+      step: string;
+      action: string;
+      approverId: string;
+      withinMs: number;
+    },
+  ) {
+    const rows = Array.isArray(record.approvals)
+      ? record.approvals as ExpenseApprovalRecordLike[]
+      : [];
+    const now = Date.now();
+
+    return rows.some((item) => {
+      if (
+        Number(item.approval_round ?? 1) !== input.approvalRound ||
+        item.step !== input.step ||
+        item.action !== input.action ||
+        item.approver_id !== input.approverId ||
+        !item.created_at
+      ) {
+        return false;
+      }
+
+      const createdAt = new Date(item.created_at).getTime();
+      return Number.isFinite(createdAt) && now - createdAt <= input.withinMs;
+    });
+  }
+
+  private async hasApprovalAction(input: {
+    tenantId?: string | null;
+    expenseRequestId: string;
+    approvalRound: number;
+    step: string;
+    action: string;
+    approverId: string;
+  }) {
+    return expenseRequestRepository.findApprovalByBusinessKey({
+      tenant_id: input.tenantId ?? null,
+      expense_request_id: input.expenseRequestId,
+      approval_round: input.approvalRound,
+      step: input.step,
+      action: input.action,
+      approver_id: input.approverId,
+    });
+  }
+
+  private async appendApprovalOnce(input: {
+    tenantId?: string | null;
+    expenseRequestId: string;
+    approvalRound: number;
+    step: string;
+    action: string;
+    approverId: string;
+    comment?: string | null;
+  }) {
+    const exists = await this.hasApprovalAction(input);
+    if (exists) {
+      return false;
+    }
+
+    await expenseRequestRepository.appendApproval({
+      tenant_id: input.tenantId ?? null,
+      expense_request_id: input.expenseRequestId,
+      approval_round: input.approvalRound,
+      step: input.step,
+      action: input.action,
+      approver_id: input.approverId,
+      comment: input.comment ?? null,
+    });
+    return true;
+  }
+
+  private async getLatestExpenseRequest(id: string, tenantId?: string | null) {
+    return this.serializeExpenseRequest(
+      await expenseRequestRepository.findById(id, tenantId),
+    );
+  }
+
   private async assertEmployeeExists(
     id: string,
     tenantId?: string | null,
@@ -1032,8 +1165,16 @@ class ExpenseRequestService {
       "expense_request.submit",
     );
 
+    if (existing.status === "pending") {
+      return this.getLatestExpenseRequest(id, tenantId);
+    }
+
     if (!["draft", "rejected"].includes(existing.status)) {
-      throw Errors.badRequest("当前状态不允许提交费用申请");
+      throw Errors.business(
+        400,
+        "当前状态不允许提交费用申请",
+        "EXPENSE_REQUEST_INVALID_TRANSITION",
+      );
     }
 
     await this.assertEmployeeExists(operatorId, tenantId, "提交人不存在");
@@ -1050,6 +1191,9 @@ class ExpenseRequestService {
 
     const now = new Date().toISOString();
     const action = existing.status === "rejected" ? "resubmit" : "submit";
+    const approvalRound = existing.status === "rejected"
+      ? this.getApprovalRound(existing) + 1
+      : this.getApprovalRound(existing);
     const requestedApprovalChain = input.approval_chain ??
       (this.getApprovalChain(existing).length > 0
         ? this.getApprovalChain(existing).map((item) => ({
@@ -1085,18 +1229,17 @@ class ExpenseRequestService {
       tenantId,
     );
 
-    await expenseRequestRepository.appendApproval({
-      tenant_id: tenantId ?? null,
-      expense_request_id: id,
+    await this.appendApprovalOnce({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
       step: "draft",
       action,
-      approver_id: operatorId,
+      approverId: operatorId,
       comment: input.comment ?? null,
     });
 
-    return this.serializeExpenseRequest(
-      await expenseRequestRepository.findById(updated.id, tenantId),
-    );
+    return this.getLatestExpenseRequest(updated.id, tenantId);
   }
 
   async approveExpenseRequest(
@@ -1110,31 +1253,101 @@ class ExpenseRequestService {
       throw Errors.badRequest("费用申请不存在");
     }
 
-    if (existing.status !== "pending") {
-      throw Errors.badRequest("只有审批中的费用申请才能通过");
-    }
-
-    if (!["manager_review", "finance_review"].includes(existing.current_step)) {
-      throw Errors.badRequest("当前审批节点不允许通过");
-    }
-
     const approverId = input.approver_id ?? authContext.employeeId;
     if (!approverId) {
       throw Errors.badRequest("缺少审批人");
+    }
+    const approvalRound = this.getApprovalRound(existing);
+
+    if (existing.status !== "pending") {
+      const repeatedApprove = await Promise.all([
+        this.hasApprovalAction({
+          tenantId,
+          expenseRequestId: id,
+          approvalRound,
+          step: "manager_review",
+          action: "approve",
+          approverId,
+        }),
+        this.hasApprovalAction({
+          tenantId,
+          expenseRequestId: id,
+          approvalRound,
+          step: "finance_review",
+          action: "approve",
+          approverId,
+        }),
+      ]);
+      if (repeatedApprove.some(Boolean)) {
+        return this.getLatestExpenseRequest(id, tenantId);
+      }
+
+      throw Errors.business(
+        409,
+        "当前审批状态已变化，请刷新后查看",
+        "EXPENSE_REQUEST_STATE_CHANGED",
+      );
+    }
+
+    if (!["manager_review", "finance_review"].includes(existing.current_step)) {
+      throw Errors.business(
+        400,
+        "当前审批节点不允许通过",
+        "EXPENSE_REQUEST_INVALID_TRANSITION",
+      );
+    }
+
+    if (await this.hasApprovalAction({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
+      step: existing.current_step,
+      action: "approve",
+      approverId,
+    })) {
+      return this.getLatestExpenseRequest(id, tenantId);
+    }
+
+    const previousApproveStep = existing.current_step === "finance_review"
+      ? "manager_review"
+      : null;
+    if (
+      previousApproveStep &&
+      this.hasRecentApprovalAction(existing, {
+        approvalRound,
+        step: previousApproveStep,
+        action: "approve",
+        approverId,
+        withinMs: 30_000,
+      })
+    ) {
+      return this.getLatestExpenseRequest(id, tenantId);
     }
 
     const currentNode = this.getCurrentApprovalNode(existing);
     if (currentNode) {
       if (currentNode.status !== "current") {
-        throw Errors.badRequest("当前审批链节点状态不允许操作");
+        throw Errors.business(
+          409,
+          "当前审批节点已处理，请刷新后查看",
+          "EXPENSE_REQUEST_ALREADY_PROCESSED",
+        );
       }
 
       if (currentNode.assignee_id !== approverId) {
-        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
+        throw Errors.business(
+          403,
+          "当前用户无该节点操作权限",
+          "EXPENSE_REQUEST_PERMISSION_DENIED",
+        );
       }
 
       if (currentNode.step !== existing.current_step) {
-        throw Errors.badRequest("审批链与当前节点不一致");
+        throw Errors.business(
+          409,
+          "当前审批状态已变化，请刷新后查看",
+          "EXPENSE_REQUEST_STATE_CHANGED",
+        );
       }
     }
 
@@ -1198,18 +1411,17 @@ class ExpenseRequestService {
       }, tenantId);
     }
 
-    await expenseRequestRepository.appendApproval({
-      tenant_id: tenantId ?? null,
-      expense_request_id: id,
+    await this.appendApprovalOnce({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
       step: existing.current_step,
       action: "approve",
-      approver_id: approverId,
+      approverId,
       comment: input.comment ?? null,
     });
 
-    return this.serializeExpenseRequest(
-      await expenseRequestRepository.findById(updated.id, tenantId),
-    );
+    return this.getLatestExpenseRequest(updated.id, tenantId);
   }
 
   async rejectExpenseRequest(
@@ -1223,31 +1435,80 @@ class ExpenseRequestService {
       throw Errors.badRequest("费用申请不存在");
     }
 
-    if (existing.status !== "pending") {
-      throw Errors.badRequest("只有审批中的费用申请才能驳回");
-    }
-
     const approverId = input.approver_id ?? authContext.employeeId;
     if (!approverId) {
       throw Errors.badRequest("缺少审批人");
     }
+    const approvalRound = this.getApprovalRound(existing);
+    if (existing.status === "rejected" && (await Promise.all([
+      this.hasApprovalAction({
+        tenantId,
+        expenseRequestId: id,
+        approvalRound,
+        step: "manager_review",
+        action: "reject",
+        approverId,
+      }),
+      this.hasApprovalAction({
+        tenantId,
+        expenseRequestId: id,
+        approvalRound,
+        step: "finance_review",
+        action: "reject",
+        approverId,
+      }),
+    ])).some(Boolean)) {
+      return this.getLatestExpenseRequest(id, tenantId);
+    }
+
+    if (existing.status !== "pending") {
+      throw Errors.business(
+        409,
+        "当前审批状态已变化，请刷新后查看",
+        "EXPENSE_REQUEST_STATE_CHANGED",
+      );
+    }
+
     const rejectedReason = input.rejected_reason ?? input.reason;
     if (!rejectedReason) {
       throw Errors.badRequest("驳回原因不能为空");
     }
 
+    if (await this.hasApprovalAction({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
+      step: existing.current_step,
+      action: "reject",
+      approverId,
+    })) {
+      return this.getLatestExpenseRequest(id, tenantId);
+    }
+
     const currentNode = this.getCurrentApprovalNode(existing);
     if (currentNode) {
       if (currentNode.status !== "current") {
-        throw Errors.badRequest("当前审批链节点状态不允许操作");
+        throw Errors.business(
+          409,
+          "当前审批节点已处理，请刷新后查看",
+          "EXPENSE_REQUEST_ALREADY_PROCESSED",
+        );
       }
 
       if (currentNode.assignee_id !== approverId) {
-        throw Errors.business(403, "当前费用申请不归你审批", "FORBIDDEN");
+        throw Errors.business(
+          403,
+          "当前用户无该节点操作权限",
+          "EXPENSE_REQUEST_PERMISSION_DENIED",
+        );
       }
 
       if (currentNode.step !== existing.current_step) {
-        throw Errors.badRequest("审批链与当前节点不一致");
+        throw Errors.business(
+          409,
+          "当前审批状态已变化，请刷新后查看",
+          "EXPENSE_REQUEST_STATE_CHANGED",
+        );
       }
     }
 
@@ -1276,7 +1537,11 @@ class ExpenseRequestService {
         "expense_request.approve_finance",
       );
     } else {
-      throw Errors.badRequest("当前审批节点不允许驳回");
+      throw Errors.business(
+        400,
+        "当前审批节点不允许驳回",
+        "EXPENSE_REQUEST_INVALID_TRANSITION",
+      );
     }
 
     await this.assertEmployeeExists(approverId, tenantId, "审批人不存在");
@@ -1307,18 +1572,17 @@ class ExpenseRequestService {
       }
     }
 
-    await expenseRequestRepository.appendApproval({
-      tenant_id: tenantId ?? null,
-      expense_request_id: id,
+    await this.appendApprovalOnce({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
       step: existing.current_step,
       action: "reject",
-      approver_id: approverId,
+      approverId,
       comment: input.comment ?? rejectedReason,
     });
 
-    return this.serializeExpenseRequest(
-      await expenseRequestRepository.findById(updated.id, tenantId),
-    );
+    return this.getLatestExpenseRequest(updated.id, tenantId);
   }
 
   async cancelExpenseRequest(
@@ -1339,13 +1603,22 @@ class ExpenseRequestService {
       "expense_request.submit",
     );
 
+    if (existing.status === "cancelled") {
+      return this.getLatestExpenseRequest(id, tenantId);
+    }
+
     if (!["draft", "pending", "rejected"].includes(existing.status)) {
-      throw Errors.badRequest("当前状态不允许撤回费用申请");
+      throw Errors.business(
+        400,
+        "当前状态不允许撤回费用申请",
+        "EXPENSE_REQUEST_INVALID_TRANSITION",
+      );
     }
 
     await this.assertEmployeeExists(input.operator_id, tenantId, "操作员工不存在");
 
     const now = new Date().toISOString();
+    const approvalRound = this.getApprovalRound(existing);
     const updated = await expenseRequestRepository.update(id, {
       status: "cancelled",
       current_step: "cancelled",
@@ -1364,18 +1637,17 @@ class ExpenseRequestService {
       }
     }
 
-    await expenseRequestRepository.appendApproval({
-      tenant_id: tenantId ?? null,
-      expense_request_id: id,
+    await this.appendApprovalOnce({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
       step: existing.current_step,
       action: "cancel",
-      approver_id: input.operator_id,
+      approverId: input.operator_id,
       comment: input.comment ?? null,
     });
 
-    return this.serializeExpenseRequest(
-      await expenseRequestRepository.findById(updated.id, tenantId),
-    );
+    return this.getLatestExpenseRequest(updated.id, tenantId);
   }
 
   async payExpenseRequest(
@@ -1398,12 +1670,19 @@ class ExpenseRequestService {
     );
     this.ensureCurrentEmployee(authContext, input.paid_by, "expense_request.pay");
 
-    if (existing.status !== "approved" || existing.current_step !== "payment") {
-      throw Errors.badRequest("只有待打款的费用申请才能登记支付");
+    if (
+      existing.status === "paid" ||
+      await expenseRequestRepository.hasSettlement(id, tenantId)
+    ) {
+      return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    if (await expenseRequestRepository.hasSettlement(id, tenantId)) {
-      throw Errors.badRequest("该费用申请已登记过打款");
+    if (existing.status !== "approved" || existing.current_step !== "payment") {
+      throw Errors.business(
+        400,
+        "只有待打款的费用申请才能登记支付",
+        "EXPENSE_REQUEST_INVALID_TRANSITION",
+      );
     }
 
     await this.assertEmployeeExists(input.paid_by, tenantId, "打款登记员工不存在");
@@ -1413,6 +1692,7 @@ class ExpenseRequestService {
     }
 
     const paidAt = input.paid_at || new Date().toISOString();
+    const approvalRound = this.getApprovalRound(existing);
 
     await expenseRequestRepository.createSettlement({
       tenant_id: tenantId ?? null,
@@ -1428,12 +1708,13 @@ class ExpenseRequestService {
       remark: input.remark ?? null,
     });
 
-    await expenseRequestRepository.appendApproval({
-      tenant_id: tenantId ?? null,
-      expense_request_id: id,
+    await this.appendApprovalOnce({
+      tenantId,
+      expenseRequestId: id,
+      approvalRound,
       step: "payment",
       action: "pay",
-      approver_id: input.paid_by,
+      approverId: input.paid_by,
       comment: input.remark ?? null,
     });
 
@@ -1444,9 +1725,7 @@ class ExpenseRequestService {
       assignee_id: null,
     }, undefined, tenantId);
 
-    return this.serializeExpenseRequest(
-      await expenseRequestRepository.findById(id, tenantId),
-    );
+    return this.getLatestExpenseRequest(id, tenantId);
   }
 
   async getExpenseRequestById(authContext: AuthContext, id: string) {
