@@ -86,6 +86,8 @@ export const ExpenseRequestItemSchema = z.object({
   category: z.string().trim().min(1, "费用分类不能为空").max(100, "费用分类过长")
     .nullable()
     .optional(),
+  category_remark: z.string().trim().max(500, "分类补充说明过长").nullable()
+    .optional(),
   amount: z.coerce.number("费用金额必须是数字").min(0, "费用金额不能为负数"),
   remark: z.string().trim().max(500, "费用说明过长").nullable().optional(),
   invoice_no: z.string().trim().max(100, "发票号过长").nullable().optional(),

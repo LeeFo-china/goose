@@ -1,5 +1,6 @@
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
+import { EXPENSE_MODE_VALUES } from "@gooes/domain";
 
 function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((value) => {
@@ -24,6 +25,23 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
   }, schema.optional());
 }
 
+function optionalQueryBoolean() {
+  return z.preprocess((value) => {
+    if (value == null) return undefined;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized || normalized === "undefined" || normalized === "null") {
+        return undefined;
+      }
+      if (["true", "1", "yes"].includes(normalized)) return true;
+      if (["false", "0", "no"].includes(normalized)) return false;
+    }
+
+    return value;
+  }, z.boolean().optional());
+}
+
 export const ExpenseRequestCategoryStatusSchema = z.enum(
   ["active", "disabled"],
   {
@@ -42,6 +60,14 @@ export const ExpenseRequestCategoryListQuerySchema = PaginationQuerySchema.exten
   ).default(20),
   status: optionalQueryValue(ExpenseRequestCategoryStatusSchema),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  mode: optionalQueryValue(z.enum(EXPENSE_MODE_VALUES, {
+    message: "无效的费用申请模式",
+  })),
+  department_code: optionalQueryValue(
+    z.string().trim().max(100, "部门编码过长"),
+  ),
+  project_id: optionalQueryValue(z.uuid("无效的项目 ID")),
+  include_disabled: optionalQueryBoolean().default(false),
 });
 
 export const ExpenseRequestCategoryBaseSchema = z.object({
@@ -54,6 +80,14 @@ export const ExpenseRequestCategoryBaseSchema = z.object({
     "排序值不能为负数",
   ).default(0),
   is_builtin: z.boolean().default(false),
+  is_default: z.boolean().default(false),
+  department_codes: z.array(
+    z.string().trim().min(1, "部门编码不能为空").max(100, "部门编码过长"),
+  ).default([]),
+  mode_codes: z.array(z.enum(EXPENSE_MODE_VALUES, {
+    message: "无效的费用申请模式",
+  })).default([]),
+  description: z.string().trim().max(500, "分类说明过长").nullable().optional(),
   remark: z.string().trim().max(500, "备注过长").nullable().optional(),
 });
 

@@ -81,6 +81,7 @@ const scopeWeight: Record<ExpenseRequestAccessScope, number> = {
 type ResolvedExpenseRequestItemInput = ExpenseRequestItemInput & {
   category: string;
   category_code: string | null;
+  category_remark: string | null;
 };
 
 function calculateTotalAmount(items: Array<ExpenseRequestItemInput | ResolvedExpenseRequestItemInput>) {
@@ -202,8 +203,20 @@ function resolveEvidenceImagesRelation(value: unknown): unknown {
     return value;
   }
 
+  const categoryFields = "category" in row || "category_code" in row
+    ? {
+      category_name: typeof row.category_code === "string" &&
+          row.category_code.trim()
+        ? typeof row.category === "string"
+          ? row.category
+          : null
+        : null,
+    }
+    : {};
+
   return {
     ...row,
+    ...categoryFields,
     evidence_images: resolveStoredFileUrlList(row.evidence_images),
   };
 }
@@ -279,6 +292,7 @@ class ExpenseRequestService {
             ...item,
             category: category.name,
             category_code: category.code,
+            category_remark: item.category_remark?.trim() || null,
           };
         }
 
@@ -291,6 +305,7 @@ class ExpenseRequestService {
           ...item,
           category: categoryName,
           category_code: null,
+          category_remark: item.category_remark?.trim() || null,
         };
       }),
     );

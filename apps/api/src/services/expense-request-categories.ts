@@ -14,6 +14,56 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
 class ExpenseRequestCategoryService {
+  private normalizeStringArray(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [] as string[];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private serializeCategory(record: ExpenseRequestCategoryRecord) {
+    const departmentCodes = this.normalizeStringArray(record.department_codes);
+    const modeCodes = this.normalizeStringArray(record.mode_codes);
+    const description = record.description ?? record.remark ?? null;
+
+    return {
+      ...record,
+      description,
+      enabled: record.status === "active",
+      sort_order: record.sort,
+      department_codes: departmentCodes,
+      mode_codes: modeCodes,
+      is_default: Boolean(record.is_default),
+    };
+  }
+
+  private categoryMatchesFilters(
+    record: ReturnType<ExpenseRequestCategoryService["serializeCategory"]>,
+    query: ExpenseRequestCategoryListQuery,
+  ) {
+    if (
+      query.mode &&
+      record.mode_codes.length > 0 &&
+      !record.mode_codes.includes(query.mode)
+    ) {
+      return false;
+    }
+
+    if (
+      query.department_code &&
+      record.department_codes.length > 0 &&
+      !record.department_codes.includes(query.department_code)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   private normalizeCode(code: string) {
     return code.trim().toLowerCase();
   }
@@ -83,7 +133,25 @@ class ExpenseRequestCategoryService {
   ) {
     this.assertCanRead(authContext);
     const tenantId = accessPolicyService.assertTenantId(authContext);
-    return expenseRequestCategoryRepository.list(query, tenantId);
+    const result = await expenseRequestCategoryRepository.list(query, tenantId);
+    const list = result.list
+      .map((item) => this.serializeCategory(item))
+      .filter((item) => this.categoryMatchesFilters(item, query));
+    const hasInMemoryFilters = Boolean(query.mode || query.department_code);
+    const pagedList = hasInMemoryFilters
+      ? list.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
+      : list;
+    const total = hasInMemoryFilters ? list.length : result.pagination.total;
+
+    return {
+      ...result,
+      list: pagedList,
+      pagination: {
+        ...result.pagination,
+        total,
+        totalPages: total ? Math.ceil(total / query.pageSize) : 0,
+      },
+    };
   }
 
   async getCategoryById(authContext: AuthContext, id: string) {
@@ -98,7 +166,7 @@ class ExpenseRequestCategoryService {
       );
     }
 
-    return record;
+    return this.serializeCategory(record);
   }
 
   async createCategory(
@@ -113,10 +181,11 @@ class ExpenseRequestCategoryService {
       name: this.normalizeName(input.name),
     };
     await this.ensureCodeAndNameUnique(normalized, tenantId);
-    return expenseRequestCategoryRepository.create({
+    const created = await expenseRequestCategoryRepository.create({
       ...normalized,
       tenant_id: tenantId,
     });
+    return this.serializeCategory(created);
   }
 
   async updateCategory(
@@ -146,7 +215,12 @@ class ExpenseRequestCategoryService {
       existing.id,
     );
 
-    return expenseRequestCategoryRepository.update(id, normalized, tenantId);
+    const updated = await expenseRequestCategoryRepository.update(
+      id,
+      normalized,
+      tenantId,
+    );
+    return this.serializeCategory(updated);
   }
 
   async updateCategoryStatus(
@@ -165,7 +239,12 @@ class ExpenseRequestCategoryService {
       );
     }
 
-    return expenseRequestCategoryRepository.updateStatus(id, input.status, tenantId);
+    const updated = await expenseRequestCategoryRepository.updateStatus(
+      id,
+      input.status,
+      tenantId,
+    );
+    return this.serializeCategory(updated);
   }
 
   async resolveActiveCategoryByCode(

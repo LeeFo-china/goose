@@ -15,6 +15,10 @@ export type ExpenseRequestCategoryRecord = {
   status: ExpenseRequestCategoryStatus;
   sort: number;
   is_builtin: boolean;
+  is_default: boolean | null;
+  department_codes: unknown;
+  mode_codes: unknown;
+  description?: string | null;
   remark: string | null;
   created_at: string;
   updated_at: string;
@@ -22,9 +26,10 @@ export type ExpenseRequestCategoryRecord = {
 
 class ExpenseRequestCategoryRepository {
   async list(params: ExpenseRequestCategoryListQuery, tenantId?: string | null) {
-    const { page, pageSize, status, keyword } = params;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
+    const { page, pageSize, status, keyword, include_disabled } = params;
+    const hasInMemoryFilters = Boolean(params.mode || params.department_code);
+    const from = hasInMemoryFilters ? 0 : (page - 1) * pageSize;
+    const to = hasInMemoryFilters ? 999 : from + pageSize - 1;
 
     let query = SupabaseDB.getAdminClient()
       .from("expense_request_categories")
@@ -38,6 +43,8 @@ class ExpenseRequestCategoryRepository {
 
     if (status) {
       query = query.eq("status", status);
+    } else if (!include_disabled) {
+      query = query.eq("status", "active");
     }
 
     if (keyword) {
@@ -129,7 +136,11 @@ class ExpenseRequestCategoryRepository {
         status: input.status,
         sort: input.sort,
         is_builtin: input.is_builtin,
-        remark: input.remark ?? null,
+        is_default: input.is_default ?? false,
+        department_codes: input.department_codes ?? [],
+        mode_codes: input.mode_codes ?? [],
+        description: input.description ?? input.remark ?? null,
+        remark: input.remark ?? input.description ?? null,
       })
       .select("*")
       .maybeSingle();
@@ -158,6 +169,14 @@ class ExpenseRequestCategoryRepository {
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.sort !== undefined ? { sort: input.sort } : {}),
         ...(input.is_builtin !== undefined ? { is_builtin: input.is_builtin } : {}),
+        ...(input.is_default !== undefined ? { is_default: input.is_default } : {}),
+        ...(input.department_codes !== undefined
+          ? { department_codes: input.department_codes }
+          : {}),
+        ...(input.mode_codes !== undefined ? { mode_codes: input.mode_codes } : {}),
+        ...(input.description !== undefined
+          ? { description: input.description ?? null }
+          : {}),
         ...(input.remark !== undefined ? { remark: input.remark ?? null } : {}),
       })
       .eq("id", id);

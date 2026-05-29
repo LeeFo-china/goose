@@ -9,6 +9,7 @@ type ExpenseRequestItemMutationInput = {
   occurred_at?: string | null;
   category_code?: string | null;
   category: string;
+  category_remark?: string | null;
   amount: number;
   remark?: string | null;
   invoice_no?: string | null;
@@ -190,6 +191,7 @@ class ExpenseRequestRepository {
       occurred_at,
       category_code,
       category,
+      category_remark,
       amount,
       remark,
       invoice_no,
@@ -416,6 +418,7 @@ class ExpenseRequestRepository {
       occurred_at: item.occurred_at ?? null,
       category_code: item.category_code ?? null,
       category: item.category,
+      category_remark: item.category_remark ?? null,
       amount: item.amount,
       remark: item.remark ?? null,
       invoice_no: item.invoice_no ?? null,
