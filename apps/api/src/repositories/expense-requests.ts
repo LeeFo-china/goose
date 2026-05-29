@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   ExpenseRequestListQueryType,
+  ExpenseRequestProjectCandidateQueryType,
 } from "@/schema/expense-requests";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -134,6 +135,26 @@ export type ExpenseApprovalCandidateEmployee = {
   post?: unknown;
 };
 
+export type ExpenseProjectCandidateRow = {
+  id: string;
+  name: string | null;
+  status: string | null;
+  signed_amount: number | null;
+  address: string | null;
+  customer?: {
+    name?: string | null;
+  } | Array<{
+    name?: string | null;
+  }> | null;
+  property?: {
+    community?: string | null;
+    building_info?: string | null;
+  } | Array<{
+    community?: string | null;
+    building_info?: string | null;
+  }> | null;
+};
+
 type ExpenseRequestVisibilityFilter =
   | { type: "all"; employeeIds: string[] }
   | { type: "none"; employeeIds: string[] }
@@ -145,7 +166,7 @@ class ExpenseRequestRepository {
   private summarySelect = `
     *,
     employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
-    project:projects(id, name, status),
+    project:projects(id, name, status, signed_amount, customer_id),
     assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
     settlement:expense_request_settlements(
       id,
@@ -319,6 +340,49 @@ class ExpenseRequestRepository {
     }
 
     return Boolean(data?.id);
+  }
+
+  async listProjectCandidates(input: {
+    params: ExpenseRequestProjectCandidateQueryType;
+    visibleProjectIds: string[] | null;
+    tenantId?: string | null;
+  }) {
+    if (input.visibleProjectIds && input.visibleProjectIds.length === 0) {
+      return [] as ExpenseProjectCandidateRow[];
+    }
+
+    let query = SupabaseDB.getAdminClient()
+      .from("projects")
+      .select(`
+        id,
+        name,
+        status,
+        signed_amount,
+        address,
+        customer:customers!projects_customer_id_fkey(name),
+        property:properties!projects_property_id_fkey(community, building_info)
+      `)
+      .neq("status", "invalid")
+      .order("created_at", { ascending: false });
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.visibleProjectIds) {
+      query = query.in("id", input.visibleProjectIds);
+    }
+
+    if (input.params.status) {
+      query = query.eq("status", input.params.status);
+    }
+
+    const { data, error } = await query.limit(1000);
+    if (error) {
+      throw Errors.dbError("查询费用申请项目候选失败", error);
+    }
+
+    return ((data || []) as unknown) as ExpenseProjectCandidateRow[];
   }
 
   async create(

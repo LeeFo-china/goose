@@ -7,6 +7,7 @@ import {
   ExpenseApprovalCandidateQuerySchema,
   ExpenseApprovalTemplateQuerySchema,
   ExpenseRequestListQuerySchema,
+  ExpenseRequestProjectCandidateQuerySchema,
   ExpenseRequestTodoQuerySchema,
   PayExpenseRequestSchema,
   RejectExpenseRequestSchema,
@@ -84,6 +85,21 @@ class ExpenseRequestsController extends TenantBaseController<
     if (!result.success) throw Errors.fromZod(result.error);
 
     const data = await expenseRequestService.listTodoExpenseRequests(
+      authContext,
+      result.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/expense-requests/project-candidates")
+  async projectCandidates(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const result = ExpenseRequestProjectCandidateQuerySchema.safeParse(
+      request.query,
+    );
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await expenseRequestService.listProjectCandidates(
       authContext,
       result.data,
     );
