@@ -5,6 +5,7 @@ import {
 } from "@/repositories/project-logs";
 import {
   projectLogCommentsRepository,
+  type ProjectLogCommentCountRow,
   type ProjectLogCommentSummaryRow,
 } from "@/repositories/project-log-comments";
 import type {
@@ -28,6 +29,24 @@ function buildPagination(page: number, pageSize: number, total: number) {
 }
 
 class ProjectLogService {
+  buildCommentCountMap(rows: ProjectLogCommentCountRow[]) {
+    const map = new Map<string, {
+      comment_count: number;
+      latest_comment: null;
+    }>();
+
+    for (const row of rows) {
+      const current = map.get(row.log_id) || {
+        comment_count: 0,
+        latest_comment: null,
+      };
+      current.comment_count += 1;
+      map.set(row.log_id, current);
+    }
+
+    return map;
+  }
+
   buildCommentSummaryMap(rows: ProjectLogCommentSummaryRow[]) {
     const map = new Map<string, {
       comment_count: number;
@@ -248,6 +267,46 @@ class ProjectLogService {
     };
   }
 
+  async listProjectLogBootstrapByProject(input: {
+    authContext: AuthContext;
+    projectId: string;
+    pageSize: number;
+    skipReadAccessCheck?: boolean;
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const from = 0;
+    const hasReadAllScope =
+      accessPolicyService.getScope(input.authContext, "project.read") === "all";
+    if (!input.skipReadAccessCheck && !hasReadAllScope) {
+      const hasAccess = await accessPolicyService.canAccessProject(
+        input.authContext,
+        input.projectId,
+        "project.read",
+      );
+      if (!hasAccess) {
+        throw Errors.forbidden();
+      }
+    }
+
+    const result = await projectLogRepository.listBootstrapByProject({
+      projectId: input.projectId,
+      tenantId,
+      from,
+      limit: input.pageSize,
+    });
+    const total = result.rows.length + (result.hasMore ? 1 : 0);
+
+    return {
+      rows: result.rows,
+      pagination: {
+        page: 1,
+        pageSize: input.pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / input.pageSize) : 0,
+      },
+    };
+  }
+
   async listProjectLogCalendar(input: {
     authContext: AuthContext;
     projectId: string;
@@ -276,6 +335,23 @@ class ProjectLogService {
 
     return this.buildCommentSummaryMap(
       await projectLogCommentsRepository.listSummariesByLogIds({
+        logIds: normalizedLogIds,
+        tenantId,
+      }),
+    );
+  }
+
+  async listProjectLogCommentCounts(input: {
+    authContext: AuthContext;
+    logIds: string[];
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const normalizedLogIds = Array.from(
+      new Set(input.logIds.filter((item) => typeof item === "string" && item)),
+    );
+
+    return this.buildCommentCountMap(
+      await projectLogCommentsRepository.listCountRowsByLogIds({
         logIds: normalizedLogIds,
         tenantId,
       }),

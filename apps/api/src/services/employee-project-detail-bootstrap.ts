@@ -3,12 +3,27 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { projectLogService } from "@/services/project-logs";
 import { projectSer } from "@/services/projects";
+import { isProjectStatus, listProjectStatusActions } from "@gooes/domain";
 
 type PartialError = {
   module: string;
   code: string | null;
   message: string;
 };
+
+type BootstrapTimingStep =
+  | "project_ms"
+  | "permissions_ms"
+  | "members_ms"
+  | "status_actions_ms"
+  | "construction_stages_ms"
+  | "logs_ms"
+  | "calendar_ms";
+
+export type EmployeeProjectDetailBootstrapTimings =
+  Record<BootstrapTimingStep, number>;
+
+const OPTIONAL_MODULE_TIMEOUT_MS = 2_500;
 
 type StatusActionsResult = Awaited<
   ReturnType<typeof projectSer.listProjectStatusActionsForTenant>
@@ -26,7 +41,7 @@ type ProjectLogCalendarResult = Awaited<
   ReturnType<typeof projectLogService.listProjectLogCalendar>
 >;
 type ProjectLogCommentSummaryMap = Awaited<
-  ReturnType<typeof projectLogService.listProjectLogCommentSummaries>
+  ReturnType<typeof projectLogService.listProjectLogCommentCounts>
 >;
 
 type BootstrapPermissions = {
@@ -50,29 +65,34 @@ class EmployeeProjectDetailBootstrapService {
     projectId: string;
     query: EmployeeProjectDetailBootstrapQuery;
   }) {
-    const project = await projectSer.getProjectDetailForEmployeeBootstrap({
-      authContext: input.authContext,
-      projectId: input.projectId,
-    });
     const partialErrors: PartialError[] = [];
+    const timings = this.createEmptyTimings();
+    const projectPromise = this.measure("project_ms", timings, () =>
+      projectSer.getProjectDetailForEmployeeBootstrap({
+        authContext: input.authContext,
+        projectId: input.projectId,
+      })
+    );
+    const permissionsPromise = this.measure("permissions_ms", timings, () =>
+      this.buildPermissions({
+        authContext: input.authContext,
+        projectId: input.projectId,
+        constructionStages: null,
+      })
+    );
 
-    const [members, rawStatusActions, constructionStages, logs, calendar] =
+    const [project, storedMembers, basePermissions, constructionStages, logs, calendar] =
       await Promise.all([
+        projectPromise,
         this.loadOptional(
           "members",
-          () => projectSer.listProjectMembersForDetail(project),
+          () => projectSer.listProjectStoredMembers(input.projectId),
           [] as ProjectMembersResult,
           partialErrors,
+          timings,
+          "members_ms",
         ),
-        this.loadOptional(
-          "status_actions",
-          () => projectSer.listProjectStatusActionsForTenant({
-            authContext: input.authContext,
-            projectId: input.projectId,
-          }),
-          this.emptyStatusActions(project),
-          partialErrors,
-        ),
+        permissionsPromise,
         this.loadOptional(
           "construction_stages",
           () => projectSer.listProjectConstructionStagesForTenant({
@@ -81,8 +101,10 @@ class EmployeeProjectDetailBootstrapService {
           }),
           null as ConstructionStagesResult | null,
           partialErrors,
+          timings,
+          "construction_stages_ms",
         ),
-        this.loadProjectLogs(input, partialErrors),
+        this.loadProjectLogs(input, partialErrors, timings),
         input.query.include_calendar
           ? this.loadOptional(
             "calendar",
@@ -92,15 +114,22 @@ class EmployeeProjectDetailBootstrapService {
             }),
             [] as ProjectLogCalendarResult,
             partialErrors,
+            timings,
+            "calendar_ms",
           )
           : Promise.resolve(null),
       ]);
+    const members = projectSer.buildProjectMembersForDetail(project, storedMembers);
 
-    const permissions = await this.buildPermissions({
-      authContext: input.authContext,
-      projectId: input.projectId,
+    const permissions = this.completePermissionsByStages(
+      basePermissions,
       constructionStages,
-    });
+    );
+    const rawStatusActions = await this.measure(
+      "status_actions_ms",
+      timings,
+      () => Promise.resolve(this.buildStatusActionsFromProject(project)),
+    );
     const statusActions = permissions.can_update_project
       ? rawStatusActions
       : {
@@ -124,6 +153,7 @@ class EmployeeProjectDetailBootstrapService {
       cameras_summary: input.query.include_cameras_summary ? null : undefined,
       server_time: new Date().toISOString(),
       partial_errors: partialErrors,
+      timings,
     };
   }
 
@@ -134,21 +164,22 @@ class EmployeeProjectDetailBootstrapService {
       query: EmployeeProjectDetailBootstrapQuery;
     },
     partialErrors: PartialError[],
+    timings: EmployeeProjectDetailBootstrapTimings,
   ) {
     return this.loadOptional(
       "logs",
       async () => {
-        const result = await projectLogService.listProjectLogsByProject({
+        const result = await projectLogService.listProjectLogBootstrapByProject({
           authContext: input.authContext,
           projectId: input.projectId,
-          page: 1,
           pageSize: input.query.log_page_size,
+          skipReadAccessCheck: true,
         });
         const logIds = result.rows
           .map((row) => typeof row.id === "string" ? row.id : null)
           .filter((item): item is string => Boolean(item));
         const commentSummaries =
-          await projectLogService.listProjectLogCommentSummaries({
+          await projectLogService.listProjectLogCommentCounts({
             authContext: input.authContext,
             logIds,
           });
@@ -171,6 +202,8 @@ class EmployeeProjectDetailBootstrapService {
         commentSummaries: ProjectLogCommentSummaryMap;
       },
       partialErrors,
+      timings,
+      "logs_ms",
     );
   }
 
@@ -179,13 +212,64 @@ class EmployeeProjectDetailBootstrapService {
     loader: () => Promise<T>,
     fallback: T,
     partialErrors: PartialError[],
+    timings: EmployeeProjectDetailBootstrapTimings,
+    step: BootstrapTimingStep,
   ) {
     try {
-      return await loader();
+      return await this.measure(step, timings, () =>
+        this.withTimeout(module, loader(), OPTIONAL_MODULE_TIMEOUT_MS)
+      );
     } catch (error) {
       partialErrors.push(this.toPartialError(module, error));
       return fallback;
     }
+  }
+
+  private createEmptyTimings(): EmployeeProjectDetailBootstrapTimings {
+    return {
+      project_ms: 0,
+      permissions_ms: 0,
+      members_ms: 0,
+      status_actions_ms: 0,
+      construction_stages_ms: 0,
+      logs_ms: 0,
+      calendar_ms: 0,
+    };
+  }
+
+  private async measure<T>(
+    step: BootstrapTimingStep,
+    timings: EmployeeProjectDetailBootstrapTimings,
+    loader: () => Promise<T>,
+  ) {
+    const startedAt = Date.now();
+    try {
+      return await loader();
+    } finally {
+      timings[step] = Date.now() - startedAt;
+    }
+  }
+
+  private withTimeout<T>(
+    module: string,
+    promise: Promise<T>,
+    timeoutMs: number,
+  ) {
+    return new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`${module} 模块加载超过 ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      promise
+        .then((value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        })
+        .catch((error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+    });
   }
 
   private toPartialError(module: string, error: unknown): PartialError {
@@ -203,6 +287,22 @@ class EmployeeProjectDetailBootstrapService {
       current_status: typeof project.status === "string" ? project.status : "designing",
       paused_from_status: null,
       actions: [],
+    } as StatusActionsResult;
+  }
+
+  private buildStatusActionsFromProject(project: Record<string, unknown>): StatusActionsResult {
+    const rawStatus = typeof project.status === "string" ? project.status : null;
+    const currentStatus = isProjectStatus(rawStatus)
+      ? rawStatus
+      : "designing";
+
+    return {
+      current_status: currentStatus,
+      paused_from_status: null,
+      actions: listProjectStatusActions({
+        fromStatus: currentStatus,
+        pausedFromStatus: null,
+      }),
     } as StatusActionsResult;
   }
 
@@ -236,8 +336,10 @@ class EmployeeProjectDetailBootstrapService {
         ],
       ),
     ]);
-    const canCreateProjectLogByStage = input.constructionStages?.stages
-      ?.some((item) => Boolean(item.can_create_log)) ?? false;
+    const canCreateProjectLogByStage = input.constructionStages
+      ? input.constructionStages.stages?.some((item) => Boolean(item.can_create_log)) ??
+        false
+      : true;
 
     return {
       employee_id: input.authContext.employeeId ?? null,
@@ -265,20 +367,32 @@ class EmployeeProjectDetailBootstrapService {
     };
   }
 
+  private completePermissionsByStages(
+    permissions: BootstrapPermissions,
+    constructionStages: ConstructionStagesResult | null,
+  ): BootstrapPermissions {
+    const canCreateProjectLogByStage = constructionStages?.stages
+      ?.some((item) => Boolean(item.can_create_log)) ?? false;
+
+    return {
+      ...permissions,
+      can_create_project_log: permissions.can_create_project_log &&
+        canCreateProjectLogByStage,
+    };
+  }
+
   private async canAccessProjectByOptionalPermission(
     authContext: AuthContext,
     projectId: string,
     permissionCodes: string[],
   ) {
-    for (const permissionCode of permissionCodes) {
-      if (
-        await this.canAccessProjectByPermission(authContext, projectId, permissionCode)
-      ) {
-        return true;
-      }
-    }
+    const results = await Promise.all(
+      permissionCodes.map((permissionCode) =>
+        this.canAccessProjectByPermission(authContext, projectId, permissionCode)
+      ),
+    );
 
-    return false;
+    return results.some(Boolean);
   }
 
   private async canAccessProjectByPermission(

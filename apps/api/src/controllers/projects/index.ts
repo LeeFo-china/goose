@@ -693,7 +693,10 @@ class ProjectController extends TenantBaseController<
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
+    const startedAt = Date.now();
+    const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
@@ -707,6 +710,7 @@ class ProjectController extends TenantBaseController<
       projectId: idVerify.data.id,
       query: queryResult.data,
     });
+    const serializeStartedAt = Date.now();
     const phonePrivacyContext =
       await customerPhonePrivacyService.createPrivacyContext(authContext);
     const logs = {
@@ -720,8 +724,7 @@ class ProjectController extends TenantBaseController<
       pagination: data.logs.pagination,
     };
     const members = data.members.map((item) => this.serializeProjectMember(item));
-
-    return ResponseHandler.success({
+    const payload = {
       project: await this.serializeProjectDetailItem(
         data.project,
         phonePrivacyContext,
@@ -753,7 +756,33 @@ class ProjectController extends TenantBaseController<
       ...(data.partial_errors.length > 0
         ? { partial_errors: data.partial_errors }
         : {}),
-    });
+    };
+    const serializeMs = Date.now() - serializeStartedAt;
+    const durationMs = Date.now() - startedAt;
+    const timingLog = {
+      event: "employee_project_detail_bootstrap_timing",
+      project_id: idVerify.data.id,
+      employee_id: authContext.employeeId ?? null,
+      tenant_id: authContext.tenantId,
+      include_calendar: queryResult.data.include_calendar,
+      include_referral_summary: queryResult.data.include_referral_summary,
+      include_cameras_summary: queryResult.data.include_cameras_summary,
+      log_page_size: queryResult.data.log_page_size,
+      duration_ms: durationMs,
+      steps: {
+        auth_context_ms: authContextMs,
+        ...data.timings,
+        serialize_ms: serializeMs,
+      },
+      partial_error_count: data.partial_errors.length,
+    };
+    if (durationMs > 1500) {
+      request.log.warn(timingLog, "[employee-project-bootstrap] slow timing");
+    } else {
+      request.log.info(timingLog, "[employee-project-bootstrap] timing");
+    }
+
+    return ResponseHandler.success(payload);
   }
 
   @Get("/projects/:id/status-transitions")

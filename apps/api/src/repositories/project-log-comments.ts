@@ -43,6 +43,8 @@ export type ProjectLogCommentSummaryRow = Pick<
   | "created_at"
 >;
 
+export type ProjectLogCommentCountRow = Pick<ProjectLogCommentRow, "id" | "log_id">;
+
 export type ProjectLogAccessInfo = {
   id: string;
   project_id: string;
@@ -239,6 +241,33 @@ class ProjectLogCommentsRepository {
     }
 
     return (data || []) as ProjectLogCommentSummaryRow[];
+  }
+
+  async listCountRowsByLogIds(input: {
+    logIds: string[];
+    tenantId: string | null;
+  }) {
+    if (input.logIds.length === 0) {
+      return [] as ProjectLogCommentCountRow[];
+    }
+
+    let query = SupabaseDB.getAdminClient()
+      .from("project_log_comments")
+      .select("id, log_id")
+      .in("log_id", input.logIds)
+      .is("deleted_at", null);
+
+    query = input.tenantId
+      ? query.eq("tenant_id", input.tenantId)
+      : query.is("tenant_id", null);
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询日志评论数量失败", error);
+    }
+
+    return (data || []) as ProjectLogCommentCountRow[];
   }
 
   async listEmployeeAuthors(employeeIds: string[]) {

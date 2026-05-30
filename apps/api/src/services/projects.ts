@@ -725,7 +725,7 @@ class ProjectService {
             throw Errors.dbError("查询记录不存在");
         }
 
-        return this.attachPrimaryAssigneesToProject(project);
+        return project;
     }
 
     async getProjectDetailForEmployeeBootstrap(input: {
@@ -733,15 +733,6 @@ class ProjectService {
         projectId: string;
     }) {
         const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-        const existing = await projectRepository.findById(input.projectId, tenantId);
-        if (!existing) {
-            throw Errors.business(
-                404,
-                "项目不存在",
-                ErrorCodes.PROJECT_NOT_FOUND,
-            );
-        }
-
         if (!accessPolicyService.hasPermission(input.authContext, "project.read")) {
             throw Errors.business(
                 403,
@@ -749,20 +740,8 @@ class ProjectService {
                 ErrorCodes.PROJECT_ACCESS_DENIED,
             );
         }
-        const hasAccess = await accessPolicyService.canAccessProject(
-            input.authContext,
-            input.projectId,
-            "project.read",
-        );
-        if (!hasAccess) {
-            throw Errors.business(
-                403,
-                "无权查看该项目",
-                ErrorCodes.PROJECT_ACCESS_DENIED,
-            );
-        }
 
-        const project = await projectRepository.findDetailById(
+        const project = await projectRepository.findEmployeeBootstrapDetailById(
             input.projectId,
             tenantId,
         );
@@ -773,17 +752,41 @@ class ProjectService {
                 ErrorCodes.PROJECT_NOT_FOUND,
             );
         }
+        if (accessPolicyService.getScope(input.authContext, "project.read") !== "all") {
+            const hasAccess = await accessPolicyService.canAccessProject(
+                input.authContext,
+                input.projectId,
+                "project.read",
+            );
+            if (!hasAccess) {
+                throw Errors.business(
+                    403,
+                    "无权查看该项目",
+                    ErrorCodes.PROJECT_ACCESS_DENIED,
+                );
+            }
+        }
 
         return this.attachPrimaryAssigneesToProject(project);
     }
 
-    async listProjectMembersForDetail(project: Record<string, unknown>) {
+    async listProjectStoredMembers(projectId: string) {
+        if (!projectId) {
+            return [] as ProjectDetailMembers;
+        }
+
+        return projectMemberService.listProjectMembers(projectId);
+    }
+
+    buildProjectMembersForDetail(
+        project: Record<string, unknown>,
+        members: ProjectDetailMembers,
+    ) {
         const projectId = typeof project.id === "string" ? project.id : "";
         if (!projectId) {
             return [] as ProjectDetailMembers;
         }
 
-        const members = await projectMemberService.listProjectMembers(projectId);
         const customer = this.normalizeRelation(project.customer, {
             id: null,
             name: null,
@@ -822,6 +825,12 @@ class ProjectService {
 
             return (a.role_name ?? "").localeCompare(b.role_name ?? "", "zh-CN");
         });
+    }
+
+    async listProjectMembersForDetail(project: Record<string, unknown>) {
+        const projectId = typeof project.id === "string" ? project.id : "";
+        const members = await this.listProjectStoredMembers(projectId);
+        return this.buildProjectMembersForDetail(project, members);
     }
 
     async createProject(input: {

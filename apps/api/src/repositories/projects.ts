@@ -53,6 +53,45 @@ export const PROJECT_DETAIL_SELECT = `
   )
 `;
 
+export const EMPLOYEE_PROJECT_BOOTSTRAP_SELECT = `
+  id,
+  tenant_id,
+  customer_id,
+  property_id,
+  name,
+  status,
+  budget,
+  signed_amount,
+  start_date,
+  created_at,
+  updated_at,
+  address,
+  style_tags,
+  visibility_status,
+  customer:customers!projects_customer_id_fkey(
+    id,
+    name,
+    phone,
+    status,
+    owner_id,
+    owner:employees!customers_owner_id_fkey(
+      id,
+      name,
+      avatar,
+      phone
+    )
+  ),
+  property:properties!projects_property_id_fkey(
+    id,
+    community,
+    building_info,
+    layout,
+    area,
+    latitude,
+    longitude
+  )
+`;
+
 export const PUBLIC_PROJECT_LIST_SELECT = `
   id,
   name,
@@ -355,6 +394,21 @@ class ProjectRepository {
 
     if (error) {
       throw Errors.dbError("查询失败", error);
+    }
+
+    return (data as unknown as Record<string, unknown> | null) ?? null;
+  }
+
+  async findEmployeeBootstrapDetailById(id: string, tenantId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select(EMPLOYEE_PROJECT_BOOTSTRAP_SELECT)
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目首屏详情失败", error);
     }
 
     return (data as unknown as Record<string, unknown> | null) ?? null;

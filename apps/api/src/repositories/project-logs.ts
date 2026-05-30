@@ -148,6 +148,43 @@ class ProjectLogRepository {
     };
   }
 
+  async listBootstrapByProject(input: {
+    projectId: string;
+    tenantId: string;
+    from: number;
+    limit: number;
+  }) {
+    const to = input.from + input.limit;
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_logs")
+      .select(`
+        id,
+        project_id,
+        tenant_id,
+        employee_id,
+        stage_code,
+        node_name,
+        content,
+        images,
+        created_at,
+        employee:employees!project_logs_employee_id_fkey(id, name, avatar)
+      `)
+      .eq("project_id", input.projectId)
+      .eq("tenant_id", input.tenantId)
+      .order("created_at", { ascending: false })
+      .range(input.from, to);
+
+    if (error) {
+      throw Errors.dbError("查询项目日志首屏摘要失败", error);
+    }
+
+    const rows = (data || []) as unknown as Array<Record<string, unknown>>;
+    return {
+      rows: rows.slice(0, input.limit),
+      hasMore: rows.length > input.limit,
+    };
+  }
+
   async listCalendarRows(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient().rpc(
       "get_project_log_calendar",
