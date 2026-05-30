@@ -53,6 +53,7 @@ class ConstructionStageStatusService {
     return this.listProjectConstructionStagesForProject({
       projectId: input.projectId,
       tenantId,
+      authContext: input.authContext,
       canReadAcceptance,
       canCreateAcceptance: canReadAcceptance && hasCreateAcceptancePermission,
     });
@@ -61,6 +62,7 @@ class ConstructionStageStatusService {
   async listProjectConstructionStagesForProject(input: {
     projectId: string;
     tenantId?: string | null;
+    authContext?: AuthContext;
     canReadAcceptance?: boolean;
     canCreateAcceptance?: boolean;
   }) {
@@ -112,6 +114,9 @@ class ConstructionStageStatusService {
         .filter((item) => item.status === "customer_confirmed")
         .map((item) => item.stage_code),
     );
+    const acceptanceWritableMap = input.authContext
+      ? await this.buildAcceptanceWritableMap(input.authContext, acceptanceRows)
+      : null;
 
     const stages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.map((stageCode) => {
       const previousStage = getPreviousProjectConstructionStage(stageCode);
@@ -129,6 +134,9 @@ class ConstructionStageStatusService {
         blockedReason,
         projectStatus: project.status,
         canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
+        canHandleExistingAcceptance: acceptanceWritableMap
+          ? acceptanceWritableMap.get(stageCode) ?? false
+          : true,
       });
     });
     const missingRequiredStages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter(
@@ -153,6 +161,9 @@ class ConstructionStageStatusService {
       blockedReason: completionBlockedReason,
       projectStatus: project.status,
       canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
+      canHandleExistingAcceptance: acceptanceWritableMap
+        ? acceptanceWritableMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE) ?? false
+        : true,
     });
 
     return {
@@ -299,6 +310,50 @@ class ConstructionStageStatusService {
     return false;
   }
 
+  private async canManageAcceptance(
+    authContext: AuthContext,
+    acceptance: ProjectAcceptanceRow,
+  ) {
+    if (!accessPolicyService.hasPermission(authContext, "project_acceptance.manage")) {
+      return false;
+    }
+
+    return accessPolicyService.canAccessProject(
+      authContext,
+      acceptance.project_id,
+      "project_acceptance.manage",
+    );
+  }
+
+  private canUpdateOrSubmitOwnAcceptance(
+    authContext: AuthContext,
+    acceptance: ProjectAcceptanceRow,
+  ) {
+    return Boolean(
+      authContext.employeeId &&
+        acceptance.initiator_id === authContext.employeeId &&
+        (
+          accessPolicyService.hasPermission(authContext, "project_acceptance.update_own") ||
+          accessPolicyService.hasPermission(authContext, "project_acceptance.submit")
+        ),
+    );
+  }
+
+  private async buildAcceptanceWritableMap(
+    authContext: AuthContext,
+    acceptances: ProjectAcceptanceRow[],
+  ) {
+    const entries = await Promise.all(
+      acceptances.map(async (acceptance) => [
+        acceptance.stage_code,
+        await this.canManageAcceptance(authContext, acceptance) ||
+          this.canUpdateOrSubmitOwnAcceptance(authContext, acceptance),
+      ] as const),
+    );
+
+    return new Map(entries);
+  }
+
   private buildStageItem(input: {
     stageCode: ProjectLogStageCode;
     acceptance?: ProjectAcceptanceRow | null;
@@ -307,6 +362,7 @@ class ConstructionStageStatusService {
     blockedReason: string | null;
     projectStatus?: string | null;
     canCreateAcceptanceByPermission: boolean;
+    canHandleExistingAcceptance: boolean;
   }) {
     const acceptance = input.acceptance ?? null;
     const latestLog = input.latestLog ?? null;
@@ -344,6 +400,7 @@ class ConstructionStageStatusService {
       canCreateAcceptance,
       blockedReason: input.blockedReason,
       canCreateAcceptanceByPermission: input.canCreateAcceptanceByPermission,
+      canHandleExistingAcceptance: input.canHandleExistingAcceptance,
     });
 
     return {
@@ -386,14 +443,17 @@ class ConstructionStageStatusService {
     canCreateAcceptance: boolean;
     blockedReason: string | null;
     canCreateAcceptanceByPermission: boolean;
+    canHandleExistingAcceptance: boolean;
   }) {
     if (input.acceptance) {
       if (input.acceptance.status === "draft" || input.acceptance.status === "rejected") {
         return {
           type: "edit" as const,
           label: "处理验收",
-          enabled: true,
-          reason: null,
+          enabled: input.canHandleExistingAcceptance,
+          reason: input.canHandleExistingAcceptance
+            ? null
+            : "当前员工无验收处理权限",
         };
       }
 

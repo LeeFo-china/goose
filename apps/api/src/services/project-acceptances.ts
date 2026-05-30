@@ -823,15 +823,27 @@ class ProjectAcceptanceService {
     if (!hasAccess) throw Errors.forbidden();
   }
 
-  private assertCanUpdateOwn(authContext: AuthContext, row: ProjectAcceptanceRow) {
-    const employeeId = this.assertCurrentEmployee(authContext);
-    const manageScope = accessPolicyService.getScope(
+  private async canManageAcceptance(
+    authContext: AuthContext,
+    row: ProjectAcceptanceRow,
+  ) {
+    if (!accessPolicyService.hasPermission(authContext, "project_acceptance.manage")) {
+      return false;
+    }
+
+    return accessPolicyService.canAccessProject(
       authContext,
+      row.project_id,
       "project_acceptance.manage",
     );
-    if (manageScope === "all") {
+  }
+
+  private async assertCanUpdateOwn(authContext: AuthContext, row: ProjectAcceptanceRow) {
+    if (await this.canManageAcceptance(authContext, row)) {
       return;
     }
+
+    const employeeId = this.assertCurrentEmployee(authContext);
 
     accessPolicyService.assertPermission(authContext, "project_acceptance.update_own");
     if (row.initiator_id !== employeeId) {
@@ -839,7 +851,11 @@ class ProjectAcceptanceService {
     }
   }
 
-  private assertCanSubmit(authContext: AuthContext, row: ProjectAcceptanceRow) {
+  private async assertCanSubmit(authContext: AuthContext, row: ProjectAcceptanceRow) {
+    if (await this.canManageAcceptance(authContext, row)) {
+      return;
+    }
+
     const employeeId = this.assertCurrentEmployee(authContext);
     const scope = accessPolicyService.assertPermission(
       authContext,
@@ -1750,7 +1766,7 @@ class ProjectAcceptanceService {
       currentStatus: row.status,
       action: "update",
     });
-    this.assertCanUpdateOwn(authContext, row);
+    await this.assertCanUpdateOwn(authContext, row);
 
     const nextRow = await this.applyUpdate(row, input);
     await this.recordAction({
@@ -1777,7 +1793,7 @@ class ProjectAcceptanceService {
       );
     }
 
-    this.assertCanUpdateOwn(authContext, row);
+    await this.assertCanUpdateOwn(authContext, row);
     await projectAcceptanceRepository.deleteAcceptance(row.id, row.tenant_id);
     this.clearCustomerAcceptanceListCache();
 
@@ -1879,7 +1895,7 @@ class ProjectAcceptanceService {
       currentStatus: row.status,
       action: "submit",
     });
-    this.assertCanSubmit(authContext, row);
+    await this.assertCanSubmit(authContext, row);
 
     const beforeItems = await projectAcceptanceRepository.listItems(
       row.id,
@@ -2159,7 +2175,7 @@ class ProjectAcceptanceService {
       currentStatus: row.status,
       action: "employee_rectify",
     });
-    this.assertCanSubmit(authContext, row);
+    await this.assertCanSubmit(authContext, row);
 
     const [items, actions] = await Promise.all([
       projectAcceptanceRepository.listItems(row.id, row.tenant_id),
