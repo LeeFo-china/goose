@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import {
   projectLogRepository,
   type ProjectLogCalendarRow,
@@ -98,7 +99,11 @@ class ProjectLogService {
       input.payload.project_id,
     );
     if (!canWriteLog) {
-      throw Errors.forbidden();
+      throw Errors.business(
+        403,
+        "无施工日志创建权限",
+        ErrorCodes.PROJECT_LOG_PERMISSION_DENIED,
+      );
     }
 
     const row = await projectLogRepository.create({
@@ -182,7 +187,11 @@ class ProjectLogService {
       existingProjectId,
     );
     if (!canUpdateExisting) {
-      throw Errors.forbidden();
+      throw Errors.business(
+        403,
+        "无施工日志创建权限",
+        ErrorCodes.PROJECT_LOG_PERMISSION_DENIED,
+      );
     }
 
     const payload = { ...input.payload } as Record<string, unknown>;
@@ -204,7 +213,11 @@ class ProjectLogService {
         payload.project_id,
       );
       if (!canUpdateTarget) {
-        throw Errors.forbidden();
+        throw Errors.business(
+          403,
+          "无施工日志创建权限",
+          ErrorCodes.PROJECT_LOG_PERMISSION_DENIED,
+        );
       }
       payload.tenant_id = project.tenant_id;
     }
@@ -364,7 +377,11 @@ class ProjectLogService {
   }) {
     const project = await projectLogRepository.findProjectById(input);
     if (!project) {
-      throw Errors.badRequest("项目不存在");
+      throw Errors.business(
+        404,
+        "项目不存在或不可见",
+        ErrorCodes.PROJECT_LOG_PROJECT_NOT_FOUND,
+      );
     }
 
     return project;

@@ -37,14 +37,19 @@ type TransitionProjectStatusInput = {
 class ProjectStatusService {
   assertCanCreateProjectLog(project: { status?: unknown }) {
     const status = this.getRequiredCurrentStatus(project.status);
-    if (status === "invalid") {
-      throw Errors.badRequest("无效项目不能新增施工日志");
-    }
-    if (status === "on_hold") {
-      throw Errors.badRequest("暂停项目不能新增施工日志");
-    }
-    if (status === "acceptance") {
-      throw Errors.badRequest("竣工验收项目不能新增施工日志");
+    if (status !== "started" && status !== "constructing") {
+      const message = status === "invalid"
+        ? "无效项目不能新增施工日志"
+        : status === "on_hold"
+          ? "暂停项目不能新增施工日志"
+          : status === "acceptance"
+            ? "竣工验收项目不能新增施工日志"
+            : "当前项目状态不能新增施工日志";
+      throw Errors.business(
+        400,
+        message,
+        ErrorCodes.PROJECT_LOG_PROJECT_STATUS_BLOCKED,
+      );
     }
   }
 

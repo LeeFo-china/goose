@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import {
   projectAcceptanceRepository,
   type ProjectAcceptanceProjectRow,
@@ -253,7 +254,57 @@ class ConstructionStageStatusService {
     tenantId?: string | null;
     stageCode: ProjectLogStageCode;
   }) {
-    await this.assertCanEnterConstructionStage(input);
+    const stages = await this.listProjectConstructionStagesForProject({
+      projectId: input.projectId,
+      tenantId: input.tenantId,
+      canReadAcceptance: true,
+      canCreateAcceptance: true,
+    });
+    const stage = stages.stages.find((item) =>
+      item.stage_code === input.stageCode
+    );
+
+    if (!stage || stage.is_completion) {
+      throw Errors.business(
+        400,
+        "当前阶段不可写施工日志",
+        ErrorCodes.PROJECT_LOG_STAGE_NOT_WRITABLE,
+      );
+    }
+
+    if (stage.can_create_log) {
+      return;
+    }
+
+    if (stage.blocked_reason) {
+      throw Errors.business(
+        400,
+        stage.blocked_reason,
+        ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
+      );
+    }
+
+    if (stage.status === "pending_acceptance") {
+      throw Errors.business(
+        400,
+        `当前${stage.stage_label}阶段待验收，完成验收后再补充施工日志`,
+        ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
+      );
+    }
+
+    if (stage.status === "accepted") {
+      throw Errors.business(
+        400,
+        `当前${stage.stage_label}阶段已验收完成，不能继续补充施工日志`,
+        ErrorCodes.PROJECT_LOG_STAGE_NOT_WRITABLE,
+      );
+    }
+
+    throw Errors.business(
+      400,
+      "当前阶段不可写施工日志",
+      ErrorCodes.PROJECT_LOG_STAGE_NOT_WRITABLE,
+    );
   }
 
   async assertCanCreateAcceptance(input: {

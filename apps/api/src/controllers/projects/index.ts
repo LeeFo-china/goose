@@ -734,6 +734,7 @@ class ProjectController extends TenantBaseController<
       members,
       status_actions: data.status_actions,
       construction_stages: data.construction_stages,
+      log_entry: data.log_entry,
       next_action: data.next_action,
       logs,
       ...(data.calendar

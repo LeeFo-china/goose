@@ -3,7 +3,12 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { projectLogService } from "@/services/project-logs";
 import { projectSer } from "@/services/projects";
-import { isProjectStatus, listProjectStatusActions } from "@gooes/domain";
+import {
+  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
+  isProjectStatus,
+  listProjectStatusActions,
+  type ProjectLogStageCode,
+} from "@gooes/domain";
 
 type PartialError = {
   module: string;
@@ -63,6 +68,22 @@ type BootstrapPermissions = {
 type InternalBootstrapPermissions = BootstrapPermissions & {
   internal_can_create_acceptance: boolean;
   internal_can_manage_acceptance: boolean;
+};
+
+type ProjectLogEntrySummary = {
+  can_create: boolean;
+  writable_stage: {
+    stage_code: ProjectLogStageCode;
+    stage_label: string;
+  } | null;
+  blocked_reason: string | null;
+  next_action: {
+    kind: "acceptance" | "status" | "refresh";
+    label: string;
+    stage_code?: string | null;
+    acceptance_id?: string | null;
+    action?: string | null;
+  } | null;
 };
 
 class EmployeeProjectDetailBootstrapService {
@@ -146,6 +167,10 @@ class EmployeeProjectDetailBootstrapService {
         ...rawStatusActions,
         actions: [],
       };
+    const nextAction = this.buildNextAction({
+      statusActions,
+      constructionStages,
+    });
 
     return {
       project,
@@ -153,10 +178,14 @@ class EmployeeProjectDetailBootstrapService {
       members,
       status_actions: statusActions,
       construction_stages: constructionStages,
-      next_action: this.buildNextAction({
-        statusActions,
+      log_entry: this.buildProjectLogEntry({
+        project,
+        permissions,
         constructionStages,
+        statusActions,
+        nextAction,
       }),
+      next_action: nextAction,
       logs,
       calendar,
       referral_summary: input.query.include_referral_summary ? null : undefined,
@@ -208,6 +237,134 @@ class EmployeeProjectDetailBootstrapService {
     }
 
     return map;
+  }
+
+  private buildProjectLogEntry(input: {
+    project: Record<string, unknown>;
+    permissions: BootstrapPermissions;
+    constructionStages: ConstructionStagesResult | null;
+    statusActions: StatusActionsResult;
+    nextAction: ReturnType<EmployeeProjectDetailBootstrapService["buildNextAction"]>;
+  }): ProjectLogEntrySummary {
+    const stages = input.constructionStages?.stages ?? [];
+    const writableStages = stages.filter((stage) =>
+      stage.can_create_log === true &&
+      stage.stage_code !== PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE
+    );
+    const currentStageCode = input.constructionStages?.current_stage ?? null;
+    const writableStage =
+      writableStages.find((stage) => stage.stage_code === currentStageCode) ??
+      writableStages.find((stage) => stage.status === "in_progress") ??
+      writableStages[0] ??
+      null;
+
+    if (input.permissions.can_create_project_log && writableStage) {
+      return {
+        can_create: true,
+        writable_stage: {
+          stage_code: writableStage.stage_code,
+          stage_label: writableStage.stage_label,
+        },
+        blocked_reason: null,
+        next_action: null,
+      };
+    }
+
+    return {
+      can_create: false,
+      writable_stage: null,
+      blocked_reason: this.buildProjectLogEntryBlockedReason(input),
+      next_action: this.buildProjectLogEntryNextAction(input),
+    };
+  }
+
+  private buildProjectLogEntryBlockedReason(input: {
+    project: Record<string, unknown>;
+    permissions: BootstrapPermissions;
+    constructionStages: ConstructionStagesResult | null;
+  }) {
+    if (!input.permissions.scopes.project_log_create) {
+      return "当前员工无施工日志创建权限";
+    }
+
+    const status = typeof input.project.status === "string"
+      ? input.project.status
+      : null;
+    if (status !== "started" && status !== "constructing") {
+      if (status === "invalid") return "无效项目不能新增施工日志";
+      if (status === "on_hold") return "暂停项目不能新增施工日志";
+      if (status === "acceptance") return "竣工验收项目不能新增施工日志";
+      return "当前项目状态不能新增施工日志";
+    }
+
+    const stages = input.constructionStages?.stages ?? [];
+    if (stages.length === 0) {
+      return "施工阶段未同步，请刷新后重试";
+    }
+
+    const currentStage = stages.find((stage) =>
+      stage.stage_code === input.constructionStages?.current_stage
+    );
+    const blockedStage = currentStage ?? stages.find((stage) =>
+      stage.blocked_reason ||
+      stage.status === "pending_acceptance" ||
+      stage.status === "accepted"
+    );
+    if (blockedStage?.blocked_reason) {
+      return blockedStage.blocked_reason;
+    }
+    if (blockedStage?.status === "pending_acceptance") {
+      return `当前${blockedStage.stage_label}阶段待验收，完成验收后再补充施工日志`;
+    }
+    if (blockedStage?.status === "accepted") {
+      return `当前${blockedStage.stage_label}阶段已验收完成，不能继续补充施工日志`;
+    }
+
+    return "当前暂无可写施工阶段";
+  }
+
+  private buildProjectLogEntryNextAction(input: {
+    constructionStages: ConstructionStagesResult | null;
+    statusActions: StatusActionsResult;
+    nextAction: ReturnType<EmployeeProjectDetailBootstrapService["buildNextAction"]>;
+  }): ProjectLogEntrySummary["next_action"] {
+    const acceptanceStage = input.constructionStages?.stages.find((stage) =>
+      stage.acceptance_action?.type &&
+      stage.acceptance_action.type !== "none" &&
+      stage.acceptance_action.enabled
+    ) ?? input.constructionStages?.stages.find((stage) =>
+      stage.acceptance_action?.type &&
+      stage.acceptance_action.type !== "none"
+    );
+
+    if (acceptanceStage?.acceptance_action?.type) {
+      return {
+        kind: "acceptance",
+        label: acceptanceStage.acceptance_action.label || "处理验收",
+        stage_code: acceptanceStage.stage_code,
+        acceptance_id: acceptanceStage.acceptance_id ?? null,
+        action: acceptanceStage.acceptance_action.type,
+      };
+    }
+
+    const statusAction = input.statusActions.actions[0];
+    if (statusAction) {
+      return {
+        kind: "status",
+        label: statusAction.label,
+        action: statusAction.action,
+      };
+    }
+
+    if (input.nextAction?.source === "project_status") {
+      return {
+        kind: "status",
+        label: input.nextAction.label,
+        action: input.nextAction.action ?? input.nextAction.type ?? null,
+      };
+    }
+
+    return null;
   }
 
   private async loadProjectLogs(
