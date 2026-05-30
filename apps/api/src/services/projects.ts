@@ -12,6 +12,7 @@ import type {
     ProjectMemberCandidateQueryType,
 } from "@/schema/project-create-select";
 import { Errors } from "@/errors/error-factory";
+import { ErrorCodes } from "@/errors/error-codes";
 import { projectRepository } from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -51,6 +52,7 @@ type CacheEntry<T> = {
 };
 
 type PublicProjectMembers = Awaited<ReturnType<typeof projectMemberService.listProjectMembers>>;
+type ProjectDetailMembers = Awaited<ReturnType<typeof projectMemberService.listProjectMembers>>;
 
 type ProjectListResult = {
     rows: Array<Record<string, unknown>>;
@@ -107,6 +109,26 @@ class ProjectService {
                 status as (typeof this.publicProjectVisibleStatuses)[number],
             )
             : false;
+    }
+
+    private normalizeRelation<T extends Record<string, unknown>>(
+        value: unknown,
+        fallback: T,
+    ): T {
+        if (Array.isArray(value)) {
+            const first = value[0];
+            if (first && typeof first === "object") {
+                return { ...fallback, ...(first as T) };
+            }
+
+            return fallback;
+        }
+
+        if (value && typeof value === "object") {
+            return { ...fallback, ...(value as T) };
+        }
+
+        return fallback;
     }
 
     async listProjects(input: {
@@ -704,6 +726,102 @@ class ProjectService {
         }
 
         return this.attachPrimaryAssigneesToProject(project);
+    }
+
+    async getProjectDetailForEmployeeBootstrap(input: {
+        authContext: AuthContext;
+        projectId: string;
+    }) {
+        const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        const existing = await projectRepository.findById(input.projectId, tenantId);
+        if (!existing) {
+            throw Errors.business(
+                404,
+                "项目不存在",
+                ErrorCodes.PROJECT_NOT_FOUND,
+            );
+        }
+
+        if (!accessPolicyService.hasPermission(input.authContext, "project.read")) {
+            throw Errors.business(
+                403,
+                "无权查看该项目",
+                ErrorCodes.PROJECT_ACCESS_DENIED,
+            );
+        }
+        const hasAccess = await accessPolicyService.canAccessProject(
+            input.authContext,
+            input.projectId,
+            "project.read",
+        );
+        if (!hasAccess) {
+            throw Errors.business(
+                403,
+                "无权查看该项目",
+                ErrorCodes.PROJECT_ACCESS_DENIED,
+            );
+        }
+
+        const project = await projectRepository.findDetailById(
+            input.projectId,
+            tenantId,
+        );
+        if (!project) {
+            throw Errors.business(
+                404,
+                "项目不存在",
+                ErrorCodes.PROJECT_NOT_FOUND,
+            );
+        }
+
+        return this.attachPrimaryAssigneesToProject(project);
+    }
+
+    async listProjectMembersForDetail(project: Record<string, unknown>) {
+        const projectId = typeof project.id === "string" ? project.id : "";
+        if (!projectId) {
+            return [] as ProjectDetailMembers;
+        }
+
+        const members = await projectMemberService.listProjectMembers(projectId);
+        const customer = this.normalizeRelation(project.customer, {
+            id: null,
+            name: null,
+            phone: null,
+            owner_id: null,
+            owner: null,
+        });
+        const customerOwnerRelation = this.normalizeRelation(customer.owner, {
+            id: "",
+            name: null,
+            avatar: null,
+            phone: null,
+            department_name: null,
+            post_name: null,
+        });
+        const customerOwner = projectMemberService.buildDerivedCustomerOwnerMember({
+            projectId,
+            employee: customerOwnerRelation.id ? customerOwnerRelation : null,
+        });
+
+        return [
+            ...(customerOwner ? [customerOwner] : []),
+            ...members,
+        ].sort((a, b) => {
+            const sortOrderA = a.sort_order ?? 0;
+            const sortOrderB = b.sort_order ?? 0;
+            if (sortOrderA !== sortOrderB) {
+                return sortOrderA - sortOrderB;
+            }
+
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            if (timeA !== timeB) {
+                return timeA - timeB;
+            }
+
+            return (a.role_name ?? "").localeCompare(b.role_name ?? "", "zh-CN");
+        });
     }
 
     async createProject(input: {

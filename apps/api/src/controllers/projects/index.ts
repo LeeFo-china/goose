@@ -1,6 +1,7 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateProjectSchema,
+  EmployeeProjectDetailBootstrapQuerySchema,
   ProjectStatusTransitionListQuerySchema,
   ProjectStatusTransitionSchema,
   UpdateProjectSchema,
@@ -32,6 +33,7 @@ import {
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import { accessPolicyService } from "@/services/access-policy";
+import { employeeProjectDetailBootstrapService } from "@/services/employee-project-detail-bootstrap";
 import { projectMemberService } from "@/services/project-members";
 import {
   customerPhonePrivacyService,
@@ -148,6 +150,20 @@ type PublicProjectLogSummary = {
   content: string | null;
   images: string[];
   created_at: string | null;
+};
+
+type ProjectLogCommentSummary = {
+  comment_count: number;
+  latest_comment: {
+    id: string;
+    log_id: string;
+    parent_id: string | null;
+    author_type: string;
+    author_id: string;
+    content: string | null;
+    rating: number | null;
+    created_at: string | null;
+  } | null;
 };
 
 class ProjectController extends TenantBaseController<
@@ -334,53 +350,66 @@ class ProjectController extends TenantBaseController<
   }
 
   private async getProjectMembersForDetail(project: Record<string, unknown>) {
-    const projectId = typeof project.id === "string" ? project.id : "";
-    if (!projectId) {
-      return [] as ProjectMemberSummary[];
-    }
+    const members = await projectSer.listProjectMembersForDetail(project);
+    return members.map((item) => this.serializeProjectMember(item));
+  }
 
-    const members = await projectMemberService.listProjectMembers(projectId);
-    const customer = this.normalizeRelation(project.customer, {
+  private serializeProjectLogForBootstrap(
+    row: Record<string, unknown>,
+    summary?: ProjectLogCommentSummary,
+  ) {
+    const rawStageCode = typeof row.stage_code === "string" ? row.stage_code : null;
+    const stageCode: ProjectLogStageCode | null = isProjectLogStageCode(rawStageCode)
+      ? rawStageCode
+      : null;
+    const images = this.normalizeProjectLogImages(row.images);
+    const employee = this.normalizeRelation(row.employee, {
       id: null,
       name: null,
-      phone: null,
-      owner_id: null,
-      owner: null,
-    });
-    const customerOwnerRelation = this.normalizeRelation(customer.owner, {
-      id: "",
-      name: null,
       avatar: null,
-      phone: null,
-      department_name: null,
-      post_name: null,
-    });
-    const customerOwner = projectMemberService.buildDerivedCustomerOwnerMember({
-      projectId,
-      employee: customerOwnerRelation.id ? customerOwnerRelation : null,
     });
 
-    return [
-      ...(customerOwner ? [this.serializeProjectMember(customerOwner)] : []),
-      ...members.map((item) => this.serializeProjectMember(item)),
-    ].sort((a, b) => {
-      if (a.sort_order !== b.sort_order) {
-        return a.sort_order - b.sort_order;
-      }
+    return {
+      ...row,
+      employee,
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+      images,
+      image_items: images.map((url) => ({
+        url,
+        thumb_url: url,
+        width: null,
+        height: null,
+      })),
+      image_count: images.length,
+      comment_count: summary?.comment_count ?? 0,
+      latest_comment: summary?.latest_comment ?? null,
+    };
+  }
 
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      if (timeA !== timeB) {
-        return timeA - timeB;
-      }
+  private serializeProjectLogCalendarItem(item: {
+    date: string;
+    count: number | string;
+    stage_code: string | null;
+    node_name: string | null;
+  }) {
+    const stageCode = isProjectLogStageCode(item.stage_code)
+      ? item.stage_code
+      : null;
 
-      return a.role_name.localeCompare(b.role_name, "zh-CN");
-    });
+    return {
+      date: item.date,
+      count: Number(item.count),
+      stage_code: stageCode,
+      stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
+      node_name: item.node_name,
+    };
   }
 
   private async serializeProjectDetailItem(
     row: Record<string, unknown>,
     phonePrivacyContext?: CustomerPhonePrivacyContext,
+    members?: ProjectMemberSummary[],
   ) {
     const normalizedCustomer = this.normalizeRelation(row.customer, {
       id: null,
@@ -440,7 +469,7 @@ class ProjectController extends TenantBaseController<
         phone: null,
         avatar: null,
       }),
-      members: await this.getProjectMembersForDetail(row),
+      members: members ?? await this.getProjectMembersForDetail(row),
     };
   }
 
@@ -657,6 +686,74 @@ class ProjectController extends TenantBaseController<
     });
 
     return ResponseHandler.success(data);
+  }
+
+  @Get("/projects/:id/employee-detail-bootstrap")
+  async getEmployeeProjectDetailBootstrap(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = EmployeeProjectDetailBootstrapQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await employeeProjectDetailBootstrapService.getBootstrap({
+      authContext,
+      projectId: idVerify.data.id,
+      query: queryResult.data,
+    });
+    const phonePrivacyContext =
+      await customerPhonePrivacyService.createPrivacyContext(authContext);
+    const logs = {
+      list: data.logs.rows.map((item) => {
+        const logId = typeof item.id === "string" ? item.id : "";
+        return this.serializeProjectLogForBootstrap(
+          item,
+          data.logs.commentSummaries.get(logId),
+        );
+      }),
+      pagination: data.logs.pagination,
+    };
+    const members = data.members.map((item) => this.serializeProjectMember(item));
+
+    return ResponseHandler.success({
+      project: await this.serializeProjectDetailItem(
+        data.project,
+        phonePrivacyContext,
+        members,
+      ),
+      permissions: data.permissions,
+      members,
+      status_actions: data.status_actions,
+      construction_stages: data.construction_stages,
+      next_action: data.next_action,
+      logs,
+      ...(data.calendar
+        ? {
+          calendar: {
+            project_id: idVerify.data.id,
+            list: data.calendar.map((item) =>
+              this.serializeProjectLogCalendarItem(item)
+            ),
+          },
+        }
+        : {}),
+      ...(data.referral_summary !== undefined
+        ? { referral_summary: data.referral_summary }
+        : {}),
+      ...(data.cameras_summary !== undefined
+        ? { cameras_summary: data.cameras_summary }
+        : {}),
+      server_time: data.server_time,
+      ...(data.partial_errors.length > 0
+        ? { partial_errors: data.partial_errors }
+        : {}),
+    });
   }
 
   @Get("/projects/:id/status-transitions")

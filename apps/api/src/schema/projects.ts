@@ -33,6 +33,26 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
     return value;
   }, schema.optional());
 }
+
+function booleanQueryValue(defaultValue: boolean) {
+  return z.preprocess((value) => {
+    if (value == null || value === "") {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes", "on"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "0", "no", "off"].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return value;
+  }, z.boolean().default(defaultValue));
+}
 /**
  * 基础项目 Schema
  */
@@ -124,6 +144,18 @@ export const ProjectStatusTransitionSchema = z.object({
 
 export const ProjectStatusTransitionListQuerySchema = PaginationQuerySchema;
 
+export const EmployeeProjectDetailBootstrapQuerySchema = z.object({
+  log_page_size: z.coerce
+    .number("日志条数必须是数字")
+    .int("日志条数必须是整数")
+    .min(1, "日志条数必须大于 0")
+    .max(10, "日志条数不能超过 10")
+    .default(5),
+  include_calendar: booleanQueryValue(true),
+  include_referral_summary: booleanQueryValue(false),
+  include_cameras_summary: booleanQueryValue(false),
+});
+
 // 导出类型
 export type ProjectType = z.infer<typeof ProjectBaseSchema>;
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
@@ -131,6 +163,9 @@ export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 export type ProjectStatusTransitionInput = z.infer<typeof ProjectStatusTransitionSchema>;
 export type ProjectStatusTransitionListQuery = z.infer<
   typeof ProjectStatusTransitionListQuerySchema
+>;
+export type EmployeeProjectDetailBootstrapQuery = z.infer<
+  typeof EmployeeProjectDetailBootstrapQuerySchema
 >;
 
 // 3. 从 Zod 自动推导出 TypeScript 类型 (这样你就不需要手动写 type ProjectStatus = ...)

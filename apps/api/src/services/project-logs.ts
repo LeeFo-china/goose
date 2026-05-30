@@ -3,6 +3,10 @@ import {
   projectLogRepository,
   type ProjectLogCalendarRow,
 } from "@/repositories/project-logs";
+import {
+  projectLogCommentsRepository,
+  type ProjectLogCommentSummaryRow,
+} from "@/repositories/project-log-comments";
 import type {
   CreateProjectLogInput,
   UpdateProjectLogInput,
@@ -24,6 +28,33 @@ function buildPagination(page: number, pageSize: number, total: number) {
 }
 
 class ProjectLogService {
+  buildCommentSummaryMap(rows: ProjectLogCommentSummaryRow[]) {
+    const map = new Map<string, {
+      comment_count: number;
+      latest_comment: ProjectLogCommentSummaryRow | null;
+    }>();
+
+    for (const row of rows) {
+      const current = map.get(row.log_id) || {
+        comment_count: 0,
+        latest_comment: null,
+      };
+      current.comment_count += 1;
+
+      const latestTime = current.latest_comment?.created_at
+        ? new Date(current.latest_comment.created_at).getTime()
+        : 0;
+      const rowTime = row.created_at ? new Date(row.created_at).getTime() : 0;
+      if (!current.latest_comment || rowTime >= latestTime) {
+        current.latest_comment = row;
+      }
+
+      map.set(row.log_id, current);
+    }
+
+    return map;
+  }
+
   async createProjectLog(input: {
     authContext: AuthContext;
     payload: CreateProjectLogInput;
@@ -232,6 +263,23 @@ class ProjectLogService {
     }
 
     return projectLogRepository.listCalendarRows(input.projectId);
+  }
+
+  async listProjectLogCommentSummaries(input: {
+    authContext: AuthContext;
+    logIds: string[];
+  }) {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const normalizedLogIds = Array.from(
+      new Set(input.logIds.filter((item) => typeof item === "string" && item)),
+    );
+
+    return this.buildCommentSummaryMap(
+      await projectLogCommentsRepository.listSummariesByLogIds({
+        logIds: normalizedLogIds,
+        tenantId,
+      }),
+    );
   }
 
   private async getRequiredProject(input: {
