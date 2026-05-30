@@ -60,7 +60,7 @@ function normalizeScope(
 }
 
 class AuthorizationService {
-  private readonly cacheTtlMs = 30 * 1000;
+  private readonly cacheTtlMs = 5 * 60 * 1000;
   private authUserCache = new Map<string, {
     expiresAt: number;
     value: AuthContext;

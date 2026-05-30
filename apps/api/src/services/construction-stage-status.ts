@@ -5,7 +5,10 @@ import {
   type ProjectAcceptanceRow,
 } from "@/repositories/project-acceptances";
 import { projectLogRepository } from "@/repositories/project-logs";
-import type { ProjectLogLatestStageRow } from "@/repositories/project-logs";
+import type {
+  ProjectLogLatestStageRow,
+  ProjectLogStageSummaryRow,
+} from "@/repositories/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
@@ -94,6 +97,32 @@ class ConstructionStageStatusService {
         tenantId: input.tenantId,
       }),
     ]);
+
+    return this.buildProjectConstructionStagesFromRows({
+      project,
+      acceptanceRows,
+      logRows,
+      latestLogRows,
+      authContext: input.authContext,
+      canReadAcceptance: input.canReadAcceptance,
+      canCreateAcceptance: input.canCreateAcceptance,
+    });
+  }
+
+  async buildProjectConstructionStagesFromRows(input: {
+    project: ProjectAcceptanceProjectRow;
+    acceptanceRows: ProjectAcceptanceRow[];
+    logRows: ProjectLogStageSummaryRow[];
+    latestLogRows: ProjectLogLatestStageRow[];
+    authContext?: AuthContext;
+    canReadAcceptance?: boolean;
+    canCreateAcceptance?: boolean;
+    canManageAcceptance?: boolean;
+  }) {
+    const project = input.project;
+    const acceptanceRows = this.pickLatestAcceptanceRows(input.acceptanceRows);
+    const logRows = input.logRows;
+    const latestLogRows = input.latestLogRows;
     const acceptanceMap = new Map(
       acceptanceRows.map((item) => [item.stage_code, item]),
     );
@@ -115,7 +144,11 @@ class ConstructionStageStatusService {
         .map((item) => item.stage_code),
     );
     const acceptanceWritableMap = input.authContext
-      ? await this.buildAcceptanceWritableMap(input.authContext, acceptanceRows)
+      ? await this.buildAcceptanceWritableMap(
+        input.authContext,
+        acceptanceRows,
+        input.canManageAcceptance,
+      )
       : null;
 
     const stages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.map((stageCode) => {
@@ -167,7 +200,7 @@ class ConstructionStageStatusService {
     });
 
     return {
-      project_id: input.projectId,
+      project_id: project.id,
       project_status: project.status,
       required_stage_codes: PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
       required_completed: missingRequiredStages.length === 0,
@@ -186,6 +219,33 @@ class ConstructionStageStatusService {
       stages: [...stages, completionStage],
       all_stage_codes: PROJECT_LOG_STAGE_CODE_VALUES,
     };
+  }
+
+  private pickLatestAcceptanceRows(rows: ProjectAcceptanceRow[]) {
+    const statusPriority: Record<ProjectAcceptanceRow["status"], number> = {
+      draft: 1,
+      rejected: 1,
+      submitted: 2,
+      leader_approved: 2,
+      customer_confirmed: 3,
+      cancelled: 99,
+    };
+    const sortedRows = [...rows].sort((left, right) => {
+      const priorityDiff =
+        statusPriority[left.status] - statusPriority[right.status];
+      if (priorityDiff !== 0) return priorityDiff;
+
+      return new Date(right.updated_at || right.created_at).getTime() -
+        new Date(left.updated_at || left.created_at).getTime();
+    });
+    const latest = new Map<string, ProjectAcceptanceRow>();
+    for (const row of sortedRows) {
+      if (!latest.has(row.stage_code)) {
+        latest.set(row.stage_code, row);
+      }
+    }
+
+    return [...latest.values()];
   }
 
   async assertCanCreateProjectLog(input: {
@@ -342,7 +402,15 @@ class ConstructionStageStatusService {
   private async buildAcceptanceWritableMap(
     authContext: AuthContext,
     acceptances: ProjectAcceptanceRow[],
+    canManageAcceptance?: boolean,
   ) {
+    if (canManageAcceptance === true) {
+      return new Map(acceptances.map((acceptance) => [
+        acceptance.stage_code,
+        true,
+      ] as const));
+    }
+
     const entries = await Promise.all(
       acceptances.map(async (acceptance) => [
         acceptance.stage_code,

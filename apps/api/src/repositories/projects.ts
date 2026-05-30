@@ -160,6 +160,22 @@ export type ProjectCreateEmployeeFilters = {
   postIds?: string[];
 };
 
+export type EmployeeProjectBootstrapBundle = {
+  project: Record<string, unknown> | null;
+  members: Array<Record<string, unknown>>;
+  acceptance_rows: Array<Record<string, unknown>>;
+  log_stage_rows: Array<Record<string, unknown>>;
+  latest_log_rows: Array<Record<string, unknown>>;
+  logs: {
+    rows: Array<Record<string, unknown>>;
+    has_more: boolean;
+    comment_counts: Array<{
+      log_id: string;
+      comment_count: number | string;
+    }>;
+  };
+};
+
 function escapeSupabaseOrValue(value: string) {
   return value
     .replace(/\\/g, "\\\\")
@@ -412,6 +428,47 @@ class ProjectRepository {
     }
 
     return (data as unknown as Record<string, unknown> | null) ?? null;
+  }
+
+  async getEmployeeBootstrapBundle(input: {
+    projectId: string;
+    tenantId: string;
+    logLimit: number;
+  }) {
+    const { data, error } = await this.rpc(
+      "get_employee_project_detail_bootstrap_data",
+      {
+        p_project_id: input.projectId,
+        p_tenant_id: input.tenantId,
+        p_log_limit: input.logLimit,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("查询员工项目首屏聚合数据失败", error);
+    }
+
+    const bundle = (data || {}) as Partial<EmployeeProjectBootstrapBundle>;
+    return {
+      project: bundle.project ?? null,
+      members: Array.isArray(bundle.members) ? bundle.members : [],
+      acceptance_rows: Array.isArray(bundle.acceptance_rows)
+        ? bundle.acceptance_rows
+        : [],
+      log_stage_rows: Array.isArray(bundle.log_stage_rows)
+        ? bundle.log_stage_rows
+        : [],
+      latest_log_rows: Array.isArray(bundle.latest_log_rows)
+        ? bundle.latest_log_rows
+        : [],
+      logs: {
+        rows: Array.isArray(bundle.logs?.rows) ? bundle.logs.rows : [],
+        has_more: Boolean(bundle.logs?.has_more),
+        comment_counts: Array.isArray(bundle.logs?.comment_counts)
+          ? bundle.logs.comment_counts
+          : [],
+      },
+    } satisfies EmployeeProjectBootstrapBundle;
   }
 
   private applyPublicProjectVisibilityQuery(query: any) {

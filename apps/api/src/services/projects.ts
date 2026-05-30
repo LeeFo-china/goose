@@ -13,7 +13,10 @@ import type {
 } from "@/schema/project-create-select";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
-import { projectRepository } from "@/repositories/projects";
+import {
+    projectRepository,
+    type EmployeeProjectBootstrapBundle,
+} from "@/repositories/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
@@ -30,6 +33,8 @@ const PUBLIC_PROJECT_LOGS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_MEMBERS_CACHE_TTL_MS = 5 * 60_000;
 const PUBLIC_PROJECT_DETAIL_PREWARM_LIMIT = 3;
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+const EMPLOYEE_PROJECT_BOOTSTRAP_CACHE_TTL_MS = 10_000;
+const EMPLOYEE_PROJECT_BOOTSTRAP_STALE_TTL_MS = 5 * 60_000;
 
 const PROJECT_CREATE_EMPLOYEE_SCENE_DEPARTMENTS: Record<
     ProjectCreateSelectEmployeeScene,
@@ -49,6 +54,10 @@ const PROJECT_MEMBER_ROLE_DEPARTMENTS: Partial<Record<ProjectMemberRoleCode, Dep
 type CacheEntry<T> = {
     expiresAt: number;
     value: T;
+};
+
+type StaleCacheEntry<T> = CacheEntry<T> & {
+    staleAt: number;
 };
 
 type PublicProjectMembers = Awaited<ReturnType<typeof projectMemberService.listProjectMembers>>;
@@ -90,6 +99,13 @@ class ProjectService {
         value: ProjectListResult;
     }>();
     private projectListInFlight = new Map<string, Promise<ProjectListResult>>();
+    private employeeProjectBootstrapCache = new Map<string, StaleCacheEntry<
+        EmployeeProjectBootstrapBundle & { project: Record<string, unknown> }
+    >>();
+    private employeeProjectBootstrapInFlight = new Map<
+        string,
+        Promise<EmployeeProjectBootstrapBundle & { project: Record<string, unknown> }>
+    >();
 
     private isPublicProjectVisible(row: Record<string, unknown>) {
         const visibilityStatus =
@@ -479,28 +495,53 @@ class ProjectService {
         if (!projectId) {
             this.publicProjectLogsCache.clear();
             this.publicProjectLogsInFlight.clear();
+            this.invalidateEmployeeProjectBootstrapCache();
             return;
         }
 
         this.publicProjectLogsCache.delete(projectId);
         this.publicProjectLogsInFlight.delete(projectId);
+        this.invalidateEmployeeProjectBootstrapCache(projectId);
     }
 
     invalidatePublicProjectMembersCache(projectId?: string) {
         if (!projectId) {
             this.publicProjectMembersCache.clear();
             this.publicProjectMembersInFlight.clear();
+            this.invalidateEmployeeProjectBootstrapCache();
             return;
         }
 
         this.publicProjectMembersCache.delete(projectId);
         this.publicProjectMembersInFlight.delete(projectId);
+        this.invalidateEmployeeProjectBootstrapCache(projectId);
+    }
+
+    invalidateEmployeeProjectBootstrapCache(projectId?: string) {
+        if (!projectId) {
+            this.employeeProjectBootstrapCache.clear();
+            this.employeeProjectBootstrapInFlight.clear();
+            return;
+        }
+
+        for (const key of this.employeeProjectBootstrapCache.keys()) {
+            if (key.includes(`"projectId":"${projectId}"`)) {
+                this.employeeProjectBootstrapCache.delete(key);
+            }
+        }
+
+        for (const key of this.employeeProjectBootstrapInFlight.keys()) {
+            if (key.includes(`"projectId":"${projectId}"`)) {
+                this.employeeProjectBootstrapInFlight.delete(key);
+            }
+        }
     }
 
     invalidatePublicProjectCache(projectId?: string) {
         this.invalidatePublicProjectDetailCache(projectId);
         this.invalidatePublicProjectLogsCache(projectId);
         this.invalidatePublicProjectMembersCache(projectId);
+        this.invalidateEmployeeProjectBootstrapCache(projectId);
     }
 
     async getRequiredPublicProjectVisibility(projectId: string) {
@@ -770,12 +811,249 @@ class ProjectService {
         return this.attachPrimaryAssigneesToProject(project);
     }
 
+    async getEmployeeProjectBootstrapBundle(input: {
+        authContext: AuthContext;
+        projectId: string;
+        logPageSize: number;
+    }) {
+        const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+        if (!accessPolicyService.hasPermission(input.authContext, "project.read")) {
+            throw Errors.business(
+                403,
+                "无权查看该项目",
+                ErrorCodes.PROJECT_ACCESS_DENIED,
+            );
+        }
+
+        const bundle = await this.loadEmployeeProjectBootstrapBundle({
+            projectId: input.projectId,
+            tenantId,
+            logPageSize: input.logPageSize,
+        });
+        if (!bundle.project) {
+            throw Errors.business(
+                404,
+                "项目不存在",
+                ErrorCodes.PROJECT_NOT_FOUND,
+            );
+        }
+
+        if (accessPolicyService.getScope(input.authContext, "project.read") !== "all") {
+            const localAccess = this.canAccessEmployeeBootstrapProject({
+                authContext: input.authContext,
+                project: bundle.project,
+                members: bundle.members,
+                permissionCode: "project.read",
+            });
+            const hasAccess = localAccess ?? await accessPolicyService.canAccessProject(
+                input.authContext,
+                input.projectId,
+                "project.read",
+            );
+            if (!hasAccess) {
+                throw Errors.business(
+                    403,
+                    "无权查看该项目",
+                    ErrorCodes.PROJECT_ACCESS_DENIED,
+                );
+            }
+        }
+
+        return {
+            ...bundle,
+            project: bundle.project as Record<string, unknown>,
+        };
+    }
+
+    private canAccessEmployeeBootstrapProject(input: {
+        authContext: AuthContext;
+        project: Record<string, unknown> | null;
+        members: Array<Record<string, unknown>>;
+        permissionCode: string;
+    }) {
+        const scope = accessPolicyService.getScope(
+            input.authContext,
+            input.permissionCode,
+        );
+        if (!scope || !input.authContext.employeeId || !input.project) {
+            return false;
+        }
+
+        if (scope === "all") {
+            return true;
+        }
+
+        if (scope === "department" && input.authContext.tenantDepartmentId) {
+            if (input.members.some((member) => {
+                const employee = this.normalizeRelation(member.employee, {
+                    tenant_department: null,
+                });
+                const tenantDepartment = this.normalizeRelation(
+                    employee.tenant_department,
+                    { id: null },
+                );
+                return tenantDepartment.id === input.authContext.tenantDepartmentId;
+            })) {
+                return true;
+            }
+
+            return null;
+        }
+
+        if (input.members.some((member) =>
+            member.employee_id === input.authContext.employeeId &&
+            !member.deleted_at
+        )) {
+            return true;
+        }
+
+        const customer = this.normalizeRelation(input.project.customer, {
+            owner_id: null,
+        });
+        return customer.owner_id === input.authContext.employeeId;
+    }
+
+    private async loadEmployeeProjectBootstrapBundle(input: {
+        projectId: string;
+        tenantId: string;
+        logPageSize: number;
+    }) {
+        const cacheKey = JSON.stringify(input);
+        const cached = this.getEmployeeProjectBootstrapCache(cacheKey);
+        if (cached) {
+            if (cached.stale) {
+                void this.refreshEmployeeProjectBootstrapBundle(cacheKey, input);
+            }
+
+            return cached.value;
+        }
+
+        const inFlight = this.employeeProjectBootstrapInFlight.get(cacheKey);
+        if (inFlight) {
+            return inFlight;
+        }
+
+        const request = this.fetchEmployeeProjectBootstrapBundle(input)
+            .finally(() => {
+                if (this.employeeProjectBootstrapInFlight.get(cacheKey) === request) {
+                    this.employeeProjectBootstrapInFlight.delete(cacheKey);
+                }
+            });
+
+        this.employeeProjectBootstrapInFlight.set(cacheKey, request);
+        return request;
+    }
+
+    private async fetchEmployeeProjectBootstrapBundle(input: {
+        projectId: string;
+        tenantId: string;
+        logPageSize: number;
+    }) {
+        const bundle = await projectRepository.getEmployeeBootstrapBundle({
+            projectId: input.projectId,
+            tenantId: input.tenantId,
+            logLimit: input.logPageSize,
+        });
+        if (!bundle.project) {
+            return bundle as EmployeeProjectBootstrapBundle & {
+                project: Record<string, unknown>;
+            };
+        }
+
+        const value = {
+            ...bundle,
+            project: bundle.project,
+        };
+        this.setEmployeeProjectBootstrapCache(JSON.stringify(input), value);
+        return value;
+    }
+
+    private refreshEmployeeProjectBootstrapBundle(
+        cacheKey: string,
+        input: {
+            projectId: string;
+            tenantId: string;
+            logPageSize: number;
+        },
+    ) {
+        if (this.employeeProjectBootstrapInFlight.has(cacheKey)) {
+            return this.employeeProjectBootstrapInFlight.get(cacheKey);
+        }
+
+        const request = this.fetchEmployeeProjectBootstrapBundle(input)
+            .finally(() => {
+                if (this.employeeProjectBootstrapInFlight.get(cacheKey) === request) {
+                    this.employeeProjectBootstrapInFlight.delete(cacheKey);
+                }
+            });
+        this.employeeProjectBootstrapInFlight.set(cacheKey, request);
+        return request;
+    }
+
+    private getEmployeeProjectBootstrapCache(cacheKey: string) {
+        const cached = this.employeeProjectBootstrapCache.get(cacheKey);
+        if (!cached) {
+            return null;
+        }
+
+        if (cached.expiresAt <= Date.now()) {
+            this.employeeProjectBootstrapCache.delete(cacheKey);
+            this.employeeProjectBootstrapInFlight.delete(cacheKey);
+            return null;
+        }
+
+        return {
+            value: cached.value,
+            stale: cached.staleAt <= Date.now(),
+        };
+    }
+
+    private setEmployeeProjectBootstrapCache(
+        cacheKey: string,
+        value: EmployeeProjectBootstrapBundle & { project: Record<string, unknown> },
+    ) {
+        const now = Date.now();
+        if (this.employeeProjectBootstrapCache.size >= 500) {
+            for (const [key, item] of this.employeeProjectBootstrapCache.entries()) {
+                if (item.expiresAt <= now) {
+                    this.employeeProjectBootstrapCache.delete(key);
+                }
+            }
+
+            if (this.employeeProjectBootstrapCache.size >= 500) {
+                this.employeeProjectBootstrapCache.clear();
+            }
+        }
+
+        this.employeeProjectBootstrapCache.set(cacheKey, {
+            expiresAt: now + EMPLOYEE_PROJECT_BOOTSTRAP_STALE_TTL_MS,
+            staleAt: now + EMPLOYEE_PROJECT_BOOTSTRAP_CACHE_TTL_MS,
+            value,
+        });
+    }
+
     async listProjectStoredMembers(projectId: string) {
         if (!projectId) {
             return [] as ProjectDetailMembers;
         }
 
         return projectMemberService.listProjectMembers(projectId);
+    }
+
+    serializeProjectStoredMembers(rows: Array<Record<string, unknown>>) {
+        return projectMemberService.serializeProjectMemberRows(rows.map((item) => ({
+            id: String(item.id ?? ""),
+            project_id: String(item.project_id ?? ""),
+            employee_id: String(item.employee_id ?? ""),
+            role_code: String(item.role_code ?? ""),
+            role_name: typeof item.role_name === "string" ? item.role_name : null,
+            is_primary: typeof item.is_primary === "boolean" ? item.is_primary : null,
+            sort_order: typeof item.sort_order === "number" ? item.sort_order : null,
+            created_at: typeof item.created_at === "string" ? item.created_at : null,
+            updated_at: typeof item.updated_at === "string" ? item.updated_at : null,
+            deleted_at: typeof item.deleted_at === "string" ? item.deleted_at : null,
+            employee: item.employee,
+        })));
     }
 
     buildProjectMembersForDetail(
@@ -965,6 +1243,38 @@ class ProjectService {
         projectId: string;
     }) {
         return constructionStageStatusService.listProjectConstructionStages(input);
+    }
+
+    async buildProjectConstructionStagesForBootstrapData(input: {
+        authContext: AuthContext;
+        project: Record<string, unknown>;
+        acceptanceRows: Array<Record<string, unknown>>;
+        logStageRows: Array<Record<string, unknown>>;
+        latestLogRows: Array<Record<string, unknown>>;
+        canReadAcceptance: boolean;
+        canCreateAcceptance: boolean;
+        canManageAcceptance: boolean;
+    }) {
+        return constructionStageStatusService.buildProjectConstructionStagesFromRows({
+            authContext: input.authContext,
+            project: {
+                id: typeof input.project.id === "string" ? input.project.id : "",
+                tenant_id: typeof input.project.tenant_id === "string"
+                    ? input.project.tenant_id
+                    : null,
+                name: typeof input.project.name === "string" ? input.project.name : null,
+                customer_id: typeof input.project.customer_id === "string"
+                    ? input.project.customer_id
+                    : null,
+                status: typeof input.project.status === "string" ? input.project.status : null,
+            },
+            acceptanceRows: input.acceptanceRows as never,
+            logRows: input.logStageRows as never,
+            latestLogRows: input.latestLogRows as never,
+            canReadAcceptance: input.canReadAcceptance,
+            canCreateAcceptance: input.canCreateAcceptance,
+            canManageAcceptance: input.canManageAcceptance,
+        });
     }
 
     async listProjectStatusTransitionsForTenant(input: {

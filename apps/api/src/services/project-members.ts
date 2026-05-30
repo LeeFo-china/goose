@@ -234,6 +234,22 @@ class ProjectMemberService {
     return rows.map((item) => this.serializeMember(item));
   }
 
+  serializeProjectMemberRows(rows: Array<{
+    id: string;
+    project_id: string;
+    employee_id: string;
+    role_code: string;
+    role_name: string | null;
+    is_primary: boolean | null;
+    sort_order: number | null;
+    created_at: string | null;
+    updated_at: string | null;
+    deleted_at: string | null;
+    employee: unknown;
+  }>) {
+    return rows.map((item) => this.serializeMember(item));
+  }
+
   async listPrimaryAssigneesByProjectIds(projectIds: string[]) {
     const rows = await projectMemberRepository.listPrimaryAssigneesByProjectIds(
       projectIds,

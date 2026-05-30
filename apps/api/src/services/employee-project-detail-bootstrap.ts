@@ -12,6 +12,7 @@ type PartialError = {
 };
 
 type BootstrapTimingStep =
+  | "bootstrap_data_ms"
   | "project_ms"
   | "permissions_ms"
   | "members_ms"
@@ -59,6 +60,11 @@ type BootstrapPermissions = {
   };
 };
 
+type InternalBootstrapPermissions = BootstrapPermissions & {
+  internal_can_create_acceptance: boolean;
+  internal_can_manage_acceptance: boolean;
+};
+
 class EmployeeProjectDetailBootstrapService {
   async getBootstrap(input: {
     authContext: AuthContext;
@@ -67,44 +73,49 @@ class EmployeeProjectDetailBootstrapService {
   }) {
     const partialErrors: PartialError[] = [];
     const timings = this.createEmptyTimings();
-    const projectPromise = this.measure("project_ms", timings, () =>
-      projectSer.getProjectDetailForEmployeeBootstrap({
+    const bundle = await this.measure("bootstrap_data_ms", timings, () =>
+      projectSer.getEmployeeProjectBootstrapBundle({
         authContext: input.authContext,
         projectId: input.projectId,
-      })
-    );
-    const permissionsPromise = this.measure("permissions_ms", timings, () =>
-      this.buildPermissions({
-        authContext: input.authContext,
-        projectId: input.projectId,
-        constructionStages: null,
+        logPageSize: input.query.log_page_size,
       })
     );
 
-    const [project, storedMembers, basePermissions, constructionStages, logs, calendar] =
+    const project = bundle.project;
+    const storedMembers = await this.measure(
+      "members_ms",
+      timings,
+      () => Promise.resolve(projectSer.serializeProjectStoredMembers(bundle.members)),
+    );
+    const members = projectSer.buildProjectMembersForDetail(project, storedMembers);
+    const basePermissions = await this.measure("permissions_ms", timings, () =>
+      this.buildPermissionsFromKnownData({
+        authContext: input.authContext,
+        project,
+        storedMembers,
+        rawMembers: bundle.members,
+      })
+    );
+
+    const [constructionStages, logs, calendar] =
       await Promise.all([
-        projectPromise,
-        this.loadOptional(
-          "members",
-          () => projectSer.listProjectStoredMembers(input.projectId),
-          [] as ProjectMembersResult,
-          partialErrors,
-          timings,
-          "members_ms",
-        ),
-        permissionsPromise,
-        this.loadOptional(
-          "construction_stages",
-          () => projectSer.listProjectConstructionStagesForTenant({
+        this.measure("construction_stages_ms", timings, () =>
+          projectSer.buildProjectConstructionStagesForBootstrapData({
             authContext: input.authContext,
-            projectId: input.projectId,
-          }),
-          null as ConstructionStagesResult | null,
-          partialErrors,
-          timings,
-          "construction_stages_ms",
+            project,
+            acceptanceRows: bundle.acceptance_rows,
+            logStageRows: bundle.log_stage_rows,
+            latestLogRows: bundle.latest_log_rows,
+            canReadAcceptance: basePermissions.can_access_project_acceptance,
+            canCreateAcceptance:
+              basePermissions.internal_can_create_acceptance &&
+              basePermissions.can_access_project_acceptance,
+            canManageAcceptance: basePermissions.internal_can_manage_acceptance,
+          })
         ),
-        this.loadProjectLogs(input, partialErrors, timings),
+        this.measure("logs_ms", timings, () =>
+          Promise.resolve(this.buildLogsFromBundle(bundle, input.query.log_page_size))
+        ),
         input.query.include_calendar
           ? this.loadOptional(
             "calendar",
@@ -119,10 +130,9 @@ class EmployeeProjectDetailBootstrapService {
           )
           : Promise.resolve(null),
       ]);
-    const members = projectSer.buildProjectMembersForDetail(project, storedMembers);
 
     const permissions = this.completePermissionsByStages(
-      basePermissions,
+      this.toPublicPermissions(basePermissions),
       constructionStages,
     );
     const rawStatusActions = await this.measure(
@@ -155,6 +165,49 @@ class EmployeeProjectDetailBootstrapService {
       partial_errors: partialErrors,
       timings,
     };
+  }
+
+  private buildLogsFromBundle(
+    bundle: Awaited<ReturnType<typeof projectSer.getEmployeeProjectBootstrapBundle>>,
+    pageSize: number,
+  ): ProjectLogListResult & {
+    commentSummaries: ProjectLogCommentSummaryMap;
+  } {
+    const rows = bundle.logs.rows;
+    const total = rows.length + (bundle.logs.has_more ? 1 : 0);
+
+    return {
+      rows,
+      pagination: {
+        page: 1,
+        pageSize,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
+      },
+      commentSummaries: this.buildCommentAggregateMap(bundle.logs.comment_counts),
+    };
+  }
+
+  private buildCommentAggregateMap(rows: Array<{
+    log_id: string;
+    comment_count: number | string;
+  }>) {
+    const map = new Map<string, {
+      comment_count: number;
+      latest_comment: null;
+    }>();
+
+    for (const row of rows) {
+      const count = typeof row.comment_count === "number"
+        ? row.comment_count
+        : Number(row.comment_count);
+      map.set(row.log_id, {
+        comment_count: Number.isFinite(count) ? count : 0,
+        latest_comment: null,
+      });
+    }
+
+    return map;
   }
 
   private async loadProjectLogs(
@@ -227,6 +280,7 @@ class EmployeeProjectDetailBootstrapService {
 
   private createEmptyTimings(): EmployeeProjectDetailBootstrapTimings {
     return {
+      bootstrap_data_ms: 0,
       project_ms: 0,
       permissions_ms: 0,
       members_ms: 0,
@@ -365,6 +419,256 @@ class EmployeeProjectDetailBootstrapService {
         ),
       },
     };
+  }
+
+  private async buildPermissionsFromKnownData(input: {
+    authContext: AuthContext;
+    project: Record<string, unknown>;
+    storedMembers: ProjectMembersResult;
+    rawMembers: Array<Record<string, unknown>>;
+  }): Promise<InternalBootstrapPermissions> {
+    const permissionMembers = input.rawMembers.length > 0
+      ? input.rawMembers
+      : input.storedMembers as unknown as Array<Record<string, unknown>>;
+    const [
+      canUpdateProject,
+      canWriteProjectLogByPermission,
+      canAccessAcceptance,
+      canCreateAcceptance,
+      canManageAcceptance,
+    ] = await Promise.all([
+      this.canAccessKnownProjectByPermission(
+        input.authContext,
+        input.project,
+        permissionMembers,
+        "project.update",
+      ),
+      this.canWriteKnownProjectLog(
+        input.authContext,
+        input.project,
+        permissionMembers,
+      ),
+      this.canAccessKnownProjectByOptionalPermission(
+        input.authContext,
+        input.project,
+        permissionMembers,
+        [
+          "project_acceptance.read",
+          "project_acceptance.create",
+          "project_acceptance.update_own",
+          "project_acceptance.submit",
+          "project_acceptance.review",
+          "project_acceptance.reject",
+          "project_acceptance.manage",
+        ],
+      ),
+      this.canAccessKnownProjectByPermission(
+        input.authContext,
+        input.project,
+        permissionMembers,
+        "project_acceptance.create",
+      ),
+      this.canAccessKnownProjectByPermission(
+        input.authContext,
+        input.project,
+        permissionMembers,
+        "project_acceptance.manage",
+      ),
+    ]);
+
+    return {
+      employee_id: input.authContext.employeeId ?? null,
+      can_read_project: true,
+      can_update_project: canUpdateProject,
+      can_manage_project_team: canUpdateProject,
+      can_create_project_log: canWriteProjectLogByPermission,
+      can_access_project_acceptance: canAccessAcceptance,
+      can_manage_project_referral: canUpdateProject,
+      scopes: {
+        project_update: accessPolicyService.getScope(
+          input.authContext,
+          "project.update",
+        ),
+        project_log_create: accessPolicyService.getScope(
+          input.authContext,
+          "project_log.create",
+        ),
+        project_acceptance_manage: accessPolicyService.getScope(
+          input.authContext,
+          "project_acceptance.manage",
+        ),
+      },
+      internal_can_create_acceptance: canCreateAcceptance,
+      internal_can_manage_acceptance: canManageAcceptance,
+    };
+  }
+
+  private toPublicPermissions(
+    permissions: InternalBootstrapPermissions,
+  ): BootstrapPermissions {
+    const {
+      internal_can_create_acceptance: _create,
+      internal_can_manage_acceptance: _manage,
+      ...publicPermissions
+    } = permissions;
+
+    return publicPermissions;
+  }
+
+  private async canAccessKnownProjectByOptionalPermission(
+    authContext: AuthContext,
+    project: Record<string, unknown>,
+    members: Array<Record<string, unknown>>,
+    permissionCodes: string[],
+  ) {
+    const results = await Promise.all(
+      permissionCodes.map((permissionCode) =>
+        this.canAccessKnownProjectByPermission(
+          authContext,
+          project,
+          members,
+          permissionCode,
+        )
+      ),
+    );
+
+    return results.some(Boolean);
+  }
+
+  private async canAccessKnownProjectByPermission(
+    authContext: AuthContext,
+    project: Record<string, unknown>,
+    members: Array<Record<string, unknown>>,
+    permissionCode: string,
+  ) {
+    if (!accessPolicyService.hasPermission(authContext, permissionCode)) {
+      return false;
+    }
+
+    const scope = accessPolicyService.getScope(authContext, permissionCode);
+    if (!scope || !authContext.employeeId) {
+      return false;
+    }
+
+    if (!this.isKnownProjectInTenant(authContext, project)) {
+      return false;
+    }
+
+    if (scope === "all") {
+      return true;
+    }
+
+    if (scope === "department") {
+      return this.hasDepartmentMember(authContext, members) ||
+        accessPolicyService.canAccessProject(
+          authContext,
+          String(project.id ?? ""),
+          permissionCode,
+        );
+    }
+
+    return this.hasEmployeeProjectAccess(authContext, project, members);
+  }
+
+  private async canWriteKnownProjectLog(
+    authContext: AuthContext,
+    project: Record<string, unknown>,
+    members: Array<Record<string, unknown>>,
+  ) {
+    if (!accessPolicyService.hasPermission(authContext, "project_log.create")) {
+      return false;
+    }
+
+    const scope = accessPolicyService.getScope(authContext, "project_log.create");
+    if (!scope || !authContext.employeeId) {
+      return false;
+    }
+
+    if (!this.isKnownProjectInTenant(authContext, project)) {
+      return false;
+    }
+
+    if (scope === "all") {
+      return true;
+    }
+
+    if (scope === "department") {
+      return this.hasDepartmentMember(authContext, members) ||
+        accessPolicyService.canWriteProjectLog(
+          authContext,
+          String(project.id ?? ""),
+        );
+    }
+
+    return members.some((member) =>
+      member.employee_id === authContext.employeeId &&
+      !member.deleted_at
+    );
+  }
+
+  private isKnownProjectInTenant(
+    authContext: AuthContext,
+    project: Record<string, unknown>,
+  ) {
+    if (authContext.isPlatformAdmin) {
+      return true;
+    }
+
+    return Boolean(
+      authContext.tenantId &&
+      typeof project.tenant_id === "string" &&
+      project.tenant_id === authContext.tenantId,
+    );
+  }
+
+  private hasEmployeeProjectAccess(
+    authContext: AuthContext,
+    project: Record<string, unknown>,
+    members: Array<Record<string, unknown>>,
+  ) {
+    if (!authContext.employeeId) {
+      return false;
+    }
+
+    if (members.some((member) =>
+      member.employee_id === authContext.employeeId &&
+      !member.deleted_at
+    )) {
+      return true;
+    }
+
+    const customer = this.normalizeObject(project.customer);
+    return customer?.owner_id === authContext.employeeId;
+  }
+
+  private hasDepartmentMember(
+    authContext: AuthContext,
+    members: Array<Record<string, unknown>>,
+  ) {
+    if (!authContext.tenantDepartmentId) {
+      return false;
+    }
+
+    return members.some((member) => {
+      const employee = this.normalizeObject(member.employee);
+      return this.getRelationId(employee?.tenant_department) ===
+        authContext.tenantDepartmentId;
+    });
+  }
+
+  private normalizeObject(value: unknown): Record<string, unknown> | null {
+    if (Array.isArray(value)) {
+      return this.normalizeObject(value[0]);
+    }
+
+    return value && typeof value === "object"
+      ? value as Record<string, unknown>
+      : null;
+  }
+
+  private getRelationId(value: unknown) {
+    const object = this.normalizeObject(value);
+    return typeof object?.id === "string" ? object.id : null;
   }
 
   private completePermissionsByStages(
