@@ -155,6 +155,41 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - 不改变项目相关 API path、payload 和返回数据适配。
 - 验收通过后提交，提交信息建议：`refactor: split large admin project components`。
 
+### 执行记录
+
+2026-05-31：
+
+- 已拆分 `apps/admin/components/projects/project-mutations.tsx`：
+  - 类型：`project-mutation-types.ts`
+  - 工具与请求：`project-mutation-utils.ts`
+  - 项目表单：`project-form-dialog.tsx`
+  - 项目详情：`project-detail-dialog.tsx`
+  - 项目状态面板：`project-status-panel.tsx`
+  - 状态动作弹窗：`project-status-action-dialog.tsx`
+  - 项目成员弹窗：`project-member-dialog.tsx`
+  - 下拉选择与选项 hook：`project-option-select.tsx`、`use-project-select-options.ts`
+- 已拆分 `apps/admin/components/projects/project-acceptances-panel.tsx`：
+  - 类型：`project-acceptance-types.ts`
+  - 工具与请求：`project-acceptance-utils.ts`
+  - 左侧验收列表：`project-acceptance-sidebar.tsx`
+  - 右侧验收详情：`project-acceptance-detail.tsx`
+  - 流程时间线：`project-acceptance-timeline.tsx`
+  - 竣工模板弹窗：`project-final-acceptance-template-dialog.tsx`
+  - 验收动作弹窗：`project-acceptance-action-dialog.tsx`
+  - 客户通知条：`project-acceptance-customer-notification-panel.tsx`
+  - 图片上传块：`project-acceptance-image-upload-block.tsx`
+
+### 验收记录
+
+2026-05-31：
+
+- `apps/admin/components/projects/project-acceptances-panel.tsx`：500 行。
+- `apps/admin/components/projects/project-mutations.tsx`：129 行。
+- 阶段 1 目标文件已从 `>500` 行门禁输出中消失。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+
 ## 阶段 2：客户、费用、摄像头业务弹窗拆分
 
 ### 范围
