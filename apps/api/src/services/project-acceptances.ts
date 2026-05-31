@@ -257,6 +257,7 @@ class ProjectAcceptanceService {
       project_id: string;
       page: number;
       pageSize: number;
+      acceptance_type?: ProjectAcceptanceType;
       status?: ProjectAcceptanceStatus;
       stage_code?: ProjectLogStageCode;
     },
@@ -272,6 +273,7 @@ class ProjectAcceptanceService {
       query.project_id,
       query.page,
       query.pageSize,
+      query.acceptance_type ?? "",
       query.status ?? "",
       query.stage_code ?? "",
     ].join(":");
@@ -1603,6 +1605,7 @@ class ProjectAcceptanceService {
       project_id: string;
       page: number;
       pageSize: number;
+      acceptance_type?: ProjectAcceptanceType;
       status?: ProjectAcceptanceStatus;
       stage_code?: ProjectLogStageCode;
     },
