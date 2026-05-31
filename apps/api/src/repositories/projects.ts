@@ -9,6 +9,31 @@ import type {
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
 import type { DepartmentCode } from "@gooes/domain";
 
+type SupabaseRpcError = {
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  code?: string | null;
+};
+
+function normalizeRpcError(error: unknown): SupabaseRpcError {
+  if (!error || typeof error !== "object") return {};
+
+  const source = error as Record<string, unknown>;
+  return {
+    message: typeof source.message === "string" ? source.message : null,
+    details: typeof source.details === "string" ? source.details : null,
+    hint: typeof source.hint === "string" ? source.hint : null,
+    code: typeof source.code === "string" ? source.code : null,
+  };
+}
+
+function getRpcErrorText(error: SupabaseRpcError) {
+  return [error.message, error.details, error.hint, error.code]
+    .filter((item): item is string => Boolean(item))
+    .join("\n");
+}
+
 export const PROJECT_LIST_SELECT = `
   id,
   name,
@@ -783,12 +808,24 @@ class ProjectRepository {
     );
 
     if (error) {
-      const message = error.message || error.details || "";
+      const rpcError = normalizeRpcError(error);
+      const message = getRpcErrorText(rpcError);
+      const diagnostic = {
+        project_id: input.projectId,
+        tenant_id: input.tenantId,
+        expected_status: input.expectedStatus,
+        to_status: input.toStatus,
+        start_date: input.startDate,
+        construction_manager_employee_id: input.constructionManagerEmployeeId,
+        rpc_error: rpcError,
+      };
+
       if (message.includes("PROJECT_STATUS_CONFLICT")) {
         throw Errors.business(
           409,
           "项目状态已变化，请刷新后重试",
           ErrorCodes.PROJECT_STATUS_CONFLICT,
+          diagnostic,
         );
       }
       if (message.includes("INVALID_CONSTRUCTION_MANAGER")) {
@@ -796,16 +833,68 @@ class ProjectRepository {
           400,
           "所选员工不能作为工程负责人",
           ErrorCodes.INVALID_CONSTRUCTION_MANAGER,
+          diagnostic,
         );
       }
       if (message.includes("PROJECT_NOT_FOUND")) {
         throw Errors.badRequest("项目不存在");
       }
-      throw Errors.dbError("排期开工状态流转失败", error);
+      if (
+        rpcError.code === "23514" ||
+        message.includes("violates check constraint")
+      ) {
+        throw Errors.business(
+          500,
+          "排期开工状态流转约束不匹配，请联系管理员",
+          ErrorCodes.PROJECT_SCHEDULE_TRANSITION_CONSTRAINT_FAILED,
+          diagnostic,
+        );
+      }
+      if (
+        rpcError.code === "23503" ||
+        message.includes("violates foreign key constraint")
+      ) {
+        throw Errors.business(
+          500,
+          "排期开工关联数据不完整，请联系管理员",
+          ErrorCodes.PROJECT_SCHEDULE_TRANSITION_FAILED,
+          diagnostic,
+        );
+      }
+      if (
+        rpcError.code === "23505" ||
+        message.includes("duplicate key value")
+      ) {
+        throw Errors.business(
+          409,
+          "工程负责人已存在，请刷新项目后重试",
+          ErrorCodes.PROJECT_SCHEDULE_TRANSITION_FAILED,
+          diagnostic,
+        );
+      }
+      throw Errors.business(
+        500,
+        "排期开工状态流转失败",
+        ErrorCodes.PROJECT_SCHEDULE_TRANSITION_FAILED,
+        diagnostic,
+      );
     }
 
     if (!data) {
-      throw Errors.dbError("排期开工状态流转失败");
+      throw Errors.business(
+        500,
+        "排期开工状态流转失败",
+        ErrorCodes.PROJECT_SCHEDULE_TRANSITION_FAILED,
+        {
+          project_id: input.projectId,
+          tenant_id: input.tenantId,
+          expected_status: input.expectedStatus,
+          to_status: input.toStatus,
+          start_date: input.startDate,
+          construction_manager_employee_id: input.constructionManagerEmployeeId,
+          rpc_error: null,
+        },
+      );
     }
 
     return data as Record<string, unknown>;
