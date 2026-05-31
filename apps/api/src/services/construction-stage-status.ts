@@ -465,12 +465,54 @@ class ConstructionStageStatusService {
     const entries = await Promise.all(
       acceptances.map(async (acceptance) => [
         acceptance.stage_code,
-        await this.canManageAcceptance(authContext, acceptance) ||
-          this.canUpdateOrSubmitOwnAcceptance(authContext, acceptance),
+        await this.canHandleExistingAcceptance(authContext, acceptance),
       ] as const),
     );
 
     return new Map(entries);
+  }
+
+  private async canHandleExistingAcceptance(
+    authContext: AuthContext,
+    acceptance: ProjectAcceptanceRow,
+  ) {
+    if (await this.canManageAcceptance(authContext, acceptance)) {
+      return true;
+    }
+
+    if (acceptance.status === "draft" || acceptance.status === "rejected") {
+      return this.canUpdateOrSubmitOwnAcceptance(authContext, acceptance);
+    }
+
+    if (acceptance.status === "submitted") {
+      return this.canReviewOrRejectAcceptance(authContext, acceptance);
+    }
+
+    return false;
+  }
+
+  private canReviewOrRejectAcceptance(
+    authContext: AuthContext,
+    acceptance: ProjectAcceptanceRow,
+  ) {
+    const employeeId = authContext.employeeId;
+    const permissionCodes = [
+      "project_acceptance.review",
+      "project_acceptance.reject",
+    ];
+
+    return permissionCodes.some((permissionCode) => {
+      if (!accessPolicyService.hasPermission(authContext, permissionCode)) {
+        return false;
+      }
+
+      const scope = accessPolicyService.getScope(authContext, permissionCode);
+      if (scope === "all") {
+        return true;
+      }
+
+      return Boolean(employeeId && acceptance.reviewer_id === employeeId);
+    });
   }
 
   private buildStageItem(input: {
@@ -576,9 +618,18 @@ class ConstructionStageStatusService {
         };
       }
 
+      if (input.acceptance.status === "submitted") {
+        return {
+          type: "view" as const,
+          label: input.canHandleExistingAcceptance ? "复核验收" : "查看验收",
+          enabled: true,
+          reason: null,
+        };
+      }
+
       return {
         type: "view" as const,
-        label: "查看",
+        label: "查看验收",
         enabled: true,
         reason: null,
       };

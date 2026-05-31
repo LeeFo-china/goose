@@ -86,6 +86,37 @@ type ProjectLogEntrySummary = {
   } | null;
 };
 
+type ProjectDetailNextAction =
+  | {
+    kind: "acceptance";
+    source: "project_acceptance";
+    title: string;
+    description: string;
+    action_label: string;
+    action_type: "create" | "edit" | "view";
+    stage_code: ProjectLogStageCode;
+    stage_label: string;
+    acceptance_id: string | null;
+    type: "create" | "edit" | "view";
+    label: string;
+    enabled: boolean;
+    reason: string | null;
+  }
+  | {
+    kind: "status";
+    source: "project_status";
+    title: string;
+    description: string;
+    action_label: string;
+    action: string;
+    to_status: string | null;
+    type: string;
+    label: string;
+    enabled: boolean;
+    reason: string | null;
+    from_status: string | null;
+  };
+
 class EmployeeProjectDetailBootstrapService {
   async getBootstrap(input: {
     authContext: AuthContext;
@@ -328,13 +359,8 @@ class EmployeeProjectDetailBootstrapService {
     statusActions: StatusActionsResult;
     nextAction: ReturnType<EmployeeProjectDetailBootstrapService["buildNextAction"]>;
   }): ProjectLogEntrySummary["next_action"] {
-    const acceptanceStage = input.constructionStages?.stages.find((stage) =>
-      stage.acceptance_action?.type &&
-      stage.acceptance_action.type !== "none" &&
-      stage.acceptance_action.enabled
-    ) ?? input.constructionStages?.stages.find((stage) =>
-      stage.acceptance_action?.type &&
-      stage.acceptance_action.type !== "none"
+    const acceptanceStage = this.selectNextAcceptanceActionStage(
+      input.constructionStages,
     );
 
     if (acceptanceStage?.acceptance_action?.type) {
@@ -356,10 +382,10 @@ class EmployeeProjectDetailBootstrapService {
       };
     }
 
-    if (input.nextAction?.source === "project_status") {
+    if (input.nextAction?.kind === "status") {
       return {
         kind: "status",
-        label: input.nextAction.label,
+        label: input.nextAction.action_label || input.nextAction.label,
         action: input.nextAction.action ?? input.nextAction.type ?? null,
       };
     }
@@ -883,21 +909,40 @@ class EmployeeProjectDetailBootstrapService {
   private buildNextAction(input: {
     statusActions: StatusActionsResult;
     constructionStages: ConstructionStagesResult | null;
-  }) {
-    const acceptanceStage = input.constructionStages?.stages.find((stage) =>
-      stage.acceptance_action?.type && stage.acceptance_action.type !== "none" &&
-      stage.acceptance_action.enabled
-    ) ?? input.constructionStages?.stages.find((stage) =>
-      stage.acceptance_action?.type && stage.acceptance_action.type !== "none"
+  }): ProjectDetailNextAction | null {
+    const acceptanceStage = this.selectNextAcceptanceActionStage(
+      input.constructionStages,
     );
 
     if (acceptanceStage?.acceptance_action?.type) {
+      const actionType = acceptanceStage.acceptance_action.type as
+        | "create"
+        | "edit"
+        | "view";
+      const actionLabel = acceptanceStage.acceptance_action.label ||
+        this.getAcceptanceActionLabel(actionType);
+      const title = this.buildAcceptanceNextActionTitle({
+        stageLabel: acceptanceStage.stage_label,
+        actionType,
+        actionLabel,
+        acceptanceStatus: acceptanceStage.acceptance_status,
+      });
       return {
+        kind: "acceptance",
         source: "project_acceptance",
+        title,
+        description: this.buildAcceptanceNextActionDescription({
+          stageLabel: acceptanceStage.stage_label,
+          actionType,
+          acceptanceStatus: acceptanceStage.acceptance_status,
+        }),
+        action_label: actionLabel,
+        action_type: actionType,
         stage_code: acceptanceStage.stage_code,
         stage_label: acceptanceStage.stage_label,
-        type: acceptanceStage.acceptance_action.type,
-        label: acceptanceStage.acceptance_action.label,
+        acceptance_id: acceptanceStage.acceptance_id ?? null,
+        type: actionType,
+        label: actionLabel,
         enabled: acceptanceStage.acceptance_action.enabled,
         reason: acceptanceStage.acceptance_action.reason,
       };
@@ -906,18 +951,106 @@ class EmployeeProjectDetailBootstrapService {
     const statusAction = input.statusActions.actions[0];
     if (statusAction) {
       return {
+        kind: "status",
         source: "project_status",
+        title: "项目下一步",
+        description: "按项目状态流转继续推进。",
+        action_label: statusAction.label,
         action: statusAction.action,
+        to_status: statusAction.to_status ?? null,
         type: statusAction.action,
         label: statusAction.label,
         enabled: true,
         reason: null,
-        from_status: statusAction.from_status,
-        to_status: statusAction.to_status,
+        from_status: statusAction.from_status ?? null,
       };
     }
 
     return null;
+  }
+
+  private selectNextAcceptanceActionStage(
+    constructionStages: ConstructionStagesResult | null,
+  ) {
+    const stages = constructionStages?.stages ?? [];
+    const currentStageCode = constructionStages?.current_stage ?? null;
+
+    return stages
+      .filter((stage) =>
+        stage.acceptance_action?.type &&
+        stage.acceptance_action.type !== "none"
+      )
+      .sort((left, right) =>
+        this.getAcceptanceActionPriority(left, currentStageCode) -
+        this.getAcceptanceActionPriority(right, currentStageCode)
+      )[0] ?? null;
+  }
+
+  private getAcceptanceActionPriority(
+    stage: NonNullable<ConstructionStagesResult>["stages"][number],
+    currentStageCode: string | null,
+  ) {
+    const actionType = stage.acceptance_action?.type;
+    const disabledPenalty = stage.acceptance_action?.enabled === false ? 100 : 0;
+    const currentStageBonus = stage.stage_code === currentStageCode ? -1 : 0;
+    let priority = 20;
+
+    if (stage.acceptance_status === "submitted") {
+      priority = 0;
+    } else if (actionType === "edit") {
+      priority = 1;
+    } else if (actionType === "create") {
+      priority = 2;
+    } else if (stage.status === "pending_acceptance") {
+      priority = 3;
+    } else if (actionType === "view") {
+      priority = 10;
+    }
+
+    return disabledPenalty + priority + currentStageBonus;
+  }
+
+  private getAcceptanceActionLabel(actionType: "create" | "edit" | "view") {
+    if (actionType === "create") return "发起验收";
+    if (actionType === "edit") return "处理验收";
+    return "查看验收";
+  }
+
+  private buildAcceptanceNextActionTitle(input: {
+    stageLabel: string;
+    actionType: "create" | "edit" | "view";
+    actionLabel: string;
+    acceptanceStatus?: string | null;
+  }) {
+    if (input.acceptanceStatus === "submitted") {
+      return `${input.stageLabel}待复核`;
+    }
+    if (input.actionType === "edit") {
+      return `${input.stageLabel}待处理`;
+    }
+    if (input.actionType === "view") {
+      return `${input.stageLabel}验收记录`;
+    }
+
+    return `${input.stageLabel}可推进`;
+  }
+
+  private buildAcceptanceNextActionDescription(input: {
+    stageLabel: string;
+    actionType: "create" | "edit" | "view";
+    acceptanceStatus?: string | null;
+  }) {
+    if (input.acceptanceStatus === "submitted") {
+      return `员工已提交${input.stageLabel}验收，主管复核后进入业主确认。`;
+    }
+    if (input.actionType === "edit") {
+      return `该阶段验收需要处理，完成后可继续推进${input.stageLabel}施工。`;
+    }
+    if (input.actionType === "view") {
+      return `可查看${input.stageLabel}验收记录，确认阶段状态后再继续施工日志。`;
+    }
+
+    return `完成${input.stageLabel}施工后可发起阶段验收。`;
   }
 }
 

@@ -30,6 +30,7 @@ import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
   ProjectAcceptanceCustomerRow,
@@ -212,6 +213,13 @@ class ProjectAcceptanceService {
   private clearCustomerAcceptanceListCache() {
     this.customerAcceptanceListCache.clear();
     this.customerAcceptanceListInFlight.clear();
+  }
+
+  private invalidateAcceptanceRelatedCaches(projectId?: string | null) {
+    this.clearCustomerAcceptanceListCache();
+    if (projectId) {
+      projectSer.invalidateEmployeeProjectBootstrapCache(projectId);
+    }
   }
 
   private customerAcceptanceListCacheKey(
@@ -1663,6 +1671,7 @@ class ProjectAcceptanceService {
       operatorType: "employee",
       operatorId: employeeId,
     });
+    this.invalidateAcceptanceRelatedCaches(row.project_id);
 
     if (options.response === "detail") {
       return this.buildDetail(row);
@@ -1777,6 +1786,7 @@ class ProjectAcceptanceService {
       operatorType: "employee",
       operatorId: authContext.employeeId,
     });
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
 
     return this.buildDetail(nextRow);
   }
@@ -1795,7 +1805,7 @@ class ProjectAcceptanceService {
 
     await this.assertCanUpdateOwn(authContext, row);
     await projectAcceptanceRepository.deleteAcceptance(row.id, row.tenant_id);
-    this.clearCustomerAcceptanceListCache();
+    this.invalidateAcceptanceRelatedCaches(row.project_id);
 
     return {
       id: row.id,
@@ -1945,6 +1955,7 @@ class ProjectAcceptanceService {
         comment: reason,
       });
 
+      this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
       return this.buildDetail(nextRow);
     }
 
@@ -1965,6 +1976,7 @@ class ProjectAcceptanceService {
       operatorId: authContext.employeeId,
       comment: input.summary,
     });
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
 
     return this.buildDetail(nextRow);
   }
@@ -2007,6 +2019,7 @@ class ProjectAcceptanceService {
       // 短信是客户触达能力，不能阻断领导复核主流程。
     }
 
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
 
@@ -2056,6 +2069,7 @@ class ProjectAcceptanceService {
       comment: input.comment,
     });
 
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
 
@@ -2099,6 +2113,7 @@ class ProjectAcceptanceService {
       comment: input.comment,
     });
 
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
 
@@ -2161,6 +2176,7 @@ class ProjectAcceptanceService {
       },
     });
 
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
 
@@ -2244,6 +2260,7 @@ class ProjectAcceptanceService {
       },
     });
 
+    this.invalidateAcceptanceRelatedCaches(row.project_id);
     return this.buildDetail(row);
   }
 
@@ -2274,6 +2291,7 @@ class ProjectAcceptanceService {
       comment: input.comment,
     });
 
+    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);
   }
 }
