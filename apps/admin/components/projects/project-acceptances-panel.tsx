@@ -3,9 +3,11 @@
 import { ChangeEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   PROJECT_ACCEPTANCE_STAGE_LABELS,
   ProjectAcceptanceStatusConfig,
   PROJECT_LOG_STAGE_CODE_VALUES,
+  type ProjectAcceptanceType,
   type ProjectAcceptanceStatus,
   type ProjectLogStageCode,
 } from "@gooes/domain";
@@ -13,6 +15,7 @@ import {
   CheckCircle2,
   CornerDownRight,
   Clock3,
+  FileText,
   Image as ImageIcon,
   Loader2,
   MessageSquareText,
@@ -26,6 +29,7 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -51,6 +56,7 @@ type AcceptanceItemResult = "pass" | "fail" | "not_applicable";
 
 type AcceptanceItem = {
   id: string;
+  section_id?: string | null;
   category: string | null;
   title: string;
   standard: string;
@@ -66,6 +72,63 @@ type AcceptanceItem = {
   rectification_remark: string | null;
   rectification_images: string[];
   rectification_image_items?: AcceptanceImageItem[];
+};
+
+type AcceptanceProgress = {
+  total: number;
+  checked: number;
+  passed: number;
+  failed: number;
+  not_applicable: number;
+  required_incomplete: number;
+};
+
+type AcceptanceSection = {
+  id: string | null;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  items: AcceptanceItem[];
+};
+
+type AcceptanceTemplateItem = {
+  id: string;
+  section_id: string | null;
+  category: string | null;
+  title: string;
+  standard: string;
+  required: boolean;
+  allow_not_applicable: boolean;
+  photo_required: boolean;
+  photo_min_count: number;
+  photo_max_count: number;
+  remark_required_on_fail: boolean;
+  sort_order: number;
+};
+
+type AcceptanceTemplateSection = {
+  id: string | null;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  items: AcceptanceTemplateItem[];
+};
+
+type AcceptanceTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  version: number;
+  status: string;
+  acceptance_type: ProjectAcceptanceType;
+  stage_code: ProjectLogStageCode;
+  stage_label?: string | null;
+  sections?: AcceptanceTemplateSection[];
+  items?: AcceptanceTemplateItem[];
+};
+
+type AcceptanceTemplateListData = {
+  list?: AcceptanceTemplate[];
 };
 
 type AcceptanceImageItem = {
@@ -101,6 +164,7 @@ type AcceptanceAction = {
 type ProjectAcceptance = {
   id: string;
   project_id: string;
+  acceptance_type?: ProjectAcceptanceType;
   stage_code: ProjectLogStageCode;
   stage_label: string | null;
   title: string;
@@ -113,6 +177,12 @@ type ProjectAcceptance = {
   updated_at: string | null;
   submitted_at: string | null;
   items: AcceptanceItem[];
+  sections?: AcceptanceSection[];
+  progress?: AcceptanceProgress;
+  failed_count?: number;
+  required_incomplete_count?: number;
+  can_submit?: boolean;
+  blocked_reason?: string | null;
   actions?: AcceptanceAction[];
   initiator?: { name?: string | null } | null;
   reviewer?: { name?: string | null } | null;
@@ -213,10 +283,12 @@ type AcceptanceDialogState =
   }
   | null;
 
-const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES.map((value) => ({
-  value,
-  label: PROJECT_ACCEPTANCE_STAGE_LABELS[value],
-}));
+const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES
+  .filter((value) => value !== PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE)
+  .map((value) => ({
+    value,
+    label: PROJECT_ACCEPTANCE_STAGE_LABELS[value],
+  }));
 
 const openAcceptanceStatuses = new Set<ProjectAcceptanceStatus>([
   "draft",
@@ -391,6 +463,15 @@ function resultVariant(result: AcceptanceItemResult | null | undefined) {
 }
 
 function getAcceptanceItemStats(acceptance: ProjectAcceptance | null) {
+  if (acceptance?.progress) {
+    return {
+      total: acceptance.progress.total,
+      pass: acceptance.progress.passed,
+      fail: acceptance.progress.failed,
+      pending: acceptance.progress.required_incomplete,
+    };
+  }
+
   const items = acceptance?.items || [];
   return {
     total: items.length,
@@ -398,6 +479,55 @@ function getAcceptanceItemStats(acceptance: ProjectAcceptance | null) {
     fail: items.filter((item) => item.result === "fail").length,
     pending: items.filter((item) => !item.result).length,
   };
+}
+
+function isFinalAcceptance(acceptance: ProjectAcceptance | null | undefined) {
+  return acceptance?.acceptance_type === "final";
+}
+
+function getAcceptanceDisplayTitle(acceptance: ProjectAcceptance) {
+  if (isFinalAcceptance(acceptance)) return "竣工交付验收";
+  return acceptance.stage_label || acceptance.title;
+}
+
+function getAcceptanceDisplaySections(acceptance: ProjectAcceptance) {
+  if (isFinalAcceptance(acceptance) && acceptance.sections?.length) {
+    return acceptance.sections;
+  }
+
+  return [{
+    id: null,
+    title: acceptance.stage_label || "验收项",
+    description: null,
+    sort_order: 0,
+    items: acceptance.items || [],
+  }];
+}
+
+function cloneTemplateForEdit(template: AcceptanceTemplate | null) {
+  if (!template) return null;
+
+  const sections = template.sections?.length
+    ? template.sections
+    : [{
+      id: null,
+      title: "验收项",
+      description: null,
+      sort_order: 0,
+      items: template.items || [],
+    }];
+
+  return {
+    ...template,
+    sections: sections.map((section, sectionIndex) => ({
+      ...section,
+      sort_order: sectionIndex,
+      items: section.items.map((item, itemIndex) => ({
+        ...item,
+        sort_order: itemIndex,
+      })),
+    })),
+  } satisfies AcceptanceTemplate;
 }
 
 function notificationVariant(notification: AcceptanceNotification | null | undefined) {
@@ -439,8 +569,8 @@ function getActionLabel(action: string) {
     create: "创建验收",
     update: "保存草稿",
     submit: "提交验收",
-    leader_approve: "领导复核通过",
-    leader_reject: "领导驳回",
+    leader_approve: "主管复核通过",
+    leader_reject: "主管退回整改",
     customer_confirm: "业主确认通过",
     customer_dispute: "业主提出疑问",
     cancel: "作废验收",
@@ -547,6 +677,10 @@ export function ProjectAcceptancesPanel({
   );
   const [actionDialog, setActionDialog] = useState<AcceptanceDialogState>(null);
   const [actionDialogError, setActionDialogError] = useState("");
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateError, setTemplateError] = useState("");
+  const [finalTemplate, setFinalTemplate] = useState<AcceptanceTemplate | null>(null);
   const [editable, setEditable] = useState<EditableState>(() =>
     buildEditable(null),
   );
@@ -567,13 +701,24 @@ export function ProjectAcceptancesPanel({
     () => getAcceptanceItemStats(selected),
     [selected],
   );
+  const selectedSections = useMemo(
+    () => selected ? getAcceptanceDisplaySections(selected) : [],
+    [selected],
+  );
   const occupiedStages = useMemo(() => {
     return new Map(
       acceptances
+        .filter((item) => item.acceptance_type !== "final")
         .filter((item) => openAcceptanceStatuses.has(item.status))
         .map((item) => [item.stage_code, item]),
     );
   }, [acceptances]);
+  const openFinalAcceptance = useMemo(
+    () => acceptances.find((item) =>
+      item.acceptance_type === "final" && openAcceptanceStatuses.has(item.status)
+    ) || null,
+    [acceptances],
+  );
   const constructionStageMap = useMemo(() => {
     return new Map(constructionStages.map((item) => [item.stage_code, item]));
   }, [constructionStages]);
@@ -595,6 +740,22 @@ export function ProjectAcceptancesPanel({
   const canCreateAcceptance = canCreateByProjectStatus &&
     Boolean(firstAvailableStage) &&
     !selectedStageBlocked;
+  const canCreateFinalAcceptance = project.status === "constructing" &&
+    !openFinalAcceptance &&
+    constructionStages.length > 0 &&
+    constructionStages.every((stage) =>
+      stage.stage_code === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE ||
+      stage.status === "accepted"
+    );
+  const finalAcceptanceBlockedReason = openFinalAcceptance
+    ? "当前项目已有进行中的竣工交付验收"
+    : project.status !== "constructing"
+    ? "仅施工中项目可发起竣工交付验收"
+    : constructionStages.length === 0
+    ? "施工阶段状态加载后才可发起竣工交付验收"
+    : canCreateFinalAcceptance
+    ? ""
+    : "必需施工阶段全部完成后才可发起竣工交付验收";
 
   const loadAcceptances = async () => {
     setLoading(true);
@@ -676,7 +837,7 @@ export function ProjectAcceptancesPanel({
     setActionDialog({
       type,
       acceptanceId: selected.id,
-      title: selected.title,
+      title: getAcceptanceDisplayTitle(selected),
       comment: type === "approve" ? "复核通过" : "",
     });
   };
@@ -701,6 +862,43 @@ export function ProjectAcceptancesPanel({
       });
       setSelectedId(created.id);
     });
+
+  const createFinalAcceptance = () =>
+    runAction(async () => {
+      if (!canCreateFinalAcceptance) {
+        throw new Error(finalAcceptanceBlockedReason || "当前不可发起竣工交付验收");
+      }
+      const created = await requestBackend<ProjectAcceptance>("/project-acceptances", {
+        method: "POST",
+        payload: {
+          project_id: project.id,
+          acceptance_type: "final",
+          stage_code: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
+        },
+      });
+      setSelectedId(created.id);
+    });
+
+  const openTemplateDialog = async () => {
+    setTemplateDialogOpen(true);
+    setTemplateError("");
+    if (finalTemplate) return;
+
+    setTemplateLoading(true);
+    try {
+      const data = await requestBackend<AcceptanceTemplateListData>(
+        `/project-acceptance-templates?acceptance_type=final&stage_code=${PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE}&status=active`,
+      );
+      setFinalTemplate(data.list?.[0] || null);
+      if (!data.list?.length) {
+        setTemplateError("当前没有启用的竣工交付验收模板");
+      }
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "竣工模板加载失败");
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
 
   const saveAcceptance = (submit = false) =>
     runAction(async () => {
@@ -843,7 +1041,7 @@ export function ProjectAcceptancesPanel({
             <div className="flex h-full min-h-0 flex-col rounded-md border bg-card">
               <div className="border-b p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <Label>发起工序验收</Label>
+                  <Label>项目验收</Label>
                   <Button
                     type="button"
                     variant="ghost"
@@ -856,7 +1054,46 @@ export function ProjectAcceptancesPanel({
                     <RefreshCw className={loading ? "animate-spin" : ""} />
                   </Button>
                 </div>
+                <div className="mt-3 rounded-md border bg-background p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">竣工交付验收</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        施工阶段全部完成后发起
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={createFinalAcceptance}
+                      disabled={actionLoading || !canCreateFinalAcceptance}
+                    >
+                      {actionLoading
+                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                        : <Plus data-icon="inline-start" />}
+                      发起
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={openTemplateDialog}
+                      disabled={templateLoading}
+                    >
+                      {templateLoading
+                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                        : <FileText data-icon="inline-start" />}
+                      模板
+                    </Button>
+                  </div>
+                  {finalAcceptanceBlockedReason ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {finalAcceptanceBlockedReason}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="mt-2 space-y-2">
+                  <Label className="text-xs text-muted-foreground">工序验收</Label>
                   <Select
                     value={stageCode}
                     onValueChange={(value) => setStageCode(value as ProjectLogStageCode)}
@@ -889,7 +1126,7 @@ export function ProjectAcceptancesPanel({
                   >
                     {actionLoading
                       ? <Loader2 className="animate-spin" data-icon="inline-start" />
-                      : <Plus />}
+                      : <Plus data-icon="inline-start" />}
                     发起验收
                   </Button>
                 </div>
@@ -916,7 +1153,7 @@ export function ProjectAcceptancesPanel({
               <div className="p-1">
                 {acceptances.length === 0 ? (
                   <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    暂无工序验收
+                    暂无验收记录
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1">
@@ -933,7 +1170,7 @@ export function ProjectAcceptancesPanel({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0 truncate text-sm font-medium">
-                            {item.stage_label || item.title}
+                            {getAcceptanceDisplayTitle(item)}
                           </div>
                           <Badge variant={statusVariant(item.status)}>
                             {item.status_label}
@@ -941,7 +1178,9 @@ export function ProjectAcceptancesPanel({
                         </div>
                         <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                           <span>{formatDateTime(item.updated_at || item.created_at)}</span>
-                          <span>{item.items.length} 项</span>
+                          <span>
+                            {isFinalAcceptance(item) ? "竣工" : "工序"} · {item.items.length} 项
+                          </span>
                         </div>
                       </Button>
                     ))}
@@ -957,8 +1196,11 @@ export function ProjectAcceptancesPanel({
                 <div className="flex h-8 items-center justify-between gap-3 overflow-hidden">
                   <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                     <h3 className="min-w-0 truncate text-base font-semibold">
-                      {selected.title}
+                      {getAcceptanceDisplayTitle(selected)}
                     </h3>
+                    {isFinalAcceptance(selected) ? (
+                      <Badge variant="outline" className="shrink-0">竣工报告</Badge>
+                    ) : null}
                     <Badge variant={statusVariant(selected.status)} className="shrink-0">
                       {selected.status_label}
                     </Badge>
@@ -1005,7 +1247,7 @@ export function ProjectAcceptancesPanel({
                         type="button"
                         size="sm"
                         onClick={() => saveAcceptance(true)}
-                        disabled={actionLoading}
+                        disabled={actionLoading || selected.can_submit === false}
                       >
                         <Send />
                         提交验收
@@ -1022,7 +1264,7 @@ export function ProjectAcceptancesPanel({
                         disabled={actionLoading}
                       >
                         <XCircle />
-                        驳回
+                        退回整改
                       </Button>
                       <Button
                         type="button"
@@ -1031,7 +1273,7 @@ export function ProjectAcceptancesPanel({
                         disabled={actionLoading}
                       >
                         <CheckCircle2 />
-                        通过
+                        复核通过
                       </Button>
                     </>
                   ) : null}
@@ -1096,6 +1338,10 @@ export function ProjectAcceptancesPanel({
                   onUploadImages={uploadImages}
                 />
 
+                {selected.can_submit === false && selected.blocked_reason ? (
+                  <StatusAlert>{selected.blocked_reason}</StatusAlert>
+                ) : null}
+
                 <div className="space-y-2">
                   <Label>整体验收说明</Label>
                   <Textarea
@@ -1110,101 +1356,132 @@ export function ProjectAcceptancesPanel({
                   />
                 </div>
 
-                <div className="space-y-3">
-                  {selected.items.map((item) => {
-                    const draft = editable.items[item.id];
-                    const editableNow = canEdit(selected.status);
-                    return (
-                      <article key={item.id} className="rounded-md border bg-background">
-                        <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="font-medium">{item.title}</h4>
-                              <Badge variant={resultVariant(draft?.result)}>
-                                {resultLabel(draft?.result)}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              {item.category ? (
-                                <Badge variant="secondary">{item.category}</Badge>
-                              ) : null}
-                              {item.required ? <Badge variant="outline">必检</Badge> : null}
-                              {item.photo_required ? (
-                                <Badge variant="outline">
-                                  需 {Math.max(item.photo_min_count || 1, 1)} 张照片
-                                </Badge>
+                <div className="flex flex-col gap-4">
+                  {selectedSections.map((section) => (
+                    <section key={section.id || "flat-items"} className="flex flex-col gap-3">
+                      {isFinalAcceptance(selected) ? (
+                        <div className="rounded-md border bg-background px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <h4 className="truncate text-sm font-semibold">{section.title}</h4>
+                              {section.description ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {section.description}
+                                </p>
                               ) : null}
                             </div>
-                            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                              {item.standard}
-                            </p>
-                          </div>
-                          <div className="w-full sm:w-40">
-                            <Select
-                              value={draft?.result || "unset"}
-                              disabled={!editableNow}
-                              onValueChange={(value) =>
-                                updateEditableItem(item.id, {
-                                  result: value === "unset"
-                                    ? null
-                                    : value as AcceptanceItemResult,
-                                })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="unset">未填写</SelectItem>
-                                <SelectItem value="pass">通过</SelectItem>
-                                <SelectItem value="fail">不通过</SelectItem>
-                                {item.allow_not_applicable ? (
-                                  <SelectItem value="not_applicable">不适用</SelectItem>
-                                ) : null}
-                              </SelectContent>
-                            </Select>
+                            <Badge variant="secondary">{section.items.length} 项</Badge>
                           </div>
                         </div>
+                      ) : null}
+                      {section.items.map((item) => {
+                        const draft = editable.items[item.id];
+                        const editableNow = canEdit(selected.status);
+                        return (
+                          <article key={item.id} className="rounded-md border bg-background">
+                            <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="font-medium">{item.title}</h4>
+                                  <Badge variant={resultVariant(draft?.result)}>
+                                    {resultLabel(draft?.result)}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  {item.category ? (
+                                    <Badge variant="secondary">{item.category}</Badge>
+                                  ) : null}
+                                  {item.required ? <Badge variant="outline">必检</Badge> : null}
+                                  {item.photo_required ? (
+                                    <Badge variant="outline">
+                                      需 {Math.max(item.photo_min_count || 1, 1)} 张照片
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                                  {item.standard}
+                                </p>
+                              </div>
+                              <div className="w-full sm:w-40">
+                                <Select
+                                  value={draft?.result || "unset"}
+                                  disabled={!editableNow}
+                                  onValueChange={(value) =>
+                                    updateEditableItem(item.id, {
+                                      result: value === "unset"
+                                        ? null
+                                        : value as AcceptanceItemResult,
+                                    })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unset">未填写</SelectItem>
+                                    <SelectItem value="pass">通过</SelectItem>
+                                    <SelectItem value="fail">不通过</SelectItem>
+                                    {item.allow_not_applicable ? (
+                                      <SelectItem value="not_applicable">不适用</SelectItem>
+                                    ) : null}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
 
-                        <div className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_240px]">
-                          <div className="space-y-2">
-                            <Label>备注</Label>
-                            <Textarea
-                              className="min-h-24"
-                              value={draft?.remark || ""}
-                              disabled={!editableNow}
-                              onChange={(event) =>
-                                updateEditableItem(item.id, {
-                                  remark: event.target.value,
+                            <div className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_240px]">
+                              <div className="space-y-2">
+                                <Label>备注</Label>
+                                <Textarea
+                                  className="min-h-24"
+                                  value={draft?.remark || ""}
+                                  disabled={!editableNow}
+                                  onChange={(event) =>
+                                    updateEditableItem(item.id, {
+                                      remark: event.target.value,
+                                    })}
+                                  placeholder="填写验收备注"
+                                />
+                              </div>
+
+                              <ImageUploadBlock
+                                label="现场照片"
+                                images={draft?.imagePreviews || draft?.images || []}
+                                disabled={!editableNow}
+                                uploading={uploadingItemId === `${item.id}:images`}
+                                onUpload={(event) => uploadImages(item.id, event, "images")}
+                                onRemove={(index) => updateEditableItem(item.id, {
+                                  images: (draft?.images || []).filter((_, i) => i !== index),
+                                  imagePreviews: (draft?.imagePreviews || []).filter((_, i) => i !== index),
                                 })}
-                              placeholder="填写验收备注"
-                            />
-                          </div>
-
-                          <ImageUploadBlock
-                            label="现场照片"
-                            images={draft?.imagePreviews || draft?.images || []}
-                            disabled={!editableNow}
-                            uploading={uploadingItemId === `${item.id}:images`}
-                            onUpload={(event) => uploadImages(item.id, event, "images")}
-                            onRemove={(index) => updateEditableItem(item.id, {
-                              images: (draft?.images || []).filter((_, i) => i !== index),
-                              imagePreviews: (draft?.imagePreviews || []).filter((_, i) => i !== index),
-                            })}
-                          />
-                        </div>
-                      </article>
-                    );
-                  })}
+                              />
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </section>
+                  ))}
                 </div>
               </div>
             </section>
           ) : (
             <section className="flex min-h-0 items-center justify-center rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
-              从左侧发起一个工序验收后，在这里填写验收内容。
+              从左侧发起工序验收或竣工交付验收后，在这里填写验收内容。
             </section>
           )}
         </div>
       )}
+
+      <FinalAcceptanceTemplateDialog
+        open={templateDialogOpen}
+        loading={templateLoading}
+        error={templateError}
+        template={finalTemplate}
+        onSaved={(template) => {
+          setFinalTemplate(template);
+          toast.success("竣工模板已保存");
+        }}
+        onOpenChange={setTemplateDialogOpen}
+      />
 
       <AcceptanceActionDialog
         state={actionDialog}
@@ -1234,6 +1511,324 @@ export function ProjectAcceptancesPanel({
   );
 }
 
+function FinalAcceptanceTemplateDialog({
+  open,
+  loading,
+  error,
+  template,
+  onSaved,
+  onOpenChange,
+}: {
+  open: boolean;
+  loading: boolean;
+  error: string;
+  template: AcceptanceTemplate | null;
+  onSaved: (template: AcceptanceTemplate) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<AcceptanceTemplate | null>(null);
+  const [localError, setLocalError] = useState("");
+  const displayTemplate = editing ? draft : template;
+  const sections = displayTemplate?.sections || [];
+
+  useEffect(() => {
+    if (!open) {
+      setEditing(false);
+      setLocalError("");
+      return;
+    }
+    setDraft(cloneTemplateForEdit(template));
+  }, [open, template]);
+
+  const updateDraft = (patch: Partial<AcceptanceTemplate>) => {
+    setDraft((current) => current ? { ...current, ...patch } : current);
+  };
+
+  const updateSection = (
+    sectionIndex: number,
+    patch: Partial<AcceptanceTemplateSection>,
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        sections: (current.sections || []).map((section, index) =>
+          index === sectionIndex ? { ...section, ...patch } : section
+        ),
+      };
+    });
+  };
+
+  const updateItem = (
+    sectionIndex: number,
+    itemIndex: number,
+    patch: Partial<AcceptanceTemplateItem>,
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        sections: (current.sections || []).map((section, currentSectionIndex) =>
+          currentSectionIndex === sectionIndex
+            ? {
+              ...section,
+              items: section.items.map((item, currentItemIndex) =>
+                currentItemIndex === itemIndex ? { ...item, ...patch } : item
+              ),
+            }
+            : section
+        ),
+      };
+    });
+  };
+
+  const saveTemplate = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setLocalError("");
+    try {
+      const saved = await requestBackend<AcceptanceTemplate>(
+        `/project-acceptance-templates/${draft.id}`,
+        {
+          method: "PATCH",
+          payload: {
+            name: draft.name,
+            description: draft.description,
+            status: draft.status,
+            sections: (draft.sections || []).map((section, sectionIndex) => ({
+              id: section.id || undefined,
+              title: section.title,
+              description: section.description,
+              sort_order: sectionIndex,
+              items: section.items.map((item, itemIndex) => ({
+                id: item.id || undefined,
+                category: item.category,
+                title: item.title,
+                standard: item.standard,
+                required: item.required,
+                allow_not_applicable: item.allow_not_applicable,
+                photo_required: item.photo_required,
+                photo_min_count: item.photo_min_count,
+                photo_max_count: item.photo_max_count,
+                remark_required_on_fail: item.remark_required_on_fail,
+                sort_order: itemIndex,
+              })),
+            })),
+          },
+        },
+      );
+      onSaved(saved);
+      setDraft(cloneTemplateForEdit(saved));
+      setEditing(false);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "竣工模板保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[86vh] max-w-[860px] flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>竣工交付验收模板</DialogTitle>
+          <DialogDescription>
+            查看当前启用模板的分组、检查项和拍照要求。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {loading ? (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-16" />
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+            </div>
+          ) : error || localError ? (
+            <StatusAlert>{localError || error}</StatusAlert>
+          ) : displayTemplate ? (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-md border bg-background px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {editing ? (
+                    <Input
+                      value={draft?.name || ""}
+                      disabled={saving}
+                      onChange={(event) => updateDraft({ name: event.target.value })}
+                    />
+                  ) : (
+                    <h3 className="text-sm font-semibold">{displayTemplate.name}</h3>
+                  )}
+                  <Badge variant={displayTemplate.status === "active" ? "success" : "secondary"}>
+                    {displayTemplate.status === "active" ? "启用中" : displayTemplate.status}
+                  </Badge>
+                  <Badge variant="outline">v{displayTemplate.version}</Badge>
+                </div>
+                {editing ? (
+                  <Textarea
+                    className="mt-3"
+                    value={draft?.description || ""}
+                    disabled={saving}
+                    onChange={(event) =>
+                      updateDraft({ description: event.target.value })}
+                    placeholder="填写模板说明"
+                  />
+                ) : displayTemplate.description ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {displayTemplate.description}
+                  </p>
+                ) : null}
+              </div>
+
+              {sections.map((section, sectionIndex) => (
+                <section key={section.id || "template-items"} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      {editing ? (
+                        <Input
+                          value={section.title}
+                          disabled={saving}
+                          onChange={(event) =>
+                            updateSection(sectionIndex, { title: event.target.value })}
+                        />
+                      ) : (
+                        <h4 className="truncate text-sm font-semibold">{section.title}</h4>
+                      )}
+                      {!editing && section.description ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {section.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Badge variant="secondary">{section.items.length} 项</Badge>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {section.items.map((item, itemIndex) => (
+                      <div key={item.id} className="rounded-md border bg-background px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {editing ? (
+                            <Input
+                              value={item.title}
+                              disabled={saving}
+                              onChange={(event) =>
+                                updateItem(sectionIndex, itemIndex, {
+                                  title: event.target.value,
+                                })}
+                            />
+                          ) : (
+                            <span className="text-sm font-medium">{item.title}</span>
+                          )}
+                          {!editing && item.required ? <Badge variant="outline">必检</Badge> : null}
+                          {!editing && item.photo_required ? (
+                              <Badge variant="outline">
+                                需 {Math.max(item.photo_min_count || 1, 1)} 张照片
+                              </Badge>
+                            ) : null}
+                          {!editing && item.remark_required_on_fail ? (
+                              <Badge variant="outline">不通过需备注</Badge>
+                            ) : null}
+                        </div>
+                        {editing ? (
+                          <div className="mt-3 flex flex-col gap-3">
+                            <Textarea
+                              value={item.standard}
+                              disabled={saving}
+                              onChange={(event) =>
+                                updateItem(sectionIndex, itemIndex, {
+                                  standard: event.target.value,
+                                })}
+                              placeholder="填写验收标准"
+                            />
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={item.required}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) =>
+                                    updateItem(sectionIndex, itemIndex, {
+                                      required: checked === true,
+                                    })}
+                                />
+                                必检
+                              </label>
+                              <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={item.photo_required}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) =>
+                                    updateItem(sectionIndex, itemIndex, {
+                                      photo_required: checked === true,
+                                    })}
+                                />
+                                需要现场照片
+                              </label>
+                              <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={item.remark_required_on_fail}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) =>
+                                    updateItem(sectionIndex, itemIndex, {
+                                      remark_required_on_fail: checked === true,
+                                    })}
+                                />
+                                不通过需备注
+                              </label>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            {item.standard}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              暂无启用的竣工交付验收模板
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          {template ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading || saving}
+              onClick={() => {
+                if (editing) {
+                  setDraft(cloneTemplateForEdit(template));
+                  setEditing(false);
+                  setLocalError("");
+                  return;
+                }
+                setEditing(true);
+              }}
+            >
+              {editing ? "取消编辑" : "编辑模板"}
+            </Button>
+          ) : null}
+          {editing ? (
+            <Button type="button" disabled={saving} onClick={saveTemplate}>
+              {saving ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+              保存模板
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AcceptanceActionDialog({
   state,
   error,
@@ -1259,11 +1854,11 @@ function AcceptanceActionDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {isApprove ? "复核通过" : isReject ? "驳回验收" : "删除草稿"}
+            {isApprove ? "复核通过" : isReject ? "退回整改" : "删除草稿"}
           </DialogTitle>
           <DialogDescription>
             {isDelete
-              ? `确认删除「${state?.title || "当前验收单"}」草稿？删除后可重新发起该工序验收。`
+              ? `确认删除「${state?.title || "当前验收单"}」草稿？删除后可重新发起。`
               : `当前验收单：${state?.title || "-"}`}
           </DialogDescription>
         </DialogHeader>
@@ -1271,12 +1866,12 @@ function AcceptanceActionDialog({
         {isApprove || isReject ? (
           <div className="flex flex-col gap-2">
             <Label htmlFor="acceptance-action-comment">
-              {isApprove ? "复核说明" : "驳回原因"}
+              {isApprove ? "复核说明" : "退回原因"}
             </Label>
             <Textarea
               id="acceptance-action-comment"
               value={state?.comment || ""}
-              placeholder={isApprove ? "填写复核说明" : "请填写驳回原因"}
+              placeholder={isApprove ? "填写复核说明" : "请填写退回整改原因"}
               disabled={loading}
               aria-invalid={Boolean(error)}
               onChange={(event) => onCommentChange(event.target.value)}
@@ -1301,7 +1896,7 @@ function AcceptanceActionDialog({
             onClick={onConfirm}
           >
             {loading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-            {isApprove ? "确认通过" : isReject ? "确认驳回" : "确认删除"}
+            {isApprove ? "确认通过" : isReject ? "确认退回" : "确认删除"}
           </Button>
         </DialogFooter>
       </DialogContent>

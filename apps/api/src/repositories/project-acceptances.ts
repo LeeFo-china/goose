@@ -35,6 +35,15 @@ export type ProjectAcceptanceTemplateSectionRow = {
   updated_at: string;
 };
 
+export type ProjectAcceptanceTemplateSectionWriteRow = {
+  id: string;
+  template_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  status: string;
+};
+
 export type ProjectAcceptanceTemplateItemRow = {
   id: string;
   template_id: string;
@@ -54,6 +63,25 @@ export type ProjectAcceptanceTemplateItemRow = {
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ProjectAcceptanceTemplateItemWriteRow = {
+  id: string;
+  template_id: string;
+  section_id: string | null;
+  category: string | null;
+  title: string;
+  standard: string;
+  required: boolean;
+  allow_not_applicable: boolean;
+  photo_required: boolean;
+  photo_min_count: number;
+  photo_max_count: number;
+  remark_required_on_fail: boolean;
+  input_type: string;
+  options: unknown;
+  sort_order: number;
+  status: string;
 };
 
 export type ProjectAcceptanceRow = {
@@ -204,6 +232,24 @@ class ProjectAcceptanceRepository {
     return (data || null) as ProjectAcceptanceTemplateRow | null;
   }
 
+  async updateTemplate(
+    id: string,
+    patch: Partial<Pick<
+      ProjectAcceptanceTemplateRow,
+      "name" | "description" | "status" | "version"
+    >>,
+  ) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_templates")
+      .update(patch)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("更新验收模板失败", error);
+    return (data || null) as ProjectAcceptanceTemplateRow | null;
+  }
+
   async getActiveTemplateByStage(stageCode: ProjectLogStageCode) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_acceptance_templates")
@@ -252,6 +298,30 @@ class ProjectAcceptanceRepository {
     return (data || []) as ProjectAcceptanceTemplateSectionRow[];
   }
 
+  async upsertTemplateSections(rows: ProjectAcceptanceTemplateSectionWriteRow[]) {
+    if (rows.length === 0) return [] as ProjectAcceptanceTemplateSectionRow[];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_template_sections")
+      .upsert(rows, { onConflict: "id" })
+      .select("*");
+
+    if (error) throw Errors.dbError("保存验收模板分组失败", error);
+    return (data || []) as ProjectAcceptanceTemplateSectionRow[];
+  }
+
+  async deactivateTemplateSections(templateId: string, sectionIds: string[]) {
+    if (sectionIds.length === 0) return;
+
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_template_sections")
+      .update({ status: "inactive" })
+      .eq("template_id", templateId)
+      .in("id", sectionIds);
+
+    if (error) throw Errors.dbError("停用验收模板分组失败", error);
+  }
+
   async listTemplateItems(templateId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_acceptance_template_items")
@@ -263,6 +333,30 @@ class ProjectAcceptanceRepository {
 
     if (error) throw Errors.dbError("查询验收模板标准项失败", error);
     return (data || []) as ProjectAcceptanceTemplateItemRow[];
+  }
+
+  async upsertTemplateItems(rows: ProjectAcceptanceTemplateItemWriteRow[]) {
+    if (rows.length === 0) return [] as ProjectAcceptanceTemplateItemRow[];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_template_items")
+      .upsert(rows, { onConflict: "id" })
+      .select("*");
+
+    if (error) throw Errors.dbError("保存验收模板标准项失败", error);
+    return (data || []) as ProjectAcceptanceTemplateItemRow[];
+  }
+
+  async deactivateTemplateItems(templateId: string, itemIds: string[]) {
+    if (itemIds.length === 0) return;
+
+    const { error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_template_items")
+      .update({ status: "inactive" })
+      .eq("template_id", templateId)
+      .in("id", itemIds);
+
+    if (error) throw Errors.dbError("停用验收模板标准项失败", error);
   }
 
   async getProject(projectId: string, tenantId?: string | null) {

@@ -13,10 +13,11 @@ import {
   RejectProjectAcceptanceSchema,
   RectifyProjectAcceptanceSchema,
   SubmitProjectAcceptanceSchema,
+  UpdateProjectAcceptanceTemplateSchema,
   UpdateProjectAcceptanceSchema,
 } from "@/schema/project-acceptances";
 import { projectAcceptanceService } from "@/services/project-acceptances";
-import { Delete, Get, Post } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -123,6 +124,22 @@ class ProjectAcceptancesController extends TenantBaseController<
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
 
     const data = await projectAcceptanceService.getTemplate(idVerify.data.id);
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/project-acceptance-templates/:id")
+  async updateTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const result = UpdateProjectAcceptanceTemplateSchema.safeParse(request.body);
+    if (!result.success) throw Errors.fromZod(result.error);
+
+    const data = await projectAcceptanceService.updateTemplate(
+      authContext,
+      idVerify.data.id,
+      result.data,
+    );
     return ResponseHandler.success(data);
   }
 

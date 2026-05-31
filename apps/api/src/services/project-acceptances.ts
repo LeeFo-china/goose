@@ -13,10 +13,11 @@ import type {
   RejectProjectAcceptanceInput,
   RectifyProjectAcceptanceInput,
   SubmitProjectAcceptanceInput,
+  UpdateProjectAcceptanceTemplateInput,
   UpdateProjectAcceptanceInput,
   VerifyProjectAcceptanceOpenTicketInput,
 } from "@/schema/project-acceptances";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
@@ -39,8 +40,10 @@ import type {
   ProjectAcceptanceProjectRow,
   ProjectAcceptanceRow,
   ProjectAcceptanceTemplateItemRow,
+  ProjectAcceptanceTemplateItemWriteRow,
   ProjectAcceptanceTemplateRow,
   ProjectAcceptanceTemplateSectionRow,
+  ProjectAcceptanceTemplateSectionWriteRow,
 } from "@/repositories/project-acceptances";
 import {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
@@ -1523,6 +1526,115 @@ class ProjectAcceptanceService {
       throw Errors.badRequest("验收模板不存在");
     }
     return this.buildTemplateDetail(template);
+  }
+
+  async updateTemplate(
+    authContext: AuthContext,
+    id: string,
+    input: UpdateProjectAcceptanceTemplateInput,
+  ) {
+    this.requireTenantId(authContext);
+    this.assertCanManage(authContext);
+
+    const template = await projectAcceptanceRepository.getTemplateById(id);
+    if (!template) {
+      throw Errors.badRequest("验收模板不存在");
+    }
+
+    const [existingSections, existingItems] = await Promise.all([
+      projectAcceptanceRepository.listTemplateSections(template.id),
+      projectAcceptanceRepository.listTemplateItems(template.id),
+    ]);
+    const existingSectionIds = new Set(existingSections.map((item) => item.id));
+    const existingItemIds = new Set(existingItems.map((item) => item.id));
+    const incomingSectionIds = new Set<string>();
+    const incomingItemIds = new Set<string>();
+
+    const sectionRows: ProjectAcceptanceTemplateSectionWriteRow[] = [];
+    const itemRows: ProjectAcceptanceTemplateItemWriteRow[] = [];
+
+    input.sections.forEach((section, sectionIndex) => {
+      if (section.id && !existingSectionIds.has(section.id)) {
+        throw Errors.badRequest("模板分组不存在或不属于当前模板");
+      }
+
+      const sectionId = section.id || randomUUID();
+      if (incomingSectionIds.has(sectionId)) {
+        throw Errors.badRequest("模板分组重复");
+      }
+      incomingSectionIds.add(sectionId);
+      sectionRows.push({
+        id: sectionId,
+        template_id: template.id,
+        title: section.title,
+        description: section.description ?? null,
+        sort_order: section.sort_order || sectionIndex,
+        status: "active",
+      });
+
+      section.items.forEach((item, itemIndex) => {
+        if (item.id && !existingItemIds.has(item.id)) {
+          throw Errors.badRequest("模板检查项不存在或不属于当前模板");
+        }
+
+        const itemId = item.id || randomUUID();
+        if (incomingItemIds.has(itemId)) {
+          throw Errors.badRequest("模板检查项重复");
+        }
+        incomingItemIds.add(itemId);
+        itemRows.push({
+          id: itemId,
+          template_id: template.id,
+          section_id: sectionId,
+          category: item.category ?? null,
+          title: item.title,
+          standard: item.standard,
+          required: item.required,
+          allow_not_applicable: item.allow_not_applicable,
+          photo_required: item.photo_required,
+          photo_min_count: item.photo_min_count,
+          photo_max_count: item.photo_max_count,
+          remark_required_on_fail: item.remark_required_on_fail,
+          input_type: "pass_fail",
+          options: null,
+          sort_order: item.sort_order || itemIndex,
+          status: "active",
+        });
+      });
+    });
+
+    const removedItemIds = existingItems
+      .map((item) => item.id)
+      .filter((itemId) => !incomingItemIds.has(itemId));
+    const removedSectionIds = existingSections
+      .map((section) => section.id)
+      .filter((sectionId) => !incomingSectionIds.has(sectionId));
+
+    await projectAcceptanceRepository.deactivateTemplateItems(
+      template.id,
+      removedItemIds,
+    );
+    await projectAcceptanceRepository.deactivateTemplateSections(
+      template.id,
+      removedSectionIds,
+    );
+    await projectAcceptanceRepository.upsertTemplateSections(sectionRows);
+    await projectAcceptanceRepository.upsertTemplateItems(itemRows);
+
+    const nextTemplate = await projectAcceptanceRepository.updateTemplate(
+      template.id,
+      {
+        name: input.name,
+        description: input.description ?? null,
+        status: input.status ?? template.status,
+        version: Number(template.version || 0) + 1,
+      },
+    );
+    if (!nextTemplate) {
+      throw Errors.badRequest("验收模板不存在");
+    }
+
+    return this.buildTemplateDetail(nextTemplate);
   }
 
   private async buildTemplateDetail(template: ProjectAcceptanceTemplateRow) {
