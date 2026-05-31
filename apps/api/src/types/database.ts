@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       _backup_departments_20260527: {
@@ -1301,6 +1276,7 @@ export type Database = {
           status: string | null
           tags: Json | null
           tenant_id: string | null
+          updated_at: string
           user_id: string | null
         }
         Insert: {
@@ -1320,6 +1296,7 @@ export type Database = {
           status?: string | null
           tags?: Json | null
           tenant_id?: string | null
+          updated_at?: string
           user_id?: string | null
         }
         Update: {
@@ -1339,6 +1316,7 @@ export type Database = {
           status?: string | null
           tags?: Json | null
           tenant_id?: string | null
+          updated_at?: string
           user_id?: string | null
         }
         Relationships: [
@@ -1818,6 +1796,7 @@ export type Database = {
       expense_request_approvals: {
         Row: {
           action: string
+          approval_round: number
           approver_id: string | null
           comment: string | null
           created_at: string
@@ -1828,6 +1807,7 @@ export type Database = {
         }
         Insert: {
           action: string
+          approval_round?: number
           approver_id?: string | null
           comment?: string | null
           created_at?: string
@@ -1838,6 +1818,7 @@ export type Database = {
         }
         Update: {
           action?: string
+          approval_round?: number
           approver_id?: string | null
           comment?: string | null
           created_at?: string
@@ -1874,8 +1855,12 @@ export type Database = {
         Row: {
           code: string
           created_at: string
+          department_codes: Json
+          description: string | null
           id: string
           is_builtin: boolean
+          is_default: boolean
+          mode_codes: Json
           name: string
           remark: string | null
           sort: number
@@ -1886,8 +1871,12 @@ export type Database = {
         Insert: {
           code: string
           created_at?: string
+          department_codes?: Json
+          description?: string | null
           id?: string
           is_builtin?: boolean
+          is_default?: boolean
+          mode_codes?: Json
           name: string
           remark?: string | null
           sort?: number
@@ -1898,8 +1887,12 @@ export type Database = {
         Update: {
           code?: string
           created_at?: string
+          department_codes?: Json
+          description?: string | null
           id?: string
           is_builtin?: boolean
+          is_default?: boolean
+          mode_codes?: Json
           name?: string
           remark?: string | null
           sort?: number
@@ -1922,6 +1915,7 @@ export type Database = {
           amount: number
           category: string
           category_code: string | null
+          category_remark: string | null
           created_at: string
           evidence_images: Json
           expense_request_id: string
@@ -1937,6 +1931,7 @@ export type Database = {
           amount: number
           category: string
           category_code?: string | null
+          category_remark?: string | null
           created_at?: string
           evidence_images?: Json
           expense_request_id: string
@@ -1952,6 +1947,7 @@ export type Database = {
           amount?: number
           category?: string
           category_code?: string | null
+          category_remark?: string | null
           created_at?: string
           evidence_images?: Json
           expense_request_id?: string
@@ -3516,8 +3512,10 @@ export type Database = {
           rectification_images: Json
           rectification_remark: string | null
           remark: string | null
+          remark_required_on_fail: boolean
           required: boolean
           result: string | null
+          section_id: string | null
           sort_order: number
           standard: string
           template_item_id: string | null
@@ -3538,8 +3536,10 @@ export type Database = {
           rectification_images?: Json
           rectification_remark?: string | null
           remark?: string | null
+          remark_required_on_fail?: boolean
           required?: boolean
           result?: string | null
+          section_id?: string | null
           sort_order?: number
           standard: string
           template_item_id?: string | null
@@ -3560,8 +3560,10 @@ export type Database = {
           rectification_images?: Json
           rectification_remark?: string | null
           remark?: string | null
+          remark_required_on_fail?: boolean
           required?: boolean
           result?: string | null
+          section_id?: string | null
           sort_order?: number
           standard?: string
           template_item_id?: string | null
@@ -3575,6 +3577,13 @@ export type Database = {
             columns: ["acceptance_id"]
             isOneToOne: false
             referencedRelation: "project_acceptances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_acceptance_items_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "project_acceptance_template_sections"
             referencedColumns: ["id"]
           },
           {
@@ -3712,7 +3721,9 @@ export type Database = {
           photo_max_count: number
           photo_min_count: number
           photo_required: boolean
+          remark_required_on_fail: boolean
           required: boolean
+          section_id: string | null
           sort_order: number
           standard: string
           status: string
@@ -3730,7 +3741,9 @@ export type Database = {
           photo_max_count?: number
           photo_min_count?: number
           photo_required?: boolean
+          remark_required_on_fail?: boolean
           required?: boolean
+          section_id?: string | null
           sort_order?: number
           standard: string
           status?: string
@@ -3748,7 +3761,9 @@ export type Database = {
           photo_max_count?: number
           photo_min_count?: number
           photo_required?: boolean
+          remark_required_on_fail?: boolean
           required?: boolean
+          section_id?: string | null
           sort_order?: number
           standard?: string
           status?: string
@@ -3758,7 +3773,55 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "project_acceptance_template_items_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "project_acceptance_template_sections"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "project_acceptance_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "project_acceptance_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_acceptance_template_sections: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          sort_order: number
+          status: string
+          template_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          sort_order?: number
+          status?: string
+          template_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          sort_order?: number
+          status?: string
+          template_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_acceptance_template_sections_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "project_acceptance_templates"
@@ -3768,10 +3831,13 @@ export type Database = {
       }
       project_acceptance_templates: {
         Row: {
+          acceptance_type: string
           created_at: string
           description: string | null
           id: string
+          is_builtin: boolean
           name: string
+          project_type: string | null
           sort_order: number
           stage_code: string
           status: string
@@ -3779,10 +3845,13 @@ export type Database = {
           version: number
         }
         Insert: {
+          acceptance_type?: string
           created_at?: string
           description?: string | null
           id?: string
+          is_builtin?: boolean
           name: string
+          project_type?: string | null
           sort_order?: number
           stage_code: string
           status?: string
@@ -3790,10 +3859,13 @@ export type Database = {
           version?: number
         }
         Update: {
+          acceptance_type?: string
           created_at?: string
           description?: string | null
           id?: string
+          is_builtin?: boolean
           name?: string
+          project_type?: string | null
           sort_order?: number
           stage_code?: string
           status?: string
@@ -3804,6 +3876,7 @@ export type Database = {
       }
       project_acceptances: {
         Row: {
+          acceptance_type: string
           completed_at: string | null
           created_at: string
           customer_confirmed_at: string | null
@@ -3821,12 +3894,14 @@ export type Database = {
           submitted_at: string | null
           summary: string | null
           template_id: string | null
+          template_snapshot: Json | null
           template_version: number
           tenant_id: string | null
           title: string
           updated_at: string
         }
         Insert: {
+          acceptance_type?: string
           completed_at?: string | null
           created_at?: string
           customer_confirmed_at?: string | null
@@ -3844,12 +3919,14 @@ export type Database = {
           submitted_at?: string | null
           summary?: string | null
           template_id?: string | null
+          template_snapshot?: Json | null
           template_version?: number
           tenant_id?: string | null
           title: string
           updated_at?: string
         }
         Update: {
+          acceptance_type?: string
           completed_at?: string | null
           created_at?: string
           customer_confirmed_at?: string | null
@@ -3867,6 +3944,7 @@ export type Database = {
           submitted_at?: string | null
           summary?: string | null
           template_id?: string | null
+          template_snapshot?: Json | null
           template_version?: number
           tenant_id?: string | null
           title?: string
@@ -6732,6 +6810,14 @@ export type Database = {
           roles: Json
         }[]
       }
+      get_employee_project_detail_bootstrap_data: {
+        Args: {
+          p_log_limit?: number
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       get_project_log_calendar: {
         Args: { project_uuid: string; timezone_name?: string }
         Returns: {
@@ -6819,6 +6905,42 @@ export type Database = {
           tenant_status: string
           user_id: string
         }[]
+      }
+      schedule_project_construction_transition: {
+        Args: {
+          p_construction_manager_employee_id: string
+          p_expected_status: string
+          p_metadata: Json
+          p_operator_auth_user_id: string
+          p_operator_employee_id: string
+          p_project_id: string
+          p_reason: string
+          p_start_date: string
+          p_tenant_id: string
+          p_to_status: string
+        }
+        Returns: {
+          address: string | null
+          budget: number | null
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          name: string | null
+          property_id: string | null
+          signed_amount: number | null
+          start_date: string | null
+          status: string | null
+          style_tags: Json
+          tenant_id: string | null
+          updated_at: string
+          visibility_status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "projects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       sync_user_oauth_identity: {
         Args: {
@@ -6968,9 +7090,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
