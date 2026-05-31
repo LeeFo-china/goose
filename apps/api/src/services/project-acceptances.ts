@@ -38,14 +38,18 @@ import type {
   ProjectAcceptanceItemRow,
   ProjectAcceptanceProjectRow,
   ProjectAcceptanceRow,
+  ProjectAcceptanceTemplateItemRow,
   ProjectAcceptanceTemplateRow,
+  ProjectAcceptanceTemplateSectionRow,
 } from "@/repositories/project-acceptances";
 import {
+  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   PROJECT_ACCEPTANCE_STAGE_LABELS,
   PROJECT_LOG_STAGE_CONFIG,
   isProjectLogStageCode,
   type ProjectAcceptanceAction,
   type ProjectAcceptanceStatus,
+  type ProjectAcceptanceType,
   type ProjectLogStageCode,
 } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
@@ -125,7 +129,7 @@ type CreateAcceptanceResponseMode = "summary" | "detail";
 
 type AcceptanceCreateSummary = Pick<
   ProjectAcceptanceRow,
-  "id" | "project_id" | "stage_code" | "status" | "created_at"
+  "id" | "project_id" | "acceptance_type" | "stage_code" | "status" | "created_at"
 > & {
   stage_label: string | null;
 };
@@ -831,6 +835,24 @@ class ProjectAcceptanceService {
     if (!hasAccess) throw Errors.forbidden();
   }
 
+  private async assertCanCreateFinalAcceptance(
+    authContext: AuthContext,
+    projectId: string,
+  ) {
+    const hasAccess = await accessPolicyService.canAccessProject(
+      authContext,
+      projectId,
+      "project_acceptance.create",
+    );
+    if (!hasAccess) {
+      throw Errors.business(
+        403,
+        "暂无竣工验收操作权限",
+        ErrorCodes.FINAL_ACCEPTANCE_PERMISSION_DENIED,
+      );
+    }
+  }
+
   private async canManageAcceptance(
     authContext: AuthContext,
     row: ProjectAcceptanceRow,
@@ -919,16 +941,31 @@ class ProjectAcceptanceService {
   }
 
   private async resolveTemplate(input: CreateProjectAcceptanceInput) {
+    const acceptanceType = input.acceptance_type ?? "stage";
     const template = input.template_id
       ? await projectAcceptanceRepository.getTemplateById(input.template_id)
-      : await projectAcceptanceRepository.getActiveTemplateByStage(input.stage_code);
+      : await projectAcceptanceRepository.getActiveTemplate({
+        stageCode: input.stage_code,
+        acceptanceType,
+      });
 
     if (!template) {
+      if (acceptanceType === "final") {
+        throw Errors.business(
+          400,
+          "暂无可用竣工验收模板",
+          ErrorCodes.FINAL_ACCEPTANCE_TEMPLATE_MISSING,
+        );
+      }
       throw Errors.badRequest("验收模板不存在");
     }
 
     if (template.status !== "active") {
       throw Errors.badRequest("验收模板未启用");
+    }
+
+    if (template.acceptance_type !== acceptanceType) {
+      throw Errors.badRequest("验收模板类型不匹配");
     }
 
     if (template.stage_code !== input.stage_code) {
@@ -937,10 +974,46 @@ class ProjectAcceptanceService {
 
     const items = await projectAcceptanceRepository.listTemplateItems(template.id);
     if (items.length === 0) {
+      if (acceptanceType === "final") {
+        throw Errors.business(
+          400,
+          "暂无可用竣工验收模板",
+          ErrorCodes.FINAL_ACCEPTANCE_TEMPLATE_MISSING,
+        );
+      }
       throw Errors.badRequest("验收模板没有可用标准项");
     }
 
     return { template, items };
+  }
+
+  private async assertCanCreateFinalAcceptanceForProject(
+    project: ProjectAcceptanceProjectRow,
+  ) {
+    if (project.status !== "constructing") {
+      throw Errors.business(
+        400,
+        "项目施工中才能发起竣工验收",
+        ErrorCodes.FINAL_ACCEPTANCE_STAGE_INCOMPLETE,
+      );
+    }
+
+    const stages = await constructionStageStatusService
+      .listProjectConstructionStagesForProject({
+        projectId: project.id,
+        tenantId: project.tenant_id,
+        canReadAcceptance: true,
+        canCreateAcceptance: false,
+      });
+
+    if (!stages.required_completed) {
+      throw Errors.business(
+        400,
+        "施工阶段未全部完成",
+        ErrorCodes.FINAL_ACCEPTANCE_STAGE_INCOMPLETE,
+        { missing_required_stages: stages.missing_required_stages },
+      );
+    }
   }
 
   private async resolveReviewer(
@@ -1254,17 +1327,14 @@ class ProjectAcceptanceService {
 
   async listTemplates(input: ProjectAcceptanceTemplateListQuery) {
     const templates = await projectAcceptanceRepository.listTemplates({
+      acceptance_type: input.acceptance_type,
       stage_code: input.stage_code,
       status: input.status ?? "active",
     });
 
     return {
       list: await Promise.all(
-        templates.map(async (template) => ({
-          ...template,
-          stage_label: this.getStageLabel(template.stage_code),
-          items: await projectAcceptanceRepository.listTemplateItems(template.id),
-        })),
+        templates.map((template) => this.buildTemplateDetail(template)),
       ),
     };
   }
@@ -1274,11 +1344,48 @@ class ProjectAcceptanceService {
     if (!template) {
       throw Errors.badRequest("验收模板不存在");
     }
+    return this.buildTemplateDetail(template);
+  }
+
+  private async buildTemplateDetail(template: ProjectAcceptanceTemplateRow) {
+    const [sections, items] = await Promise.all([
+      projectAcceptanceRepository.listTemplateSections(template.id),
+      projectAcceptanceRepository.listTemplateItems(template.id),
+    ]);
+
     return {
       ...template,
       stage_label: this.getStageLabel(template.stage_code),
-      items: await projectAcceptanceRepository.listTemplateItems(template.id),
+      sections: this.buildTemplateSections(sections, items),
+      items,
     };
+  }
+
+  private buildTemplateSections(
+    sections: ProjectAcceptanceTemplateSectionRow[],
+    items: ProjectAcceptanceTemplateItemRow[],
+  ) {
+    const sectionMap = new Map(sections.map((section) => [
+      section.id,
+      {
+        ...section,
+        items: [] as ProjectAcceptanceTemplateItemRow[],
+      },
+    ]));
+
+    for (const item of items) {
+      const sectionId = typeof item.section_id === "string" ? item.section_id : null;
+      if (sectionId && sectionMap.has(sectionId)) {
+        sectionMap.get(sectionId)?.items.push(item);
+      }
+    }
+
+    return [...sectionMap.values()].map((section) => ({
+      ...section,
+      items: [...section.items].sort((left, right) =>
+        Number(left.sort_order || 0) - Number(right.sort_order || 0)
+      ),
+    }));
   }
 
   async listAcceptances(
@@ -1599,7 +1706,12 @@ class ProjectAcceptanceService {
   ) {
     const employeeId = this.assertCurrentEmployee(authContext);
     const tenantId = this.requireTenantId(authContext);
-    await this.assertCanCreate(authContext, input.project_id);
+    const acceptanceType = input.acceptance_type ?? "stage";
+    if (acceptanceType === "final") {
+      await this.assertCanCreateFinalAcceptance(authContext, input.project_id);
+    } else {
+      await this.assertCanCreate(authContext, input.project_id);
+    }
 
     const project = await projectAcceptanceRepository.getProject(
       input.project_id,
@@ -1608,31 +1720,54 @@ class ProjectAcceptanceService {
     if (!project) {
       throw Errors.badRequest("项目不存在");
     }
-    projectStatusService.assertCanCreateProjectAcceptance(project);
-    await constructionStageStatusService.assertCanCreateAcceptance({
-      project,
-      stageCode: input.stage_code,
-    });
+    if (acceptanceType === "final") {
+      if (input.stage_code !== PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE) {
+        throw Errors.badRequest("竣工验收必须使用 completion 阶段");
+      }
+      await this.assertCanCreateFinalAcceptanceForProject(project);
+    } else {
+      projectStatusService.assertCanCreateProjectAcceptance(project);
+      await constructionStageStatusService.assertCanCreateAcceptance({
+        project,
+        stageCode: input.stage_code,
+      });
+    }
 
     const open = await projectAcceptanceRepository.hasOpenAcceptance(
       input.project_id,
       input.stage_code,
       tenantId,
+      acceptanceType,
     );
     if (open) {
+      if (acceptanceType === "final") {
+        throw Errors.business(
+          409,
+          "已有竣工验收单待处理",
+          ErrorCodes.FINAL_ACCEPTANCE_ALREADY_EXISTS,
+          { acceptance_id: open.id, status: open.status },
+        );
+      }
       throw Errors.badRequest("该工序已有进行中的验收单，请处理完成后再发起");
     }
 
     const { template, items } = await this.resolveTemplate(input);
     const reviewerId = await this.resolveReviewer(project, input.reviewer_id);
 
-    const title = PROJECT_ACCEPTANCE_STAGE_LABELS[input.stage_code] || template.name;
+    const title = acceptanceType === "final"
+      ? "竣工交付验收"
+      : PROJECT_ACCEPTANCE_STAGE_LABELS[input.stage_code] || template.name;
+    const templateSnapshot = acceptanceType === "final"
+      ? await this.buildTemplateDetail(template)
+      : null;
     const row = await projectAcceptanceRepository.createAcceptance({
       tenant_id: project.tenant_id,
       project_id: input.project_id,
+      acceptance_type: acceptanceType,
       stage_code: input.stage_code,
       template_id: template.id,
       template_version: template.version,
+      template_snapshot: templateSnapshot,
       title,
       status: "draft",
       initiator_id: employeeId,
@@ -1646,6 +1781,7 @@ class ProjectAcceptanceService {
         acceptance_id: row.id,
         tenant_id: row.tenant_id,
         template_item_id: item.id,
+        section_id: item.section_id,
         category: item.category,
         title: item.title,
         standard: item.standard,
@@ -1654,6 +1790,7 @@ class ProjectAcceptanceService {
         photo_required: item.photo_required,
         photo_min_count: item.photo_min_count,
         photo_max_count: item.photo_max_count,
+        remark_required_on_fail: item.remark_required_on_fail,
         result: null,
         remark: null,
         rectification_remark: null,
@@ -1684,6 +1821,7 @@ class ProjectAcceptanceService {
     return {
       id: row.id,
       project_id: row.project_id,
+      acceptance_type: row.acceptance_type,
       stage_code: row.stage_code,
       stage_label: this.getStageLabel(row.stage_code),
       status: row.status,

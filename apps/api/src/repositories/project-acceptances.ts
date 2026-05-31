@@ -5,17 +5,32 @@ import type {
   ProjectAcceptanceItemResult,
   ProjectAcceptanceRejectSource,
   ProjectAcceptanceStatus,
+  ProjectAcceptanceType,
   ProjectLogStageCode,
 } from "@gooes/domain";
 
 export type ProjectAcceptanceTemplateRow = {
   id: string;
+  acceptance_type: ProjectAcceptanceType;
   stage_code: string;
   name: string;
   description: string | null;
   version: number;
   status: string;
+  project_type: string | null;
+  is_builtin: boolean;
   sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectAcceptanceTemplateSectionRow = {
+  id: string;
+  template_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  status: string;
   created_at: string;
   updated_at: string;
 };
@@ -23,6 +38,7 @@ export type ProjectAcceptanceTemplateRow = {
 export type ProjectAcceptanceTemplateItemRow = {
   id: string;
   template_id: string;
+  section_id: string | null;
   category: string | null;
   title: string;
   standard: string;
@@ -31,6 +47,7 @@ export type ProjectAcceptanceTemplateItemRow = {
   photo_required: boolean;
   photo_min_count: number;
   photo_max_count: number;
+  remark_required_on_fail: boolean;
   input_type: string;
   options: unknown;
   sort_order: number;
@@ -43,9 +60,11 @@ export type ProjectAcceptanceRow = {
   id: string;
   tenant_id: string | null;
   project_id: string;
+  acceptance_type: ProjectAcceptanceType;
   stage_code: string;
   template_id: string | null;
   template_version: number;
+  template_snapshot: unknown;
   title: string;
   status: ProjectAcceptanceStatus;
   initiator_id: string;
@@ -68,6 +87,7 @@ export type ProjectAcceptanceItemRow = {
   tenant_id: string | null;
   acceptance_id: string;
   template_item_id: string | null;
+  section_id: string | null;
   category: string | null;
   title: string;
   standard: string;
@@ -76,6 +96,7 @@ export type ProjectAcceptanceItemRow = {
   photo_required: boolean;
   photo_min_count: number;
   photo_max_count: number;
+  remark_required_on_fail: boolean;
   result: ProjectAcceptanceItemResult | null;
   remark: string | null;
   rectification_remark: string | null;
@@ -134,6 +155,7 @@ type ListAcceptancesInput = {
   page: number;
   pageSize: number;
   project_id?: string;
+  acceptance_type?: ProjectAcceptanceType;
   status?: ProjectAcceptanceStatus;
   stage_code?: ProjectLogStageCode;
   reviewer_id?: string;
@@ -144,6 +166,7 @@ type ListAcceptancesInput = {
 
 class ProjectAcceptanceRepository {
   async listTemplates(input: {
+    acceptance_type?: ProjectAcceptanceType;
     stage_code?: ProjectLogStageCode;
     status?: "active" | "inactive";
   }) {
@@ -152,6 +175,10 @@ class ProjectAcceptanceRepository {
       .select("*")
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
+
+    if (input.acceptance_type) {
+      query = query.eq("acceptance_type", input.acceptance_type);
+    }
 
     if (input.stage_code) {
       query = query.eq("stage_code", input.stage_code);
@@ -182,6 +209,7 @@ class ProjectAcceptanceRepository {
       .from("project_acceptance_templates")
       .select("*")
       .eq("stage_code", stageCode)
+      .eq("acceptance_type", "stage")
       .eq("status", "active")
       .order("version", { ascending: false })
       .order("sort_order", { ascending: true })
@@ -190,6 +218,38 @@ class ProjectAcceptanceRepository {
 
     if (error) throw Errors.dbError("查询验收模板失败", error);
     return (data || null) as ProjectAcceptanceTemplateRow | null;
+  }
+
+  async getActiveTemplate(input: {
+    stageCode: ProjectLogStageCode;
+    acceptanceType: ProjectAcceptanceType;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_templates")
+      .select("*")
+      .eq("stage_code", input.stageCode)
+      .eq("acceptance_type", input.acceptanceType)
+      .eq("status", "active")
+      .order("version", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询验收模板失败", error);
+    return (data || null) as ProjectAcceptanceTemplateRow | null;
+  }
+
+  async listTemplateSections(templateId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_acceptance_template_sections")
+      .select("*")
+      .eq("template_id", templateId)
+      .eq("status", "active")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) throw Errors.dbError("查询验收模板分组失败", error);
+    return (data || []) as ProjectAcceptanceTemplateSectionRow[];
   }
 
   async listTemplateItems(templateId: string) {
@@ -258,6 +318,7 @@ class ProjectAcceptanceRepository {
     projectId: string,
     stageCode: ProjectLogStageCode,
     tenantId?: string | null,
+    acceptanceType?: ProjectAcceptanceType,
   ) {
     let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")
@@ -269,6 +330,9 @@ class ProjectAcceptanceRepository {
 
     if (tenantId) {
       query = query.eq("tenant_id", tenantId);
+    }
+    if (acceptanceType) {
+      query = query.eq("acceptance_type", acceptanceType);
     }
 
     const { data, error } = await query.maybeSingle();
@@ -372,6 +436,7 @@ class ProjectAcceptanceRepository {
     }
 
     if (input.project_id) query = query.eq("project_id", input.project_id);
+    if (input.acceptance_type) query = query.eq("acceptance_type", input.acceptance_type);
     if (input.status) query = query.eq("status", input.status);
     if (input.stage_code) query = query.eq("stage_code", input.stage_code);
     if (input.reviewer_id) query = query.eq("reviewer_id", input.reviewer_id);

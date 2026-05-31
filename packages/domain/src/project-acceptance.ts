@@ -1,5 +1,10 @@
 import type { ProjectLogStageCode } from './project-log';
 
+export const PROJECT_ACCEPTANCE_TYPE_VALUES = ['stage', 'final'] as const;
+
+export type ProjectAcceptanceType =
+  (typeof PROJECT_ACCEPTANCE_TYPE_VALUES)[number];
+
 export const PROJECT_ACCEPTANCE_STATUS_VALUES = [
   'draft',
   'submitted',
@@ -87,6 +92,12 @@ export const isProjectAcceptanceStatus = (
 ): value is ProjectAcceptanceStatus =>
   typeof value === 'string' &&
   PROJECT_ACCEPTANCE_STATUS_VALUES.includes(value as ProjectAcceptanceStatus);
+
+export const isProjectAcceptanceType = (
+  value: string | null | undefined,
+): value is ProjectAcceptanceType =>
+  typeof value === 'string' &&
+  PROJECT_ACCEPTANCE_TYPE_VALUES.includes(value as ProjectAcceptanceType);
 
 export const isProjectAcceptanceAction = (
   value: string | null | undefined,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  PROJECT_ACCEPTANCE_TYPE_VALUES,
   PROJECT_ACCEPTANCE_ITEM_RESULT_VALUES,
   PROJECT_ACCEPTANCE_STATUS_VALUES,
   PROJECT_LOG_STAGE_CODE_VALUES,
@@ -18,6 +19,9 @@ const ReferencedImageListSchema = z.array(
 
 export const ProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("无效的项目ID").optional(),
+  acceptance_type: z.enum(PROJECT_ACCEPTANCE_TYPE_VALUES, {
+    message: "无效的验收类型",
+  }).optional(),
   status: z.enum(PROJECT_ACCEPTANCE_STATUS_VALUES, {
     message: "无效的验收状态",
   }).optional(),
@@ -29,10 +33,17 @@ export const ProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
 });
 
 export const ProjectAcceptanceTemplateListQuerySchema = z.object({
+  acceptance_type: z.enum(PROJECT_ACCEPTANCE_TYPE_VALUES, {
+    message: "无效的验收类型",
+  }).optional(),
   stage_code: z.enum(PROJECT_LOG_STAGE_CODE_VALUES, {
     message: "无效的施工阶段",
   }).optional(),
-  status: z.enum(["active", "inactive"]).optional(),
+  status: z.preprocess((value) => {
+    if (value === "enabled") return "active";
+    if (value === "disabled") return "inactive";
+    return value;
+  }, z.enum(["active", "inactive"]).optional()),
 });
 
 export const ProjectAcceptanceCreateQuerySchema = z.object({
@@ -43,6 +54,9 @@ export const ProjectAcceptanceCreateQuerySchema = z.object({
 
 export const CreateProjectAcceptanceSchema = z.object({
   project_id: z.uuid("请选择有效的项目"),
+  acceptance_type: z.enum(PROJECT_ACCEPTANCE_TYPE_VALUES, {
+    message: "无效的验收类型",
+  }).optional().default("stage"),
   stage_code: z.enum(PROJECT_LOG_STAGE_CODE_VALUES, {
     message: "无效的施工阶段",
   }),
