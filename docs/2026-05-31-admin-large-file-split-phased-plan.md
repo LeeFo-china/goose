@@ -221,6 +221,42 @@ pnpm --dir apps/admin test:e2e
 - 成功操作后的 `router.refresh()`、toast、弹窗关闭行为保持不变。
 - 验收通过后提交，提交信息建议：`refactor: split admin customer expense camera mutations`。
 
+### 执行记录
+
+2026-05-31：
+
+- 已拆分 `apps/admin/components/customers/customer-mutations.tsx`：
+  - 类型：`customer-mutation-types.ts`
+  - 共享状态、请求与展示工具：`customer-mutation-shared.tsx`
+  - 客户表单弹窗：`customer-form-dialog.tsx`
+  - 客户详情弹窗：`customer-detail-dialog.tsx`
+  - 客户状态操作：`customer-status-panel.tsx`
+  - 设计项目前置状态确认：`design-project-before-status-dialog.tsx`
+- 已拆分 `apps/admin/components/expenses/expense-mutations.tsx`：
+  - 类型：`expense-mutation-types.ts`
+  - 费用请求、枚举标签、COS 凭证上传工具：`expense-mutation-shared.ts`
+  - 费用详情弹窗：`expense-detail-dialog.tsx`
+  - 登记打款弹窗：`expense-pay-dialog.tsx`
+- 已拆分 `apps/admin/components/cameras/camera-mutations.tsx`：
+  - 类型：`camera-mutation-types.ts`
+  - 表单 schema、请求、设备与预览工具：`camera-mutation-shared.ts`
+  - 摄像头绑定/编辑弹窗：`camera-form-dialog.tsx`
+  - 项目与设备选择区：`camera-project-device-fields.tsx`
+  - 摄像头配置字段区：`camera-settings-fields.tsx`
+  - 实时预览弹窗：`camera-play-preview-dialog.tsx`
+
+### 验收记录
+
+2026-05-31：
+
+- `apps/admin/components/customers/customer-mutations.tsx`：124 行。
+- `apps/admin/components/expenses/expense-mutations.tsx`：214 行。
+- `apps/admin/components/cameras/camera-mutations.tsx`：130 行。
+- 阶段 2 目标文件已从 `>500` 行门禁输出中消失。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。第一次与 E2E 并行执行时 Next `.next` 产物竞争导致 `/_document` 读取失败，随后单独重跑构建通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+
 ## 阶段 3：营销与 H5 编辑器拆分
 
 ### 范围
