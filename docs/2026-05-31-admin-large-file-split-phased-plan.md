@@ -369,6 +369,36 @@ pnpm --dir apps/admin test:e2e
 - 表格筛选、分页、操作按钮、弹窗确认流程保持原行为。
 - 验收通过后提交，提交信息建议：`refactor: split admin platform ops panels`。
 
+### 执行记录
+
+2026-05-31：
+
+- 已拆分 `apps/admin/components/ops/release-deployments-panel.tsx`：
+  - 请求、格式化和状态工具：`release-deployments-shared.ts`
+  - 运行详情与运行版本面板：`release-deployments-dialogs.tsx`
+  - 版本/服务选择和分页控件：`release-deployments-controls.tsx`
+  - 发布表单卡片：`release-deployments-dispatch-card.tsx`
+  - 成功版本辅助和发布记录列表：`release-deployments-sections.tsx`
+- 已拆分 `apps/admin/app/(console)/platform/billing/page.tsx`：
+  - 页面参数、数据读取、格式化和基础控件：`billing-page-shared.tsx`
+  - 租户账户和影子计费 tab：`billing-account-tabs.tsx`
+  - AI 观察、价格规则和计费流水 tab：`billing-usage-tabs.tsx`
+- 已拆分 `apps/admin/components/platform-ai/ai-model-routing-panel.tsx`：
+  - 表单状态和请求工具：`ai-model-routing-shared.ts`
+  - 表单、表格和状态控件：`ai-model-routing-sections.tsx`
+
+### 验收记录
+
+2026-05-31：
+
+- `apps/admin/components/ops/release-deployments-panel.tsx`：406 行。
+- `apps/admin/app/(console)/platform/billing/page.tsx`：236 行。
+- `apps/admin/components/platform-ai/ai-model-routing-panel.tsx`：343 行。
+- 阶段 4 目标文件已从 `>500` 行门禁输出中消失。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+
 ## 阶段 5：组织、权限、员工、设置轻量收口
 
 ### 范围

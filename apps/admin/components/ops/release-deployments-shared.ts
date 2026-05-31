@@ -1,0 +1,273 @@
+import type { ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseOperation, ReleaseOptionsData, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData, Pagination } from "@/components/ops/ops-types";
+
+export type ReleaseDeploymentsPanelProps = {
+  options: ReleaseOptionsData | null;
+  runs: ReleaseRun[];
+  runsPagination: Pagination;
+  successfulRefs: ReleaseSuccessfulRef[];
+  successfulRefsPagination: Pagination;
+  runtimeVersions: ReleaseRuntimeVersionData | null;
+  runtimeError?: string | null;
+  error?: string | null;
+};
+
+export type ReleaseSearchEnvironment = ReleaseEnvironment | "all";
+
+export const REF_TYPE_OPTIONS: Array<{
+  value: ReleaseRefType;
+  label: string;
+  description: string;
+}> = [
+  { value: "branch", label: "分支", description: "适合 dev 快速验证" },
+  { value: "tag", label: "Tag", description: "适合生产发布" },
+];
+export const RELEASE_RUN_POLL_MS = 15_000;
+export const RELEASE_RUN_FORCE_POLL_MS = 10 * 60_000;
+
+export function getPayloadMessage(payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object" && "message" in payload) {
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
+export async function dispatchRelease(payload: {
+  environment: ReleaseEnvironment;
+  service: ReleaseService;
+  services?: ReleaseService[];
+  ref_type: ReleaseRefType;
+  ref: string;
+  operation?: ReleaseOperation;
+  reason: string;
+  confirm_text?: string;
+}) {
+  const response = await fetch("/api/backend/admin/ops/releases/dispatch", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "发布任务提交失败"));
+  }
+  return data.data as ReleaseDispatchResult;
+}
+
+export async function createReleaseTag(payload: {
+  tag: string;
+  source_ref: string;
+  message: string;
+}) {
+  const response = await fetch("/api/backend/admin/ops/releases/tags", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "发布 Tag 创建失败"));
+  }
+  return data.data as ReleaseCreateTagResult;
+}
+
+export async function createRollbackTag(payload: {
+  source_ref: string;
+  message?: string;
+}) {
+  const response = await fetch("/api/backend/admin/ops/releases/rollback-tag", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "回滚 Tag 创建失败"));
+  }
+  return data.data as ReleaseCreateTagResult;
+}
+
+export async function fetchReleaseRefs(input: {
+  type: ReleaseRefType;
+  keyword: string;
+  baseRef?: string;
+}) {
+  const query = new URLSearchParams({
+    type: input.type,
+  });
+  if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
+  if (input.baseRef?.trim()) query.set("base_ref", input.baseRef.trim());
+
+  const response = await fetch(`/api/backend/admin/ops/releases/refs?${query.toString()}`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "版本列表加载失败"));
+  }
+  return (data.data?.list || []) as ReleaseRefOption[];
+}
+
+export async function fetchReleaseRuns(input: { page: number; pageSize?: number }) {
+  const query = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize || 5),
+  });
+  const response = await fetch(`/api/backend/admin/ops/releases/runs?${query.toString()}`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "最近发布记录刷新失败"));
+  }
+  return data.data as ReleaseRunListData;
+}
+
+export async function fetchSuccessfulRefs(input: {
+  page: number;
+  pageSize?: number;
+  environment: ReleaseSearchEnvironment;
+  keyword: string;
+}) {
+  const query = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize || 5),
+  });
+  if (input.environment !== "all") query.set("environment", input.environment);
+  if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
+
+  const response = await fetch(`/api/backend/admin/ops/releases/successful-refs?${query.toString()}`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "发布辅助刷新失败"));
+  }
+  return data.data as ReleaseSuccessfulRefListData;
+}
+
+export async function fetchReleaseRuntimeVersions() {
+  const response = await fetch("/api/backend/admin/ops/releases/runtime-versions", {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "运行版本刷新失败"));
+  }
+  return data.data as ReleaseRuntimeVersionData;
+}
+
+export async function fetchReleaseRunFailureSummary(runId: string) {
+  const response = await fetch(`/api/backend/admin/ops/releases/runs/${encodeURIComponent(runId)}/failure-summary`, {
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(getPayloadMessage(data, "失败摘要加载失败"));
+  }
+  return data.data as ReleaseRunFailureSummary;
+}
+
+export function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+export function statusLabel(run: ReleaseRun) {
+  if (run.status === "completed") {
+    if (run.conclusion === "success") return "成功";
+    if (run.conclusion === "failure") return "失败";
+    if (run.conclusion === "cancelled") return "已取消";
+    return run.conclusion || "已完成";
+  }
+  if (run.status === "in_progress") return "执行中";
+  if (run.status === "queued") return "排队中";
+  return run.status || "-";
+}
+
+export function statusVariant(run: ReleaseRun) {
+  if (run.status === "completed" && run.conclusion === "success") return "success" as const;
+  if (run.status === "completed" && run.conclusion) return "danger" as const;
+  if (run.status === "in_progress" || run.status === "queued") return "warning" as const;
+  return "outline" as const;
+}
+
+export function isReleaseRunActive(run: ReleaseRun) {
+  if (run.status === "queued" || run.status === "in_progress") return true;
+  return run.status !== "completed" && !run.conclusion;
+}
+
+export function shouldShowFailureSummary(run: ReleaseRun) {
+  return run.status === "completed" && Boolean(run.conclusion) && run.conclusion !== "success";
+}
+
+export function getRunActorLabel(run: ReleaseRun) {
+  const employee = run.audit?.actor_employee;
+  if (employee?.name && employee.phone) return `${employee.name} · ${employee.phone}`;
+  if (employee?.name) return employee.name;
+  if (employee?.phone) return employee.phone;
+  if (run.audit?.actor_user_id) return run.audit.actor_user_id;
+  return "未记录";
+}
+
+export function getRunRefLabel(run: ReleaseRun) {
+  if (run.audit?.ref) {
+    return `${run.audit.ref_type_label || "版本"} · ${run.audit.ref}`;
+  }
+  return `${run.head_branch || "-"} · ${run.head_sha?.slice(0, 7) || "-"}`;
+}
+
+export function getSuccessfulRefDescription(item: ReleaseSuccessfulRef) {
+  return [
+    item.workflow_label,
+    item.head_branch ? `来源 ${item.head_branch}` : "",
+    `发布时间 ${formatDateTime(item.created_at)}`,
+  ].filter(Boolean).join(" · ");
+}
+
+export function environmentLabel(environment: ReleaseEnvironment) {
+  return environment === "production" ? "生产环境" : "开发环境";
+}
+
+export function runtimeHealthVariant(item: ReleaseRuntimeServiceVersion) {
+  if (item.health === "healthy") return "success" as const;
+  if (item.health === "starting" || item.state === "running") return "warning" as const;
+  if (item.health === "unhealthy" || item.health === "exited" || item.state !== "running") return "danger" as const;
+  return "outline" as const;
+}
+
+export function diffVariant(item: ReleaseRuntimeServiceVersion) {
+  if (item.diff_status === "same_as_dev") return "success" as const;
+  if (item.diff_status === "behind_dev") return "warning" as const;
+  if (item.diff_status === "ahead_of_dev") return "danger" as const;
+  return "secondary" as const;
+}
+
+export function runtimeVersionLabel(item: ReleaseRuntimeServiceVersion) {
+  if (item.revision_short) return item.revision_short;
+  if (item.image_tag) return item.image_tag;
+  return "等待新版镜像";
+}
+
+export function shortenImageId(value: string | null | undefined) {
+  if (!value) return "-";
+  return value.replace(/^sha256:/, "").slice(0, 12);
+}
+
+export function conclusionLabel(value: string | null | undefined) {
+  if (value === "failure") return "失败";
+  if (value === "timed_out") return "超时";
+  if (value === "cancelled") return "已取消";
+  if (value === "action_required") return "需要处理";
+  return value || "-";
+}
