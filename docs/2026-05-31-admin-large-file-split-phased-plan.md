@@ -298,6 +298,46 @@ pnpm --dir apps/admin test:e2e
 - 组件拆分后不引入全局状态替代局部状态，避免扩大副作用。
 - 验收通过后提交，提交信息建议：`refactor: split admin marketing editor modules`。
 
+### 执行记录
+
+2026-05-31：
+
+- 已拆分 `apps/admin/components/marketing/h5-page-editor.tsx`：
+  - 类型与模板常量：`h5-page-editor-types.ts`
+  - 编辑器 API、图片校验压缩和 COS 上传：`h5-page-editor-api.ts`
+  - 区块创建、规范化和字段读取工具：`h5-page-editor-block-utils.tsx`
+  - 预览组件：`h5-page-editor-preview.tsx`
+  - 属性面板：`h5-page-editor-property-panel.tsx`
+  - 案例选择器：`h5-page-editor-project-case-selector.tsx`
+  - 图片上传字段：`h5-page-editor-image-upload-field.tsx`
+  - 通用字段控件：`h5-page-editor-fields.tsx`
+- 已拆分 `apps/admin/components/marketing/h5-page-mutations.tsx`：
+  - 共享 schema、请求与 payload 工具：`h5-page-mutation-shared.ts`
+  - 新建弹窗：`h5-page-create-dialog.tsx`
+  - 配置弹窗：`h5-page-settings-dialog.tsx`
+  - 行操作：`h5-page-row-actions.tsx`
+  - 排序控件：`h5-page-order-controls.tsx`
+- 已拆分 `apps/admin/components/marketing/marketing-mutations.tsx`：
+  - 共享 schema、请求与 payload 工具：`marketing-mutation-shared.ts`
+  - 活动表单弹窗：`marketing-campaign-form-dialog.tsx`
+  - 项目选择器：`marketing-project-selector.tsx`
+  - 详情弹窗：`marketing-campaign-detail-dialog.tsx`
+- 已拆分 `apps/admin/app/(console)/marketing/page.tsx`：
+  - 页面参数、数据读取和 tab href 工具：`marketing-page-data.ts`
+
+### 验收记录
+
+2026-05-31：
+
+- `apps/admin/components/marketing/h5-page-editor.tsx`：453 行。
+- `apps/admin/components/marketing/h5-page-mutations.tsx`：4 行。
+- `apps/admin/components/marketing/marketing-mutations.tsx`：156 行。
+- `apps/admin/app/(console)/marketing/page.tsx`：330 行。
+- 阶段 3 目标文件已从 `>500` 行门禁输出中消失。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+
 ## 阶段 4：平台、运维、计费复杂页拆分
 
 ### 范围
