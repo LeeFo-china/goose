@@ -45,7 +45,9 @@ const PROJECT_CREATE_EMPLOYEE_SCENE_DEPARTMENTS: Record<
     project_construction_manager: ["PROJECT"],
 };
 
-const PROJECT_MEMBER_ROLE_DEPARTMENTS: Partial<Record<ProjectMemberRoleCode, DepartmentCode[]>> = {
+const PROJECT_MEMBER_ROLE_CANDIDATE_DEPARTMENTS: Partial<
+    Record<ProjectMemberRoleCode, DepartmentCode[]>
+> = {
     designer: ["DESIGN"],
     supervisor: ["PROJECT"],
     construction_manager: ["PROJECT"],
@@ -1356,33 +1358,14 @@ class ProjectService {
         const departmentCodes = "scene" in input.query
             ? PROJECT_CREATE_EMPLOYEE_SCENE_DEPARTMENTS[input.query.scene]
             : roleCode
-                ? PROJECT_MEMBER_ROLE_DEPARTMENTS[roleCode]
+                ? PROJECT_MEMBER_ROLE_CANDIDATE_DEPARTMENTS[roleCode]
                 : undefined;
-        const postIds = roleCode
-            ? await projectRepository.listProjectMemberRolePostIds({
-                tenantId: input.tenantId,
-                roleCode,
-            })
-            : undefined;
-
-        if (roleCode && postIds?.length === 0) {
-            return {
-                rows: [],
-                pagination: {
-                    page,
-                    pageSize,
-                    total: 0,
-                    totalPages: 0,
-                },
-            };
-        }
 
         const result = await projectRepository.listCreateEmployees({
             filters: {
                 tenantId: input.tenantId,
                 keyword,
                 departmentCodes,
-                postIds,
             },
             from,
             to,

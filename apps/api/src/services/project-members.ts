@@ -11,8 +11,17 @@ import {
   PROJECT_MEMBER_ROLE_CONFIG,
   isEmployeeOperableStatus,
   isProjectMemberRoleCode,
+  type DepartmentCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
+
+const PROJECT_MEMBER_ROLE_CANDIDATE_DEPARTMENTS: Partial<
+  Record<ProjectMemberRoleCode, DepartmentCode[]>
+> = {
+  designer: ["DESIGN"],
+  supervisor: ["PROJECT"],
+  construction_manager: ["PROJECT"],
+};
 
 type ProjectMemberEmployee = {
   id: string;
@@ -213,15 +222,22 @@ class ProjectMemberService {
       throw this.createRoleValidationError(input.invalidError);
     }
 
-    const postIds = await projectRepository.listProjectMemberRolePostIds({
-      tenantId: input.tenantId,
-      roleCode: input.roleCode,
-    });
+    const departmentCodes = PROJECT_MEMBER_ROLE_CANDIDATE_DEPARTMENTS[
+      input.roleCode
+    ] as DepartmentCode[] | undefined;
+    const rawDepartment = "tenant_department" in employee
+      ? employee.tenant_department
+      : null;
+    const department = Array.isArray(rawDepartment)
+      ? rawDepartment[0] ?? null
+      : rawDepartment;
+    const departmentCode = typeof department?.code === "string"
+      ? department.code
+      : null;
 
     if (
-      postIds.length === 0 ||
-      !employee.post_id ||
-      !postIds.includes(employee.post_id)
+      departmentCodes?.length &&
+      (!departmentCode || !departmentCodes.includes(departmentCode as DepartmentCode))
     ) {
       throw this.createRoleValidationError(input.invalidError);
     }

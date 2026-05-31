@@ -7,7 +7,7 @@ import type {
   UpdateProjectInput,
 } from "@/schema/projects";
 import { getAsiaShanghaiTodayRange } from "@/utils/date-ranges";
-import type { DepartmentCode, ProjectMemberRoleCode } from "@gooes/domain";
+import type { DepartmentCode } from "@gooes/domain";
 
 export const PROJECT_LIST_SELECT = `
   id,
@@ -707,47 +707,6 @@ class ProjectRepository {
       rows: (data || []) as unknown as Array<Record<string, unknown>>,
       total: count ?? 0,
     };
-  }
-
-  async listProjectMemberRolePostIds(input: {
-    tenantId: string;
-    roleCode: ProjectMemberRoleCode;
-  }) {
-    const { data: ruleRows, error: ruleError } = await SupabaseDB.getAdminClient()
-      .from("project_member_role_post_rules")
-      .select("post_code")
-      .eq("tenant_id", input.tenantId)
-      .eq("role_code", input.roleCode)
-      .eq("enabled", true)
-      .order("sort", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (ruleError) {
-      throw Errors.dbError("查询项目成员角色岗位规则失败", ruleError);
-    }
-
-    const postCodes = Array.from(
-      new Set(
-        ((ruleRows || []) as Array<{ post_code: string | null }>)
-          .map((item) => item.post_code)
-          .filter((item): item is string => Boolean(item)),
-      ),
-    );
-    if (postCodes.length === 0) return [];
-
-    const { data: postRows, error: postError } = await SupabaseDB.getAdminClient()
-      .from("posts")
-      .select("id")
-      .eq("tenant_id", input.tenantId)
-      .in("code", postCodes);
-
-    if (postError) {
-      throw Errors.dbError("查询项目成员角色岗位失败", postError);
-    }
-
-    return ((postRows || []) as Array<{ id: string | null }>)
-      .map((item) => item.id)
-      .filter((item): item is string => Boolean(item));
   }
 
   async update(id: string, input: UpdateProjectInput, tenantId?: string | null) {
