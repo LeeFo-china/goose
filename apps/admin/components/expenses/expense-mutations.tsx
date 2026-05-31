@@ -3,9 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  EXPENSE_APPROVAL_ACTION_VALUES,
   EXPENSE_MODE_VALUES,
+  EXPENSE_REQUEST_STEP_VALUES,
   EXPENSE_SETTLEMENT_METHOD_VALUES,
+  ExpenseApprovalActionConfig,
   ExpenseModeConfig,
+  ExpenseRequestStepConfig,
   ExpenseSettlementMethodConfig,
 } from "@gooes/domain";
 import { Controller, useForm, type Resolver } from "react-hook-form";
@@ -70,6 +74,8 @@ export type ExpenseItem = {
   occurred_at: string | null;
   category_code: string | null;
   category: string | null;
+  category_name?: string | null;
+  category_remark?: string | null;
   amount: number;
   remark: string | null;
   invoice_no: string | null;
@@ -200,13 +206,43 @@ const modeLabel: Record<string, string> = Object.fromEntries(
   ]),
 );
 
-const actionLabel: Record<string, string> = {
-  submit: "提交",
-  resubmit: "重新提交",
-  approve: "通过",
-  reject: "驳回",
-  cancel: "撤回",
-  pay: "打款",
+const requestStepLabel: Record<string, string> = Object.fromEntries(
+  EXPENSE_REQUEST_STEP_VALUES.map((value) => [
+    value,
+    ExpenseRequestStepConfig[value].label,
+  ]),
+);
+
+const actionLabel: Record<string, string> = Object.fromEntries(
+  EXPENSE_APPROVAL_ACTION_VALUES.map((value) => [
+    value,
+    ExpenseApprovalActionConfig[value].label,
+  ]),
+);
+
+const approvalChainStatusMeta: Record<string, {
+  label: string;
+  variant: "success" | "warning" | "outline" | "danger";
+}> = {
+  approved: { label: "已通过", variant: "success" },
+  current: { label: "当前处理", variant: "warning" },
+  pending: { label: "待处理", variant: "outline" },
+  rejected: { label: "已驳回", variant: "danger" },
+  cancelled: { label: "已作废", variant: "outline" },
+  skipped: { label: "已跳过", variant: "outline" },
+};
+
+const expenseCategoryFallbackLabel: Record<string, string> = {
+  material: "材料费",
+  transport: "交通费",
+  labor: "人工费",
+  subcontract: "外包费",
+  meal: "餐饮费",
+  hospitality: "餐饮费",
+  travel: "差旅费",
+  tool: "工具设备",
+  office: "办公费用",
+  other: "其他费用",
 };
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
@@ -255,6 +291,33 @@ function formatDateTime(value: string | null | undefined) {
 function formatSettlementMethod(value: string | null | undefined) {
   if (!value) return "-";
   return settlementMethodLabel[value] || value;
+}
+
+function formatExpenseCategory(item: ExpenseItem) {
+  const category = item.category_name || item.category;
+  if (category?.trim()) {
+    return category;
+  }
+
+  const code = item.category_code?.trim() || "";
+  return code ? expenseCategoryFallbackLabel[code] || code : "-";
+}
+
+function formatApprovalAction(value: string | null | undefined) {
+  if (!value) return "审批记录";
+  return actionLabel[value] || value;
+}
+
+function formatApprovalStep(value: string | null | undefined) {
+  if (!value) return "审批节点";
+  return requestStepLabel[value] || value;
+}
+
+function getApprovalChainStatusMeta(value: string | null | undefined) {
+  return approvalChainStatusMeta[value || ""] || {
+    label: value || "未知状态",
+    variant: "outline" as const,
+  };
 }
 
 function getPayloadMessage(payload: unknown, fallback: string) {
@@ -468,7 +531,7 @@ function DetailDialog({
                   {(expense.items || []).length > 0 ? (
                     (expense.items || []).map((item) => (
                       <tr key={item.id} className="border-t">
-                        <td className="px-4 py-3">{item.category || item.category_code || "-"}</td>
+                        <td className="px-4 py-3">{formatExpenseCategory(item)}</td>
                         <td className="px-4 py-3">¥{formatMoney(item.amount)}</td>
                         <td className="px-4 py-3">{item.vendor_name || "-"}</td>
                         <td className="px-4 py-3">{formatDateTime(item.occurred_at)}</td>
@@ -490,22 +553,28 @@ function DetailDialog({
           <section>
             <h3 className="mb-3 text-sm font-semibold">审批链</h3>
             <div className="grid gap-2 md:grid-cols-2">
-              {(expense.approval_chain || []).map((node) => (
-                <div key={node.id} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{node.step_name || node.step}</div>
-                    <Badge variant={node.status === "approved" ? "success" : node.status === "current" ? "warning" : "outline"}>
-                      {node.status}
-                    </Badge>
+              {(expense.approval_chain || []).map((node) => {
+                const statusMeta = getApprovalChainStatusMeta(node.status);
+
+                return (
+                  <div key={node.id} className="rounded-md border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium">
+                        {node.step_name || formatApprovalStep(node.step)}
+                      </div>
+                      <Badge variant={statusMeta.variant}>
+                        {statusMeta.label}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {personName(node.assignee)} · {formatDateTime(node.acted_at)}
+                    </div>
+                    {node.comment ? (
+                      <div className="mt-2 text-sm text-muted-foreground">{node.comment}</div>
+                    ) : null}
                   </div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {personName(node.assignee)} · {formatDateTime(node.acted_at)}
-                  </div>
-                  {node.comment ? (
-                    <div className="mt-2 text-sm text-muted-foreground">{node.comment}</div>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
               {(expense.approval_chain || []).length === 0 ? (
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">
                   暂无审批链
@@ -520,7 +589,7 @@ function DetailDialog({
               emptyText="暂无审批记录"
               items={(expense.approvals || []).map((item) => ({
                 id: item.id,
-                title: `${actionLabel[item.action] || item.action} · ${personName(item.approver)}`,
+                title: `${formatApprovalAction(item.action)} · ${personName(item.approver)}`,
                 meta: formatDateTime(item.created_at),
                 description: item.comment || undefined,
               }))}
