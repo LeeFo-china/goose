@@ -86,17 +86,42 @@ type ActionMetadata = {
   referenced_images: AcceptanceImageItem[];
 };
 
+type AcceptanceDetailItem = ProjectAcceptanceItemRow & {
+  images: string[];
+  image_items: AcceptanceImageItem[];
+  rectification_images: string[];
+  rectification_image_items: AcceptanceImageItem[];
+};
+
+type AcceptanceDetailSection = {
+  id: string | null;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  items: AcceptanceDetailItem[];
+};
+
+type AcceptanceProgress = {
+  total: number;
+  checked: number;
+  passed: number;
+  failed: number;
+  not_applicable: number;
+  required_incomplete: number;
+};
+
 type AcceptanceDetail = ProjectAcceptanceRow & {
   stage_label: string | null;
   status_label: string;
   customer_status_label: string;
   has_customer_dispute: boolean;
-  items: Array<ProjectAcceptanceItemRow & {
-    images: string[];
-    image_items: AcceptanceImageItem[];
-    rectification_images: string[];
-    rectification_image_items: AcceptanceImageItem[];
-  }>;
+  sections: AcceptanceDetailSection[];
+  progress: AcceptanceProgress;
+  failed_count: number;
+  required_incomplete_count: number;
+  can_submit: boolean;
+  blocked_reason: string | null;
+  items: AcceptanceDetailItem[];
   actions: Array<ProjectAcceptanceActionRow & {
     operator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceCustomerRow | null;
     images: string[];
@@ -568,6 +593,149 @@ class ProjectAcceptanceService {
       PROJECT_LOG_STAGE_CONFIG[stageCode].label;
   }
 
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private getStringField(value: Record<string, unknown>, key: string) {
+    const field = value[key];
+    return typeof field === "string" ? field : null;
+  }
+
+  private getNumberField(value: Record<string, unknown>, key: string) {
+    const field = value[key];
+    return typeof field === "number" && Number.isFinite(field) ? field : 0;
+  }
+
+  private getSnapshotSections(row: ProjectAcceptanceRow) {
+    if (row.acceptance_type !== "final" || !this.isRecord(row.template_snapshot)) {
+      return [] as Array<Omit<AcceptanceDetailSection, "items">>;
+    }
+
+    const sections = row.template_snapshot.sections;
+    if (!Array.isArray(sections)) {
+      return [];
+    }
+
+    return sections
+      .filter((section): section is Record<string, unknown> =>
+        this.isRecord(section)
+      )
+      .map((section, index) => ({
+        id: this.getStringField(section, "id") ?? `snapshot-section-${index + 1}`,
+        title: this.getStringField(section, "title") ?? `分组 ${index + 1}`,
+        description: this.getStringField(section, "description"),
+        sort_order: this.getNumberField(section, "sort_order"),
+      }))
+      .sort((left, right) => left.sort_order - right.sort_order);
+  }
+
+  private buildAcceptanceSections(
+    row: ProjectAcceptanceRow,
+    items: AcceptanceDetailItem[],
+  ): AcceptanceDetailSection[] {
+    const sectionSnapshots = this.getSnapshotSections(row);
+    const sections = sectionSnapshots.map((section) => ({
+      ...section,
+      items: [] as AcceptanceDetailItem[],
+    }));
+    const sectionMap = new Map(sections.map((section) => [section.id, section]));
+    const fallbackItems: AcceptanceDetailItem[] = [];
+
+    for (const item of items) {
+      const sectionId = item.section_id || null;
+      if (sectionId && sectionMap.has(sectionId)) {
+        sectionMap.get(sectionId)?.items.push(item);
+      } else {
+        fallbackItems.push(item);
+      }
+    }
+
+    for (const section of sections) {
+      section.items.sort((left, right) =>
+        Number(left.sort_order || 0) - Number(right.sort_order || 0)
+      );
+    }
+
+    if (fallbackItems.length > 0) {
+      sections.push({
+        id: null,
+        title: row.acceptance_type === "final" ? "其他验收项" : "验收项",
+        description: null,
+        sort_order: Number.MAX_SAFE_INTEGER,
+        items: fallbackItems.sort((left, right) =>
+          Number(left.sort_order || 0) - Number(right.sort_order || 0)
+        ),
+      });
+    }
+
+    return sections.filter((section) => section.items.length > 0);
+  }
+
+  private buildAcceptanceProgress(
+    items: AcceptanceDetailItem[],
+  ): AcceptanceProgress {
+    return items.reduce<AcceptanceProgress>(
+      (progress, item) => {
+        progress.total += 1;
+        if (item.result) progress.checked += 1;
+        if (item.result === "pass") progress.passed += 1;
+        if (item.result === "fail") progress.failed += 1;
+        if (item.result === "not_applicable") progress.not_applicable += 1;
+        if (item.required && !item.result) progress.required_incomplete += 1;
+        return progress;
+      },
+      {
+        total: 0,
+        checked: 0,
+        passed: 0,
+        failed: 0,
+        not_applicable: 0,
+        required_incomplete: 0,
+      },
+    );
+  }
+
+  private getSubmitBlockReason(
+    row: ProjectAcceptanceRow,
+    items: AcceptanceDetailItem[],
+    progress: AcceptanceProgress,
+  ) {
+    if (row.status !== "draft" && row.status !== "rejected") {
+      return "当前状态不允许提交";
+    }
+
+    if (progress.required_incomplete > 0) {
+      return `还有 ${progress.required_incomplete} 个必填检查项未完成`;
+    }
+
+    for (const item of items) {
+      if (
+        item.result === "not_applicable" &&
+        (!item.allow_not_applicable || !item.remark?.trim())
+      ) {
+        return `验收项「${item.title}」不适用说明未完成`;
+      }
+
+      if (item.result === "fail" && item.remark_required_on_fail && !item.remark?.trim()) {
+        return `验收项「${item.title}」未通过时必须填写备注`;
+      }
+
+      if (
+        item.photo_required &&
+        item.images.length < Math.max(1, item.photo_min_count)
+      ) {
+        return `验收项「${item.title}」必须上传现场照片`;
+      }
+
+      if (item.images.length > item.photo_max_count) {
+        return `验收项「${item.title}」图片数量超过上限`;
+      }
+    }
+
+    return null;
+  }
+
   private buildDetailFromParts(
     row: ProjectAcceptanceRow,
     input: {
@@ -585,7 +753,7 @@ class ProjectAcceptanceService {
     const customerStatusLabel = row.status === "leader_approved" && hasCustomerDispute
       ? "整改完成，待你确认"
       : this.getStatusLabel(row.status);
-    const detailItems = input.items.map((item) => ({
+    const detailItems: AcceptanceDetailItem[] = input.items.map((item) => ({
       ...item,
       images: this.normalizeImageArray(item.images),
       image_items: this.normalizeAcceptanceImageItems({
@@ -604,6 +772,8 @@ class ProjectAcceptanceService {
         value: item.rectification_images,
       }),
     }));
+    const progress = this.buildAcceptanceProgress(detailItems);
+    const blockedReason = this.getSubmitBlockReason(row, detailItems, progress);
 
     return {
       ...row,
@@ -611,6 +781,12 @@ class ProjectAcceptanceService {
       status_label: this.getStatusLabel(row.status),
       customer_status_label: customerStatusLabel,
       has_customer_dispute: hasCustomerDispute,
+      sections: this.buildAcceptanceSections(row, detailItems),
+      progress,
+      failed_count: progress.failed,
+      required_incomplete_count: progress.required_incomplete,
+      can_submit: blockedReason === null,
+      blocked_reason: blockedReason,
       items: detailItems,
       actions: input.actions.map((item) => {
         const metadata = this.normalizeActionMetadata(item.metadata);
