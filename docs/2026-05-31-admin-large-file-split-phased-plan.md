@@ -434,6 +434,45 @@ pnpm --dir apps/admin test:e2e
 - 角色、权限、部门岗位这些关键业务字段展示不丢失。
 - 验收通过后提交，提交信息建议：`refactor: split admin organization permission modules`。
 
+### 执行记录
+
+2026-05-31：
+
+- 已拆分 `apps/admin/components/employees/employee-mutations.tsx`：
+  - 类型：`employee-types.ts`
+  - 员工表单弹窗：`employee-dialog.tsx`
+  - 员工角色配置弹窗：`employee-roles-dialog.tsx`
+  - 请求、状态选项、头像直传工具：`employee-mutation-shared.ts`
+- 已拆分 `apps/admin/components/organization/department-mutations.tsx`：
+  - 部门编辑弹窗：`department-dialog.tsx`
+  - 启用部门弹窗：`enable-departments-dialog.tsx`
+  - 部门请求与编码工具：`department-mutation-shared.ts`
+- 已拆分 `apps/admin/components/settings/settings-actions.tsx`：
+  - COS 文件访问策略编辑器：`settings-file-access-policy-editor.tsx`
+  - 设置请求与来源标签：`settings-mutation-shared.tsx`
+- 已拆分 `apps/admin/components/permissions/permission-mutations.tsx`：
+  - 类型：`permission-types.ts`
+  - 权限表单弹窗：`permission-dialog.tsx`
+  - 权限表单选项、schema 与请求：`permission-mutation-shared.tsx`
+- 已拆分 `apps/admin/components/employee-personalization/employee-personalization-client.tsx`：
+  - 规则编辑弹窗：`employee-personalization-rule-dialog.tsx`
+  - 请求与展示工具：`employee-personalization-shared.ts`
+
+### 验收记录
+
+2026-05-31：
+
+- `apps/admin/components/employees/employee-mutations.tsx`：135 行。
+- `apps/admin/components/organization/department-mutations.tsx`：141 行。
+- `apps/admin/components/settings/settings-actions.tsx`：287 行。
+- `apps/admin/components/permissions/permission-mutations.tsx`：119 行。
+- `apps/admin/components/employee-personalization/employee-personalization-client.tsx`：179 行。
+- 阶段 5 目标文件已从 `>500` 行门禁输出中消失。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+
 ## 阶段 6：全局门禁与最终验收
 
 ### 范围
