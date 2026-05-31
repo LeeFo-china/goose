@@ -495,7 +495,7 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 ```json
 {
   "scripts": {
-    "admin:check-file-size": "..."
+    "admin:check-file-size": "pnpm --dir apps/admin check:file-size"
   }
 }
 ```
@@ -524,6 +524,27 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin test:e2e` 通过，或对暂无自动化覆盖的页面记录手动验收结果。
 - 工作区只包含本任务相关改动。
 - 最终提交后，本文档更新完整执行记录。
+
+### 执行记录
+
+2026-05-31：
+
+- 新增 admin 行数门禁脚本：`apps/admin/scripts/check-file-size.mjs`。
+- 新增 admin 包脚本：`check:file-size`。
+- 新增根脚本：`admin:check-file-size`。
+- 脚本按 `wc -l` 口径统计换行数，排除 `.next`、`dist`、`node_modules`，检查 `.ts` / `.tsx` 文件是否超过 500 行。
+
+### 验收记录
+
+2026-05-31：
+
+- `pnpm admin:check-file-size` 通过，输出 `admin file size check passed: 311 TS/TSX files <= 500 lines`。
+- 最终 `wc -l` 行数门禁无输出。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin exec tsc -p tsconfig.json --noEmit` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，现有用例 `admin smoke › 租户管理员可访问组织架构并打开配置岗位弹窗` 通过。
+- 阶段 1 到阶段 6 已全部按阶段执行、验收并提交。
 
 ## 执行顺序与提交策略
 
