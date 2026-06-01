@@ -1064,3 +1064,57 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/files/platform-file-storage/legacy-service.ts`、`apps/api/src/scripts/storage-migration-dry-run/legacy-script.ts`、`apps/api/src/scripts/storage-migration-upload/legacy-script.ts`、`apps/api/src/scripts/storage-migration-final-verify/legacy-script.ts` 仍为大文件；本阶段仅完成入口瘦身，未完成迁移共享 helper 的实质抽取。
 - 后续治理应把 dry-run、upload、verify 共享的 CSV、报告输出、COS URL 解析、对象校验能力提取到 `services/files` 下的迁移 helper，减少脚本间复制。
+
+## 阶段 9 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `chore: enforce api file size governance`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| - | - | `scripts/check-api-file-size.ts` |
+| - | - | `package.json` |
+| - | - | `apps/api/package.json` |
+| - | - | `docs/2026-06-01-api-large-file-governance-phased-plan.md` |
+
+### 结构变化
+
+- 新增 `scripts/check-api-file-size.ts`，默认扫描 `apps/api` 下 `.ts/.tsx/.js/.jsx/.mjs/.cjs` 文件，排除 `node_modules`、`dist`、`build`、`coverage`。
+- 根 `package.json` 新增 `api:check-file-size`，API 包 `apps/api/package.json` 新增 `check:file-size`。
+- 检查脚本使用 500 行阈值，未记录豁免的文件 `>= 500` 行时直接失败。
+- 生成文件和历史治理阶段产生的 legacy/gateway 文件作为显式豁免记录在 `scripts/check-api-file-size.ts` 的 `EXEMPTIONS` 中。
+
+### 豁免记录
+
+| 类型 | 文件数 | 理由 |
+| --- | ---: | --- |
+| 生成类型 | 1 | `apps/api/src/types/database.ts` 由 Supabase 生成，不纳入手写业务拆分 |
+| legacy service/controller/plugin/script/repository | 40 | 前序阶段为保持行为不变迁出的兼容实现，已在各阶段风险和遗留中记录后续实拆方向 |
+| gateway | 1 | `apps/api/src/gateways/tencent-iot-video.ts` 已从 service 层隔离为第三方 gateway，后续可按签名、设备、通道、播放地址继续拆分 |
+
+`scripts/check-api-file-size.ts` 中逐一列出 42 个豁免文件及理由；新增大文件必须加入治理计划或拆分后才能通过 `api:check-file-size`。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 42 个显式豁免，0 个未记录超阈值文件 |
+| 最终行数扫描 | 通过 | 输出 41 个非生成超阈值文件，均已在 `api:check-file-size` 豁免清单中记录 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 文件行数门禁 | 通过 | 新增未记录大文件会使 `api:check-file-size` 失败 |
+| 全阶段执行记录 | 通过 | 阶段 0 到阶段 9 均已追加执行记录、测试记录、smoke 摘要和风险遗留 |
+| 真实业务接口 smoke | 未执行 | 当前环境没有统一测试 token/租户数据；各阶段均以编译级 smoke 和专项脚本 smoke 作为本地验收 |
+
+### 风险和遗留
+
+- 当前治理把原大文件迁为显式 legacy 豁免，解决入口边界和新增门禁问题，但未完成所有 legacy 内部实质拆分。
+- 后续新增代码必须先通过 `bun run api:check-file-size`；若确需超过 500 行，必须在治理文档中新增豁免理由和后续拆分计划。

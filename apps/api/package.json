@@ -24,6 +24,7 @@
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:file-size": "bun ../../scripts/check-api-file-size.ts",
     "gen": "supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > src/types/database.ts"
   },
   "dependencies": {
