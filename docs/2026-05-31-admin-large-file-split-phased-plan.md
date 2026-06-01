@@ -573,6 +573,68 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `apps/admin/components/projects/project-acceptance-utils.ts`：370 行。
 - 最终 `>500` 行门禁无输出。
 
+## 2026-06-01 后续收口执行记录
+
+本轮按“请求封装收口、临界文件预拆、E2E 覆盖补齐、最终验收”四阶段继续执行。
+
+### 阶段 1：请求封装收口
+
+范围：
+
+- `apps/admin/components/ops/*`
+- `apps/admin/components/platform-leads/platform-lead-mutations.tsx`
+- `apps/admin/components/platform-tenants/platform-tenant-mutations.tsx`
+
+处理：
+
+- 将 ops 发布、脚本执行、系统指标、微服务健康请求迁移到 `requestBackendJson`。
+- 将平台线索、平台租户 mutation 的本地 `fetch + response.json + payload.success` helper 迁移到 `requestBackendJson`。
+- 保留 auth/login 相关 route 与登录表单请求，不纳入本轮业务请求封装收口。
+
+提交：
+
+- `c6ceda9 refactor: centralize admin ops platform requests`
+
+### 阶段 2：H5 预览临界文件预拆
+
+范围：
+
+- `apps/admin/components/marketing/h5-page-editor-preview.tsx`
+
+处理：
+
+- 提取案例图片浏览组件到 `h5-page-case-image-carousel-preview.tsx`。
+- 保留 `CaseImageCarouselPreview` 从原文件 re-export，避免现有引用大范围改动。
+
+结果：
+
+- `h5-page-editor-preview.tsx`：481 行降到 285 行。
+- `h5-page-case-image-carousel-preview.tsx`：212 行。
+
+提交：
+
+- `66d7082 refactor: split h5 page image preview`
+
+### 阶段 3：关键 E2E 覆盖补齐
+
+新增 smoke：
+
+- 项目详情弹窗可切到“工序验收”页签。
+- 摄像头页基础统计与“设备接入”区域可渲染。
+
+提交：
+
+- `14193e4 test: cover project acceptance and cameras smoke`
+
+### 验收记录
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，当前 9 条 smoke 全部通过。
+- `>500` 行门禁无输出。
+- E2E 中仍偶发 Next dev `__webpack_modules__[moduleId] is not a function` 日志，但用例退出码为 0。该问题表现为 Next dev server/cache 噪音，未阻塞本轮提交；如需彻底清理，应单独阶段排查 `.next-e2e` 与 dev server 并发缓存。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
