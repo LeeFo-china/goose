@@ -1276,3 +1276,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把模板、通知、客户访问、状态流转分别收敛为显式 context 或子 service。
 - `decoration-qa/legacy-service.ts`、`expense-requests/legacy-service.ts`、`system-settings/legacy-service.ts`、`billing/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 4 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split decoration qa legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2144 | 8 | `apps/api/src/services/decoration-qa/legacy-service.ts` |
+| - | 368 | `apps/api/src/services/decoration-qa/legacy/ai-runtime.ts` |
+| - | 493 | `apps/api/src/services/decoration-qa/legacy/chat.ts` |
+| - | 84 | `apps/api/src/services/decoration-qa/legacy/identity.ts` |
+| - | 216 | `apps/api/src/services/decoration-qa/legacy/project-context.ts` |
+| - | 203 | `apps/api/src/services/decoration-qa/legacy/project-format.ts` |
+| - | 409 | `apps/api/src/services/decoration-qa/legacy/shared.ts` |
+| - | 322 | `apps/api/src/services/decoration-qa/legacy/suggestions.ts` |
+| - | 186 | `apps/api/src/services/decoration-qa/legacy/usage.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为公开 API 聚合入口，只 re-export 推荐问题、普通问答、流式问答、流式事件序列化和系统 prompt 方法。
+- AI 运行时配置、OpenAI/DeepSeek/OpenRouter 消息构造、问答解析、token 统计拆入 `ai-runtime.ts`。
+- 客户/员工/访客 usage 归因拆入 `identity.ts` 和 `usage.ts`。
+- 客户项目上下文查询、施工阶段上下文归一化、prompt 格式化拆入 `project-context.ts` 和 `project-format.ts`。
+- 推荐问题缓存、AI 生成和 fallback 逻辑拆入 `suggestions.ts`；普通问答和流式问答拆入 `chat.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/decoration-qa/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 39 个减少到 38 个，`decoration-qa/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `decoration-qa/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖推荐问题、客户项目上下文、普通问答、流式问答和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实 AI 接口 smoke | 未执行 | 当前阶段仅做结构拆分；未消耗真实模型额度，也未调用微信/租户项目测试数据 |
+
+### 风险和遗留
+
+- 拆分后 public API 保持原导出名称；内部模块仍共享 `shared.ts` 中的类型、prompt 常量和 cache map，后续可继续把 AI provider runtime 与业务 prompt 进一步分离。
+- `expense-requests/legacy-service.ts`、`system-settings/legacy-service.ts`、`billing/legacy-service.ts`、`projects/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
