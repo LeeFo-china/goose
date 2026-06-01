@@ -1209,6 +1209,126 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 
+## 2026-06-01 第六轮临界文件拆分记录
+
+本轮按“客服工单详情、平台设备页、客户设计前状态弹窗、腾讯设备动作”四阶段执行。
+
+### 阶段 1：客服工单详情弹窗拆分
+
+范围：
+
+- `apps/admin/components/customer-service/customer-service-detail-dialog.tsx`
+
+处理：
+
+- 提取工单摘要、基础信息、图片列表、负责人/处理动作和处理记录到 `customer-service-detail-sections.tsx`。
+- 原弹窗保留详情加载、分配负责人、执行动作和刷新回调。
+
+结果：
+
+- `customer-service-detail-dialog.tsx`：404 行降到 203 行。
+- `customer-service-detail-sections.tsx`：284 行。
+
+提交：
+
+- `c9f1680 refactor: split customer service detail sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 2：平台设备页拆分
+
+范围：
+
+- `apps/admin/app/(console)/platform/devices/page.tsx`
+
+处理：
+
+- 提取查询参数解析、后端数据读取和本页汇总计算到 `page-data.ts`。
+- 提取设备页标题、汇总卡、Tab、筛选、列表和分页组合到 `page-sections.tsx`。
+- 页面入口保留权限判断和数据组合。
+
+结果：
+
+- `page.tsx`：397 行降到 60 行。
+- `page-data.ts`：170 行。
+- `page-sections.tsx`：233 行。
+
+提交：
+
+- `c562006 refactor: split platform devices page`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 摄像头资产页 smoke 通过。
+
+### 阶段 3：客户设计前状态弹窗字段拆分
+
+范围：
+
+- `apps/admin/components/customers/design-project-before-status-dialog.tsx`
+
+处理：
+
+- 提取关联客户/主房产摘要、主房产信息区和项目字段到 `design-project-before-status-fields.tsx`。
+- 原弹窗保留主房产确保逻辑、项目创建、成员同步和状态推进回调。
+
+结果：
+
+- `design-project-before-status-dialog.tsx`：396 行降到 279 行。
+- `design-project-before-status-fields.tsx`：256 行。
+
+提交：
+
+- `aa4cc24 refactor: split design project before status fields`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 4：腾讯设备 SIP 信息弹窗拆分
+
+范围：
+
+- `apps/admin/components/cameras/tencent-device-actions.tsx`
+
+处理：
+
+- 提取 SIP 接入信息、认证密码展示和复制字段到 `tencent-device-secret-dialog.tsx`。
+- 原动作组件保留新增设备、查密码、重置密码的状态和请求逻辑。
+
+结果：
+
+- `tencent-device-actions.tsx`：393 行降到 306 行。
+- `tencent-device-secret-dialog.tsx`：105 行。
+
+提交：
+
+- `56fc265 refactor: split tencent device secret dialog`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 摄像头资产页 smoke 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
