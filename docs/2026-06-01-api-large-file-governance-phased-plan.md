@@ -1432,3 +1432,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 设置定义仍集中在多个静态数组文件中，属于低风险结构拆分；后续如配置继续增长，可按业务域迁移为 registry 目录。
 - `billing/legacy-service.ts`、`projects/legacy-service.ts`、`marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 7 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split billing legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1401 | 99 | `apps/api/src/services/billing/legacy-service.ts` |
+| - | 247 | `apps/api/src/services/billing/legacy/ai-usage.ts` |
+| - | 99 | `apps/api/src/services/billing/legacy/pricing.ts` |
+| - | 324 | `apps/api/src/services/billing/legacy/runtime-charges.ts` |
+| - | 402 | `apps/api/src/services/billing/legacy/shadow-events.ts` |
+| - | 193 | `apps/api/src/services/billing/legacy/shadow.ts` |
+| - | 137 | `apps/api/src/services/billing/legacy/shared.ts` |
+| - | 251 | `apps/api/src/services/billing/legacy/tenant-platform.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定和 `billingService` 导出。
+- 租户账户、平台汇总、租户列表、人工充值、平台流水和事件查询拆入 `tenant-platform.ts`。
+- AI 用量统计和筛选项拆入 `ai-usage.ts`。
+- 短信预扣校验、短信计费落账、社媒视频冻结/结算/解冻拆入 `runtime-charges.ts`。
+- shadow billing 调度拆入 `shadow.ts`，shadow 事件构建、计费估算和定价规则匹配拆入 `shadow-events.ts`。
+- 定价规则 CRUD、租户校验和审计日志拆入 `pricing.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/billing/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 36 个减少到 35 个，`billing/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `billing/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖账户查询、充值、计费事件、AI 用量统计、短信/视频扣费、shadow billing、定价规则和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实计费写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对租户账户、冻结、扣费、充值或定价规则执行真实写入 |
+
+### 风险和遗留
+
+- 拆分后仍通过 service 实例 `this` 复用定价和估算 helper，属于行为保持型结构拆分；后续可以把运行时扣费和 shadow billing 抽为显式子 service。
+- `projects/legacy-service.ts`、`marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
