@@ -742,6 +742,127 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin test:e2e` 连续两轮通过，均为 9 条 smoke 通过。
 - 两轮正式 E2E 未再出现 `__webpack_modules__[moduleId] is not a function`。
 
+## 2026-06-01 第二轮临界文件拆分记录
+
+本轮按“营销 H5 编辑器、用量列表动作、项目验收派生状态、角色权限弹窗”四阶段继续拆分。
+
+### 阶段 1：营销 H5 编辑器状态拆分
+
+范围：
+
+- `apps/admin/components/marketing/h5-page-editor.tsx`
+
+处理：
+
+- 提取编辑器配置状态、模块增删改移、AI 回填、保存草稿、发布逻辑到 `h5-page-editor-state.ts`。
+- 原组件保留模块库、手机预览、属性面板和 AI 弹窗渲染。
+
+结果：
+
+- `h5-page-editor.tsx`：453 行降到 254 行。
+- `h5-page-editor-state.ts`：274 行。
+
+提交：
+
+- `7b61fb7 refactor: split h5 page editor state`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- H5 活动页新建弹窗 smoke 通过。
+
+### 阶段 2：用量列表导航与分页拆分
+
+范围：
+
+- `apps/admin/components/usage/usage-list-actions.tsx`
+
+处理：
+
+- 提取用量 tab 类型、状态选项、URL 构建到 `usage-list-navigation.ts`。
+- 提取分页组件到 `usage-pagination.tsx`。
+- `usage-list-actions.tsx` 保留 tab 切换和筛选表单，并继续 re-export 原入口，避免调用方改动。
+
+结果：
+
+- `usage-list-actions.tsx`：451 行降到 305 行。
+- `usage-list-navigation.ts`：69 行。
+- `usage-pagination.tsx`：94 行。
+
+提交：
+
+- `d9bdefe refactor: split usage list navigation`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 3：项目验收派生状态拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptances-panel-state.ts`
+
+处理：
+
+- 提取当前验收单、工序占用、可发起状态、竣工验收阻塞原因等纯派生逻辑到 `project-acceptances-panel-derived.ts`。
+- 主 hook 保留异步加载、动作请求、弹窗状态和图片上传。
+
+结果：
+
+- `project-acceptances-panel-state.ts`：442 行降到 390 行。
+- `project-acceptances-panel-derived.ts`：85 行。
+
+提交：
+
+- `caa1bf7 refactor: split project acceptances derived state`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情“工序验收” smoke 通过。
+
+### 阶段 4：角色权限弹窗拆分
+
+范围：
+
+- `apps/admin/components/roles/role-mutations.tsx`
+
+处理：
+
+- 提取角色权限配置弹窗到 `role-permissions-dialog.tsx`。
+- 原文件保留新增角色、编辑角色和行操作入口。
+
+结果：
+
+- `role-mutations.tsx`：436 行降到 230 行。
+- `role-permissions-dialog.tsx`：230 行。
+
+提交：
+
+- `b696b15 refactor: split role permissions dialog`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 角色权限配置弹窗 smoke 通过。
+
+### 最终验收
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，9 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
