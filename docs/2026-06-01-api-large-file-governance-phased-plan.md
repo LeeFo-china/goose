@@ -1586,3 +1586,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `marketingPageRepository` 外观和 Supabase 表 helper，调用方导入路径不变；拆分后的模块仍通过 repository 实例 `this` 共享表访问与范围过滤 helper，属于行为保持型结构拆分。
 - `marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`permissions/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 10 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split marketing pages legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1185 | 97 | `apps/api/src/services/marketing-pages/legacy-service.ts` |
+| - | 223 | `apps/api/src/services/marketing-pages/legacy/admin-list.ts` |
+| - | 364 | `apps/api/src/services/marketing-pages/legacy/drafts.ts` |
+| - | 160 | `apps/api/src/services/marketing-pages/legacy/leads-events.ts` |
+| - | 233 | `apps/api/src/services/marketing-pages/legacy/pages.ts` |
+| - | 165 | `apps/api/src/services/marketing-pages/legacy/public-h5.ts` |
+| - | 235 | `apps/api/src/services/marketing-pages/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定和 `marketingPageService` 导出。
+- 共享配置、复制标题/slug、H5 base URL、手机号尾号、24 小时防重窗口、排序步长、关系归一化、图片 URL 解析和项目选项序列化拆入 `shared.ts`。
+- 后台/平台列表、公开入口列表、项目案例选项、有效页排序和重排逻辑拆入 `admin-list.ts`。
+- 页面详情、创建、更新、归档、下线、存在性校验和 slug 唯一性校验拆入 `pages.ts`。
+- 草稿获取/保存、发布、复制、版本号和草稿版本创建逻辑拆入 `drafts.ts`。
+- 公开 H5 页面按 slug 解析、H5 session 创建、营销 token 身份解析和展示窗口判断拆入 `public-h5.ts`。
+- 公开提交线索、埋点、线索列表、线索跟进和线索转客户拆入 `leads-events.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/marketing-pages/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 33 个减少到 32 个，`marketing-pages/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `marketing-pages/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖租户/平台营销页管理、草稿发布、复制下线、公开 H5、session、线索和埋点入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实营销页写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对页面、版本、线索、客户或埋点执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `marketingPageService` 外观，controller 和 wechat 登录链路导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用私有 helper，属于行为保持型结构拆分。
+- `project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`permissions/legacy-repository.ts`、`social-video-transcriptions/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
