@@ -873,3 +873,48 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/expense-requests/legacy-service.ts`、`apps/api/src/services/billing/legacy-service.ts`、`apps/api/src/services/sms/legacy-service.ts`、`apps/api/src/services/usage/legacy-service.ts`、`apps/api/src/services/task-center/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按申请创建、审批流、余额流水、短信渠道、用量聚合、待办聚合的实质拆分。
 - 后续治理应优先拆 `billing/legacy-service.ts` 的余额校验、流水写入、冻结结算和定价规则，降低短信、社媒视频转写等调用方对单体 billing 的耦合。
+
+## 阶段 5 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split marketing ai release service facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2144 | 8 | `apps/api/src/services/decoration-qa.ts` |
+| 1185 | 1 | `apps/api/src/services/marketing-pages.ts` |
+| 1166 | 1 | `apps/api/src/services/release-deployments.ts` |
+| 1100 | 1 | `apps/api/src/services/social-video-transcriptions.ts` |
+| 897 | 1 | `apps/api/src/services/social-video-scripts.ts` |
+| 727 | 5 | `apps/api/src/services/marketing-page-ai.ts` |
+
+### 结构变化
+
+- 6 个目标 service 入口均改为薄 facade，继续导出原有 service 实例或函数，保持调用方 import path 不变。
+- 原装修问答、营销页、发布部署、社媒视频转写、社媒视频脚本、营销页 AI 实现分别迁入对应 `legacy-service.ts` 目录，作为后续按 AI gateway、prompt、调用日志、发布状态、视频 worker 和扣费边界继续细拆的兼容实现。
+- 本阶段未修改 controller 调用、worker 调用、API path、payload、返回结构、AI prompt 输入、模型选择和扣费用量路径。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 6 个目标入口文件均 `<= 500` 行 |
+| 导出引用扫描 | 通过 | 原调用方继续从 `@/services/decoration-qa`、`@/services/marketing-pages`、`@/services/release-deployments`、`@/services/social-video-transcriptions`、`@/services/social-video-scripts`、`@/services/marketing-page-ai` 导入 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 facade 导入、类型转发和 bundle |
+| 装修问答、营销页、社媒视频、发布部署真实接口 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对 AI 调用、视频转写提交、发布部署创建或回滚路径发请求 |
+| 发布部署破坏性 smoke | 未执行 | 本阶段不触发生产发布、回滚或外部工作流 dispatch |
+
+### 风险和遗留
+
+- `apps/api/src/services/decoration-qa/legacy-service.ts`、`apps/api/src/services/marketing-pages/legacy-service.ts`、`apps/api/src/services/release-deployments/legacy-service.ts`、`apps/api/src/services/social-video-transcriptions/legacy-service.ts`、`apps/api/src/services/social-video-scripts/legacy-service.ts`、`apps/api/src/services/marketing-page-ai/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按 AI gateway、prompt 构造、扣费、发布状态、worker 编排的实质拆分。
+- 后续治理应优先拆 `social-video-transcriptions/legacy-service.ts` 的任务状态机、Apify/ASR gateway、扣费冻结结算和 worker 编排，降低社媒视频链路回归风险。
