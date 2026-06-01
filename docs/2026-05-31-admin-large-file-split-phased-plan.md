@@ -970,6 +970,125 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 
+## 2026-06-01 第四轮临界文件拆分记录
+
+本轮按“平台身份诊断、组织岗位弹窗、平台用量页、项目验收时间线”四阶段执行。
+
+### 阶段 1：平台身份诊断结果拆分
+
+范围：
+
+- `apps/admin/components/platform-identity-diagnostics/identity-diagnostics-result.tsx`
+
+处理：
+
+- 提取诊断状态、租户摘要、主体身份、检查项列表、租户映射、修复结果等展示段到 `identity-diagnostics-result-sections.tsx`。
+- 原结果组件保留数据状态判断和整体布局。
+
+结果：
+
+- `identity-diagnostics-result.tsx`：426 行降到 77 行。
+- `identity-diagnostics-result-sections.tsx`：367 行。
+
+提交：
+
+- `921fa8c refactor: split identity diagnostics result sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 2：组织岗位新增弹窗拆分
+
+范围：
+
+- `apps/admin/components/organization/post-mutations.tsx`
+
+处理：
+
+- 提取岗位新增/编辑弹窗表单、字段映射和默认值到 `post-dialog.tsx`。
+- 原 mutations 文件保留触发按钮、状态和 API 提交流程。
+
+结果：
+
+- `post-mutations.tsx`：415 行降到 106 行。
+- `post-dialog.tsx`：322 行。
+
+提交：
+
+- `65cfb45 refactor: split organization post dialog`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 组织架构 smoke 通过。
+
+### 阶段 3：平台用量页数据逻辑拆分
+
+范围：
+
+- `apps/admin/app/(console)/platform/usage/page.tsx`
+
+处理：
+
+- 提取 searchParams 解析、默认日期、查询参数构建、后端 fetch、空数据兜底和分页摘要到 `page-data.ts`。
+- 页面文件保留 session 判断、数据组合和 UI 渲染。
+
+结果：
+
+- `page.tsx`：445 行降到 284 行。
+- `page-data.ts`：150 行。
+
+提交：
+
+- `55e7ecf refactor: split platform usage page data`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 平台用量页访问提示 smoke 通过。
+
+### 阶段 4：项目验收时间线拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptance-timeline.tsx`
+
+处理：
+
+- 提取整改回复、整改摘要、动作图片画廊、客户补充图片到 `project-acceptance-timeline-sections.tsx`。
+- 时间线主文件保留流程排序、最新记录、驳回整改显示条件和动作卡片编排。
+
+结果：
+
+- `project-acceptance-timeline.tsx`：412 行降到 141 行。
+- `project-acceptance-timeline-sections.tsx`：292 行。
+
+提交：
+
+- `aa1364b refactor: split project acceptance timeline sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情工序验收页签 smoke 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 首轮出现一次登录接口瞬时失败；重跑失败用例通过，随后完整重跑 12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
