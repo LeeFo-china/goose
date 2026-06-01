@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CameraDeviceChannel, CameraProjectOption, CameraRecord, TenantDeviceAsset } from "@/components/cameras/camera-types";
 import type { PlayParams, PreviewSource } from "@/components/cameras/camera-mutation-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export const CAMERA_CAPABILITY_VALUES = [
   "live",
@@ -62,29 +63,15 @@ export const playProtocolOptions = [
   ["hls", "HLS"],
 ] as const;
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
-export async function requestCamera(input: {
+export async function requestCamera<T = any>(input: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data;
 }
 
 export function getVendorLabel(vendor: string) {

@@ -17,27 +17,11 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { SwitchSelect } from "@/components/billing/switch-select";
 import type { BillingPricingRule, BillingTenant } from "@/components/billing/billing-types";
+import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 async function requestJson<T>(path: string, init?: RequestInit) {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({})) as {
-    success?: boolean;
-    data?: T;
-    message?: string;
-  };
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.message || "请求失败");
-  }
-
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }
 
 function buildIdempotencyKey(tenantId: string) {

@@ -4,26 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
+import { requestBackendJson } from "@/lib/backend-client";
 
 async function requestBackend(path: string, payload: unknown) {
-  const response = await fetch(`/api/backend${path}`, {
+  await requestBackendJson(path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "纳入设备资产失败"));
-  }
 }
 
 export function ImportTenantDeviceButton({

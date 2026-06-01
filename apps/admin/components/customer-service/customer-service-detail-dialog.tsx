@@ -28,12 +28,7 @@ import type {
   CustomerServiceTicketAction,
   EmployeeOption,
 } from "@/components/customer-service/customer-service-types";
-
-type BackendPayload<T> = {
-  success?: boolean;
-  data?: T;
-  message?: string;
-};
+import { requestBackendJson } from "@/lib/backend-client";
 
 const statusVariant: Record<string, "default" | "secondary" | "outline" | "success" | "warning" | "danger"> = {
   open: "warning",
@@ -43,22 +38,8 @@ const statusVariant: Record<string, "default" | "secondary" | "outline" | "succe
   cancelled: "danger",
 };
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestBackend<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`/api/backend${path}`, init);
-  const payload = await response.json().catch(() => ({})) as BackendPayload<T>;
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "请求失败"));
-  }
-
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }
 
 function formatDateTime(value: string | null | undefined) {

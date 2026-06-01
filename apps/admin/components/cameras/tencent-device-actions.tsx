@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { TencentSipServerConfig } from "@/components/cameras/camera-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 type TencentDeviceSecretResult = {
   device_id?: string | null;
@@ -48,29 +49,15 @@ type TencentPasswordResult = TencentDeviceSecretResult & {
   status?: string | null;
 };
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestBackend<T>(input: {
   path: string;
   method?: "GET" | "POST";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data as T;
 }
 
 function SecretItem({

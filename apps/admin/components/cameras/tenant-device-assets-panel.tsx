@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 const statusMeta: Record<string, {
@@ -53,23 +54,8 @@ const statusMeta: Record<string, {
   unknown: { label: "未知", variant: "secondary" },
 };
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestBackend<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`/api/backend${path}`, init);
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }
 
 function vendorLabel(vendor: string) {
