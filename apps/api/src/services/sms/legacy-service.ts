@@ -4,6 +4,7 @@ import { Config } from "@alicloud/openapi-client";
 import Credential, { Config as CredentialConfig } from "@alicloud/credentials";
 import { RuntimeOptions } from "@alicloud/tea-util";
 import { smsSendLogRepository } from "@/repositories/sms-send-logs";
+import { Errors } from "@/errors/error-factory";
 import { billingService } from "@/services/billing";
 import { systemSettingsService } from "@/services/system-settings";
 import type { SmsScene } from "@gooes/domain";
@@ -131,10 +132,12 @@ async function requireSmsConfig(channel: SmsChannel, key: string) {
   const value = await readSmsConfig(channel, key);
 
   if (!value) {
-    throw new Error(
+    throw Errors.business(
+      503,
       channel.strictTenantConfig
         ? `租户短信配置不完整: ${key}`
         : `缺少短信配置: ${key}`,
+      "SMS_CONFIG_MISSING",
     );
   }
 
@@ -204,8 +207,10 @@ async function sendAliyunSms(input: {
     const responseCode = response.body?.code;
 
     if (responseCode !== "OK") {
-      throw new Error(
+      throw Errors.business(
+        503,
         `阿里云短信发送失败: ${responseCode || "UNKNOWN"} ${response.body?.message || "未知错误"}`,
+        "ALIYUN_SMS_SEND_FAILED",
       );
     }
 
@@ -222,7 +227,11 @@ async function sendAliyunSms(input: {
 
     const recommend = err.data?.Recommend;
     if (recommend) {
-      throw new Error(`${err.message || "阿里云短信发送异常"}，诊断信息：${recommend}`);
+      throw Errors.business(
+        503,
+        `${err.message || "阿里云短信发送异常"}，诊断信息：${recommend}`,
+        "ALIYUN_SMS_SEND_FAILED",
+      );
     }
 
     throw error;
@@ -459,7 +468,11 @@ async function sendTencentSms(input: {
   if (!response.ok || apiError || sendStatus?.Code !== "Ok") {
     const code = apiError?.Code || sendStatus?.Code || "UNKNOWN";
     const message = apiError?.Message || sendStatus?.Message || "未知错误";
-    throw new Error(`腾讯云短信发送失败: ${code} ${message}`);
+    throw Errors.business(
+      503,
+      `腾讯云短信发送失败: ${code} ${message}`,
+      "TENCENT_SMS_SEND_FAILED",
+    );
   }
 
   return {
@@ -494,7 +507,7 @@ async function sendByChannel(input: {
         smsCount: 0,
       });
       logged = true;
-      throw new Error("短信服务未启用");
+      throw Errors.business(503, "短信服务未启用", "SMS_DISABLED");
     }
 
     if (input.channel.provider === "mock") {

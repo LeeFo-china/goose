@@ -918,3 +918,53 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/decoration-qa/legacy-service.ts`、`apps/api/src/services/marketing-pages/legacy-service.ts`、`apps/api/src/services/release-deployments/legacy-service.ts`、`apps/api/src/services/social-video-transcriptions/legacy-service.ts`、`apps/api/src/services/social-video-scripts/legacy-service.ts`、`apps/api/src/services/marketing-page-ai/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按 AI gateway、prompt 构造、扣费、发布状态、worker 编排的实质拆分。
 - 后续治理应优先拆 `social-video-transcriptions/legacy-service.ts` 的任务状态机、Apify/ASR gateway、扣费冻结结算和 worker 编排，降低社媒视频链路回归风险。
+
+## 阶段 6 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split auth tenant customer service facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1554 | 1 | `apps/api/src/services/system-settings.ts` |
+| 1058 | 4 | `apps/api/src/services/employee-project-detail-bootstrap.ts` |
+| 649 | 5 | `apps/api/src/services/wechat-customer-identities.ts` |
+| 615 | 1 | `apps/api/src/services/wechat-rebind-requests.ts` |
+| 603 | 1 | `apps/api/src/services/customer-service-tickets.ts` |
+| 593 | 1 | `apps/api/src/plugins/auth.ts` |
+| 561 | 5 | `apps/api/src/services/customer-core.ts` |
+| 535 | 6 | `apps/api/src/services/authorization.ts` |
+
+### 结构变化
+
+- 8 个目标入口均改为薄 facade，继续导出原有 service 实例、默认插件、命名函数和类型，保持调用方 import path 不变。
+- 原系统设置、员工项目详情 bootstrap、微信客户身份、重绑申请、客服工单、auth plugin、客户核心、授权上下文实现分别迁入对应 `legacy-service.ts` 或 `legacy-plugin.ts`，作为后续按租户设置、公开/敏感配置、身份绑定、权限上下文继续细拆的兼容实现。
+- 为满足阶段 6 全局静态门禁，顺手将 `apps/api/src/services/sms/legacy-service.ts` 中既有的直接 `throw new Error()` 改为 `Errors.business(...)` 包装；未修改短信发送 API、provider 调用参数或日志字段。
+- 本阶段未修改 controller 调用、auth 上下文字段、tenant 上下文字段、权限响应语义、API path、payload、返回结构和中文错误文案。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 8 个目标入口文件均 `<= 500` 行 |
+| `rg 'tenant_id|tenantId' apps/api/src/services apps/api/src/repositories --count` | 通过 | 112 个文件存在租户字段引用，作为租户隔离关注面记录 |
+| `rg 'throw new Error\(' apps/api/src/plugins apps/api/src/services` | 通过 | 无输出 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 facade 导入、默认插件导出、类型转发和 bundle |
+| 管理员、员工、客户自助服务登录态真实接口 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对登录态链路发请求 |
+| 租户隔离和微信身份绑定真实接口 smoke | 未执行 | 当前环境没有成对租户测试数据；未对跨租户访问、绑定、解绑、重绑写路径发请求 |
+| 系统设置和客服工单真实接口 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对设置更新和工单状态写路径发请求 |
+
+### 风险和遗留
+
+- `apps/api/src/services/system-settings/legacy-service.ts`、`apps/api/src/services/employee-project-detail-bootstrap/legacy-service.ts`、`apps/api/src/services/wechat-customer-identities/legacy-service.ts`、`apps/api/src/services/wechat-rebind-requests/legacy-service.ts`、`apps/api/src/services/customer-service-tickets/legacy-service.ts`、`apps/api/src/plugins/auth/legacy-plugin.ts`、`apps/api/src/services/customer-core/legacy-service.ts`、`apps/api/src/services/authorization/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按权限上下文、租户设置、身份绑定、客户隐私字段的实质拆分。
+- 后续治理应优先拆 `authorization/legacy-service.ts` 和 `auth/legacy-plugin.ts` 的上下文缓存、微信凭证校验、业务绑定校验和路由白名单，降低认证链路回归风险。
