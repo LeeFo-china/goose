@@ -1843,6 +1843,135 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 - 当前最高 TS/TSX 文件为 `project-acceptances-panel-state.ts`、`ai-model-routing-panel.tsx`、`h5-page-create-dialog.tsx`，均为 343 行。
 
+## 第十一轮执行记录（2026-06-01）
+
+目标：
+
+- 继续压缩 340 行附近的高频维护文件。
+- 优先拆分状态与局部弹窗，保持原页面入口和请求行为不变。
+
+### 阶段 1：项目验收可编辑状态拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptances-panel-state.ts`
+
+处理：
+
+- 提取验收可编辑判定、缺失项计算、阶段结果辅助到 `project-acceptances-panel-editable-state.ts`。
+- 原 state 文件保留状态机、reducer、初始化和动作处理。
+
+结果：
+
+- `project-acceptances-panel-state.ts`：343 行降到 292 行。
+- `project-acceptances-panel-editable-state.ts`：95 行。
+
+提交：
+
+- `a577a44 refactor: split project acceptance editable state`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情工序验收页签 smoke 通过。
+
+### 阶段 2：AI 模型路由 tab 拆分
+
+范围：
+
+- `apps/admin/components/platform-ai/ai-model-routing-panel.tsx`
+
+处理：
+
+- 提取模型路由 tab 内容到 `ai-model-route-tab.tsx`。
+- 父 panel 保留数据加载、保存状态、tab 组装和全局操作。
+
+结果：
+
+- `ai-model-routing-panel.tsx`：343 行降到 264 行。
+- `ai-model-route-tab.tsx`：100 行。
+
+提交：
+
+- `9f8c253 refactor: split ai model route tab`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 3：H5 页面创建字段拆分
+
+范围：
+
+- `apps/admin/components/marketing/h5-page-create-dialog.tsx`
+
+处理：
+
+- 提取 H5 页面创建表单字段到 `h5-page-create-fields.tsx`。
+- 父弹窗保留创建流程、AI 生成状态、发布开关和保存提交。
+
+结果：
+
+- `h5-page-create-dialog.tsx`：343 行降到 284 行。
+- `h5-page-create-fields.tsx`：85 行。
+
+提交：
+
+- `33b5fff refactor: split h5 page create fields`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- H5 活动页新建弹窗 smoke 通过。
+
+### 阶段 4：发布与项目日志弹窗拆分
+
+范围：
+
+- `apps/admin/components/ops/release-deployments-dialogs.tsx`
+- `apps/admin/components/projects/project-logs-dialog.tsx`
+
+处理：
+
+- 提取 GitHub Actions 失败摘要 UI 到 `release-run-failure-summary-panel.tsx`。
+- 提取施工日志图片预览弹窗到 `project-log-image-preview-dialog.tsx`。
+
+结果：
+
+- `release-deployments-dialogs.tsx`：339 行降到 255 行。
+- `release-run-failure-summary-panel.tsx`：94 行。
+- `project-logs-dialog.tsx`：338 行降到 226 行。
+- `project-log-image-preview-dialog.tsx`：116 行。
+
+提交：
+
+- `7029d6e refactor: split release and project log dialogs`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+- 当前最高 TS/TSX 文件为 `customer-form-fields.tsx`，337 行；随后为多个 332 行文件。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
