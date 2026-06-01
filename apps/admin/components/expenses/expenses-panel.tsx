@@ -1,118 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  EXPENSE_MODE_VALUES,
-  EXPENSE_REQUEST_STEP_VALUES,
-  EXPENSE_STATUS_VALUES,
-  ExpenseModeConfig,
-  ExpenseRequestStepConfig,
-  ExpenseStatusConfig,
-} from "@gooes/domain";
-import { ChevronLeft, ChevronRight, CircleDollarSign, Clock3, ListFilter, Loader2, RotateCcw, Search, UserRound } from "lucide-react";
-import { FormSelect } from "@/components/admin/form-select";
-import { ListCardHeader } from "@/components/admin/list-card-header";
+import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
 import { ExpensesTable } from "@/components/expenses/expenses-table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { requestBackendJson } from "@/lib/backend-client";
-
-type Pagination = {
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-};
-
-type ExpenseListData = {
-  list: ExpenseRecord[];
-  pagination: Pagination;
-};
-
-type InitialExpenseData = ExpenseListData & {
-  error: string | null;
-};
-
-type ExpenseFiltersState = {
-  status: string;
-  mode: string;
-  currentStep: string;
-  keyword: string;
-  createdFrom: string;
-  createdTo: string;
-};
-
-const EXPENSE_PAGE_SIZE = 20;
-
-const statusOptions = [
-  ["", "全部状态"],
-  ...EXPENSE_STATUS_VALUES.map((value) => [
-    value,
-    ExpenseStatusConfig[value].label,
-  ] as const),
-] as const;
-
-const modeOptions = [
-  ["", "全部模式"],
-  ...EXPENSE_MODE_VALUES.map((value) => [
-    value,
-    ExpenseModeConfig[value].label,
-  ] as const),
-] as const;
-
-const stepOptions = [
-  ["", "全部节点"],
-  ...EXPENSE_REQUEST_STEP_VALUES.map((value) => [
-    value,
-    ExpenseRequestStepConfig[value].label,
-  ] as const),
-] as const;
-
-function formatMoney(value: number | string | null | undefined) {
-  const amount = Number(value || 0);
-  return amount.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function dateStartToIso(value: string) {
-  return value ? new Date(`${value}T00:00:00`).toISOString() : "";
-}
-
-function dateEndToIso(value: string) {
-  return value ? new Date(`${value}T23:59:59.999`).toISOString() : "";
-}
-
-function toDateInputValue(value: string) {
-  if (!value) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
-}
-
-async function fetchExpenses(filters: ExpenseFiltersState, page: number) {
-  const query = new URLSearchParams({
-    page: String(page),
-    pageSize: String(EXPENSE_PAGE_SIZE),
-  });
-
-  if (filters.status) query.set("status", filters.status);
-  if (filters.mode) query.set("mode", filters.mode);
-  if (filters.currentStep) query.set("current_step", filters.currentStep);
-  if (filters.keyword.trim()) query.set("keyword", filters.keyword.trim());
-  if (filters.createdFrom) query.set("created_from", dateStartToIso(filters.createdFrom));
-  if (filters.createdTo) query.set("created_to", dateEndToIso(filters.createdTo));
-
-  return requestBackendJson<ExpenseListData>(`/expense-requests?${query.toString()}`, {
-    cache: "no-store",
-    fallbackMessage: "费用申请列表加载失败",
-  });
-}
+import {
+  EXPENSE_PAGE_SIZE,
+  emptyExpenseFilters,
+  fetchExpenses,
+  summarizeExpensePage,
+  toDateInputValue,
+  type ExpenseFiltersState,
+  type InitialExpenseData,
+} from "@/components/expenses/expenses-panel-data";
+import {
+  ExpenseListHeader,
+  ExpensePagination,
+  ExpenseSummaryCards,
+} from "@/components/expenses/expenses-panel-sections";
 
 export function ExpensesPanel({
   initialData,
@@ -192,145 +98,30 @@ export function ExpensesPanel({
     setFilters((current) => ({ ...current, ...patch }));
     setPage(1);
   };
-  const canGoPrev = pagination.page > 1 && !loading;
-  const canGoNext = pagination.totalPages > 0 && pagination.page < pagination.totalPages && !loading;
-  const pendingCount = expenses.filter((item) => item.status === "pending").length;
-  const paymentCount = expenses.filter((item) =>
-    item.status === "approved" && item.current_step === "payment"
-  ).length;
-  const totalAmount = expenses.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+  const summary = summarizeExpensePage(expenses);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ListFilter className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选费用</div>
-              <div className="text-xl font-semibold">{pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <CircleDollarSign className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页金额</div>
-              <div className="text-xl font-semibold">¥{formatMoney(totalAmount)}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Clock3 className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页审批中</div>
-              <div className="text-xl font-semibold">{pendingCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <UserRound className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页待打款</div>
-              <div className="text-xl font-semibold">{paymentCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ExpenseSummaryCards
+        total={pagination.total}
+        totalAmount={summary.totalAmount}
+        pendingCount={summary.pendingCount}
+        paymentCount={summary.paymentCount}
+      />
 
       <Card className="overflow-hidden">
-        <ListCardHeader
-          title="费用申请列表"
-          description={`筛选条件作用于下方费用申请表格，当前共 ${pagination.total} 条记录。`}
-          action={
-            <Badge variant="outline">
-              {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
-              第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
-            </Badge>
-          }
-          filters={
-            <div className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_150px_150px_auto]">
-              <FormSelect
-                id="expense-status-filter"
-                value={filters.status || "__all"}
-                options={statusOptions.map(([value, label]) => ({
-                  value: value || "__all",
-                  label,
-                }))}
-                onChange={(value) => updateFilter({ status: value === "__all" ? "" : value })}
-              />
-              <FormSelect
-                id="expense-mode-filter"
-                value={filters.mode || "__all"}
-                options={modeOptions.map(([value, label]) => ({
-                  value: value || "__all",
-                  label,
-                }))}
-                onChange={(value) => updateFilter({ mode: value === "__all" ? "" : value })}
-              />
-              <FormSelect
-                id="expense-current-step-filter"
-                value={filters.currentStep || "__all"}
-                options={stepOptions.map(([value, label]) => ({
-                  value: value || "__all",
-                  label,
-                }))}
-                onChange={(value) => updateFilter({ currentStep: value === "__all" ? "" : value })}
-              />
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={keywordDraft}
-                  placeholder="搜索单号或标题"
-                  className="pl-9"
-                  onChange={(event) => setKeywordDraft(event.target.value)}
-                />
-              </div>
-              <Input
-                type="date"
-                value={filters.createdFrom}
-                aria-label="创建开始日期"
-                onChange={(event) => updateFilter({ createdFrom: event.target.value })}
-              />
-              <Input
-                type="date"
-                value={filters.createdTo}
-                aria-label="创建结束日期"
-                onChange={(event) => updateFilter({ createdTo: event.target.value })}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const emptyFilters = {
-                    status: "",
-                    mode: "",
-                    currentStep: "",
-                    keyword: "",
-                    createdFrom: "",
-                    createdTo: "",
-                  };
-                  setKeywordDraft("");
-                  setFilters(emptyFilters);
-                  setPage(1);
-                }}
-              >
-                <RotateCcw data-icon="inline-start" />
-                重置
-              </Button>
-            </div>
-          }
+        <ExpenseListHeader
+          filters={filters}
+          keywordDraft={keywordDraft}
+          pagination={pagination}
+          loading={loading}
+          onFilterChange={updateFilter}
+          onKeywordDraftChange={setKeywordDraft}
+          onReset={() => {
+            setKeywordDraft("");
+            setFilters(emptyExpenseFilters());
+            setPage(1);
+          }}
         />
         <CardContent className="relative flex flex-col gap-4 p-0">
           {loading ? (
@@ -354,31 +145,11 @@ export function ExpensesPanel({
               }}
             />
           )}
-          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-muted-foreground">
-              每页 {pagination.pageSize} 条，共 {pagination.total} 条
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoPrev}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft data-icon="inline-start" />
-                上一页
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canGoNext}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                下一页
-                <ChevronRight data-icon="inline-end" />
-              </Button>
-            </div>
-          </div>
+          <ExpensePagination
+            pagination={pagination}
+            loading={loading}
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
     </div>
