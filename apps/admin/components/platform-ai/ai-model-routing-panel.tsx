@@ -2,19 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Edit3 } from "lucide-react";
 import { toast } from "sonner";
 import type { AiConfigData, AiModelRecord, AiProviderRecord, AiSceneRouteRecord } from "@/components/platform-ai/ai-config-types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { countModelsByProvider, FormActions, ModelFormCard, ModelTable, ProviderFormCard, ProviderTable, RouteStatusSelect, StatusBadge } from "@/components/platform-ai/ai-model-routing-sections";
-import { emptyModelForm, emptyProviderForm, emptyRouteForm, modelLabel, modelOptionLabel, NONE_VALUE, requestBackend, type ModelFormState, type ProviderFormState, type RouteFormState } from "@/components/platform-ai/ai-model-routing-shared";
+import { AiModelRouteTab } from "@/components/platform-ai/ai-model-route-tab";
+import { countModelsByProvider, ModelFormCard, ModelTable, ProviderFormCard, ProviderTable } from "@/components/platform-ai/ai-model-routing-sections";
+import { emptyModelForm, emptyProviderForm, emptyRouteForm, NONE_VALUE, requestBackend, type ModelFormState, type ProviderFormState, type RouteFormState } from "@/components/platform-ai/ai-model-routing-shared";
 
 export function AiModelRoutingPanel({ data }: { data: AiConfigData }) {
   const router = useRouter();
@@ -146,170 +139,15 @@ export function AiModelRoutingPanel({ data }: { data: AiConfigData }) {
       </TabsList>
 
       <TabsContent value="routes" className="m-0">
-        <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>{routeForm.id ? "编辑场景路由" : "新增场景路由"}</CardTitle>
-              <CardDescription>给业务场景配置主模型、备用模型和调用参数。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="ai-route-scene-code">场景编码</FieldLabel>
-                  <Input
-                    id="ai-route-scene-code"
-                    value={routeForm.scene_code}
-                    onChange={(event) => setRouteForm({ ...routeForm, scene_code: event.target.value })}
-                    placeholder="decoration_qa"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="ai-route-name">场景名称</FieldLabel>
-                  <Input
-                    id="ai-route-name"
-                    value={routeForm.name}
-                    onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })}
-                    placeholder="装修问答"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>主模型</FieldLabel>
-                  <Select
-                    value={routeForm.primary_model_id}
-                    onValueChange={(value) => setRouteForm({ ...routeForm, primary_model_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择主模型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {data.models.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {modelOptionLabel(item)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field>
-                  <FieldLabel>备用模型</FieldLabel>
-                  <Select
-                    value={routeForm.fallback_model_id}
-                    onValueChange={(value) => setRouteForm({ ...routeForm, fallback_model_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="无备用模型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value={NONE_VALUE}>无备用模型</SelectItem>
-                        {data.models.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {modelOptionLabel(item)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field>
-                    <FieldLabel htmlFor="ai-route-temperature">温度</FieldLabel>
-                    <Input
-                      id="ai-route-temperature"
-                      value={routeForm.temperature}
-                      onChange={(event) => setRouteForm({ ...routeForm, temperature: event.target.value })}
-                      inputMode="decimal"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel>格式</FieldLabel>
-                    <Select
-                      value={routeForm.response_format}
-                      onValueChange={(value) => setRouteForm({
-                        ...routeForm,
-                        response_format: value as RouteFormState["response_format"],
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="json_object">JSON</SelectItem>
-                          <SelectItem value="text">文本</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="ai-route-timeout">超时</FieldLabel>
-                    <Input
-                      id="ai-route-timeout"
-                      value={routeForm.timeout_ms}
-                      onChange={(event) => setRouteForm({ ...routeForm, timeout_ms: event.target.value })}
-                      inputMode="numeric"
-                    />
-                  </Field>
-                </div>
-                <RouteStatusSelect value={routeForm.status} onChange={(status) => setRouteForm({ ...routeForm, status })} />
-                <FormActions
-                  isPending={isPending}
-                  isEditing={Boolean(routeForm.id)}
-                  onReset={() => setRouteForm(emptyRouteForm(data.models[0]?.id || ""))}
-                  onSubmit={submitRoute}
-                />
-              </FieldGroup>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>场景路由列表</CardTitle>
-              <CardDescription>模型切换后，新请求立即按最新配置解析。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>场景</TableHead>
-                    <TableHead>主模型</TableHead>
-                    <TableHead>备用模型</TableHead>
-                    <TableHead>参数</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.routes.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.scene_code}</div>
-                      </TableCell>
-                      <TableCell>{modelLabel(item.primary_model)}</TableCell>
-                      <TableCell>{modelLabel(item.fallback_model)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <StatusBadge status={item.status} />
-                          <Badge variant="secondary">T {item.temperature ?? "-"}</Badge>
-                          <Badge variant="secondary">{item.response_format || "默认"}</Badge>
-                          <Badge variant="secondary">{item.timeout_ms || "-"}ms</Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => editRoute(item)}>
-                          <Edit3 data-icon="inline-start" />
-                          编辑
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+        <AiModelRouteTab
+          routes={data.routes}
+          models={data.models}
+          routeForm={routeForm}
+          isPending={isPending}
+          onRouteFormChange={setRouteForm}
+          onRouteSubmit={submitRoute}
+          onRouteEdit={editRoute}
+        />
       </TabsContent>
 
       <TabsContent value="models" className="m-0">
