@@ -1457,6 +1457,132 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 
+## 第八轮执行记录（2026-06-01）
+
+目标：
+
+- 继续压缩近期接近 400 行的 admin 文件，优先处理弹窗、页面数据辅助和多 tab 页面。
+- 每阶段保持单一改动面，验收通过后单独提交。
+
+### 阶段 1：平台线索详情弹窗拆分
+
+范围：
+
+- `apps/admin/components/platform-leads/platform-lead-mutations.tsx`
+
+处理：
+
+- 提取分配面板、详情网格、分配信息、分配日志和日期/面积展示辅助到 `platform-lead-detail-sections.tsx`。
+- 原弹窗文件保留详情加载、打开/关闭状态和刷新时序。
+
+结果：
+
+- `platform-lead-mutations.tsx`：降到 140 行。
+- `platform-lead-detail-sections.tsx`：265 行。
+
+提交：
+
+- `d52b6ab refactor: split platform lead detail sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 营销活动 H5 线索入口 smoke 通过。
+
+### 阶段 2：摄像头表单提交辅助拆分
+
+范围：
+
+- `apps/admin/components/cameras/camera-form-dialog.tsx`
+
+处理：
+
+- 提取摄像头新增/编辑 payload 组装和保存请求到 `camera-form-submit.ts`。
+- 弹窗文件保留表单状态、设备加载、校验和关闭刷新时序。
+
+结果：
+
+- `camera-form-dialog.tsx`：降到 330 行。
+- `camera-form-submit.ts`：85 行。
+
+提交：
+
+- `b1c5989 refactor: split camera form submit helper`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 摄像头资产页 smoke 通过。
+
+### 阶段 3：租户用量页数据辅助拆分
+
+范围：
+
+- `apps/admin/app/(console)/usage/page.tsx`
+
+处理：
+
+- 按平台用量页既有模式，提取 searchParams 类型、日期默认值、状态解析、查询串构造、后端 fetch 和空数据模型到 `page-data.ts`。
+- 页面文件保留会话跳转、数据编排和 UI 渲染。
+
+结果：
+
+- `page.tsx`：降到 276 行。
+- `page-data.ts`：116 行。
+
+提交：
+
+- `e35c822 refactor: split tenant usage page data`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 租户用量页 smoke 通过。
+
+### 阶段 4：平台账单 AI 用量 Tab 拆分
+
+范围：
+
+- `apps/admin/app/(console)/platform/billing/billing-usage-tabs.tsx`
+
+处理：
+
+- 提取 AI 试算观察 tab 到 `billing-ai-tab.tsx`。
+- 原 `billing-usage-tabs.tsx` 保留价格规则、计费流水，并 re-export AI tab，避免改动页面调用方。
+
+结果：
+
+- `billing-usage-tabs.tsx`：降到 201 行。
+- `billing-ai-tab.tsx`：192 行。
+
+提交：
+
+- `761231d refactor: split billing ai usage tab`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
