@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const filesToRestore = ["next-env.d.ts", "tsconfig.json"];
@@ -19,6 +19,8 @@ function restoreSnapshots() {
 }
 
 const restoreTimer = setInterval(restoreSnapshots, 1_000);
+
+rmSync(join(process.cwd(), ".next-e2e"), { recursive: true, force: true });
 
 const child = spawn(
   "pnpm",
