@@ -6,6 +6,11 @@ import { CUSTOMER_SOURCE_VALUES, CustomerSourceConfig, CustomerStatusActionConfi
 import { FormSelect } from "@/components/admin/form-select";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeVariant, CustomerRecord, CustomerSourceRecord, EmployeeOption, Owner, PropertySummary } from "@/components/customers/customer-mutation-types";
+import {
+  buildUploadPreviewUrl,
+  uploadDirectToCos,
+  validateUploadFile,
+} from "@/lib/cos-direct-upload";
 
 export const sourceOptions = CUSTOMER_SOURCE_VALUES.map((value) => [
   value,
@@ -176,7 +181,7 @@ export function getPayloadMessage(payload: unknown, fallback: string) {
 }
 
 export function buildAvatarPreviewUrl(value: string) {
-  return `/api/backend/uploads/public-url?path=${encodeURIComponent(value)}`;
+  return buildUploadPreviewUrl(value);
 }
 
 export async function requestCustomer(input: {
@@ -270,64 +275,25 @@ export async function syncProjectPrimaryMembers(input: {
 }
 
 export async function uploadCustomerAvatarDirect(file: File) {
-  const init = await requestCustomer({
-    path: "/uploads/cos/direct-init",
-    method: "POST",
-    payload: {
+  const uploaded = await uploadDirectToCos(file, {
       scene: "customer_avatar",
-      filename: file.name,
-      mimetype: file.type,
-      size_bytes: file.size,
-    },
+    uploadErrorLabel: "上传头像",
+    missingStorageMessage: "头像上传成功但未返回图片地址",
   });
-
-  const uploadResponse = await fetch(init.upload_url, {
-    method: init.method || "PUT",
-    headers: init.headers || { "content-type": file.type },
-    body: file,
-  });
-  if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      `上传头像到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
-    );
-  }
-
-  const completed = await requestCustomer({
-    path: "/uploads/cos/direct-complete",
-    method: "POST",
-    payload: {
-      scene: "customer_avatar",
-      filename: file.name,
-      mimetype: file.type,
-      size_bytes: file.size,
-      object_key: init.object_key,
-      etag: uploadResponse.headers.get("etag") || undefined,
-    },
-  });
-
-  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
-    init.object_key;
-  if (typeof storageValue !== "string" || !storageValue) {
-    throw new Error("头像上传成功但未返回图片地址");
-  }
 
   return {
-    value: storageValue,
-    previewUrl: buildAvatarPreviewUrl(storageValue),
+    value: uploaded.storagePath,
+    previewUrl: buildAvatarPreviewUrl(uploaded.storagePath),
   };
 }
 
 export async function uploadCustomerAvatar(file: File) {
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-    throw new Error("头像仅支持 JPG、PNG、WebP、HEIC、HEIF");
-  }
-
-  if (file.size > MAX_AVATAR_SIZE) {
-    throw new Error("头像图片不能超过 2MB");
-  }
+  validateUploadFile(file, {
+    allowedTypes: ALLOWED_AVATAR_TYPES,
+    maxSizeBytes: MAX_AVATAR_SIZE,
+    typeMessage: "头像仅支持 JPG、PNG、WebP、HEIC、HEIF",
+    sizeMessage: "头像图片不能超过 2MB",
+  });
 
   return uploadCustomerAvatarDirect(file);
 }

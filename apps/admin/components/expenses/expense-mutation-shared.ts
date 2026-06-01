@@ -10,13 +10,12 @@ import {
   ExpenseSettlementMethodConfig,
 } from "@gooes/domain";
 import type {
-  DirectUploadCompleteResult,
-  DirectUploadInitResult,
   ExpenseItem,
   ExpenseRecord,
   Person,
   Project,
 } from "@/components/expenses/expense-mutation-types";
+import { buildUploadPreviewUrl, uploadDirectToCos } from "@/lib/cos-direct-upload";
 
 const settlementMethodOptions = EXPENSE_SETTLEMENT_METHOD_VALUES.map((value) => [
   value,
@@ -259,61 +258,20 @@ export async function compressImageIfNeeded(file: File) {
 }
 
 export function getEvidenceImagePreviewSrc(image: string) {
-  if (!image) return "";
-  if (/^https?:\/\//i.test(image) || image.startsWith("blob:") || image.startsWith("data:")) {
-    return image;
-  }
-  return `/api/backend/uploads/public-url?path=${encodeURIComponent(image)}`;
+  return buildUploadPreviewUrl(image);
 }
 
 export async function uploadEvidenceImageDirect(file: File) {
   const uploadFile = await compressImageIfNeeded(file);
   const mimetype = uploadFile.type || "image/jpeg";
-  const init = await requestExpense<DirectUploadInitResult>({
-    path: "/uploads/cos/direct-init",
-    method: "POST",
-    payload: {
+  const uploaded = await uploadDirectToCos(uploadFile, {
       scene: "expense_request",
-      filename: uploadFile.name,
       mimetype,
-      size_bytes: uploadFile.size,
-    },
+    uploadErrorLabel: "上传打款凭证",
+    missingStorageMessage: "打款凭证上传成功但未返回图片地址",
   });
 
-  const uploadResponse = await fetch(init.upload_url, {
-    method: init.method || "PUT",
-    headers: init.headers || { "content-type": mimetype },
-    body: uploadFile,
-  });
-  if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      `上传打款凭证到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
-    );
-  }
-
-  const completed = await requestExpense<DirectUploadCompleteResult>({
-    path: "/uploads/cos/direct-complete",
-    method: "POST",
-    payload: {
-      scene: "expense_request",
-      filename: uploadFile.name,
-      mimetype,
-      size_bytes: uploadFile.size,
-      object_key: init.object_key,
-      etag: uploadResponse.headers.get("etag") || undefined,
-    },
-  });
-
-  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
-    init.object_key;
-  if (!storageValue) {
-    throw new Error("打款凭证上传成功但未返回图片地址");
-  }
-
-  return storageValue;
+  return uploaded.storagePath;
 }
 
 export async function uploadEvidenceImages(files: File[]) {

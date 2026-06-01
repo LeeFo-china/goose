@@ -12,11 +12,10 @@ import type {
   AcceptanceItemResult,
   AcceptanceNotification,
   AcceptanceTemplate,
-  DirectUploadCompleteResult,
-  DirectUploadInitResult,
   EditableState,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+import { buildUploadPreviewUrl, uploadDirectToCos } from "@/lib/cos-direct-upload";
 
 export const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES
   .filter((value) => value !== PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE)
@@ -58,53 +57,17 @@ export async function requestBackend<T>(
 
 export async function uploadAcceptanceImageDirect(file: File, projectId: string) {
   const mimetype = file.type || "image/jpeg";
-  const init = await requestBackend<DirectUploadInitResult>("/uploads/cos/direct-init", {
-    method: "POST",
-    payload: {
+  const uploaded = await uploadDirectToCos(file, {
       scene: "project_acceptance",
-      project_id: projectId,
-      filename: file.name,
       mimetype,
-      size_bytes: file.size,
-    },
+    payload: { project_id: projectId },
+    uploadErrorLabel: "上传验收图片",
+    missingStorageMessage: "验收图片上传成功但未返回图片地址",
   });
-
-  const uploadResponse = await fetch(init.upload_url, {
-    method: init.method || "PUT",
-    headers: init.headers || { "content-type": mimetype },
-    body: file,
-  });
-  if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      `上传验收图片到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
-    );
-  }
-
-  const completed = await requestBackend<DirectUploadCompleteResult>("/uploads/cos/direct-complete", {
-    method: "POST",
-    payload: {
-      scene: "project_acceptance",
-      project_id: projectId,
-      filename: file.name,
-      mimetype,
-      size_bytes: file.size,
-      object_key: init.object_key,
-      etag: uploadResponse.headers.get("etag") || undefined,
-    },
-  });
-
-  const storageValue = completed.storage_path || completed.object_key || init.storage_path ||
-    init.object_key;
-  if (!storageValue) {
-    throw new Error("验收图片上传成功但未返回图片地址");
-  }
 
   return {
-    path: storageValue,
-    preview: completed.url || storageValue,
+    path: uploaded.storagePath,
+    preview: uploaded.url || uploaded.storagePath,
   };
 }
 
@@ -284,11 +247,7 @@ export function notificationLabel(notification: AcceptanceNotification | null | 
 }
 
 export function getPreviewImageSrc(image: string) {
-  if (!image) return "";
-  if (/^https?:\/\//i.test(image) || image.startsWith("data:") || image.startsWith("blob:")) {
-    return image;
-  }
-  return `/api/backend/uploads/public-url?path=${encodeURIComponent(image)}`;
+  return buildUploadPreviewUrl(image);
 }
 
 export function getImageItemSrc(image: AcceptanceImageItem) {

@@ -1,5 +1,6 @@
-import type { DirectUploadCompleteResult, DirectUploadInitResult, ImageUsage, LoadedImageFile, ProjectCaseOption, ProjectCaseOptionPagination } from "@/components/marketing/h5-page-editor-types";
+import type { ImageUsage, LoadedImageFile, ProjectCaseOption, ProjectCaseOptionPagination } from "@/components/marketing/h5-page-editor-types";
 import { EDITOR_IMAGE_ALLOWED_TYPES, EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES, EDITOR_IMAGE_MAX_BYTES, EDITOR_IMAGE_OUTPUT_MAX_WIDTH, PROJECT_CASE_SELECTOR_PAGE_SIZE } from "@/components/marketing/h5-page-editor-types";
+import { uploadDirectToCos } from "@/lib/cos-direct-upload";
 
 export function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
@@ -188,45 +189,14 @@ export async function repairImageFile(input: {
 }
 
 export async function uploadEditorImage(file: File) {
-  const init = await requestEditor<DirectUploadInitResult>({
-    path: "/uploads/cos/direct-init",
-    method: "POST",
-    payload: {
+  const uploaded = await uploadDirectToCos(file, {
       scene: "h5_marketing_page",
-      filename: file.name,
       mimetype: file.type,
-      size_bytes: file.size,
-    },
+    uploadErrorLabel: "上传图片",
+    missingStorageMessage: "图片上传成功但未返回地址",
   });
 
-  const uploadResponse = await fetch(init.upload_url, {
-    method: init.method || "PUT",
-    headers: init.headers || { "content-type": file.type },
-    body: file,
-  });
-  if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      `上传图片到 COS 失败(${uploadResponse.status})${
-        detail.trim() ? `：${detail.trim().slice(0, 120)}` : ""
-      }`,
-    );
-  }
-
-  const completed = await requestEditor<DirectUploadCompleteResult>({
-    path: "/uploads/cos/direct-complete",
-    method: "POST",
-    payload: {
-      scene: "h5_marketing_page",
-      filename: file.name,
-      mimetype: file.type,
-      size_bytes: file.size,
-      object_key: init.object_key,
-      etag: uploadResponse.headers.get("etag") || undefined,
-    },
-  });
-
-  const url = completed.url || completed.public_url;
+  const url = uploaded.url || uploaded.publicUrl;
   if (typeof url !== "string" || !url) {
     throw new Error("图片上传成功但未返回地址");
   }
