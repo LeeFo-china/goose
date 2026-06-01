@@ -65,6 +65,22 @@ test.describe("admin smoke", () => {
     await expect(dialog.getByRole("button", { name: "创建项目" })).toBeVisible();
   });
 
+  test("项目详情工序验收页签可打开", async ({ page }) => {
+    await gotoAdminPage(page, "/projects");
+
+    const detailButton = page.getByRole("button", { name: "详情" }).first();
+    if (await detailButton.count()) {
+      await expect(detailButton).toBeVisible();
+      await detailButton.click();
+      const dialog = page.getByRole("dialog").filter({ hasText: "工序验收" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("tab", { name: "工序验收" }).click();
+      await expect(dialog.getByRole("tabpanel", { name: "工序验收" })).toBeVisible();
+    } else {
+      await expect(page.getByText("没有符合条件的项目")).toBeVisible();
+    }
+  });
+
   test("员工新增和角色配置弹窗可打开", async ({ page }) => {
     await gotoAdminPage(page, "/employees");
 
@@ -132,6 +148,26 @@ test.describe("admin smoke", () => {
       }
     } else {
       await expect(page.getByText("没有符合条件的费用申请")).toBeVisible();
+    }
+  });
+
+  test("摄像头资产页基础区域可渲染", async ({ page }) => {
+    await gotoAdminPage(page, "/cameras");
+
+    await expect(page.getByRole("heading", { name: "工地监控" })).toBeVisible();
+    await expect(page.getByText("未绑定设备通道")).toBeVisible();
+
+    const devicesTab = page.getByRole("tab", { name: "设备接入" });
+    if (await devicesTab.count()) {
+      await devicesTab.click();
+      const assetHeading = page.getByRole("heading", { name: "设备资产池" });
+      if (await assetHeading.count()) {
+        await expect(assetHeading).toBeVisible();
+      } else {
+        await expect(page.getByText("暂无设备接入上下文")).toBeVisible();
+      }
+    } else {
+      await expect(page.getByText(/暂无可管理项目|缺少登录凭证/)).toBeVisible();
     }
   });
 
