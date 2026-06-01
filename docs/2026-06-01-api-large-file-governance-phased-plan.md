@@ -1535,3 +1535,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `projectSer` 外观和缓存字段，调用方导入路径不变；拆分后的模块仍通过 service 实例 `this` 共享缓存和 helper，属于行为保持型结构拆分。
 - `marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`social-video-transcriptions/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 9 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split marketing pages legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1288 | 168 | `apps/api/src/repositories/marketing-pages/legacy-repository.ts` |
+| - | 61 | `apps/api/src/repositories/marketing-pages/legacy/events.ts` |
+| - | 413 | `apps/api/src/repositories/marketing-pages/legacy/leads.ts` |
+| - | 261 | `apps/api/src/repositories/marketing-pages/legacy/pages.ts` |
+| - | 224 | `apps/api/src/repositories/marketing-pages/legacy/queries.ts` |
+| - | 204 | `apps/api/src/repositories/marketing-pages/legacy/shared.ts` |
+| - | 188 | `apps/api/src/repositories/marketing-pages/legacy/versions.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 Supabase client、表访问 helper、租户/项目范围 helper、方法绑定和 `marketingPageRepository` 导出。
+- 共享记录类型、Supabase 非强类型表接口、错误消息解析、公开页排序和项目选项 select 定义拆入 `shared.ts`。
+- 营销页列表、公开页列表、有效发布页、项目案例选项和项目日志封面查询拆入 `queries.ts`。
+- 页面查找、租户查找、创建、更新、排序、归档和下线拆入 `pages.ts`。
+- 版本号查询、草稿/版本查找、版本创建/更新、旧版本归档和发布标记拆入 `versions.ts`。
+- 线索创建、防重查询、重复提交更新、客户身份查询、线索列表、跟进更新、转客户和客户匹配/创建 helper 拆入 `leads.ts`。
+- 埋点写入和唯一键错误包装拆入 `events.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/marketing-pages/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 34 个减少到 33 个，`marketing-pages/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `marketing-pages/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖营销页列表、公开页、项目选项、页面 CRUD、版本发布、线索转客户和埋点写入入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实营销页写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对页面、版本、线索、客户或埋点执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `marketingPageRepository` 外观和 Supabase 表 helper，调用方导入路径不变；拆分后的模块仍通过 repository 实例 `this` 共享表访问与范围过滤 helper，属于行为保持型结构拆分。
+- `marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`permissions/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
