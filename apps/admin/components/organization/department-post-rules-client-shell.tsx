@@ -12,6 +12,13 @@ import type {
   DepartmentPostRuleDepartment,
   DepartmentPostRulePostOption,
 } from "@/components/organization/organization-types";
+import { saveDepartmentPostCodes } from "@/components/organization/department-post-config-api";
+import {
+  createDepartmentPostSelectedState,
+  getPostSearchText,
+  isPostCodeSelectionDirty,
+  type DepartmentPostSelectedState,
+} from "@/components/organization/department-post-rules-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,66 +34,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
-
-type SelectedState = Record<string, string[]>;
-
-async function saveDepartmentPostCodes(
-  departmentCode: string,
-  postCodes: string[],
-) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
-
-  try {
-    const response = await fetch(
-      `/api/backend/department-post-rules/${encodeURIComponent(departmentCode)}`,
-      {
-        method: "PUT",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          post_codes: postCodes,
-        }),
-        signal: controller.signal,
-      },
-    );
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(payload?.message || payload?.error || "保存部门岗位规则失败");
-    }
-    return payload as {
-      data?: {
-        department_code?: string;
-        selected_post_codes?: string[];
-        config?: DepartmentPostRuleConfig;
-      };
-    };
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("请求超时，请稍后重试");
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-function sortCodes(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b));
-}
-
-function createSelectedState(departments: DepartmentPostRuleDepartment[]) {
-  return departments.reduce<SelectedState>((acc, department) => {
-    acc[department.code] = department.selected_post_codes;
-    return acc;
-  }, {});
-}
-
-function getPostSearchText(post: DepartmentPostRulePostOption) {
-  return `${post.name} ${post.code}`.toLowerCase();
-}
 
 export function DepartmentPostRulesClientShell({
   departments,
@@ -104,11 +51,11 @@ export function DepartmentPostRulesClientShell({
     departments[0]?.code || "",
   );
   const [keyword, setKeyword] = useState("");
-  const [selected, setSelected] = useState<SelectedState>(() =>
-    createSelectedState(departments)
+  const [selected, setSelected] = useState<DepartmentPostSelectedState>(() =>
+    createDepartmentPostSelectedState(departments)
   );
-  const [baseline, setBaseline] = useState<SelectedState>(() =>
-    createSelectedState(departments)
+  const [baseline, setBaseline] = useState<DepartmentPostSelectedState>(() =>
+    createDepartmentPostSelectedState(departments)
   );
   const [savingDepartmentCode, setSavingDepartmentCode] = useState("");
   const [pending, startTransition] = useTransition();
@@ -122,8 +69,7 @@ export function DepartmentPostRulesClientShell({
   const baselineCodes = activeDepartment
     ? baseline[activeDepartment.code] || []
     : [];
-  const dirty = JSON.stringify(sortCodes(selectedCodes)) !==
-    JSON.stringify(sortCodes(baselineCodes));
+  const dirty = isPostCodeSelectionDirty(selectedCodes, baselineCodes);
   const saving = pending && savingDepartmentCode === activeDepartmentCode;
   const normalizedKeyword = keyword.trim().toLowerCase();
   const filteredPosts = normalizedKeyword
@@ -133,7 +79,7 @@ export function DepartmentPostRulesClientShell({
     : postOptions;
 
   useEffect(() => {
-    const nextState = createSelectedState(departments);
+    const nextState = createDepartmentPostSelectedState(departments);
     setSelected(nextState);
     setBaseline(nextState);
     setActiveDepartmentCode((currentCode) =>
@@ -190,7 +136,7 @@ export function DepartmentPostRulesClientShell({
         const payload = await saveDepartmentPostCodes(activeDepartment.code, selectedCodes);
         const nextConfig = payload.data?.config;
         const nextState = nextConfig
-          ? createSelectedState(nextConfig.departments)
+          ? createDepartmentPostSelectedState(nextConfig.departments)
           : {
             ...selected,
             [activeDepartment.code]: payload.data?.selected_post_codes || selectedCodes,

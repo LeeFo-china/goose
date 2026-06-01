@@ -18,6 +18,12 @@ import {
   DepartmentPostCommandItems,
   DepartmentPostSelectionSummary,
 } from "@/components/organization/department-post-config-list";
+import {
+  getDepartmentSelectedPostCodes,
+  getPostSearchText,
+  isPostCodeSelectionDirty,
+  normalizePostName,
+} from "@/components/organization/department-post-rules-utils";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -42,31 +48,6 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-
-function sortCodes(values: string[]) {
-  return [...values].sort((a, b) => a.localeCompare(b));
-}
-
-function getDepartmentSelectedPostCodes(
-  department: DepartmentRecord,
-  config: DepartmentPostRuleConfig,
-) {
-  const ruleDepartment = config.departments.find((item) =>
-    (department.tenant_department_id &&
-      item.tenant_department_id === department.tenant_department_id) ||
-    (department.code && item.code === department.code)
-  );
-
-  return ruleDepartment?.selected_post_codes || [];
-}
-
-function getPostSearchText(post: DepartmentPostRulePostOption) {
-  return `${post.name} ${post.code}`.toLowerCase();
-}
-
-function normalizePostName(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
 
 export function DepartmentPostConfigDialog({
   department,
@@ -110,9 +91,7 @@ export function DepartmentPostConfigDialog({
     [localConfig.post_options, trimmedKeyword],
   );
   const canCreatePost = Boolean(trimmedKeyword && departmentId && !exactNamePost);
-  const dirty =
-    JSON.stringify(sortCodes(selectedCodes)) !==
-    JSON.stringify(sortCodes(baselineCodes));
+  const dirty = isPostCodeSelectionDirty(selectedCodes, baselineCodes);
   const selectedPosts = useMemo(() => {
     const selectedCodeSet = new Set(selectedCodes);
     return localConfig.post_options.filter((post) => selectedCodeSet.has(post.code));
