@@ -1483,3 +1483,55 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后仍通过 service 实例 `this` 复用定价和估算 helper，属于行为保持型结构拆分；后续可以把运行时扣费和 shadow billing 抽为显式子 service。
 - `projects/legacy-service.ts`、`marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 8 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split projects legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1386 | 166 | `apps/api/src/services/projects/legacy-service.ts` |
+| - | 139 | `apps/api/src/services/projects/legacy/base.ts` |
+| - | 131 | `apps/api/src/services/projects/legacy/create-select.ts` |
+| - | 435 | `apps/api/src/services/projects/legacy/detail-bootstrap.ts` |
+| - | 215 | `apps/api/src/services/projects/legacy/lists.ts` |
+| - | 235 | `apps/api/src/services/projects/legacy/mutations.ts` |
+| - | 321 | `apps/api/src/services/projects/legacy/public-cache.ts` |
+| - | 114 | `apps/api/src/services/projects/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留缓存字段、方法绑定和 `projectSer` 导出。
+- 基础关系归一化、公开可见性判断和主设计师/监理挂载拆入 `base.ts`。
+- 项目列表查询、列表缓存 key、列表缓存读写和首页列表加载拆入 `lists.ts`。
+- 公开项目列表、公开详情/日志/成员缓存、预热和缓存失效拆入 `public-cache.ts`。
+- 项目创建下拉客户、员工候选和成员候选拆入 `create-select.ts`。
+- 项目详情、员工端 bootstrap bundle、成员序列化和施工阶段 bootstrap 构造拆入 `detail-bootstrap.ts`。
+- 项目创建、更新、状态流转、状态动作、施工阶段列表、删除和租户关系校验拆入 `mutations.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/projects/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 35 个减少到 34 个，`projects/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `projects/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖项目列表、公开项目详情、员工端 bootstrap、成员候选、创建更新、状态流转和删除入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实项目写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对租户项目、成员、状态或施工阶段执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `projectSer` 外观和缓存字段，调用方导入路径不变；拆分后的模块仍通过 service 实例 `this` 共享缓存和 helper，属于行为保持型结构拆分。
+- `marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`social-video-transcriptions/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
