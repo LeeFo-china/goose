@@ -14,6 +14,7 @@ import type { ProjectFormState, ProjectMode, ProjectRecord } from "@/components/
 import { buildDefaults, buildOptimisticProject, requestProject, syncProjectPrimaryAssignees, visibilityOptions } from "@/components/projects/project-mutation-utils";
 import { useSelectOptions } from "@/components/projects/use-project-select-options";
 import { OptionSelect } from "@/components/projects/project-option-select";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export function ProjectDialog({
   mode,
@@ -101,7 +102,7 @@ export function ProjectDialog({
         if (onSaved) {
           onSaved(nextProject);
         } else {
-          router.refresh();
+          refreshAfterDialogClose(router);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");

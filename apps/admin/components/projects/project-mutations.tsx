@@ -9,6 +9,7 @@ import { ProjectDialog } from "@/components/projects/project-form-dialog";
 import { ProjectDetailDialog } from "@/components/projects/project-detail-dialog";
 import type { ProjectDetailTab, ProjectRecord } from "@/components/projects/project-mutation-types";
 import { requestProject } from "@/components/projects/project-mutation-utils";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export type { ProjectRecord } from "@/components/projects/project-mutation-types";
 
@@ -72,7 +73,7 @@ export function ProjectRowActions({
             status: "invalid",
           });
         } else {
-          router.refresh();
+          refreshAfterDialogClose(router);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "作废失败");

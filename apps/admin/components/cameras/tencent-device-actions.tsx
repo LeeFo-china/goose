@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type { TencentSipServerConfig } from "@/components/cameras/camera-types";
 import { requestBackendJson } from "@/lib/backend-client";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 type TencentDeviceSecretResult = {
   device_id?: string | null;
@@ -213,7 +214,7 @@ export function CreateTencentDeviceButton({
         setOpen(false);
         setName("");
         setPassword("");
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "创建设备失败");
       }

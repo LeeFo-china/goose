@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { buildH5PageEditHref, buildPageUrl, DEFAULT_H5_PAGE_API_BASE_PATH, DEFAULT_H5_PAGE_EDIT_BASE_PATH, DEFAULT_H5_PAGE_RETURN_TO, requestH5Page } from "@/components/marketing/h5-page-mutation-shared";
 import { H5PageSettingsButton } from "@/components/marketing/h5-page-settings-dialog";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export function H5PageRowActions({
   page,
@@ -38,6 +39,22 @@ export function H5PageRowActions({
         await action();
         toast.success(label);
         router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "操作失败");
+      }
+    });
+  }
+
+  function archivePage() {
+    startTransition(async () => {
+      try {
+        setArchiveOpen(false);
+        await requestH5Page({
+          path: `${apiBasePath}/${page.id}`,
+          method: "DELETE",
+        });
+        toast.success("H5 活动页已结束");
+        refreshAfterDialogClose(router);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "操作失败");
       }
@@ -155,15 +172,7 @@ export function H5PageRowActions({
               type="button"
               variant="destructive"
               disabled={pending}
-              onClick={() => {
-                setArchiveOpen(false);
-                runAction("H5 活动页已结束", () =>
-                  requestH5Page({
-                    path: `${apiBasePath}/${page.id}`,
-                    method: "DELETE",
-                  })
-                );
-              }}
+              onClick={archivePage}
             >
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
               确认结束

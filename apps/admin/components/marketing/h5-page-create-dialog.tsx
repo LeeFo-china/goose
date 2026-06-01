@@ -15,6 +15,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildDefaultConfig, buildPagePayload, buildPageUrl, buildRandomSlug, createDefaultH5PageValues, DEFAULT_H5_PAGE_API_BASE_PATH, H5PageFormSchema, type AiCreateSnapshot, type AiFillCreateResponse, type H5MarketingPageRouteOptions, type H5PageFormValues, normalizeSlug, requestH5Page } from "@/components/marketing/h5-page-mutation-shared";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export function CreateH5MarketingPageButton({
   apiBasePath = DEFAULT_H5_PAGE_API_BASE_PATH,
@@ -137,7 +138,7 @@ export function CreateH5MarketingPageButton({
         setAiSnapshot(null);
         setAiError("");
         setValues(createDefaultH5PageValues());
-        router.refresh();
+        refreshAfterDialogClose(router);
       } catch (error) {
         setError(error instanceof Error ? error.message : "创建失败");
       }
