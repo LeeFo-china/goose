@@ -1327,3 +1327,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后 public API 保持原导出名称；内部模块仍共享 `shared.ts` 中的类型、prompt 常量和 cache map，后续可继续把 AI provider runtime 与业务 prompt 进一步分离。
 - `expense-requests/legacy-service.ts`、`system-settings/legacy-service.ts`、`billing/legacy-service.ts`、`projects/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 5 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split expense request legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1937 | 111 | `apps/api/src/services/expense-requests/legacy-service.ts` |
+| - | 221 | `apps/api/src/services/expense-requests/legacy/access.ts` |
+| - | 286 | `apps/api/src/services/expense-requests/legacy/approval-chain.ts` |
+| - | 194 | `apps/api/src/services/expense-requests/legacy/base.ts` |
+| - | 222 | `apps/api/src/services/expense-requests/legacy/candidates.ts` |
+| - | 280 | `apps/api/src/services/expense-requests/legacy/drafts.ts` |
+| - | 129 | `apps/api/src/services/expense-requests/legacy/payment.ts` |
+| - | 256 | `apps/api/src/services/expense-requests/legacy/queries.ts` |
+| - | 328 | `apps/api/src/services/expense-requests/legacy/shared.ts` |
+| - | 459 | `apps/api/src/services/expense-requests/legacy/workflow.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定和 `expenseRequestService` 导出。
+- 公共类型、审批节点配置、金额/附件/关系序列化 helper 拆入 `shared.ts`。
+- 读写权限、可见范围和审批候选 scope 逻辑拆入 `access.ts`。
+- 审批链校验、当前节点、轮次和审批记录幂等写入拆入 `approval-chain.ts`。
+- 审批人候选、项目候选和审批模板拆入 `candidates.ts`。
+- 草稿创建、更新和提交拆入 `drafts.ts`；审批/驳回/撤回拆入 `workflow.ts`；打款登记拆入 `payment.ts`；详情、列表、统计、待办拆入 `queries.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/expense-requests/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 38 个减少到 37 个，`expense-requests/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `expense-requests/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖费用申请草稿、提交、审批、驳回、撤回、打款、查询统计和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实业务接口 smoke | 未执行 | 当前环境没有统一测试 token、审批人权限配置、项目和费用申请测试数据；未对费用申请写路径发请求 |
+
+### 风险和遗留
+
+- 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把审批链运行时和费用申请状态流转继续收敛成显式子 service。
+- `system-settings/legacy-service.ts`、`billing/legacy-service.ts`、`projects/legacy-service.ts`、`marketing-pages/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
