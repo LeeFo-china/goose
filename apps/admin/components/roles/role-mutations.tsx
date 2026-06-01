@@ -1,14 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
-import {
-  ACCESS_SCOPE_VALUES,
-  AccessScopeConfig,
-  ROLE_STATUS_VALUES,
-  RoleStatusConfig,
-  type AccessScope,
-  type RoleStatus,
-} from "@gooes/domain";
 import { useRouter } from "next/navigation";
 import { Edit3, KeyRound, Loader2, Plus, Shield } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -31,47 +23,25 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { requestBackendJson } from "@/lib/backend-client";
+import {
+  accessScopeOptions,
+  normalizeAccessScope,
+  normalizeRoleStatus,
+  requestRoleJson,
+  roleStatusOptions,
+  type AccessScope,
+  type PermissionRecord,
+  type RoleDetail,
+  type RoleMode,
+  type RoleRecord,
+  type RoleStatus,
+} from "@/components/roles/role-mutation-shared";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
-export type RoleRecord = {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  status: RoleStatus | string;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type PermissionRecord = {
-  id: string;
-  code: string;
-  name: string | null;
-  module: string;
-  description: string | null;
-  access_scope?: AccessScope | string;
-};
-
-type RoleDetail = RoleRecord & {
-  permissions: PermissionRecord[];
-  permission_count: number;
-};
-
-type RoleMode = "create" | "edit";
-
-const roleStatusOptions = ROLE_STATUS_VALUES.map((value) => ({
-  value,
-  label: RoleStatusConfig[value].label,
-}));
-
-const accessScopeOptions = ACCESS_SCOPE_VALUES.map((value) => ({
-  value,
-  label: AccessScopeConfig[value].label,
-}));
+export type { RoleRecord } from "@/components/roles/role-mutation-shared";
 
 async function requestJson<T>(path: string, init?: RequestInit) {
-  return requestBackendJson<T>(path, init);
+  return requestRoleJson<T>(path, init);
 }
 
 function RoleDialog({
@@ -92,9 +62,7 @@ function RoleDialog({
     code: role?.code || "",
     name: role?.name || "",
     description: role?.description || "",
-    status: ROLE_STATUS_VALUES.includes(role?.status as RoleStatus)
-      ? role?.status as RoleStatus
-      : "active",
+    status: normalizeRoleStatus(role?.status),
   }), [role]);
   const [status, setStatus] = useState<RoleStatus>(defaults.status);
 
@@ -244,9 +212,7 @@ function RolePermissionsDialog({
         if (cancelled) return;
         const nextSelected: Record<string, AccessScope> = {};
         for (const item of detail.permissions || []) {
-          nextSelected[item.id] = ACCESS_SCOPE_VALUES.includes(item.access_scope as AccessScope)
-            ? item.access_scope as AccessScope
-            : "self";
+          nextSelected[item.id] = normalizeAccessScope(item.access_scope);
         }
         setPermissions(permissionData.list || []);
         setSelected(nextSelected);
