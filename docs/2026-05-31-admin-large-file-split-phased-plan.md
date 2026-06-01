@@ -1583,6 +1583,137 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 
+## 第九轮执行记录（2026-06-01）
+
+目标：
+
+- 继续做预防性拆分，把 350-370 行区间的文件往下压。
+- 保持每阶段改动边界清晰，已有 import 路径尽量兼容。
+
+### 阶段 1：身份诊断结果表格辅助拆分
+
+范围：
+
+- `apps/admin/components/platform-identity-diagnostics/identity-diagnostics-result-sections.tsx`
+
+处理：
+
+- 提取日期、状态 variant、风险等级、短值展示、复制单元格、JSON 预览、空行组件到 `identity-diagnostics-table-shared.tsx`。
+- 结果区块文件保留摘要卡、问题列表和各业务表格。
+
+结果：
+
+- `identity-diagnostics-result-sections.tsx`：367 行降到 295 行。
+- `identity-diagnostics-table-shared.tsx`：84 行。
+
+提交：
+
+- `c2830cf refactor: split identity diagnostics table helpers`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 2：项目验收工具函数拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptance-utils.ts`
+
+处理：
+
+- 提取后端请求、阶段选项、开放状态、COS 直传和图片预览到 `project-acceptance-io.ts`。
+- 提取编辑态构造、整改重置、模板编辑 clone 到 `project-acceptance-editable.ts`。
+- 提取状态/结果/通知/动作/整改展示辅助到 `project-acceptance-display-utils.ts`。
+- 原 `project-acceptance-utils.ts` 改为 re-export，保持调用方 import 路径兼容。
+
+结果：
+
+- `project-acceptance-utils.ts`：366 行降到 3 行。
+- `project-acceptance-io.ts`：61 行。
+- `project-acceptance-editable.ts`：95 行。
+- `project-acceptance-display-utils.ts`：215 行。
+
+提交：
+
+- `9308094 refactor: split project acceptance utilities`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情工序验收页签 smoke 通过。
+
+### 阶段 3：平台租户弹窗拆分
+
+范围：
+
+- `apps/admin/components/platform-tenants/platform-tenant-mutations.tsx`
+
+处理：
+
+- 提取新建/编辑租户弹窗到 `platform-tenant-dialog.tsx`。
+- 提取平台租户请求 helper 到 `platform-tenant-requests.ts`。
+- 原 mutation 文件保留新建、编辑、启停按钮入口。
+
+结果：
+
+- `platform-tenant-mutations.tsx`：363 行降到 105 行。
+- `platform-tenant-dialog.tsx`：273 行。
+- `platform-tenant-requests.ts`：5 行。
+
+提交：
+
+- `6c824bb refactor: split platform tenant dialog`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 4：admin shell 偏好存储拆分
+
+范围：
+
+- `apps/admin/components/layout/admin-shell-preferences.tsx`
+
+处理：
+
+- 提取偏好类型、默认值、主题 token、localStorage 读写和主题应用到 `admin-shell-preferences-store.ts`。
+- 原偏好文件保留菜单 UI，并 re-export 原公开 API。
+
+结果：
+
+- `admin-shell-preferences.tsx`：359 行降到 97 行。
+- `admin-shell-preferences-store.ts`：272 行。
+
+提交：
+
+- `30e9a6b refactor: split admin shell preferences store`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+- 当前最高 TS/TSX 文件为 `marketing-campaign-form-fields.tsx` 和 `employee-dialog.tsx`，均为 357 行。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
