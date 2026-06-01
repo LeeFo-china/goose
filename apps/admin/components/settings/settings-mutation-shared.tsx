@@ -2,25 +2,14 @@
 
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
-
-export function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
+import { requestBackendJson } from "@/lib/backend-client";
 
 export async function updateSetting(key: string, value: string | null) {
-  const response = await fetch(`/api/backend/admin/system-settings/${encodeURIComponent(key)}`, {
+  await requestBackendJson(`/admin/system-settings/${encodeURIComponent(key)}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({ value }),
+    fallbackMessage: "系统配置保存失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "系统配置保存失败"));
-  }
 }
 
 export function sourceBadge(setting: SystemSetting) {

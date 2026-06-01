@@ -1,4 +1,5 @@
 import type { AiModelRecord } from "@/components/platform-ai/ai-config-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export type ProviderFormState = {
   id?: string;
@@ -70,18 +71,7 @@ export function emptyRouteForm(modelId = ""): RouteFormState {
 }
 
 export async function requestBackend<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`/api/backend${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({})) as { data?: T; message?: string };
-  if (!response.ok) {
-    throw new Error(payload.message || `请求失败(${response.status})`);
-  }
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }
 
 export function modelLabel(model?: AiModelRecord | null) {

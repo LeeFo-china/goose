@@ -6,10 +6,10 @@ import { Check, Loader2, RotateCcw, Save, TestTube2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import {
-  getPayloadMessage,
   sourceBadge,
   updateSetting,
 } from "@/components/settings/settings-mutation-shared";
+import { requestBackendJson } from "@/lib/backend-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,23 +34,18 @@ import { Textarea } from "@/components/ui/textarea";
 export { updateSetting } from "@/components/settings/settings-mutation-shared";
 
 async function testSocialVideoTranscription(url: string) {
-  const response = await fetch("/api/backend/admin/social-video/transcriptions/test", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ platform: "douyin", url }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "短视频识别测试失败"));
-  }
-  return data.data as {
+  return requestBackendJson<{
     actor_id?: string;
     run_id?: string;
     title?: string | null;
     text?: string;
     text_length?: number;
     segment_count?: number;
-  };
+  }>("/admin/social-video/transcriptions/test", {
+    method: "POST",
+    body: JSON.stringify({ platform: "douyin", url }),
+    fallbackMessage: "短视频识别测试失败",
+  });
 }
 
 function formatValue(value: string | null) {

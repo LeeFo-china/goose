@@ -8,6 +8,7 @@ import {
 } from "@gooes/domain";
 import { FormSelect } from "@/components/admin/form-select";
 import type { SelectOption } from "@/components/admin/form-select";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export type PermissionMode = "create" | "edit";
 
@@ -96,30 +97,13 @@ export function SelectField({
   );
 }
 
-export function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 export async function mutatePermission(input: {
   method: "POST" | "PATCH" | "DELETE";
   id?: string;
   payload?: unknown;
 }) {
-  const response = await fetch(
-    input.id ? `/api/backend/permissions/${input.id}` : "/api/backend/permissions",
-    {
-      method: input.method,
-      headers: input.payload ? { "content-type": "application/json" } : undefined,
-      body: input.payload ? JSON.stringify(input.payload) : undefined,
-    },
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload;
+  return requestBackendJson(input.id ? `/permissions/${input.id}` : "/permissions", {
+    method: input.method,
+    body: input.payload ? JSON.stringify(input.payload) : undefined,
+  });
 }
