@@ -97,6 +97,24 @@ test.describe("admin smoke", () => {
     await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
   });
 
+  test("角色权限配置弹窗可打开", async ({ page }) => {
+    await gotoAdminPage(page, "/roles");
+
+    await expect(page.getByRole("heading", { name: "角色管理" })).toBeVisible();
+    await expect(page.getByText("角色列表")).toBeVisible();
+
+    const permissionButton = page.getByRole("button", { name: "权限" }).first();
+    if (await permissionButton.count()) {
+      await expect(permissionButton).toBeVisible();
+      await permissionButton.click();
+      const dialog = page.getByRole("dialog").filter({ hasText: "配置角色权限" });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "保存权限" })).toBeVisible();
+    } else {
+      await expect(page.getByText("还没有创建角色")).toBeVisible();
+    }
+  });
+
   test("费用审批列表和操作入口可渲染", async ({ page }) => {
     await gotoAdminPage(page, "/expenses");
 
