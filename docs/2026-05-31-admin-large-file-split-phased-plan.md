@@ -863,6 +863,113 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，9 条 smoke 全部通过。
 
+## 2026-06-01 第三轮临界文件拆分与覆盖补齐记录
+
+本轮按“摄像头资产、H5 线索、组织岗位配置、E2E 覆盖补齐”四阶段执行。
+
+### 阶段 1：摄像头资产面板拆分
+
+范围：
+
+- `apps/admin/components/cameras/tenant-device-assets-panel.tsx`
+
+处理：
+
+- 提取设备资产编辑、删除、同步动作到 `tenant-device-asset-actions.tsx`。
+- 提取厂商展示、状态 badge、设备标识压缩、资产显示名到 `tenant-device-asset-utils.tsx`。
+- 原面板保留统计、表格和行渲染编排。
+
+结果：
+
+- `tenant-device-assets-panel.tsx`：427 行降到 120 行。
+- `tenant-device-asset-actions.tsx`：282 行。
+- `tenant-device-asset-utils.tsx`：42 行。
+
+提交：
+
+- `4a1c454 refactor: split tenant device asset actions`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 摄像头资产页 smoke 通过。
+
+### 阶段 2：H5 线索表动作拆分
+
+范围：
+
+- `apps/admin/components/marketing/h5-leads-table.tsx`
+
+处理：
+
+- 提取线索跟进、转客户、作废弹窗和请求动作到 `h5-lead-actions.tsx`。
+- 原表格文件保留列定义、状态展示和 DataTable 接入。
+
+结果：
+
+- `h5-leads-table.tsx`：426 行降到 149 行。
+- `h5-lead-actions.tsx`：287 行。
+
+提交：
+
+- `40aade2 refactor: split h5 lead actions`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- H5 活动页新建弹窗 smoke 通过。
+
+### 阶段 3：组织岗位配置列表拆分
+
+范围：
+
+- `apps/admin/components/organization/department-post-config-dialog.tsx`
+
+处理：
+
+- 提取已选岗位摘要和岗位命令列表到 `department-post-config-list.tsx`。
+- 保存、新增岗位、搜索状态仍保留在原 dialog，避免改变业务 payload。
+
+结果：
+
+- `department-post-config-dialog.tsx`：419 行降到 353 行。
+- `department-post-config-list.tsx`：130 行。
+
+提交：
+
+- `bdc82c7 refactor: split department post config list`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 组织架构配置岗位 smoke 通过。
+
+### 阶段 4：E2E 覆盖补齐
+
+新增 smoke：
+
+- `/usage` 租户用量页基础区域。
+- `/platform/usage` 租户账号访问平台用量时的访问提示。
+- `/marketing?tab=h5-leads` 营销 H5 线索入口。
+
+提交：
+
+- `0533eb2 test: cover admin usage and marketing smoke`
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
