@@ -13,17 +13,20 @@ async function loginAsTenantAdmin(page: Page) {
   expect(loginResponse.ok()).toBe(true);
 }
 
+async function gotoAdminPage(page: Page, path: string) {
+  await page.goto(path, { waitUntil: "load" });
+}
+
 test.describe("admin smoke", () => {
   test.beforeEach(async ({ page }) => {
     await loginAsTenantAdmin(page);
   });
 
   test("租户管理员可访问组织架构并打开配置岗位弹窗", async ({ page }) => {
-    await page.goto("/dashboard");
+    await gotoAdminPage(page, "/dashboard");
     await expect(page.getByText("鹅班长工作台")).toBeVisible();
 
-    await page.goto("/organization");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/organization");
     const configurePostButton = page.getByRole("button", { name: /配置岗位/ }).first();
     await expect(configurePostButton).toBeVisible();
 
@@ -50,8 +53,7 @@ test.describe("admin smoke", () => {
   });
 
   test("项目新增弹窗保留客户和负责人字段", async ({ page }) => {
-    await page.goto("/projects");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/projects");
 
     await page.getByRole("button", { name: "新增项目" }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "维护项目基础档案" });
@@ -64,8 +66,7 @@ test.describe("admin smoke", () => {
   });
 
   test("员工新增和角色配置弹窗可打开", async ({ page }) => {
-    await page.goto("/employees");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/employees");
 
     await expect(page.getByRole("heading", { name: "员工管理" })).toBeVisible();
     await page.getByRole("button", { name: "新增员工" }).click();
@@ -85,8 +86,7 @@ test.describe("admin smoke", () => {
   });
 
   test("权限点列表展示核心字段", async ({ page }) => {
-    await page.goto("/permissions");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/permissions");
 
     await expect(page.getByRole("heading", { name: "权限点管理" })).toBeVisible();
     await expect(page.getByText("权限点列表")).toBeVisible();
@@ -98,8 +98,7 @@ test.describe("admin smoke", () => {
   });
 
   test("费用审批列表和操作入口可渲染", async ({ page }) => {
-    await page.goto("/expenses");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/expenses");
 
     await expect(page.getByRole("heading", { name: "费用审批" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "申请", exact: true })).toBeVisible();
@@ -119,8 +118,7 @@ test.describe("admin smoke", () => {
   });
 
   test("H5 活动页新建弹窗保留 AI 和基础字段", async ({ page }) => {
-    await page.goto("/marketing?tab=h5");
-    await page.waitForLoadState("networkidle");
+    await gotoAdminPage(page, "/marketing?tab=h5");
 
     await expect(page.getByRole("heading", { name: "营销活动" })).toBeVisible();
     await expect(page.getByText("H5 活动页").first()).toBeVisible();
