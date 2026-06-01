@@ -1380,3 +1380,55 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把审批链运行时和费用申请状态流转继续收敛成显式子 service。
 - `system-settings/legacy-service.ts`、`billing/legacy-service.ts`、`projects/legacy-service.ts`、`marketing-pages/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 6 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split system settings legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1554 | 56 | `apps/api/src/services/system-settings/legacy-service.ts` |
+| - | 153 | `apps/api/src/services/system-settings/legacy/crypto.ts` |
+| - | 297 | `apps/api/src/services/system-settings/legacy/definitions-ai-social.ts` |
+| - | 274 | `apps/api/src/services/system-settings/legacy/definitions-integrations.ts` |
+| - | 183 | `apps/api/src/services/system-settings/legacy/definitions-sms.ts` |
+| - | 135 | `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts` |
+| - | 88 | `apps/api/src/services/system-settings/legacy/definitions.ts` |
+| - | 246 | `apps/api/src/services/system-settings/legacy/records.ts` |
+| - | 246 | `apps/api/src/services/system-settings/legacy/settings.ts` |
+| - | 43 | `apps/api/src/services/system-settings/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留缓存字段、方法绑定和 `systemSettingsService` 导出。
+- 设置定义按领域拆入 `definitions-sms.ts`、`definitions-integrations.ts`、`definitions-ai-social.ts`、`definitions-wechat-notify.ts`，再由 `definitions.ts` 汇总。
+- 加密、解密、环境变量读取、配置值校验拆入 `crypto.ts`。
+- 记录读取、effective 值合成、租户短信可编辑配置构造拆入 `records.ts`。
+- 对外 list/update/getString/getNumber/getBoolean 等 API 拆入 `settings.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/system-settings/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 37 个减少到 36 个，`system-settings/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `system-settings/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖系统配置定义、租户覆盖、加密配置读取、更新写入和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实配置写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对生产/测试租户配置执行写入 |
+
+### 风险和遗留
+
+- 设置定义仍集中在多个静态数组文件中，属于低风险结构拆分；后续如配置继续增长，可按业务域迁移为 registry 目录。
+- `billing/legacy-service.ts`、`projects/legacy-service.ts`、`marketing-pages/legacy-service.ts`、`project-cameras/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
