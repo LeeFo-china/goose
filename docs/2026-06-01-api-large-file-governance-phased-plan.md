@@ -1118,3 +1118,50 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 当前治理把原大文件迁为显式 legacy 豁免，解决入口边界和新增门禁问题，但未完成所有 legacy 内部实质拆分。
 - 后续新增代码必须先通过 `bun run api:check-file-size`；若确需超过 500 行，必须在治理文档中新增豁免理由和后续拆分计划。
+
+## 后续 Legacy Phase 1 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split wechat auth legacy controller`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2238 | 187 | `apps/api/src/services/wechat-auth-legacy-controller.ts` |
+| - | 484 | `apps/api/src/services/wechat-auth-legacy/common.ts` |
+| - | 406 | `apps/api/src/services/wechat-auth-legacy/login.ts` |
+| - | 378 | `apps/api/src/services/wechat-auth-legacy/verify-role.ts` |
+| - | 409 | `apps/api/src/services/wechat-auth-legacy/identity.ts` |
+| - | 408 | `apps/api/src/services/wechat-auth-legacy/customer.ts` |
+| - | 348 | `apps/api/src/services/wechat-auth-legacy/employee.ts` |
+| - | 46 | `apps/api/src/services/wechat-auth-legacy/shared.ts` |
+
+### 结构变化
+
+- `wechat-auth-legacy-controller.ts` 只保留路由装饰器、BaseController 继承和薄委托，继续作为 `controllers/wechat/index.ts` 的兼容入口。
+- 原登录、短信验证、客户租户选择、重绑、H5 session、员工绑定、客户绑定、公众号占位配置逻辑按职责拆入 `wechat-auth-legacy/` 子模块。
+- 共享 schema、登录态类型、visitor 缓存 TTL 移入 `wechat-auth-legacy/shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/wechat-auth-legacy-controller.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 42 个减少到 41 个，`wechat-auth-legacy-controller.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `wechat-auth-legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖路由装饰器、委托方法、类型转发和 bundle |
+| 真实微信登录/绑定接口 smoke | 未执行 | 当前环境没有可用微信 code、测试手机号验证码和测试租户数据；未对登录、绑定、换绑写路径发请求 |
+
+### 风险和遗留
+
+- 拆分后模块间仍通过 controller 实例 `this` 共享 helper，属于低风险结构拆分；后续可以继续把这些 helper 收敛为显式 runtime/context 对象，减少 `this` 依赖。
+- 下一批 legacy 实拆建议处理 `customer-project-log-shares/legacy-service.ts` 或 `project-acceptances/legacy-service.ts`，两者仍是最大的遗留业务单体。
