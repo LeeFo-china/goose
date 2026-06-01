@@ -1329,6 +1329,134 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 
+## 2026-06-01 第七轮临界文件拆分记录
+
+本轮按“用量日志表、项目验收状态、费用面板、客户 mutation shared”四阶段执行。
+
+### 阶段 1：用量日志表拆分
+
+范围：
+
+- `apps/admin/components/usage/usage-logs-tables.tsx`
+
+处理：
+
+- 提取 AI、短信、短视频转写三张日志表到独立组件。
+- 提取日期、数字、时长、状态 badge 和计费 badge 到 `usage-log-formatters.tsx`。
+- 原 `usage-logs-tables.tsx` 保留 re-export，调用方 import 路径不变。
+
+结果：
+
+- `usage-logs-tables.tsx`：390 行降到 3 行。
+- `usage-ai-logs-table.tsx`：119 行。
+- `usage-sms-logs-table.tsx`：103 行。
+- `usage-social-video-logs-table.tsx`：133 行。
+- `usage-log-formatters.tsx`：69 行。
+
+提交：
+
+- `f98ce95 refactor: split usage log tables`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 租户用量页 smoke 通过。
+
+### 阶段 2：项目验收状态管理 API/helper 拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptances-panel-state.ts`
+
+处理：
+
+- 提取验收列表加载、创建工序/竣工验收、模板加载、保存/提交、通过/驳回、通知客户、删除草稿和上传图片 patch 到 `project-acceptances-panel-api.ts`。
+- hook 文件保留 React 状态、派生状态、弹窗状态和回调编排。
+
+结果：
+
+- `project-acceptances-panel-state.ts`：390 行降到 343 行。
+- `project-acceptances-panel-api.ts`：153 行。
+
+提交：
+
+- `08996c0 refactor: split project acceptance panel api helpers`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情工序验收页签 smoke 通过。
+
+### 阶段 3：费用面板拆分
+
+范围：
+
+- `apps/admin/components/expenses/expenses-panel.tsx`
+
+处理：
+
+- 提取筛选类型、选项、日期转换、列表请求、金额格式化和本页汇总到 `expenses-panel-data.ts`。
+- 提取统计卡、筛选头部和分页控件到 `expenses-panel-sections.tsx`。
+- 面板文件保留状态、加载、防并发请求和表格刷新回调。
+
+结果：
+
+- `expenses-panel.tsx`：386 行降到 157 行。
+- `expenses-panel-data.ts`：124 行。
+- `expenses-panel-sections.tsx`：223 行。
+
+提交：
+
+- `42f3f9e refactor: split expenses panel sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 费用审批列表 smoke 通过。
+
+### 阶段 4：客户 mutation shared 拆分
+
+范围：
+
+- `apps/admin/components/customers/customer-mutation-shared.tsx`
+
+处理：
+
+- 提取客户请求、头像上传、项目主成员同步到 `customer-mutation-api.ts`。
+- 提取展示格式化、状态标签、来源标签、房产摘要和通用展示项到 `customer-mutation-display.tsx`。
+- 原 shared 文件继续 re-export 新文件，保持现有 import 路径兼容。
+
+结果：
+
+- `customer-mutation-shared.tsx`：384 行降到 147 行。
+- `customer-mutation-api.ts`：127 行。
+- `customer-mutation-display.tsx`：143 行。
+
+提交：
+
+- `bb7bcdd refactor: split customer mutation shared helpers`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目新增弹窗 smoke 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
