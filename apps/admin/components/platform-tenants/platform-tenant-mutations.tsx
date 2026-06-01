@@ -22,26 +22,12 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 type TenantDialogMode = "create" | "edit";
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestJson<T>(path: string, init?: RequestInit) {
-  const response = await fetch(path, init);
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }
 
 function generateTenantSlug() {

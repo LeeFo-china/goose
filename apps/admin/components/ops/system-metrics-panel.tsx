@@ -7,6 +7,7 @@ import type { OpsSystemMetrics } from "@/components/ops/ops-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
 const AUTO_REFRESH_INTERVAL_MS = 2000;
@@ -37,14 +38,10 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 async function requestMetrics() {
-  const response = await fetch("/api/backend/admin/ops/system-metrics", {
+  return requestBackendJson<OpsSystemMetrics>("/admin/ops/system-metrics", {
     cache: "no-store",
+    fallbackMessage: "资源指标加载失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.message || `资源指标加载失败(${response.status})`);
-  }
-  return payload.data as OpsSystemMetrics;
 }
 
 function RingMetric({

@@ -15,26 +15,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
+import { requestBackendJson } from "@/lib/backend-client";
 
 async function requestOps<T>(path: string, payload?: unknown) {
-  const response = await fetch(`/api/backend${path}`, {
+  return requestBackendJson<T>(path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(payload || {}),
+    fallbackMessage: "脚本执行失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "脚本执行失败"));
-  }
-  return data.data as T;
 }
 
 function statusVariant(status: OpsScriptRun["status"]) {
@@ -146,4 +134,3 @@ export function RunOpsScriptButton({ script }: { script: OpsScript }) {
     </>
   );
 }
-

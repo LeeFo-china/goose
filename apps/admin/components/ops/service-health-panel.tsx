@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
 const AUTO_REFRESH_INTERVAL_MS = 5000;
@@ -59,14 +60,10 @@ function healthVariant(value: OpsServiceHealth["containers"][number]["health"]):
 }
 
 async function requestServiceHealth() {
-  const response = await fetch("/api/backend/admin/ops/service-health", {
+  return requestBackendJson<OpsServiceHealth>("/admin/ops/service-health", {
     cache: "no-store",
+    fallbackMessage: "微服务健康状态加载失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.message || `微服务健康状态加载失败(${response.status})`);
-  }
-  return payload.data as OpsServiceHealth;
 }
 
 function SummaryItem({

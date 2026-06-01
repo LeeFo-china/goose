@@ -1,4 +1,5 @@
 import type { ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseOperation, ReleaseOptionsData, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData, Pagination } from "@/components/ops/ops-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export type ReleaseDeploymentsPanelProps = {
   options: ReleaseOptionsData | null;
@@ -24,14 +25,6 @@ export const REF_TYPE_OPTIONS: Array<{
 export const RELEASE_RUN_POLL_MS = 15_000;
 export const RELEASE_RUN_FORCE_POLL_MS = 10 * 60_000;
 
-export function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 export async function dispatchRelease(payload: {
   environment: ReleaseEnvironment;
   service: ReleaseService;
@@ -42,16 +35,11 @@ export async function dispatchRelease(payload: {
   reason: string;
   confirm_text?: string;
 }) {
-  const response = await fetch("/api/backend/admin/ops/releases/dispatch", {
+  return requestBackendJson<ReleaseDispatchResult>("/admin/ops/releases/dispatch", {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
+    fallbackMessage: "发布任务提交失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "发布任务提交失败"));
-  }
-  return data.data as ReleaseDispatchResult;
 }
 
 export async function createReleaseTag(payload: {
@@ -59,32 +47,22 @@ export async function createReleaseTag(payload: {
   source_ref: string;
   message: string;
 }) {
-  const response = await fetch("/api/backend/admin/ops/releases/tags", {
+  return requestBackendJson<ReleaseCreateTagResult>("/admin/ops/releases/tags", {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
+    fallbackMessage: "发布 Tag 创建失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "发布 Tag 创建失败"));
-  }
-  return data.data as ReleaseCreateTagResult;
 }
 
 export async function createRollbackTag(payload: {
   source_ref: string;
   message?: string;
 }) {
-  const response = await fetch("/api/backend/admin/ops/releases/rollback-tag", {
+  return requestBackendJson<ReleaseCreateTagResult>("/admin/ops/releases/rollback-tag", {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
+    fallbackMessage: "回滚 Tag 创建失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "回滚 Tag 创建失败"));
-  }
-  return data.data as ReleaseCreateTagResult;
 }
 
 export async function fetchReleaseRefs(input: {
@@ -98,14 +76,11 @@ export async function fetchReleaseRefs(input: {
   if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
   if (input.baseRef?.trim()) query.set("base_ref", input.baseRef.trim());
 
-  const response = await fetch(`/api/backend/admin/ops/releases/refs?${query.toString()}`, {
+  const data = await requestBackendJson<{ list?: ReleaseRefOption[] }>(`/admin/ops/releases/refs?${query.toString()}`, {
     cache: "no-store",
+    fallbackMessage: "版本列表加载失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "版本列表加载失败"));
-  }
-  return (data.data?.list || []) as ReleaseRefOption[];
+  return data.list || [];
 }
 
 export async function fetchReleaseRuns(input: { page: number; pageSize?: number }) {
@@ -113,14 +88,10 @@ export async function fetchReleaseRuns(input: { page: number; pageSize?: number 
     page: String(input.page),
     pageSize: String(input.pageSize || 5),
   });
-  const response = await fetch(`/api/backend/admin/ops/releases/runs?${query.toString()}`, {
+  return requestBackendJson<ReleaseRunListData>(`/admin/ops/releases/runs?${query.toString()}`, {
     cache: "no-store",
+    fallbackMessage: "最近发布记录刷新失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "最近发布记录刷新失败"));
-  }
-  return data.data as ReleaseRunListData;
 }
 
 export async function fetchSuccessfulRefs(input: {
@@ -136,36 +107,24 @@ export async function fetchSuccessfulRefs(input: {
   if (input.environment !== "all") query.set("environment", input.environment);
   if (input.keyword.trim()) query.set("keyword", input.keyword.trim());
 
-  const response = await fetch(`/api/backend/admin/ops/releases/successful-refs?${query.toString()}`, {
+  return requestBackendJson<ReleaseSuccessfulRefListData>(`/admin/ops/releases/successful-refs?${query.toString()}`, {
     cache: "no-store",
+    fallbackMessage: "发布辅助刷新失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "发布辅助刷新失败"));
-  }
-  return data.data as ReleaseSuccessfulRefListData;
 }
 
 export async function fetchReleaseRuntimeVersions() {
-  const response = await fetch("/api/backend/admin/ops/releases/runtime-versions", {
+  return requestBackendJson<ReleaseRuntimeVersionData>("/admin/ops/releases/runtime-versions", {
     cache: "no-store",
+    fallbackMessage: "运行版本刷新失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "运行版本刷新失败"));
-  }
-  return data.data as ReleaseRuntimeVersionData;
 }
 
 export async function fetchReleaseRunFailureSummary(runId: string) {
-  const response = await fetch(`/api/backend/admin/ops/releases/runs/${encodeURIComponent(runId)}/failure-summary`, {
+  return requestBackendJson<ReleaseRunFailureSummary>(`/admin/ops/releases/runs/${encodeURIComponent(runId)}/failure-summary`, {
     cache: "no-store",
+    fallbackMessage: "失败摘要加载失败",
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) {
-    throw new Error(getPayloadMessage(data, "失败摘要加载失败"));
-  }
-  return data.data as ReleaseRunFailureSummary;
 }
 
 export function formatDateTime(value: string | null | undefined) {
