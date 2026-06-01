@@ -2,29 +2,33 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
-  type ProjectLogStageCode,
-} from "@gooes/domain";
+import { type ProjectLogStageCode } from "@gooes/domain";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
 import type {
   AcceptanceDialogState,
-  AcceptanceListData,
   AcceptanceTemplate,
-  AcceptanceTemplateListData,
   ConstructionStageItem,
-  ConstructionStagePayload,
   EditableItem,
   EditableState,
-  NotifyCustomerResult,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+import {
+  approveProjectAcceptance,
+  buildUploadedImagePatch,
+  createFinalProjectAcceptance,
+  createStageAcceptance,
+  deleteProjectAcceptanceDraft,
+  loadFinalAcceptanceTemplate,
+  loadProjectAcceptanceData,
+  notifyProjectAcceptanceCustomer,
+  rejectProjectAcceptance,
+  saveProjectAcceptance,
+} from "@/components/projects/project-acceptances-panel-api";
 import { getProjectAcceptancesPanelDerived } from "@/components/projects/project-acceptances-panel-derived";
 import {
   buildEditable,
   formatDateTime,
   getAcceptanceDisplayTitle,
-  requestBackend,
   resetRejectedEditableItems,
   uploadAcceptanceImageDirect,
 } from "@/components/projects/project-acceptance-utils";
@@ -82,14 +86,7 @@ export function useProjectAcceptancesPanel(
     setLoading(true);
     setError("");
     try {
-      const [data, stageData] = await Promise.all([
-        requestBackend<AcceptanceListData>(
-          `/project-acceptances?project_id=${project.id}&page=1&pageSize=20`,
-        ),
-        requestBackend<ConstructionStagePayload>(
-          `/projects/${project.id}/construction-stages`,
-        ),
-      ]);
+      const [data, stageData] = await loadProjectAcceptanceData(project.id);
       const list = data.list || [];
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
@@ -165,12 +162,9 @@ export function useProjectAcceptancesPanel(
       if (!canCreateAcceptance) {
         throw new Error("当前无可发起的工序验收");
       }
-      const created = await requestBackend<ProjectAcceptance>("/project-acceptances", {
-        method: "POST",
-        payload: {
-          project_id: project.id,
-          stage_code: stageCode,
-        },
+      const created = await createStageAcceptance({
+        projectId: project.id,
+        stageCode,
       });
       setSelectedId(created.id);
     });
@@ -180,14 +174,7 @@ export function useProjectAcceptancesPanel(
       if (!canCreateFinalAcceptance) {
         throw new Error(finalAcceptanceBlockedReason || "当前不可发起竣工交付验收");
       }
-      const created = await requestBackend<ProjectAcceptance>("/project-acceptances", {
-        method: "POST",
-        payload: {
-          project_id: project.id,
-          acceptance_type: "final",
-          stage_code: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
-        },
-      });
+      const created = await createFinalProjectAcceptance(project.id);
       setSelectedId(created.id);
     });
 
@@ -198,11 +185,9 @@ export function useProjectAcceptancesPanel(
 
     setTemplateLoading(true);
     try {
-      const data = await requestBackend<AcceptanceTemplateListData>(
-        `/project-acceptance-templates?acceptance_type=final&stage_code=${PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE}&status=active`,
-      );
-      setFinalTemplate(data.list?.[0] || null);
-      if (!data.list?.length) {
+      const data = await loadFinalAcceptanceTemplate();
+      setFinalTemplate(data.template || null);
+      if (!data.hasTemplate) {
         setTemplateError("当前没有启用的竣工交付验收模板");
       }
     } catch (err) {
@@ -215,36 +200,16 @@ export function useProjectAcceptancesPanel(
   const saveAcceptance = (submit = false) =>
     runAction(async () => {
       if (!selected) return;
-      const payload = {
-        summary: editable.summary,
-        items: Object.values(editable.items).map((item) => ({
-          id: item.id,
-          result: item.result,
-          remark: item.remark,
-          images: item.images,
-          rectification_remark: item.rectification_remark,
-          rectification_images: item.rectification_images,
-        })),
-      };
-      if (submit) {
-        await requestBackend(`/project-acceptances/${selected.id}/submit`, {
-          method: "POST",
-          payload,
-        });
-      } else {
-        await requestBackend(`/project-acceptances/${selected.id}`, {
-          method: "PATCH",
-          payload,
-        });
-      }
+      await saveProjectAcceptance({
+        acceptanceId: selected.id,
+        editable,
+        submit,
+      });
     });
 
   const approveAcceptance = (acceptanceId: string, comment: string) =>
     runAction(async () => {
-      await requestBackend(`/project-acceptances/${acceptanceId}/approve`, {
-        method: "POST",
-        payload: { comment: comment.trim() || "复核通过" },
-      });
+      await approveProjectAcceptance({ acceptanceId, comment });
       setActionDialog(null);
     });
 
@@ -256,9 +221,9 @@ export function useProjectAcceptancesPanel(
     }
 
     return runAction(async () => {
-      await requestBackend(`/project-acceptances/${acceptanceId}/reject`, {
-        method: "POST",
-        payload: { comment: normalizedComment },
+      await rejectProjectAcceptance({
+        acceptanceId,
+        comment: normalizedComment,
       });
       setActionDialog(null);
     });
@@ -267,13 +232,10 @@ export function useProjectAcceptancesPanel(
   const notifyCustomer = (force = false) =>
     runAction(async () => {
       if (!selected) return;
-      const data = await requestBackend<NotifyCustomerResult>(
-        `/project-acceptances/${selected.id}/notify-customer`,
-        {
-          method: "POST",
-          payload: { scene: "customer_review", force },
-        },
-      );
+      const data = await notifyProjectAcceptanceCustomer({
+        acceptanceId: selected.id,
+        force,
+      });
       toast.success(data.reused ? "已复用未过期通知" : "客户通知已发送", {
         description: `${data.phone} · ${formatDateTime(data.expire_at)} 过期`,
       });
@@ -281,9 +243,7 @@ export function useProjectAcceptancesPanel(
 
   const deleteDraftAcceptance = (acceptanceId: string) =>
     runAction(async () => {
-      await requestBackend(`/project-acceptances/${acceptanceId}`, {
-        method: "DELETE",
-      });
+      await deleteProjectAcceptanceDraft(acceptanceId);
       setActionDialog(null);
     });
 
@@ -319,18 +279,11 @@ export function useProjectAcceptancesPanel(
         files.map((file) => uploadAcceptanceImageDirect(file, project.id)),
       );
       const currentItem = editable.items[itemId];
-      updateEditableItem(itemId, {
-        [target]: [
-          ...(currentItem?.[target] || []),
-          ...uploaded.map((item) => item.path),
-        ],
-        [target === "images" ? "imagePreviews" : "rectificationImagePreviews"]: [
-          ...(target === "images"
-            ? currentItem?.imagePreviews || []
-            : currentItem?.rectificationImagePreviews || []),
-          ...uploaded.map((item) => item.preview),
-        ],
-      } as Partial<EditableItem>);
+      updateEditableItem(itemId, buildUploadedImagePatch({
+        currentItem,
+        target,
+        uploaded,
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "图片上传失败");
     } finally {
