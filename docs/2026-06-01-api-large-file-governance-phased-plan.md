@@ -1165,3 +1165,61 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后模块间仍通过 controller 实例 `this` 共享 helper，属于低风险结构拆分；后续可以继续把这些 helper 收敛为显式 runtime/context 对象，减少 `this` 依赖。
 - 下一批 legacy 实拆建议处理 `customer-project-log-shares/legacy-service.ts` 或 `project-acceptances/legacy-service.ts`，两者仍是最大的遗留业务单体。
+
+## 后续 Legacy Phase 2 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split customer project log share legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 4287 | 309 | `apps/api/src/services/customer-project-log-shares/legacy-service.ts` |
+| - | 404 | `apps/api/src/services/customer-project-log-shares/legacy/base.ts` |
+| - | 350 | `apps/api/src/services/customer-project-log-shares/legacy/config-access.ts` |
+| - | 356 | `apps/api/src/services/customer-project-log-shares/legacy/customer-appointments.ts` |
+| - | 329 | `apps/api/src/services/customer-project-log-shares/legacy/customer-campaigns.ts` |
+| - | 460 | `apps/api/src/services/customer-project-log-shares/legacy/employee-config.ts` |
+| - | 348 | `apps/api/src/services/customer-project-log-shares/legacy/employee-rewards.ts` |
+| - | 439 | `apps/api/src/services/customer-project-log-shares/legacy/employee-shares.ts` |
+| - | 320 | `apps/api/src/services/customer-project-log-shares/legacy/marketing-campaign-details.ts` |
+| - | 403 | `apps/api/src/services/customer-project-log-shares/legacy/marketing-campaigns.ts` |
+| - | 491 | `apps/api/src/services/customer-project-log-shares/legacy/owned-context.ts` |
+| - | 312 | `apps/api/src/services/customer-project-log-shares/legacy/public-actions.ts` |
+| - | 330 | `apps/api/src/services/customer-project-log-shares/legacy/public-campaigns.ts` |
+| - | 485 | `apps/api/src/services/customer-project-log-shares/legacy/reward-config.ts` |
+| - | 399 | `apps/api/src/services/customer-project-log-shares/legacy/share-campaign-core.ts` |
+| - | 388 | `apps/api/src/services/customer-project-log-shares/legacy/shared-helpers.ts` |
+| - | 267 | `apps/api/src/services/customer-project-log-shares/legacy/shared-types.ts` |
+| - | 2 | `apps/api/src/services/customer-project-log-shares/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留缓存字段、方法绑定和 `customerProjectLogShareService` 导出。
+- 原客户分享、预约奖励、员工配置、员工领奖、营销活动、公开助力、配置解析、缓存和共享 helper 按职责拆入 `customer-project-log-shares/legacy/` 子模块。
+- 对外入口 `apps/api/src/services/customer-project-log-shares.ts` 保持不变，继续转发既有 service 实例。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/customer-project-log-shares/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 41 个减少到 40 个，`customer-project-log-shares/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `customer-project-log-shares/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖分享活动、预约奖励、员工领奖、营销活动、公开助力和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实业务接口 smoke | 未执行 | 当前环境没有统一测试 token、客户项目、营销活动和微信访问凭据；未对助力、领奖、预约奖励写路径发请求 |
+
+### 风险和遗留
+
+- 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把运行时依赖收敛成显式 context，降低跨模块隐式耦合。
+- `project-acceptances/legacy-service.ts`、`decoration-qa/legacy-service.ts`、`expense-requests/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
