@@ -783,3 +783,49 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/customer-project-log-shares/legacy-service.ts` 仍为 4287 行，`apps/api/src/repositories/customer-project-log-share-campaigns/legacy-repository.ts` 仍为 751 行；本阶段先完成外部入口瘦身和行为保持，未完成 legacy 内部按客户侧、员工侧、营销中心、预约奖励的实质拆分。
 - 后续继续治理时应优先把 legacy service 中的纯 helper、token/券状态、客户分享、员工活动、营销中心模板/实例逐步拆出，避免长期保留单体 legacy。
+
+## 阶段 3 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split project workflow service facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2728 | 1 | `apps/api/src/services/project-acceptances.ts` |
+| 1386 | 1 | `apps/api/src/services/projects.ts` |
+| 1170 | 1 | `apps/api/src/services/project-cameras.ts` |
+| 659 | 1 | `apps/api/src/services/construction-stage-status.ts` |
+| 624 | 12 | `apps/api/src/services/tencent-iot-video.ts` |
+| 619 | 1 | `apps/api/src/services/tenant-devices.ts` |
+
+### 结构变化
+
+- 6 个目标 service 入口均改为薄 facade，继续导出原有 service 实例、class 或类型，保持调用方 import path 不变。
+- 原项目验收、项目、摄像头、施工阶段、租户设备实现分别迁入对应 `legacy-service.ts` 目录，作为后续细拆的兼容实现。
+- Tencent IoT 直连实现从 service 层迁到 `apps/api/src/gateways/tencent-iot-video.ts`，`apps/api/src/services/tencent-iot-video.ts` 仅保留兼容导出。
+- 本阶段未修改 controller 调用、API path、payload、返回结构和中文错误文案。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 6 个目标入口文件均 `<= 500` 行 |
+| `set -a; . apps/api/.env; set +a; bun run api:construction-stage-check` | 通过 | 输出 `summary: []`、`issues: []` |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 facade 导入、类型转发和 bundle |
+| 项目状态和施工阶段一致性检查 | 通过 | 显式加载 `apps/api/.env` 后完成，未发现一致性问题 |
+| 真实接口请求 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对项目、验收、摄像头写路径发请求 |
+
+### 风险和遗留
+
+- `apps/api/src/services/project-acceptances/legacy-service.ts`、`apps/api/src/services/projects/legacy-service.ts`、`apps/api/src/services/project-cameras/legacy-service.ts`、`apps/api/src/services/construction-stage-status/legacy-service.ts`、`apps/api/src/services/tenant-devices/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身和第三方 IoT gateway 边界迁移，后续仍需按领域继续拆出模板、状态机、设备绑定、播放地址、成员候选等模块。
+- `bun run api:construction-stage-check` 在当前 shell 不会自动获得 `apps/api/.env` 中的数据库变量；本阶段通过 `set -a; . apps/api/.env; set +a; bun run api:construction-stage-check` 显式加载环境后完成验收。
