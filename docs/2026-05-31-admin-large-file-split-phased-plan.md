@@ -635,6 +635,113 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `>500` 行门禁无输出。
 - E2E 中仍偶发 Next dev `__webpack_modules__[moduleId] is not a function` 日志，但用例退出码为 0。该问题表现为 Next dev server/cache 噪音，未阻塞本轮提交；如需彻底清理，应单独阶段排查 `.next-e2e` 与 dev server 并发缓存。
 
+## 2026-06-01 临界文件继续拆分与 E2E 稳定性记录
+
+本轮按“项目验收面板、项目状态面板、摄像头页与 Admin Shell、E2E dev server 稳定性”四阶段执行。
+
+### 阶段 1：项目验收面板拆分
+
+范围：
+
+- `apps/admin/components/projects/project-acceptances-panel.tsx`
+
+处理：
+
+- 提取验收列表加载、施工阶段状态、验收动作、图片直传、竣工模板弹窗状态到 `project-acceptances-panel-state.ts`。
+- 原面板保留布局和子组件连接，业务请求与 payload 未改写。
+
+结果：
+
+- `project-acceptances-panel.tsx`：492 行降到 112 行。
+- `project-acceptances-panel-state.ts`：442 行。
+
+提交：
+
+- `aa8d7d9 refactor: split project acceptances panel state`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情“工序验收” smoke 通过。
+
+### 阶段 2：项目状态面板拆分
+
+范围：
+
+- `apps/admin/components/projects/project-status-panel.tsx`
+
+处理：
+
+- 提取状态动作、施工阶段、状态流转、排期开工工程负责人候选加载与提交逻辑到 `project-status-panel-state.ts`。
+- 原面板保留项目概览、最近流转、下一步动作和动作弹窗渲染。
+
+结果：
+
+- `project-status-panel.tsx`：473 行降到 225 行。
+- `project-status-panel-state.ts`：315 行。
+
+提交：
+
+- `8174292 refactor: split project status panel state`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 项目详情“工序验收” smoke 通过。
+
+### 阶段 3：摄像头页与 Admin Shell 拆分
+
+范围：
+
+- `apps/admin/app/(console)/cameras/page.tsx`
+- `apps/admin/components/layout/admin-shell.tsx`
+
+处理：
+
+- 提取 cameras 页后端数据访问、分页 URL 构建和搜索参数类型到 `page-data.ts`。
+- 提取 Admin Shell 主题 token、偏好读取/保存、偏好菜单到 `admin-shell-preferences.tsx`。
+
+结果：
+
+- `cameras/page.tsx`：468 行降到 279 行。
+- `page-data.ts`：196 行。
+- `admin-shell.tsx`：467 行降到 121 行。
+- `admin-shell-preferences.tsx`：359 行。
+
+提交：
+
+- `9aaca87 refactor: split cameras page and admin shell`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 组织架构与摄像头 smoke 通过。
+
+### 阶段 4：E2E dev server 稳定性
+
+处理：
+
+- Playwright 专用 dev server 启动前清理 `.next-e2e`，避免复用残留 dev 编译缓存。
+- Admin smoke 改为单 worker 串行执行，避免多个 worker 并发触发 Next dev 的模块图异常。
+
+提交：
+
+- `bb719a4 test: stabilize admin e2e dev server`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 连续两轮通过，均为 9 条 smoke 通过。
+- 两轮正式 E2E 未再出现 `__webpack_modules__[moduleId] is not a function`。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
