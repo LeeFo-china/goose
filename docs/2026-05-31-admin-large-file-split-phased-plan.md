@@ -1714,6 +1714,135 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
 - 当前最高 TS/TSX 文件为 `marketing-campaign-form-fields.tsx` 和 `employee-dialog.tsx`，均为 357 行。
 
+## 第十轮执行记录（2026-06-01）
+
+目标：
+
+- 继续压缩 350 行附近的高频维护文件。
+- 优先保持原入口 import 路径稳定，降低页面调用方回归面。
+
+### 阶段 1：营销活动表单字段拆分
+
+范围：
+
+- `apps/admin/components/marketing/marketing-campaign-form-fields.tsx`
+
+处理：
+
+- 提取活动基础信息、项目范围、规则字段、奖励字段到 `marketing-campaign-form-sections.tsx`。
+- 原字段入口保留表单 watch 和区块组合。
+
+结果：
+
+- `marketing-campaign-form-fields.tsx`：357 行降到 78 行。
+- `marketing-campaign-form-sections.tsx`：290 行。
+
+提交：
+
+- `cf6d0a9 refactor: split marketing campaign form sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- H5 活动页新建弹窗 smoke 通过。
+
+### 阶段 2：员工弹窗字段拆分
+
+范围：
+
+- `apps/admin/components/employees/employee-dialog.tsx`
+
+处理：
+
+- 提取头像字段、基础信息字段、部门职位字段到 `employee-dialog-fields.tsx`。
+- 父弹窗保留头像上传、部门/岗位联动、payload 组装和保存流程。
+
+结果：
+
+- `employee-dialog.tsx`：357 行降到 275 行。
+- `employee-dialog-fields.tsx`：208 行。
+
+提交：
+
+- `7e9d2f4 refactor: split employee dialog fields`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 员工新增和角色配置弹窗 smoke 通过。
+
+### 阶段 3：组织岗位规则辅助拆分
+
+范围：
+
+- `apps/admin/components/organization/department-post-config-dialog.tsx`
+- `apps/admin/components/organization/department-post-rules-client-shell.tsx`
+
+处理：
+
+- 提取岗位编码排序、脏状态判断、部门已选岗位、选中状态初始化、岗位搜索文本和岗位名称规范化到 `department-post-rules-utils.ts`。
+- `department-post-rules-client-shell.tsx` 复用已有 `department-post-config-api.ts` 的保存请求，移除重复 fetch 实现。
+
+结果：
+
+- `department-post-config-dialog.tsx`：353 行降到 332 行。
+- `department-post-rules-client-shell.tsx`：352 行降到 297 行。
+- `department-post-rules-utils.ts`：46 行。
+
+提交：
+
+- `8f51ca9 refactor: share department post rule helpers`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- 组织架构配置岗位弹窗 smoke 通过。
+
+### 阶段 4：平台账单页面数据辅助拆分
+
+范围：
+
+- `apps/admin/app/(console)/platform/billing/billing-page-shared.tsx`
+
+处理：
+
+- 提取 searchParams 类型、tab/query 解析、空数据模型、后端 fetch 到 `billing-page-data.ts`。
+- `billing-page-shared.tsx` 保留 UI 小组件、格式化和标签函数，并 re-export 数据 API 以保持调用方路径兼容。
+
+结果：
+
+- `billing-page-shared.tsx`：351 行降到 197 行。
+- `billing-page-data.ts`：166 行。
+
+提交：
+
+- `7bc1dda refactor: split billing page data helpers`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+- 当前最高 TS/TSX 文件为 `project-acceptances-panel-state.ts`、`ai-model-routing-panel.tsx`、`h5-page-create-dialog.tsx`，均为 343 行。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
