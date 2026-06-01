@@ -3,18 +3,15 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { Controller, useForm, type Resolver } from "react-hook-form";
-import { Loader2, Upload, UserRound, X } from "lucide-react";
-import { FormSelect } from "@/components/admin/form-select";
+import { useForm, type Resolver } from "react-hook-form";
+import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
+import { CustomerFormFields } from "@/components/customers/customer-form-fields";
 import type { CustomerMode, CustomerRecord } from "@/components/customers/customer-mutation-types";
-import { buildDefaults, CustomerFormSchema, type CustomerFormValues, requestCustomer, SelectField, sourceOptions, uploadCustomerAvatar, useEmployeeOptions } from "@/components/customers/customer-mutation-shared";
+import { buildDefaults, CustomerFormSchema, type CustomerFormValues, requestCustomer, uploadCustomerAvatar, useEmployeeOptions } from "@/components/customers/customer-mutation-shared";
 
 export function CustomerDialog({
   mode,
@@ -42,7 +39,6 @@ export function CustomerDialog({
     resolver: zodResolver(CustomerFormSchema as never) as Resolver<CustomerFormValues>,
     defaultValues: defaults,
   });
-  const selectedSource = form.watch("source");
 
   useEffect(() => {
     if (!open) return;
@@ -155,238 +151,26 @@ export function CustomerDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="flex max-h-[calc(88vh-82px)] flex-col gap-4 overflow-y-auto p-5" onSubmit={form.handleSubmit(submit)}>
-          <FieldGroup className="grid gap-4 md:grid-cols-2">
-            <Field className="md:col-span-2">
-              <FieldLabel htmlFor={`${mode}-customer-avatar-file`}>头像</FieldLabel>
-              <input type="hidden" name="avatar" value={avatar} />
-              <div className="flex gap-3">
-                <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
-                  {avatarPreviewUrl && !avatarLoadFailed ? (
-                    <img
-                      src={avatarPreviewUrl}
-                      alt={`${defaults.name || "客户"}头像预览`}
-                      className="size-full object-cover"
-                      onError={() => setAvatarLoadFailed(true)}
-                    />
-                  ) : (
-                    <UserRound />
-                  )}
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={pending || uploadingAvatar}
-                      onClick={() => avatarInputRef.current?.click()}
-                    >
-                      {uploadingAvatar
-                        ? <Loader2 className="animate-spin" data-icon="inline-start" />
-                        : <Upload data-icon="inline-start" />}
-                      上传头像
-                    </Button>
-                    {avatar ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={pending || uploadingAvatar}
-                        onClick={() => {
-                          setAvatar("");
-                          setAvatarPreviewUrl("");
-                          setAvatarLoadFailed(false);
-                          setAvatarDirty(true);
-                        }}
-                      >
-                        <X data-icon="inline-start" />
-                        清除
-                      </Button>
-                    ) : null}
-                  </div>
-                  <Input
-                    id={`${mode}-customer-avatar-file`}
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                    className="sr-only"
-                    disabled={pending || uploadingAvatar}
-                    onChange={handleAvatarChange}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {avatar
-                      ? avatarLoadFailed
-                        ? "头像图片加载失败，请重新上传"
-                        : "已上传头像"
-                      : "支持 JPG、PNG、WebP、HEIC，单张不超过 2MB"}
-                  </p>
-                </div>
-              </div>
-            </Field>
-            <Controller
-              name="name"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-name`}>客户姓名</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-name`}
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="phone"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-phone`}>手机号</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-phone`}
-                    disabled={pending}
-                    inputMode="numeric"
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="source"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-source`}>来源</FieldLabel>
-                  <SelectField
-                    id={`${mode}-customer-source`}
-                    value={field.value}
-                    options={sourceOptions}
-                    disabled={pending}
-                    onChange={field.onChange}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="owner_id"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-owner`}>负责人</FieldLabel>
-                  <FormSelect
-                    id={`${mode}-customer-owner`}
-                    value={field.value || "__current_account__"}
-                    disabled={pending || employees.loading}
-                    invalid={fieldState.invalid}
-                    placeholder={employees.loading ? "负责人加载中" : "默认当前账号"}
-                    options={[
-                      {
-                        value: "__current_account__",
-                        label: employees.loading ? "负责人加载中" : "默认当前账号",
-                      },
-                      ...employees.options.map((employee) => ({
-                        value: employee.id,
-                        label: employee.name || employee.phone || employee.id,
-                      })),
-                    ]}
-                    onChange={(value) => field.onChange(value === "__current_account__" ? "" : value)}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            {selectedSource === "douyin" ? (
-              <Controller
-                name="douyin_screenshot_images"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor={`${mode}-customer-douyin`}>抖音截图 URL</FieldLabel>
-                    <Textarea
-                      {...field}
-                      id={`${mode}-customer-douyin`}
-                      placeholder="抖音来源必填，最多 1 张"
-                      disabled={pending}
-                      aria-invalid={fieldState.invalid}
-                      className="min-h-[72px]"
-                    />
-                    <FieldError errors={[fieldState.error]} />
-                  </Field>
-                )}
-              />
-            ) : null}
-            <Controller
-              name="community"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-community`}>小区名称</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-community`}
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="building_info"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-building`}>楼栋门牌</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-building`}
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="area"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-area`}>面积</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-area`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="layout"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${mode}-customer-layout`}>户型</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${mode}-customer-layout`}
-                    disabled={pending}
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-          </FieldGroup>
+          <CustomerFormFields
+            mode={mode}
+            form={form}
+            pending={pending}
+            employees={employees}
+            avatar={avatar}
+            avatarPreviewUrl={avatarPreviewUrl}
+            avatarLoadFailed={avatarLoadFailed}
+            uploadingAvatar={uploadingAvatar}
+            avatarInputRef={avatarInputRef}
+            customerName={defaults.name}
+            onAvatarLoadFailed={() => setAvatarLoadFailed(true)}
+            onAvatarClear={() => {
+              setAvatar("");
+              setAvatarPreviewUrl("");
+              setAvatarLoadFailed(false);
+              setAvatarDirty(true);
+            }}
+            onAvatarChange={handleAvatarChange}
+          />
           {employees.error ? (
             <StatusAlert tone="warning">{employees.error}</StatusAlert>
           ) : null}
