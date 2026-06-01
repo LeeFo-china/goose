@@ -130,3 +130,48 @@ find apps/admin/components -path '*/node_modules' -prune -o \( -name '*.ts' -o -
 - 不建议一次性替换所有 `requestBackend`，容易引入跨模块回归。
 - 不建议把所有 `router.refresh()` 机械替换成延迟刷新，列表筛选和分页不属于弹窗刷新问题。
 - 不建议继续追求所有文件低于 350 行，当前门禁已经解决主要维护风险。
+
+## 2026-06-01 执行记录
+
+### 已完成
+
+- 新增统一后端请求工具：`apps/admin/lib/backend-client.ts`。
+  - 提供 `getPayloadMessage()`。
+  - 提供 `buildBackendProxyPath()`，兼容 `/api/backend/...` 和业务相对路径。
+  - 提供 `requestBackendJson<T>()`，统一 JSON 解析、`success === false` 判断、错误对象附加 `status/code/requestId/payload`。
+- 已迁移低风险模块：
+  - `settings/settings-actions.tsx`
+  - `settings/settings-mutation-shared.tsx`
+  - `permissions/permission-mutation-shared.tsx`
+  - `employee-personalization/employee-personalization-shared.ts`
+  - `platform-ai/ai-model-routing-shared.ts`
+- 新增统一 COS 直传工具：`apps/admin/lib/cos-direct-upload.ts`。
+  - 提供 `uploadDirectToCos()`。
+  - 提供 `buildUploadPreviewUrl()`。
+  - 提供 `validateUploadFile()`。
+- 已迁移 COS 直传场景：
+  - 客户头像。
+  - 员工头像。
+  - 费用打款凭证。
+  - 项目验收图片。
+  - H5 编辑器图片。
+
+### 扫描结果
+
+- `direct-init` / `direct-complete` 只剩 `apps/admin/lib/cos-direct-upload.ts` 一个实现。
+- `getPayloadMessage` 从 32 个文件降到 30 个文件。本轮只迁移低风险模块，客户、项目、费用、营销、摄像头等高交互模块的请求函数保留到后续阶段逐步迁移。
+
+### 验收记录
+
+2026-06-01：
+
+- `pnpm admin:check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，6 个 smoke 用例全部通过。
+- `git diff --check` 通过。
+
+### 后续建议
+
+- 后端请求工具下一步可以继续迁移 cameras、customer-service、roles、billing 等中风险模块。
+- 高交互模块 customers、projects、expenses、marketing 建议结合具体需求逐步迁移，避免请求工具替换和业务改动混在一起。
+- COS 直传如需真实链路验收，应准备测试文件和可回收测试数据，覆盖头像、费用凭证、项目验收图、H5 图片四类实际上传。
