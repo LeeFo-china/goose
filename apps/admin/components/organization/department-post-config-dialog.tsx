@@ -9,6 +9,11 @@ import type {
   DepartmentPostRulePostOption,
   DepartmentRecord,
 } from "@/components/organization/organization-types";
+import {
+  createPostForDepartment,
+  fetchDepartmentPostRuleConfig,
+  saveDepartmentPostCodes,
+} from "@/components/organization/department-post-config-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,86 +68,6 @@ function getPostSearchText(post: DepartmentPostRulePostOption) {
 
 function normalizePostName(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-async function saveDepartmentPostCodes(
-  departmentCode: string,
-  postCodes: string[],
-) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
-
-  try {
-    const response = await fetch(
-      `/api/backend/department-post-rules/${encodeURIComponent(departmentCode)}`,
-      {
-        method: "PUT",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          post_codes: postCodes,
-        }),
-        signal: controller.signal,
-      },
-    );
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(payload?.message || payload?.error || "保存部门岗位失败");
-    }
-    return payload as {
-      data?: {
-        department_code?: string;
-        selected_post_codes?: string[];
-        config?: DepartmentPostRuleConfig;
-      };
-    };
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("请求超时，请稍后重试");
-    }
-    throw err;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-async function fetchDepartmentPostRuleConfig() {
-  const response = await fetch("/api/backend/department-post-rules", {
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || payload?.error || "刷新部门岗位失败");
-  }
-  return payload.data as DepartmentPostRuleConfig;
-}
-
-async function createPostForDepartment(input: {
-  name: string;
-  departmentId: string;
-}) {
-  const response = await fetch("/api/backend/posts", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      name: input.name,
-      tenant_department_id: input.departmentId,
-      base_salary: null,
-      salary_type: null,
-      sort: 0,
-      status: 1,
-      description: null,
-    }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || payload?.error || "新增岗位失败");
-  }
-  return payload;
 }
 
 export function DepartmentPostConfigDialog({

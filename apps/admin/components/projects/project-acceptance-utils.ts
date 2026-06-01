@@ -130,6 +130,23 @@ export function buildEditable(acceptance: ProjectAcceptance | null): EditableSta
   };
 }
 
+export function resetRejectedEditableItems(editable: EditableState): EditableState {
+  return {
+    ...editable,
+    items: Object.fromEntries(
+      Object.entries(editable.items).map(([itemId, item]) => [
+        itemId,
+        {
+          ...item,
+          rectification_remark: "",
+          rectification_images: [],
+          rectificationImagePreviews: [],
+        },
+      ]),
+    ),
+  };
+}
+
 export function canEdit(status: ProjectAcceptanceStatus) {
   return status === "draft" || status === "rejected";
 }

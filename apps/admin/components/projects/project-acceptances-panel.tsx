@@ -31,6 +31,7 @@ import {
   formatDateTime,
   openAcceptanceStatuses,
   requestBackend,
+  resetRejectedEditableItems,
   stageOptions,
   uploadAcceptanceImageDirect,
 } from "@/components/projects/project-acceptance-utils";
@@ -177,17 +178,8 @@ export function ProjectAcceptancesPanel({
   useEffect(() => {
     const nextEditable = buildEditable(selected);
     if (selected?.status === "rejected") {
-      nextEditable.items = Object.fromEntries(
-        Object.entries(nextEditable.items).map(([itemId, item]) => [
-          itemId,
-          {
-            ...item,
-            rectification_remark: "",
-            rectification_images: [],
-            rectificationImagePreviews: [],
-          },
-        ]),
-      );
+      setEditable(resetRejectedEditableItems(nextEditable));
+      return;
     }
     setEditable(nextEditable);
   }, [selected?.id, selected?.status]);

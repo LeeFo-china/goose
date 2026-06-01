@@ -553,6 +553,26 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 3. 阶段 6 做最终门禁和文档回写，单独提交。
 4. 如果某阶段发现业务 bug，先记录在阶段执行记录中；只有影响拆分验收时才同阶段修复，否则单独开修复提交。
 
+## 2026-06-01 临界文件预拆记录
+
+背景：后续功能仍会持续落到 Admin，虽然最终门禁已经保证 `>500` 行无输出，但部分文件接近 500 行，继续追加代码容易再次触发门禁。
+
+本轮预拆范围：
+
+- `apps/admin/components/organization/department-post-config-dialog.tsx`
+  - 提取请求函数到 `department-post-config-api.ts`。
+  - 同步改用 `requestBackendJson`，保留原超时、错误文案和返回结构。
+- `apps/admin/components/projects/project-acceptances-panel.tsx`
+  - 提取被驳回验收单的整改字段重置逻辑到 `project-acceptance-utils.ts`。
+
+验收口径：
+
+- `apps/admin/components/organization/department-post-config-dialog.tsx`：419 行。
+- `apps/admin/components/organization/department-post-config-api.ts`：68 行。
+- `apps/admin/components/projects/project-acceptances-panel.tsx`：492 行。
+- `apps/admin/components/projects/project-acceptance-utils.ts`：370 行。
+- 最终 `>500` 行门禁无输出。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
