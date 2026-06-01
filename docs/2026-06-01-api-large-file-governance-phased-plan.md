@@ -968,3 +968,53 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/system-settings/legacy-service.ts`、`apps/api/src/services/employee-project-detail-bootstrap/legacy-service.ts`、`apps/api/src/services/wechat-customer-identities/legacy-service.ts`、`apps/api/src/services/wechat-rebind-requests/legacy-service.ts`、`apps/api/src/services/customer-service-tickets/legacy-service.ts`、`apps/api/src/plugins/auth/legacy-plugin.ts`、`apps/api/src/services/customer-core/legacy-service.ts`、`apps/api/src/services/authorization/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按权限上下文、租户设置、身份绑定、客户隐私字段的实质拆分。
 - 后续治理应优先拆 `authorization/legacy-service.ts` 和 `auth/legacy-plugin.ts` 的上下文缓存、微信凭证校验、业务绑定校验和路由白名单，降低认证链路回归风险。
+
+## 阶段 7 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split large api repository facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1288 | 1 | `apps/api/src/repositories/marketing-pages.ts` |
+| 1110 | 1 | `apps/api/src/repositories/permissions.ts` |
+| 1049 | 1 | `apps/api/src/repositories/expense-requests.ts` |
+| 1005 | 1 | `apps/api/src/repositories/billing.ts` |
+| 904 | 1 | `apps/api/src/repositories/projects.ts` |
+| 833 | 1 | `apps/api/src/repositories/project-cameras.ts` |
+| 763 | 1 | `apps/api/src/repositories/project-acceptances.ts` |
+| 99 | 99 | `apps/api/src/repositories/customer-project-log-share-campaigns.ts` |
+| 728 | 1 | `apps/api/src/repositories/platform-tenants.ts` |
+| 638 | 1 | `apps/api/src/repositories/tenant-devices.ts` |
+
+### 结构变化
+
+- 9 个仍超过 500 行的目标 repository 入口改为薄 facade，继续通过 `export *` 转发原有 repository 实例、类型和 select 常量，保持调用方 import path 不变。
+- 原营销页、权限、费用申请、计费、项目、项目摄像头、项目验收、平台租户、租户设备 repository 实现分别迁入对应 `legacy-repository.ts`，作为后续按读写分离、列表/详情/统计查询继续细拆的兼容实现。
+- `apps/api/src/repositories/customer-project-log-share-campaigns.ts` 已在阶段 2 降到 99 行，本阶段不再改动。
+- 本阶段未修改 Supabase select/update/insert/delete 条件、查询参数、返回字段或错误包装方式。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 10 个目标 repository 均 `<= 500` 行 |
+| repository 顶层大文件扫描 | 通过 | `apps/api/src/repositories` 顶层无 `>= 500` 行 `.ts` 文件 |
+| `rg -n "from \"fastify\"|from 'fastify'|Fastify|ResponseHandler|@/utils/response" apps/api/src/repositories` | 通过 | 无输出 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 repository facade 导入、类型转发和 bundle |
+| repository 读写真实接口 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对项目、验收、营销页、费用、计费、权限写路径发请求 |
+
+### 风险和遗留
+
+- 本阶段仍是入口瘦身，`legacy-repository.ts` 内部尚未按 read/write、列表、详情、统计、状态更新实质拆分。
+- 后续治理应优先拆 `marketing-pages/legacy-repository.ts`、`permissions/legacy-repository.ts` 和 `billing/legacy-repository.ts`，这些文件仍承载最多复杂查询和写入路径。
