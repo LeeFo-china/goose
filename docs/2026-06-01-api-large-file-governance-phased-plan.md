@@ -1018,3 +1018,49 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段仍是入口瘦身，`legacy-repository.ts` 内部尚未按 read/write、列表、详情、统计、状态更新实质拆分。
 - 后续治理应优先拆 `marketing-pages/legacy-repository.ts`、`permissions/legacy-repository.ts` 和 `billing/legacy-repository.ts`，这些文件仍承载最多复杂查询和写入路径。
+
+## 阶段 8 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split storage migration script facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 716 | 4 | `apps/api/src/services/files/platform-file-storage.ts` |
+| 666 | 1 | `apps/api/src/scripts/storage-migration-dry-run.ts` |
+| 581 | 1 | `apps/api/src/scripts/storage-migration-upload.ts` |
+| 502 | 1 | `apps/api/src/scripts/storage-migration-final-verify.ts` |
+
+### 结构变化
+
+- `platform-file-storage.ts` 改为薄 facade，继续导出 `platformFileStorageService` 和 `PlatformUploadScene`，保持调用方 import path 不变。
+- 原平台文件存储实现迁入 `apps/api/src/services/files/platform-file-storage/legacy-service.ts`。
+- 3 个迁移脚本入口保留原 CLI 路径，分别通过 top-level import 执行对应 `legacy-script.ts`，保持参数解析、输出格式和执行行为不变。
+- 本阶段未修改 COS/Supabase 上传参数、文件对象字段、迁移 CSV 字段、dry-run 报告字段或真实上传开关语义。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 4 个目标入口均低于阶段阈值 |
+| `bun --cwd apps/api src/scripts/storage-migration-output-smoke.ts --input /tmp/storage-migration-empty-final-verify-items.csv --limit 1 --out /tmp/gooes-storage-migration-output-smoke-phase8` | 通过 | 使用最小空 final-verify CSV 验证输出格式，结果 `passed=0, failed=0` |
+| `bun --cwd apps/api src/scripts/storage-migration-dry-run.ts --all-tenants --limit 5 --out /tmp/gooes-storage-migration-dry-run-phase8` | 通过 | 只读 dry-run，结果 `total=5, migratable=5` |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 storage facade、CLI facade 和 bundle |
+| dry-run 输出格式 | 通过 | dry-run 输出到 `/tmp/gooes-storage-migration-dry-run-phase8/...`，未写入仓库 |
+| output smoke 输出格式 | 通过 | 使用空 final-verify CSV 验证 summary 和 CSV 输出链路 |
+| 真实上传或删除 | 未执行 | 本阶段未传 `--apply`，未执行真实 COS 上传、删除或数据库写回 |
+
+### 风险和遗留
+
+- `apps/api/src/services/files/platform-file-storage/legacy-service.ts`、`apps/api/src/scripts/storage-migration-dry-run/legacy-script.ts`、`apps/api/src/scripts/storage-migration-upload/legacy-script.ts`、`apps/api/src/scripts/storage-migration-final-verify/legacy-script.ts` 仍为大文件；本阶段仅完成入口瘦身，未完成迁移共享 helper 的实质抽取。
+- 后续治理应把 dry-run、upload、verify 共享的 CSV、报告输出、COS URL 解析、对象校验能力提取到 `services/files` 下的迁移 helper，减少脚本间复制。
