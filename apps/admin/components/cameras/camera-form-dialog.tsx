@@ -12,9 +12,10 @@ import { FieldGroup } from "@/components/ui/field";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import type { CameraDeviceChannel, CameraProjectOption, CameraRecord } from "@/components/cameras/camera-types";
 import type { CameraBindProjectOptionsData, CameraMode, TenantDeviceListData } from "@/components/cameras/camera-mutation-types";
+import { saveCameraForm } from "@/components/cameras/camera-form-submit";
 import { CameraProjectDeviceFields } from "@/components/cameras/camera-project-device-fields";
 import { CameraSettingsFields } from "@/components/cameras/camera-settings-fields";
-import { buildDefaults, buildDeviceKey, CameraFormSchema, canBindCameraToProject, getVendorLabel, parseDeviceKey, requestCamera, tenantAssetsToDevices, toBoolean, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
+import { buildDefaults, buildDeviceKey, CameraFormSchema, canBindCameraToProject, getVendorLabel, requestCamera, tenantAssetsToDevices, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
 
 export function CameraDialog({
   mode,
@@ -249,72 +250,23 @@ export function CameraDialog({
 
     startTransition(async () => {
       try {
-        const commonPayload = {
-          name: values.name.trim(),
-          position: values.position.trim() || null,
-          can_view: toBoolean(values.can_view),
-          can_control: toBoolean(values.can_control),
-          capabilities: values.capabilities,
-          cover_url: values.cover_url.trim() || null,
-          sort_order: Number(values.sort_order || 0),
-          remark: values.remark.trim() || null,
-          video_encrypted: toBoolean(values.video_encrypted),
-          play_protocol: values.play_protocol,
-        };
-
-        if (mode === "create") {
-          const device = parseDeviceKey(values.device_key);
-          if (device.vendor === "tencent_iotvideo_industry") {
-            const selectedDevice = availableDevices.find(
-              (item) => buildDeviceKey(item) === values.device_key,
-            );
-            await requestCamera({
-              path: `/projects/${activeProjectId}/cameras`,
-              method: "POST",
-              payload: {
-                ...commonPayload,
-                vendor: "tencent_iotvideo_industry",
-                vendor_device_serial: device.deviceId,
-                vendor_channel_id: device.channelId,
-                vendor_device_code: selectedDevice?.vendor === "tencent_iotvideo_industry"
-                  ? selectedDevice.device_code
-                  : null,
-                vendor_channel_code: selectedDevice?.vendor === "tencent_iotvideo_industry"
-                  ? selectedDevice.channel_code
-                  : null,
-                channel_no: 1,
-              },
-            });
-            onOpenChange(false);
-            refreshAfterDialogClose(router);
-            return;
-          }
-
-          await requestCamera({
-            path: `/projects/${activeProjectId}/cameras`,
-            method: "POST",
-            payload: {
-              ...commonPayload,
-              vendor: "ezviz",
-              vendor_device_serial: device.deviceSerial,
-              channel_no: device.channelNo,
-            },
-          });
-        } else if (camera) {
-          await requestCamera({
-            path: `/projects/${projectId}/cameras/${camera.id}`,
-            method: "PATCH",
-            payload: commonPayload,
-          });
-        }
-
+        await saveCameraForm({
+          mode,
+          projectId,
+          activeProjectId,
+          cameraId: camera?.id,
+          values,
+          availableDevices,
+        });
         onOpenChange(false);
         refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存失败");
       }
     });
-  }  return (
+  }
+
+  return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-[760px] overflow-y-auto">
         <DialogHeader>
