@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { requestBackendJson } from "@/lib/backend-client";
 
 type Pagination = {
   page: number;
@@ -71,14 +72,6 @@ const stepOptions = [
   ] as const),
 ] as const;
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 function formatMoney(value: number | string | null | undefined) {
   const amount = Number(value || 0);
   return amount.toLocaleString("zh-CN", {
@@ -115,15 +108,10 @@ async function fetchExpenses(filters: ExpenseFiltersState, page: number) {
   if (filters.createdFrom) query.set("created_from", dateStartToIso(filters.createdFrom));
   if (filters.createdTo) query.set("created_to", dateEndToIso(filters.createdTo));
 
-  const response = await fetch(`/api/backend/expense-requests?${query.toString()}`, {
+  return requestBackendJson<ExpenseListData>(`/expense-requests?${query.toString()}`, {
     cache: "no-store",
+    fallbackMessage: "费用申请列表加载失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "费用申请列表加载失败"));
-  }
-
-  return payload.data as ExpenseListData;
 }
 
 export function ExpensesPanel({

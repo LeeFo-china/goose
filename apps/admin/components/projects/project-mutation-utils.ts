@@ -14,6 +14,7 @@ import type {
   PropertyRelation,
   BadgeVariant,
 } from "@/components/projects/project-mutation-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export const visibilityOptions = [
   ["inherit", "跟随状态"],
@@ -177,22 +178,16 @@ export function getPayloadMessage(payload: unknown, fallback: string) {
 
 type ProjectAssigneeRoleCode = "designer" | "supervisor";
 
-export async function requestProject(input: {
+export async function requestProject<T = any>(input: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
     cache: "no-store",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data;
 }
 
 async function syncProjectPrimaryAssignee(input: {

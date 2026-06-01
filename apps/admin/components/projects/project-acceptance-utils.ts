@@ -16,6 +16,7 @@ import type {
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
 import { buildUploadPreviewUrl, uploadDirectToCos } from "@/lib/cos-direct-upload";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export const stageOptions = PROJECT_LOG_STAGE_CODE_VALUES
   .filter((value) => value !== PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE)
@@ -43,16 +44,11 @@ export async function requestBackend<T>(
   path: string,
   input?: { method?: "GET" | "POST" | "PATCH" | "DELETE"; payload?: unknown },
 ) {
-  const response = await fetch(`/api/backend${path}`, {
+  return requestBackendJson<T>(path, {
     method: input?.method || "GET",
-    headers: input?.payload ? { "content-type": "application/json" } : undefined,
     body: input?.payload ? JSON.stringify(input.payload) : undefined,
+    fallbackMessage: "请求失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "请求失败"));
-  }
-  return payload.data as T;
 }
 
 export async function uploadAcceptanceImageDirect(file: File, projectId: string) {

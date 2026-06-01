@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectStatusActionDialog } from "@/components/projects/project-status-action-dialog";
 import type { EmployeeOption, ProjectConstructionStagesResponse, ProjectRecord, ProjectStatusActionsResponse, ProjectStatusActionItem, ProjectStatusTransitionRecord } from "@/components/projects/project-mutation-types";
-import { blockedProjectActions, buildProjectActionViews, customerName, customerStatus, formatDate, formatDateTime, formatMoney, getEmployeeMeta, getEmployeeOptionLabel, getPayloadMessage, isProjectStatusActionVisible, personName, projectActionLabel, projectStatusBadgeVariant, projectStatusLabel, propertyLabel, requestProject } from "@/components/projects/project-mutation-utils";
+import { blockedProjectActions, buildProjectActionViews, customerName, customerStatus, formatDate, formatDateTime, formatMoney, getEmployeeMeta, getEmployeeOptionLabel, isProjectStatusActionVisible, personName, projectActionLabel, projectStatusBadgeVariant, projectStatusLabel, propertyLabel, requestProject } from "@/components/projects/project-mutation-utils";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export function ProjectStatusPanel({
   project,
@@ -132,16 +133,16 @@ export function ProjectStatusPanel({
       if (normalizedKeyword) query.set("keyword", normalizedKeyword);
 
       setConstructionManagerLoading(true);
-      fetch(`/api/backend/projects/${project.id}/member-candidates?${query.toString()}`, {
+      requestBackendJson<{ list?: EmployeeOption[] }>(
+        `/projects/${project.id}/member-candidates?${query.toString()}`,
+        {
         signal: controller.signal,
         cache: "no-store",
-      })
-        .then((response) => response.json().then((payload) => ({ response, payload })))
-        .then(({ response, payload }) => {
-          if (!response.ok || payload.success === false) {
-            throw new Error(getPayloadMessage(payload, "工程负责人候选加载失败"));
-          }
-          setConstructionManagerCandidates((payload.data?.list || []) as EmployeeOption[]);
+          fallbackMessage: "工程负责人候选加载失败",
+        },
+      )
+        .then((data) => {
+          setConstructionManagerCandidates(data.list || []);
         })
         .catch((err) => {
           if (err instanceof DOMException && err.name === "AbortError") return;

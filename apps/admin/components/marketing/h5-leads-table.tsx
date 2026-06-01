@@ -10,6 +10,7 @@ import { h5MarketingLeadStatusOptions } from "@/components/marketing/marketing-c
 import type { H5MarketingLeadRecord, H5MarketingLeadStatus } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { requestBackendJson } from "@/lib/backend-client";
 import {
   Dialog,
   DialogContent,
@@ -49,55 +50,35 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestLeadUpdate(input: {
   id: string;
   lead_status: H5MarketingLeadStatus;
   follow_remark: string | null;
 }) {
-  const response = await fetch(`/api/backend/marketing-leads/${input.id}`, {
+  return requestBackendJson<H5MarketingLeadRecord>(`/marketing-leads/${input.id}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       lead_status: input.lead_status,
       follow_remark: input.follow_remark,
     }),
+    fallbackMessage: "更新线索失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "更新线索失败"));
-  }
-
-  return payload.data as H5MarketingLeadRecord;
 }
 
 async function requestLeadConvert(input: {
   id: string;
   follow_remark: string | null;
 }) {
-  const response = await fetch(`/api/backend/marketing-leads/${input.id}/convert-customer`, {
+  return requestBackendJson<{
+    lead?: H5MarketingLeadRecord;
+    created?: boolean;
+  }>(`/marketing-leads/${input.id}/convert-customer`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       follow_remark: input.follow_remark,
     }),
+    fallbackMessage: "转客户失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "转客户失败"));
-  }
-
-  return payload.data as {
-    lead?: H5MarketingLeadRecord;
-    created?: boolean;
-  };
 }
 
 function LeadFollowAction({

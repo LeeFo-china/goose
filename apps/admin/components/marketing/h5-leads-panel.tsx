@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { requestBackendJson } from "@/lib/backend-client";
 
 type LeadListData = {
   list: H5MarketingLeadRecord[];
@@ -34,14 +35,6 @@ type LeadFilters = {
 };
 
 const LEAD_PAGE_SIZE = 20;
-
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
 
 function dateStartToIso(value: string) {
   return value ? new Date(`${value}T00:00:00`).toISOString() : "";
@@ -70,15 +63,10 @@ async function fetchLeadList(filters: LeadFilters, page: number) {
   if (filters.createdFrom) query.set("created_from", dateStartToIso(filters.createdFrom));
   if (filters.createdTo) query.set("created_to", dateEndToIso(filters.createdTo));
 
-  const response = await fetch(`/api/backend/marketing-leads?${query.toString()}`, {
+  return requestBackendJson<LeadListData>(`/marketing-leads?${query.toString()}`, {
     cache: "no-store",
+    fallbackMessage: "H5 营销线索加载失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "H5 营销线索加载失败"));
-  }
-
-  return payload.data as LeadListData;
 }
 
 export function H5LeadsPanel({

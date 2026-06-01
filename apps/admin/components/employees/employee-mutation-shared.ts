@@ -10,6 +10,7 @@ import {
   uploadDirectToCos,
   validateUploadFile,
 } from "@/lib/cos-direct-upload";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export type MutationMode = "create" | "edit";
 
@@ -71,17 +72,11 @@ export async function requestJson(input: {
   payload?: unknown;
   fallbackMessage: string;
 }) {
-  const response = await fetch(input.path, {
+  return requestBackendJson(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
+    fallbackMessage: input.fallbackMessage,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, input.fallbackMessage));
-  }
-
-  return payload.data;
 }
 
 export async function uploadEmployeeAvatarDirect(file: File) {
@@ -115,30 +110,16 @@ export async function mutateEmployee(input: {
   id?: string;
   payload?: unknown;
 }) {
-  const response = await fetch(
+  return requestBackendJson(
     input.id ? `/api/backend/employees/${input.id}` : "/api/backend/employees",
     {
       method: input.method,
-      headers: input.payload ? { "content-type": "application/json" } : undefined,
       body: input.payload ? JSON.stringify(input.payload) : undefined,
+      fallbackMessage: "操作失败",
     },
   );
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-
-  return payload;
 }
 
 export async function requestBackend<T>(path: string, init?: RequestInit) {
-  const response = await fetch(path, init);
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-
-  return payload.data as T;
+  return requestBackendJson<T>(path, init);
 }

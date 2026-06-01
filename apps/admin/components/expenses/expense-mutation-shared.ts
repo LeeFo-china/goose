@@ -16,6 +16,7 @@ import type {
   Project,
 } from "@/components/expenses/expense-mutation-types";
 import { buildUploadPreviewUrl, uploadDirectToCos } from "@/lib/cos-direct-upload";
+import { requestBackendJson } from "@/lib/backend-client";
 
 const settlementMethodOptions = EXPENSE_SETTLEMENT_METHOD_VALUES.map((value) => [
   value,
@@ -180,16 +181,10 @@ export async function requestExpense<T = unknown>(input: {
   method?: "GET" | "POST";
   payload?: unknown;
 }): Promise<T> {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data as T;
 }
 
 export function loadImage(file: File) {

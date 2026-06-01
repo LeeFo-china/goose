@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { requestBackendJson } from "@/lib/backend-client";
 import { cn } from "@/lib/utils";
 
 type ConstructionStageStatus =
@@ -64,21 +65,10 @@ type ConstructionStagesPayload = {
   stages: ConstructionStageItem[];
 };
 
-function getPayloadMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "message" in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-}
-
 async function requestBackend<T>(path: string) {
-  const response = await fetch(`/api/backend${path}`);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "请求失败"));
-  }
-  return payload.data as T;
+  return requestBackendJson<T>(path, {
+    fallbackMessage: "请求失败",
+  });
 }
 
 function statusMeta(status: ConstructionStageStatus) {

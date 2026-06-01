@@ -1,6 +1,7 @@
 import type { ImageUsage, LoadedImageFile, ProjectCaseOption, ProjectCaseOptionPagination } from "@/components/marketing/h5-page-editor-types";
 import { EDITOR_IMAGE_ALLOWED_TYPES, EDITOR_IMAGE_DIRECT_UPLOAD_MAX_BYTES, EDITOR_IMAGE_MAX_BYTES, EDITOR_IMAGE_OUTPUT_MAX_WIDTH, PROJECT_CASE_SELECTOR_PAGE_SIZE } from "@/components/marketing/h5-page-editor-types";
 import { uploadDirectToCos } from "@/lib/cos-direct-upload";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export function getH5BaseUrl() {
   return (process.env.NEXT_PUBLIC_GOOES_H5_BASE_URL || "https://h5.goodcms.cn").replace(/\/+$/, "");
@@ -19,16 +20,10 @@ export async function requestEditor<T>(input: {
   method?: "GET" | "POST" | "PUT";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data as T;
 }
 
 export function getImageRequirement(usage: ImageUsage) {
@@ -213,21 +208,21 @@ export async function fetchProjectCaseOptions(keyword: string, page = 1) {
     query.set("keyword", keyword.trim());
   }
 
-  const response = await fetch(`/api/backend/marketing-pages/project-options?${query}`, {
+  const data = await requestBackendJson<{
+    list?: ProjectCaseOption[];
+    pagination?: ProjectCaseOptionPagination;
+  }>(`/marketing-pages/project-options?${query}`, {
     cache: "no-store",
+    fallbackMessage: "项目案例加载失败",
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "项目案例加载失败"));
-  }
 
   return {
-    list: (payload?.data?.list || []) as ProjectCaseOption[],
+    list: data?.list || [],
     pagination: {
-      page: Number(payload?.data?.pagination?.page) || page,
-      pageSize: Number(payload?.data?.pagination?.pageSize) || PROJECT_CASE_SELECTOR_PAGE_SIZE,
-      total: Number(payload?.data?.pagination?.total) || 0,
-      totalPages: Number(payload?.data?.pagination?.totalPages) || 0,
+      page: Number(data?.pagination?.page) || page,
+      pageSize: Number(data?.pagination?.pageSize) || PROJECT_CASE_SELECTOR_PAGE_SIZE,
+      total: Number(data?.pagination?.total) || 0,
+      totalPages: Number(data?.pagination?.totalPages) || 0,
     },
   };
 }

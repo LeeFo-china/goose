@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { h5PageDisplaySceneOptions } from "@/components/marketing/marketing-constants";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export const H5PageFormSchema = z.object({
   title: z.string().trim().min(1, "页面标题不能为空").max(120, "页面标题不能超过 120 个字符"),
@@ -134,16 +135,10 @@ export async function requestH5Page<T>(input: {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data as T;
 }
 
 export function buildDefaultConfig(values: H5PageFormValues) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { campaignStatusOptions, campaignTypeOptions, targetScopeOptions } from "@/components/marketing/marketing-constants";
 import type { MarketingCampaignDetail, MarketingCampaignType, MarketingProjectOption } from "@/components/marketing/marketing-types";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export const booleanOptions = [
   { value: "true", label: "是" },
@@ -96,16 +97,10 @@ export async function requestMarketing<T>(input: {
   method?: "GET" | "POST" | "PUT";
   payload?: unknown;
 }) {
-  const response = await fetch(`/api/backend${input.path}`, {
+  return requestBackendJson<T>(input.path, {
     method: input.method || "GET",
-    headers: input.payload ? { "content-type": "application/json" } : undefined,
     body: input.payload ? JSON.stringify(input.payload) : undefined,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(getPayloadMessage(payload, "操作失败"));
-  }
-  return payload.data as T;
 }
 
 export function toDatetimeLocal(value: string | null | undefined) {

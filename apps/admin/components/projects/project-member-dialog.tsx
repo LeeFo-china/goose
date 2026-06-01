@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { EmployeeOption } from "@/components/projects/project-mutation-types";
-import { getEmployeeMeta, getEmployeeOptionLabel, getPayloadMessage, requestProject } from "@/components/projects/project-mutation-utils";
+import { getEmployeeMeta, getEmployeeOptionLabel, requestProject } from "@/components/projects/project-mutation-utils";
+import { requestBackendJson } from "@/lib/backend-client";
 
 export function AddProjectMemberDialog({
   projectId,
@@ -50,16 +51,16 @@ export function AddProjectMemberDialog({
 
       setLoading(true);
       setError("");
-      fetch(`/api/backend/projects/${projectId}/member-candidates?${query.toString()}`, {
+      requestBackendJson<{ list?: EmployeeOption[] }>(
+        `/projects/${projectId}/member-candidates?${query.toString()}`,
+        {
         signal: controller.signal,
         cache: "no-store",
-      })
-        .then((response) => response.json().then((payload) => ({ response, payload })))
-        .then(({ response, payload }) => {
-          if (!response.ok || payload.success === false) {
-            throw new Error(getPayloadMessage(payload, "员工候选加载失败"));
-          }
-          setCandidates((payload.data?.list || []) as EmployeeOption[]);
+          fallbackMessage: "员工候选加载失败",
+        },
+      )
+        .then((data) => {
+          setCandidates(data.list || []);
         })
         .catch((err) => {
           if (err instanceof DOMException && err.name === "AbortError") return;
