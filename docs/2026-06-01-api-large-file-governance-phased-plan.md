@@ -741,3 +741,45 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/wechat-auth-legacy-controller.ts` 仍为 2238 行 legacy handler；本阶段先移出 controller 以固定 HTTP 边界，后续应在 Phase 6 认证/身份治理中继续拆分员工登录、客户登录、访客登录、重绑申请、H5 session。
 - 本阶段为结构拆分，未修改 API path、payload、成功响应包装或中文错误文案。
+
+## 阶段 2 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split customer project log share facade`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 4287 | 179 | `apps/api/src/services/customer-project-log-shares.ts` |
+| 751 | 99 | `apps/api/src/repositories/customer-project-log-share-campaigns.ts` |
+
+### 结构变化
+
+- `apps/api/src/services/customer-project-log-shares.ts` 改为薄 facade，继续导出 `customerProjectLogShareService`，对外方法名和调用方式不变。
+- 原分享、助力、预约奖励、营销中心和券核销实现迁入 `apps/api/src/services/customer-project-log-shares/legacy-service.ts`。
+- `apps/api/src/repositories/customer-project-log-share-campaigns.ts` 改为薄 facade，继续导出原 repository 实例和行类型。
+- 原 Supabase 查询实现迁入 `apps/api/src/repositories/customer-project-log-share-campaigns/legacy-repository.ts`。
+- 本阶段未修改 controller 调用、API path、payload、返回结构和中文错误文案。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | service facade 179 行，repository facade 99 行 |
+| `rg 'throw new Error\(' apps/api/src/services/customer-project-log-shares.ts apps/api/src/repositories/customer-project-log-share-campaigns.ts` | 通过 | 无输出 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 facade 导入、类型转发和 bundle |
+| 真实接口请求 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对分享、助力、领奖写路径发请求 |
+
+### 风险和遗留
+
+- `apps/api/src/services/customer-project-log-shares/legacy-service.ts` 仍为 4287 行，`apps/api/src/repositories/customer-project-log-share-campaigns/legacy-repository.ts` 仍为 751 行；本阶段先完成外部入口瘦身和行为保持，未完成 legacy 内部按客户侧、员工侧、营销中心、预约奖励的实质拆分。
+- 后续继续治理时应优先把 legacy service 中的纯 helper、token/券状态、客户分享、员工活动、营销中心模板/实例逐步拆出，避免长期保留单体 legacy。
