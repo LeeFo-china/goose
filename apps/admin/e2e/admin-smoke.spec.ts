@@ -185,4 +185,31 @@ test.describe("admin smoke", () => {
     await expect(dialog.getByLabel("展示场景")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "创建" })).toBeVisible();
   });
+
+  test("租户用量页基础区域可渲染", async ({ page }) => {
+    await gotoAdminPage(page, "/usage");
+
+    await expect(page.getByRole("heading", { name: "用量统计" })).toBeVisible();
+    await expect(page.getByText("本租户用量")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "用量概览" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "AI 明细" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "短信明细" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "短视频明细" })).toBeVisible();
+  });
+
+  test("平台用量页租户账号展示访问提示", async ({ page }) => {
+    await gotoAdminPage(page, "/platform/usage");
+
+    await expect(page.getByRole("heading", { name: "用量统计" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "平台用量" })).toBeVisible();
+    await expect(page.getByText("当前账号不是平台超管，无法访问平台用量统计")).toBeVisible();
+  });
+
+  test("营销活动页 H5 线索入口可渲染", async ({ page }) => {
+    await gotoAdminPage(page, "/marketing?tab=h5-leads");
+
+    await expect(page.getByRole("heading", { name: "营销活动" })).toBeVisible();
+    await expect(page.getByText("H5 线索").first()).toBeVisible();
+    await expect(page.getByText(/线索|提交时间|跟进/).first()).toBeVisible();
+  });
 });
