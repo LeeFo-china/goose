@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  DesignProjectContextInfo,
+  DesignProjectFields,
+  DesignProjectPropertySection,
+} from "@/components/customers/design-project-before-status-fields";
 import type { CustomerRecord, ProjectEmployeeOption } from "@/components/customers/customer-mutation-types";
-import { getPrimaryCustomerProperty, InfoItem, requestCustomer, syncProjectPrimaryMembers } from "@/components/customers/customer-mutation-shared";
+import { getPrimaryCustomerProperty, requestCustomer, syncProjectPrimaryMembers } from "@/components/customers/customer-mutation-shared";
 
 export function DesignProjectBeforeStatusDialog({
   open,
@@ -222,162 +222,45 @@ export function DesignProjectBeforeStatusDialog({
         </DialogHeader>
         <div className="flex max-h-[calc(88vh-82px)] flex-col gap-4 overflow-y-auto p-5">
           <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="关联客户" value={customer.name || customer.phone_masked || customer.phone || "-"} />
-            <InfoItem
-              label="主房产"
-              value={existingPropertyId ? propertyName || "已选择主房产" : "待补全"}
+            <DesignProjectContextInfo
+              customer={customer}
+              propertyName={propertyName}
+              existingPropertyId={existingPropertyId}
             />
-            <section className="md:col-span-2 rounded-md border bg-muted/20 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-semibold">主房产信息</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {needsProperty
-                      ? "开始设计必须先绑定主房产，提交后会自动设为客户主房产。"
-                      : "当前项目会绑定这个客户主房产。"}
-                  </p>
-                </div>
-                <Badge variant={needsProperty ? "warning" : "success"}>
-                  {needsProperty ? "待补全" : "已绑定"}
-                </Badge>
-              </div>
-              {needsProperty ? (
-                <FieldGroup className="grid gap-4 md:grid-cols-2">
-                  <Field className="md:col-span-2">
-                    <FieldLabel htmlFor="design-property-community">小区名称</FieldLabel>
-                    <Input
-                      id="design-property-community"
-                      value={propertyCommunity}
-                      disabled={disabled}
-                      placeholder="例如：万科城市花园"
-                      onChange={(event) => setPropertyCommunity(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="design-property-building">楼栋门牌</FieldLabel>
-                    <Input
-                      id="design-property-building"
-                      value={propertyBuildingInfo}
-                      disabled={disabled}
-                      placeholder="例如：12栋1单元1203"
-                      onChange={(event) => setPropertyBuildingInfo(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="design-property-area">面积</FieldLabel>
-                    <Input
-                      id="design-property-area"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={propertyArea}
-                      disabled={disabled}
-                      placeholder="例如：120"
-                      onChange={(event) => setPropertyArea(event.target.value)}
-                    />
-                  </Field>
-                  <Field className="md:col-span-2">
-                    <FieldLabel htmlFor="design-property-layout">户型</FieldLabel>
-                    <Input
-                      id="design-property-layout"
-                      value={propertyLayout}
-                      disabled={disabled}
-                      placeholder="例如：三室两厅"
-                      onChange={(event) => setPropertyLayout(event.target.value)}
-                    />
-                  </Field>
-                </FieldGroup>
-              ) : (
-                <div className="grid gap-2 text-sm md:grid-cols-3">
-                  <InfoItem label="小区" value={existingProperty?.community || customer.community || "-"} />
-                  <InfoItem label="楼栋门牌" value={existingProperty?.building_info || customer.building_info || "-"} />
-                  <InfoItem
-                    label="面积户型"
-                    value={[
-                      existingProperty?.area != null ? `${existingProperty.area}㎡` : customer.area != null ? `${customer.area}㎡` : null,
-                      existingProperty?.layout || customer.layout,
-                    ].filter(Boolean).join(" · ") || "-"}
-                  />
-                </div>
-              )}
-            </section>
-            <Field className="md:col-span-2">
-              <FieldLabel htmlFor="design-project-name">项目名称</FieldLabel>
-              <Input
-                id="design-project-name"
-                value={name}
-                disabled={disabled}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="design-project-designer">设计师</FieldLabel>
-              <FormSelect
-                id="design-project-designer"
-                value={designerId}
-                disabled={disabled || loadingOptions}
-                options={[
-                  { value: "__none__", label: loadingOptions ? "设计师加载中" : "暂不选择" },
-                  ...designers.map((item) => ({ value: item.id, label: item.label })),
-                ]}
-                onChange={setDesignerId}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="design-project-supervisor">工程负责人</FieldLabel>
-              <FormSelect
-                id="design-project-supervisor"
-                value={supervisorId}
-                disabled={disabled || loadingOptions}
-                options={[
-                  { value: "__none__", label: loadingOptions ? "负责人加载中" : "暂不选择" },
-                  ...supervisors.map((item) => ({ value: item.id, label: item.label })),
-                ]}
-                onChange={setSupervisorId}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="design-project-budget">预算</FieldLabel>
-              <Input
-                id="design-project-budget"
-                type="number"
-                min="0"
-                step="0.01"
-                value={budget}
-                disabled={disabled}
-                onChange={(event) => setBudget(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="design-project-start-date">开工日期</FieldLabel>
-              <Input
-                id="design-project-start-date"
-                type="date"
-                value={startDate}
-                disabled={disabled}
-                onChange={(event) => setStartDate(event.target.value)}
-              />
-            </Field>
-            <Field className="md:col-span-2">
-              <FieldLabel htmlFor="design-project-tags">风格标签</FieldLabel>
-              <Input
-                id="design-project-tags"
-                value={styleTags}
-                placeholder="现代,轻奢"
-                disabled={disabled}
-                onChange={(event) => setStyleTags(event.target.value)}
-              />
-            </Field>
-            <Field className="md:col-span-2">
-              <FieldLabel htmlFor="design-project-address">项目地址</FieldLabel>
-              <Textarea
-                id="design-project-address"
-                value={address}
-                disabled={disabled}
-                className="min-h-[72px]"
-                onChange={(event) => setAddress(event.target.value)}
-              />
-            </Field>
+            <DesignProjectPropertySection
+              needsProperty={needsProperty}
+              disabled={disabled}
+              existingProperty={existingProperty}
+              customer={customer}
+              propertyCommunity={propertyCommunity}
+              propertyBuildingInfo={propertyBuildingInfo}
+              propertyArea={propertyArea}
+              propertyLayout={propertyLayout}
+              onPropertyCommunityChange={setPropertyCommunity}
+              onPropertyBuildingInfoChange={setPropertyBuildingInfo}
+              onPropertyAreaChange={setPropertyArea}
+              onPropertyLayoutChange={setPropertyLayout}
+            />
+            <DesignProjectFields
+              disabled={disabled}
+              loadingOptions={loadingOptions}
+              name={name}
+              designerId={designerId}
+              supervisorId={supervisorId}
+              budget={budget}
+              startDate={startDate}
+              styleTags={styleTags}
+              address={address}
+              designers={designers}
+              supervisors={supervisors}
+              onNameChange={setName}
+              onDesignerIdChange={setDesignerId}
+              onSupervisorIdChange={setSupervisorId}
+              onBudgetChange={setBudget}
+              onStartDateChange={setStartDate}
+              onStyleTagsChange={setStyleTags}
+              onAddressChange={setAddress}
+            />
           </div>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <DialogFooter>
