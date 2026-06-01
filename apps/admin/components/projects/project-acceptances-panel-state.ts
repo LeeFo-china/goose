@@ -19,18 +19,13 @@ import type {
   NotifyCustomerResult,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+import { getProjectAcceptancesPanelDerived } from "@/components/projects/project-acceptances-panel-derived";
 import {
   buildEditable,
   formatDateTime,
-  getAcceptanceDisplaySections,
   getAcceptanceDisplayTitle,
-  getAcceptanceItemStats,
-  getLatestCustomerDispute,
-  getLatestRejectAction,
-  openAcceptanceStatuses,
   requestBackend,
   resetRejectedEditableItems,
-  stageOptions,
   uploadAcceptanceImageDirect,
 } from "@/components/projects/project-acceptance-utils";
 
@@ -57,78 +52,31 @@ export function useProjectAcceptancesPanel(
   const [editable, setEditable] = useState<EditableState>(() =>
     buildEditable(null),
   );
-
-  const selected = useMemo(
-    () => acceptances.find((item) => item.id === selectedId) || null,
-    [acceptances, selectedId],
+  const {
+    selected,
+    latestCustomerDispute,
+    latestRejectAction,
+    selectedStats,
+    selectedSections,
+    occupiedStages,
+    selectableStageOptions,
+    firstAvailableStage,
+    selectedStageBlockedReason,
+    selectedStageBlocked,
+    canCreateByProjectStatus,
+    canCreateAcceptance,
+    canCreateFinalAcceptance,
+    finalAcceptanceBlockedReason,
+  } = useMemo(
+    () => getProjectAcceptancesPanelDerived({
+      acceptances,
+      constructionStages,
+      selectedId,
+      stageCode,
+      projectStatus: project.status,
+    }),
+    [acceptances, constructionStages, project.status, selectedId, stageCode],
   );
-  const latestCustomerDispute = useMemo(
-    () => getLatestCustomerDispute(selected),
-    [selected],
-  );
-  const latestRejectAction = useMemo(
-    () => getLatestRejectAction(selected),
-    [selected],
-  );
-  const selectedStats = useMemo(
-    () => getAcceptanceItemStats(selected),
-    [selected],
-  );
-  const selectedSections = useMemo(
-    () => selected ? getAcceptanceDisplaySections(selected) : [],
-    [selected],
-  );
-  const occupiedStages = useMemo(() => {
-    return new Map(
-      acceptances
-        .filter((item) => item.acceptance_type !== "final")
-        .filter((item) => openAcceptanceStatuses.has(item.status))
-        .map((item) => [item.stage_code, item]),
-    );
-  }, [acceptances]);
-  const openFinalAcceptance = useMemo(
-    () => acceptances.find((item) =>
-      item.acceptance_type === "final" && openAcceptanceStatuses.has(item.status)
-    ) || null,
-    [acceptances],
-  );
-  const constructionStageMap = useMemo(() => {
-    return new Map(constructionStages.map((item) => [item.stage_code, item]));
-  }, [constructionStages]);
-  const selectableStageOptions = useMemo(() => {
-    return stageOptions.map((item) => ({
-      ...item,
-      acceptance: occupiedStages.get(item.value),
-      constructionStage: constructionStageMap.get(item.value),
-    }));
-  }, [constructionStageMap, occupiedStages]);
-  const firstAvailableStage = selectableStageOptions.find((item) =>
-    !item.acceptance && !item.constructionStage?.blocked_reason
-  );
-  const selectedStageBlockedReason = occupiedStages.get(stageCode)
-    ? "该工序已有进行中的验收单"
-    : constructionStageMap.get(stageCode)?.blocked_reason || "";
-  const selectedStageBlocked = Boolean(selectedStageBlockedReason);
-  const canCreateByProjectStatus = project.status === "constructing" || project.status === "acceptance";
-  const canCreateAcceptance = canCreateByProjectStatus &&
-    Boolean(firstAvailableStage) &&
-    !selectedStageBlocked;
-  const canCreateFinalAcceptance = project.status === "constructing" &&
-    !openFinalAcceptance &&
-    constructionStages.length > 0 &&
-    constructionStages.every((stage) =>
-      stage.stage_code === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE ||
-      stage.status === "accepted"
-    );
-  const finalAcceptanceBlockedReason = openFinalAcceptance
-    ? "当前项目已有进行中的竣工交付验收"
-    : project.status !== "constructing"
-    ? "仅施工中项目可发起竣工交付验收"
-    : constructionStages.length === 0
-    ? "施工阶段状态加载后才可发起竣工交付验收"
-    : canCreateFinalAcceptance
-    ? ""
-    : "必需施工阶段全部完成后才可发起竣工交付验收";
 
   const loadAcceptances = async () => {
     setLoading(true);
