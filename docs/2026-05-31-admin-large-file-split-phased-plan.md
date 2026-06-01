@@ -1089,6 +1089,126 @@ find apps/admin -path '*/node_modules' -prune -o -path '*/.next' -prune -o -path
 - `pnpm --dir apps/admin build` 通过。
 - `pnpm --dir apps/admin test:e2e` 首轮出现一次登录接口瞬时失败；重跑失败用例通过，随后完整重跑 12 条 smoke 全部通过。
 
+## 2026-06-01 第五轮临界文件拆分记录
+
+本轮按“客户表单、发布部署面板、营销活动表单、Dashboard 页面”四阶段执行。
+
+### 阶段 1：客户表单弹窗拆分
+
+范围：
+
+- `apps/admin/components/customers/customer-form-dialog.tsx`
+
+处理：
+
+- 提取头像上传、客户基础字段、负责人字段、抖音截图字段和主房产字段到 `customer-form-fields.tsx`。
+- 原弹窗保留默认值重置、头像上传请求、提交 payload 和刷新流程。
+
+结果：
+
+- `customer-form-dialog.tsx`：409 行降到 193 行。
+- `customer-form-fields.tsx`：337 行。
+
+提交：
+
+- `5148c6b refactor: split customer form fields`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 2：发布部署面板快照状态拆分
+
+范围：
+
+- `apps/admin/components/ops/release-deployments-panel.tsx`
+
+处理：
+
+- 提取发布记录、成功版本、运行版本的刷新、轮询、分页和筛选状态到 `release-deployments-snapshots.ts`。
+- 原面板保留发布、生产 Tag、回滚和卡片编排动作。
+
+结果：
+
+- `release-deployments-panel.tsx`：406 行降到 266 行。
+- `release-deployments-snapshots.ts`：222 行。
+
+提交：
+
+- `605d85c refactor: split release deployment snapshots`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+
+### 阶段 3：营销活动表单字段拆分
+
+范围：
+
+- `apps/admin/components/marketing/marketing-campaign-form-dialog.tsx`
+
+处理：
+
+- 提取基础字段、项目范围选择、活动规则字段和奖励字段到 `marketing-campaign-form-fields.tsx`。
+- 原弹窗保留项目选项加载、范围选择状态和创建/编辑提交。
+
+结果：
+
+- `marketing-campaign-form-dialog.tsx`：406 行降到 211 行。
+- `marketing-campaign-form-fields.tsx`：357 行。
+
+提交：
+
+- `8452bed refactor: split marketing campaign form fields`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- H5 活动页新建弹窗 smoke 通过。
+
+### 阶段 4：Dashboard 页面拆分
+
+范围：
+
+- `apps/admin/app/(console)/dashboard/page.tsx`
+
+处理：
+
+- 提取平台/租户概览类型、默认日期和后端数据请求到 `dashboard-data.ts`。
+- 提取平台概览、租户概览、指标卡和图表组合到 `dashboard-sections.tsx`。
+- 页面文件仅保留 session 角色判断和数据组合。
+
+结果：
+
+- `page.tsx`：406 行降到 39 行。
+- `dashboard-data.ts`：139 行。
+- `dashboard-sections.tsx`：226 行。
+
+提交：
+
+- `a096f55 refactor: split dashboard data and sections`
+
+验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `pnpm --dir apps/admin build` 通过。
+- 包含 `/dashboard` 入口的组织架构 smoke 通过。
+
+最终验收：
+
+- `pnpm admin:check` 通过。
+- `git diff --check` 通过。
+- `>500` 行门禁无输出。
+- `pnpm --dir apps/admin build` 通过。
+- `pnpm --dir apps/admin test:e2e` 通过，12 条 smoke 全部通过。
+
 ## 风险与控制
 
 - 风险：拆分过程中隐性改变表单默认值或 payload。
