@@ -829,3 +829,47 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - `apps/api/src/services/project-acceptances/legacy-service.ts`、`apps/api/src/services/projects/legacy-service.ts`、`apps/api/src/services/project-cameras/legacy-service.ts`、`apps/api/src/services/construction-stage-status/legacy-service.ts`、`apps/api/src/services/tenant-devices/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身和第三方 IoT gateway 边界迁移，后续仍需按领域继续拆出模板、状态机、设备绑定、播放地址、成员候选等模块。
 - `bun run api:construction-stage-check` 在当前 shell 不会自动获得 `apps/api/.env` 中的数据库变量；本阶段通过 `set -a; . apps/api/.env; set +a; bun run api:construction-stage-check` 显式加载环境后完成验收。
+
+## 阶段 4 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split billing expense usage service facades`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1937 | 1 | `apps/api/src/services/expense-requests.ts` |
+| 1401 | 1 | `apps/api/src/services/billing.ts` |
+| 618 | 4 | `apps/api/src/services/sms.ts` |
+| 616 | 1 | `apps/api/src/services/usage.ts` |
+| 615 | 4 | `apps/api/src/services/task-center.ts` |
+
+### 结构变化
+
+- 5 个目标 service 入口均改为薄 facade，继续导出原有 service 实例、函数或类型，保持调用方 import path 不变。
+- 原费用申请、计费、短信、用量、任务中心实现分别迁入对应 `legacy-service.ts` 目录，作为后续按审批流、余额流水、短信渠道、用量汇总、待办聚合继续细拆的兼容实现。
+- 本阶段未修改 controller 调用、API path、payload、返回结构、扣费字段、余额字段、用量记录字段和中文错误文案。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| 目标入口文件行数门禁 | 通过 | 5 个目标入口文件均 `<= 500` 行 |
+| 导出引用扫描 | 通过 | 原调用方继续从 `@/services/billing`、`@/services/sms`、`@/services/usage`、`@/services/task-center`、`@/services/expense-requests` 导入 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 facade 导入、类型转发和 bundle |
+| 费用、计费、用量、任务中心真实接口 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对费用审批、扣费、用量写路径发请求 |
+| 短信真实发送 smoke | 未执行 | 本阶段不触发真实短信发送，仅通过编译级验证确认 `sendSmsCode`、`sendSmsTemplate` 导出兼容 |
+
+### 风险和遗留
+
+- `apps/api/src/services/expense-requests/legacy-service.ts`、`apps/api/src/services/billing/legacy-service.ts`、`apps/api/src/services/sms/legacy-service.ts`、`apps/api/src/services/usage/legacy-service.ts`、`apps/api/src/services/task-center/legacy-service.ts` 仍为大文件；本次仅完成入口瘦身，未完成 legacy 内部按申请创建、审批流、余额流水、短信渠道、用量聚合、待办聚合的实质拆分。
+- 后续治理应优先拆 `billing/legacy-service.ts` 的余额校验、流水写入、冻结结算和定价规则，降低短信、社媒视频转写等调用方对单体 billing 的耦合。
