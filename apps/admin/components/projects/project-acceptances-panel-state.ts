@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type ProjectLogStageCode } from "@gooes/domain";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
@@ -8,13 +8,10 @@ import type {
   AcceptanceDialogState,
   AcceptanceTemplate,
   ConstructionStageItem,
-  EditableItem,
-  EditableState,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
 import {
   approveProjectAcceptance,
-  buildUploadedImagePatch,
   createFinalProjectAcceptance,
   createStageAcceptance,
   deleteProjectAcceptanceDraft,
@@ -25,12 +22,10 @@ import {
   saveProjectAcceptance,
 } from "@/components/projects/project-acceptances-panel-api";
 import { getProjectAcceptancesPanelDerived } from "@/components/projects/project-acceptances-panel-derived";
+import { useProjectAcceptanceEditableState } from "@/components/projects/project-acceptances-panel-editable-state";
 import {
-  buildEditable,
   formatDateTime,
   getAcceptanceDisplayTitle,
-  resetRejectedEditableItems,
-  uploadAcceptanceImageDirect,
 } from "@/components/projects/project-acceptance-utils";
 
 export function useProjectAcceptancesPanel(
@@ -39,7 +34,6 @@ export function useProjectAcceptancesPanel(
 ) {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [uploadingItemId, setUploadingItemId] = useState("");
   const [error, setError] = useState("");
   const [acceptances, setAcceptances] = useState<ProjectAcceptance[]>([]);
   const [constructionStages, setConstructionStages] = useState<ConstructionStageItem[]>([]);
@@ -53,9 +47,6 @@ export function useProjectAcceptancesPanel(
   const [templateLoading, setTemplateLoading] = useState(false);
   const [templateError, setTemplateError] = useState("");
   const [finalTemplate, setFinalTemplate] = useState<AcceptanceTemplate | null>(null);
-  const [editable, setEditable] = useState<EditableState>(() =>
-    buildEditable(null),
-  );
   const {
     selected,
     latestCustomerDispute,
@@ -81,6 +72,17 @@ export function useProjectAcceptancesPanel(
     }),
     [acceptances, constructionStages, project.status, selectedId, stageCode],
   );
+  const {
+    uploadingItemId,
+    editable,
+    setEditable,
+    updateEditableItem,
+    uploadImages,
+  } = useProjectAcceptanceEditableState({
+    selected,
+    projectId: project.id,
+    setError,
+  });
 
   const loadAcceptances = async () => {
     setLoading(true);
@@ -110,15 +112,6 @@ export function useProjectAcceptancesPanel(
     void loadAcceptances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, project.id]);
-
-  useEffect(() => {
-    const nextEditable = buildEditable(selected);
-    if (selected?.status === "rejected") {
-      setEditable(resetRejectedEditableItems(nextEditable));
-      return;
-    }
-    setEditable(nextEditable);
-  }, [selected?.id, selected?.status]);
 
   useEffect(() => {
     if (!firstAvailableStage) return;
@@ -246,50 +239,6 @@ export function useProjectAcceptancesPanel(
       await deleteProjectAcceptanceDraft(acceptanceId);
       setActionDialog(null);
     });
-
-  const updateEditableItem = (
-    itemId: string,
-    patch: Partial<EditableItem>,
-  ) => {
-    setEditable((current) => ({
-      ...current,
-      items: {
-        ...current.items,
-        [itemId]: {
-          ...current.items[itemId],
-          ...patch,
-        },
-      },
-    }));
-  };
-
-  const uploadImages = async (
-    itemId: string,
-    event: ChangeEvent<HTMLInputElement>,
-    target: "images" | "rectification_images",
-  ) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-    if (files.length === 0) return;
-
-    setUploadingItemId(`${itemId}:${target}`);
-    setError("");
-    try {
-      const uploaded = await Promise.all(
-        files.map((file) => uploadAcceptanceImageDirect(file, project.id)),
-      );
-      const currentItem = editable.items[itemId];
-      updateEditableItem(itemId, buildUploadedImagePatch({
-        currentItem,
-        target,
-        uploaded,
-      }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "图片上传失败");
-    } finally {
-      setUploadingItemId("");
-    }
-  };
 
   return {
     loading,
