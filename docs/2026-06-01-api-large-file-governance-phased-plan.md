@@ -657,7 +657,7 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 ## 阶段 0 执行记录
 
 日期：2026-06-01
-提交：待提交
+提交：0fbc38f
 
 ### 目标文件
 
@@ -690,3 +690,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本地初始缺少 `node_modules`，`bun install --frozen-lockfile` 长时间停在 resolving 后中断，改用项目声明的 `pnpm install --frozen-lockfile` 安装依赖并完成门禁。
 - Phase 1 开始前需重新确认 controller 当前行数和导出结构。
+
+## 阶段 1 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: slim api controllers`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2238 | 15 | `apps/api/src/controllers/wechat/index.ts` |
+| 1249 | 183 | `apps/api/src/controllers/customer-self-service/index.ts` |
+| 1243 | 119 | `apps/api/src/controllers/projects/index.ts` |
+| 1048 | 15 | `apps/api/src/controllers/customer-project-log-shares/index.ts` |
+| 1016 | 296 | `apps/api/src/controllers/customer/index.ts` |
+| 756 | 15 | `apps/api/src/controllers/marketing-pages/index.ts` |
+| 649 | 53 | `apps/api/src/controllers/employee-self-service/index.ts` |
+
+### 结构变化
+
+- `employee-self-service`：抽出员工首页 bootstrap handler、schema、types、prewarm helper；controller 只保留路由和个性化查询。
+- `marketing-pages`：按平台营销页、租户营销页、公开页面/线索拆为子 controller，入口统一注册。
+- `customer-project-log-shares`：按客户分享/预约活动、员工营销活动、营销中心活动实例拆为子 controller，入口统一注册。
+- `customer`：抽出客户 shared base、客户属性 controller、详情/状态/来源/跟进/手机号动作 controller，原入口保留 CRUD。
+- `projects`：抽出项目 shared base、列表序列化、状态/bootstrap、成员、公开项目、创建选择 controller，原入口保留 CRUD。
+- `customer-self-service`：抽出客户上下文 shared base、项目/日志 base、项目路由 controller、工单/验收 controller，原入口保留 context/profile/bootstrap。
+- `wechat`：原混合登录实现整体迁到 `apps/api/src/services/wechat-auth-legacy-controller.ts`，新 controller 仅代理注册现有路由，保持行为不变。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| controller 行数门禁 | 通过 | `apps/api/src/controllers` 下无 `>= 500` 行 `.ts` 文件 |
+| `rg 'throw new Error\(' apps/api/src/controllers` | 通过 | 无输出 |
+| controller Supabase 直连扫描 | 通过 | 无输出 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 路由注册结构 | 通过 | 各入口 controller 继续通过 `registerExtraRoutes` 注册原路由 |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖装饰器、导入路径、类型和 bundle |
+| 真实接口请求 smoke | 未执行 | 当前环境没有可用测试 token/测试租户数据；未对数据库写路径发请求 |
+
+### 风险和遗留
+
+- `apps/api/src/services/wechat-auth-legacy-controller.ts` 仍为 2238 行 legacy handler；本阶段先移出 controller 以固定 HTTP 边界，后续应在 Phase 6 认证/身份治理中继续拆分员工登录、客户登录、访客登录、重绑申请、H5 session。
+- 本阶段为结构拆分，未修改 API path、payload、成功响应包装或中文错误文案。
