@@ -1223,3 +1223,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把运行时依赖收敛成显式 context，降低跨模块隐式耦合。
 - `project-acceptances/legacy-service.ts`、`decoration-qa/legacy-service.ts`、`expense-requests/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 3 执行记录
+
+日期：2026-06-01
+提交：本阶段提交 `refactor: split project acceptance legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 2728 | 406 | `apps/api/src/services/project-acceptances/legacy-service.ts` |
+| - | 360 | `apps/api/src/services/project-acceptances/legacy/base.ts` |
+| - | 449 | `apps/api/src/services/project-acceptances/legacy/create-update.ts` |
+| - | 417 | `apps/api/src/services/project-acceptances/legacy/customer-actions.ts` |
+| - | 283 | `apps/api/src/services/project-acceptances/legacy/customer-auth.ts` |
+| - | 307 | `apps/api/src/services/project-acceptances/legacy/detail-bulk.ts` |
+| - | 487 | `apps/api/src/services/project-acceptances/legacy/detail-sections.ts` |
+| - | 418 | `apps/api/src/services/project-acceptances/legacy/image-metadata.ts` |
+| - | 417 | `apps/api/src/services/project-acceptances/legacy/lists.ts` |
+| - | 487 | `apps/api/src/services/project-acceptances/legacy/notifications.ts` |
+| - | 421 | `apps/api/src/services/project-acceptances/legacy/permissions.ts` |
+| - | 455 | `apps/api/src/services/project-acceptances/legacy/submit-review.ts` |
+| - | 367 | `apps/api/src/services/project-acceptances/legacy/templates.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留缓存字段、方法绑定和 `projectAcceptanceService` 导出。
+- 原验收单模板、详情构建、图片引用、权限校验、客户通知/open ticket、客户侧访问、创建更新、提交复核、客户确认/异议/整改/取消逻辑按职责拆入 `project-acceptances/legacy/` 子模块。
+- 对外入口和 service 名称保持不变，既有 controller/import 不需要改动。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/project-acceptances/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 40 个减少到 39 个，`project-acceptances/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `project-acceptances/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖验收模板、创建更新、提交复核、客户通知、open ticket、客户确认/异议和 bundle |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实业务接口 smoke | 未执行 | 当前环境没有统一测试 token、项目验收单、客户手机号和短信通道测试数据；未对验收写路径发请求 |
+
+### 风险和遗留
+
+- 拆分后仍通过 service 实例 `this` 串联 helper，属于行为保持型结构拆分；后续可把模板、通知、客户访问、状态流转分别收敛为显式 context 或子 service。
+- `decoration-qa/legacy-service.ts`、`expense-requests/legacy-service.ts`、`system-settings/legacy-service.ts`、`billing/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。

@@ -9,7 +9,6 @@ const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs
 
 const EXEMPTIONS = new Map<string, string>([
   ["apps/api/src/types/database.ts", "generated Supabase database types"],
-  ["apps/api/src/services/project-acceptances/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
   ["apps/api/src/services/decoration-qa/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
   ["apps/api/src/services/expense-requests/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
   ["apps/api/src/services/system-settings/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
