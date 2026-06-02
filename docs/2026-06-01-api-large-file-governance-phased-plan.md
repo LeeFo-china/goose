@@ -2610,3 +2610,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 `tenantDeviceRepository` 外观和 `adminClient` 实例生命周期，service 与 project camera 模块的 repository 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
 - `sms/legacy-service.ts`、`tencent-iot-video.ts`、`tenant-devices/legacy-service.ts`、`usage/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 30 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split sms legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 631 | 33 | `apps/api/src/services/sms/legacy-service.ts` |
+| - | 82 | `apps/api/src/services/sms/legacy/aliyun.ts` |
+| - | 160 | `apps/api/src/services/sms/legacy/config.ts` |
+| - | 131 | `apps/api/src/services/sms/legacy/dispatcher.ts` |
+| - | 114 | `apps/api/src/services/sms/legacy/logging-billing.ts` |
+| - | 26 | `apps/api/src/services/sms/legacy/shared.ts` |
+| - | 135 | `apps/api/src/services/sms/legacy/tencent.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容导出入口，只保留 `sendSmsCode` 和 `sendSmsTemplate`，`@/services/sms` 调用路径不变。
+- provider/channel 归一化、租户/平台配置读取、模板 key 选择和必填配置校验拆入 `config.ts`。
+- 阿里云 SDK client 创建、SendSmsRequest 构造、RuntimeOptions 和阿里云错误包装拆入 `aliyun.ts`。
+- 腾讯云 TC3-HMAC-SHA256 签名、手机号归一化、SendSms API 调用和腾讯错误包装拆入 `tencent.ts`。
+- 手机号 mask/hash、短信发送日志、短信计费前置检查和计费结果回写拆入 `logging-billing.ts`。
+- disabled/mock/aliyun/tencent 分支调度、成功/失败日志和 billing 调用拆入 `dispatcher.ts`。
+- 共享类型、腾讯常量和 sms/billing/system settings 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/sms/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 13 个减少到 12 个，`sms/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `sms/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 `sendSmsCode`、`sendSmsTemplate`、配置读取、阿里云/腾讯 provider、日志和计费入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实短信 smoke | 未执行 | 当前阶段仅做结构拆分；未触发真实阿里云/腾讯云短信发送、扣费或验证码业务流程 |
+
+### 风险和遗留
+
+- 本阶段保留 mock/disabled/aliyun/tencent 分支、模板 fallback、日志字段、计费开关和错误包装语义，属于行为保持型结构拆分。
+- `tencent-iot-video.ts`、`tenant-devices/legacy-service.ts`、`usage/legacy-service.ts`、`task-center/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
