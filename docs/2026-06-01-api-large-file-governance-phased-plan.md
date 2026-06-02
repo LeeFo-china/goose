@@ -2104,3 +2104,52 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `socialVideoScriptService` 外观，controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用权限、缓存和序列化 helper，属于行为保持型结构拆分。
 - `project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 20 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split project cameras legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 833 | 47 | `apps/api/src/repositories/project-cameras/legacy-repository.ts` |
+| - | 78 | `apps/api/src/repositories/project-cameras/legacy/access.ts` |
+| - | 300 | `apps/api/src/repositories/project-cameras/legacy/bind-options.ts` |
+| - | 171 | `apps/api/src/repositories/project-cameras/legacy/mutations.ts` |
+| - | 130 | `apps/api/src/repositories/project-cameras/legacy/queries.ts` |
+| - | 171 | `apps/api/src/repositories/project-cameras/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 Supabase admin client、方法绑定和 `projectCameraRepository` 导出。
+- 客户自有项目租户校验和项目基础读取拆入 `access.ts`。
+- 绑定项目搜索、客户/房产匹配、绑定项目候选和项目摄像头分组拆入 `bind-options.ts`。
+- 项目摄像头列表、项目摄像头详情、设备通道绑定查询和 vendor 绑定列表拆入 `queries.ts`。
+- 摄像头绑定创建、更新、状态更新、软删除和访问日志写入拆入 `mutations.ts`。
+- 共享 record 类型、schema 类型、项目选项序列化、手机号脱敏、关键词清理和基础依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/project-cameras/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 23 个减少到 22 个，`project-cameras/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `project-cameras/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖客户项目权限、绑定项目候选、摄像头分组、设备绑定查询、CRUD、状态更新和访问日志入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实摄像头/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实摄像头绑定、解绑、状态同步或访问日志写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `projectCameraRepository` 外观，project camera service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 Supabase admin client 和搜索 helper，属于行为保持型结构拆分。
+- `project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
