@@ -3254,3 +3254,36 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段不修改 `database.ts` 内容，仅改变门禁统计口径：生成文件继续被显示和审计，但不占用大文件治理豁免名额。
 - 大文件治理目标完成后，后续应保持 `EXEMPTIONS` 为空；如确有临时豁免，必须先补阶段计划、测试和验收记录。
+
+## 治理收尾 Phase 43 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `chore: add api governance check script`
+
+### 目标
+
+| 文件 | 变化 |
+| --- | --- |
+| `package.json` | 新增根目录 `api:check`，串联 `api:typecheck`、`api:build`、`api:check-file-size` |
+| `apps/api/package.json` | 新增 API 包内 `check`，串联 `typecheck`、`build`、`check:file-size` |
+
+### 结构变化
+
+- API 日常验收命令固化为 `bun run api:check`，一次性覆盖类型检查、构建和大文件门禁。
+- API 包内也可直接执行 `bun run check`，便于在 `apps/api` 工作目录下复用同一验收链路。
+- 大文件门禁继续要求 `exemptions=0`；`database.ts` 作为生成类型文件单独展示但不计入豁免。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:check` | 通过 | 串联 `api:typecheck`、`api:build`、`api:check-file-size` 全部通过 |
+| 显式豁免数门禁 | 通过 | `API file size check passed. threshold=500, exemptions=0` |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| API 日常验收 smoke | 通过 | 根目录 `bun run api:check` 可作为后续 API 日常验收命令 |
+| 行数门禁 smoke | 通过 | `api:check` 已包含大文件门禁且保持 `exemptions=0` |
