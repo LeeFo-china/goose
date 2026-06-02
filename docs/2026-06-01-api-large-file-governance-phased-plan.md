@@ -3071,3 +3071,50 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 CLI 参数、CSV 字段顺序、迁移状态、COS 上传、上传后缓存刷新、访问检查和报告输出语义，属于行为保持型结构拆分。
 - `customer-core/legacy-service.ts`、`authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 39 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split customer core legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 561 | 104 | `apps/api/src/services/customer-core/legacy-service.ts` |
+| - | 79 | `apps/api/src/services/customer-core/legacy/access.ts` |
+| - | 325 | `apps/api/src/services/customer-core/legacy/list-manager.ts` |
+| - | 144 | `apps/api/src/services/customer-core/legacy/mutations.ts` |
+| - | 20 | `apps/api/src/services/customer-core/legacy/types.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `customerCoreService` 单例、原 public 方法名和类型导出。
+- 客户列表缓存、in-flight 合并、follow 状态判定、home/compact/普通列表查询和 debug timings 拆入 `list-manager.ts`。
+- 客户访问断言、详情读取、更新前读取和 not found 错误映射拆入 `access.ts`。
+- 创建、更新、状态流转和删除作废入口拆入 `mutations.ts`，写入后仍通过 facade 触发列表缓存失效。
+- 列表结果和 latest follow-up 类型拆入 `types.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/customer-core/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 4 个减少到 3 个，`customer-core/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `customer-core/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖客户列表、follow 筛选、详情、创建、更新、状态流转和作废入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实客户/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实客户列表、详情、创建、更新或状态流转接口 |
+
+### 风险和遗留
+
+- 本阶段保留客户列表缓存 key、home/compact 查询、follow 筛选、客户访问权限、状态流转和缓存失效语义，属于行为保持型结构拆分。
+- `authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
