@@ -2508,3 +2508,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 `constructionStageStatusService` 外观和六个 public 方法名称，项目、施工日志、验收、客户自助和装修问答调用路径不变；拆分后的模块仍为行为保持型结构拆分。
 - `wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts`、`tencent-iot-video.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 28 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split wechat customer identity service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 649 | 59 | `apps/api/src/services/wechat-customer-identities/legacy-service.ts` |
+| - | 108 | `apps/api/src/services/wechat-customer-identities/legacy/binding.ts` |
+| - | 175 | `apps/api/src/services/wechat-customer-identities/legacy/cache.ts` |
+| - | 157 | `apps/api/src/services/wechat-customer-identities/legacy/login-state.ts` |
+| - | 119 | `apps/api/src/services/wechat-customer-identities/legacy/mappers.ts` |
+| - | 45 | `apps/api/src/services/wechat-customer-identities/legacy/shared.ts` |
+| - | 137 | `apps/api/src/services/wechat-customer-identities/legacy/tenant-options.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留原 service 单例、缓存 map 状态、类型导出和 public 方法名称，`@/services/wechat-customer-identities` 导出路径不变。
+- 客户租户选项缓存、登录 membership 缓存、openid 登录状态缓存、in-flight 合并和失效逻辑拆入 `cache.ts`。
+- 租户关系归一化、活跃客户过滤、登录 membership 映射、客户选项映射、员工登录行过滤和项目摘要 enrich 拆入 `mappers.ts`。
+- 微信登录 membership state、openid 登录 state、登录状态 row 归一化和缓存回填拆入 `login-state.ts`。
+- 按手机号、auth user、memberships 查询客户租户选项和客户租户详情查询拆入 `tenant-options.ts`。
+- 客户 auth user 绑定、自助注册/手机号绑定和业务 membership 同步拆入 `binding.ts`。
+- 共享 repository、Errors、user identity、rebind request、缓存 TTL 和类型重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/wechat-customer-identities/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 15 个减少到 14 个，`wechat-customer-identities/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `wechat-customer-identities/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖微信登录态解析、客户租户选项缓存、客户绑定、自助注册和 membership 同步入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实微信/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实微信登录、客户绑定、自助注册或 rebind request 流程 |
+
+### 风险和遗留
+
+- 本阶段保留缓存状态在 `wechatCustomerIdentityService` 单例实例上，拆出函数通过显式 `this` 上下文访问缓存 map，避免改变缓存生命周期。
+- `tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts`、`tencent-iot-video.ts`、`tenant-devices/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
