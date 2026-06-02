@@ -2865,3 +2865,55 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留待办类型、优先级排序、target_url、summary cache key 和权限判断语义，属于行为保持型结构拆分。
 - `wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 35 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split wechat rebind request service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 615 | 20 | `apps/api/src/services/wechat-rebind-requests/legacy-service.ts` |
+| - | 140 | `apps/api/src/services/wechat-rebind-requests/legacy/assertions.ts` |
+| - | 81 | `apps/api/src/services/wechat-rebind-requests/legacy/requests.ts` |
+| - | 171 | `apps/api/src/services/wechat-rebind-requests/legacy/review.ts` |
+| - | 25 | `apps/api/src/services/wechat-rebind-requests/legacy/serialize.ts` |
+| - | 49 | `apps/api/src/services/wechat-rebind-requests/legacy/shared.ts` |
+| - | 110 | `apps/api/src/services/wechat-rebind-requests/legacy/unbind.ts` |
+| - | 65 | `apps/api/src/services/wechat-rebind-requests/legacy/verification.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留换绑 service 单例和原 public 方法名。
+- 绑定冲突、目标身份、微信解绑前置条件、oauth 活跃关系和 business membership 断言拆入 `assertions.ts`。
+- 验证码读取、校验和标记 verified 拆入 `verification.ts`。
+- 换绑申请创建和列表查询拆入 `requests.ts`。
+- 审核通过/拒绝、目标读取、审核权限和 audit log 拆入 `review.ts`。
+- 客户/员工解绑流程拆入 `unbind.ts`。
+- 响应序列化拆入 `serialize.ts`，共享依赖和类型拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/wechat-rebind-requests/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 8 个减少到 7 个，`wechat-rebind-requests/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `wechat-rebind-requests/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖换绑申请、审核、客户/员工解绑、验证码和缓存失效入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实微信/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实换绑审核、验证码验证、解绑或用户身份转移 |
+
+### 风险和遗留
+
+- 本阶段保留换绑申请字段、审核状态、audit log action、auth context 失效和微信客户身份缓存失效语义，属于行为保持型结构拆分。
+- `customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
