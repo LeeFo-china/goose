@@ -2559,3 +2559,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留缓存状态在 `wechatCustomerIdentityService` 单例实例上，拆出函数通过显式 `this` 上下文访问缓存 map，避免改变缓存生命周期。
 - `tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts`、`tencent-iot-video.ts`、`tenant-devices/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 29 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split tenant devices repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 638 | 51 | `apps/api/src/repositories/tenant-devices/legacy-repository.ts` |
+| - | 121 | `apps/api/src/repositories/tenant-devices/legacy/camera-sync.ts` |
+| - | 39 | `apps/api/src/repositories/tenant-devices/legacy/filters.ts` |
+| - | 104 | `apps/api/src/repositories/tenant-devices/legacy/hydrate.ts` |
+| - | 203 | `apps/api/src/repositories/tenant-devices/legacy/mutations.ts` |
+| - | 196 | `apps/api/src/repositories/tenant-devices/legacy/queries.ts` |
+| - | 74 | `apps/api/src/repositories/tenant-devices/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，保留 `tenantDeviceRepository` 单例、`adminClient` 实例状态、原方法名和原类型 re-export。
+- 租户设备列表过滤、关键词 OR 查询和 ID 去重 helper 拆入 `filters.ts`。
+- 平台设备行 hydrate、租户/项目/摄像头轻量查询拆入 `hydrate.ts`。
+- 普通列表、平台列表、按 ID 查询、按 vendor/channel 查询、租户全量和 vendor 查询拆入 `queries.ts`。
+- 创建设备、同步 upsert、更新和软删除拆入 `mutations.ts`。
+- 项目摄像头绑定同步、按摄像头解绑和按摄像头更新状态拆入 `camera-sync.ts`。
+- 共享 row 类型、lite 类型、schema 类型、ProjectCamera 类型、Errors/ErrorCodes 和 SupabaseDB 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/tenant-devices/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 14 个减少到 13 个，`tenant-devices/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `tenant-devices/legacy/` repository 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖设备列表、平台 hydrate、同步 upsert、项目摄像头绑定同步、更新和软删除入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实设备/API smoke | 未执行 | 当前阶段仅做 repository 结构拆分；未执行真实设备创建、同步、删除或摄像头绑定写入 |
+
+### 风险和遗留
+
+- 本阶段保留 `tenantDeviceRepository` 外观和 `adminClient` 实例生命周期，service 与 project camera 模块的 repository 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
+- `sms/legacy-service.ts`、`tencent-iot-video.ts`、`tenant-devices/legacy-service.ts`、`usage/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
