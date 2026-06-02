@@ -2204,3 +2204,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `projectAcceptanceRepository` 外观，project acceptance service 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
 - `customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 22 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split customer project log share campaigns legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 751 | 52 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy-repository.ts` |
+| - | 184 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/campaigns.ts` |
+| - | 148 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/employee-list.ts` |
+| - | 144 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/engagement.ts` |
+| - | 102 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/queries.ts` |
+| - | 85 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/shared.ts` |
+| - | 95 | `apps/api/src/repositories/customer-project-log-share-campaigns/legacy/stats.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留方法绑定和 `customerProjectLogShareCampaignRepository` 导出。
+- 活动基础查询、token/id/voucher 查询、项目活动列表和项目进行中活动查询拆入 `queries.ts`。
+- 活动创建、助力指标更新、领奖信息更新、海报保存/打开时间触达和活动状态更新拆入 `campaigns.ts`。
+- 分享打开记录、助力记录查询/创建、助力人数统计和有效助力列表拆入 `engagement.ts`。
+- 项目状态统计、营销活动状态统计和管理端汇总统计拆入 `stats.ts`。
+- 员工端助力活动管理列表拆入 `employee-list.ts`。
+- 共享活动 row、助力 row、员工列表 row 类型和 Supabase/Error 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/customer-project-log-share-campaigns/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 21 个减少到 20 个，`customer-project-log-share-campaigns/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `customer-project-log-share-campaigns/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖活动基础查询、创建更新、打开/助力记录、统计汇总和员工管理列表入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实分享活动/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实分享活动、打开记录、助力记录或领奖信息写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `customerProjectLogShareCampaignRepository` 外观，customer project log share service 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
+- `platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
