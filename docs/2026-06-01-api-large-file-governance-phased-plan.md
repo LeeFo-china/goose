@@ -2455,3 +2455,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 dry-run 输出文件名、CSV header、summary 字段、控制台摘要和 `--check-remote` 语义，属于行为保持型结构拆分。
 - `construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 27 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split construction stage status service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 659 | 22 | `apps/api/src/services/construction-stage-status/legacy-service.ts` |
+| - | 136 | `apps/api/src/services/construction-stage-status/legacy/assertions.ts` |
+| - | 12 | `apps/api/src/services/construction-stage-status/legacy/labels.ts` |
+| - | 214 | `apps/api/src/services/construction-stage-status/legacy/lists.ts` |
+| - | 123 | `apps/api/src/services/construction-stage-status/legacy/permissions.ts` |
+| - | 50 | `apps/api/src/services/construction-stage-status/legacy/rows.ts` |
+| - | 27 | `apps/api/src/services/construction-stage-status/legacy/shared.ts` |
+| - | 149 | `apps/api/src/services/construction-stage-status/legacy/stage-item.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留原 service 实例和六个 public 方法挂载，`@/services/construction-stage-status` 导出路径不变。
+- 项目施工阶段列表入口、项目级列表编排和 rows 构造成响应 payload 拆入 `lists.ts`。
+- 施工日志创建断言、验收创建断言、竣工验收前置阶段断言拆入 `assertions.ts`。
+- 验收可写权限、可选权限访问、创建人提交/复核权限判断拆入 `permissions.ts`。
+- 最新验收记录选择和已验收阶段集合查询拆入 `rows.ts`。
+- 阶段 label、验收 label 拆入 `labels.ts`。
+- 单个阶段状态、日志/验收可创建状态、验收动作 payload 构造拆入 `stage-item.ts`。
+- 共享 repository、domain 类型/常量、access policy、Errors 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/construction-stage-status/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 16 个减少到 15 个，`construction-stage-status/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `construction-stage-status/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖阶段列表、rows 构造、日志写入断言、验收创建断言和权限判断入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实项目/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实项目详情、验收创建或施工日志写入接口 |
+
+### 风险和遗留
+
+- 本阶段保留 `constructionStageStatusService` 外观和六个 public 方法名称，项目、施工日志、验收、客户自助和装修问答调用路径不变；拆分后的模块仍为行为保持型结构拆分。
+- `wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts`、`tencent-iot-video.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
