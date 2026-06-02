@@ -2255,3 +2255,52 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `customerProjectLogShareCampaignRepository` 外观，customer project log share service 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
 - `platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 23 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split platform tenants legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 728 | 63 | `apps/api/src/repositories/platform-tenants/legacy-repository.ts` |
+| - | 339 | `apps/api/src/repositories/platform-tenants/legacy/initialization.ts` |
+| - | 122 | `apps/api/src/repositories/platform-tenants/legacy/members.ts` |
+| - | 118 | `apps/api/src/repositories/platform-tenants/legacy/shared.ts` |
+| - | 123 | `apps/api/src/repositories/platform-tenants/legacy/tenants.ts` |
+| - | 54 | `apps/api/src/repositories/platform-tenants/legacy/usage.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 Supabase client、`from` helper、方法绑定和 `platformTenantRepository` 导出。
+- 租户列表、按 ID/slug 查询、创建、更新和状态更新拆入 `tenants.ts`。
+- 租户用量统计和最近模板应用记录查询拆入 `usage.ts`。
+- 手机号员工查询、员工/角色批量读取、租户管理员员工查询和租户角色列表拆入 `members.ts`。
+- 默认部门、岗位、角色、管理员员工、管理员权限、员工角色绑定和模板应用记录初始化拆入 `initialization.ts`。
+- 共享 row 类型、初始化结果类型、用量常量、领域配置和 Supabase/Error 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/platform-tenants/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 20 个减少到 19 个，`platform-tenants/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `platform-tenants/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖租户列表、CRUD、状态、用量、员工角色读取和默认模板初始化入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实租户/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实租户创建、默认数据初始化、角色授权或管理员员工写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `platformTenantRepository` 外观，platform tenant service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 `from` helper，属于行为保持型结构拆分。
+- `marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
