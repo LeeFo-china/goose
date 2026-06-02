@@ -3019,3 +3019,55 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 token 校验、公开路由、访客会话限制、微信绑定检查缓存、后台预热和日志语义，属于行为保持型结构拆分。
 - `storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts`、`authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 38 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split storage migration upload script`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 581 | 6 | `apps/api/src/scripts/storage-migration-upload/legacy-script.ts` |
+| - | 45 | `apps/api/src/scripts/storage-migration-upload/legacy/cli.ts` |
+| - | 28 | `apps/api/src/scripts/storage-migration-upload/legacy/cos-config.ts` |
+| - | 107 | `apps/api/src/scripts/storage-migration-upload/legacy/csv.ts` |
+| - | 203 | `apps/api/src/scripts/storage-migration-upload/legacy/migration.ts` |
+| - | 70 | `apps/api/src/scripts/storage-migration-upload/legacy/runner.ts` |
+| - | 25 | `apps/api/src/scripts/storage-migration-upload/legacy/summary.ts` |
+| - | 45 | `apps/api/src/scripts/storage-migration-upload/legacy/types.ts` |
+| - | 85 | `apps/api/src/scripts/storage-migration-upload/legacy/urls.ts` |
+
+### 结构变化
+
+- `legacy-script.ts` 变为兼容 CLI 入口，只保留 `main()` 调用和错误输出；`storage-migration-upload.ts` 的导入路径不变。
+- 参数解析拆入 `cli.ts`，dry-run CSV 读取和迁移结果 CSV 输出拆入 `csv.ts`。
+- Supabase legacy public URL、COS public URL 拼接、下载超时、访问检查和 MIME 推断拆入 `urls.ts`。
+- COS 配置读取和必填配置校验拆入 `cos-config.ts`。
+- 单条迁移、已存在对象判定、上传、checksum、file object 创建和上传后访问检查拆入 `migration.ts`。
+- 批量执行、输出目录、逐条 progress 日志和报告写入拆入 `runner.ts`，汇总统计拆入 `summary.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/scripts/storage-migration-upload/legacy-script.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 5 个减少到 4 个，`storage-migration-upload/legacy-script.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `storage-migration-upload/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 CLI 参数解析、CSV 读取/输出、COS 配置读取、单条迁移、报告写入入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实迁移 smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实 COS 上传、下载或报告写入 |
+
+### 风险和遗留
+
+- 本阶段保留 CLI 参数、CSV 字段顺序、迁移状态、COS 上传、上传后缓存刷新、访问检查和报告输出语义，属于行为保持型结构拆分。
+- `customer-core/legacy-service.ts`、`authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
