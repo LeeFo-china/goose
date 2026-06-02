@@ -1794,3 +1794,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `permissionRepository` 外观，access policy、authorization、permissions service 等调用方导入路径不变；拆分后的模块仍通过 repository 实例 `this` 复用重试和 RPC helper，属于行为保持型结构拆分。
 - `social-video-transcriptions/legacy-service.ts`、`employee-project-detail-bootstrap/legacy-service.ts`、`expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 14 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split social video transcription legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1100 | 34 | `apps/api/src/services/social-video-transcriptions/legacy-service.ts` |
+| - | 241 | `apps/api/src/services/social-video-transcriptions/legacy/apify-gateway.ts` |
+| - | 73 | `apps/api/src/services/social-video-transcriptions/legacy/billing.ts` |
+| - | 179 | `apps/api/src/services/social-video-transcriptions/legacy/config.ts` |
+| - | 208 | `apps/api/src/services/social-video-transcriptions/legacy/processor.ts` |
+| - | 407 | `apps/api/src/services/social-video-transcriptions/legacy/shared.ts` |
+| - | 159 | `apps/api/src/services/social-video-transcriptions/legacy/tasks.ts` |
+| - | 60 | `apps/api/src/services/social-video-transcriptions/legacy/testing.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留 Apify gateway 实例、方法绑定和 `socialVideoTranscriptionService` 导出。
+- Apify run 创建、轮询、dataset 读取、媒体地址解析和 Apify 直接转写拆入 `apify-gateway.ts`。
+- 租户解析、转写 provider 配置、Apify 配置、媒体处理配置、功能开关、日限额和缓存查询拆入 `config.ts`。
+- 任务创建、缓存复用、预冻结和任务读取拆入 `tasks.ts`。
+- 腾讯 ASR 处理链路、媒体下载、ffmpeg 提取音频、Apify 备用转写和失败释放冻结拆入 `processor.ts`。
+- 完成后结算、扣费事件回写和扣费失败记录拆入 `billing.ts`。
+- Apify 测试入口拆入 `testing.ts`。
+- URL 归一化、输入 hash、序列化、媒体下载安全校验、ffmpeg helper、计费时长计算、文本/数字/segments 归一化等共享逻辑拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/social-video-transcriptions/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 29 个减少到 28 个，`social-video-transcriptions/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `social-video-transcriptions/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖任务创建、任务查询、worker 处理、Apify 媒体解析、腾讯 ASR、计费结算和 Apify 测试入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实转写/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用 Apify、腾讯 ASR、ffmpeg、下载媒体或真实计费写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `socialVideoTranscriptionService` 外观，controller 和 worker 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用配置、Apify gateway 和结算 helper，属于行为保持型结构拆分。
+- `employee-project-detail-bootstrap/legacy-service.ts`、`expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts`、`projects/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
