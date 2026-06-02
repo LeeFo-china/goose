@@ -1949,3 +1949,52 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `expenseRequestRepository` 外观，expense request service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 summary/detail select 和 helper，属于行为保持型结构拆分。
 - `billing/legacy-repository.ts`、`projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 17 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split billing legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1005 | 125 | `apps/api/src/repositories/billing/legacy-repository.ts` |
+| - | 155 | `apps/api/src/repositories/billing/legacy/accounts.ts` |
+| - | 292 | `apps/api/src/repositories/billing/legacy/events.ts` |
+| - | 98 | `apps/api/src/repositories/billing/legacy/pricing-rules.ts` |
+| - | 228 | `apps/api/src/repositories/billing/legacy/shadow-logs.ts` |
+| - | 234 | `apps/api/src/repositories/billing/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 Supabase admin client、`from/rpc` helper、价格规则 mapper、方法绑定和 `billingRepository` 导出。
+- 租户账户初始化、账户查询、租户候选、租户统计、平台账户汇总和人工充值拆入 `accounts.ts`。
+- 积分流水、计费事件查询、事件 key、事件创建/查找、事件结算、冻结和解冻积分拆入 `events.ts`。
+- AI、短信、短视频影子计费日志扫描和 AI 用量筛选选项拆入 `shadow-logs.ts`。
+- 价格规则列表、创建和更新拆入 `pricing-rules.ts`。
+- 共享 schema 类型、record 类型、payload 类型和 Supabase/Error/UUID 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/billing/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 26 个减少到 25 个，`billing/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `billing/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖租户账户、人工充值、积分流水、计费事件、影子日志、冻结/解冻和价格规则入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实计费/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实充值、结算、冻结、解冻或价格规则写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `billingRepository` 外观，billing service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 Supabase helper 和价格规则 mapper，属于行为保持型结构拆分。
+- `projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
