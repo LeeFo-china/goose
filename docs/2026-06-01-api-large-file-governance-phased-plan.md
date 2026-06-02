@@ -3213,3 +3213,44 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留输入 CSV 去重、uploaded/already_exists 过滤、source config、业务字段匹配、访问状态检查、summary 和 final-verify CSV 输出语义，属于行为保持型结构拆分。
 - 非生成代码大文件豁免已处理完毕；剩余 `apps/api/src/types/database.ts` 为 Supabase 生成类型文件，后续阶段应从显式豁免清单迁到生成文件排除策略，确保豁免数归零。
+
+## 后续 Legacy Phase 42 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `chore: exclude generated database types from file size exemptions`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 7096 | 7096 | `apps/api/src/types/database.ts` |
+| 96 | 107 | `scripts/check-api-file-size.ts` |
+
+### 结构变化
+
+- `apps/api/src/types/database.ts` 确认为 Supabase 生成类型文件，不做人工拆分，避免破坏生成物同步路径。
+- `scripts/check-api-file-size.ts` 新增 `GENERATED_FILE_EXCLUSIONS`，生成文件仍会在门禁输出中显式展示，但不再计入 `exemptions`。
+- `EXEMPTIONS` 清单归零，后续新增任何非生成大文件都必须拆分或在文档中重新发起治理审批。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 生成类型文件单独展示，显式豁免从 1 个减少到 0 个 |
+| 显式豁免数门禁 | 通过 | `API file size check passed. threshold=500, exemptions=0` |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖生成类型引用和门禁脚本类型检查 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖任何显式大文件豁免 |
+| 生成类型 smoke | 未执行 | 当前阶段不重新生成 Supabase database types，仅调整门禁分类 |
+
+### 风险和遗留
+
+- 本阶段不修改 `database.ts` 内容，仅改变门禁统计口径：生成文件继续被显示和审计，但不占用大文件治理豁免名额。
+- 大文件治理目标完成后，后续应保持 `EXEMPTIONS` 为空；如确有临时豁免，必须先补阶段计划、测试和验收记录。

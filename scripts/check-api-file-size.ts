@@ -7,9 +7,11 @@ const API_ROOT = "apps/api";
 const EXCLUDED_DIRS = new Set(["node_modules", "dist", "build", "coverage"]);
 const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
-const EXEMPTIONS = new Map<string, string>([
+const GENERATED_FILE_EXCLUSIONS = new Map<string, string>([
   ["apps/api/src/types/database.ts", "generated Supabase database types"],
 ]);
+
+const EXEMPTIONS = new Map<string, string>([]);
 
 function getRepoRoot() {
   const cwd = process.cwd();
@@ -64,12 +66,19 @@ const apiRoot = join(repoRoot, API_ROOT);
 const files = await collectFiles(apiRoot);
 const violations: Array<{ lines: number; path: string }> = [];
 const oversizedExemptions: Array<{ lines: number; path: string; reason: string }> = [];
+const generatedExclusions: Array<{ lines: number; path: string; reason: string }> = [];
 
 for (const file of files) {
   const relativePath = toPosixPath(relative(repoRoot, file));
   const lines = countLines(await readFile(file, "utf8"));
 
   if (lines < THRESHOLD) {
+    continue;
+  }
+
+  const generatedExclusion = GENERATED_FILE_EXCLUSIONS.get(relativePath);
+  if (generatedExclusion) {
+    generatedExclusions.push({ lines, path: relativePath, reason: generatedExclusion });
     continue;
   }
 
@@ -84,6 +93,14 @@ for (const file of files) {
 
 violations.sort((left, right) => right.lines - left.lines);
 oversizedExemptions.sort((left, right) => right.lines - left.lines);
+generatedExclusions.sort((left, right) => right.lines - left.lines);
+
+if (generatedExclusions.length > 0) {
+  console.log("Generated oversized API files excluded from exemption count:");
+  for (const item of generatedExclusions) {
+    console.log(`${item.lines} ${item.path} - ${item.reason}`);
+  }
+}
 
 if (oversizedExemptions.length > 0) {
   console.log("Exempt oversized API files:");
