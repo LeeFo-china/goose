@@ -2402,3 +2402,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `platformFileStorageService` 外观，file upload service 调用路径不变；拆分后的模块仍通过 service 实例 `this` 复用 COS client/config cache，属于行为保持型结构拆分。
 - `storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 26 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split storage migration dry run script`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 666 | 6 | `apps/api/src/scripts/storage-migration-dry-run/legacy-script.ts` |
+| - | 100 | `apps/api/src/scripts/storage-migration-dry-run/legacy/classification.ts` |
+| - | 50 | `apps/api/src/scripts/storage-migration-dry-run/legacy/cli.ts` |
+| - | 44 | `apps/api/src/scripts/storage-migration-dry-run/legacy/csv.ts` |
+| - | 54 | `apps/api/src/scripts/storage-migration-dry-run/legacy/runner.ts` |
+| - | 128 | `apps/api/src/scripts/storage-migration-dry-run/legacy/scan.ts` |
+| - | 117 | `apps/api/src/scripts/storage-migration-dry-run/legacy/shared.ts` |
+| - | 194 | `apps/api/src/scripts/storage-migration-dry-run/legacy/sources.ts` |
+
+### 结构变化
+
+- `legacy-script.ts` 变为兼容入口，只保留 `main()` 调用和错误输出，`storage-migration-dry-run.ts` 的导入路径不变。
+- CLI 参数解析和必填参数校验拆入 `cli.ts`。
+- 迁移扫描源配置、租户 ID 递归解析、数组/单值/metadata 字段提取拆入 `sources.ts`。
+- COS/Supabase legacy 值分类、Supabase public URL 解析和远端 HEAD 大小检查拆入 `classification.ts`。
+- CSV escape、通用 CSV 输出和 report CSV 输出拆入 `csv.ts`。
+- Supabase 表扫描、target object key 生成接入和汇总统计拆入 `scan.ts`。
+- 输出目录创建、summary/items/failures/tenants 文件写入和控制台摘要拆入 `runner.ts`。
+- 共享类型、legacy bucket、COS 前缀、字符串归一化、object key 生成和 Supabase public URL helper 拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/scripts/storage-migration-dry-run/legacy-script.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 17 个减少到 16 个，`storage-migration-dry-run/legacy-script.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `storage-migration-dry-run/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 CLI、扫描源、分类、CSV、汇总和 runner 入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| dry-run 只读脚本 smoke | 通过 | `bun --cwd apps/api src/scripts/storage-migration-dry-run.ts --all-tenants --limit 1 --out /tmp/gooes-storage-migration-dry-run-phase26` 输出 `total=1, migratable=1`，只写 `/tmp` 报告目录 |
+
+### 风险和遗留
+
+- 本阶段保留原 dry-run 输出文件名、CSV header、summary 字段、控制台摘要和 `--check-remote` 语义，属于行为保持型结构拆分。
+- `construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts`、`sms/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
