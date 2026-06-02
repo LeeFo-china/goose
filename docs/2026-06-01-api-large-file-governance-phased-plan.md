@@ -3287,3 +3287,59 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 | --- | --- | --- |
 | API 日常验收 smoke | 通过 | 根目录 `bun run api:check` 可作为后续 API 日常验收命令 |
 | 行数门禁 smoke | 通过 | `api:check` 已包含大文件门禁且保持 `exemptions=0` |
+
+## 治理收尾 Phase 44 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `docs: add api smoke readiness plan`
+
+### 目标
+
+- 明确拆分后真实 smoke 回归清单。
+- 检查 `apps/api/.env` 是否具备本地 smoke 的基础环境变量。
+- 不输出任何环境变量值，仅记录变量是否存在和 smoke 可执行边界。
+
+### `.env` 可用性检查
+
+| 分组 | 变量 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| API 基础 | `PORT`、`APP_ENV`、`GOOES_ENV`、`NODE_ENV`、`LOG_LEVEL` | 存在 | 可支持本地 API 启动和基础日志配置 |
+| Supabase API | `SUPABASE_URL`、`SUPABASE_PUBLISH`、`SUPABASE_SERVICE_ROLE_KEY`、`SUPABASE_PROJECT_REF` | 存在 | 可支持 Supabase client 初始化和只读/管理端查询 |
+| Supabase DB | `SUPABASE_DB_URL`、`SUPABASE_DB_DIRECT_URL`、`SUPABASE_DB_PASSWORD` | 存在 | 可支持依赖直连数据库的脚本类检查 |
+| JWT/Auth | `JWT_SECRET`、`JWT_EXPIRES_IN`、`AUTH_IDENTITY_SOURCE`、`AUTH_PHONE_LOGIN_WITHOUT_CODE` | 存在 | 可支持 token 生成/校验和测试登录策略判定 |
+| 平台存储 | `PLATFORM_STORAGE_PROVIDER`、`PLATFORM_FILE_ACCESS_POLICY`、`PLATFORM_COS_BUCKET`、`PLATFORM_COS_REGION`、`PLATFORM_COS_PUBLIC_BASE_URL` | 存在 | 可支持 COS URL 解析和迁移脚本 dry-run 前置检查 |
+| COS 密钥 | `TENCENT_COS_SECRET_ID`、`TENCENT_COS_SECRET_KEY` | 存在 | 可支持真实上传类 smoke；执行前仍需确认目标测试数据和只写测试对象 |
+| 计费开关 | `BILLING_CHARGE_ENABLED`、`SMS_CHARGE_ENABLED`、`SOCIAL_VIDEO_CHARGE_ENABLED` | 存在 | 可识别计费相关运行策略 |
+| AI/微信/短信业务密钥 | `AI_API_KEY`、`AI_MODEL`、`WECHAT_APPID`、`WECHAT_SECRET`、短信模板/密钥类变量 | `.env` 未直接出现 | 这些配置主要通过 system settings 定义解析，需结合数据库配置确认，不适合作为本阶段本地 smoke 前置条件 |
+
+### smoke 回归清单
+
+| 链路 | 场景 | 本阶段执行策略 | 验收口径 |
+| --- | --- | --- | --- |
+| Auth 基础 | public route 无 token、缺 token、空 Bearer、非法 token | 可本地执行 | HTTP 状态和错误 code 符合认证插件语义 |
+| Auth 访客会话 | `visitor_session` 访问允许/不允许路由 | 需要构造测试 token | 允许路由通过，非允许路由返回 `TOKEN_INVALID` |
+| Auth 微信绑定 | oauth 凭证和 business membership 检查 | 需要真实或种子用户身份数据 | 绑定有效时通过，绑定变化时返回 `WECHAT_BINDING_NOT_MATCHED` |
+| Employee bootstrap | `/employee/bootstrap` 和后台 prewarm | 需要员工测试账号 token | 返回租户、员工、权限、首页列表；日志无异常 |
+| Customer 列表 | 普通列表、home、compact、follow due/overdue | 需要租户/员工/客户测试数据 | 分页、权限过滤、follow 状态和 latest project map 正确 |
+| Customer 详情/更新 | 详情、空 patch、普通 patch、状态变更 | 需要只写测试客户 | 返回数据正确，写入后列表缓存失效 |
+| Storage upload | `storage:migration:upload` 最小 CSV，不带 `--apply` | 可本地执行 | 输出 `planned`，不上传 COS，不写 `platform_file_objects` |
+| Storage final verify | `storage:migration:final-verify` 空/最小 CSV | 可本地执行空输入格式 smoke；真实验证需测试对象 | 空输入输出 summary；真实对象校验 file object、业务字段和访问状态 |
+
+### 本阶段结论
+
+- `apps/api/.env` 已具备 API 启动、Supabase、JWT、COS 和迁移脚本 smoke 的基础变量。
+- 真实 auth/customer smoke 仍需要测试账号、token 和租户/客户种子数据；本阶段不直接调用真实业务接口，避免误写生产/共享数据。
+- 下一阶段建议优先执行无写入或 dry-run smoke：auth 基础错误路径、storage upload planned、storage final verify 空输入。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:check` | 通过 | 串联 typecheck、build、file-size 全部通过，`exemptions=0` |
+| `.env` 变量名检查 | 通过 | 仅读取变量名，不输出变量值 |
+
+### 风险和遗留
+
+- 本阶段只完成 smoke readiness，不代表真实业务接口已经回归通过。
+- 后续执行真实写入类 smoke 前，必须明确测试租户、测试账号、测试客户和迁移对象前缀，避免污染线上或共享数据。
