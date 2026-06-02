@@ -2763,3 +2763,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 controller/service public API、权限检查、同步返回字段、audit log action 和腾讯/萤石同步分支语义，属于行为保持型结构拆分。
 - `usage/legacy-service.ts`、`task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 33 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split usage legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 616 | 31 | `apps/api/src/services/usage/legacy-service.ts` |
+| - | 59 | `apps/api/src/services/usage/legacy/date-range.ts` |
+| - | 110 | `apps/api/src/services/usage/legacy/logs.ts` |
+| - | 159 | `apps/api/src/services/usage/legacy/platform.ts` |
+| - | 41 | `apps/api/src/services/usage/legacy/shared.ts` |
+| - | 123 | `apps/api/src/services/usage/legacy/summaries.ts` |
+| - | 177 | `apps/api/src/services/usage/legacy/tenant.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `usageService` 单例和 usage controller 使用的 public 方法名。
+- 日期范围归一化、日期 bucket 和 created_at 日期提取拆入 `date-range.ts`。
+- AI、短信、短视频用量聚合 summary 和 counter helper 拆入 `summaries.ts`。
+- 租户 summary、租户 overview、客户/项目/报销/AI/短视频趋势聚合拆入 `tenant.ts`。
+- 平台租户用量列表和平台 overview 聚合拆入 `platform.ts`。
+- 租户/平台 AI、短信、短视频日志列表拆入 `logs.ts`。
+- 共享 repository、schema/auth 类型、平台管理员断言和活跃项目状态集合拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/usage/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 10 个减少到 9 个，`usage/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `usage/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖租户/平台用量汇总、趋势 overview、AI/SMS/短视频日志列表入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实用量/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实 usage controller 或执行数据库统计查询 |
+
+### 风险和遗留
+
+- 本阶段保留用量日期范围、趋势 bucket、summary 字段、列表查询参数和平台管理员权限语义，属于行为保持型结构拆分。
+- `task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
