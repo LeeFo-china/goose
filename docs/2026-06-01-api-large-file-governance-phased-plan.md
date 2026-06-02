@@ -2712,3 +2712,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 `TencentIotVideoService` 方法名、请求 action、签名算法、错误映射和服务层 re-export 路径，属于行为保持型结构拆分。
 - `tenant-devices/legacy-service.ts`、`usage/legacy-service.ts`、`task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 32 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split tenant devices service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 619 | 37 | `apps/api/src/services/tenant-devices/legacy-service.ts` |
+| - | 57 | `apps/api/src/services/tenant-devices/legacy/access.ts` |
+| - | 104 | `apps/api/src/services/tenant-devices/legacy/crud.ts` |
+| - | 149 | `apps/api/src/services/tenant-devices/legacy/lists.ts` |
+| - | 208 | `apps/api/src/services/tenant-devices/legacy/platform-tencent.ts` |
+| - | 41 | `apps/api/src/services/tenant-devices/legacy/shared.ts` |
+| - | 113 | `apps/api/src/services/tenant-devices/legacy/sync.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `tenantDeviceService` 单例和 controller 使用的 public 方法名。
+- 租户权限、平台管理员权限、平台设备读取和设备 label helper 拆入 `access.ts`。
+- 租户设备查询、创建、更新、删除拆入 `crud.ts`。
+- 租户列表、平台列表和腾讯云设备/通道聚合列表拆入 `lists.ts`。
+- 平台腾讯设备删除、接入信息、密码查询、密码重置和单设备同步拆入 `platform-tencent.ts`。
+- 租户设备资产同步、腾讯云/萤石通道 upsert 编排拆入 `sync.ts`。
+- 共享依赖、schema/auth 类型、腾讯设备类型 label 和 SIP 密码生成拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/tenant-devices/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 11 个减少到 10 个，`tenant-devices/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `tenant-devices/legacy/` service 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖租户设备 CRUD、平台腾讯设备列表/删除/密码、资产同步和 audit log 入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实设备/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实腾讯云/萤石设备同步、删除、密码重置或设备资产写入 |
+
+### 风险和遗留
+
+- 本阶段保留 controller/service public API、权限检查、同步返回字段、audit log action 和腾讯/萤石同步分支语义，属于行为保持型结构拆分。
+- `usage/legacy-service.ts`、`task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
