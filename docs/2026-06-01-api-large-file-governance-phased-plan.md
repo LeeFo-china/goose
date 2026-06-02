@@ -3163,3 +3163,53 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留权限 scope 权重、系统管理员全权限、不可操作员工清空权限、auth user/employee 双缓存、prewarm 和租户可用性断言语义，属于行为保持型结构拆分。
 - `storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 41 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split storage migration final verify script`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 502 | 6 | `apps/api/src/scripts/storage-migration-final-verify/legacy-script.ts` |
+| - | 38 | `apps/api/src/scripts/storage-migration-final-verify/legacy/cli.ts` |
+| - | 86 | `apps/api/src/scripts/storage-migration-final-verify/legacy/csv.ts` |
+| - | 51 | `apps/api/src/scripts/storage-migration-final-verify/legacy/runner.ts` |
+| - | 179 | `apps/api/src/scripts/storage-migration-final-verify/legacy/sources.ts` |
+| - | 20 | `apps/api/src/scripts/storage-migration-final-verify/legacy/summary.ts` |
+| - | 34 | `apps/api/src/scripts/storage-migration-final-verify/legacy/types.ts` |
+| - | 97 | `apps/api/src/scripts/storage-migration-final-verify/legacy/verifier.ts` |
+
+### 结构变化
+
+- `legacy-script.ts` 变为兼容 CLI 入口，只保留 `main()` 调用和错误输出；`storage-migration-final-verify.ts` 的导入路径不变。
+- 参数解析拆入 `cli.ts`，迁移 CSV 读取和最终验证 CSV 输出拆入 `csv.ts`。
+- 验证来源配置、源表读取、metadata/array/single 业务字段读取拆入 `sources.ts`。
+- object key 解析、平台文件对象检查、业务字段比对和访问状态检查拆入 `verifier.ts`。
+- 输入去重、limit、progress 日志、报告写入和 COS public base URL 缓存刷新拆入 `runner.ts`，汇总统计拆入 `summary.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/scripts/storage-migration-final-verify/legacy-script.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 2 个减少到 1 个，`storage-migration-final-verify/legacy-script.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `storage-migration-final-verify/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 CLI 参数解析、CSV 读取/输出、source config、源表读取、业务字段比对和访问检查入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实最终验证 smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实源表读取、COS 访问检查或报告写入 |
+
+### 风险和遗留
+
+- 本阶段保留输入 CSV 去重、uploaded/already_exists 过滤、source config、业务字段匹配、访问状态检查、summary 和 final-verify CSV 输出语义，属于行为保持型结构拆分。
+- 非生成代码大文件豁免已处理完毕；剩余 `apps/api/src/types/database.ts` 为 Supabase 生成类型文件，后续阶段应从显式豁免清单迁到生成文件排除策略，确保豁免数归零。

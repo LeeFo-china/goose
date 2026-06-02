@@ -9,7 +9,6 @@ const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs
 
 const EXEMPTIONS = new Map<string, string>([
   ["apps/api/src/types/database.ts", "generated Supabase database types"],
-  ["apps/api/src/scripts/storage-migration-final-verify/legacy-script.ts", "legacy migration script tracked in large-file governance plan"],
 ]);
 
 function getRepoRoot() {
