@@ -1637,3 +1637,56 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `marketingPageService` 外观，controller 和 wechat 登录链路导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用私有 helper，属于行为保持型结构拆分。
 - `project-cameras/legacy-service.ts`、`release-deployments/legacy-service.ts`、`permissions/legacy-repository.ts`、`social-video-transcriptions/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 11 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split project cameras legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1170 | 51 | `apps/api/src/services/project-cameras/legacy-service.ts` |
+| - | 216 | `apps/api/src/services/project-cameras/legacy/access.ts` |
+| - | 213 | `apps/api/src/services/project-cameras/legacy/channels.ts` |
+| - | 168 | `apps/api/src/services/project-cameras/legacy/lists.ts` |
+| - | 142 | `apps/api/src/services/project-cameras/legacy/mutations.ts` |
+| - | 248 | `apps/api/src/services/project-cameras/legacy/playback.ts` |
+| - | 292 | `apps/api/src/services/project-cameras/legacy/shared.ts` |
+| - | 187 | `apps/api/src/services/project-cameras/legacy/tencent-device.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定和 `projectCameraService` 导出。
+- 摄像头状态回写、腾讯通道状态 enrich、客户/员工访问主体解析、项目存在性校验和访问日志拆入 `access.ts`。
+- 项目摄像头列表、绑定项目候选和项目摄像头分组拆入 `lists.ts`。
+- 萤石设备通道候选和腾讯云设备/通道候选拆入 `channels.ts`。
+- 腾讯云设备创建、SIP 密码查询和密码重置拆入 `tencent-device.ts`。
+- 萤石/腾讯播放参数生成、播放 URL 选择、离线/加密/缺通道错误处理和播放访问日志拆入 `playback.ts`。
+- 摄像头绑定创建、更新和解绑拆入 `mutations.ts`。
+- 通用序列化、设备通道 key、租户设备资产状态、设备名称生成、腾讯设备类型标签和请求 meta 解析拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/project-cameras/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 32 个减少到 31 个，`project-cameras/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `project-cameras/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖摄像头列表、绑定候选、设备通道、腾讯设备创建/密码、播放参数和绑定 CRUD 入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实设备/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用萤石、腾讯云、租户设备资产或项目摄像头真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `projectCameraService` 外观，controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用访问控制、状态回写和日志 helper，属于行为保持型结构拆分。
+- `release-deployments/legacy-service.ts`、`permissions/legacy-repository.ts`、`social-video-transcriptions/legacy-service.ts`、`employee-project-detail-bootstrap/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
