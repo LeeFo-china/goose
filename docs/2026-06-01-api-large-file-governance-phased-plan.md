@@ -2661,3 +2661,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 mock/disabled/aliyun/tencent 分支、模板 fallback、日志字段、计费开关和错误包装语义，属于行为保持型结构拆分。
 - `tencent-iot-video.ts`、`tenant-devices/legacy-service.ts`、`usage/legacy-service.ts`、`task-center/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 31 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split tencent iot video gateway`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 624 | 42 | `apps/api/src/gateways/tencent-iot-video.ts` |
+| - | 83 | `apps/api/src/gateways/tencent-iot-video/channels.ts` |
+| - | 169 | `apps/api/src/gateways/tencent-iot-video/devices.ts` |
+| - | 61 | `apps/api/src/gateways/tencent-iot-video/errors.ts` |
+| - | 55 | `apps/api/src/gateways/tencent-iot-video/live-stream.ts` |
+| - | 120 | `apps/api/src/gateways/tencent-iot-video/request.ts` |
+| - | 194 | `apps/api/src/gateways/tencent-iot-video/shared.ts` |
+
+### 结构变化
+
+- `tencent-iot-video.ts` 变为兼容 gateway facade，保留 `TencentIotVideoService`、`tencentIotVideoService` 和全部公开类型 re-export。
+- 腾讯云 API 类型、设备/通道/播放地址领域类型、常量和通用读取/状态归一化 helper 拆入 `shared.ts`。
+- 配置缺失检查、腾讯 API 错误消息和业务错误映射拆入 `errors.ts`。
+- 腾讯云 TC3-HMAC-SHA256 签名、配置读取、HTTP 请求和统一 API 响应错误处理拆入 `request.ts`。
+- 设备分页列表、设备摘要、SIP server、创建设备、密码查询/更新和删除设备拆入 `devices.ts`。
+- 通道分页列表和设备通道汇总拆入 `channels.ts`。
+- 直播地址 action fallback 和播放地址响应归一化拆入 `live-stream.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/gateways/tencent-iot-video.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 12 个减少到 11 个，`gateways/tencent-iot-video.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `gateways/tencent-iot-video/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖设备、通道、SIP、密码、删除、播放地址和签名请求入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实腾讯云/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实腾讯云 IoT Video API、未创建/删除设备或获取播放地址 |
+
+### 风险和遗留
+
+- 本阶段保留 `TencentIotVideoService` 方法名、请求 action、签名算法、错误映射和服务层 re-export 路径，属于行为保持型结构拆分。
+- `tenant-devices/legacy-service.ts`、`usage/legacy-service.ts`、`task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
