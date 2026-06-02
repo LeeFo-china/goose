@@ -1998,3 +1998,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `billingRepository` 外观，billing service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 Supabase helper 和价格规则 mapper，属于行为保持型结构拆分。
 - `projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 18 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split projects legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 904 | 114 | `apps/api/src/repositories/projects/legacy-repository.ts` |
+| - | 180 | `apps/api/src/repositories/projects/legacy/create-options.ts` |
+| - | 92 | `apps/api/src/repositories/projects/legacy/detail.ts` |
+| - | 150 | `apps/api/src/repositories/projects/legacy/lists.ts` |
+| - | 168 | `apps/api/src/repositories/projects/legacy/mutations.ts` |
+| - | 65 | `apps/api/src/repositories/projects/legacy/public.ts` |
+| - | 212 | `apps/api/src/repositories/projects/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 RPC helper、项目列表过滤 helper、方法绑定和 `projectRepository` 导出。
+- 今日工作项目、项目计数和项目列表行查询拆入 `lists.ts`。
+- 项目基础详情、租户详情、员工首屏详情和员工项目首屏聚合 RPC 拆入 `detail.ts`。
+- 公开项目可见性过滤、公开项目列表/详情和公开日志查询拆入 `public.ts`。
+- 项目创建、客户/房产租户校验、已有项目校验、创建页客户和员工候选查询拆入 `create-options.ts`。
+- 项目更新、状态条件更新和排期开工状态流转 RPC 拆入 `mutations.ts`。
+- 共享 select、filter 类型、RPC 错误规范化、Supabase OR 转义和基础依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/projects/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 25 个减少到 24 个，`projects/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `projects/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖项目列表、详情、公开项目、创建候选、更新、状态条件更新和排期开工 RPC 入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实项目/API smoke | 未执行 | 当前阶段仅做结构拆分；未对项目、公开项目日志或排期开工 RPC 执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `projectRepository` 外观，projects service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 RPC 和列表过滤 helper，属于行为保持型结构拆分。
+- `social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
