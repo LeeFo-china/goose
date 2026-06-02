@@ -2153,3 +2153,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `projectCameraRepository` 外观，project camera service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 Supabase admin client 和搜索 helper，属于行为保持型结构拆分。
 - `project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 21 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split project acceptances legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 763 | 87 | `apps/api/src/repositories/project-acceptances/legacy-repository.ts` |
+| - | 113 | `apps/api/src/repositories/project-acceptances/legacy/acceptances.ts` |
+| - | 126 | `apps/api/src/repositories/project-acceptances/legacy/items-actions.ts` |
+| - | 45 | `apps/api/src/repositories/project-acceptances/legacy/people.ts` |
+| - | 129 | `apps/api/src/repositories/project-acceptances/legacy/projects.ts` |
+| - | 203 | `apps/api/src/repositories/project-acceptances/legacy/shared.ts` |
+| - | 176 | `apps/api/src/repositories/project-acceptances/legacy/templates.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留方法绑定和 `projectAcceptanceRepository` 导出。
+- 验收模板列表、模板详情、模板更新、模板分组和标准项维护拆入 `templates.ts`。
+- 项目读取、批量项目读取、主施工经理查询、进行中验收检查和阶段最新验收查询拆入 `projects.ts`。
+- 验收单创建、验收项批量创建、验收单列表、验收单详情、验收单更新和草稿删除拆入 `acceptances.ts`。
+- 验收项列表、批量验收项、操作记录列表、批量操作记录、验收项更新和操作记录创建拆入 `items-actions.ts`。
+- 员工、客户和租户状态查询拆入 `people.ts`。
+- 共享 row 类型、列表输入类型、领域类型和 Supabase/Error 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/project-acceptances/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 22 个减少到 21 个，`project-acceptances/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `project-acceptances/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖模板、项目辅助查询、验收单、验收项、操作记录、员工、客户和租户入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实验收/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实验收模板、验收单、验收项或操作记录写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `projectAcceptanceRepository` 外观，project acceptance service 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
+- `customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts`、`marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
