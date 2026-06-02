@@ -1,0 +1,85 @@
+import { Errors } from "@/errors/error-factory";
+import { SupabaseDB } from "@/utils/supabase";
+
+export type CustomerProjectLogShareCampaignRow = {
+  id: string;
+  campaign_id: string | null;
+  campaign_type: string;
+  share_token: string;
+  customer_id: string;
+  project_id: string;
+  log_id: string;
+  config_id: string | null;
+  status: "active" | "achieved" | "reward_claimed" | "closed";
+  channel: string | null;
+  target_assist_count: number;
+  assist_count: number;
+  assist_uv: number;
+  reward_title: string | null;
+  reward_remark: string | null;
+  reward_claim_status: "unclaimed" | "pending" | "claimed" | "expired";
+  reward_claim_code: string | null;
+  reward_claim_instruction: string | null;
+  reward_claim_channel: string | null;
+  reward_claim_requested_at: string | null;
+  reward_claimed_by_employee_id: string | null;
+  reward_claim_voucher_token: string | null;
+  reward_claim_voucher_expires_at: string | null;
+  valid_until: string | null;
+  closed_reason: string | null;
+  latest_opened_at: string | null;
+  latest_assisted_at: string | null;
+  poster_generated_at: string | null;
+  poster_saved_at: string | null;
+  achieved_at: string | null;
+  reward_claimed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerProjectLogShareAssistRow = {
+  id: string;
+  campaign_id: string;
+  share_token: string;
+  helper_auth_user_id: string | null;
+  helper_openid: string | null;
+  helper_device_id: string | null;
+  helper_ip: string | null;
+  source: string;
+  helper_name: string | null;
+  helper_avatar: string | null;
+  is_valid: boolean;
+  invalid_reason: string | null;
+  risk_level: string;
+  created_at: string;
+};
+
+export type EmployeeShareCampaignListRow = {
+  instance_id: string;
+  campaign_id: string | null;
+  campaign_type: string;
+  project_id: string;
+  project_name: string | null;
+  customer_id: string;
+  customer_name: string | null;
+  log_id: string;
+  log_title: string | null;
+  status: CustomerProjectLogShareCampaignRow["status"];
+  reward_claim_status: CustomerProjectLogShareCampaignRow["reward_claim_status"];
+  assist_count: number;
+  target_assist_count: number;
+  reward_title: string | null;
+  reward_remark: string | null;
+  share_token: string;
+  started_at: string;
+  valid_until: string | null;
+  last_assisted_at: string | null;
+  reward_claim_code: string | null;
+  reward_claim_instruction: string | null;
+  reward_claim_channel: string | null;
+  reward_claimed_at: string | null;
+  reward_claim_voucher_token: string | null;
+  reward_claim_voucher_expires_at: string | null;
+};
+
+export { Errors, SupabaseDB };

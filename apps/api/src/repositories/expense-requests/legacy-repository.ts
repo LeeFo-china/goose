@@ -1,0 +1,171 @@
+import {
+  findById,
+  employeeExists,
+  projectExists,
+  listProjectCandidates,
+} from "./legacy/base";
+import { create, update, replaceItems } from "./legacy/mutations";
+import {
+  appendApproval,
+  findApprovalByBusinessKey,
+  replaceApprovalChain,
+  listApprovalChain,
+  updateApprovalChainNode,
+  findEmployeeForApproval,
+  listEmployeesForApprovalCandidates,
+  listEmployeePermissionContexts,
+} from "./legacy/approvals";
+import { createSettlement, hasSettlement } from "./legacy/settlements";
+import { list, listStatsRows } from "./legacy/lists";
+
+export type {
+  ExpenseApprovalCandidateEmployee,
+  ExpenseApprovalChainPayload,
+  ExpenseApprovalChainRecord,
+  ExpenseProjectCandidateRow,
+  ExpenseRequestMutationPayload,
+  ExpenseRequestRecord,
+} from "./legacy/shared";
+
+class ExpenseRequestRepository {
+  private summarySelect = `
+    *,
+    employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
+    project:projects(id, name, status, signed_amount, customer_id),
+    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
+    settlement:expense_request_settlements(
+      id,
+      method,
+      paid_amount,
+      paid_at,
+      paid_by
+    ),
+    approval_chain:expense_request_approval_chains(
+      id,
+      step,
+      step_name,
+      sort_order,
+      assignee_id,
+      assignee_name_snapshot,
+      required_permission,
+      status,
+      acted_by,
+      acted_at,
+      comment,
+      created_at,
+      updated_at,
+      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
+        post:posts!employees_post_id_fkey(name)
+      )
+    )
+  `;
+
+  private detailSelect = `
+    *,
+    employee:employees!expense_requests_employee_id_fkey(id, name, phone, status),
+    project:projects(id, name, status, signed_amount, customer_id),
+    assignee:employees!expense_requests_assignee_id_fkey(id, name, phone, status),
+    items:expense_request_items(
+      id,
+      occurred_at,
+      category_code,
+      category,
+      category_remark,
+      amount,
+      remark,
+      invoice_no,
+      vendor_name,
+      evidence_images,
+      created_at,
+      updated_at
+    ),
+    approvals:expense_request_approvals(
+      id,
+      step,
+      action,
+      approval_round,
+      approver_id,
+      comment,
+      created_at,
+      approver:employees!expense_request_approvals_approver_id_fkey(
+        id,
+        name,
+        phone,
+        status
+      )
+    ),
+    settlement:expense_request_settlements(
+      id,
+      payee_name,
+      payee_bank,
+      payee_account,
+      method,
+      paid_amount,
+      paid_at,
+      paid_by,
+      evidence_images,
+      remark,
+      created_at,
+      updated_at,
+      paid_operator:employees!expense_request_settlements_paid_by_fkey(
+        id,
+        name,
+        phone,
+        status
+      )
+    ),
+    approval_chain:expense_request_approval_chains(
+      id,
+      step,
+      step_name,
+      sort_order,
+      assignee_id,
+      assignee_name_snapshot,
+      required_permission,
+      status,
+      acted_by,
+      acted_at,
+      comment,
+      created_at,
+      updated_at,
+      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
+        id,
+        name,
+        phone,
+        avatar,
+        status,
+        tenant_department_id,
+        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
+        post:posts!employees_post_id_fkey(name)
+      )
+    )
+  `;
+  findById = findById;
+  employeeExists = employeeExists;
+  projectExists = projectExists;
+  listProjectCandidates = listProjectCandidates;
+  create = create;
+  update = update;
+  replaceItems = replaceItems;
+  appendApproval = appendApproval;
+  findApprovalByBusinessKey = findApprovalByBusinessKey;
+  replaceApprovalChain = replaceApprovalChain;
+  listApprovalChain = listApprovalChain;
+  updateApprovalChainNode = updateApprovalChainNode;
+  findEmployeeForApproval = findEmployeeForApproval;
+  listEmployeesForApprovalCandidates = listEmployeesForApprovalCandidates;
+  listEmployeePermissionContexts = listEmployeePermissionContexts;
+  createSettlement = createSettlement;
+  hasSettlement = hasSettlement;
+  list = list;
+  listStatsRows = listStatsRows;
+}
+
+export const expenseRequestRepository = new ExpenseRequestRepository();

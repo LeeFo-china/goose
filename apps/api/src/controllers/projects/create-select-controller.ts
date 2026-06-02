@@ -1,0 +1,173 @@
+import type { FastifyRequest } from "fastify";
+import { Errors } from "@/errors/error-factory";
+import { ProjectListQuerySchema } from "@/schema/projects";
+import {
+  ProjectCreateSelectCustomerQuerySchema,
+  ProjectCreateSelectEmployeeQuerySchema,
+  ProjectMemberCandidateQuerySchema,
+} from "@/schema/project-create-select";
+import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
+import { projectSer } from "@/services/projects";
+import { Get } from "@/utils/decorators/route";
+import { ResponseHandler } from "@/utils/response";
+import { serializeProjectListItem } from "./list-serializer";
+import {
+  ProjectBaseController,
+  type ProjectCreateCustomerOption,
+  type ProjectCreateEmployeeOption,
+  type ProjectCreateSelectCustomerRow,
+  type ProjectCreateSelectEmployeeRow,
+} from "./shared";
+
+function serializeEmployeeOption(item: ProjectCreateSelectEmployeeRow): ProjectCreateEmployeeOption {
+  const rawDepartment = item.department ?? item.tenant_department ?? null;
+  const department = Array.isArray(rawDepartment)
+    ? (rawDepartment[0] ?? null)
+    : rawDepartment;
+  const post = Array.isArray(item.post)
+    ? (item.post[0] ?? null)
+    : item.post;
+  const departmentName = department?.name ?? department?.alias_name ?? null;
+
+  return {
+    id: item.id,
+    name: item.name,
+    phone: item.phone,
+    avatar: item.avatar ?? null,
+    role_label: post?.name || null,
+    department: department
+      ? {
+        id: department.id,
+        name: departmentName ?? "",
+      }
+      : null,
+    department_name: departmentName,
+    post: post
+      ? {
+        id: post.id,
+        name: post.name,
+        code: post.code,
+      }
+      : null,
+    post_code: post?.code || null,
+    post_name: post?.name || null,
+  };
+}
+
+class ProjectCreateSelectController extends ProjectBaseController {
+  @Get("/projects/status")
+  async getProjectsBystatus(request: FastifyRequest) {
+    const queryResult = ProjectListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const authContextStartedAt = Date.now();
+    const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authContextStartedAt;
+    const result = await projectSer.listProjects({
+      authContext,
+      query: queryResult.data,
+    });
+    if (queryResult.data.mode === "home") {
+      request.log.info(
+        {
+          requestId: request.id,
+          employeeId: authContext.employeeId ?? null,
+          tenantId: authContext.tenantId,
+          authContextMs,
+          timings: result.debugTimings ?? null,
+        },
+        "[project-home-list] timings",
+      );
+
+      return ResponseHandler.success({
+        list: result.rows.map((item) => serializeProjectListItem(item)),
+        pagination: result.pagination,
+      });
+    }
+
+    const phonePrivacyContext = await customerPhonePrivacyService.createPrivacyContext(
+      authContext,
+    );
+
+    return ResponseHandler.success({
+      list: result.rows.map((item) =>
+        serializeProjectListItem(item, phonePrivacyContext)
+      ),
+      pagination: result.pagination,
+    });
+  }
+
+  @Get("/projects/create/customers")
+  async getProjectCreateCustomers(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+
+    const queryResult = ProjectCreateSelectCustomerQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectSer.listProjectCreateCustomers({
+      authContext,
+      query: queryResult.data,
+    });
+
+    const list: ProjectCreateCustomerOption[] =
+      (result.rows as unknown as ProjectCreateSelectCustomerRow[])
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          phone: null,
+          phone_masked: customerPhonePrivacyService.maskPhone(item.phone),
+          can_view_phone: false,
+        }));
+
+    return ResponseHandler.success({
+      list,
+      pagination: result.pagination,
+    });
+  }
+
+  @Get("/projects/create/employees")
+  async getProjectCreateEmployees(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+
+    const queryResult = ProjectCreateSelectEmployeeQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectSer.listProjectCreateEmployees({
+      authContext,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success({
+      list: (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
+        .map(serializeEmployeeOption),
+      pagination: result.pagination,
+    });
+  }
+
+  @Get("/projects/:id/member-candidates")
+  async getProjectMemberCandidates(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const idVerify = this.idParamSchema.safeParse(request.params);
+    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+
+    const queryResult = ProjectMemberCandidateQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectSer.listProjectMemberCandidates({
+      authContext,
+      projectId: idVerify.data.id,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success({
+      list: (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
+        .map(serializeEmployeeOption),
+      pagination: result.pagination,
+    });
+  }
+}
+
+export default new ProjectCreateSelectController();
