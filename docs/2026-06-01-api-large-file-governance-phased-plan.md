@@ -2917,3 +2917,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留换绑申请字段、审核状态、audit log action、auth context 失效和微信客户身份缓存失效语义，属于行为保持型结构拆分。
 - `customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 36 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split customer service ticket service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 603 | 25 | `apps/api/src/services/customer-service-tickets/legacy-service.ts` |
+| - | 95 | `apps/api/src/services/customer-service-tickets/legacy/access.ts` |
+| - | 172 | `apps/api/src/services/customer-service-tickets/legacy/admin.ts` |
+| - | 98 | `apps/api/src/services/customer-service-tickets/legacy/customer.ts` |
+| - | 127 | `apps/api/src/services/customer-service-tickets/legacy/serialize.ts` |
+| - | 26 | `apps/api/src/services/customer-service-tickets/legacy/settings.ts` |
+| - | 81 | `apps/api/src/services/customer-service-tickets/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `customerServiceTicketService` 单例和原 public 方法名。
+- 客服配置读取和启用断言拆入 `settings.ts`。
+- 可见客户、客户访问、项目归属、后台/客户侧 ticket 读取拆入 `access.ts`。
+- ticket/action 序列化、图片 URL 解析、状态/分类/优先级 label 拆入 `serialize.ts`。
+- 客户侧创建、列表、详情拆入 `customer.ts`。
+- 后台列表、详情、分配、状态动作执行拆入 `admin.ts`。
+- 共享 repository、schema/auth 类型、domain 配置和 helper 拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/customer-service-tickets/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 7 个减少到 6 个，`customer-service-tickets/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `customer-service-tickets/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖客服配置、客户侧创建/列表/详情、后台列表/详情/分配/动作执行入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实客服/API smoke | 未执行 | 当前阶段仅做结构拆分；未创建真实客服工单、分配或执行状态动作 |
+
+### 风险和遗留
+
+- 本阶段保留 ticket/action 字段、可见客户过滤、状态动作校验、通知触发和图片 URL 解析语义，属于行为保持型结构拆分。
+- `plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts`、`authorization/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
