@@ -2353,3 +2353,52 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `fillMarketingPageBlockWithAi`、`fillMarketingPageSettingsWithAi`、`fillMarketingPageCreateWithAi` 导出，marketing page controller 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
 - `files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 25 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split platform file storage legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 716 | 39 | `apps/api/src/services/files/platform-file-storage/legacy-service.ts` |
+| - | 129 | `apps/api/src/services/files/platform-file-storage/legacy/config.ts` |
+| - | 139 | `apps/api/src/services/files/platform-file-storage/legacy/direct-upload.ts` |
+| - | 91 | `apps/api/src/services/files/platform-file-storage/legacy/paths.ts` |
+| - | 191 | `apps/api/src/services/files/platform-file-storage/legacy/shared.ts` |
+| - | 173 | `apps/api/src/services/files/platform-file-storage/legacy/uploads.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留 COS client/config cache 字段、方法绑定和 `platformFileStorageService` 导出。
+- 存储 provider、COS 配置读取、COS client cache、直传 HEAD 校验开关和 COS access cache 写入拆入 `config.ts`。
+- legacy path、COS object key、COS public URL 和上传响应序列化拆入 `paths.ts`。
+- 腾讯 COS 上传、Supabase legacy bucket 上传和统一图片上传登记拆入 `uploads.ts`。
+- COS 直传签名、直传完成和既有 COS object 登记拆入 `direct-upload.ts`。
+- 共享类型、常量、路径/文件名 helper、etag 归一化、mime 推断、计时日志和外部依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/files/platform-file-storage/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 18 个减少到 17 个，`files/platform-file-storage/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `platform-file-storage/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖普通上传、COS/Supabase 分支、直传签名、直传完成和既有 COS object 登记入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实存储/API smoke | 未执行 | 当前阶段仅做结构拆分；未执行真实 COS/Supabase 上传、HEAD 校验或文件对象写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `platformFileStorageService` 外观，file upload service 调用路径不变；拆分后的模块仍通过 service 实例 `this` 复用 COS client/config cache，属于行为保持型结构拆分。
+- `storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts`、`tenant-devices/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
