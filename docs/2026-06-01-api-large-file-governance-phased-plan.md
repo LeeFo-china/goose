@@ -3118,3 +3118,48 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留客户列表缓存 key、home/compact 查询、follow 筛选、客户访问权限、状态流转和缓存失效语义，属于行为保持型结构拆分。
 - `authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 40 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split authorization legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 535 | 203 | `apps/api/src/services/authorization/legacy-service.ts` |
+| - | 216 | `apps/api/src/services/authorization/legacy/context-builder.ts` |
+| - | 129 | `apps/api/src/services/authorization/legacy/context-cache.ts` |
+| - | 34 | `apps/api/src/services/authorization/legacy/types.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `authorizationService` 单例、原 public 方法名和 `AuthContext`/权限类型导出。
+- auth user/employee 双缓存、TTL、in-flight 合并和失效逻辑拆入 `context-cache.ts`。
+- 员工权限上下文构建、角色/权限聚合、scope 合并、系统管理员全权限、租户上下文和头像 URL 解析拆入 `context-builder.ts`。
+- `AuthContext`、`AuthContextRole`、`EffectivePermission` 类型拆入 `types.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/authorization/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 3 个减少到 2 个，`authorization/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `authorization/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 auth user/employee 权限上下文、prewarm、员工绑定断言、租户可用性断言和缓存失效入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实认证/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实登录、权限上下文、租户状态或缓存失效接口 |
+
+### 风险和遗留
+
+- 本阶段保留权限 scope 权重、系统管理员全权限、不可操作员工清空权限、auth user/employee 双缓存、prewarm 和租户可用性断言语义，属于行为保持型结构拆分。
+- `storage-migration-final-verify/legacy-script.ts` 仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。

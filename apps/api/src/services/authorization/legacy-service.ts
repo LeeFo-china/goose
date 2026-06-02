@@ -1,340 +1,23 @@
 import { Errors } from "@/errors/error-factory";
-import {
-  permissionRepository,
-  type EmployeePermissionContextRecord,
-} from "@/repositories/permissions";
 import { ErrorCodes } from "@/errors/error-codes";
-import { isEmployeeOperableStatus, PERMISSION_CODE_VALUES } from "@gooes/domain";
-import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
-
-export type EffectivePermission = {
-  code: string;
-  scope: "self" | "department" | "assigned" | "all";
-};
-
-export type AuthContextRole = {
-  id: string;
-  code: string;
-  name: string | null;
-  description: string | null;
-  status: string | null;
-};
-
-export type AuthContext = {
-  authUserId: string;
-  employeeId: string | null;
-  tenantId: string | null;
-  tenantName: string | null;
-  tenantSlug: string | null;
-  tenantStatus: string | null;
-  isPlatformAdmin: boolean;
-  employeeName: string | null;
-  employeeStatus: string | null;
-  departmentId: string | null;
-  tenantDepartmentId: string | null;
-  departmentCode: string | null;
-  departmentName: string | null;
-  postId: string | null;
-  postName: string | null;
-  avatar: string | null;
-  roleCodes: string[];
-  roles: AuthContextRole[];
-  permissions: EffectivePermission[];
-};
-
-const scopeWeight: Record<EffectivePermission["scope"], number> = {
-  self: 1,
-  assigned: 2,
-  department: 3,
-  all: 4,
-};
-
-function normalizeScope(
-  value: string | null | undefined,
-): EffectivePermission["scope"] {
-  if (value === "assigned" || value === "department" || value === "all") {
-    return value;
-  }
-
-  return "self";
-}
+import { permissionRepository } from "@/repositories/permissions";
+import {
+  buildAuthContext,
+  type EmployeePermissionContextRecord,
+} from "./legacy/context-builder";
+import { AuthContextCache } from "./legacy/context-cache";
+import type { AuthContext } from "./legacy/types";
 
 class AuthorizationService {
-  private readonly cacheTtlMs = 5 * 60 * 1000;
-  private authUserCache = new Map<string, {
-    expiresAt: number;
-    value: AuthContext;
-  }>();
-  private employeeCache = new Map<string, {
-    expiresAt: number;
-    value: AuthContext;
-  }>();
-  private authUserInFlight = new Map<string, Promise<AuthContext>>();
-  private employeeInFlight = new Map<string, Promise<AuthContext>>();
-
-  private getCacheValue(
-    cache: Map<string, { expiresAt: number; value: AuthContext }>,
-    key: string,
-  ) {
-    const item = cache.get(key);
-    if (!item) {
-      return null;
-    }
-
-    if (item.expiresAt <= Date.now()) {
-      cache.delete(key);
-      return null;
-    }
-
-    return item.value;
-  }
-
-  private setCacheValue(key: string, value: AuthContext) {
-    const expiresAt = Date.now() + this.cacheTtlMs;
-    this.authUserCache.set(key, { expiresAt, value });
-
-    if (value.employeeId) {
-      this.employeeCache.set(value.employeeId, { expiresAt, value });
-    }
-  }
-
-  private setCacheContext(value: AuthContext) {
-    if (value.authUserId) {
-      this.setCacheValue(value.authUserId, value);
-      return;
-    }
-
-    if (value.employeeId) {
-      this.employeeCache.set(value.employeeId, {
-        expiresAt: Date.now() + this.cacheTtlMs,
-        value,
-      });
-    }
-  }
-
-  private setAuthUserInFlight(authUserId: string, promise: Promise<AuthContext>) {
-    this.authUserInFlight.set(authUserId, promise);
-    void promise.then(() => {
-      if (this.authUserInFlight.get(authUserId) === promise) {
-        this.authUserInFlight.delete(authUserId);
-      }
-    }, () => {
-      if (this.authUserInFlight.get(authUserId) === promise) {
-        this.authUserInFlight.delete(authUserId);
-      }
-    });
-  }
-
-  private setEmployeeInFlight(employeeId: string, promise: Promise<AuthContext>) {
-    this.employeeInFlight.set(employeeId, promise);
-    void promise.then(() => {
-      if (this.employeeInFlight.get(employeeId) === promise) {
-        this.employeeInFlight.delete(employeeId);
-      }
-    }, () => {
-      if (this.employeeInFlight.get(employeeId) === promise) {
-        this.employeeInFlight.delete(employeeId);
-      }
-    });
-  }
-
-  private mergeScopes(
-    existing: EffectivePermission["scope"] | undefined,
-    incoming: EffectivePermission["scope"],
-  ) {
-    if (!existing) {
-      return incoming;
-    }
-
-    return scopeWeight[incoming] > scopeWeight[existing] ? incoming : existing;
-  }
-
-  private getRelationName(
-    value:
-      | { name: string | null }
-      | Array<{ name: string | null }>
-      | null
-      | undefined,
-  ) {
-    if (Array.isArray(value)) {
-      return value[0]?.name ?? null;
-    }
-
-    return value?.name ?? null;
-  }
-
-  private getTenantDepartmentName(
-    value:
-      | { alias_name: string | null }
-      | Array<{ alias_name: string | null }>
-      | null
-      | undefined,
-  ) {
-    if (Array.isArray(value)) {
-      return value[0]?.alias_name ?? null;
-    }
-
-    return value?.alias_name ?? null;
-  }
-
-  private getRelationValue<T extends Record<string, unknown>, K extends keyof T>(
-    value: T | T[] | null | undefined,
-    key: K,
-  ): T[K] | null {
-    const record = Array.isArray(value) ? value[0] : value;
-    return record?.[key] ?? null;
-  }
-
-  private buildTenantContext(
-    employee: NonNullable<EmployeePermissionContextRecord["employee"]> | null,
-    roleCodes: string[],
-  ) {
-    const tenantId = employee?.tenant_id ?? null;
-    return {
-      tenantId,
-      tenantName: this.getRelationValue(employee?.tenant, "name") as string | null,
-      tenantSlug: this.getRelationValue(employee?.tenant, "slug") as string | null,
-      tenantStatus: this.getRelationValue(employee?.tenant, "status") as string | null,
-      isPlatformAdmin: roleCodes.includes("platform_admin") && !tenantId,
-    };
-  }
-
-  private buildAuthContext(input: Awaited<
-    ReturnType<typeof permissionRepository.getEmployeePermissionContextByAuthUserId>
-  >, authUserId: string): AuthContext {
-    const employee = input.employee;
-    const roles = input.roles.map((item) => ({
-      id: item.id,
-      code: item.code,
-      name: item.name ?? null,
-      description: item.description ?? null,
-      status: item.status ?? null,
-    }));
-    const roleCodes = input.roles.map((item) => item.code);
-
-    if (!employee) {
-      const tenantContext = this.buildTenantContext(null, roleCodes);
-      return {
-        authUserId,
-        employeeId: null,
-        ...tenantContext,
-        employeeName: null,
-        employeeStatus: null,
-        departmentId: null,
-        tenantDepartmentId: null,
-        departmentCode: null,
-        departmentName: null,
-        postId: null,
-        postName: null,
-        avatar: null,
-        roleCodes,
-        roles,
-        permissions: [],
-      };
-    }
-
-    const tenantDepartmentId = employee.tenant_department_id ?? null;
-    const tenantDepartmentName = this.getTenantDepartmentName(employee.tenant_department);
-    const departmentCode = this.getRelationValue(employee.tenant_department, "code") as string | null;
-    const departmentName = tenantDepartmentName;
-    const postName = this.getRelationName(employee.post);
-    const tenantContext = this.buildTenantContext(employee, roleCodes);
-
-    if (!isEmployeeOperableStatus(employee.status)) {
-      return {
-        authUserId,
-        employeeId: employee.id,
-        ...tenantContext,
-        employeeName: employee.name ?? null,
-        employeeStatus: employee.status,
-        departmentId: null,
-        tenantDepartmentId,
-        departmentCode,
-        departmentName,
-        postId: employee.post_id,
-        postName,
-        avatar: resolveStoredFileUrl(employee.avatar ?? null),
-        roleCodes,
-        roles,
-        permissions: [],
-      };
-    }
-
-    if (roleCodes.includes("system_admin")) {
-      return {
-        authUserId,
-        employeeId: employee.id,
-        ...tenantContext,
-        employeeName: employee.name ?? null,
-        employeeStatus: employee.status,
-        departmentId: null,
-        tenantDepartmentId,
-        departmentCode,
-        departmentName,
-        postId: employee.post_id,
-        postName,
-        avatar: resolveStoredFileUrl(employee.avatar ?? null),
-        roleCodes,
-        roles,
-        permissions: PERMISSION_CODE_VALUES.map((code) => ({
-          code,
-          scope: "all" as const,
-        })),
-      };
-    }
-
-    const permissionMap = new Map<string, EffectivePermission["scope"]>();
-
-    for (const item of input.rolePermissions) {
-      const normalizedScope = normalizeScope(item.scope);
-      permissionMap.set(
-        item.code,
-        this.mergeScopes(permissionMap.get(item.code), normalizedScope),
-      );
-    }
-
-    for (const item of input.overrides) {
-      if (item.effect === "deny") {
-        permissionMap.delete(item.code);
-        continue;
-      }
-
-      const normalizedScope = normalizeScope(item.scope);
-      permissionMap.set(
-        item.code,
-        this.mergeScopes(permissionMap.get(item.code), normalizedScope),
-      );
-    }
-
-    return {
-      authUserId,
-      employeeId: employee.id,
-      ...tenantContext,
-      employeeName: employee.name ?? null,
-      employeeStatus: employee.status,
-      departmentId: null,
-      tenantDepartmentId,
-      departmentCode,
-      departmentName,
-      postId: employee.post_id,
-      postName,
-      avatar: resolveStoredFileUrl(employee.avatar ?? null),
-      roleCodes,
-      roles,
-      permissions: Array.from(permissionMap.entries()).map(([code, scope]) => ({
-        code,
-        scope,
-      })),
-    };
-  }
+  private cache = new AuthContextCache();
 
   async getAuthContextByAuthUserId(authUserId: string): Promise<AuthContext> {
-    const cached = this.getCacheValue(this.authUserCache, authUserId);
+    const cached = this.cache.getByAuthUserId(authUserId);
     if (cached) {
       return cached;
     }
 
-    const inFlight = this.authUserInFlight.get(authUserId);
+    const inFlight = this.cache.getAuthUserInFlight(authUserId);
     if (inFlight) {
       return inFlight;
     }
@@ -342,21 +25,21 @@ class AuthorizationService {
     const promise = permissionRepository.getEmployeePermissionContextByAuthUserId(
       authUserId,
     ).then((raw) => {
-      const context = this.buildAuthContext(raw, authUserId);
-      this.setCacheValue(authUserId, context);
+      const context = buildAuthContext(raw, authUserId);
+      this.cache.setCacheValue(authUserId, context);
       return context;
     });
-    this.setAuthUserInFlight(authUserId, promise);
+    this.cache.setAuthUserInFlight(authUserId, promise);
     return promise;
   }
 
   async getAuthContextByEmployeeId(employeeId: string): Promise<AuthContext> {
-    const cached = this.getCacheValue(this.employeeCache, employeeId);
+    const cached = this.cache.getByEmployeeId(employeeId);
     if (cached) {
       return cached;
     }
 
-    const inFlight = this.employeeInFlight.get(employeeId);
+    const inFlight = this.cache.getEmployeeInFlight(employeeId);
     if (inFlight) {
       return inFlight;
     }
@@ -365,17 +48,17 @@ class AuthorizationService {
       employeeId,
     ).then((raw) => {
       const authUserId = raw.employee?.user_id || "";
-      const context = this.buildAuthContext(
+      const context = buildAuthContext(
         {
           ...raw,
         },
         authUserId,
       );
 
-      this.setCacheContext(context);
+      this.cache.setCacheContext(context);
       return context;
     });
-    this.setEmployeeInFlight(employeeId, promise);
+    this.cache.setEmployeeInFlight(employeeId, promise);
     return promise;
   }
 
@@ -383,8 +66,8 @@ class AuthorizationService {
     authUserId: string;
     employeeId: string;
   }) {
-    const cachedByAuthUser = this.getCacheValue(this.authUserCache, input.authUserId);
-    const cachedByEmployee = this.getCacheValue(this.employeeCache, input.employeeId);
+    const cachedByAuthUser = this.cache.getByAuthUserId(input.authUserId);
+    const cachedByEmployee = this.cache.getByEmployeeId(input.employeeId);
     if (
       cachedByAuthUser?.roles.length ||
       cachedByAuthUser?.permissions.length ||
@@ -394,30 +77,30 @@ class AuthorizationService {
       return Promise.resolve(cachedByAuthUser ?? cachedByEmployee!);
     }
 
-    const existingAuthUserPromise = this.authUserInFlight.get(input.authUserId);
+    const existingAuthUserPromise = this.cache.getAuthUserInFlight(input.authUserId);
     if (existingAuthUserPromise) {
       return existingAuthUserPromise;
     }
 
-    const existingEmployeePromise = this.employeeInFlight.get(input.employeeId);
+    const existingEmployeePromise = this.cache.getEmployeeInFlight(input.employeeId);
     if (existingEmployeePromise) {
-      this.setAuthUserInFlight(input.authUserId, existingEmployeePromise);
+      this.cache.setAuthUserInFlight(input.authUserId, existingEmployeePromise);
       return existingEmployeePromise;
     }
 
     const promise = this.getAuthContextByEmployeeId(input.employeeId);
-    this.setAuthUserInFlight(input.authUserId, promise);
+    this.cache.setAuthUserInFlight(input.authUserId, promise);
     return promise;
   }
 
   async getEmployeeLoginContextByAuthUserId(authUserId: string): Promise<AuthContext> {
-    const cached = this.getCacheValue(this.authUserCache, authUserId);
+    const cached = this.cache.getByAuthUserId(authUserId);
     if (cached?.employeeId) {
       return cached;
     }
 
     const employee = await permissionRepository.findEmployeeByAuthUserId(authUserId);
-    return this.buildAuthContext({
+    return buildAuthContext({
       employee: employee as EmployeePermissionContextRecord["employee"] || null,
       roles: [],
       rolePermissions: [],
@@ -426,13 +109,13 @@ class AuthorizationService {
   }
 
   async getEmployeeLoginContextByEmployeeId(employeeId: string): Promise<AuthContext> {
-    const cached = this.getCacheValue(this.employeeCache, employeeId);
+    const cached = this.cache.getByEmployeeId(employeeId);
     if (cached?.employeeId) {
       return cached;
     }
 
     const employee = await permissionRepository.findEmployeeById(employeeId);
-    return this.buildAuthContext({
+    return buildAuthContext({
       employee: employee as EmployeePermissionContextRecord["employee"] || null,
       roles: [],
       rolePermissions: [],
@@ -471,31 +154,11 @@ class AuthorizationService {
     authUserId?: string | null;
     employeeId?: string | null;
   }) {
-    if (input.authUserId) {
-      this.authUserCache.delete(input.authUserId);
-      this.authUserInFlight.delete(input.authUserId);
-    }
-
-    if (input.employeeId) {
-      this.employeeCache.delete(input.employeeId);
-      this.employeeInFlight.delete(input.employeeId);
-    }
+    this.cache.invalidateAuthContext(input);
   }
 
   invalidateTenantContext(tenantId: string | null | undefined) {
-    if (!tenantId) return;
-
-    for (const [key, item] of this.authUserCache.entries()) {
-      if (item.value.tenantId === tenantId) {
-        this.authUserCache.delete(key);
-      }
-    }
-
-    for (const [key, item] of this.employeeCache.entries()) {
-      if (item.value.tenantId === tenantId) {
-        this.employeeCache.delete(key);
-      }
-    }
+    this.cache.invalidateTenantContext(tenantId);
   }
 
   assertTenantAvailable(authContext: AuthContext) {
@@ -533,3 +196,8 @@ class AuthorizationService {
 }
 
 export const authorizationService = new AuthorizationService();
+export type {
+  AuthContext,
+  AuthContextRole,
+  EffectivePermission,
+} from "./legacy/types";
