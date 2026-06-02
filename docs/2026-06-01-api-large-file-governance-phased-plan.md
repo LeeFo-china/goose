@@ -1898,3 +1898,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `employeeProjectDetailBootstrapService` 外观，status bootstrap controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用 helper，属于行为保持型结构拆分。
 - `expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts`、`projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 16 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split expense requests legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1049 | 171 | `apps/api/src/repositories/expense-requests/legacy-repository.ts` |
+| - | 336 | `apps/api/src/repositories/expense-requests/legacy/approvals.ts` |
+| - | 109 | `apps/api/src/repositories/expense-requests/legacy/base.ts` |
+| - | 178 | `apps/api/src/repositories/expense-requests/legacy/lists.ts` |
+| - | 121 | `apps/api/src/repositories/expense-requests/legacy/mutations.ts` |
+| - | 44 | `apps/api/src/repositories/expense-requests/legacy/settlements.ts` |
+| - | 170 | `apps/api/src/repositories/expense-requests/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 summary/detail select、方法绑定和 `expenseRequestRepository` 导出。
+- 费用申请详情、员工/项目存在性校验、项目候选查询拆入 `base.ts`。
+- 创建、更新和费用明细替换拆入 `mutations.ts`。
+- 审批记录幂等写入、审批链替换/读取/节点更新、审批候选人和候选人权限上下文拆入 `approvals.ts`。
+- 打款登记和打款记录存在性校验拆入 `settlements.ts`。
+- 列表查询、可见性过滤和统计行查询拆入 `lists.ts`。
+- 共享 schema 类型、record 类型、payload 类型和 Supabase/Error 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/expense-requests/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 27 个减少到 26 个，`expense-requests/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `expense-requests/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖费用申请详情、创建更新、明细替换、审批链、审批候选人、打款、列表和统计入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实费用申请/API smoke | 未执行 | 当前阶段仅做结构拆分；未对费用申请、审批链或打款记录执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `expenseRequestRepository` 外观，expense request service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 summary/detail select 和 helper，属于行为保持型结构拆分。
+- `billing/legacy-repository.ts`、`projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
