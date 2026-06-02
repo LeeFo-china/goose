@@ -2814,3 +2814,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留用量日期范围、趋势 bucket、summary 字段、列表查询参数和平台管理员权限语义，属于行为保持型结构拆分。
 - `task-center/legacy-service.ts`、`wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 34 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split task center legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 615 | 19 | `apps/api/src/services/task-center/legacy-service.ts` |
+| - | 126 | `apps/api/src/services/task-center/legacy/actions.ts` |
+| - | 97 | `apps/api/src/services/task-center/legacy/builders-acceptance.ts` |
+| - | 112 | `apps/api/src/services/task-center/legacy/builders-basic.ts` |
+| - | 134 | `apps/api/src/services/task-center/legacy/builders-expense.ts` |
+| - | 61 | `apps/api/src/services/task-center/legacy/builders-ticket.ts` |
+| - | 128 | `apps/api/src/services/task-center/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，保留 `taskCenterService` 单例、`listTodos`、`getSummary` 和 `TaskCenterTodoItem` 类型导出。
+- summary cache map 和 in-flight map 保留在 service 单例实例上，cache key、排序、通用 helper 和类型拆入 `shared.ts`。
+- 待跟进客户、施工日志待办拆入 `builders-basic.ts`。
+- 费用申请待提交/审批/打款待办拆入 `builders-expense.ts`。
+- 工序验收复核/整改/提交待办拆入 `builders-acceptance.ts`。
+- 客服工单待办拆入 `builders-ticket.ts`。
+- 待办汇总构建、列表分页过滤和 summary cache 调度拆入 `actions.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/task-center/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 9 个减少到 8 个，`task-center/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `task-center/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖待办列表、summary cache、客户跟进、施工日志、费用、验收、客服工单待办入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实待办/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实 task-center controller 或数据库待办查询 |
+
+### 风险和遗留
+
+- 本阶段保留待办类型、优先级排序、target_url、summary cache key 和权限判断语义，属于行为保持型结构拆分。
+- `wechat-rebind-requests/legacy-service.ts`、`customer-service-tickets/legacy-service.ts`、`plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。

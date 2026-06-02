@@ -10,7 +10,6 @@ const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs
 const EXEMPTIONS = new Map<string, string>([
   ["apps/api/src/types/database.ts", "generated Supabase database types"],
   ["apps/api/src/services/wechat-rebind-requests/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
-  ["apps/api/src/services/task-center/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
   ["apps/api/src/services/customer-service-tickets/legacy-service.ts", "legacy facade implementation tracked in large-file governance plan"],
   ["apps/api/src/plugins/auth/legacy-plugin.ts", "legacy auth plugin implementation tracked in large-file governance plan"],
   ["apps/api/src/scripts/storage-migration-upload/legacy-script.ts", "legacy migration script tracked in large-file governance plan"],
