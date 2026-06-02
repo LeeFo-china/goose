@@ -1743,3 +1743,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `releaseDeploymentService` 外观，admin ops controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用私有 helper，属于行为保持型结构拆分。
 - `permissions/legacy-repository.ts`、`social-video-transcriptions/legacy-service.ts`、`employee-project-detail-bootstrap/legacy-service.ts`、`expense-requests/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 13 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split permissions legacy repository`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1110 | 157 | `apps/api/src/repositories/permissions/legacy-repository.ts` |
+| - | 142 | `apps/api/src/repositories/permissions/legacy/context.ts` |
+| - | 347 | `apps/api/src/repositories/permissions/legacy/employees.ts` |
+| - | 150 | `apps/api/src/repositories/permissions/legacy/overrides.ts` |
+| - | 127 | `apps/api/src/repositories/permissions/legacy/permissions.ts` |
+| - | 240 | `apps/api/src/repositories/permissions/legacy/roles.ts` |
+| - | 131 | `apps/api/src/repositories/permissions/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-repository.ts` 变为兼容 facade，只保留 Supabase admin client、RPC、重试 helper、方法绑定和 `permissionRepository` 导出。
+- 角色列表、角色详情、角色权限记录、角色 CRUD、按 ID 查询角色、按角色查员工和角色权限替换拆入 `roles.ts`。
+- 权限列表、按 ID/code 查询、权限创建和更新拆入 `permissions.ts`。
+- 员工查询、员工角色、部门员工、可见项目范围、项目租户、项目成员校验和员工角色替换拆入 `employees.ts`。
+- 角色权限扁平查询、员工权限覆盖查询、覆盖 upsert 和删除拆入 `overrides.ts`。
+- 员工权限上下文 RPC、回退组装逻辑和带权限的员工角色查询拆入 `context.ts`。
+- 共享记录类型和 schema 输入类型重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/repositories/permissions/legacy-repository.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 30 个减少到 29 个，`permissions/legacy-repository.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `permissions/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖角色、权限、员工角色、权限覆盖、项目可见范围和员工权限上下文入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实权限写入 smoke | 未执行 | 当前阶段仅做结构拆分；未对角色、权限、员工角色或权限覆盖执行真实写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `permissionRepository` 外观，access policy、authorization、permissions service 等调用方导入路径不变；拆分后的模块仍通过 repository 实例 `this` 复用重试和 RPC helper，属于行为保持型结构拆分。
+- `social-video-transcriptions/legacy-service.ts`、`employee-project-detail-bootstrap/legacy-service.ts`、`expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
