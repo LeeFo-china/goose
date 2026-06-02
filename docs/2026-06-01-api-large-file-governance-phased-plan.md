@@ -2049,3 +2049,58 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `projectRepository` 外观，projects service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 RPC 和列表过滤 helper，属于行为保持型结构拆分。
 - `social-video-scripts/legacy-service.ts`、`project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 19 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split social video scripts legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 897 | 31 | `apps/api/src/services/social-video-scripts/legacy-service.ts` |
+| - | 137 | `apps/api/src/services/social-video-scripts/legacy/ai-config.ts` |
+| - | 132 | `apps/api/src/services/social-video-scripts/legacy/ai-generation.ts` |
+| - | 169 | `apps/api/src/services/social-video-scripts/legacy/generation.ts` |
+| - | 61 | `apps/api/src/services/social-video-scripts/legacy/lists.ts` |
+| - | 143 | `apps/api/src/services/social-video-scripts/legacy/normalization.ts` |
+| - | 48 | `apps/api/src/services/social-video-scripts/legacy/permissions.ts` |
+| - | 122 | `apps/api/src/services/social-video-scripts/legacy/shared.ts` |
+| - | 119 | `apps/api/src/services/social-video-scripts/legacy/usage.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定和 `socialVideoScriptService` 导出。
+- AI endpoint、API key、模型、超时、OpenRouter header 和直接 OpenAI 兼容请求 helper 拆入 `ai-config.ts`。
+- AI prompt 构造、`aiGateway.chat` 调用、JSON repair 重试和模型/provider 回传拆入 `ai-generation.ts`。
+- AI 返回解析、字符串截断、脚本结构归一化、缓存时间和脚本序列化拆入 `normalization.ts`。
+- 管理权限、转写任务访问校验和租户解析拆入 `permissions.ts`。
+- 每日限额、缓存命中、输入兼容归一化和脚本生成主流程拆入 `generation.ts`。
+- 用户/管理员脚本列表拆入 `lists.ts`。
+- 转写、脚本和 AI 调用用量汇总拆入 `usage.ts`。
+- 共享 schema 类型、label/prompt 常量、仓库、AI gateway 和 settings 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/social-video-scripts/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 24 个减少到 23 个，`social-video-scripts/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `social-video-scripts/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖脚本生成、AI prompt/解析、缓存、权限、脚本列表和用量汇总入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实 AI/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实 AI gateway、OpenAI/DeepSeek/OpenRouter 或写入脚本记录 |
+
+### 风险和遗留
+
+- 本阶段保留原 `socialVideoScriptService` 外观，controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用权限、缓存和序列化 helper，属于行为保持型结构拆分。
+- `project-cameras/legacy-repository.ts`、`project-acceptances/legacy-repository.ts`、`customer-project-log-share-campaigns/legacy-repository.ts`、`platform-tenants/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
