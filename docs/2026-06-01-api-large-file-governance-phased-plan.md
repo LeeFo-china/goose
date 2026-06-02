@@ -2968,3 +2968,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留 ticket/action 字段、可见客户过滤、状态动作校验、通知触发和图片 URL 解析语义，属于行为保持型结构拆分。
 - `plugins/auth/legacy-plugin.ts`、`storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts`、`authorization/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 37 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split auth legacy plugin`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 593 | 111 | `apps/api/src/plugins/auth/legacy-plugin.ts` |
+| - | 98 | `apps/api/src/plugins/auth/legacy/employee-prewarm.ts` |
+| - | 41 | `apps/api/src/plugins/auth/legacy/responses.ts` |
+| - | 140 | `apps/api/src/plugins/auth/legacy/routes.ts` |
+| - | 36 | `apps/api/src/plugins/auth/legacy/timing.ts` |
+| - | 10 | `apps/api/src/plugins/auth/legacy/types.ts` |
+| - | 86 | `apps/api/src/plugins/auth/legacy/wechat-assertions.ts` |
+| - | 125 | `apps/api/src/plugins/auth/legacy/wechat-cache.ts` |
+
+### 结构变化
+
+- `legacy-plugin.ts` 变为 Fastify `onRequest` hook 入口，保留默认导出和 `primeWechatIdentityCheckCacheFromToken` 对外导出。
+- 公开路由、访客会话路由和纯访客 payload 判定拆入 `routes.ts`。
+- token 错误映射、未授权响应包装和拒绝日志拆入 `responses.ts`，继续使用 `error-factory.ts` 和统一 `fail` 响应。
+- 微信身份检查缓存、TTL、in-flight 合并和 token 预热拆入 `wechat-cache.ts`。
+- 微信 oauth 凭证和业务绑定校验拆入 `wechat-assertions.ts`。
+- 员工首页鉴权上下文后台预热拆入 `employee-prewarm.ts`，阶段耗时日志拆入 `timing.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/plugins/auth/legacy-plugin.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 6 个减少到 5 个，`plugins/auth/legacy-plugin.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `plugins/auth/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖 token 校验、访客会话、微信绑定检查、员工鉴权上下文预热和认证 hook 入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实认证/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实登录、访客会话、微信绑定或 employee bootstrap 接口 |
+
+### 风险和遗留
+
+- 本阶段保留 token 校验、公开路由、访客会话限制、微信绑定检查缓存、后台预热和日志语义，属于行为保持型结构拆分。
+- `storage-migration-upload/legacy-script.ts`、`customer-core/legacy-service.ts`、`authorization/legacy-service.ts`、`storage-migration-final-verify/legacy-script.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。

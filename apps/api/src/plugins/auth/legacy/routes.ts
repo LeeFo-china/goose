@@ -1,0 +1,140 @@
+import type { VerifiedJwtPayload } from "./types";
+
+const publicRoutes = new Set([
+  "/",
+  "/auth",
+  "/auth/send-code",
+  "/admin/auth/send-code",
+  "/admin/auth/login",
+]);
+
+export function isPublicRoute(method: string, url: string) {
+  if (publicRoutes.has(url)) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url === "/ai/decoration-qa/suggestions"
+  ) {
+    return true;
+  }
+
+  if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/share-campaign-claim-vouchers/")
+  ) {
+    return true;
+  }
+
+  if (method === "POST" && url === "/share-campaigns/open") {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/public/marketing-pages" || url.startsWith("/public/marketing-pages/"))
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/public/tenants/")
+    && url.includes("/marketing-pages")
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/public/tenant-share-links/")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url.startsWith("/public/marketing-pages/")
+    && (url.endsWith("/leads") || url.endsWith("/events"))
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url.startsWith("/public/tenants/")
+    && url.includes("/marketing-pages/")
+    && (url.endsWith("/leads") || url.endsWith("/events"))
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url === "/customer/project-acceptances/open-ticket/verify"
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && url.startsWith("/customer/project-acceptances/")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && url.startsWith("/project-acceptances/")
+    && (url.endsWith("/customer-confirm") || url.endsWith("/customer-dispute"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isVisitorSessionRoute(method: string, url: string) {
+  if (method === "POST" && url === "/auth/verify-role") {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/front/projects" || url.startsWith("/front/projects/"))
+  ) {
+    return true;
+  }
+
+  if (
+    method === "GET"
+    && url === "/ai/decoration-qa/suggestions"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && (url === "/ai/decoration-qa" || url === "/ai/decoration-qa/stream")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isPureVisitorPayload(payload: VerifiedJwtPayload) {
+  const roles = Array.isArray(payload.roles) ? payload.roles : [];
+  return (
+    roles.length === 1 &&
+    roles[0] === "visitor" &&
+    !payload.tenant_id &&
+    !payload.customer_id &&
+    !payload.employee_id
+  );
+}
