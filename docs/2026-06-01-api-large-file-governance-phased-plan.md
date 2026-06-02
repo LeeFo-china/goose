@@ -3343,3 +3343,53 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段只完成 smoke readiness，不代表真实业务接口已经回归通过。
 - 后续执行真实写入类 smoke 前，必须明确测试租户、测试账号、测试客户和迁移对象前缀，避免污染线上或共享数据。
+
+## 治理收尾 Phase 45 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `test: run api no-write smoke checks`
+
+### 目标
+
+- 执行不依赖真实测试账号、不写业务数据的 smoke 回归。
+- 覆盖本轮拆分涉及的认证插件错误路径和 storage migration CLI 报告链路。
+- 保持 `exemptions=0` 门禁。
+
+### 执行环境
+
+| 项目 | 结果 | 备注 |
+| --- | --- | --- |
+| 本地 API 启动 | 复用已有 3000 端口实例 | 新启动 `bun run api:start` 时端口已占用；探测 `/` 返回 `{"hello":"world"}`，`/employee/bootstrap` 返回认证错误，判定为当前 API |
+| 写入行为 | 无业务写入 | auth 仅请求错误路径；upload 未加 `--apply`；final verify 使用空输入 |
+| 敏感信息 | 未输出 | 未记录 token、密钥或 `.env` 值 |
+
+### smoke 结果
+
+| 链路 | 场景 | 结果 | 备注 |
+| --- | --- | --- | --- |
+| Auth 基础错误路径 | `GET /employee/bootstrap` 无 `Authorization` | 通过 | HTTP 401，`success=false`，`code=TOKEN_MISSING` |
+| Auth 基础错误路径 | `Authorization: Bearer ` | 通过 | HTTP 401，`success=false`，`code=TOKEN_MISSING` |
+| Auth 基础错误路径 | `Authorization: Bearer invalid-smoke-token` | 通过 | HTTP 401，`success=false`，`code=TOKEN_INVALID` |
+| Storage upload planned | 最小 migration CSV，不带 `--apply` | 通过 | `uploaded=0, planned=1, failed=0, already_exists=0` |
+| Storage final verify 空输入 | 只有 header 的 final verify CSV | 通过 | `passed=0, failed=0` |
+
+### 输出文件
+
+| 场景 | 输出 |
+| --- | --- |
+| Storage upload planned | `/tmp/gooes-storage-upload-planned-smoke-*/<timestamp>/summary.json` 和 `migration-items.csv` |
+| Storage final verify 空输入 | `/tmp/gooes-storage-final-verify-empty-smoke-*/<timestamp>/summary.json` 和 `final-verify-items.csv` |
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:check` | 通过 | 串联 typecheck、build、file-size 全部通过，`exemptions=0` |
+| Auth no-write smoke | 通过 | 三条错误路径均返回统一错误结构 |
+| Storage migration no-write smoke | 通过 | upload planned 和 final verify 空输入均生成报告 |
+
+### 风险和遗留
+
+- 本阶段未覆盖真实登录、访客 session、微信绑定、员工 bootstrap 成功路径、客户列表/详情/更新/状态流转成功路径。
+- 下一阶段如继续真实业务 smoke，需要准备测试账号、测试租户、测试客户和明确可写测试数据边界。
