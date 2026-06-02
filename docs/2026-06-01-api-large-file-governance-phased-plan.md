@@ -1847,3 +1847,54 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `socialVideoTranscriptionService` 外观，controller 和 worker 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用配置、Apify gateway 和结算 helper，属于行为保持型结构拆分。
 - `employee-project-detail-bootstrap/legacy-service.ts`、`expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts`、`projects/legacy-repository.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 15 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split employee project detail bootstrap legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 1058 | 89 | `apps/api/src/services/employee-project-detail-bootstrap/legacy-service.ts` |
+| - | 177 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/log-entry.ts` |
+| - | 152 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/next-action.ts` |
+| - | 220 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/orchestration.ts` |
+| - | 371 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/permissions.ts` |
+| - | 128 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/shared.ts` |
+| - | 82 | `apps/api/src/services/employee-project-detail-bootstrap/legacy/timing.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 facade，只保留方法绑定、类型重导出和 `employeeProjectDetailBootstrapService` 导出。
+- 员工项目详情 bootstrap 主编排、状态动作构建和旧日志加载 helper 拆入 `orchestration.ts`。
+- 施工日志入口摘要、日志聚合 map、blocked reason 和日志下一步动作拆入 `log-entry.ts`。
+- 项目访问、施工日志创建、验收访问、成员归属和阶段补全权限判断拆入 `permissions.ts`。
+- 项目状态/验收下一步动作选择、优先级、标题和描述构建拆入 `next-action.ts`。
+- 可选模块超时、计时和 partial error 包装拆入 `timing.ts`。
+- 共享类型、服务依赖和领域常量重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/employee-project-detail-bootstrap/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 28 个减少到 27 个，`employee-project-detail-bootstrap/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `employee-project-detail-bootstrap/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖员工项目详情 bootstrap、权限、成员、施工阶段、日志入口、日历和下一步动作入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实项目详情/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实员工项目详情接口或 Supabase 数据写入 |
+
+### 风险和遗留
+
+- 本阶段保留原 `employeeProjectDetailBootstrapService` 外观，status bootstrap controller 导入路径不变；拆分后的模块仍通过 service 实例 `this` 复用 helper，属于行为保持型结构拆分。
+- `expense-requests/legacy-repository.ts`、`billing/legacy-repository.ts`、`projects/legacy-repository.ts`、`social-video-scripts/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
