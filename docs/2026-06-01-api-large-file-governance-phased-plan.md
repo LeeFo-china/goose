@@ -2304,3 +2304,52 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段保留原 `platformTenantRepository` 外观，platform tenant service 调用路径不变；拆分后的模块仍通过 repository 实例 `this` 复用 `from` helper，属于行为保持型结构拆分。
 - `marketing-page-ai/legacy-service.ts`、`files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
+
+## 后续 Legacy Phase 24 执行记录
+
+日期：2026-06-02
+提交：本阶段提交 `refactor: split marketing page ai legacy service`
+
+### 目标文件
+
+| 拆分前行数 | 拆分后行数 | 文件 |
+| ---: | ---: | --- |
+| 727 | 5 | `apps/api/src/services/marketing-page-ai/legacy-service.ts` |
+| - | 137 | `apps/api/src/services/marketing-page-ai/legacy/ai-config.ts` |
+| - | 215 | `apps/api/src/services/marketing-page-ai/legacy/fill-actions.ts` |
+| - | 117 | `apps/api/src/services/marketing-page-ai/legacy/normalization.ts` |
+| - | 126 | `apps/api/src/services/marketing-page-ai/legacy/prompts.ts` |
+| - | 149 | `apps/api/src/services/marketing-page-ai/legacy/shared.ts` |
+
+### 结构变化
+
+- `legacy-service.ts` 变为兼容 re-export facade，只保留三项 AI 填充函数导出。
+- AI endpoint、API key、模型、超时、OpenRouter header、直连 OpenAI 兼容请求和内容提取 helper 拆入 `ai-config.ts`。
+- 模块字段白名单、页面设置字段白名单、块/页面摘要和三类 user prompt 构造拆入 `prompts.ts`。
+- JSON 解析、字符截断、slug 归一化、patch 归一化、创建结果归一化和计费上下文解析拆入 `normalization.ts`。
+- 模块文案填充、页面设置填充和新建页面标题描述生成三项 AI 入口拆入 `fill-actions.ts`。
+- 共享 schema 类型、AI 请求类型、字段定义、提示词常量、字段定义常量和 AI gateway/settings/Error 依赖重导出拆入 `shared.ts`。
+- 移除 `scripts/check-api-file-size.ts` 中对 `apps/api/src/services/marketing-page-ai/legacy-service.ts` 的大文件豁免；该文件后续重新超过 500 行会触发行数门禁失败。
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:typecheck` | 通过 | TypeScript noEmit 通过 |
+| `bun run api:build` | 通过 | `apps/api/dist/app.js` 构建成功，dist 未纳入版本变更 |
+| `bun run api:check-file-size` | 通过 | 显式豁免从 19 个减少到 18 个，`marketing-page-ai/legacy-service.ts` 不再豁免 |
+| 目标文件行数门禁 | 通过 | 新增 `marketing-page-ai/legacy/` 模块和原入口均低于 500 行 |
+
+### smoke 验收
+
+| 场景 | 结果 | 备注 |
+| --- | --- | --- |
+| 编译级 API smoke | 通过 | `api:typecheck` 和 `api:build` 覆盖模块填充、页面设置填充、新建页面 AI 生成、prompt 构造和 patch 归一化入口 |
+| 行数门禁 smoke | 通过 | `api:check-file-size` 已不依赖本阶段目标文件豁免 |
+| 真实 AI/API smoke | 未执行 | 当前阶段仅做结构拆分；未调用真实 AI gateway、OpenAI/DeepSeek/OpenRouter 或写入营销页配置 |
+
+### 风险和遗留
+
+- 本阶段保留原 `fillMarketingPageBlockWithAi`、`fillMarketingPageSettingsWithAi`、`fillMarketingPageCreateWithAi` 导出，marketing page controller 调用路径不变；拆分后的模块仍为行为保持型结构拆分。
+- `files/platform-file-storage/legacy-service.ts`、`storage-migration-dry-run/legacy-script.ts`、`construction-stage-status/legacy-service.ts`、`wechat-customer-identities/legacy-service.ts` 等仍在大文件豁免清单中，后续阶段按行数和业务风险继续处理。
