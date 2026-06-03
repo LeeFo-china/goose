@@ -4,9 +4,16 @@ import { Errors } from "@/errors/error-factory";
 import { AuthMeProfileUpdateSchema } from "@/schema/user-profile";
 import { customerServiceTicketService } from "@/services/customer-service-tickets";
 import { customerSelfServiceService } from "@/services/customer-self-service";
+import type { CustomerHomeProjectListItem } from "@/services/customer-home-projects";
+import {
+  createCustomerProjectDetailTimingSteps,
+  logCustomerProjectDetailTiming,
+  measureCustomerProjectDetailStep,
+} from "@/utils/customer-project-detail-timing";
 import { Get, Patch } from "@/utils/decorators/route";
 import { registerRoutes } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import customerProjectDetailBootstrapController from "./detail-bootstrap-controller";
 import customerProjectsController from "./projects-controller";
 import { CustomerSelfServiceProjectBaseController } from "./project-base";
 import {
@@ -17,6 +24,7 @@ import customerTicketsAcceptancesController from "./tickets-acceptances-controll
 class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseController {
   public override registerExtraRoutes = (fastify: FastifyInstance) => {
     customerProjectsController.registerExtraRoutes(fastify);
+    customerProjectDetailBootstrapController.registerExtraRoutes(fastify);
     customerTicketsAcceptancesController.registerExtraRoutes(fastify);
     registerRoutes(fastify, this);
   };
@@ -93,11 +101,20 @@ class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseContro
   @Get("/customer/bootstrap")
   async getCustomerBootstrap(request: FastifyRequest) {
     const startedAt = Date.now();
-    const authUserId = await this.getRequiredAuthUserId(request);
+    const steps = createCustomerProjectDetailTimingSteps();
+    const authUserId = await measureCustomerProjectDetailStep(
+      steps,
+      "auth_context_ms",
+      () => this.getRequiredAuthUserId(request),
+    );
     const customerStartedAt = Date.now();
-    const customer = await this.getCustomerProfileFromRequest(request, {
-      required: true,
-    });
+    const customer = await measureCustomerProjectDetailStep(
+      steps,
+      "customer_context_ms",
+      () => this.getCustomerProfileFromRequest(request, {
+        required: true,
+      }),
+    );
     request.log.info(
       {
         requestId: request.id,
@@ -108,14 +125,24 @@ class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseContro
       },
       "[customer-bootstrap] customer context loaded",
     );
-    const queryResult = CustomerBootstrapQuerySchema.safeParse(request.query);
+    const queryResult = await measureCustomerProjectDetailStep(
+      steps,
+      "query_parse_ms",
+      () => CustomerBootstrapQuerySchema.safeParse(request.query),
+    );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
     const { page, pageSize, include, projects_mode: projectsMode } = queryResult.data;
     const userProfileStartedAt = Date.now();
-    const cachedUserProfile = customerSelfServiceService
-      .getCachedUserProfileByAuthUserId(authUserId);
-    if (!cachedUserProfile) {
+    const preloadedUserProfile = this.getPreloadedUserProfile(request);
+    const cachedUserProfile = await measureCustomerProjectDetailStep(
+      steps,
+      "user_profile_ms",
+      async () => preloadedUserProfile !== undefined
+        ? preloadedUserProfile
+        : customerSelfServiceService.getCachedUserProfileByAuthUserId(authUserId),
+    );
+    if (!cachedUserProfile && preloadedUserProfile === undefined) {
       void this.getUserProfileByAuthUserId(authUserId);
     }
     request.log.info(
@@ -124,19 +151,35 @@ class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseContro
         durationMs: Date.now() - userProfileStartedAt,
         authUserId,
         hasUserProfile: Boolean(cachedUserProfile),
-        source: cachedUserProfile ? "cache" : "background",
+        source: preloadedUserProfile !== undefined
+          ? "preload"
+          : cachedUserProfile ? "cache" : "background",
       },
       "[customer-bootstrap] user profile loaded",
     );
-    const projects = projectsMode === "inline"
-      ? await this.buildCustomerProjectsPayload({
+    const projectsPromise = projectsMode === "inline"
+      ? this.buildCustomerBootstrapProjectsPayload({
         customer: customer!,
         page,
         pageSize,
         include,
+        includeDesigner: false,
+        includeCount: false,
+        recentLogsTimeoutMs: 50,
         request,
+        timingSteps: steps,
       })
-      : null;
+      : Promise.resolve(null);
+    const customerServiceConfigPromise = Promise.race([
+      measureCustomerProjectDetailStep(
+        steps,
+        "customer_service_ms",
+      () => customerServiceTicketService.getCustomerServiceConfig(
+        customer!.tenant_id,
+      ),
+    ),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 100)),
+    ]);
     if (projectsMode === "defer") {
       void customerSelfServiceService.prewarmCustomerHomeProjects({
         customerId: customer!.id,
@@ -157,14 +200,37 @@ class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseContro
       );
     }
 
-    const response = {
-      context: this.serializeCustomerContext(authUserId, customer!, cachedUserProfile),
-      customer_service: await customerServiceTicketService.getCustomerServiceConfig(
-        customer!.tenant_id,
-      ),
-      projects,
-      projects_mode: projectsMode,
-    };
+    const [projects, customerServiceConfig] = await Promise.all([
+      projectsPromise,
+      customerServiceConfigPromise,
+    ]);
+    const response = await measureCustomerProjectDetailStep(
+      steps,
+      "serialize_ms",
+      async () => ({
+        context: this.serializeCustomerContext(
+          authUserId,
+          customer!,
+          cachedUserProfile,
+        ),
+        customer_service: customerServiceConfig,
+        projects,
+        projects_mode: projectsMode,
+      }),
+    );
+    logCustomerProjectDetailTiming(request, {
+      route: "GET /customer/bootstrap",
+      startedAt,
+      tenantId: customer?.tenant_id ?? null,
+      customerId: customer?.id ?? null,
+      query: {
+        include,
+        projects_mode: projectsMode,
+        page,
+        pageSize,
+      },
+      steps,
+    });
     request.log.info(
       {
         requestId: request.id,
@@ -176,7 +242,70 @@ class CustomerSelfServiceController extends CustomerSelfServiceProjectBaseContro
       },
       "[customer-bootstrap] bootstrap resolved",
     );
-    return ResponseHandler.success(response);
+    return ResponseHandler.success(this.withDebugTiming(
+      response,
+      queryResult.data.debug_timing,
+      { auth_steps: this.getAuthTimingSteps(request), steps },
+    ));
+  }
+
+  private getPreloadedCustomerHomeProjects(
+    request: FastifyRequest,
+    page: number,
+    pageSize: number,
+  ) {
+    const preloaded = (request as FastifyRequest & {
+      preloadedCustomerHomeProjects?: {
+        page?: unknown;
+        pageSize?: unknown;
+        list?: unknown;
+      };
+    }).preloadedCustomerHomeProjects;
+    if (
+      preloaded?.page !== page ||
+      preloaded.pageSize !== pageSize ||
+      !Array.isArray(preloaded.list)
+    ) {
+      return null;
+    }
+
+    return preloaded.list as CustomerHomeProjectListItem[];
+  }
+
+  private async buildCustomerBootstrapProjectsPayload(input: {
+    customer: NonNullable<Awaited<ReturnType<
+      CustomerSelfServiceController["getCustomerProfileFromRequest"]
+    >>>;
+    page: number;
+    pageSize: number;
+    include: "home_summary";
+    includeDesigner: false;
+    includeCount: false;
+    recentLogsTimeoutMs: number;
+    request: FastifyRequest;
+    timingSteps: ReturnType<typeof createCustomerProjectDetailTimingSteps>;
+  }) {
+    const preloaded = this.getPreloadedCustomerHomeProjects(
+      input.request,
+      input.page,
+      input.pageSize,
+    );
+    if (!preloaded) return this.buildCustomerProjectsPayload(input);
+
+    return measureCustomerProjectDetailStep(input.timingSteps, "projects_ms", async () => ({
+      list: preloaded.map((row) => ({
+        ...this.serializeCustomerProjectListItem(row),
+        recent_logs: Array.isArray(row.recent_logs)
+          ? row.recent_logs.map((log) => this.serializeCustomerProjectRecentLog(log))
+          : [],
+      })),
+      pagination: {
+        page: input.page,
+        pageSize: input.pageSize,
+        total: 0,
+        totalPages: 0,
+      },
+    }));
   }
 }
 

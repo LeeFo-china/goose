@@ -11,6 +11,11 @@ import {
 } from "@/schema/project-acceptances";
 import { customerServiceTicketService } from "@/services/customer-service-tickets";
 import { projectAcceptanceService } from "@/services/project-acceptances";
+import {
+  createCustomerProjectDetailTimingSteps,
+  logCustomerProjectDetailTiming,
+  measureCustomerProjectDetailStep,
+} from "@/utils/customer-project-detail-timing";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { CustomerSelfServiceBaseController } from "./shared";
@@ -69,22 +74,55 @@ class CustomerTicketsAcceptancesController extends CustomerSelfServiceBaseContro
 
   @Get("/customer/project-acceptances")
   async listCustomerProjectAcceptances(request: FastifyRequest) {
-    const authUserId = await this.getRequiredAuthUserId(request);
+    const startedAt = Date.now();
+    const steps = createCustomerProjectDetailTimingSteps();
+    const acceptanceSteps: Record<string, number> = {};
+    const authUserId = await measureCustomerProjectDetailStep(
+      steps,
+      "auth_context_ms",
+      () => this.getRequiredAuthUserId(request),
+    );
     const queryResult = CustomerProjectAcceptanceListQuerySchema.safeParse(
       request.query,
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    return ResponseHandler.success(
-      await projectAcceptanceService.listCustomerAcceptances(
+    const payload = await measureCustomerProjectDetailStep(
+      steps,
+      "acceptances_ms",
+      () => projectAcceptanceService.listCustomerAcceptances(
         authUserId,
         queryResult.data,
         {
           tenantId: request.user?.tenant_id ?? null,
           customerId: request.user?.customer_id ?? null,
         },
+        { responseMode: "summary", timing: acceptanceSteps },
       ),
     );
+    logCustomerProjectDetailTiming(request, {
+      route: "GET /customer/project-acceptances",
+      startedAt,
+      tenantId: request.user?.tenant_id ?? null,
+      customerId: request.user?.customer_id ?? null,
+      projectId: queryResult.data.project_id ?? null,
+      query: {
+        project_id: queryResult.data.project_id ?? null,
+        page: queryResult.data.page,
+        pageSize: queryResult.data.pageSize,
+      },
+      extra: { acceptance_steps: acceptanceSteps },
+      steps,
+    });
+    return ResponseHandler.success(this.withDebugTiming(
+      payload,
+      queryResult.data.debug_timing,
+      {
+        auth_steps: this.getAuthTimingSteps(request),
+        steps,
+        acceptance_steps: acceptanceSteps,
+      },
+    ));
   }
 
   @Post("/customer/project-acceptances/open-ticket/verify")

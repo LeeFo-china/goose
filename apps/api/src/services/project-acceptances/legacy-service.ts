@@ -229,6 +229,7 @@ import {
   buildDetailFromParts,
   buildDetail,
 } from "./legacy/detail-sections";
+import { buildSummaryDetail } from "./legacy/summary-detail";
 import {
   getCommonTenantId,
   groupBy,
@@ -277,6 +278,7 @@ import {
   getCustomerAcceptanceByAuthOrTicket,
   verifyOpenTicket,
 } from "./legacy/lists";
+import { loadCustomerAcceptanceSummaries } from "./legacy/summary-lists";
 import {
   resolveCustomerActor,
   normalizeCustomerTenant,
@@ -342,6 +344,7 @@ class ProjectAcceptanceService {
   private buildAcceptanceProgress = buildAcceptanceProgress;
   private getSubmitBlockReason = getSubmitBlockReason;
   private buildDetailFromParts = buildDetailFromParts;
+  private buildSummaryDetail = buildSummaryDetail;
   private buildDetail = buildDetail;
   private getCommonTenantId = getCommonTenantId;
   private groupBy = groupBy;
@@ -377,6 +380,7 @@ class ProjectAcceptanceService {
   listAcceptances = listAcceptances;
   getAcceptance = getAcceptance;
   listCustomerAcceptances = listCustomerAcceptances;
+  private loadCustomerAcceptanceSummaries = loadCustomerAcceptanceSummaries;
   private loadCustomerAcceptances = loadCustomerAcceptances;
   getCustomerAcceptance = getCustomerAcceptance;
   getCustomerAcceptanceByAuthOrTicket = getCustomerAcceptanceByAuthOrTicket;

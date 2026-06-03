@@ -56,6 +56,10 @@ import {
   type ProjectLogStageCode,
 } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  measureProjectAcceptanceTiming,
+  type ProjectAcceptanceTimingSteps,
+} from "./timing";
 const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "draft",
   "submitted",
@@ -221,6 +225,7 @@ export async function buildDetails(this: any,
       projects?: ProjectAcceptanceProjectRow[];
       customers?: ProjectAcceptanceCustomerRow[];
     },
+    options?: { timing?: ProjectAcceptanceTimingSteps },
   ): Promise<AcceptanceDetail[]> {
     if (rows.length === 0) return [];
 
@@ -232,24 +237,58 @@ export async function buildDetails(this: any,
     const missingProjectIds = Array.from(
       new Set(rows.map((item) => item.project_id)),
     ).filter((projectId) => !knownProjectMap.has(projectId));
-    const [items, actions, projects, latestNotifications] = await Promise.all([
-      projectAcceptanceRepository.listItemsByAcceptanceIds(acceptanceIds, tenantId),
-      projectAcceptanceRepository.listActionsByAcceptanceIds(acceptanceIds, tenantId),
-      projectAcceptanceRepository.listProjectsByIds(missingProjectIds, tenantId),
-      projectAcceptanceOpenTicketRepository.listLatestByAcceptances(
-        acceptanceIds,
-        tenantId,
+    const timing = options?.timing;
+    const rowEmployeeIds = new Set<string>();
+    for (const row of rows) {
+      rowEmployeeIds.add(row.initiator_id);
+      if (row.reviewer_id) rowEmployeeIds.add(row.reviewer_id);
+    }
+    const [items, actions, projects, latestNotifications, rowEmployees] = await Promise.all([
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_items_query_ms",
+        () => projectAcceptanceRepository.listItemsByAcceptanceIds(
+          acceptanceIds,
+          tenantId,
+        ),
+      ),
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_actions_query_ms",
+        () => projectAcceptanceRepository.listActionsByAcceptanceIds(
+          acceptanceIds,
+          tenantId,
+        ),
+      ),
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_projects_query_ms",
+        () => projectAcceptanceRepository.listProjectsByIds(
+          missingProjectIds,
+          tenantId,
+        ),
+      ),
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_notifications_query_ms",
+        () => projectAcceptanceOpenTicketRepository.listLatestByAcceptances(
+          acceptanceIds,
+          tenantId,
+        ),
+      ),
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_row_employees_query_ms",
+        () => projectAcceptanceRepository.listEmployees(Array.from(rowEmployeeIds)),
       ),
     ]);
-    const employeeIds = new Set<string>();
+    const actionEmployeeIds = new Set<string>();
     const customerMap = new Map(
       (known?.customers || []).map((item) => [item.id, item]),
     );
     const missingCustomerIds = new Set<string>();
 
     for (const row of rows) {
-      employeeIds.add(row.initiator_id);
-      if (row.reviewer_id) employeeIds.add(row.reviewer_id);
       if (row.customer_id && !customerMap.has(row.customer_id)) {
         missingCustomerIds.add(row.customer_id);
       }
@@ -257,7 +296,9 @@ export async function buildDetails(this: any,
 
     for (const action of actions) {
       if (action.operator_type === "employee" && action.operator_id) {
-        employeeIds.add(action.operator_id);
+        if (!rowEmployeeIds.has(action.operator_id)) {
+          actionEmployeeIds.add(action.operator_id);
+        }
       }
       if (
         action.operator_type === "customer" &&
@@ -268,9 +309,19 @@ export async function buildDetails(this: any,
       }
     }
 
-    const [employees, customers] = await Promise.all([
-      projectAcceptanceRepository.listEmployees(Array.from(employeeIds)),
-      projectAcceptanceRepository.listCustomers(Array.from(missingCustomerIds)),
+    const [actionEmployees, customers] = await Promise.all([
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_action_employees_query_ms",
+        () => projectAcceptanceRepository.listEmployees(Array.from(actionEmployeeIds)),
+      ),
+      measureProjectAcceptanceTiming(
+        timing,
+        "detail_customers_query_ms",
+        () => projectAcceptanceRepository.listCustomers(
+          Array.from(missingCustomerIds),
+        ),
+      ),
     ]);
     const itemsByAcceptance = this.groupBy(items, (item: ProjectAcceptanceItemRow) => item.acceptance_id);
     const actionsByAcceptance = this.groupBy(actions, (item: ProjectAcceptanceActionRow) => item.acceptance_id);
@@ -281,20 +332,24 @@ export async function buildDetails(this: any,
     const notificationMap = new Map(
       latestNotifications.map((item) => [item.acceptance_id, item]),
     );
-    const employeeMap = new Map(employees.map((item) => [item.id, item]));
+    const employeeMap = new Map(
+      [...rowEmployees, ...actionEmployees].map((item) => [item.id, item]),
+    );
     for (const customer of customers) {
       customerMap.set(customer.id, customer);
     }
 
-    return rows.map((row) =>
-      this.buildDetailFromParts(row, {
-        items: itemsByAcceptance.get(row.id) || [],
-        actions: actionsByAcceptance.get(row.id) || [],
-        project: projectMap.get(row.project_id) || null,
-        employeeMap,
-        customerMap,
-        latestNotification: notificationMap.get(row.id) || null,
-      })
+    return measureProjectAcceptanceTiming(timing, "detail_serialize_ms", () =>
+      rows.map((row) =>
+        this.buildDetailFromParts(row, {
+          items: itemsByAcceptance.get(row.id) || [],
+          actions: actionsByAcceptance.get(row.id) || [],
+          project: projectMap.get(row.project_id) || null,
+          employeeMap,
+          customerMap,
+          latestNotification: notificationMap.get(row.id) || null,
+        })
+      )
     );
   }
 

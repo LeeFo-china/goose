@@ -34,13 +34,35 @@ export function optionalCustomerQueryValue<T extends z.ZodTypeAny>(schema: T) {
   }, schema.optional());
 }
 
+export function customerBooleanQueryValue(defaultValue: boolean) {
+  return z.preprocess((value) => {
+    if (value == null || value === "") {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes", "on"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "0", "no", "off"].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return value;
+  }, z.boolean().default(defaultValue));
+}
+
 export const CustomerProjectListQuerySchema = PaginationQuerySchema.extend({
   include: optionalCustomerQueryValue(z.enum(["home_summary"])),
+  debug_timing: customerBooleanQueryValue(false),
 });
 
 export const CustomerBootstrapQuerySchema = PaginationQuerySchema.extend({
   include: optionalCustomerQueryValue(z.enum(["home_summary"])).default("home_summary"),
   projects_mode: optionalCustomerQueryValue(z.enum(["inline", "defer"])).default("inline"),
+  debug_timing: customerBooleanQueryValue(false),
 });
 
 export const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
@@ -49,6 +71,18 @@ export const CustomerProjectLogListQuerySchema = PaginationQuerySchema.extend({
     "每页日志不能超过 20 条",
   ).default(10),
   imageMode: optionalCustomerQueryValue(z.enum(["thumb", "full"])).default("thumb"),
+  debug_timing: customerBooleanQueryValue(false),
+});
+
+export const CustomerProjectDetailBootstrapQuerySchema = z.object({
+  log_page_size: z.coerce.number().int().min(1, "日志条数必须大于 0").max(
+    10,
+    "首屏日志不能超过 10 条",
+  ).default(5),
+  include_acceptances: customerBooleanQueryValue(true),
+  include_stages: customerBooleanQueryValue(true),
+  include_campaigns: customerBooleanQueryValue(false),
+  debug_timing: customerBooleanQueryValue(false),
 });
 
 export const CustomerProjectLogCommentListQuerySchema = PaginationQuerySchema.extend({
@@ -73,6 +107,44 @@ export abstract class CustomerSelfServiceBaseController extends BaseController {
       throw Errors.unauthorized();
     }
     return authUserId;
+  }
+
+  protected withDebugTiming<T extends Record<string, unknown>>(
+    payload: T,
+    enabled: boolean,
+    timing: Record<string, unknown>,
+  ) {
+    return enabled ? { ...payload, debug_timing: timing } : payload;
+  }
+
+  protected getAuthTimingSteps(request: unknown) {
+    return ((request as { authTimingSteps?: Record<string, number> })
+      .authTimingSteps) ?? {};
+  }
+
+  protected getPreloadedCustomerContext(request: unknown) {
+    const preloaded = (request as { preloadedCustomerContext?: unknown })
+      .preloadedCustomerContext;
+    if (!preloaded || typeof preloaded !== "object") {
+      return null;
+    }
+
+    return preloaded as CustomerContextRow;
+  }
+
+  protected getPreloadedUserProfile(request: unknown) {
+    const carrier = request as { preloadedUserProfile?: unknown };
+    if (!("preloadedUserProfile" in carrier)) {
+      return undefined;
+    }
+
+    if (carrier.preloadedUserProfile === null) {
+      return null;
+    }
+
+    return typeof carrier.preloadedUserProfile === "object"
+      ? carrier.preloadedUserProfile as UserProfileRow
+      : undefined;
   }
 
   protected normalizeRelation<T extends Record<string, unknown>>(
@@ -216,6 +288,16 @@ export abstract class CustomerSelfServiceBaseController extends BaseController {
     options?: { required?: boolean },
   ) {
     const authUserId = await this.getRequiredAuthUserId(request);
+    const preloaded = this.getPreloadedCustomerContext(request);
+    if (
+      preloaded &&
+      (!request.user?.tenant_id || preloaded.tenant_id === request.user.tenant_id) &&
+      (!request.user?.customer_id || preloaded.id === request.user.customer_id)
+    ) {
+      this.assertCustomerTenantAvailable(preloaded);
+      return preloaded;
+    }
+
     const customer = await this.getCustomerProfileByAuthUserId(authUserId, {
       required: options?.required,
       tenantId: request.user?.tenant_id ?? null,

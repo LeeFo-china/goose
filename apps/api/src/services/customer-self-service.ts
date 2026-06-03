@@ -47,6 +47,10 @@ class CustomerSelfServiceService {
     value: CustomerSelfServiceProjectLogCommentAggregateRow[];
   }>();
   private projectLogCommentAggregatesInFlight = new Map<string, Promise<CustomerSelfServiceProjectLogCommentAggregateRow[]>>();
+  private recentLogSummariesCache = new Map<string, {
+    expiresAt: number; value: CustomerSelfServiceRecentLogSummaryRow[];
+  }>();
+  private recentLogSummariesInFlight = new Map<string, Promise<CustomerSelfServiceRecentLogSummaryRow[]>>();
 
   private getCachedValue<T>(cache: Map<string, { expiresAt: number; value: T }>, key: string) {
     const item = cache.get(key);
@@ -101,11 +105,7 @@ class CustomerSelfServiceService {
     customerId: string;
     tenantId?: string | null;
   }) {
-    return [
-      input.customerId,
-      input.tenantId ?? "",
-      input.projectId,
-    ].join(":");
+    return [input.customerId, input.tenantId ?? "", input.projectId].join(":");
   }
 
   private async attachDesigner<T extends CustomerSelfServiceProjectListItem>(
@@ -213,13 +213,7 @@ class CustomerSelfServiceService {
 
   getCachedUserProfileEntryByAuthUserId(authUserId: string) {
     const entry = this.getCachedEntry(this.userProfileCache, authUserId);
-    if (!entry) {
-      return null;
-    }
-
-    return {
-      value: entry.value,
-    };
+    return entry ? { value: entry.value } : null;
   }
 
   prewarmCustomerContext(input: {
@@ -276,16 +270,13 @@ class CustomerSelfServiceService {
   }
 
   listOwnedProjects(input: {
-    customerId: string;
-    tenantId: string;
-    from: number;
-    to: number;
+    customerId: string; tenantId: string; from: number; to: number;
+    includeDesigner?: boolean; includeCount?: boolean;
   }) {
     const cacheKey = [
-      input.customerId,
-      input.tenantId,
-      input.from,
-      input.to,
+      input.customerId, input.tenantId, input.from, input.to,
+      input.includeDesigner === false ? "no_designer" : "designer",
+      input.includeCount === false ? "no_count" : "count",
     ].join(":");
     const cached = this.getCachedValue(this.ownedProjectsCache, cacheKey);
     if (cached) {
@@ -300,7 +291,9 @@ class CustomerSelfServiceService {
     const request = customerSelfServiceRepository.listOwnedProjects(input)
       .then(async (result) => ({
         ...result,
-        list: await this.attachDesigner(result.list),
+        list: input.includeDesigner === false
+          ? result.list
+          : await this.attachDesigner(result.list),
       }))
       .then((result) => {
         this.setCachedValue(this.ownedProjectsCache, cacheKey, result);
@@ -362,7 +355,38 @@ class CustomerSelfServiceService {
     projectIds: string[];
     perProject: number;
   }) {
-    return customerSelfServiceRepository.listRecentLogSummariesForProjects(input);
+    const normalizedProjectIds = Array.from(new Set(input.projectIds)).sort();
+    if (normalizedProjectIds.length === 0) {
+      return Promise.resolve([] as CustomerSelfServiceRecentLogSummaryRow[]);
+    }
+
+    const cacheKey = [
+      input.customerId, normalizedProjectIds.join(","), input.perProject,
+    ].join(":");
+    const cached = this.getCachedValue(this.recentLogSummariesCache, cacheKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.recentLogSummariesInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = customerSelfServiceRepository.listRecentLogSummariesForProjects({
+      ...input, projectIds: normalizedProjectIds,
+    })
+      .then((result) => {
+        this.setCachedValue(this.recentLogSummariesCache, cacheKey, result);
+        return result;
+      })
+      .finally(() => {
+        if (this.recentLogSummariesInFlight.get(cacheKey) === request) {
+          this.recentLogSummariesInFlight.delete(cacheKey);
+        }
+      });
+    this.recentLogSummariesInFlight.set(cacheKey, request);
+    return request;
   }
 
   findOwnedProjectLog(input: {
@@ -378,12 +402,11 @@ class CustomerSelfServiceService {
     tenantId: string | null;
     from: number;
     to: number;
+    includeCount?: boolean;
   }) {
     const cacheKey = [
-      input.projectId,
-      input.tenantId ?? "",
-      input.from,
-      input.to,
+      input.projectId, input.tenantId ?? "", input.from, input.to,
+      input.includeCount === false ? "no_count" : "count",
     ].join(":");
     const cached = this.getCachedValue(this.projectLogsCache, cacheKey);
     if (cached) {
@@ -418,10 +441,7 @@ class CustomerSelfServiceService {
       return Promise.resolve([] as CustomerSelfServiceProjectLogCommentAggregateRow[]);
     }
 
-    const cacheKey = [
-      input.tenantId ?? "",
-      normalizedLogIds.join(","),
-    ].join(":");
+    const cacheKey = [input.tenantId ?? "", normalizedLogIds.join(",")].join(":");
     const cached = this.getCachedValue(this.projectLogCommentAggregatesCache, cacheKey);
     if (cached) {
       return Promise.resolve(cached);
@@ -468,16 +488,12 @@ class CustomerSelfServiceService {
 }
 
 export type CustomerContextRow = CustomerSelfServiceCustomerContextRow;
-export type CustomerProjectLogCommentAggregateRow =
-  CustomerSelfServiceProjectLogCommentAggregateRow;
-export type CustomerProjectLogCommentAuthorCustomer =
-  CustomerSelfServiceProjectLogCommentAuthorCustomer;
-export type CustomerProjectLogCommentAuthorEmployee =
-  CustomerSelfServiceProjectLogCommentAuthorEmployee;
+export type CustomerProjectLogCommentAggregateRow = CustomerSelfServiceProjectLogCommentAggregateRow;
+export type CustomerProjectLogCommentAuthorCustomer = CustomerSelfServiceProjectLogCommentAuthorCustomer;
+export type CustomerProjectLogCommentAuthorEmployee = CustomerSelfServiceProjectLogCommentAuthorEmployee;
 export type CustomerProjectLogCommentRow = CustomerSelfServiceProjectLogCommentRow;
 export type CustomerProjectLogRow = CustomerSelfServiceProjectLogRow;
 export type CustomerProjectListItem = CustomerSelfServiceProjectListItem;
 export type CustomerProjectRecentLogSummaryRow = CustomerSelfServiceRecentLogSummaryRow;
 export type UserProfileRow = CustomerSelfServiceUserProfileRow;
-
 export const customerSelfServiceService = new CustomerSelfServiceService();

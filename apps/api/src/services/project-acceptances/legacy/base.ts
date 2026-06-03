@@ -261,6 +261,7 @@ export function customerAcceptanceListCacheKey(this: any,
       tenantId?: string | null;
       customerId?: string | null;
     },
+    responseMode?: "summary" | "detail",
   ) {
     return [
       authUserId,
@@ -272,6 +273,7 @@ export function customerAcceptanceListCacheKey(this: any,
       query.acceptance_type ?? "",
       query.status ?? "",
       query.stage_code ?? "",
+      responseMode ?? "detail",
     ].join(":");
   }
 

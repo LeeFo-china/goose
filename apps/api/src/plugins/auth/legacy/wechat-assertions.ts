@@ -8,6 +8,49 @@ import {
 } from "./wechat-cache";
 import type { VerifiedJwtPayload } from "./types";
 
+export async function assertWechatIdentityBinding(payload: VerifiedJwtPayload) {
+  if (!payload.openid || !payload.sub) {
+    return;
+  }
+
+  const cacheKey = buildWechatIdentityCheckCacheKey("binding", payload);
+  return runWechatIdentityCheckOnce(cacheKey, payload, async () => {
+    const result = await userIdentityService.verifyWechatIdentityBinding({
+      userId: payload.sub!,
+      openid: payload.openid!,
+      tenantId: payload.tenant_id ?? null,
+      customerId: payload.customer_id ?? null,
+      employeeId: payload.employee_id ?? null,
+    });
+
+    if (!result.oauth_matched) {
+      throw Errors.unauthorized(
+        "当前微信登录凭证已失效，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
+    if (!result.employee_user_matched) {
+      throw Errors.unauthorized(
+        "当前员工身份已失效，请重新登录",
+        ErrorCodes.EMPLOYEE_CONTEXT_MISSING,
+      );
+    }
+
+    if (
+      !result.customer_membership_matched ||
+      !result.employee_membership_matched
+    ) {
+      throw Errors.unauthorized(
+        "当前微信绑定关系已变化，请重新登录",
+        ErrorCodes.WECHAT_BINDING_NOT_MATCHED,
+      );
+    }
+
+    return result;
+  });
+}
+
 export async function assertWechatBusinessBinding(payload: VerifiedJwtPayload) {
   if (!payload.openid || !payload.sub || !payload.tenant_id) {
     return;

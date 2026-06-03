@@ -5,7 +5,7 @@ import {
   PROJECT_LOG_STAGE_CODE_VALUES,
 } from "@gooes/domain";
 import { z } from "zod";
-import { optionalCustomerQueryValue } from "./shared";
+import { customerBooleanQueryValue, optionalCustomerQueryValue } from "./shared";
 
 export const CustomerProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("无效的项目 ID"),
@@ -18,4 +18,5 @@ export const CustomerProjectAcceptanceListQuerySchema = PaginationQuerySchema.ex
     20,
     "每页验收单不能超过 20 条",
   ).default(10),
+  debug_timing: customerBooleanQueryValue(false),
 });

@@ -7,6 +7,10 @@ import {
   shouldPrewarmEmployeeAuthContext,
 } from "./legacy/employee-prewarm";
 import {
+  assertWechatCustomerBootstrap,
+  getCustomerBootstrapPreloadOptions,
+} from "./legacy/customer-bootstrap-preload";
+import {
   getTokenError,
   logAuthReject,
   sendUnauthorized,
@@ -18,8 +22,7 @@ import {
 } from "./legacy/routes";
 import { logAuthStage } from "./legacy/timing";
 import {
-  assertWechatBusinessBinding,
-  assertWechatOauthCredential,
+  assertWechatIdentityBinding,
 } from "./legacy/wechat-assertions";
 
 export { primeWechatIdentityCheckCacheFromToken } from "./legacy/wechat-cache";
@@ -95,14 +98,34 @@ const authPlugin = (app: FastifyInstance) => {
       prewarmEmployeeAuthContextForRequest(request, payload);
     }
 
-    await Promise.all([
-      logAuthStage(request, "assert_wechat_oauth_credential", () =>
-        assertWechatOauthCredential(payload)
-      ),
-      logAuthStage(request, "assert_wechat_business_binding", () =>
-        assertWechatBusinessBinding(payload)
-      ),
-    ]);
+    const bootstrapOptions = getCustomerBootstrapPreloadOptions(
+      method,
+      url,
+      request.url,
+    );
+    const identityBinding = bootstrapOptions
+      ? await logAuthStage(request, "assert_wechat_customer_bootstrap", () =>
+        assertWechatCustomerBootstrap(payload, bootstrapOptions)
+      )
+      : await logAuthStage(request, "assert_wechat_identity_binding", () =>
+        assertWechatIdentityBinding(payload)
+      );
+    if (identityBinding?.customer_context || identityBinding?.user_profile !== undefined) {
+      const requestWithPreload = request as typeof request & {
+        preloadedCustomerContext?: unknown;
+        preloadedUserProfile?: unknown;
+        preloadedCustomerHomeProjects?: unknown;
+      };
+      requestWithPreload.preloadedCustomerContext = identityBinding.customer_context;
+      requestWithPreload.preloadedUserProfile = identityBinding.user_profile;
+      if (bootstrapOptions && "home_projects" in identityBinding) {
+        requestWithPreload.preloadedCustomerHomeProjects = {
+          page: bootstrapOptions.page,
+          pageSize: bootstrapOptions.pageSize,
+          list: identityBinding.home_projects,
+        };
+      }
+    }
 
     request.user = payload;
   });

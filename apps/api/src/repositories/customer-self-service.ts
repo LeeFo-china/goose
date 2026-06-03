@@ -240,10 +240,14 @@ class CustomerSelfServiceRepository {
     tenantId: string;
     from: number;
     to: number;
+    includeCount?: boolean;
   }) {
     const { data, error, count } = await this.adminClient
       .from("projects")
-      .select(this.projectListSelect, { count: "exact" })
+      .select(
+        this.projectListSelect,
+        input.includeCount === false ? undefined : { count: "exact" },
+      )
       .eq("customer_id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
@@ -340,6 +344,7 @@ class CustomerSelfServiceRepository {
     tenantId: string | null;
     from: number;
     to: number;
+    includeCount?: boolean;
   }) {
     let query = this.adminClient
       .from("project_logs")
@@ -357,7 +362,7 @@ class CustomerSelfServiceRepository {
           name,
           avatar
         )
-      `, { count: "exact" })
+      `, input.includeCount === false ? undefined : { count: "exact" })
       .eq("project_id", input.projectId)
       .order("created_at", { ascending: false })
       .range(input.from, input.to);

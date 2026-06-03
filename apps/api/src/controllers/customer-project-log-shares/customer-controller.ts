@@ -1,6 +1,9 @@
+import { AppError } from "@/errors/app-error";
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
+import { customerCampaignBootstrapService } from "@/services/customer-campaign-bootstrap";
 import {
   AssistCustomerProjectLogShareCampaignSchema,
   ClaimCustomerProjectLogShareCampaignSchema,
@@ -49,11 +52,62 @@ import {
 } from "@/schema/share-campaign-management";
 import { Post, Get } from "@/utils/decorators/route";
 import { Put } from "@/utils/decorators/route";
+import {
+  createCustomerProjectDetailTimingSteps,
+  logCustomerProjectDetailTiming,
+  measureCustomerProjectDetailStep,
+} from "@/utils/customer-project-detail-timing";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { CustomerProjectLogSharesBaseController } from "./shared";
 
 class CustomerShareCampaignController extends CustomerProjectLogSharesBaseController {
+  private isAccessError(error: unknown) {
+    return error instanceof AppError &&
+      (error.statusCode === 401 || error.statusCode === 403);
+  }
+
+  private isAppointmentRewardNotConfigured(error: unknown) {
+    return error instanceof AppError &&
+      error.code === ErrorCodes.APPOINTMENT_REWARD_CAMPAIGN_NOT_FOUND;
+  }
+
+  private buildDisabledShareCampaignSummary(projectId: string) {
+    return {
+      project_id: projectId,
+      campaign_type: "share_assist",
+      config_enabled: false,
+      display_mode: "disabled",
+      config_status: null,
+      focus_campaign: null,
+      recommended_log: null,
+    };
+  }
+
+  private buildDisabledAppointmentRewardCampaign(projectId: string) {
+    return {
+      instance_id: null,
+      campaign_id: null,
+      campaign_type: "appointment_reward",
+      status: "not_configured",
+      reward_claim_status: "unclaimed",
+      project_id: projectId,
+      project_name: null,
+      appointment_name: null,
+      appointment_phone: null,
+      appointment_time: null,
+      achieved_at: null,
+      reward_claimed_at: null,
+      reward_title: null,
+      reward_claim_instruction: null,
+      display_title: null,
+      display_subtitle: null,
+      reward_claim_voucher: null,
+      config_enabled: false,
+      display_mode: "disabled",
+    };
+  }
+
   @Post("/customer/projects/:projectId/logs/:logId/share-copy")
   async generateShareCopy(request: FastifyRequest, reply: FastifyReply) {
     const authUserId = this.getRequiredAuthUserId(request);
@@ -230,22 +284,84 @@ class CustomerShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/customer/projects/:projectId/share-campaigns/summary")
   async getCustomerProjectCampaignSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = this.getRequiredAuthUserId(request);
+    const startedAt = Date.now();
+    const steps = createCustomerProjectDetailTimingSteps();
+    const authUserId = await measureCustomerProjectDetailStep(
+      steps,
+      "auth_context_ms",
+      () => this.getRequiredAuthUserId(request),
+    );
     const paramsResult = CustomerProjectLogShareProjectIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const data = await customerProjectLogShareService.getCustomerProjectCampaignSummary(
-      authUserId,
-      paramsResult.data.projectId,
-      this.getCustomerProjectScope(request),
-    );
+    try {
+      const data = await measureCustomerProjectDetailStep(
+        steps,
+        "campaign_summary_ms",
+        async () => {
+          const tenantId = request.user?.tenant_id ?? null;
+          const hasEntry = await customerCampaignBootstrapService.hasShareAssistEntry({
+            projectId: paramsResult.data.projectId,
+            tenantId,
+          });
+          if (hasEntry === false) {
+            return this.buildDisabledShareCampaignSummary(paramsResult.data.projectId);
+          }
+          return customerProjectLogShareService.getCustomerProjectCampaignSummary(
+            authUserId,
+            paramsResult.data.projectId,
+            this.getCustomerProjectScope(request),
+          );
+        },
+      );
 
-    return ResponseHandler.success({
-      ...this.withCampaignType(data),
-      focus_campaign: data.focus_campaign
-        ? this.withCampaignType(data.focus_campaign)
-        : null,
-    });
+      const payload = await measureCustomerProjectDetailStep(
+        steps,
+        "serialize_ms",
+        async () => ({
+          ...this.withCampaignType(data),
+          focus_campaign: data.focus_campaign
+            ? this.withCampaignType(data.focus_campaign)
+            : null,
+        }),
+      );
+      logCustomerProjectDetailTiming(request, {
+        route: "GET /customer/projects/:id/share-campaigns/summary",
+        startedAt,
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+        projectId: paramsResult.data.projectId,
+        steps,
+      });
+      return ResponseHandler.success(payload);
+    } catch (error) {
+      if (this.isAccessError(error)) {
+        throw error;
+      }
+
+      request.log.warn(
+        {
+          requestId: request.id,
+          err: error,
+          projectId: paramsResult.data.projectId,
+          tenantId: request.user?.tenant_id ?? null,
+          customerId: request.user?.customer_id ?? null,
+        },
+        "[customer-project-detail] share campaign summary degraded",
+      );
+      const payload = this.withCampaignType(
+        this.buildDisabledShareCampaignSummary(paramsResult.data.projectId),
+      );
+      logCustomerProjectDetailTiming(request, {
+        route: "GET /customer/projects/:id/share-campaigns/summary",
+        startedAt,
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+        projectId: paramsResult.data.projectId,
+        steps,
+      });
+      return ResponseHandler.success(payload);
+    }
   }
 
   @Post("/customer/projects/:projectId/appointment-reward-campaign")
@@ -265,32 +381,97 @@ class CustomerShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/customer/projects/:projectId/appointment-reward-campaign")
   async getCustomerAppointmentRewardCampaign(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = this.getRequiredAuthUserId(request);
+    const startedAt = Date.now();
+    const steps = createCustomerProjectDetailTimingSteps();
+    const authUserId = await measureCustomerProjectDetailStep(
+      steps,
+      "auth_context_ms",
+      () => this.getRequiredAuthUserId(request),
+    );
     const paramsResult = CustomerAppointmentRewardProjectIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
-    const data = await customerProjectLogShareService.getCustomerAppointmentRewardCampaign(
-      authUserId,
-      paramsResult.data.projectId,
-      this.getCustomerProjectScope(request),
-    );
+    try {
+      const data = await measureCustomerProjectDetailStep(
+        steps,
+        "appointment_reward_ms",
+        async () => {
+          const tenantId = request.user?.tenant_id ?? null;
+          const hasEntry =
+            await customerCampaignBootstrapService.hasAppointmentRewardEntry({
+              projectId: paramsResult.data.projectId,
+              tenantId,
+            });
+          if (hasEntry === false) {
+            return this.buildDisabledAppointmentRewardCampaign(paramsResult.data.projectId);
+          }
+          return customerProjectLogShareService.getCustomerAppointmentRewardCampaign(
+            authUserId,
+            paramsResult.data.projectId,
+            this.getCustomerProjectScope(request),
+          );
+        },
+      );
 
-    const voucherToken = data.reward_claim_voucher?.voucher_token;
+      const voucherToken = data.reward_claim_voucher?.voucher_token;
 
-    return ResponseHandler.success(this.withCampaignType({
-      ...data,
-      reward_claim_voucher: data.reward_claim_voucher
-        ? {
-          ...data.reward_claim_voucher,
-          qrcode_url: voucherToken
-            ? this.buildAbsoluteUrl(
-              request,
-              `/appointment-reward-claim-vouchers/${encodeURIComponent(voucherToken)}/qrcode`,
-            )
+      const payload = await measureCustomerProjectDetailStep(
+        steps,
+        "serialize_ms",
+        async () => this.withCampaignType({
+          ...data,
+          reward_claim_voucher: data.reward_claim_voucher
+            ? {
+              ...data.reward_claim_voucher,
+              qrcode_url: voucherToken
+                ? this.buildAbsoluteUrl(
+                  request,
+                  `/appointment-reward-claim-vouchers/${encodeURIComponent(voucherToken)}/qrcode`,
+                )
+                : null,
+            }
             : null,
-        }
-        : null,
-    }));
+        }),
+      );
+      logCustomerProjectDetailTiming(request, {
+        route: "GET /customer/projects/:id/appointment-reward-campaign",
+        startedAt,
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+        projectId: paramsResult.data.projectId,
+        steps,
+      });
+      return ResponseHandler.success(payload);
+    } catch (error) {
+      if (this.isAccessError(error)) {
+        throw error;
+      }
+
+      if (!this.isAppointmentRewardNotConfigured(error)) {
+        request.log.warn(
+          {
+            requestId: request.id,
+            err: error,
+            projectId: paramsResult.data.projectId,
+            tenantId: request.user?.tenant_id ?? null,
+            customerId: request.user?.customer_id ?? null,
+          },
+          "[customer-project-detail] appointment reward campaign degraded",
+        );
+      }
+      const payload = this.withCampaignType(
+        this.buildDisabledAppointmentRewardCampaign(paramsResult.data.projectId),
+      );
+      logCustomerProjectDetailTiming(request, {
+        route: "GET /customer/projects/:id/appointment-reward-campaign",
+        startedAt,
+        tenantId: request.user?.tenant_id ?? null,
+        customerId: request.user?.customer_id ?? null,
+        projectId: paramsResult.data.projectId,
+        steps,
+      });
+      return ResponseHandler.success(payload);
+    }
   }
 
   @Post("/customer/projects/:projectId/appointment-reward-campaign/submit")

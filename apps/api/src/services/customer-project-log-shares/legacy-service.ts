@@ -3,7 +3,10 @@ import {
   customerAppointmentRewardCampaignCacheKey,
   customerProjectScopeCacheKey,
   getCachedCustomerProjectCampaignSummary,
+  getHotCacheEntry,
+  getHotCacheValue,
   setCachedCustomerProjectCampaignSummary,
+  setHotCacheValue,
   hasCachedCustomerAppointmentRewardCampaignMiss,
   setCachedCustomerAppointmentRewardCampaignMiss,
   buildCampaignSummary,
@@ -192,6 +195,9 @@ class CustomerProjectLogShareService {
   private customerProjectCampaignSummaryCacheKey = customerProjectCampaignSummaryCacheKey;
   private customerAppointmentRewardCampaignCacheKey = customerAppointmentRewardCampaignCacheKey;
   private customerProjectScopeCacheKey = customerProjectScopeCacheKey;
+  private getHotCacheValue = getHotCacheValue;
+  private getHotCacheEntry = getHotCacheEntry;
+  private setHotCacheValue = setHotCacheValue;
   private getCachedCustomerProjectCampaignSummary = getCachedCustomerProjectCampaignSummary;
   private setCachedCustomerProjectCampaignSummary = setCachedCustomerProjectCampaignSummary;
   private hasCachedCustomerAppointmentRewardCampaignMiss = hasCachedCustomerAppointmentRewardCampaignMiss;

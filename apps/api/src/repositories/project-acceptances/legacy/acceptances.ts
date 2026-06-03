@@ -27,9 +27,12 @@ export async function listAcceptances(this: any, input: ListAcceptancesInput) {
   const from = (input.page - 1) * input.pageSize;
   const to = from + input.pageSize - 1;
 
-  let query = SupabaseDB.getAdminClient()
-    .from("project_acceptances")
-    .select("*", { count: "exact" })
+  const baseQuery = SupabaseDB.getAdminClient().from("project_acceptances");
+  let query = (
+    input.includeCount === false
+      ? baseQuery.select("*")
+      : baseQuery.select("*", { count: "exact" })
+  )
     .order("created_at", { ascending: false })
     .range(from, to);
 

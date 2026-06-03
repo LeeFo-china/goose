@@ -56,6 +56,10 @@ import {
   type ProjectLogStageCode,
 } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  measureProjectAcceptanceTiming,
+  type ProjectAcceptanceTimingSteps,
+} from "./timing";
 const OPEN_ACCEPTANCE_STATUSES: ProjectAcceptanceStatus[] = [
   "draft",
   "submitted",
@@ -241,8 +245,18 @@ export async function listCustomerAcceptances(this: any,
       tenantId?: string | null;
       customerId?: string | null;
     },
+    options?: {
+      responseMode?: "summary" | "detail";
+      timing?: ProjectAcceptanceTimingSteps;
+    },
   ) {
-    const cacheKey = this.customerAcceptanceListCacheKey(authUserId, query, scope);
+    const responseMode = options?.responseMode ?? "detail";
+    const cacheKey = this.customerAcceptanceListCacheKey(
+      authUserId,
+      query,
+      scope,
+      responseMode,
+    );
     const cached = this.getCachedCustomerAcceptanceList(cacheKey);
     if (cached) {
       return cached;
@@ -253,7 +267,9 @@ export async function listCustomerAcceptances(this: any,
       return inFlight;
     }
 
-    const request = this.loadCustomerAcceptances(authUserId, query, scope)
+    const request = (responseMode === "summary"
+      ? this.loadCustomerAcceptanceSummaries(authUserId, query, scope, options)
+      : this.loadCustomerAcceptances(authUserId, query, scope, options))
       .then((result: CustomerAcceptanceListResult) => {
         this.setCachedCustomerAcceptanceList(cacheKey, result);
         return result;
@@ -280,10 +296,20 @@ export async function loadCustomerAcceptances(this: any,
       tenantId?: string | null;
       customerId?: string | null;
     },
+    options?: { timing?: ProjectAcceptanceTimingSteps },
   ): Promise<CustomerAcceptanceListResult> {
-    const customerPromise = this.getCustomerByAuthUserOrScope(authUserId, scope);
+    const timing = options?.timing;
+    const customerPromise = measureProjectAcceptanceTiming(
+      timing,
+      "customer_lookup_ms",
+      () => this.getCustomerByAuthUserOrScope(authUserId, scope),
+    );
     const projectPromise = scope?.tenantId
-      ? projectAcceptanceRepository.getProject(query.project_id, scope.tenantId)
+      ? measureProjectAcceptanceTiming(
+        timing,
+        "project_lookup_ms",
+        () => projectAcceptanceRepository.getProject(query.project_id, scope.tenantId),
+      )
       : null;
     const customer = await customerPromise;
     if (!customer) throw Errors.forbidden();
@@ -291,9 +317,13 @@ export async function loadCustomerAcceptances(this: any,
 
     const project = projectPromise
       ? await projectPromise
-      : await projectAcceptanceRepository.getProject(
-        query.project_id,
-        customer.tenant_id,
+      : await measureProjectAcceptanceTiming(
+        timing,
+        "project_lookup_ms",
+        () => projectAcceptanceRepository.getProject(
+          query.project_id,
+          customer.tenant_id,
+        ),
       );
     if (
       !project ||
@@ -303,17 +333,26 @@ export async function loadCustomerAcceptances(this: any,
       throw Errors.notFound("项目不存在");
     }
 
-    const { list, total } = await projectAcceptanceRepository.listAcceptances({
-      ...query,
-      customer_id: customer.id,
-      tenantId: customer.tenant_id,
-    });
-
-    return {
-      list: await this.buildDetails(list, {
+    const { list, total } = await measureProjectAcceptanceTiming(
+      timing,
+      "acceptance_list_query_ms",
+      () => projectAcceptanceRepository.listAcceptances({
+        ...query,
+        customer_id: customer.id,
+        tenantId: customer.tenant_id,
+      }),
+    );
+    const details = await measureProjectAcceptanceTiming(
+      timing,
+      "detail_build_ms",
+      () => this.buildDetails(list, {
         projects: [project],
         customers: [customer],
-      }),
+      }, { timing }),
+    );
+
+    return {
+      list: details,
       pagination: {
         page: query.page,
         pageSize: query.pageSize,

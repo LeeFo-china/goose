@@ -5,8 +5,8 @@ const DEFAULT_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 30_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_TTL_MS = 60_000;
 const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
 
-const wechatIdentityCheckCache = new Map<string, { expiresAt: number }>();
-const wechatIdentityCheckInFlight = new Map<string, Promise<void>>();
+const wechatIdentityCheckCache = new Map<string, { expiresAt: number; result?: unknown }>();
+const wechatIdentityCheckInFlight = new Map<string, Promise<unknown>>();
 
 function getWechatIdentityCheckCacheTtlMs() {
   const parsed = Number(process.env.WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
@@ -34,7 +34,7 @@ function pruneWechatIdentityCheckCache(now: number) {
 }
 
 export function buildWechatIdentityCheckCacheKey(
-  kind: "oauth" | "business",
+  kind: "oauth" | "business" | "binding" | "bootstrap",
   payload: VerifiedJwtPayload,
 ) {
   return [
@@ -62,7 +62,11 @@ function hasWechatIdentityCheckCache(key: string) {
   return true;
 }
 
-function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
+function setWechatIdentityCheckCache(
+  key: string,
+  payload: VerifiedJwtPayload,
+  result?: unknown,
+) {
   const now = Date.now();
   pruneWechatIdentityCheckCache(now);
 
@@ -73,36 +77,36 @@ function setWechatIdentityCheckCache(key: string, payload: VerifiedJwtPayload) {
   );
 
   if (expiresAt > now) {
-    wechatIdentityCheckCache.set(key, { expiresAt });
+    wechatIdentityCheckCache.set(key, { expiresAt, result });
   }
 }
 
-export async function runWechatIdentityCheckOnce(
+export async function runWechatIdentityCheckOnce<T>(
   cacheKey: string,
   payload: VerifiedJwtPayload,
-  handler: () => Promise<void>,
-) {
+  handler: () => Promise<T>,
+): Promise<T | undefined> {
   if (hasWechatIdentityCheckCache(cacheKey)) {
-    return;
+    return wechatIdentityCheckCache.get(cacheKey)?.result as T | undefined;
   }
 
   const inFlight = wechatIdentityCheckInFlight.get(cacheKey);
   if (inFlight) {
-    await inFlight;
-    return;
+    return inFlight as Promise<T | undefined>;
   }
 
   const request = handler()
-    .then(() => {
-      setWechatIdentityCheckCache(cacheKey, payload);
+    .then((result) => {
+      setWechatIdentityCheckCache(cacheKey, payload, result);
+      return result;
     })
     .finally(() => {
       if (wechatIdentityCheckInFlight.get(cacheKey) === request) {
         wechatIdentityCheckInFlight.delete(cacheKey);
       }
-    });
+  });
   wechatIdentityCheckInFlight.set(cacheKey, request);
-  await request;
+  return request;
 }
 
 export function primeWechatIdentityCheckCacheFromToken(token: string) {
@@ -113,6 +117,10 @@ export function primeWechatIdentityCheckCacheFromToken(token: string) {
 
   setWechatIdentityCheckCache(
     buildWechatIdentityCheckCacheKey("oauth", payload),
+    payload,
+  );
+  setWechatIdentityCheckCache(
+    buildWechatIdentityCheckCacheKey("binding", payload),
     payload,
   );
 

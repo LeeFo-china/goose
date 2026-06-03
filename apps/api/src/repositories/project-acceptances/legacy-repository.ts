@@ -26,6 +26,7 @@ import {
   updateAcceptance,
   deleteAcceptance,
 } from "./legacy/acceptances";
+import { listCustomerProjectAcceptanceSummaries } from "./legacy/customer-summary-rpc";
 import {
   listItems,
   listItemsByAcceptanceIds,
@@ -70,6 +71,7 @@ class ProjectAcceptanceRepository {
   createAcceptance = createAcceptance;
   createItems = createItems;
   listAcceptances = listAcceptances;
+  listCustomerProjectAcceptanceSummaries = listCustomerProjectAcceptanceSummaries;
   getAcceptanceById = getAcceptanceById;
   listItems = listItems;
   listItemsByAcceptanceIds = listItemsByAcceptanceIds;

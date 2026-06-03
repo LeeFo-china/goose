@@ -47,6 +47,9 @@ export type UserAuthEventRecord = {
   created_at: string;
 };
 
+type WechatIdentityBindingVerification = {
+  oauth_matched: boolean; customer_membership_matched: boolean; employee_membership_matched: boolean; employee_user_matched: boolean; customer_context?: unknown; user_profile?: unknown;
+};
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
@@ -220,6 +223,21 @@ class UserIdentityRepository {
     return record;
   }
 
+  async verifyWechatIdentityBinding(input: { userId: string; openid: string; tenantId?: string | null; customerId?: string | null; employeeId?: string | null }) {
+    const { data, error } = await this.rpc("verify_wechat_identity_binding", {
+      p_user_id: input.userId,
+      p_openid: input.openid,
+      p_tenant_id: input.tenantId ?? null,
+      p_customer_id: input.customerId ?? null,
+      p_employee_id: input.employeeId ?? null,
+    });
+
+    if (error) throw Errors.dbError("校验微信身份绑定失败", error);
+
+    const [record] = (data || []) as WechatIdentityBindingVerification[];
+    if (record) return record;
+    throw Errors.dbError("校验微信身份绑定失败", { message: "verify_wechat_identity_binding returned no rows" });
+  }
   async updateOauthIdentity(input: {
     id: string;
     userId: string;

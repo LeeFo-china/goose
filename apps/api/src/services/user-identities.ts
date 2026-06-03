@@ -208,6 +208,16 @@ class UserIdentityService {
     return identity;
   }
 
+  async verifyWechatIdentityBinding(input: {
+    userId: string;
+    openid: string;
+    tenantId?: string | null;
+    customerId?: string | null;
+    employeeId?: string | null;
+  }) {
+    return userIdentityRepository.verifyWechatIdentityBinding(input);
+  }
+
   async findActiveOauthIdentityByUserId(input: {
     userId: string;
     platform: OAuthPlatform;

@@ -190,6 +190,7 @@ export type ListAcceptancesInput = {
   customer_id?: string;
   visibleProjectIds?: string[] | null;
   tenantId?: string | null;
+  includeCount?: boolean;
 };
 
 export { Errors, SupabaseDB };

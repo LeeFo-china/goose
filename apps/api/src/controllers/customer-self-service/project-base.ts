@@ -1,5 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  measureCustomerProjectDetailStep,
+  type CustomerProjectDetailTimingSteps,
+} from "@/utils/customer-project-detail-timing";
+import {
   customerSelfServiceService,
   type CustomerContextRow,
   type CustomerProjectLogCommentAggregateRow,
@@ -10,6 +14,7 @@ import {
   type CustomerProjectListItem,
   type CustomerProjectRecentLogSummaryRow,
 } from "@/services/customer-self-service";
+import { buildCustomerHomeProjectsPayload } from "@/services/customer-home-projects";
 import { projectMemberService } from "@/services/project-members";
 import {
   PROJECT_LOG_STAGE_CONFIG,
@@ -28,20 +33,14 @@ type CustomerProjectLogCommentAuthor = {
 };
 
 type CustomerProjectMemberSummary = {
-  id: string;
-  project_id: string;
-  employee_id: string;
-  role_code: ProjectMemberRoleCode;
-  role_name: string;
-  is_primary: boolean;
-  sort_order: number;
+  id: string; project_id: string; employee_id: string;
+  role_code: ProjectMemberRoleCode; role_name: string;
+  is_primary: boolean; sort_order: number;
   created_at: string | null;
   updated_at?: string | null;
   employee: {
-    id: string;
-    name: string | null;
-    avatar: string | null;
-    phone: string | null;
+    id: string; name: string | null;
+    avatar: string | null; phone: string | null;
   } | null;
   is_virtual?: boolean;
 };
@@ -78,18 +77,47 @@ export abstract class CustomerSelfServiceProjectBaseController
     page: number;
     pageSize: number;
     include?: "home_summary";
+    includeDesigner?: boolean; includeCount?: boolean; recentLogsTimeoutMs?: number;
     request?: { id: string; log: { info: (...args: unknown[]) => void } };
+    timingSteps?: CustomerProjectDetailTimingSteps;
   }) {
-    const from = (input.page - 1) * input.pageSize;
-    const to = from + input.pageSize - 1;
+    const from = (input.page - 1) * input.pageSize; const to = from + input.pageSize - 1;
+    if (input.include === "home_summary" && input.includeDesigner === false && input.includeCount === false) {
+      return buildCustomerHomeProjectsPayload({
+        customerId: input.customer.id,
+        tenantId: input.customer.tenant_id!,
+        page: input.page,
+        pageSize: input.pageSize,
+        timingSteps: input.timingSteps,
+        serializeProject: (row) => this.serializeCustomerProjectListItem(row), serializeRecentLog: (log) => this.serializeCustomerProjectRecentLog(log),
+      });
+    }
 
     const projectsStartedAt = Date.now();
-    const { list: projectRows, count } = await customerSelfServiceService.listOwnedProjects({
-      customerId: input.customer.id,
-      tenantId: input.customer.tenant_id!,
-      from,
-      to,
-    });
+    const { list: projectRows, count } = input.timingSteps
+      ? await measureCustomerProjectDetailStep(
+        input.timingSteps,
+        "projects_query_ms",
+        () => customerSelfServiceService.listOwnedProjects({
+          customerId: input.customer.id,
+          tenantId: input.customer.tenant_id!,
+          from,
+          to,
+          includeDesigner: input.includeDesigner,
+          includeCount: input.includeCount,
+        }),
+      )
+      : await customerSelfServiceService.listOwnedProjects({
+        customerId: input.customer.id,
+        tenantId: input.customer.tenant_id!,
+        from,
+        to,
+        includeDesigner: input.includeDesigner,
+        includeCount: input.includeCount,
+      });
+    if (input.timingSteps) {
+      input.timingSteps.projects_ms += Date.now() - projectsStartedAt;
+    }
     input.request?.log.info(
       {
         requestId: input.request.id,
@@ -104,19 +132,54 @@ export abstract class CustomerSelfServiceProjectBaseController
       "[customer-bootstrap] owned projects loaded",
     );
 
-    const list = projectRows.map((item) =>
-      this.serializeCustomerProjectListItem(item)
-    );
+    const list = input.timingSteps
+      ? await measureCustomerProjectDetailStep(
+        input.timingSteps,
+        "projects_serialize_ms",
+        async () => projectRows.map((item) =>
+          this.serializeCustomerProjectListItem(item)
+        ),
+      )
+      : projectRows.map((item) =>
+        this.serializeCustomerProjectListItem(item)
+      );
 
     let recentLogMap: Awaited<
       ReturnType<CustomerSelfServiceProjectBaseController["listRecentLogSummariesForProjects"]>
     > | null = null;
     if (input.include === "home_summary") {
       const recentLogsStartedAt = Date.now();
-      const loadedRecentLogMap = await this.listRecentLogSummariesForProjects(
-        input.customer.id,
-        list.map((item) => item.id),
-      );
+      const loadRecentLogMap = input.timingSteps
+        ? measureCustomerProjectDetailStep(
+          input.timingSteps,
+          "recent_logs_query_ms",
+          () => this.listRecentLogSummariesForProjects(
+            input.customer.id,
+            list.map((item) => item.id),
+          ),
+        )
+        : this.listRecentLogSummariesForProjects(
+          input.customer.id,
+          list.map((item) => item.id),
+        );
+      const waitForRecentLogs = () => input.recentLogsTimeoutMs == null
+        ? loadRecentLogMap
+        : Promise.race([
+          loadRecentLogMap,
+          new Promise<Awaited<typeof loadRecentLogMap>>((resolve) => {
+            setTimeout(() => resolve(new Map()), input.recentLogsTimeoutMs);
+          }),
+        ]);
+      const loadedRecentLogMap = input.timingSteps
+        ? await measureCustomerProjectDetailStep(
+          input.timingSteps,
+          "recent_logs_wait_ms",
+          waitForRecentLogs,
+        )
+        : await waitForRecentLogs();
+      if (input.timingSteps) {
+        input.timingSteps.recent_logs_ms += Date.now() - recentLogsStartedAt;
+      }
       recentLogMap = loadedRecentLogMap;
       input.request?.log.info(
         {
