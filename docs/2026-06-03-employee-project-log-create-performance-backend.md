@@ -44,6 +44,7 @@
    - `SUPABASE_DB_URL` 或 `SUPABASE_DB_DIRECT_URL` 存在时，使用 Bun 内置 `SQL` 直连调用 RPC。
    - 无直连环境变量时，回退 Supabase RPC。
    - 这样避免 Supabase HTTP RPC 的额外延迟。
+   - 2026-06-03 补充修复：不再跨请求缓存 Bun `SQL` 连接，改为每次创建短连接调用并关闭，避免空闲连接被远端关闭后复用导致 `ERR_POSTGRES_CONNECTION_CLOSED`。
 
 4. 保留更新链路的阶段校验
    - `constructionStageStatusService.assertCanCreateProjectLog` 已改为轻量验收状态查询，不再为了单阶段写入构建完整阶段列表。
@@ -111,6 +112,26 @@ POST /project-logs?debug_timing=true
 - 当前 API 服务是否已部署包含本次代码。
 - 远端数据库是否已应用 `create_project_log_fast` 迁移。
 - API 运行环境是否配置 `SUPABASE_DB_URL` 或 `SUPABASE_DB_DIRECT_URL`；未配置时会回退 Supabase HTTP RPC，链路仍正确但耗时会更高。
+
+## 小程序同地址复测补充
+
+小程序文档后续记录了开发服务上 `POST /project-logs?debug_timing=true`
+出现 `500 / 31.912s`，API 日志显示错误为 Bun SQL 空闲连接复用后被远端关闭：
+
+```text
+ERR_POSTGRES_CONNECTION_CLOSED
+```
+
+已修复为每次创建使用短连接直连 RPC，并在请求结束关闭连接，避免重复使用失效连接。
+
+使用同一开发服务地址复测：
+
+- URL：`http://192.168.1.4:3000/project-logs?debug_timing=true`
+- 结果：`200`
+- 总耗时：`0.960s`
+- `debug_timing.create_rpc_ms`：`957ms`
+- 测试日志内容前缀：`接口测速-后端修复SQL连接curl复测-可删除`
+- 测试日志清理：已清理 `2` 条
 
 ## 验证命令
 

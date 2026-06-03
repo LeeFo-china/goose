@@ -46,9 +46,11 @@ type ProjectLogSqlClient = (
   ...values: unknown[]
 ) => Promise<Array<Record<string, unknown>>>;
 
-type ProjectLogSqlConstructor = new (url: string) => ProjectLogSqlClient;
+type ProjectLogSqlConnection = ProjectLogSqlClient & {
+  close?: () => Promise<unknown>;
+};
 
-let projectLogSqlClient: ProjectLogSqlClient | null | undefined;
+type ProjectLogSqlConstructor = new (url: string) => ProjectLogSqlConnection;
 
 function getBunSqlConstructor() {
   const bunRuntime = (globalThis as {
@@ -57,18 +59,9 @@ function getBunSqlConstructor() {
   return bunRuntime?.SQL ?? null;
 }
 
-function getProjectLogSqlClient() {
-  if (projectLogSqlClient !== undefined) {
-    return projectLogSqlClient;
-  }
-
-  const SqlConstructor = getBunSqlConstructor();
-  const databaseUrl = process.env.SUPABASE_DB_URL ||
+function getProjectLogDatabaseUrl() {
+  return process.env.SUPABASE_DB_URL ||
     process.env.SUPABASE_DB_DIRECT_URL;
-  projectLogSqlClient = databaseUrl && SqlConstructor
-    ? new SqlConstructor(databaseUrl)
-    : null;
-  return projectLogSqlClient;
 }
 
 function normalizeProjectLogRpcRow(row: Record<string, unknown>) {
@@ -144,9 +137,10 @@ class ProjectLogRepository {
       images?: unknown;
     };
   }) {
-    const sqlClient = getProjectLogSqlClient();
-    if (sqlClient) {
-      return this.createFastViaSql(sqlClient, input);
+    const SqlConstructor = getBunSqlConstructor();
+    const databaseUrl = getProjectLogDatabaseUrl();
+    if (SqlConstructor && databaseUrl) {
+      return this.createFastViaSql(SqlConstructor, databaseUrl, input);
     }
 
     return this.createFastViaSupabaseRpc(input);
@@ -169,25 +163,31 @@ class ProjectLogRepository {
   }
 
   private async createFastViaSql(
-    sqlClient: ProjectLogSqlClient,
+    SqlConstructor: ProjectLogSqlConstructor,
+    databaseUrl: string,
     input: Parameters<ProjectLogRepository["createFast"]>[0],
   ) {
-    const rows = await sqlClient`
-      SELECT public.create_project_log_fast(
-        ${input.tenantId}::uuid,
-        ${input.employeeId}::uuid,
-        ${input.payload.project_id}::uuid,
-        ${input.payload.stage_code},
-        ${input.payload.node_name ?? null},
-        ${input.payload.content},
-        ${JSON.stringify(input.payload.images ?? [])}::jsonb,
-        ${input.projectLogScope ?? null},
-        ${input.tenantDepartmentId ?? null}::uuid
-      ) AS result
-    `;
+    const sqlClient = new SqlConstructor(databaseUrl);
+    try {
+      const rows = await sqlClient`
+        SELECT public.create_project_log_fast(
+          ${input.tenantId}::uuid,
+          ${input.employeeId}::uuid,
+          ${input.payload.project_id}::uuid,
+          ${input.payload.stage_code},
+          ${input.payload.node_name ?? null},
+          ${input.payload.content},
+          ${JSON.stringify(input.payload.images ?? [])}::jsonb,
+          ${input.projectLogScope ?? null},
+          ${input.tenantDepartmentId ?? null}::uuid
+        ) AS result
+      `;
 
-    const firstRow = rows[0] as { result?: ProjectLogCreateFastResult } | undefined;
-    return this.handleCreateFastResult(firstRow?.result ?? null);
+      const firstRow = rows[0] as { result?: ProjectLogCreateFastResult } | undefined;
+      return this.handleCreateFastResult(firstRow?.result ?? null);
+    } finally {
+      await sqlClient.close?.();
+    }
   }
 
   private async createFastViaSupabaseRpc(
