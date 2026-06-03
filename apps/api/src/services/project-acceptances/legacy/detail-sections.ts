@@ -20,11 +20,7 @@ import type {
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
-import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
-import {
-  projectAcceptanceOpenTicketRepository,
-  type ProjectAcceptanceOpenTicketRow,
-} from "@/repositories/project-acceptance-open-tickets";
+import type { ProjectAcceptanceOpenTicketRow } from "@/repositories/project-acceptance-open-tickets";
 import { systemSettingsService } from "@/services/system-settings";
 import { sendSmsTemplate } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
@@ -440,48 +436,4 @@ export function buildDetailFromParts(this: any,
         }
         : null,
     };
-  }
-
-export async function buildDetail(this: any, row: ProjectAcceptanceRow): Promise<AcceptanceDetail> {
-    const rawActions = await projectAcceptanceRepository.listActions(
-      row.id,
-      row.tenant_id,
-    );
-    const actionEmployeeIds = rawActions
-      .filter((item) => item.operator_type === "employee" && item.operator_id)
-      .map((item) => item.operator_id as string);
-    const actionCustomerIds = rawActions
-      .filter((item) => item.operator_type === "customer" && item.operator_id)
-      .map((item) => item.operator_id as string);
-
-    const [items, project, employees, customers, latestNotification] = await Promise.all([
-      projectAcceptanceRepository.listItems(row.id, row.tenant_id),
-      projectAcceptanceRepository.getProject(row.project_id, row.tenant_id),
-      projectAcceptanceRepository.listEmployees(
-        Array.from(new Set([
-          row.initiator_id,
-          row.reviewer_id,
-          ...actionEmployeeIds,
-        ].filter((item): item is string => Boolean(item)))),
-      ),
-      projectAcceptanceRepository.listCustomers(
-        Array.from(new Set([
-          row.customer_id,
-          ...actionCustomerIds,
-        ].filter((item): item is string => Boolean(item)))),
-      ),
-      projectAcceptanceOpenTicketRepository.findLatestByAcceptance(
-        row.id,
-        row.tenant_id,
-      ),
-    ]);
-
-    return this.buildDetailFromParts(row, {
-      items,
-      actions: rawActions,
-      project,
-      employeeMap: new Map(employees.map((item) => [item.id, item])),
-      customerMap: new Map(customers.map((item) => [item.id, item])),
-      latestNotification,
-    });
   }

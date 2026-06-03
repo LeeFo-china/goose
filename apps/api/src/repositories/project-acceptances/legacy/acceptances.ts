@@ -1,5 +1,24 @@
 import { Errors, SupabaseDB } from "./shared";
-import type { ListAcceptancesInput, ProjectAcceptanceRow, ProjectAcceptanceItemRow } from "./shared";
+import type { ProjectAcceptanceOpenTicketRow } from "@/repositories/project-acceptance-open-tickets";
+import type {
+  ListAcceptancesInput,
+  ProjectAcceptanceActionRow,
+  ProjectAcceptanceCustomerRow,
+  ProjectAcceptanceEmployeeRow,
+  ProjectAcceptanceItemRow,
+  ProjectAcceptanceProjectRow,
+  ProjectAcceptanceRow,
+} from "./shared";
+
+export type ProjectAcceptanceDetailGraphRow = ProjectAcceptanceRow & {
+  project: ProjectAcceptanceProjectRow | ProjectAcceptanceProjectRow[] | null;
+  initiator: ProjectAcceptanceEmployeeRow | ProjectAcceptanceEmployeeRow[] | null;
+  reviewer: ProjectAcceptanceEmployeeRow | ProjectAcceptanceEmployeeRow[] | null;
+  customer: ProjectAcceptanceCustomerRow | ProjectAcceptanceCustomerRow[] | null;
+  items: ProjectAcceptanceItemRow[] | null;
+  actions: ProjectAcceptanceActionRow[] | null;
+  tickets: ProjectAcceptanceOpenTicketRow[] | null;
+};
 
 export async function createAcceptance(this: any, input: Partial<ProjectAcceptanceRow>) {
   const { data, error } = await SupabaseDB.getAdminClient()
@@ -77,6 +96,58 @@ export async function getAcceptanceById(this: any, id: string, tenantId?: string
 
   if (error) throw Errors.dbError("查询项目验收单失败", error);
   return (data || null) as ProjectAcceptanceRow | null;
+}
+
+export async function getAcceptanceDetailGraph(this: any,
+  id: string,
+  tenantId?: string | null,
+) {
+  let query = SupabaseDB.getAdminClient()
+    .from("project_acceptances")
+    .select(`
+      *,
+      project:projects!project_acceptances_project_id_fkey(id, tenant_id, name, customer_id, status),
+      initiator:employees!project_acceptances_initiator_id_fkey(id, tenant_id, name, avatar),
+      reviewer:employees!project_acceptances_reviewer_id_fkey(id, tenant_id, name, avatar),
+      customer:customers!project_acceptances_customer_id_fkey(
+        id,
+        tenant_id,
+        name,
+        phone,
+        user_id,
+        tenant:tenants!customers_tenant_id_fkey(id,status)
+      ),
+      items:project_acceptance_items!project_acceptance_items_acceptance_id_fkey(*),
+      actions:project_acceptance_actions!project_acceptance_actions_acceptance_id_fkey(*),
+      tickets:project_acceptance_open_tickets!project_acceptance_open_tickets_acceptance_id_fkey(*)
+    `)
+    .eq("id", id)
+    .order("sort_order", {
+      referencedTable: "project_acceptance_items",
+      ascending: true,
+    })
+    .order("created_at", {
+      referencedTable: "project_acceptance_items",
+      ascending: true,
+    })
+    .order("created_at", {
+      referencedTable: "project_acceptance_actions",
+      ascending: true,
+    })
+    .order("created_at", {
+      referencedTable: "project_acceptance_open_tickets",
+      ascending: false,
+    })
+    .limit(1, { referencedTable: "project_acceptance_open_tickets" });
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) throw Errors.dbError("查询项目验收详情失败", error);
+  return (data || null) as ProjectAcceptanceDetailGraphRow | null;
 }
 
 export async function updateAcceptance(this: any, 

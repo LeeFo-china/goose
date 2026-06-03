@@ -12,6 +12,17 @@ export async function listEmployees(this: any, ids: string[]) {
   return (data || []) as ProjectAcceptanceEmployeeRow[];
 }
 
+export async function listEmployeesByTenant(this: any, tenantId: string) {
+  const { data, error } = await SupabaseDB.getAdminClient()
+    .from("employees")
+    .select("id, tenant_id, name, avatar")
+    .eq("tenant_id", tenantId)
+    .limit(200);
+
+  if (error) throw Errors.dbError("查询租户员工失败", error);
+  return (data || []) as ProjectAcceptanceEmployeeRow[];
+}
+
 export async function listCustomers(this: any, ids: string[]) {
   if (ids.length === 0) return [] as ProjectAcceptanceCustomerRow[];
   const { data, error } = await SupabaseDB.getAdminClient()

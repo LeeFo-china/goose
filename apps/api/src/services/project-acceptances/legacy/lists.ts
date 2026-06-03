@@ -389,42 +389,78 @@ export async function getCustomerAcceptanceByAuthOrTicket(this: any, input: {
     authUserId?: string | null;
     tenantId?: string | null;
     customerId?: string | null;
+    customer?: ProjectAcceptanceCustomerRow | null;
     id: string;
     ticketQuery?: CustomerProjectAcceptanceOpenTicketQuery;
+  }, options?: {
+    timing?: ProjectAcceptanceTimingSteps;
   }) {
+    const timing = options?.timing;
     if (input.authUserId) {
-      const customer = await this.getCustomerByAuthUserId(
-        input.authUserId,
-        {
-          tenantId: input.tenantId,
-          customerId: input.customerId,
+      const customer = await measureProjectAcceptanceTiming(
+        timing,
+        "customer_lookup_ms",
+        () => {
+          if (
+            input.customer &&
+            (!input.tenantId || input.customer.tenant_id === input.tenantId) &&
+            (!input.customerId || input.customer.id === input.customerId)
+          ) {
+            return Promise.resolve(input.customer);
+          }
+
+          return this.getCustomerByAuthUserOrScope(input.authUserId!, {
+            tenantId: input.tenantId,
+            customerId: input.customerId,
+          });
         },
       );
-      const row = customer?.tenant_id
-        ? await projectAcceptanceRepository.getAcceptanceById(
-          input.id,
-          customer.tenant_id,
-        )
-        : null;
+      if (customer) this.assertCustomerTenantAvailable(customer);
+      const [graph, tenantEmployees] = customer?.tenant_id
+        ? await Promise.all([
+          measureProjectAcceptanceTiming(
+            timing,
+            "acceptance_detail_graph_query_ms",
+            () => projectAcceptanceRepository.getAcceptanceDetailGraph(
+              input.id,
+              customer.tenant_id,
+            ),
+          ),
+          measureProjectAcceptanceTiming(
+            timing,
+            "tenant_employee_prefetch_ms",
+            () => projectAcceptanceRepository.listEmployeesByTenant(
+              customer.tenant_id!,
+            ),
+          ),
+        ])
+        : [null, [] as ProjectAcceptanceEmployeeRow[]];
       if (
         customer &&
-        row &&
-        row.customer_id === customer.id &&
-        row.tenant_id === customer.tenant_id
+        graph &&
+        graph.customer_id === customer.id &&
+        graph.tenant_id === customer.tenant_id
       ) {
-        this.assertCustomerTenantAvailable(customer);
-        return this.buildDetail(row);
+        return this.buildDetailFromGraph(graph, {
+          timing,
+          employees: tenantEmployees,
+          customers: [customer],
+        });
       }
     }
 
     if (input.ticketQuery?.ticket && input.ticketQuery.project_id) {
-      const result = await this.verifyOpenTicketRow({
-        ticket: input.ticketQuery.ticket,
-        acceptance_id: input.id,
-        project_id: input.ticketQuery.project_id,
-      });
+      const result = await measureProjectAcceptanceTiming(
+        timing,
+        "ticket_verify_ms",
+        () => this.verifyOpenTicketRow({
+          ticket: input.ticketQuery!.ticket!,
+          acceptance_id: input.id,
+          project_id: input.ticketQuery!.project_id!,
+        }),
+      );
       if (result.valid) {
-        return this.buildDetail(result.row);
+        return this.buildDetail(result.row, { timing });
       }
 
       throw Errors.business(403, "验收短信访问票据无效或已失效", "FORBIDDEN", {

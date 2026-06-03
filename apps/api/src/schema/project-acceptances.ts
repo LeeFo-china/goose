@@ -215,9 +215,20 @@ export const VerifyProjectAcceptanceOpenTicketSchema = z.object({
   project_id: z.uuid("无效的项目 ID"),
 });
 
+const DebugTimingQueryValueSchema = z.preprocess((value) => {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return value;
+}, z.boolean().default(false));
+
 export const CustomerProjectAcceptanceOpenTicketQuerySchema = z.object({
   ticket: z.string().trim().min(16, "访问票据无效").optional(),
   project_id: z.uuid("无效的项目 ID").optional(),
+  debug_timing: DebugTimingQueryValueSchema,
 });
 
 export type ProjectAcceptanceListQuery = z.infer<

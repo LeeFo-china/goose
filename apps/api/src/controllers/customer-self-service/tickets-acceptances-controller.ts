@@ -139,22 +139,65 @@ class CustomerTicketsAcceptancesController extends CustomerSelfServiceBaseContro
 
   @Get("/customer/project-acceptances/:id")
   async getCustomerProjectAcceptanceById(request: FastifyRequest) {
-    const idVerify = this.idParamSchema.safeParse(request.params);
+    const startedAt = Date.now();
+    const steps = createCustomerProjectDetailTimingSteps();
+    const acceptanceSteps: Record<string, number> = {};
+    const authUserId = await measureCustomerProjectDetailStep(
+      steps,
+      "auth_context_ms",
+      () => Promise.resolve(request.user?.sub ?? null),
+    );
+    const idVerify = await measureCustomerProjectDetailStep(
+      steps,
+      "query_parse_ms",
+      () => this.idParamSchema.safeParse(request.params),
+    );
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-    const queryResult = CustomerProjectAcceptanceOpenTicketQuerySchema.safeParse(
-      request.query,
+    const queryResult = await measureCustomerProjectDetailStep(
+      steps,
+      "query_parse_ms",
+      () => CustomerProjectAcceptanceOpenTicketQuerySchema.safeParse(
+        request.query,
+      ),
     );
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    return ResponseHandler.success(
-      await projectAcceptanceService.getCustomerAcceptanceByAuthOrTicket({
-        authUserId: request.user?.sub,
+    const preloadedCustomer = this.getPreloadedCustomerContext(request);
+    const payload = await measureCustomerProjectDetailStep(
+      steps,
+      "acceptances_ms",
+      () => projectAcceptanceService.getCustomerAcceptanceByAuthOrTicket({
+        authUserId,
         tenantId: request.user?.tenant_id ?? null,
         customerId: request.user?.customer_id ?? null,
+        customer: preloadedCustomer,
         id: idVerify.data.id,
         ticketQuery: queryResult.data,
-      }),
+      }, { timing: acceptanceSteps }),
     );
+    logCustomerProjectDetailTiming(request, {
+      route: "GET /customer/project-acceptances/:id",
+      startedAt,
+      tenantId: request.user?.tenant_id ?? null,
+      customerId: request.user?.customer_id ?? null,
+      projectId: queryResult.data.project_id ?? payload.project_id ?? null,
+      query: {
+        id: idVerify.data.id,
+        project_id: queryResult.data.project_id ?? null,
+        has_ticket: Boolean(queryResult.data.ticket),
+      },
+      extra: { acceptance_steps: acceptanceSteps },
+      steps,
+    });
+    return ResponseHandler.success(this.withDebugTiming(
+      payload,
+      queryResult.data.debug_timing,
+      {
+        auth_steps: this.getAuthTimingSteps(request),
+        steps,
+        acceptance_steps: acceptanceSteps,
+      },
+    ));
   }
 }
 

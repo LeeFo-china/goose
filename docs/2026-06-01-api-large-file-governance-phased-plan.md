@@ -3456,3 +3456,74 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 - 本阶段优化的是详情页后续日志请求：当同一进程内已先请求 `detail-bootstrap`，日志接口可复用项目访问缓存。
 - 如果用户直接冷启动访问日志接口，仍需要一次轻量 Supabase 权限查询；该路径已从完整项目详情查询收敛为 `id/tenant_id` 查询。
 - 本阶段未修改小程序仓库文档，只在 API 仓库记录后端执行结果。
+
+## 小程序对接 Phase 47 执行记录
+
+日期：2026-06-03
+提交：本阶段提交 `perf(customer): 优化客户验收详情查询`
+
+### 目标
+
+- 对接小程序仓库 `docs/2026-06-02-customer-project-detail-performance-backend-checklist.md` 中的客户侧工序验收打开慢反馈。
+- 给 `GET /customer/project-acceptances/:id` 增加客户侧 detail timing，支持前端用 `debug_timing=true` 核对后端 step timing。
+- 将客户侧验收详情从多段串行查询收敛到详情 graph 查询，目标真实打开链路低于 `1.5s`。
+
+### 问题定位
+
+| 指标 | 优化前结果 | 结论 |
+| --- | ---: | --- |
+| 带 `debug_timing=true` 5 轮平均 | 5.329s | 响应未返回 `debug_timing`，前端无法核对后端 step |
+| 不带 debug 3 轮平均 | 5.197s | 慢点不是 debug 参数导致 |
+| 响应体 | 约 14KB | 只有 2 个验收项、3 条操作记录，数据量不是瓶颈 |
+| 第一版后端 timing | 约 5.2s | 慢点来自客户 lookup、验收主表、actions、items/project/people/latest notification 多次远端往返 |
+
+### 结构变化
+
+| 文件 | 变化 |
+| --- | --- |
+| `apps/api/src/schema/project-acceptances.ts` | `CustomerProjectAcceptanceOpenTicketQuerySchema` 新增 `debug_timing` |
+| `apps/api/src/controllers/customer-self-service/tickets-acceptances-controller.ts` | `GET /customer/project-acceptances/:id` 接入统一 timing 日志和 `debug_timing` 响应 |
+| `apps/api/src/repositories/project-acceptances/legacy/acceptances.ts` | 新增 `getAcceptanceDetailGraph()`，一次读取 acceptance、project、initiator、reviewer、customer、items、actions、latest ticket |
+| `apps/api/src/repositories/project-acceptances/legacy/people.ts` | 新增 `listEmployeesByTenant()`，用于与 graph 查询并行预取 action operator 员工 |
+| `apps/api/src/services/project-acceptances/legacy/lists.ts` | 客户 token 路径复用 auth 插件预加载 customer context，切换到 graph 详情构建 |
+| `apps/api/src/services/project-acceptances/legacy/detail-graph.ts` | 新增 graph 详情组装，避免 `detail-sections.ts` 再次超过 500 行 |
+| `apps/api/src/services/project-acceptances/legacy/detail-standard.ts` | 拆出原标准详情查询，保持大文件门禁通过 |
+
+### 性能验收
+
+| 场景 | 优化后结果 | 验收 |
+| --- | ---: | --- |
+| 直接请求详情 5 轮平均 | 1.362s | 通过；首轮包含 auth 冷态时最大 2.331s |
+| 真实链路：先列表再详情 5 轮平均 | 1.145s | 通过 |
+| 真实链路：先列表再详情 5 轮最大 | 1.218s | 通过，低于 1.5s |
+| 拆分后运行时 smoke 3 轮平均 | 1.158s | 通过 |
+| 拆分后运行时 smoke 3 轮最大 | 1.348s | 通过 |
+| 响应规模 | 约 14.7KB | 保持原规模，返回 2 个验收项、3 条操作记录 |
+
+### timing 验收
+
+| 字段 | 结果 | 备注 |
+| --- | --- | --- |
+| `debug_timing.steps.acceptances_ms` | 已返回 | controller 级总耗时 |
+| `debug_timing.acceptance_steps.customer_lookup_ms` | 已返回 | 命中 auth 预加载时为 0 |
+| `debug_timing.acceptance_steps.acceptance_detail_graph_query_ms` | 已返回 | 详情 graph 查询耗时 |
+| `debug_timing.acceptance_steps.tenant_employee_prefetch_ms` | 已返回 | 租户员工轻量预取耗时，与 graph 并行 |
+| `debug_timing.acceptance_steps.operator_employee_lookup_ms` | 已返回 | 预取命中后为 0 |
+| `debug_timing.acceptance_steps.detail_serialize_ms` | 已返回 | 详情组装/图片字段序列化耗时 |
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `bun run api:typecheck` | 通过 | 多次增量改动后均通过 |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:check` | 通过 | typecheck、build、file-size 全部通过，`exemptions=0` |
+| 客户 token 详情 smoke | 通过 | 使用本地 API 和目标验收单执行；不记录 token 值 |
+| GoodCMS RAG 同步 | 上传成功但索引失败 | `orange-curated` dry-run 仅 1 个 changed doc；上传 `uploadedCount=1, failedCount=0`；LightRAG indexing 因资源包余量已用尽失败，focused query 暂未命中 |
+
+### 风险和遗留
+
+- 直接冷启动详情请求仍可能包含 auth 插件冷态耗时；真实打开链路先访问列表后，详情接口稳定低于 `1.5s`。
+- `listEmployeesByTenant()` 当前限制最多 200 条租户员工轻量字段；若单租户员工超过该数量且操作记录 operator 不在前 200 条内，会回退到 missing operator 查询。
+- 本阶段保持原响应结构，未新增轻量详情接口。
+- GoodCMS RAG 已收到 orange checklist 上传请求，但当前索引受 LightRAG embedding 资源包余量限制；恢复额度后需重新触发同步或索引，前端才可从 RAG 检索到第十八次回写。

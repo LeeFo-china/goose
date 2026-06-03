@@ -227,8 +227,9 @@ import {
   buildAcceptanceProgress,
   getSubmitBlockReason,
   buildDetailFromParts,
-  buildDetail,
 } from "./legacy/detail-sections";
+import { buildDetailFromGraph } from "./legacy/detail-graph";
+import { buildDetail } from "./legacy/detail-standard";
 import { buildSummaryDetail } from "./legacy/summary-detail";
 import {
   getCommonTenantId,
@@ -344,6 +345,7 @@ class ProjectAcceptanceService {
   private buildAcceptanceProgress = buildAcceptanceProgress;
   private getSubmitBlockReason = getSubmitBlockReason;
   private buildDetailFromParts = buildDetailFromParts;
+  private buildDetailFromGraph = buildDetailFromGraph;
   private buildSummaryDetail = buildSummaryDetail;
   private buildDetail = buildDetail;
   private getCommonTenantId = getCommonTenantId;

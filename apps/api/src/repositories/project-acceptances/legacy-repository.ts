@@ -23,6 +23,7 @@ import {
   createItems,
   listAcceptances,
   getAcceptanceById,
+  getAcceptanceDetailGraph,
   updateAcceptance,
   deleteAcceptance,
 } from "./legacy/acceptances";
@@ -35,7 +36,12 @@ import {
   updateItem,
   createAction,
 } from "./legacy/items-actions";
-import { listEmployees, listCustomers, getTenantById } from "./legacy/people";
+import {
+  listEmployees,
+  listEmployeesByTenant,
+  listCustomers,
+  getTenantById,
+} from "./legacy/people";
 
 export type {
   ProjectAcceptanceActionRow,
@@ -50,6 +56,7 @@ export type {
   ProjectAcceptanceTemplateSectionRow,
   ProjectAcceptanceTemplateSectionWriteRow,
 } from "./legacy/shared";
+export type { ProjectAcceptanceDetailGraphRow } from "./legacy/acceptances";
 
 class ProjectAcceptanceRepository {
   listTemplates = listTemplates;
@@ -73,6 +80,7 @@ class ProjectAcceptanceRepository {
   listAcceptances = listAcceptances;
   listCustomerProjectAcceptanceSummaries = listCustomerProjectAcceptanceSummaries;
   getAcceptanceById = getAcceptanceById;
+  getAcceptanceDetailGraph = getAcceptanceDetailGraph;
   listItems = listItems;
   listItemsByAcceptanceIds = listItemsByAcceptanceIds;
   listActions = listActions;
@@ -82,6 +90,7 @@ class ProjectAcceptanceRepository {
   updateItem = updateItem;
   createAction = createAction;
   listEmployees = listEmployees;
+  listEmployeesByTenant = listEmployeesByTenant;
   listCustomers = listCustomers;
   getTenantById = getTenantById;
 }
