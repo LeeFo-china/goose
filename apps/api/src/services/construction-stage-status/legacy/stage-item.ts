@@ -93,6 +93,8 @@ export function buildStageItem(input: {
   };
 }
 
+export type ProjectConstructionStageItem = ReturnType<typeof buildStageItem>;
+
 function buildAcceptanceAction(input: {
   acceptance: ProjectAcceptanceRow | null;
   canCreateAcceptance: boolean;

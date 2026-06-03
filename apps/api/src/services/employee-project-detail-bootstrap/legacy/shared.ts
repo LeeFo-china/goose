@@ -1,4 +1,5 @@
 import type { EmployeeProjectDetailBootstrapQuery } from "@/schema/projects";
+import type { ProjectConstructionStagesResult } from "@/services/construction-stage-status/legacy/lists";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { projectLogService } from "@/services/project-logs";
@@ -34,9 +35,7 @@ export const OPTIONAL_MODULE_TIMEOUT_MS = 2_500;
 export type StatusActionsResult = Awaited<
   ReturnType<typeof projectSer.listProjectStatusActionsForTenant>
 >;
-export type ConstructionStagesResult = Awaited<
-  ReturnType<typeof projectSer.listProjectConstructionStagesForTenant>
->;
+export type ConstructionStagesResult = ProjectConstructionStagesResult;
 export type ProjectLogListResult = Awaited<
   ReturnType<typeof projectLogService.listProjectLogsByProject>
 >;

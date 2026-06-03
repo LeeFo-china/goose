@@ -18,12 +18,27 @@ import {
 import { getStageAcceptanceLabel, getStageLabel } from "./labels";
 import { buildAcceptanceWritableMap, canAccessProjectByOptionalPermission } from "./permissions";
 import { pickLatestAcceptanceRows } from "./rows";
-import { buildStageItem } from "./stage-item";
+import { buildStageItem, type ProjectConstructionStageItem } from "./stage-item";
+
+export type ProjectConstructionStagesResult = {
+  project_id: string;
+  project_status: string | null;
+  required_stage_codes: typeof PROJECT_CONSTRUCTION_STAGE_CODE_VALUES;
+  required_completed: boolean;
+  current_stage: ProjectLogStageCode | null;
+  next_stage: ProjectConstructionStageItem | null;
+  missing_required_stages: Array<{
+    stage_code: ProjectLogStageCode;
+    stage_label: string;
+  }>;
+  stages: ProjectConstructionStageItem[];
+  all_stage_codes: typeof PROJECT_LOG_STAGE_CODE_VALUES;
+};
 
 export async function listProjectConstructionStages(input: {
   authContext: AuthContext;
   projectId: string;
-}) {
+}): Promise<ProjectConstructionStagesResult> {
   const tenantId = accessPolicyService.assertTenantContext(input.authContext);
   const hasAccess = await accessPolicyService.canAccessProject(
     input.authContext,
@@ -62,7 +77,7 @@ export async function listProjectConstructionStagesForProject(input: {
   authContext?: AuthContext;
   canReadAcceptance?: boolean;
   canCreateAcceptance?: boolean;
-}) {
+}): Promise<ProjectConstructionStagesResult> {
   const project = await projectAcceptanceRepository.getProject(
     input.projectId,
     input.tenantId,
@@ -112,7 +127,7 @@ export async function buildProjectConstructionStagesFromRows(input: {
   canReadAcceptance?: boolean;
   canCreateAcceptance?: boolean;
   canManageAcceptance?: boolean;
-}) {
+}): Promise<ProjectConstructionStagesResult> {
   const project = input.project;
   const acceptanceRows = pickLatestAcceptanceRows(input.acceptanceRows);
   const acceptanceMap = new Map(

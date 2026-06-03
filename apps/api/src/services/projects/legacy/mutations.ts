@@ -163,7 +163,92 @@ export async function listProjectConstructionStagesForTenant(this: any, input: {
     authContext: AuthContext;
     projectId: string;
 }) {
+    if (input.authContext.employeeId) {
+        const bundle = await this.getEmployeeProjectBootstrapBundle({
+            authContext: input.authContext,
+            projectId: input.projectId,
+            logPageSize: 1,
+        });
+        const [
+            canReadAcceptance,
+            hasCreateAcceptancePermission,
+            canManageAcceptance,
+        ] = await Promise.all([
+            canAccessKnownProjectByOptionalPermission(this, {
+                authContext: input.authContext,
+                project: bundle.project,
+                members: bundle.members,
+                projectId: input.projectId,
+                permissionCodes: ["project_acceptance.read", "project_acceptance.manage"],
+            }),
+            canAccessKnownProjectByOptionalPermission(this, {
+                authContext: input.authContext,
+                project: bundle.project,
+                members: bundle.members,
+                projectId: input.projectId,
+                permissionCodes: ["project_acceptance.create"],
+            }),
+            canAccessKnownProjectByOptionalPermission(this, {
+                authContext: input.authContext,
+                project: bundle.project,
+                members: bundle.members,
+                projectId: input.projectId,
+                permissionCodes: ["project_acceptance.manage"],
+            }),
+        ]);
+
+        return this.buildProjectConstructionStagesForBootstrapData({
+            authContext: input.authContext,
+            project: bundle.project,
+            acceptanceRows: bundle.acceptance_rows,
+            logStageRows: bundle.log_stage_rows,
+            latestLogRows: bundle.latest_log_rows,
+            canReadAcceptance,
+            canCreateAcceptance: canReadAcceptance && hasCreateAcceptancePermission,
+            canManageAcceptance,
+        });
+    }
+
     return constructionStageStatusService.listProjectConstructionStages(input);
+}
+
+async function canAccessKnownProjectByOptionalPermission(projectService: any, input: {
+    authContext: AuthContext;
+    project: Record<string, unknown>;
+    members: Array<Record<string, unknown>>;
+    projectId: string;
+    permissionCodes: string[];
+}) {
+    for (const permissionCode of input.permissionCodes) {
+        if (!accessPolicyService.hasPermission(input.authContext, permissionCode)) {
+            continue;
+        }
+
+        const localAccess = projectService.canAccessEmployeeBootstrapProject({
+            authContext: input.authContext,
+            project: input.project,
+            members: input.members,
+            permissionCode,
+        });
+        if (localAccess === true) {
+            return true;
+        }
+        if (localAccess === false) {
+            continue;
+        }
+
+        if (
+            await accessPolicyService.canAccessProject(
+                input.authContext,
+                input.projectId,
+                permissionCode,
+            )
+        ) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 export async function listProjectStatusTransitionsForTenant(this: any, input: {
