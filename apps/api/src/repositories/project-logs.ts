@@ -324,7 +324,60 @@ class ProjectLogRepository {
     };
   }
 
-  async listCalendarRows(projectId: string) {
+  async listCalendarRows(input: {
+    projectId: string;
+    tenantId: string;
+  }) {
+    const SqlConstructor = getBunSqlConstructor();
+    const databaseUrl = getProjectLogDatabaseUrl();
+    if (SqlConstructor && databaseUrl) {
+      return this.listCalendarRowsViaSql(SqlConstructor, databaseUrl, input);
+    }
+
+    return this.listCalendarRowsViaSupabaseRpc(input.projectId);
+  }
+
+  private async listCalendarRowsViaSql(
+    SqlConstructor: ProjectLogSqlConstructor,
+    databaseUrl: string,
+    input: Parameters<ProjectLogRepository["listCalendarRows"]>[0],
+  ) {
+    const sqlClient = new SqlConstructor(databaseUrl);
+    try {
+      const timezone = "Asia/Shanghai";
+      const rows = await sqlClient`
+        WITH ranked AS (
+          SELECT
+            (created_at AT TIME ZONE ${timezone})::date AS biz_date,
+            stage_code,
+            node_name,
+            created_at,
+            id,
+            row_number() OVER (
+              PARTITION BY (created_at AT TIME ZONE ${timezone})::date
+              ORDER BY created_at DESC, id DESC
+            ) AS rn
+          FROM public.project_logs
+          WHERE project_id = ${input.projectId}::uuid
+            AND tenant_id = ${input.tenantId}::uuid
+        )
+        SELECT
+          biz_date::text AS date,
+          count(*) AS count,
+          max(CASE WHEN rn = 1 THEN stage_code END) AS stage_code,
+          max(CASE WHEN rn = 1 THEN node_name END) AS node_name
+        FROM ranked
+        GROUP BY biz_date
+        ORDER BY biz_date ASC
+      `;
+
+      return rows as ProjectLogCalendarRow[];
+    } finally {
+      await sqlClient.close?.();
+    }
+  }
+
+  private async listCalendarRowsViaSupabaseRpc(projectId: string) {
     const { data, error } = await SupabaseDB.getAdminClient().rpc(
       "get_project_log_calendar",
       {

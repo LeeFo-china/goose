@@ -19,6 +19,7 @@ import { constructionStageStatusService } from "@/services/construction-stage-st
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
 import { isProjectLogStageCode } from "@gooes/domain";
+import { ProjectLogCalendarCache } from "./project-logs/calendar-cache";
 
 type ProjectLogCreateTimingSteps = Record<string, number>;
 
@@ -49,6 +50,8 @@ async function measureProjectLogCreateStep<T>(
 }
 
 class ProjectLogService {
+  private projectLogCalendarCache = new ProjectLogCalendarCache();
+
   buildCommentCountMap(rows: ProjectLogCommentCountRow[]) {
     const map = new Map<string, {
       comment_count: number;
@@ -120,6 +123,11 @@ class ProjectLogService {
       }),
     );
     projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
+    this.projectLogCalendarCache.updateAfterCreate({
+      tenantId,
+      projectId: input.payload.project_id,
+      row,
+    });
     return { row, timings };
   }
 
@@ -248,11 +256,19 @@ class ProjectLogService {
       payload,
     });
     projectSer.invalidatePublicProjectLogsCache(existingProjectId);
+    this.projectLogCalendarCache.invalidate({
+      tenantId,
+      projectId: existingProjectId,
+    });
     if (
       typeof payload.project_id === "string" &&
       payload.project_id !== existingProjectId
     ) {
       projectSer.invalidatePublicProjectLogsCache(payload.project_id);
+      this.projectLogCalendarCache.invalidate({
+        tenantId,
+        projectId: payload.project_id,
+      });
     }
     return row;
   }
@@ -332,17 +348,22 @@ class ProjectLogService {
     authContext: AuthContext;
     projectId: string;
   }) {
-    accessPolicyService.assertTenantContext(input.authContext);
-    const hasAccess = await accessPolicyService.canAccessProject(
-      input.authContext,
-      input.projectId,
-      "project.read",
-    );
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    const [hasAccess, rows] = await Promise.all([
+      this.canReadProjectForProjectLogs(input),
+      this.projectLogCalendarCache.getOrLoad(
+        { projectId: input.projectId, tenantId },
+        () => projectLogRepository.listCalendarRows({
+          projectId: input.projectId,
+          tenantId,
+        }),
+      ),
+    ]);
     if (!hasAccess) {
       throw Errors.forbidden();
     }
 
-    return projectLogRepository.listCalendarRows(input.projectId);
+    return rows;
   }
 
   async listProjectLogCommentSummaries(input: {
@@ -406,6 +427,30 @@ class ProjectLogService {
 
     return row;
   }
+
+  private async canReadProjectForProjectLogs(input: {
+    authContext: AuthContext;
+    projectId: string;
+  }) {
+    if (
+      input.authContext.employeeId &&
+      accessPolicyService.getScope(input.authContext, "project.read") !== "all"
+    ) {
+      await projectSer.getEmployeeProjectBootstrapBundle({
+        authContext: input.authContext,
+        projectId: input.projectId,
+        logPageSize: 1,
+      });
+      return true;
+    }
+
+    return accessPolicyService.canAccessProject(
+      input.authContext,
+      input.projectId,
+      "project.read",
+    );
+  }
+
 }
 
 export const projectLogService = new ProjectLogService();
