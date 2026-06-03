@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { customerProjectDetailService } from "@/services/customer-project-detail";
 import { customerProjectDetailLogsService } from "@/services/customer-project-detail-logs";
 import { customerSelfServiceService } from "@/services/customer-self-service";
 import {
@@ -155,19 +156,19 @@ class CustomerProjectsController extends CustomerSelfServiceProjectBaseControlle
     const queryResult = CustomerProjectLogListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
-    const project = await measureCustomerProjectDetailStep(
+    const projectAccess = await measureCustomerProjectDetailStep(
       steps,
-      "project_detail_ms",
-      () => this.getOwnedProject(
-        idVerify.data.id,
-        customer!.id,
-        customer!.tenant_id,
-      ),
+      "project_access_ms",
+      () => customerProjectDetailService.getOwnedProjectAccess({
+        projectId: idVerify.data.id,
+        customerId: customer!.id,
+        tenantId: customer!.tenant_id!,
+      }),
     );
     const { page, pageSize } = queryResult.data;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const projectTenantId = project.tenant_id ?? null;
+    const projectTenantId = projectAccess.tenant_id ?? null;
 
     const payload = projectTenantId && page === 1
       ? await this.buildCustomerProjectLogsRpcPayload({
@@ -192,7 +193,7 @@ class CustomerProjectsController extends CustomerSelfServiceProjectBaseControlle
       startedAt,
       tenantId: customer?.tenant_id ?? null,
       customerId: customer?.id ?? null,
-      projectId: project.id,
+      projectId: projectAccess.id,
       query: {
         page,
         pageSize,

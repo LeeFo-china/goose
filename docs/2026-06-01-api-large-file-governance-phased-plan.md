@@ -3393,3 +3393,66 @@ rg --files apps/api -g '!node_modules' -g '!dist' -g '!build' -g '!coverage' \
 
 - 本阶段未覆盖真实登录、访客 session、微信绑定、员工 bootstrap 成功路径、客户列表/详情/更新/状态流转成功路径。
 - 下一阶段如继续真实业务 smoke，需要准备测试账号、测试租户、测试客户和明确可写测试数据边界。
+
+## 小程序对接 Phase 46 执行记录
+
+日期：2026-06-03
+提交：本阶段提交 `perf(customer): 优化客户项目日志权限校验`
+
+### 目标
+
+- 对接小程序仓库 `docs/2026-06-02-customer-project-detail-performance-backend-checklist.md` 中的客户项目详情性能检查。
+- 优化 `GET /customer/projects/:id/logs` 首屏后续请求耗时，避免日志接口重复走完整项目详情查询。
+- 保持客户项目权限边界：仍必须同时匹配 `project_id`、`customer_id`、`tenant_id`。
+
+### 问题定位
+
+| 指标 | 优化前结果 | 结论 |
+| --- | ---: | --- |
+| `logs` 第 1 轮总耗时 | 2270.56ms | 超过小程序详情页后续请求目标 |
+| `project_detail_ms` | 2169ms | 慢点来自日志接口前置完整项目详情校验 |
+| `logs_ms` | 98ms | 日志 RPC 本身不是主要瓶颈 |
+| `detail_bootstrap` 第 1 轮 | 1290.07ms | 聚合接口无 partial errors |
+
+### 结构变化
+
+| 文件 | 变化 |
+| --- | --- |
+| `apps/api/src/repositories/customer-project-detail.ts` | 新增 `findOwnedProjectAccess()`，只读取 `projects.id`、`projects.tenant_id` 做轻量权限校验 |
+| `apps/api/src/services/customer-project-detail.ts` | 新增 10 秒项目访问缓存；`getOwnedProject()` 成功后回填访问缓存，`getOwnedProjectAccess()` 命中缓存时不访问 Supabase |
+| `apps/api/src/controllers/customer-self-service/projects-controller.ts` | 日志列表由完整项目详情校验改为轻量访问校验 |
+| `apps/api/src/utils/customer-project-detail-timing.ts` | 新增 `project_access_ms`，区分轻量权限校验和完整详情查询耗时 |
+
+### 性能验收
+
+| 场景 | 优化后结果 | 验收 |
+| --- | ---: | --- |
+| `bootstrap_inline` 第 1 轮 | 828.43ms | 通过 |
+| `detail_bootstrap` 第 1 轮 | 1880.29ms | 通过；无 partial errors |
+| `logs` 第 1 轮 | 93.47ms | 通过；由 1456.64ms 降至 93.47ms |
+| `logs` 3 轮平均 | 32.29ms | 通过 |
+| `logs` 3 轮 p95/max | 93.47ms | 通过 |
+| `acceptances` 3 轮平均 | 1.52ms | 通过 |
+
+### timing 验收
+
+| 字段 | 结果 | 备注 |
+| --- | --- | --- |
+| `project_access_ms` | 已出现 | 日志接口轻量权限校验单独计时 |
+| `project_detail_ms` | 保留 | 项目详情和详情聚合接口仍使用完整详情计时 |
+| `logs_ms` | 保留 | 日志 RPC 查询耗时仍独立展示 |
+
+### 测试记录
+
+| 命令/场景 | 结果 | 备注 |
+| --- | --- | --- |
+| `bun run api:typecheck` | 通过 | 轻量权限校验和缓存回填改动类型检查通过 |
+| `CUSTOMER_PERF_ROUNDS=3 bun run customer:perf-smoke` | 通过 | 使用客户 token、本地 API、目标项目执行；不记录 token 值 |
+| `git diff --check` | 通过 | 无空白错误 |
+| `bun run api:check` | 通过 | typecheck、build、file-size 全部通过，`exemptions=0` |
+
+### 风险和遗留
+
+- 本阶段优化的是详情页后续日志请求：当同一进程内已先请求 `detail-bootstrap`，日志接口可复用项目访问缓存。
+- 如果用户直接冷启动访问日志接口，仍需要一次轻量 Supabase 权限查询；该路径已从完整项目详情查询收敛为 `id/tenant_id` 查询。
+- 本阶段未修改小程序仓库文档，只在 API 仓库记录后端执行结果。

@@ -14,6 +14,7 @@ export const customerProjectDetailTimingStepKeys = [
   "recent_logs_query_ms",
   "recent_logs_wait_ms",
   "customer_service_ms",
+  "project_access_ms",
   "project_detail_ms",
   "logs_ms",
   "acceptances_ms",

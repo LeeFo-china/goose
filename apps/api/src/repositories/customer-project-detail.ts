@@ -7,6 +7,11 @@ type ProjectDetailRow = Omit<CustomerSelfServiceProjectListItem, "designer"> & {
   designer: null;
 };
 
+export type CustomerProjectAccessRow = {
+  id: string;
+  tenant_id: string | null;
+};
+
 class CustomerProjectDetailRepository {
   private directSqlUnavailable = false;
 
@@ -99,6 +104,23 @@ class CustomerProjectDetailRepository {
     }
 
     return this.findViaSupabaseRpc(input);
+  }
+
+  async findOwnedProjectAccess(input: {
+    tenantId: string;
+    customerId: string;
+    projectId: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, tenant_id")
+      .eq("id", input.projectId)
+      .eq("customer_id", input.customerId)
+      .eq("tenant_id", input.tenantId)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("查询客户项目访问权限失败", error);
+    return (data as CustomerProjectAccessRow | null) ?? null;
   }
 }
 
