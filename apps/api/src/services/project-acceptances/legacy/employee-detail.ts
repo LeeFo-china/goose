@@ -3,7 +3,11 @@ import type { AuthContext } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { permissionRepository } from "@/repositories/permissions";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
-import type { ProjectAcceptanceRow } from "@/repositories/project-acceptances";
+import type {
+  ProjectAcceptanceCustomerRow,
+  ProjectAcceptanceEmployeeRow,
+  ProjectAcceptanceRow,
+} from "@/repositories/project-acceptances";
 import {
   measureProjectAcceptanceTiming,
   type ProjectAcceptanceTimingSteps,
@@ -70,11 +74,42 @@ async function loadEmployeeAcceptanceDetail(
   const graph = await measureProjectAcceptanceTiming(
     timing,
     "acceptance_detail_graph_query_ms",
-    () => projectAcceptanceRepository.getAcceptanceDetailGraph(id, tenantId),
+    async () => await projectAcceptanceRepository.getAcceptanceDetailGraphDirect(
+      id,
+      tenantId,
+    ) ?? projectAcceptanceRepository.getAcceptanceDetailGraph(id, tenantId),
   );
   if (!graph) throw Errors.badRequest("项目验收单不存在");
 
-  return service.buildDetailFromGraph(graph, { timing });
+  const {
+    action_employees: actionEmployees,
+    action_customers: actionCustomers,
+    ...cleanGraph
+  } = graph as typeof graph & {
+    action_employees?: unknown;
+    action_customers?: unknown;
+  };
+  return service.buildDetailFromGraph(cleanGraph, {
+    timing,
+    employees: parseRelationList<ProjectAcceptanceEmployeeRow>(actionEmployees),
+    customers: parseRelationList<ProjectAcceptanceCustomerRow>(actionCustomers),
+  });
+}
+
+function parseRelationList<T>(value: unknown): T[] {
+  const parsed = typeof value === "string" ? safeJsonParse(value) : value;
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((item) => typeof item === "string" ? safeJsonParse(item) : item)
+    .filter((item): item is T => typeof item === "object" && item !== null);
+}
+
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 async function assertCanReadFast(

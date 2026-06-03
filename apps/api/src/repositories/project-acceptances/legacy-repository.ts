@@ -28,6 +28,7 @@ import {
   updateAcceptance,
   deleteAcceptance,
 } from "./legacy/acceptances";
+import { getAcceptanceDetailGraphDirect } from "./legacy/acceptance-detail-direct";
 import { listCustomerProjectAcceptanceSummaries } from "./legacy/customer-summary-rpc";
 import {
   listItems,
@@ -61,6 +62,7 @@ export type { ProjectAcceptanceDetailGraphRow } from "./legacy/acceptances";
 
 class ProjectAcceptanceRepository {
   private acceptanceDetailListDirectSqlUnavailable = false;
+  private acceptanceDetailDirectSqlUnavailable = false;
 
   listTemplates = listTemplates;
   getTemplateById = getTemplateById;
@@ -85,6 +87,7 @@ class ProjectAcceptanceRepository {
   listCustomerProjectAcceptanceSummaries = listCustomerProjectAcceptanceSummaries;
   getAcceptanceById = getAcceptanceById;
   getAcceptanceDetailGraph = getAcceptanceDetailGraph;
+  getAcceptanceDetailGraphDirect = getAcceptanceDetailGraphDirect;
   listItems = listItems;
   listItemsByAcceptanceIds = listItemsByAcceptanceIds;
   listActions = listActions;

@@ -62,3 +62,33 @@ bun run --cwd apps/api check
 
 进程首次冷启动时，`auth_context_ms` 可能超过 2s；小程序页面并行/前置请求
 `/auth/me/permissions` 后，验收列表与详情接口均进入目标耗时范围。
+
+## 小程序回写对接补充
+
+小程序仓库回写文档：
+`/Users/leefo/Public/work/orange/docs/2026-06-03-employee-acceptance-detail-performance-backend-checklist.md`
+
+前端复测结论：
+
+- 热态处理验收详情：达标。
+- 验收列表：达标。
+- `debug_timing`：达标。
+- 剩余风险：详情 cache miss 测到 `1.216s`，其中
+  `acceptance_detail_graph_query_ms=1095ms`，建议继续压到 `< 1s`。
+
+后端补充处理：
+
+1. 员工详情 cache miss 改为优先 direct Postgres graph 查询。
+2. direct detail graph 同步聚合 action operator，避免 cache miss 后二次 HTTP 查询。
+3. direct 查询不可用时保留原 Supabase graph 查询回退。
+
+补充验收：
+
+- 进程首次详情 debug：端到端 `3.331s`，其中
+  `auth_context_ms=2340ms`，`acceptance_detail_graph_query_ms=799ms`。
+- 权限预热且详情缓存过期后：端到端 `0.187s`，
+  `acceptance_detail_graph_query_ms=94ms`，`permission_ms=91ms`。
+- 响应结构保持：4 个验收项、1 条操作记录。
+
+结论：小程序回写的详情 cache miss 风险已处理；在 auth 预热后，
+详情 cache miss 已进入 `< 1s` 目标范围。
