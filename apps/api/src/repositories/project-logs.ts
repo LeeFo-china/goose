@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { AppError } from "@/errors/app-error";
 import { SupabaseDB } from "@/utils/supabase";
 
 export const PROJECT_LOG_SELECT = `
@@ -30,6 +31,60 @@ export type ProjectLogLatestStageRow = {
   content: string | null;
   created_at: string | null;
 };
+
+type ProjectLogCreateFastResult = {
+  data?: Record<string, unknown>;
+  error?: {
+    status_code?: number;
+    code?: string;
+    message?: string;
+  };
+};
+
+type ProjectLogSqlClient = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<Array<Record<string, unknown>>>;
+
+type ProjectLogSqlConstructor = new (url: string) => ProjectLogSqlClient;
+
+let projectLogSqlClient: ProjectLogSqlClient | null | undefined;
+
+function getBunSqlConstructor() {
+  const bunRuntime = (globalThis as {
+    Bun?: { SQL?: ProjectLogSqlConstructor };
+  }).Bun;
+  return bunRuntime?.SQL ?? null;
+}
+
+function getProjectLogSqlClient() {
+  if (projectLogSqlClient !== undefined) {
+    return projectLogSqlClient;
+  }
+
+  const SqlConstructor = getBunSqlConstructor();
+  const databaseUrl = process.env.SUPABASE_DB_URL ||
+    process.env.SUPABASE_DB_DIRECT_URL;
+  projectLogSqlClient = databaseUrl && SqlConstructor
+    ? new SqlConstructor(databaseUrl)
+    : null;
+  return projectLogSqlClient;
+}
+
+function normalizeProjectLogRpcRow(row: Record<string, unknown>) {
+  if (typeof row.images !== "string") {
+    return row;
+  }
+
+  try {
+    return {
+      ...row,
+      images: JSON.parse(row.images) as unknown,
+    };
+  } catch {
+    return row;
+  }
+}
 
 class ProjectLogRepository {
   async findProjectById(input: { projectId: string; tenantId: string }) {
@@ -74,6 +129,90 @@ class ProjectLogRepository {
     }
 
     return data as unknown as Record<string, unknown>;
+  }
+
+  async createFast(input: {
+    tenantId: string;
+    employeeId: string;
+    tenantDepartmentId?: string | null;
+    projectLogScope?: string | null;
+    payload: {
+      project_id: string;
+      stage_code: string;
+      node_name?: string | null;
+      content: string;
+      images?: unknown;
+    };
+  }) {
+    const sqlClient = getProjectLogSqlClient();
+    if (sqlClient) {
+      return this.createFastViaSql(sqlClient, input);
+    }
+
+    return this.createFastViaSupabaseRpc(input);
+  }
+
+  private handleCreateFastResult(result: ProjectLogCreateFastResult | null) {
+    if (result?.error) {
+      throw new AppError(
+        result.error.status_code ?? 400,
+        result.error.message ?? "创建项目日志失败",
+        result.error.code ?? "PROJECT_LOG_CREATE_FAILED",
+      );
+    }
+
+    if (!result?.data) {
+      throw Errors.dbError("创建项目日志失败", { reason: "empty_rpc_result" });
+    }
+
+    return normalizeProjectLogRpcRow(result.data);
+  }
+
+  private async createFastViaSql(
+    sqlClient: ProjectLogSqlClient,
+    input: Parameters<ProjectLogRepository["createFast"]>[0],
+  ) {
+    const rows = await sqlClient`
+      SELECT public.create_project_log_fast(
+        ${input.tenantId}::uuid,
+        ${input.employeeId}::uuid,
+        ${input.payload.project_id}::uuid,
+        ${input.payload.stage_code},
+        ${input.payload.node_name ?? null},
+        ${input.payload.content},
+        ${JSON.stringify(input.payload.images ?? [])}::jsonb,
+        ${input.projectLogScope ?? null},
+        ${input.tenantDepartmentId ?? null}::uuid
+      ) AS result
+    `;
+
+    const firstRow = rows[0] as { result?: ProjectLogCreateFastResult } | undefined;
+    return this.handleCreateFastResult(firstRow?.result ?? null);
+  }
+
+  private async createFastViaSupabaseRpc(
+    input: Parameters<ProjectLogRepository["createFast"]>[0],
+  ) {
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "create_project_log_fast",
+      {
+        p_tenant_id: input.tenantId,
+        p_employee_id: input.employeeId,
+        p_project_id: input.payload.project_id,
+        p_stage_code: input.payload.stage_code,
+        p_node_name: input.payload.node_name ?? null,
+        p_content: input.payload.content,
+        p_images: input.payload.images ?? [],
+        p_project_log_scope: input.projectLogScope ?? null,
+        p_tenant_department_id: input.tenantDepartmentId ?? null,
+      },
+    );
+
+    if (error) {
+      throw Errors.dbError("创建项目日志失败", error);
+    }
+
+    return this.handleCreateFastResult(data as ProjectLogCreateFastResult | null);
   }
 
   async list(input: {

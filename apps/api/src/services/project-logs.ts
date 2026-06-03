@@ -20,6 +20,8 @@ import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
 import { isProjectLogStageCode } from "@gooes/domain";
 
+type ProjectLogCreateTimingSteps = Record<string, number>;
+
 function buildPagination(page: number, pageSize: number, total: number) {
   return {
     page,
@@ -27,6 +29,23 @@ function buildPagination(page: number, pageSize: number, total: number) {
     total,
     totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
   };
+}
+
+async function measureProjectLogCreateStep<T>(
+  timings: ProjectLogCreateTimingSteps | undefined,
+  step: string,
+  operation: () => Promise<T>,
+) {
+  if (!timings) {
+    return operation();
+  }
+
+  const startedAt = Date.now();
+  try {
+    return await operation();
+  } finally {
+    timings[step] = Date.now() - startedAt;
+  }
 }
 
 class ProjectLogService {
@@ -78,41 +97,30 @@ class ProjectLogService {
   async createProjectLog(input: {
     authContext: AuthContext;
     payload: CreateProjectLogInput;
+    collectTiming?: boolean;
   }) {
+    const timings = input.collectTiming ? {} : undefined;
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     if (!input.authContext.employeeId) {
       throw Errors.forbidden();
     }
 
-    const project = await this.getRequiredProject({
-      projectId: input.payload.project_id,
-      tenantId,
-    });
-    projectStatusService.assertCanCreateProjectLog(project);
-    await constructionStageStatusService.assertCanCreateProjectLog({
-      projectId: project.id,
-      tenantId,
-      stageCode: input.payload.stage_code,
-    });
-    const canWriteLog = await accessPolicyService.canWriteProjectLog(
-      input.authContext,
-      input.payload.project_id,
+    const row = await measureProjectLogCreateStep(
+      timings,
+      "create_rpc_ms",
+      () => projectLogRepository.createFast({
+        tenantId,
+        employeeId: input.authContext.employeeId!,
+        tenantDepartmentId: input.authContext.tenantDepartmentId,
+        projectLogScope: accessPolicyService.getScope(
+          input.authContext,
+          "project_log.create",
+        ),
+        payload: input.payload,
+      }),
     );
-    if (!canWriteLog) {
-      throw Errors.business(
-        403,
-        "无施工日志创建权限",
-        ErrorCodes.PROJECT_LOG_PERMISSION_DENIED,
-      );
-    }
-
-    const row = await projectLogRepository.create({
-      ...input.payload,
-      tenant_id: project.tenant_id,
-      employee_id: input.authContext.employeeId,
-    });
     projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
-    return row;
+    return { row, timings };
   }
 
   async getProjectLogDetail(input: {

@@ -16,6 +16,24 @@ const NullableProjectLogNodeNameSchema = z.preprocess(
   z.string().trim().max(100, "节点补充不能超过 100 个字符").nullable().optional(),
 );
 
+const BooleanQueryValueSchema = z.preprocess((value) => {
+  if (value == null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean().default(false));
+
 export const ProjectLogBaseSchema = z.object({
   id: z.string().uuid("无效的日志 ID").optional(),
   project_id: z.string().uuid("请选择有效的项目"),
@@ -40,6 +58,14 @@ export const UpdateProjectLogSchema = CreateProjectLogSchema.partial();
 export type ProjectLogType = z.infer<typeof ProjectLogBaseSchema>;
 export type CreateProjectLogInput = z.infer<typeof CreateProjectLogSchema>;
 export type UpdateProjectLogInput = z.infer<typeof UpdateProjectLogSchema>;
+
+export const ProjectLogCreateQuerySchema = z.object({
+  debug_timing: BooleanQueryValueSchema,
+});
+
+export type ProjectLogCreateQueryType = z.infer<
+  typeof ProjectLogCreateQuerySchema
+>;
 
 export const ProjectLogQuerySchema = z.object({
   project_id: z.uuid("无效的项目ID"),

@@ -1,8 +1,10 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
   CreateProjectLogSchema,
+  ProjectLogCreateQuerySchema,
   ProjectLogCalendarQuerySchema,
   type ProjectLogCalendarQueryType,
+  type ProjectLogCreateQueryType,
   type ProjectLogQueryType,
   UpdateProjectLogSchema,
 } from "@/schema/project-logs";
@@ -56,22 +58,47 @@ class ProjectLogController extends TenantBaseController<
   }
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
+    const startedAt = Date.now();
+    const authStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authStartedAt;
 
     if (!this.createSchema) {
       throw Errors.badRequest("缺少参数类型：createSchema");
     }
 
+    const queryResult = ProjectLogCreateQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const { debug_timing }: ProjectLogCreateQueryType = queryResult.data;
+
+    const validationStartedAt = Date.now();
     const result = this.createSchema.safeParse(request.body);
     if (!result.success) throw Errors.fromZod(result.error);
+    const validationMs = Date.now() - validationStartedAt;
 
-    const row = await projectLogService.createProjectLog({
+    const serviceResult = await projectLogService.createProjectLog({
       authContext,
       payload: result.data,
+      collectTiming: debug_timing,
     });
 
+    const serializeStartedAt = Date.now();
+    const payload = this.serializeProjectLog(serviceResult.row);
+    const serializeMs = Date.now() - serializeStartedAt;
+
     return ResponseHandler.success(
-      this.serializeProjectLog(row),
+      debug_timing
+        ? {
+          ...payload,
+          debug_timing: {
+            auth_context_ms: authContextMs,
+            validation_ms: validationMs,
+            ...(serviceResult.timings ?? {}),
+            serialize_ms: serializeMs,
+            total_ms: Date.now() - startedAt,
+          },
+        }
+        : payload,
     );
   };
 

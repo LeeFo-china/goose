@@ -274,12 +274,23 @@ class AccessPolicyService {
   }
 
   async canWriteProjectLog(authContext: AuthContext, projectId: string) {
+    const project = await permissionRepository.findProjectTenantById(projectId);
+    if (!project) {
+      return false;
+    }
+
+    return this.canWriteProjectLogForProject(authContext, project);
+  }
+
+  async canWriteProjectLogForProject(
+    authContext: AuthContext,
+    project: { id: string; tenant_id?: string | null },
+  ) {
     const scope = this.assertPermission(authContext, "project_log.create");
     if (!scope || !authContext.employeeId) {
       return false;
     }
 
-    const project = await permissionRepository.findProjectTenantById(projectId);
     if (!project || !this.matchesTenant(authContext, project)) {
       return false;
     }
@@ -297,13 +308,13 @@ class AccessPolicyService {
         : [];
 
       return permissionRepository.hasActiveProjectMember({
-        projectId,
+        projectId: project.id,
         employeeIds,
       });
     }
 
     return permissionRepository.hasActiveProjectMember({
-      projectId,
+      projectId: project.id,
       employeeIds: [authContext.employeeId],
     });
   }

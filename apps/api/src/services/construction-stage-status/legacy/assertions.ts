@@ -5,29 +5,19 @@ import {
   Errors,
   getPreviousProjectConstructionStage,
   isProjectConstructionStageCode,
+  projectAcceptanceRepository,
   type ProjectAcceptanceProjectRow,
   type ProjectLogStageCode,
 } from "./shared";
 import { getStageAcceptanceLabel, getStageLabel } from "./labels";
 import { getAcceptedConstructionStages } from "./rows";
-import { listProjectConstructionStagesForProject } from "./lists";
 
 export async function assertCanCreateProjectLog(input: {
   projectId: string;
   tenantId?: string | null;
   stageCode: ProjectLogStageCode;
 }) {
-  const stages = await listProjectConstructionStagesForProject({
-    projectId: input.projectId,
-    tenantId: input.tenantId,
-    canReadAcceptance: true,
-    canCreateAcceptance: true,
-  });
-  const stage = stages.stages.find((item) =>
-    item.stage_code === input.stageCode
-  );
-
-  if (!stage || stage.is_completion) {
+  if (!isProjectConstructionStageCode(input.stageCode)) {
     throw Errors.business(
       400,
       "当前阶段不可写施工日志",
@@ -35,38 +25,50 @@ export async function assertCanCreateProjectLog(input: {
     );
   }
 
-  if (stage.can_create_log) {
+  const previousStage = getPreviousProjectConstructionStage(input.stageCode);
+  const stageCodes = previousStage
+    ? [input.stageCode, previousStage]
+    : [input.stageCode];
+  const latestAcceptances =
+    await projectAcceptanceRepository.listLatestAcceptancesByStages({
+      projectId: input.projectId,
+      stageCodes,
+      tenantId: input.tenantId,
+    });
+  const acceptanceMap = new Map(
+    latestAcceptances.map((item) => [item.stage_code, item]),
+  );
+
+  if (previousStage) {
+    const previousAcceptance = acceptanceMap.get(previousStage);
+    if (previousAcceptance?.status !== "customer_confirmed") {
+      throw Errors.business(
+        400,
+        `请先完成${getStageAcceptanceLabel(previousStage)}后再进入${
+          getStageLabel(input.stageCode)
+        }`,
+        ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
+      );
+    }
+  }
+
+  const acceptance = acceptanceMap.get(input.stageCode);
+  if (!acceptance || acceptance.status === "rejected") {
     return;
   }
 
-  if (stage.blocked_reason) {
+  if (acceptance.status === "customer_confirmed") {
     throw Errors.business(
       400,
-      stage.blocked_reason,
-      ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
-    );
-  }
-
-  if (stage.status === "pending_acceptance") {
-    throw Errors.business(
-      400,
-      `当前${stage.stage_label}阶段待验收，完成验收后再补充施工日志`,
-      ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
-    );
-  }
-
-  if (stage.status === "accepted") {
-    throw Errors.business(
-      400,
-      `当前${stage.stage_label}阶段已验收完成，不能继续补充施工日志`,
+      `当前${getStageLabel(input.stageCode)}阶段已验收完成，不能继续补充施工日志`,
       ErrorCodes.PROJECT_LOG_STAGE_NOT_WRITABLE,
     );
   }
 
   throw Errors.business(
     400,
-    "当前阶段不可写施工日志",
-    ErrorCodes.PROJECT_LOG_STAGE_NOT_WRITABLE,
+    `当前${getStageLabel(input.stageCode)}阶段待验收，完成验收后再补充施工日志`,
+    ErrorCodes.PROJECT_LOG_STAGE_BLOCKED,
   );
 }
 
