@@ -133,6 +133,68 @@ ERR_POSTGRES_CONNECTION_CLOSED
 - 测试日志内容前缀：`接口测速-后端修复SQL连接curl复测-可删除`
 - 测试日志清理：已清理 `2` 条
 
+## 小程序二次复测结论
+
+小程序团队已在
+`orange/docs/2026-06-03-employee-project-log-create-performance-backend-checklist.md`
+回写二次复测结论。真实 token 未写入文档。
+
+测试条件：
+
+- 环境：`http://192.168.1.4:3000`
+- 项目：`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`
+- 阶段：`plumbing_electrical`
+- 图片：`[]`
+
+创建接口复测：
+
+| 接口 | 状态 | 耗时 | debug_timing | 结论 |
+| --- | --- | ---: | --- | --- |
+| `GET /auth/me/permissions` | `200` | `1.071s` | 无 | 权限预热恢复到约 1 秒 |
+| `POST /project-logs?debug_timing=true` | `200` | `2.303s` | 有 | 已不再 500，但仍高于 1 秒 |
+| `POST /project-logs` | `200` | `0.891s` | 无 | 普通提交已达标 |
+
+debug 请求返回摘要：
+
+```json
+{
+  "auth_context_ms": 0,
+  "validation_ms": 0,
+  "create_rpc_ms": 2299,
+  "serialize_ms": 0,
+  "total_ms": 2300
+}
+```
+
+结论：
+
+- 普通无图片 `POST /project-logs` 已满足 `<1s`。
+- `debug_timing=true` 诊断请求仍可能受短连接建立或数据库连接波动影响，不应作为普通用户链路默认参数。
+- 小程序端确认不默认携带 `debug_timing=true`，仅用于联调复测。
+
+返回详情页刷新接口补测：
+
+| 接口 | 状态 | 耗时 | 结论 |
+| --- | --- | ---: | --- |
+| `GET /project_logs/projects?project_id=:id&page=1&pageSize=10` | `200` | `6.759s` | 偏慢 |
+| `GET /project_logs/projects/calendar?project_id=:id` | `200` | `6.890s` | 偏慢 |
+| `GET /projects/:id/construction-stages` | `200` | `11.555s` | 明显偏慢 |
+| 三接口并发总耗时 | - | `11.568s` | 主要被施工阶段接口拖慢 |
+
+前端已完成的体感优化：
+
+- 保存成功后 `navigateBack()` 固定等待从 `800ms` 降到 `300ms`。
+- 仅施工日志创建返回时，不再触发 `loadProjectConstructionStages()` 和 `loadProjectStatusActions()`。
+- 预计普通无图片提交停留在创建页的主链路约为 `0.891s + 0.300s`，即约 `1.2s` 返回项目详情页。
+
+后端后续关注：
+
+- `GET /project_logs/projects`
+- `GET /project_logs/projects/calendar`
+- `GET /projects/:id/construction-stages`
+
+以上刷新接口仍需单独治理到 1 秒内，尤其是 `construction-stages`。
+
 ## 验证命令
 
 ```bash
