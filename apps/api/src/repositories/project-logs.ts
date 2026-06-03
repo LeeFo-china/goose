@@ -269,6 +269,51 @@ class ProjectLogRepository {
     from: number;
     to: number;
   }) {
+    const SqlConstructor = getBunSqlConstructor();
+    const databaseUrl = getProjectLogDatabaseUrl();
+    if (SqlConstructor && databaseUrl) {
+      return this.listByProjectViaSql(SqlConstructor, databaseUrl, input);
+    }
+    return this.listByProjectViaSupabase(input);
+  }
+
+  private async listByProjectViaSql(
+    SqlConstructor: ProjectLogSqlConstructor,
+    databaseUrl: string,
+    input: Parameters<ProjectLogRepository["listByProject"]>[0],
+  ) {
+    const limit = input.to - input.from + 1;
+    const sqlClient = new SqlConstructor(databaseUrl);
+    try {
+      const rows = await sqlClient`
+        SELECT
+          pl.*,
+          jsonb_build_object('id', e.id, 'name', e.name, 'avatar', e.avatar) AS employee,
+          count(*) OVER() AS total_count
+        FROM public.project_logs pl
+        LEFT JOIN public.employees e ON e.id = pl.employee_id
+        WHERE pl.project_id = ${input.projectId}::uuid
+          AND pl.tenant_id = ${input.tenantId}::uuid
+        ORDER BY pl.created_at DESC
+        LIMIT ${limit}
+        OFFSET ${input.from}
+      `;
+      const total = Number(rows[0]?.total_count ?? 0);
+      return {
+        rows: rows.map(({ total_count: _total, ...row }) => row),
+        total,
+      };
+    } finally {
+      await sqlClient.close?.();
+    }
+  }
+
+  private async listByProjectViaSupabase(input: {
+    projectId: string;
+    tenantId: string;
+    from: number;
+    to: number;
+  }) {
     const { data, error, count } = await SupabaseDB.getAdminClient()
       .from("project_logs")
       .select(PROJECT_LOG_SELECT, { count: "exact" })

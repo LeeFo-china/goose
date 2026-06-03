@@ -20,6 +20,7 @@ import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
 import { isProjectLogStageCode } from "@gooes/domain";
 import { ProjectLogCalendarCache } from "./project-logs/calendar-cache";
+import { ProjectLogProjectListCache } from "./project-logs/project-list-cache";
 
 type ProjectLogCreateTimingSteps = Record<string, number>;
 
@@ -51,6 +52,7 @@ async function measureProjectLogCreateStep<T>(
 
 class ProjectLogService {
   private projectLogCalendarCache = new ProjectLogCalendarCache();
+  private projectLogProjectListCache = new ProjectLogProjectListCache();
 
   buildCommentCountMap(rows: ProjectLogCommentCountRow[]) {
     const map = new Map<string, {
@@ -124,6 +126,11 @@ class ProjectLogService {
     );
     projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
     this.projectLogCalendarCache.updateAfterCreate({
+      tenantId,
+      projectId: input.payload.project_id,
+      row,
+    });
+    this.projectLogProjectListCache.updateAfterCreate({
       tenantId,
       projectId: input.payload.project_id,
       row,
@@ -260,12 +267,20 @@ class ProjectLogService {
       tenantId,
       projectId: existingProjectId,
     });
+    this.projectLogProjectListCache.invalidateProject({
+      tenantId,
+      projectId: existingProjectId,
+    });
     if (
       typeof payload.project_id === "string" &&
       payload.project_id !== existingProjectId
     ) {
       projectSer.invalidatePublicProjectLogsCache(payload.project_id);
       this.projectLogCalendarCache.invalidate({
+        tenantId,
+        projectId: payload.project_id,
+      });
+      this.projectLogProjectListCache.invalidateProject({
         tenantId,
         projectId: payload.project_id,
       });
@@ -280,23 +295,28 @@ class ProjectLogService {
     pageSize: number;
   }) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const hasAccess = await accessPolicyService.canAccessProject(
-      input.authContext,
-      input.projectId,
-      "project.read",
-    );
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+    const [hasAccess, result] = await Promise.all([
+      this.canReadProjectForProjectLogs(input),
+      this.projectLogProjectListCache.getOrLoad(
+        {
+          tenantId,
+          projectId: input.projectId,
+          page: input.page,
+          pageSize: input.pageSize,
+        },
+        () => projectLogRepository.listByProject({
+          projectId: input.projectId,
+          tenantId,
+          from,
+          to,
+        }),
+      ),
+    ]);
     if (!hasAccess) {
       throw Errors.forbidden();
     }
-
-    const from = (input.page - 1) * input.pageSize;
-    const to = from + input.pageSize - 1;
-    const result = await projectLogRepository.listByProject({
-      projectId: input.projectId,
-      tenantId,
-      from,
-      to,
-    });
 
     return {
       rows: result.rows,
