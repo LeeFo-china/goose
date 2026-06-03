@@ -187,13 +187,122 @@ debug 请求返回摘要：
 - 仅施工日志创建返回时，不再触发 `loadProjectConstructionStages()` 和 `loadProjectStatusActions()`。
 - 预计普通无图片提交停留在创建页的主链路约为 `0.891s + 0.300s`，即约 `1.2s` 返回项目详情页。
 
-后端后续关注：
+后端后续关注接口：
 
 - `GET /project_logs/projects`
 - `GET /project_logs/projects/calendar`
 - `GET /projects/:id/construction-stages`
 
-以上刷新接口仍需单独治理到 1 秒内，尤其是 `construction-stages`。
+以上刷新接口已在后端按阶段完成本轮治理，结果见下节。
+
+## 返回详情页刷新接口后端治理
+
+执行顺序：
+
+1. `GET /projects/:id/construction-stages`
+2. `GET /project_logs/projects/calendar`
+3. `GET /project_logs/projects`
+4. 文档汇总
+
+### 阶段 1：施工阶段接口
+
+提交：
+
+- `53ad551 perf(projects): 优化员工施工阶段查询`
+
+改动：
+
+- 员工路径复用 `getEmployeeProjectBootstrapBundle` 的聚合 RPC 和缓存。
+- 使用已聚合的 project、members、acceptance/log rows 构建施工阶段。
+- read/create/manage 验收权限优先基于已知项目数据判定，部门范围不确定时再回落到原权限查询。
+- 为施工阶段结果补充显式类型，避免 `projectSer` 类属性导致返回类型退化为 `any`。
+
+验收：
+
+| 接口 | 轮次 | 状态 | 耗时 | 响应 |
+| --- | ---: | --- | ---: | --- |
+| `GET /projects/:id/construction-stages` | 1 | `200` | `3221.6ms` | `7` 个阶段，`4401B` |
+| 同上 | 2-6 | `200` | 平均 `2.0ms`，最大 `2.7ms` | `7` 个阶段，`4401B` |
+
+结论：小程序侧记录的 `11.555s` 慢点已降至冷请求约 `3.2s`、热请求毫秒级。
+
+### 阶段 2：施工日志日历接口
+
+提交：
+
+- `b68d90d perf(project-logs): 优化施工日志日历查询`
+
+改动：
+
+- `projectLogRepository.listCalendarRows` 改为 Bun `SQL` 直连优先，Supabase HTTP RPC 兜底。
+- 直连 SQL 增加 `tenant_id` 过滤。
+- 新增 `ProjectLogCalendarCache`，支持短 TTL 缓存和 in-flight 合并。
+- 创建日志后若已有日历缓存则增量更新；更新日志时失效项目日历缓存。
+- 员工读取权限复用项目 bootstrap 读权限路径；查询和权限检查并行执行。
+
+验收：
+
+| 接口 | 轮次 | 状态 | 耗时 | 响应 |
+| --- | ---: | --- | ---: | --- |
+| `GET /project_logs/projects/calendar` | 1 | `200` | `3817.1ms` | `2` 条，`290B` |
+| 同上 | 2-6 | `200` | 平均 `2.1ms`，最大 `4.9ms` | `2` 条，`290B` |
+
+结论：小程序侧记录的 `6.890s` 慢点已降至冷请求约 `3.8s`、热请求毫秒级。
+
+### 阶段 3：施工日志列表接口
+
+提交：
+
+- `70ac9a3 perf(project-logs): 优化项目施工日志列表`
+
+改动：
+
+- `projectLogRepository.listByProject` 改为 Bun `SQL` 直连优先，Supabase HTTP select 兜底。
+- 直连 SQL 使用 `count(*) over()` 单次查询返回列表和总数。
+- 新增 `ProjectLogProjectListCache`，支持短 TTL 缓存和 in-flight 合并。
+- 创建日志后若已有第一页缓存则增量插入；其他页缓存失效。更新日志时失效项目列表缓存。
+- 列表查询和读权限检查并行执行。
+
+验收：
+
+| 接口 | 轮次 | 状态 | 耗时 | 响应 |
+| --- | ---: | --- | ---: | --- |
+| `GET /project_logs/projects?page=1&pageSize=20` | 1 | `200` | `3716.2ms` | `5` 条，`3685B` |
+| 同上 | 2-6 | `200` | 平均 `2.2ms`，最大 `3.9ms` | `5` 条，`3685B` |
+
+字段核对：
+
+- 首条日志字段：`id`、`project_id`、`tenant_id`、`employee_id`、`stage_code`、`stage_label`、`node_name`、`content`、`images`、`created_at`、`employee`
+- `created_at` 为字符串。
+- `images` 为数组。
+- `employee` 包含 `id`、`name`、`avatar`。
+- 分页：`page=1`、`pageSize=20`、`total=5`、`totalPages=1`。
+
+结论：小程序侧记录的 `6.759s` 慢点已降至冷请求约 `3.7s`、热请求毫秒级。
+
+### 本轮总体验收
+
+静态验收：
+
+```bash
+bun run --cwd apps/api check
+```
+
+结果：
+
+```text
+API file size check passed. threshold=500, exemptions=0
+```
+
+运行时验收均使用开发服务 `http://127.0.0.1:3000`、项目
+`54f11aa5-09a8-4410-a9c5-604a7fe9e09c`、员工身份 token。
+真实 token 未写入文档。
+
+注意：
+
+- 三个刷新接口的冷请求仍受 auth context、项目 bootstrap、数据库短连接建立影响，约 `3-4s`。
+- 连续访问、详情页已加载后返回刷新、并发请求共享 in-flight/cache 时，热路径已降至毫秒级。
+- 若线上或开发服务重启后首个请求仍偏慢，应继续单独治理 auth context 冷启动和数据库连接建立成本。
 
 ## 验证命令
 
