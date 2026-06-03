@@ -177,7 +177,7 @@ class ProjectLogRepository {
           ${input.payload.stage_code},
           ${input.payload.node_name ?? null},
           ${input.payload.content},
-          ${JSON.stringify(input.payload.images ?? [])}::jsonb,
+          (${JSON.stringify(input.payload.images ?? [])}::text)::jsonb,
           ${input.projectLogScope ?? null},
           ${input.tenantDepartmentId ?? null}::uuid
         ) AS result

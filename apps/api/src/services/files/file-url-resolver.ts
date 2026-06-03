@@ -413,11 +413,20 @@ export function resolveStoredFileUrl(value: string | null | undefined) {
 }
 
 export function resolveStoredFileUrlList(value: unknown) {
-  if (!Array.isArray(value)) {
+  let listValue = value;
+  if (typeof value === "string") {
+    try {
+      listValue = JSON.parse(value) as unknown;
+    } catch {
+      listValue = value;
+    }
+  }
+
+  if (!Array.isArray(listValue)) {
     return [] as string[];
   }
 
-  return value
+  return listValue
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean)

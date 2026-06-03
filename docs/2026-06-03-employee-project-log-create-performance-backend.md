@@ -304,6 +304,65 @@ API file size check passed. threshold=500, exemptions=0
 - 连续访问、详情页已加载后返回刷新、并发请求共享 in-flight/cache 时，热路径已降至毫秒级。
 - 若线上或开发服务重启后首个请求仍偏慢，应继续单独治理 auth context 冷启动和数据库连接建立成本。
 
+## 带图片施工日志列表回显修复
+
+对接来源：
+
+- `orange/docs/2026-06-03-employee-project-log-create-performance-backend-checklist.md`
+
+小程序三次复测后新增问题：
+
+- 带 `images` 创建施工日志时，`POST /project-logs` 创建响应包含图片 URL。
+- 随后 `GET /project_logs/projects` 同一日志返回 `images: []`。
+- 小程序已做本地 pending 图片保护，但页面重开或其他用户查看仍依赖后端列表接口正确返回图片。
+
+后端定位：
+
+- 直连 Bun `SQL` 调用 `create_project_log_fast` 时，原代码使用
+  `${JSON.stringify(images)}::jsonb` 传入 `p_images`。
+- Bun SQL 会把该参数作为 JSON 字符串传给 Postgres，导致数据库中
+  `project_logs.images` 的 `jsonb_typeof(images)` 为 `string`，内容形如
+  `"[\"tenants/...jpg\"]"`。
+- 列表序列化只接受数组，因此历史错误形态会被转成 `[]`。
+
+修复：
+
+1. `apps/api/src/repositories/project-logs.ts`
+   - 直连创建 RPC 的 `p_images` 改为 `(${json}::text)::jsonb`。
+   - 新创建日志会写成真正的 JSON array。
+
+2. `apps/api/src/services/files/file-url-resolver.ts`
+   - `resolveStoredFileUrlList` 兼容历史 JSON 字符串数组。
+   - 即使遇到旧数据，也能解析后转换为可访问图片 URL。
+
+3. 新增迁移：
+   - `supabase/migrations/20260603162000_fix_project_log_images_jsonb_string.sql`
+   - 将历史 `jsonb string` 且内容为数组字符串的 `images` 修正为 JSON array。
+
+开发库处理：
+
+- `supabase db push --include-all` 因当前环境 `SUPABASE_DB_PASSWORD` 认证失败，未能通过 CLI 应用。
+- 已使用 `apps/api/.env` 中的直连 DB URL 执行同一条幂等数据修复 SQL。
+- 修复前历史错误图片字段：`6` 条。
+- 修复后剩余错误图片字段：`0` 条。
+
+验收：
+
+1. 历史小程序测试日志：
+   - 日志 ID：`207030d1-dd10-474e-98d8-f94e4c691bee`
+   - 数据库：`jsonb_typeof(images)=array`，图片数 `1`
+   - `GET /project_logs/projects`：找到该日志，`images.length=1`
+   - 返回图片为 `https://...` 可访问 URL
+
+2. 新建临时带图日志：
+   - 创建接口：`POST /project-logs?debug_timing=true`
+   - 状态：`200`
+   - 创建响应：`images.length=1`，首图为 `https://...`
+   - 随后列表：同一日志 `images.length=1`，首图为 `https://...`
+   - 数据库：`jsonb_typeof(images)=array`，图片数 `1`
+   - `debug_timing.create_rpc_ms=895`
+   - 临时测试日志已清理
+
 ## 验证命令
 
 ```bash
