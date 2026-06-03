@@ -1,8 +1,10 @@
 import {
   projectAcceptanceRepository,
+  type ProjectAcceptanceActionRow,
   type ProjectAcceptanceCustomerRow,
   type ProjectAcceptanceDetailGraphRow,
   type ProjectAcceptanceEmployeeRow,
+  type ProjectAcceptanceItemRow,
 } from "@/repositories/project-acceptances";
 import {
   measureProjectAcceptanceTiming,
@@ -10,11 +12,34 @@ import {
 } from "./timing";
 
 function getSingleRelation<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) {
-    return value[0] ?? null;
+  const parsed = parseJsonRelation(value);
+  if (Array.isArray(parsed)) {
+    return (parsed[0] as T | undefined) ?? null;
   }
 
-  return value ?? null;
+  return (parsed as T | null | undefined) ?? null;
+}
+
+function getRelationList<T>(value: T[] | string | null | undefined): T[] {
+  const parsed = parseJsonRelation(value);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item) => parseJsonRelation(item))
+    .filter((item): item is T => (
+      typeof item === "object" &&
+      item !== null
+    ));
+}
+
+function parseJsonRelation(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 export async function buildDetailFromGraph(this: any,
@@ -40,11 +65,15 @@ export async function buildDetailFromGraph(this: any,
   const initiator = getSingleRelation(rawInitiator);
   const reviewer = getSingleRelation(rawReviewer);
   const customer = getSingleRelation(rawCustomer);
-  const items = [...(rawItems ?? [])].sort((left, right) =>
+  const items = getRelationList<ProjectAcceptanceItemRow>(
+    rawItems as ProjectAcceptanceItemRow[] | string | null,
+  ).sort((left, right) =>
     left.sort_order - right.sort_order ||
     left.created_at.localeCompare(right.created_at)
   );
-  const actions = [...(rawActions ?? [])].sort((left, right) =>
+  const actions = getRelationList<ProjectAcceptanceActionRow>(
+    rawActions as ProjectAcceptanceActionRow[] | string | null,
+  ).sort((left, right) =>
     left.created_at.localeCompare(right.created_at)
   );
   const employeeMap = new Map(
@@ -96,7 +125,7 @@ export async function buildDetailFromGraph(this: any,
       project,
       employeeMap,
       customerMap,
-      latestNotification: tickets?.[0] ?? null,
+      latestNotification: getRelationList(tickets as any)[0] ?? null,
     }),
   );
 }

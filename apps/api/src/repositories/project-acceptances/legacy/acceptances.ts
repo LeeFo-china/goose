@@ -1,5 +1,6 @@
 import { Errors, SupabaseDB } from "./shared";
 import type { ProjectAcceptanceOpenTicketRow } from "@/repositories/project-acceptance-open-tickets";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import type {
   ListAcceptancesInput,
   ProjectAcceptanceActionRow,
@@ -80,6 +81,200 @@ export async function listAcceptances(this: any, input: ListAcceptancesInput) {
     list: (data || []) as ProjectAcceptanceRow[],
     total: count || 0,
   };
+}
+
+export async function listProjectAcceptanceDetailGraphs(this: any,
+  input: ListAcceptancesInput & {
+    tenantId: string;
+    project_id: string;
+  },
+) {
+  const directSql = getDirectPostgresSql();
+  if (!directSql || this.acceptanceDetailListDirectSqlUnavailable) {
+    return null;
+  }
+
+  try {
+    const offset = (input.page - 1) * input.pageSize;
+    const rows = await directSql`
+      WITH filtered AS (
+        SELECT *
+        FROM public.project_acceptances AS acceptance
+        WHERE acceptance.tenant_id = ${input.tenantId}::uuid
+          AND acceptance.project_id = ${input.project_id}::uuid
+          AND (
+            ${input.acceptance_type ?? null}::text IS NULL
+            OR acceptance.acceptance_type::text = ${input.acceptance_type ?? null}::text
+          )
+          AND (
+            ${input.status ?? null}::text IS NULL
+            OR acceptance.status::text = ${input.status ?? null}::text
+          )
+          AND (
+            ${input.stage_code ?? null}::text IS NULL
+            OR acceptance.stage_code::text = ${input.stage_code ?? null}::text
+          )
+          AND (
+            ${input.reviewer_id ?? null}::uuid IS NULL
+            OR acceptance.reviewer_id = ${input.reviewer_id ?? null}::uuid
+          )
+          AND (
+            ${input.customer_id ?? null}::uuid IS NULL
+            OR acceptance.customer_id = ${input.customer_id ?? null}::uuid
+          )
+      ),
+      paged AS (
+        SELECT
+          filtered.*,
+          COUNT(*) OVER()::integer AS total_count
+        FROM filtered
+        ORDER BY filtered.created_at DESC
+        OFFSET ${offset}::integer
+        LIMIT ${input.pageSize}::integer
+      )
+      SELECT
+        paged.id,
+        paged.tenant_id,
+        paged.project_id,
+        paged.acceptance_type,
+        paged.stage_code,
+        paged.template_id,
+        paged.template_version,
+        paged.template_snapshot,
+        paged.title,
+        paged.status,
+        paged.initiator_id,
+        paged.reviewer_id,
+        paged.customer_id,
+        paged.summary,
+        paged.submitted_at,
+        paged.reviewed_at,
+        paged.customer_confirmed_at,
+        paged.completed_at,
+        paged.rejected_at,
+        paged.reject_reason,
+        paged.reject_source,
+        paged.created_at,
+        paged.updated_at,
+        paged.total_count,
+        CASE WHEN project.id IS NULL THEN NULL ELSE jsonb_build_object(
+          'id', project.id,
+          'tenant_id', project.tenant_id,
+          'name', project.name,
+          'customer_id', project.customer_id,
+          'status', project.status
+        ) END AS project,
+        CASE WHEN initiator.id IS NULL THEN NULL ELSE jsonb_build_object(
+          'id', initiator.id,
+          'tenant_id', initiator.tenant_id,
+          'name', initiator.name,
+          'avatar', initiator.avatar
+        ) END AS initiator,
+        CASE WHEN reviewer.id IS NULL THEN NULL ELSE jsonb_build_object(
+          'id', reviewer.id,
+          'tenant_id', reviewer.tenant_id,
+          'name', reviewer.name,
+          'avatar', reviewer.avatar
+        ) END AS reviewer,
+        CASE WHEN customer.id IS NULL THEN NULL ELSE jsonb_build_object(
+          'id', customer.id,
+          'tenant_id', customer.tenant_id,
+          'name', customer.name,
+          'phone', customer.phone,
+          'user_id', customer.user_id,
+          'tenant', CASE WHEN tenant.id IS NULL THEN NULL ELSE jsonb_build_object(
+            'id', tenant.id,
+            'status', tenant.status
+          ) END
+        ) END AS customer,
+        COALESCE((
+          SELECT jsonb_agg(to_jsonb(item) ORDER BY item.sort_order ASC, item.created_at ASC)
+          FROM public.project_acceptance_items AS item
+          WHERE item.acceptance_id = paged.id
+            AND (item.tenant_id = paged.tenant_id OR item.tenant_id IS NULL)
+        ), '[]'::jsonb) AS items,
+        COALESCE((
+          SELECT jsonb_agg(to_jsonb(act) ORDER BY act.created_at ASC)
+          FROM public.project_acceptance_actions AS act
+          WHERE act.acceptance_id = paged.id
+            AND (act.tenant_id = paged.tenant_id OR act.tenant_id IS NULL)
+        ), '[]'::jsonb) AS actions,
+        COALESCE((
+          SELECT jsonb_agg(DISTINCT jsonb_build_object(
+            'id', employee.id,
+            'tenant_id', employee.tenant_id,
+            'name', employee.name,
+            'avatar', employee.avatar
+          ))
+          FROM public.project_acceptance_actions AS act
+          JOIN public.employees AS employee
+            ON employee.id = act.operator_id
+            AND employee.tenant_id = paged.tenant_id
+          WHERE act.acceptance_id = paged.id
+            AND act.operator_type = 'employee'
+            AND act.operator_id IS NOT NULL
+        ), '[]'::jsonb) AS action_employees,
+        COALESCE((
+          SELECT jsonb_agg(DISTINCT jsonb_build_object(
+            'id', customer.id,
+            'tenant_id', customer.tenant_id,
+            'name', customer.name,
+            'phone', customer.phone,
+            'user_id', customer.user_id
+          ))
+          FROM public.project_acceptance_actions AS act
+          JOIN public.customers AS customer
+            ON customer.id = act.operator_id
+            AND customer.tenant_id = paged.tenant_id
+          WHERE act.acceptance_id = paged.id
+            AND act.operator_type = 'customer'
+            AND act.operator_id IS NOT NULL
+        ), '[]'::jsonb) AS action_customers,
+        COALESCE((
+          SELECT jsonb_agg(to_jsonb(ticket) ORDER BY ticket.created_at DESC)
+          FROM (
+            SELECT *
+            FROM public.project_acceptance_open_tickets AS ticket
+            WHERE ticket.acceptance_id = paged.id
+              AND (ticket.tenant_id = paged.tenant_id OR ticket.tenant_id IS NULL)
+            ORDER BY ticket.created_at DESC
+            LIMIT 1
+          ) AS ticket
+        ), '[]'::jsonb) AS tickets
+      FROM paged
+      LEFT JOIN public.projects AS project
+        ON project.id = paged.project_id
+        AND project.tenant_id = paged.tenant_id
+      LEFT JOIN public.employees AS initiator
+        ON initiator.id = paged.initiator_id
+        AND initiator.tenant_id = paged.tenant_id
+      LEFT JOIN public.employees AS reviewer
+        ON reviewer.id = paged.reviewer_id
+        AND reviewer.tenant_id = paged.tenant_id
+      LEFT JOIN public.customers AS customer
+        ON customer.id = paged.customer_id
+        AND customer.tenant_id = paged.tenant_id
+      LEFT JOIN public.tenants AS tenant
+        ON tenant.id = customer.tenant_id
+      ORDER BY paged.created_at DESC
+    `;
+
+    const graphRows = rows as Array<ProjectAcceptanceDetailGraphRow & {
+      total_count?: number;
+    }>;
+    const total = Number((graphRows[0] as { total_count?: number } | undefined)
+      ?.total_count ?? 0);
+    const list = graphRows.map((row) => {
+      const { total_count: _totalCount, ...graph } = row as (
+        ProjectAcceptanceDetailGraphRow & { total_count?: number }
+      );
+      return graph as ProjectAcceptanceDetailGraphRow;
+    });
+    return { list, total };
+  } catch {
+    this.acceptanceDetailListDirectSqlUnavailable = true;
+    return null;
+  }
 }
 
 export async function getAcceptanceById(this: any, id: string, tenantId?: string | null) {

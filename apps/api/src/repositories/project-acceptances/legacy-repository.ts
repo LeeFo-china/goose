@@ -22,6 +22,7 @@ import {
   createAcceptance,
   createItems,
   listAcceptances,
+  listProjectAcceptanceDetailGraphs,
   getAcceptanceById,
   getAcceptanceDetailGraph,
   updateAcceptance,
@@ -59,6 +60,8 @@ export type {
 export type { ProjectAcceptanceDetailGraphRow } from "./legacy/acceptances";
 
 class ProjectAcceptanceRepository {
+  private acceptanceDetailListDirectSqlUnavailable = false;
+
   listTemplates = listTemplates;
   getTemplateById = getTemplateById;
   updateTemplate = updateTemplate;
@@ -78,6 +81,7 @@ class ProjectAcceptanceRepository {
   createAcceptance = createAcceptance;
   createItems = createItems;
   listAcceptances = listAcceptances;
+  listProjectAcceptanceDetailGraphs = listProjectAcceptanceDetailGraphs;
   listCustomerProjectAcceptanceSummaries = listCustomerProjectAcceptanceSummaries;
   getAcceptanceById = getAcceptanceById;
   getAcceptanceDetailGraph = getAcceptanceDetailGraph;

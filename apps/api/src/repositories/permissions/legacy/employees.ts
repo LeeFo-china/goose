@@ -16,6 +16,7 @@ import {
   type UpdatePermissionInput,
   type UpdateRoleInput,
 } from "./shared";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 
 export async function findEmployeeById(this: any, id: string) {
   const { data, error } = await this.adminClient
@@ -265,6 +266,76 @@ export async function findProjectTenantById(this: any, projectId: string) {
   }
 
   return data as { id: string; tenant_id: string | null } | null;
+}
+
+export async function canAccessProjectByScope(this: any, input: {
+  projectId: string;
+  tenantId: string;
+  scope: "self" | "department" | "assigned" | "all";
+  employeeId: string;
+  tenantDepartmentId?: string | null;
+}) {
+  const directSql = getDirectPostgresSql();
+  if (!directSql) return null;
+
+  const rows = await directSql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.projects AS project
+      WHERE project.id = ${input.projectId}::uuid
+        AND project.tenant_id = ${input.tenantId}::uuid
+        AND (
+          ${input.scope}::text = 'all'
+          OR (
+            ${input.scope}::text IN ('self', 'assigned')
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM public.project_members AS member
+                WHERE member.project_id = project.id
+                  AND member.employee_id = ${input.employeeId}::uuid
+                  AND member.deleted_at IS NULL
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM public.customers AS customer
+                WHERE customer.id = project.customer_id
+                  AND customer.owner_id = ${input.employeeId}::uuid
+                  AND customer.tenant_id = ${input.tenantId}::uuid
+              )
+            )
+          )
+          OR (
+            ${input.scope}::text = 'department'
+            AND ${input.tenantDepartmentId ?? null}::uuid IS NOT NULL
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM public.project_members AS member
+                JOIN public.employees AS employee
+                  ON employee.id = member.employee_id
+                  AND employee.tenant_id = ${input.tenantId}::uuid
+                WHERE member.project_id = project.id
+                  AND member.deleted_at IS NULL
+                  AND employee.tenant_department_id = ${input.tenantDepartmentId ?? null}::uuid
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM public.customers AS customer
+                JOIN public.employees AS owner
+                  ON owner.id = customer.owner_id
+                  AND owner.tenant_id = ${input.tenantId}::uuid
+                WHERE customer.id = project.customer_id
+                  AND customer.tenant_id = ${input.tenantId}::uuid
+                  AND owner.tenant_department_id = ${input.tenantDepartmentId ?? null}::uuid
+              )
+            )
+          )
+        )
+    ) AS allowed
+  `;
+
+  return Boolean((rows[0] as { allowed?: boolean } | undefined)?.allowed);
 }
 
 export async function hasActiveProjectMember(this: any, input: {

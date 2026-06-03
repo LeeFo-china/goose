@@ -24,6 +24,7 @@ import {
   listEmployeeIdsByDepartmentId,
   listVisibleProjectIds,
   findProjectTenantById,
+  canAccessProjectByScope,
   hasActiveProjectMember,
   replaceEmployeeRoles,
 } from "./legacy/employees";
@@ -142,6 +143,7 @@ class PermissionRepository {
   listEmployeeIdsByDepartmentId = listEmployeeIdsByDepartmentId;
   listVisibleProjectIds = listVisibleProjectIds;
   findProjectTenantById = findProjectTenantById;
+  canAccessProjectByScope = canAccessProjectByScope;
   hasActiveProjectMember = hasActiveProjectMember;
   replaceEmployeeRoles = replaceEmployeeRoles;
   listRolePermissions = listRolePermissions;

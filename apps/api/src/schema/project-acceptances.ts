@@ -17,6 +17,16 @@ const ReferencedImageListSchema = z.array(
   .max(9, "最多引用9张图片")
   .default([]);
 
+const DebugTimingQueryValueSchema = z.preprocess((value) => {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return value;
+}, z.boolean().default(false));
+
 export const ProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
   project_id: z.uuid("无效的项目ID").optional(),
   acceptance_type: z.enum(PROJECT_ACCEPTANCE_TYPE_VALUES, {
@@ -30,6 +40,7 @@ export const ProjectAcceptanceListQuerySchema = PaginationQuerySchema.extend({
   }).optional(),
   reviewer_id: z.uuid("无效的复核人ID").optional(),
   customer_id: z.uuid("无效的客户ID").optional(),
+  debug_timing: DebugTimingQueryValueSchema,
 });
 
 export const ProjectAcceptanceTemplateListQuerySchema = z.object({
@@ -215,24 +226,21 @@ export const VerifyProjectAcceptanceOpenTicketSchema = z.object({
   project_id: z.uuid("无效的项目 ID"),
 });
 
-const DebugTimingQueryValueSchema = z.preprocess((value) => {
-  if (value == null || value === "") return undefined;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(normalized)) return true;
-    if (["false", "0", "no", "off"].includes(normalized)) return false;
-  }
-  return value;
-}, z.boolean().default(false));
-
 export const CustomerProjectAcceptanceOpenTicketQuerySchema = z.object({
   ticket: z.string().trim().min(16, "访问票据无效").optional(),
   project_id: z.uuid("无效的项目 ID").optional(),
   debug_timing: DebugTimingQueryValueSchema,
 });
 
+export const ProjectAcceptanceDetailQuerySchema = z.object({
+  debug_timing: DebugTimingQueryValueSchema,
+});
+
 export type ProjectAcceptanceListQuery = z.infer<
   typeof ProjectAcceptanceListQuerySchema
+>;
+export type ProjectAcceptanceDetailQuery = z.infer<
+  typeof ProjectAcceptanceDetailQuerySchema
 >;
 export type ProjectAcceptanceTemplateListQuery = z.infer<
   typeof ProjectAcceptanceTemplateListQuerySchema

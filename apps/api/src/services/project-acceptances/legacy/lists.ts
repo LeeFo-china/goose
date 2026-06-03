@@ -8,7 +8,6 @@ import type {
   CustomerConfirmProjectAcceptanceInput,
   CustomerDisputeProjectAcceptanceInput,
   NotifyProjectAcceptanceCustomerInput,
-  ProjectAcceptanceListQuery,
   ProjectAcceptanceTemplateListQuery,
   RejectProjectAcceptanceInput,
   RectifyProjectAcceptanceInput,
@@ -19,7 +18,6 @@ import type {
 } from "@/schema/project-acceptances";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AuthContext } from "@/services/authorization";
-import { accessPolicyService } from "@/services/access-policy";
 import { projectAcceptanceRepository } from "@/repositories/project-acceptances";
 import {
   projectAcceptanceOpenTicketRepository,
@@ -197,39 +195,6 @@ class ProjectAcceptanceWorkflowService {
 }
 
 const projectAcceptanceWorkflowService = new ProjectAcceptanceWorkflowService();
-
-export async function listAcceptances(this: any, 
-    authContext: AuthContext,
-    query: ProjectAcceptanceListQuery,
-  ) {
-    const tenantId = this.requireTenantId(authContext);
-    const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
-      authContext,
-      "project_acceptance.read",
-    );
-    const { list, total } = await projectAcceptanceRepository.listAcceptances({
-      ...query,
-      visibleProjectIds,
-      tenantId,
-    });
-
-    return {
-      list: await this.buildDetails(list),
-      pagination: {
-        page: query.page,
-        pageSize: query.pageSize,
-        total,
-        totalPages: total ? Math.ceil(total / query.pageSize) : 0,
-      },
-    };
-  }
-
-export async function getAcceptance(this: any, authContext: AuthContext, id: string) {
-    const tenantId = this.requireTenantId(authContext);
-    const row = await this.getRequiredAcceptance(id, tenantId);
-    await this.assertCanRead(authContext, row);
-    return this.buildDetail(row);
-  }
 
 export async function listCustomerAcceptances(this: any, 
     authUserId: string,

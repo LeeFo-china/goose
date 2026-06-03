@@ -238,6 +238,7 @@ export function setCachedCustomerAcceptanceList(this: any,
 export function clearCustomerAcceptanceListCache(this: any) {
     this.customerAcceptanceListCache.clear();
     this.customerAcceptanceListInFlight.clear();
+    this.clearEmployeeAcceptanceDetailCache?.();
   }
 
 export function invalidateAcceptanceRelatedCaches(this: any, projectId?: string | null) {

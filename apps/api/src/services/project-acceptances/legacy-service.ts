@@ -271,14 +271,20 @@ import {
   buildTemplateSections,
 } from "./legacy/templates";
 import {
-  listAcceptances,
-  getAcceptance,
   listCustomerAcceptances,
   loadCustomerAcceptances,
   getCustomerAcceptance,
   getCustomerAcceptanceByAuthOrTicket,
   verifyOpenTicket,
 } from "./legacy/lists";
+import { listAcceptances } from "./legacy/employee-list";
+import { getAcceptance } from "./legacy/employee-detail";
+import {
+  clearEmployeeAcceptanceDetailCache,
+  employeeAcceptanceDetailCacheKey,
+  getCachedEmployeeAcceptanceDetail,
+  setCachedEmployeeAcceptanceDetail,
+} from "./legacy/employee-detail";
 import { loadCustomerAcceptanceSummaries } from "./legacy/summary-lists";
 import {
   resolveCustomerActor,
@@ -316,6 +322,11 @@ class ProjectAcceptanceService {
     value: CustomerAcceptanceListResult;
   }>();
   private customerAcceptanceListInFlight = new Map<string, Promise<CustomerAcceptanceListResult>>();
+  private employeeAcceptanceDetailCache = new Map<string, {
+    expiresAt: number;
+    value: any;
+  }>();
+  private employeeAcceptanceDetailInFlight = new Map<string, Promise<any>>();
 
   private requireTenantId = requireTenantId;
   private getCachedCustomerAcceptanceList = getCachedCustomerAcceptanceList;
@@ -323,6 +334,10 @@ class ProjectAcceptanceService {
   private clearCustomerAcceptanceListCache = clearCustomerAcceptanceListCache;
   private invalidateAcceptanceRelatedCaches = invalidateAcceptanceRelatedCaches;
   private customerAcceptanceListCacheKey = customerAcceptanceListCacheKey;
+  private employeeAcceptanceDetailCacheKey = employeeAcceptanceDetailCacheKey;
+  private getCachedEmployeeAcceptanceDetail = getCachedEmployeeAcceptanceDetail;
+  private setCachedEmployeeAcceptanceDetail = setCachedEmployeeAcceptanceDetail;
+  private clearEmployeeAcceptanceDetailCache = clearEmployeeAcceptanceDetailCache;
   private listCustomerProfilesByMembership = listCustomerProfilesByMembership;
   private getCustomerByAuthUserId = getCustomerByAuthUserId;
   private getCustomerByAuthUserOrScope = getCustomerByAuthUserOrScope;

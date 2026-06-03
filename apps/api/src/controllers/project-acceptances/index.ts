@@ -7,6 +7,7 @@ import {
   CustomerConfirmProjectAcceptanceSchema,
   CustomerDisputeProjectAcceptanceSchema,
   ProjectAcceptanceCreateQuerySchema,
+  ProjectAcceptanceDetailQuerySchema,
   NotifyProjectAcceptanceCustomerSchema,
   ProjectAcceptanceListQuerySchema,
   ProjectAcceptanceTemplateListQuerySchema,
@@ -17,6 +18,7 @@ import {
   UpdateProjectAcceptanceSchema,
 } from "@/schema/project-acceptances";
 import { projectAcceptanceService } from "@/services/project-acceptances";
+import type { ProjectAcceptanceTimingSteps } from "@/services/project-acceptances/legacy/timing";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -34,27 +36,79 @@ class ProjectAcceptancesController extends TenantBaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
+    const startedAt = Date.now();
+    const authStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authStartedAt;
     const result = ProjectAcceptanceListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
+    const timing: ProjectAcceptanceTimingSteps | undefined = result.data
+      .debug_timing
+      ? {}
+      : undefined;
     const data = await projectAcceptanceService.listAcceptances(
       authContext,
       result.data,
+      { timing },
     );
+    if (result.data.debug_timing) {
+      return ResponseHandler.success({
+        ...data,
+        debug_timing: {
+          ...timing,
+          auth_context_ms: authContextMs,
+          total_ms: Date.now() - startedAt,
+        },
+      });
+    }
     return ResponseHandler.success(data);
   };
 
   override getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const startedAt = Date.now();
+    const authStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
+    const authContextMs = Date.now() - authStartedAt;
     const idVerify = this.idParamSchema.safeParse(request.params);
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
+    const queryResult = ProjectAcceptanceDetailQuerySchema.safeParse(
+      request.query ?? {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
+    const timing: ProjectAcceptanceTimingSteps | undefined = queryResult.data
+      .debug_timing
+      ? {}
+      : undefined;
     const data = await projectAcceptanceService.getAcceptance(
       authContext,
       idVerify.data.id,
+      { timing },
     );
-    return ResponseHandler.success(data);
+    if (!queryResult.data.debug_timing) {
+      return ResponseHandler.success(data);
+    }
+
+    const graphQueryMs = timing?.acceptance_detail_graph_query_ms ?? 0;
+    return ResponseHandler.success({
+      ...data,
+      debug_timing: {
+        ...timing,
+        auth_context_ms: authContextMs,
+        total_ms: Date.now() - startedAt,
+        acceptance_ms: graphQueryMs,
+        project_ms: 0,
+        customer_ms: 0,
+        items_ms: 0,
+        actions_ms: 0,
+        images_ms: timing?.detail_serialize_ms ?? 0,
+        latest_notification_ms: 0,
+        permission_ms: timing?.permission_ms ?? 0,
+        assemble_ms: timing?.detail_serialize_ms ?? 0,
+        cache_hit: timing?.cache_hit ?? 0,
+      },
+    });
   };
 
   override create = async (request: FastifyRequest, reply: FastifyReply) => {
