@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { ReleaseEnvironment, ReleaseRefType, ReleaseSuccessfulRef } from "@/components/ops/ops-types";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
 import { RuntimeVersionsPanel } from "@/components/ops/release-deployments-dialogs";
+import { ProductionMigrationAssistCard } from "@/components/ops/production-migration-assist-card";
 import { ProductionMigrationCard, ReleaseDispatchCard } from "@/components/ops/release-deployments-dispatch-card";
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
@@ -270,7 +271,7 @@ export function ReleaseDeploymentsPanel({
         </TabsContent>
 
         <TabsContent value="database-migration" className="mt-0">
-          <div className="max-w-3xl">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.62fr)]">
             <ProductionMigrationCard
               options={options}
               onSubmitted={() => {
@@ -279,6 +280,7 @@ export function ReleaseDeploymentsPanel({
                 void refreshReleaseSnapshots({ silent: true });
               }}
             />
+            <ProductionMigrationAssistCard options={options} />
           </div>
         </TabsContent>
       </Tabs>
