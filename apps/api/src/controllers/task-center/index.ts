@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Get } from "@/utils/decorators/route";
 import { Errors } from "@/errors/error-factory";
@@ -9,6 +10,16 @@ import {
   TaskCenterTodoListQuerySchema,
 } from "@/schema/task-center";
 import { taskCenterService } from "@/services/task-center";
+
+const TaskSummaryQuerySchema = z.object({
+  debug_timing: z.preprocess((value) => {
+    if (value == null || value === "") return false;
+    if (typeof value === "string") {
+      return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+    }
+    return value;
+  }, z.boolean().default(false)),
+});
 
 class TaskCenterController extends TenantBaseController {
   constructor() {
@@ -43,6 +54,10 @@ class TaskCenterController extends TenantBaseController {
 
   @Get("/task-center/todos/summary")
   async getSummary(request: FastifyRequest, reply: FastifyReply) {
+    const queryResult = TaskSummaryQuerySchema.safeParse(request.query);
+    if (!queryResult.success) {
+      throw Errors.fromZod(queryResult.error);
+    }
     const authContextStartedAt = Date.now();
     const authContext = await this.getRequiredTenantContext(request);
     const authContextMs = Date.now() - authContextStartedAt;
@@ -62,7 +77,18 @@ class TaskCenterController extends TenantBaseController {
       "[task-summary] timings",
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...data,
+      ...(queryResult.data.debug_timing
+        ? {
+          debug_timing: {
+            auth_context_ms: authContextMs,
+            service_ms: serviceMs,
+            total_ms: authContextMs + serviceMs,
+          },
+        }
+        : {}),
+    });
   }
 }
 

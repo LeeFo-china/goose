@@ -179,11 +179,13 @@ export async function loadProjects(this: any, input: {
             rows: rowsWithAssignees,
             tenantId,
         });
+        const stageDurationMs = Date.now() - stageStartedAt;
+        const displayStatusStartedAt = Date.now();
         const rows = await attachProjectDisplayStatuses({
             rows: rowsWithStages,
             tenantId,
         });
-        const stageDurationMs = Date.now() - stageStartedAt;
+        const displayStatusDurationMs = Date.now() - displayStatusStartedAt;
         const hasMore = rowsWithLookahead.length > pageSize;
         const total = from + rows.length + (hasMore ? 1 : 0);
 
@@ -201,6 +203,7 @@ export async function loadProjects(this: any, input: {
                 rowsMs: rowsDurationMs,
                 assigneesMs: assignmentDurationMs,
                 stagesMs: stageDurationMs,
+                displayStatusMs: displayStatusDurationMs,
                 totalMs: Date.now() - startedAt,
                 visibleProjectCount: visibleProjectIds?.length ?? null,
                 todayProjectCount: todayProjectIds?.length ?? null,

@@ -20,7 +20,10 @@ export async function attachProjectDisplayStatuses(input: {
     }
 
     const acceptanceProjectIds = input.rows
-        .filter((row) => row.status === "acceptance")
+        .filter((row) =>
+            row.status === "acceptance" &&
+            typeof row.display_status !== "string"
+        )
         .map((row) => getProjectId(row))
         .filter((id): id is string => Boolean(id));
     const completedProjectIds = acceptanceProjectIds.length > 0

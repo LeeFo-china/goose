@@ -54,9 +54,31 @@ function serializeEmployeeOption(item: ProjectCreateSelectEmployeeRow): ProjectC
   };
 }
 
+function buildProjectListDebugTiming(input: {
+  authContextMs: number;
+  controllerTotalMs: number;
+  timings?: Record<string, number | string | null>;
+}) {
+  return {
+    auth_context_ms: input.authContextMs,
+    cache: input.timings?.cache ?? null,
+    scope_ms: input.timings?.scopeMs ?? null,
+    rows_ms: input.timings?.rowsMs ?? null,
+    assignees_ms: input.timings?.assigneesMs ?? null,
+    stages_ms: input.timings?.stagesMs ?? null,
+    display_status_ms: input.timings?.displayStatusMs ?? null,
+    total_ms: input.timings?.totalMs ?? input.controllerTotalMs,
+    visible_project_count: input.timings?.visibleProjectCount ?? null,
+    today_project_count: input.timings?.todayProjectCount ?? null,
+    row_count: input.timings?.rowCount ?? null,
+    has_more: input.timings?.hasMore ?? null,
+  };
+}
+
 class ProjectCreateSelectController extends ProjectBaseController {
   @Get("/projects/status")
   async getProjectsBystatus(request: FastifyRequest) {
+    const requestStartedAt = Date.now();
     const queryResult = ProjectListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContextStartedAt = Date.now();
@@ -81,6 +103,15 @@ class ProjectCreateSelectController extends ProjectBaseController {
       return ResponseHandler.success({
         list: result.rows.map((item) => serializeProjectListItem(item)),
         pagination: result.pagination,
+        ...(queryResult.data.debug_timing
+          ? {
+            debug_timing: buildProjectListDebugTiming({
+              authContextMs,
+              controllerTotalMs: Date.now() - requestStartedAt,
+              timings: result.debugTimings,
+            }),
+          }
+          : {}),
       });
     }
 
