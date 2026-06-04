@@ -13,6 +13,7 @@ import {
   formatServiceLabels,
   getAuditRunId,
   getAuditServices,
+  getMetadataValue,
   getGithubConfig,
   getLatestSuccessfulRunFromPayload,
   getReleaseEnvironmentOrder,
@@ -124,13 +125,15 @@ export async function hydrateRunServiceLabels(this: any, list: NormalizedRelease
 
     return list.map((run) => {
       const record = byRunId.get(run.id);
-      const services = record ? getAuditServices(record) : null;
+      const auditRef = record ? getMetadataValue(record.metadata, "ref") : null;
+      const isMatchingAudit = !auditRef || auditRef === run.head_branch || auditRef === run.head_sha;
+      const services = record && isMatchingAudit ? getAuditServices(record) : null;
       if (!record) return run;
       return {
         ...run,
         services: services?.length ? services : run.services,
         service_label: services?.length ? formatServiceLabels(services) : run.service_label,
-        audit: normalizeRunAudit(record),
+        audit: isMatchingAudit ? normalizeRunAudit(record) : run.audit,
       };
     });
   } catch {

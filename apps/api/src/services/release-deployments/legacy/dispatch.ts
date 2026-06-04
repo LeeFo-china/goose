@@ -97,7 +97,7 @@ export async function findRecentRun(this: any, workflow: ReleaseWorkflow, input:
         return item.head_sha?.toLowerCase() === input.ref.toLowerCase();
       }
       return item.head_branch === input.ref;
-    }) || payload.workflow_runs?.[0];
+    });
 
     if (run) {
       return normalizeWorkflowRun(workflow, run);
