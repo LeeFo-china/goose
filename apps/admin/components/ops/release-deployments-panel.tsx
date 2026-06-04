@@ -10,6 +10,7 @@ import { ProductionMigrationCard, ReleaseDispatchCard } from "@/components/ops/r
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ReleaseDeploymentsPanel({
   options,
@@ -254,21 +255,33 @@ export function ReleaseDeploymentsPanel({
         onRefresh={() => void refreshReleaseSnapshots()}
       />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
-        <div className="flex flex-col gap-3">
-          <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
-          <ProductionMigrationCard
-            options={options}
-            onSubmitted={() => {
-              router.refresh();
-              setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
-              void refreshReleaseSnapshots({ silent: true });
-            }}
-          />
-        </div>
+      <Tabs defaultValue="service-release" className="flex flex-col gap-3">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="service-release">服务发布</TabsTrigger>
+          <TabsTrigger value="database-migration">数据库迁移</TabsTrigger>
+        </TabsList>
 
-      <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
-      </div>
+        <TabsContent value="service-release" className="mt-0">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
+            <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
+
+            <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="database-migration" className="mt-0">
+          <div className="max-w-3xl">
+            <ProductionMigrationCard
+              options={options}
+              onSubmitted={() => {
+                router.refresh();
+                setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+                void refreshReleaseSnapshots({ silent: true });
+              }}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <ReleaseRunsCard state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns }} actions={{ refreshReleaseSnapshots, changeRunsPage }} />
     </div>
