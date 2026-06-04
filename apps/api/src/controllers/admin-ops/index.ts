@@ -9,6 +9,7 @@ import {
   ReleaseCreateRollbackTagSchema,
   ReleaseCreateTagSchema,
   ReleaseDispatchSchema,
+  ReleaseProductionMigrationDispatchSchema,
   ReleaseRefListQuerySchema,
   ReleaseRunFailureSummaryParamsSchema,
   ReleaseRunListQuerySchema,
@@ -149,6 +150,17 @@ class AdminOpsController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await releaseDeploymentService.dispatch(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/ops/releases/production-migrations/dispatch")
+  async dispatchProductionMigration(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+
+    const bodyResult = ReleaseProductionMigrationDispatchSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await releaseDeploymentService.dispatchProductionMigration(authContext, bodyResult.data);
     return ResponseHandler.success(data);
   }
 

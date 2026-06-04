@@ -1,0 +1,245 @@
+name: Migrate Production Database
+run-name: Production database migration ${{ github.event.inputs.mode || 'plan' }}
+
+# Manually plans or applies Supabase SQL migrations to the production
+# self-hosted Supabase database. This workflow is intentionally separate from
+# image release workflows because database changes have a higher blast radius.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Migration mode"
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+      confirm_text:
+        description: "Required for apply: 确认迁移生产数据库"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-production-database
+  cancel-in-progress: false
+
+env:
+  DEPLOY_DIR: /opt/supabase/docker
+  BACKUP_DIR: /opt/supabase/docker/backups
+
+jobs:
+  migrate-production:
+    name: Migrate production database
+    runs-on: [self-hosted, Linux, X64, gooes-build-tencent, gooes-prod-vm-0-3]
+
+    steps:
+      - name: Guard production runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test -d "${DEPLOY_DIR}"
+          docker inspect supabase-db >/dev/null
+
+      - name: Checkout repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
+          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+
+          checkout_attempt() {
+            mode="$1"
+            if [ "$mode" = "proxy" ]; then
+              export HTTPS_PROXY=socks5h://127.0.0.1:18080
+              export HTTP_PROXY=socks5h://127.0.0.1:18080
+              export ALL_PROXY=socks5h://127.0.0.1:18080
+              export https_proxy="$HTTPS_PROXY"
+              export http_proxy="$HTTP_PROXY"
+              export all_proxy="$ALL_PROXY"
+              git_timeout=180
+            else
+              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
+              git_timeout=45
+            fi
+
+            if [ ! -d "${SOURCE_DIR}/.git" ]; then
+              rm -rf "${SOURCE_DIR}" || return 1
+              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
+            fi
+            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
+            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
+            git -C "${SOURCE_DIR}" clean -fdx || return 1
+          }
+
+          if ! checkout_attempt direct; then
+            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
+              checkout_attempt proxy
+            else
+              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
+              exit 1
+            fi
+          fi
+
+      - name: Plan and apply migrations
+        env:
+          MIGRATE_MODE: ${{ inputs.mode }}
+          CONFIRM_TEXT: ${{ inputs.confirm_text }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_WORKSPACE}/source"
+          test -d supabase/migrations
+
+          if [ "${MIGRATE_MODE}" != "plan" ] && [ "${MIGRATE_MODE}" != "apply" ]; then
+            echo "error=invalid_migrate_mode"
+            exit 1
+          fi
+
+          if [ "${MIGRATE_MODE}" = "apply" ] && [ "${CONFIRM_TEXT}" != "确认迁移生产数据库" ]; then
+            echo "error=confirm_text_mismatch"
+            exit 1
+          fi
+
+          psql_prod() {
+            docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
+          }
+
+          migration_table_exists="$(psql_prod -Atc "select to_regclass('supabase_migrations.schema_migrations') is not null;")"
+          if [ "${migration_table_exists}" = "t" ]; then
+            before_count="$(psql_prod -Atc "select count(*) from supabase_migrations.schema_migrations;")"
+            before_latest="$(psql_prod -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
+            mapfile -t executed_versions < <(psql_prod -Atc "select version from supabase_migrations.schema_migrations order by version;")
+          else
+            before_count="0"
+            before_latest=""
+            executed_versions=()
+          fi
+
+          db_name="$(psql_prod -Atc "select current_database();")"
+          db_user="$(psql_prod -Atc "select current_user;")"
+          tenant_count="$(psql_prod -Atc "select count(*) from public.tenants;" 2>/dev/null || echo "unknown")"
+          permission_count="$(psql_prod -Atc "select count(*) from public.permissions;" 2>/dev/null || echo "unknown")"
+
+          declare -A executed_version_map=()
+          for version in "${executed_versions[@]}"; do
+            executed_version_map["${version}"]=1
+          done
+
+          pending_files=()
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            version="${base%%_*}"
+            if [ -z "${executed_version_map[${version}]:-}" ]; then
+              pending_files+=("${file}")
+            fi
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
+
+          backup_file=""
+          applied_versions=()
+          if [ "${MIGRATE_MODE}" = "apply" ]; then
+            mkdir -p "${BACKUP_DIR}"
+            backup_file="${BACKUP_DIR}/prod-migrate-${GITHUB_RUN_ID}-$(date +%Y%m%d%H%M%S).sql"
+            docker exec supabase-db pg_dump -U postgres -d postgres --schema=public --schema=supabase_migrations > "${backup_file}"
+
+            psql_prod -c "CREATE SCHEMA IF NOT EXISTS supabase_migrations;"
+            psql_prod -c "CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text PRIMARY KEY, statements text[], name text);"
+
+            for file in "${pending_files[@]}"; do
+              base="$(basename "${file}")"
+              version="${base%%_*}"
+              name="${base#${version}_}"
+              name="${name%.sql}"
+              escaped_name="${name}"
+
+              if grep -Eiq '^[[:space:]]*(begin|commit)[[:space:]]*;' "${file}"; then
+                {
+                  cat "${file}"
+                  printf "\ninsert into supabase_migrations.schema_migrations(version, name, statements) values ('%s', '%s', array['applied_by_migrate_production_database_workflow']) on conflict (version) do nothing;\n" "${version}" "${escaped_name}"
+                } | psql_prod
+              else
+                {
+                  echo "begin;"
+                  cat "${file}"
+                  printf "\ninsert into supabase_migrations.schema_migrations(version, name, statements) values ('%s', '%s', array['applied_by_migrate_production_database_workflow']) on conflict (version) do nothing;\n" "${version}" "${escaped_name}"
+                  echo "commit;"
+                } | psql_prod
+              fi
+
+              applied_versions+=("${version}")
+            done
+
+            psql_prod -c "notify pgrst, 'reload schema';" >/dev/null
+          fi
+
+          if [ "${migration_table_exists}" = "t" ] || [ "${MIGRATE_MODE}" = "apply" ]; then
+            after_count="$(psql_prod -Atc "select count(*) from supabase_migrations.schema_migrations;")"
+            after_latest="$(psql_prod -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
+          else
+            after_count="${before_count}"
+            after_latest="${before_latest}"
+          fi
+
+          pending_versions=()
+          for file in "${pending_files[@]}"; do
+            base="$(basename "${file}")"
+            pending_versions+=("${base%%_*}")
+          done
+
+          {
+            echo "MIGRATE_MODE_RESULT=${MIGRATE_MODE}"
+            echo "PROD_DB_NAME=${db_name}"
+            echo "PROD_DB_USER=${db_user}"
+            echo "MIGRATION_BEFORE_COUNT=${before_count}"
+            echo "MIGRATION_BEFORE_LATEST=${before_latest}"
+            echo "MIGRATION_AFTER_COUNT=${after_count}"
+            echo "MIGRATION_AFTER_LATEST=${after_latest}"
+            echo "MIGRATION_PENDING_COUNT=${#pending_files[@]}"
+            echo "MIGRATION_PENDING_VERSIONS=${pending_versions[*]:-}"
+            echo "MIGRATION_APPLIED_COUNT=${#applied_versions[@]}"
+            echo "MIGRATION_APPLIED_VERSIONS=${applied_versions[*]:-}"
+            echo "PROD_TENANT_COUNT=${tenant_count}"
+            echo "PROD_PERMISSION_COUNT=${permission_count}"
+            echo "PROD_BACKUP_FILE=${backup_file}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Write migration summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Migrate Production Database Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Result | ${{ job.status }} |"
+            echo "| Mode | \`${MIGRATE_MODE_RESULT:-${{ inputs.mode }}}\` |"
+            echo "| Commit | \`${GITHUB_SHA:0:12}\` |"
+            echo "| DB | \`${PROD_DB_NAME:-unknown}\` |"
+            echo "| DB user | \`${PROD_DB_USER:-unknown}\` |"
+            echo "| Before | count \`${MIGRATION_BEFORE_COUNT:-unknown}\`, latest \`${MIGRATION_BEFORE_LATEST:-unknown}\` |"
+            echo "| After | count \`${MIGRATION_AFTER_COUNT:-unknown}\`, latest \`${MIGRATION_AFTER_LATEST:-unknown}\` |"
+            echo "| Pending before run | \`${MIGRATION_PENDING_COUNT:-unknown}\` |"
+            echo "| Applied | \`${MIGRATION_APPLIED_COUNT:-unknown}\` |"
+            echo "| Backup | \`${PROD_BACKUP_FILE:-not-created}\` |"
+            echo "| Tenants | \`${PROD_TENANT_COUNT:-unknown}\` |"
+            echo "| Permissions | \`${PROD_PERMISSION_COUNT:-unknown}\` |"
+            echo ""
+            echo "### Pending Versions Before Run"
+            echo ""
+            echo "\`${MIGRATION_PENDING_VERSIONS:-none}\`"
+            echo ""
+            echo "### Applied Versions"
+            echo ""
+            echo "\`${MIGRATION_APPLIED_VERSIONS:-none}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,4 +1,4 @@
-import type { ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseOperation, ReleaseOptionsData, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData, Pagination } from "@/components/ops/ops-types";
+import type { ReleaseCreateTagResult, ReleaseDispatchResult, ReleaseEnvironment, ReleaseMigrationMode, ReleaseOperation, ReleaseOptionsData, ReleaseProductionMigrationDispatchResult, ReleaseRefOption, ReleaseRefType, ReleaseRuntimeServiceVersion, ReleaseRuntimeVersionData, ReleaseRun, ReleaseRunFailureSummary, ReleaseRunListData, ReleaseService, ReleaseSuccessfulRef, ReleaseSuccessfulRefListData, Pagination } from "@/components/ops/ops-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type ReleaseDeploymentsPanelProps = {
@@ -39,6 +39,20 @@ export async function dispatchRelease(payload: {
     method: "POST",
     body: JSON.stringify(payload),
     fallbackMessage: "发布任务提交失败",
+  });
+}
+
+export async function dispatchProductionMigration(payload: {
+  mode: ReleaseMigrationMode;
+  ref_type: Exclude<ReleaseRefType, "commit">;
+  ref: string;
+  reason: string;
+  confirm_text?: string;
+}) {
+  return requestBackendJson<ReleaseProductionMigrationDispatchResult>("/admin/ops/releases/production-migrations/dispatch", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    fallbackMessage: "生产数据库迁移任务提交失败",
   });
 }
 

@@ -4,6 +4,7 @@ import {
   ErrorCodes,
   REF_TYPE_LABELS,
   RELEASE_OPERATION_LABELS,
+  PRODUCTION_MIGRATION_WORKFLOW,
   RELEASE_WORKFLOWS,
   SERVICE_LABELS,
   compareRuntimeWithDev,
@@ -44,6 +45,7 @@ import {
   type ReleaseCreateTagInput,
   type ReleaseDispatchInput,
   type ReleaseEnvironment,
+  type ReleaseProductionMigrationDispatchInput,
   type ReleaseRefListQuery,
   type ReleaseRunFailureJobSummary,
   type ReleaseRunListQuery,
@@ -173,5 +175,93 @@ export async function dispatch(this: any, authContext: AuthContext, input: Relea
     workflow_url: workflowUrl,
     run,
     message: "已提交 GitHub Actions 发布任务，请在发布记录中查看状态。",
+  };
+}
+
+export async function dispatchProductionMigration(
+  this: any,
+  authContext: AuthContext,
+  input: ReleaseProductionMigrationDispatchInput,
+) {
+  const workflow = PRODUCTION_MIGRATION_WORKFLOW;
+  await this.assertWorkflowIdle(workflow);
+
+  if (input.ref_type === "branch") {
+    await githubRequest<GithubBranch>(`/branches/${encodeURIComponent(input.ref)}`);
+  } else {
+    const tags = await githubRequest<GithubTag[]>("/tags?per_page=100");
+    const matched = tags.some((item) => item.name === input.ref);
+    if (!matched) {
+      throw Errors.business(
+        404,
+        "迁移版本 Tag 不存在，请重新选择",
+        ErrorCodes.RELEASE_REF_NOT_FOUND,
+        { ref: input.ref, ref_type: input.ref_type },
+      );
+    }
+  }
+
+  const config = getGithubConfig();
+  const inputs = {
+    mode: input.mode,
+    confirm_text: input.mode === "apply" ? input.confirm_text || "" : "",
+  };
+
+  await githubRequest<null>(
+    `/actions/workflows/${workflow.workflowId}/dispatches`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ref: input.ref,
+        inputs,
+      }),
+    },
+  );
+
+  const workflowUrl = `${config.webBase}/actions/workflows/${workflow.workflowId}`;
+  const run = await this.findRecentRun(workflow, {
+    environment: "production",
+    service: "all",
+    services: ["all"],
+    ref_type: input.ref_type,
+    ref: input.ref,
+    operation: "release",
+    reason: input.reason,
+    confirm_text: input.confirm_text,
+  });
+  const modeLabel = input.mode === "apply" ? "执行" : "预检查";
+
+  await platformAuditLogService.recordBestEffort({
+    action: "platform_release_dispatch",
+    actorEmployeeId: authContext.employeeId,
+    actorUserId: authContext.authUserId,
+    resourceType: "github_actions_workflow",
+    resourceLabel: `${workflow.label} ${modeLabel}`,
+    status: "success",
+    summary: `发起${workflow.label}${modeLabel}`,
+    metadata: {
+      environment: "production",
+      operation: "migration",
+      operation_label: modeLabel,
+      migration_mode: input.mode,
+      ref_type: input.ref_type,
+      ref_type_label: REF_TYPE_LABELS[input.ref_type],
+      ref: input.ref,
+      reason: input.reason || null,
+      workflow_id: workflow.workflowId,
+      workflow_url: workflowUrl,
+      run_id: run?.id || null,
+      run_url: run?.html_url || null,
+    },
+  });
+
+  return {
+    mode: input.mode,
+    ref: input.ref,
+    ref_type: input.ref_type,
+    workflow_id: workflow.workflowId,
+    workflow_url: workflowUrl,
+    run,
+    message: `已提交生产数据库迁移${modeLabel}任务，请在发布记录中查看状态。`,
   };
 }

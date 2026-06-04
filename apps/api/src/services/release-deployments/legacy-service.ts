@@ -28,6 +28,7 @@ import {
   assertWorkflowIdle,
   findRecentRun,
   dispatch,
+  dispatchProductionMigration,
 } from "./legacy/dispatch";
 
 class ReleaseDeploymentService {
@@ -52,6 +53,7 @@ class ReleaseDeploymentService {
   private assertWorkflowIdle = assertWorkflowIdle;
   private findRecentRun = findRecentRun;
   dispatch = dispatch;
+  dispatchProductionMigration = dispatchProductionMigration;
 }
 
 export const releaseDeploymentService = new ReleaseDeploymentService();

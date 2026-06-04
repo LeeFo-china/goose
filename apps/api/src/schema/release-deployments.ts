@@ -13,6 +13,7 @@ export const ReleaseServiceSchema = z.enum([
 
 export const ReleaseRefTypeSchema = z.enum(["branch", "tag", "commit"]);
 export const ReleaseOperationSchema = z.enum(["release", "rollback"]);
+export const ReleaseMigrationModeSchema = z.enum(["plan", "apply"]);
 
 export const ReleaseDispatchSchema = z.object({
   environment: ReleaseEnvironmentSchema,
@@ -108,10 +109,35 @@ export const ReleaseRefListQuerySchema = z.object({
   base_ref: z.string().trim().max(120, "基础分支不能超过 120 个字符").optional(),
 });
 
+export const ReleaseProductionMigrationDispatchSchema = z.object({
+  mode: ReleaseMigrationModeSchema.default("plan"),
+  ref_type: ReleaseRefTypeSchema.default("branch"),
+  ref: z.string().trim().min(1, "版本不能为空").max(120, "版本不能超过 120 个字符"),
+  reason: z.string().trim().max(200, "迁移原因不能超过 200 个字符").optional(),
+  confirm_text: z.string().trim().max(40, "确认文本不能超过 40 个字符").optional(),
+}).superRefine((value, ctx) => {
+  if (value.ref_type === "commit") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ref_type"],
+      message: "GitHub Actions 数据库迁移不能直接使用 Commit SHA，请选择分支或 Tag",
+    });
+  }
+
+  if (value.mode === "apply" && value.confirm_text !== "确认迁移生产数据库") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["confirm_text"],
+      message: "执行生产数据库迁移需要输入：确认迁移生产数据库",
+    });
+  }
+});
+
 export type ReleaseEnvironment = z.infer<typeof ReleaseEnvironmentSchema>;
 export type ReleaseService = z.infer<typeof ReleaseServiceSchema>;
 export type ReleaseRefType = z.infer<typeof ReleaseRefTypeSchema>;
 export type ReleaseOperation = z.infer<typeof ReleaseOperationSchema>;
+export type ReleaseMigrationMode = z.infer<typeof ReleaseMigrationModeSchema>;
 export type ReleaseDispatchInput = z.infer<typeof ReleaseDispatchSchema>;
 export type ReleaseCreateTagInput = z.infer<typeof ReleaseCreateTagSchema>;
 export type ReleaseCreateRollbackTagInput = z.infer<typeof ReleaseCreateRollbackTagSchema>;
@@ -119,3 +145,4 @@ export type ReleaseRunListQuery = z.infer<typeof ReleaseRunListQuerySchema>;
 export type ReleaseRunFailureSummaryParams = z.infer<typeof ReleaseRunFailureSummaryParamsSchema>;
 export type ReleaseSuccessfulRefListQuery = z.infer<typeof ReleaseSuccessfulRefListQuerySchema>;
 export type ReleaseRefListQuery = z.infer<typeof ReleaseRefListQuerySchema>;
+export type ReleaseProductionMigrationDispatchInput = z.infer<typeof ReleaseProductionMigrationDispatchSchema>;

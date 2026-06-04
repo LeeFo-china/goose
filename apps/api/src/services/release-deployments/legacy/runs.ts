@@ -4,6 +4,7 @@ import {
   ErrorCodes,
   REF_TYPE_LABELS,
   RELEASE_OPERATION_LABELS,
+  PRODUCTION_MIGRATION_WORKFLOW,
   RELEASE_WORKFLOWS,
   SERVICE_LABELS,
   compareRuntimeWithDev,
@@ -61,8 +62,11 @@ export async function listRuns(this: any, query: ReleaseRunListQuery) {
   const page = query.page || 1;
   const pageSize = Math.min(query.pageSize || 10, 30);
   const environments = query.environment
-    ? [RELEASE_WORKFLOWS[query.environment]]
-    : Object.values(RELEASE_WORKFLOWS);
+    ? [
+        RELEASE_WORKFLOWS[query.environment],
+        ...(query.environment === "production" ? [PRODUCTION_MIGRATION_WORKFLOW] : []),
+      ]
+    : [...Object.values(RELEASE_WORKFLOWS), PRODUCTION_MIGRATION_WORKFLOW];
 
   const results = await Promise.all(
     environments.map(async (workflow) => {

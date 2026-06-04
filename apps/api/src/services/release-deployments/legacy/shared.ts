@@ -20,6 +20,7 @@ import type {
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,
   ReleaseRunListQuery,
@@ -48,6 +49,14 @@ export const RELEASE_WORKFLOWS: Record<ReleaseEnvironment, ReleaseWorkflow> = {
     defaultRef: "main",
     services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
   },
+};
+
+export const PRODUCTION_MIGRATION_WORKFLOW: ReleaseWorkflow = {
+  environment: "production",
+  workflowId: "migrate-production-database.yml",
+  label: "生产数据库迁移",
+  defaultRef: "main",
+  services: [],
 };
 
 export const SERVICE_LABELS: Record<ReleaseService, string> = {
@@ -252,6 +261,7 @@ export function inferRunServices(_workflow: ReleaseWorkflow, run: GithubWorkflow
 }
 
 export function inferFallbackServiceLabel(workflow: ReleaseWorkflow, run: GithubWorkflowRun) {
+  if (workflow.workflowId === PRODUCTION_MIGRATION_WORKFLOW.workflowId) return "数据库迁移";
   if (workflow.environment === "dev" && run.event === "push") return "自动识别";
   return "未记录";
 }
@@ -415,6 +425,7 @@ export type {
   ReleaseCreateTagInput,
   ReleaseDispatchInput,
   ReleaseEnvironment,
+  ReleaseProductionMigrationDispatchInput,
   ReleaseRefListQuery,
   ReleaseRefType,
   ReleaseRunFailureJobSummary,

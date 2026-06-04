@@ -4,6 +4,7 @@ import {
   ErrorCodes,
   REF_TYPE_LABELS,
   RELEASE_OPERATION_LABELS,
+  PRODUCTION_MIGRATION_WORKFLOW,
   RELEASE_WORKFLOWS,
   SERVICE_LABELS,
   compareRuntimeWithDev,
@@ -81,6 +82,12 @@ export function getOptions(this: any) {
         label: SERVICE_LABELS[service],
       })),
     })),
+    production_migration: {
+      workflow_id: PRODUCTION_MIGRATION_WORKFLOW.workflowId,
+      label: PRODUCTION_MIGRATION_WORKFLOW.label,
+      default_ref: PRODUCTION_MIGRATION_WORKFLOW.defaultRef,
+      workflow_url: `${webBase}/actions/workflows/${PRODUCTION_MIGRATION_WORKFLOW.workflowId}`,
+    },
   };
 }
 

@@ -96,6 +96,7 @@ export type ReleaseService = "api" | "admin" | "social-video-worker" | "cos-reco
 
 export type ReleaseRefType = "branch" | "tag" | "commit";
 export type ReleaseOperation = "release" | "rollback";
+export type ReleaseMigrationMode = "plan" | "apply";
 
 export type ReleaseRefOption = {
   value: string;
@@ -121,6 +122,12 @@ export type ReleaseOptionsData = {
   configured: boolean;
   repository: string;
   environments: ReleaseOptionEnvironment[];
+  production_migration?: {
+    workflow_id: string;
+    label: string;
+    default_ref: string;
+    workflow_url: string;
+  };
 };
 
 export type ReleaseRun = {
@@ -260,6 +267,16 @@ export type ReleaseDispatchResult = {
   services?: ReleaseService[];
   service_label: string;
   ref: string;
+  workflow_id: string;
+  workflow_url: string;
+  run: ReleaseRun | null;
+  message: string;
+};
+
+export type ReleaseProductionMigrationDispatchResult = {
+  mode: ReleaseMigrationMode;
+  ref: string;
+  ref_type: Exclude<ReleaseRefType, "commit">;
   workflow_id: string;
   workflow_url: string;
   run: ReleaseRun | null;

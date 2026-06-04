@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { ReleaseEnvironment, ReleaseRefType, ReleaseSuccessfulRef } from "@/components/ops/ops-types";
 import { useReleaseDeploymentStore } from "@/components/ops/release-deployments-store";
 import { RuntimeVersionsPanel } from "@/components/ops/release-deployments-dialogs";
-import { ReleaseDispatchCard } from "@/components/ops/release-deployments-dispatch-card";
+import { ProductionMigrationCard, ReleaseDispatchCard } from "@/components/ops/release-deployments-dispatch-card";
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
@@ -255,7 +255,17 @@ export function ReleaseDeploymentsPanel({
       />
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.9fr)]">
-        <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
+        <div className="flex flex-col gap-3">
+          <ReleaseDispatchCard state={{ error, options, latestDispatch, production, productionVersionMode, pending, disabled, creatingProductionTag, currentEnvironment, selectedServiceLabel, confirmRefLabel, environment, serviceOptions, selectedServices, ref, tagName, tagSourceRefType, tagSourceRef, tagMessage, refType, reason, confirmText }} actions={{ onEnvironmentChange, setDraft, onRefTypeChange, runDispatch }} />
+          <ProductionMigrationCard
+            options={options}
+            onSubmitted={() => {
+              router.refresh();
+              setForcePollUntil(Date.now() + RELEASE_RUN_FORCE_POLL_MS);
+              void refreshReleaseSnapshots({ silent: true });
+            }}
+          />
+        </div>
 
       <SuccessfulRefsCard state={{ successfulRefEnvironment, currentSuccessfulRefsPagination, successfulRefsRefreshing, successfulRefKeyword, currentSuccessfulRefs, rollbackPendingId, rollbackConfirmText }} actions={{ setSuccessfulRefEnvironment, setSuccessfulRefKeyword, applySuccessfulRef, runCreateRollbackTag, setRollbackConfirmText, runRollbackDispatch, changeSuccessfulRefsPage }} />
       </div>
