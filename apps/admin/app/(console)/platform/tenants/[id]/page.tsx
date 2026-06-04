@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Building2, ClipboardList, ShieldCheck, UserRoundCog } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { TenantServiceAreaPanel } from "@/components/platform-tenants/tenant-service-area-panel";
 import {
   getPlatformTenantStatusMeta,
   type PlatformTenantRecord,
   type PlatformTenantRoleLite,
+  type TenantServiceAreaListData,
 } from "@/components/platform-tenants/platform-tenant-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,41 @@ async function getPlatformTenant(id: string) {
     return {
       data: null,
       error: error instanceof Error ? error.message : "平台租户详情加载失败",
+    };
+  }
+}
+
+async function getTenantServiceAreas(tenantId: string) {
+  const token = await getAdminToken();
+  if (!token) {
+    return {
+      data: [],
+      error: "缺少登录凭证",
+    };
+  }
+
+  const query = new URLSearchParams({
+    tenant_id: tenantId,
+    page: "1",
+    pageSize: "100",
+  });
+
+  try {
+    const response = await fetch(buildBackendUrl(`/platform/tenant-service-areas?${query}`), {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await parseBackendJson<TenantServiceAreaListData>(response);
+    return {
+      data: payload.data?.list ?? [],
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: [],
+      error: error instanceof Error ? error.message : "服务区域加载失败",
     };
   }
 }
@@ -128,9 +165,13 @@ export default async function PlatformTenantDetailPage({
 
   const { id } = await params;
   const hasPlatformAccess = session.roles.includes("platform_admin");
-  const { data: tenant, error } = hasPlatformAccess
-    ? await getPlatformTenant(id)
-    : { data: null, error: "当前账号不是平台超管，无法访问租户详情" };
+  const [{ data: tenant, error }, { data: serviceAreas, error: serviceAreaError }] =
+    hasPlatformAccess
+      ? await Promise.all([getPlatformTenant(id), getTenantServiceAreas(id)])
+      : [
+          { data: null, error: "当前账号不是平台超管，无法访问租户详情" },
+          { data: [], error: null },
+        ];
   const statusMeta = tenant ? getPlatformTenantStatusMeta(tenant.status) : null;
   const initialization = tenant?.initialization ?? null;
   const adminEmployee = initialization?.admin_employee ?? tenant?.admin_employees?.[0] ?? null;
@@ -266,6 +307,12 @@ export default async function PlatformTenantDetailPage({
               <RoleList roles={tenant.roles || []} />
             </CardContent>
           </Card>
+
+          <TenantServiceAreaPanel
+            tenantId={tenant.id}
+            areas={serviceAreas}
+            error={serviceAreaError}
+          />
         </>
       ) : null}
     </div>

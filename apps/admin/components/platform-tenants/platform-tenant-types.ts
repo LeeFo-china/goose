@@ -63,6 +63,30 @@ export type PlatformTenantRecord = {
   roles?: PlatformTenantRoleLite[];
 };
 
+export type TenantServiceAreaStatus = "active" | "inactive";
+
+export type TenantServiceAreaRecord = {
+  id: string;
+  tenant_id: string;
+  province: string | null;
+  city: string;
+  district: string | null;
+  adcode: string | null;
+  center_latitude: number | null;
+  center_longitude: number | null;
+  service_radius_km: number | null;
+  priority: number;
+  status: TenantServiceAreaStatus | string;
+  created_at: string;
+  updated_at: string;
+  tenant?: {
+    id: string;
+    name: string | null;
+    slug: string | null;
+    status: string | null;
+  } | null;
+};
+
 export type Pagination = {
   page: number;
   pageSize: number;
@@ -75,10 +99,20 @@ export type PlatformTenantListData = {
   pagination: Pagination;
 };
 
+export type TenantServiceAreaListData = {
+  list: TenantServiceAreaRecord[];
+  pagination: Pagination;
+};
+
 export const platformTenantStatusOptions = [
   { value: "active", label: "正常" },
   { value: "suspended", label: "停用" },
   { value: "archived", label: "归档" },
+] as const;
+
+export const tenantServiceAreaStatusOptions = [
+  { value: "active", label: "启用" },
+  { value: "inactive", label: "停用" },
 ] as const;
 
 export function getPlatformTenantStatusMeta(status: string | null | undefined) {
