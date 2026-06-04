@@ -1,12 +1,14 @@
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { customerSelfServiceService } from "@/services/customer-self-service";
 import { employeePersonalizationService } from "@/services/employee-personalization";
-import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { taskCenterService } from "@/services/task-center";
 import type { FastifyRequest } from "fastify";
+import {
+  getUserProfileForBootstrap,
+  serializeAuthProfile,
+} from "./bootstrap-profile";
 import {
   prewarmDeferredHomeData,
   prewarmDeferredSummaryData,
@@ -16,15 +18,14 @@ import {
   type EmployeeBootstrapQuery,
 } from "./bootstrap-schema";
 import type {
-  EmployeeBootstrapProfile,
   EmployeeBootstrapResponse,
-  EmployeeBootstrapUserProfile,
   TenantAuthContext,
 } from "./bootstrap-types";
 
 const EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS = 15_000;
-const EMPLOYEE_BOOTSTRAP_PROFILE_WAIT_MS = 250;
 const MAX_EMPLOYEE_BOOTSTRAP_CACHE_SIZE = 1_000;
+
+type EmployeeBootstrapDebugTiming = Record<string, number | string | null>;
 
 type EmployeeBootstrapHandlerOptions = {
   getRequiredTenantContext: (request: FastifyRequest) => Promise<TenantAuthContext>;
@@ -69,8 +70,30 @@ export class EmployeeBootstrapHandler {
 
     this.bootstrapCache.set(cacheKey, {
       expiresAt: now + EMPLOYEE_BOOTSTRAP_CACHE_TTL_MS,
-      value,
+      value: this.stripBootstrapDebugTiming(value),
     });
+  }
+
+  private stripBootstrapDebugTiming(
+    response: EmployeeBootstrapResponse,
+  ): EmployeeBootstrapResponse {
+    const { debug_timing: _debugTiming, ...payload } = response;
+    return payload;
+  }
+
+  private withBootstrapDebugTiming(
+    response: EmployeeBootstrapResponse,
+    query: EmployeeBootstrapQuery,
+    timing: EmployeeBootstrapDebugTiming,
+  ): EmployeeBootstrapResponse {
+    if (!query.debug_timing) {
+      return response;
+    }
+
+    return {
+      ...response,
+      debug_timing: timing,
+    };
   }
 
   private bootstrapCacheKey(
@@ -117,90 +140,6 @@ export class EmployeeBootstrapHandler {
     }
 
     throw Errors.forbidden();
-  }
-
-  private serializeAuthProfile(
-    authContext: AuthContext,
-    userProfile: EmployeeBootstrapUserProfile,
-  ): EmployeeBootstrapProfile {
-    return {
-      auth_user_id: authContext.authUserId,
-      nickname: userProfile?.nickname ?? null,
-      avatar: resolveStoredFileUrl(userProfile?.avatar_path),
-      avatar_path: userProfile?.avatar_path ?? null,
-      profile_completed: Boolean(userProfile?.profile_completed_at),
-      profile_completed_at: userProfile?.profile_completed_at ?? null,
-      roles: authContext.roleCodes,
-    };
-  }
-
-  private async getUserProfileForBootstrap(
-    request: FastifyRequest,
-    authContext: TenantAuthContext,
-  ): Promise<{
-    userProfile: EmployeeBootstrapUserProfile;
-    source: "cache" | "remote" | "timeout" | "error";
-  }> {
-    const cached = customerSelfServiceService.getCachedUserProfileEntryByAuthUserId(
-      authContext.authUserId,
-    );
-    if (cached) {
-      return {
-        userProfile: cached.value,
-        source: "cache",
-      };
-    }
-
-    const profileRequest = customerSelfServiceService.getUserProfileByAuthUserId(
-      authContext.authUserId,
-    );
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeout = new Promise<{ source: "timeout"; userProfile: null }>((resolve) => {
-      timeoutId = setTimeout(() => {
-        resolve({ source: "timeout", userProfile: null });
-      }, EMPLOYEE_BOOTSTRAP_PROFILE_WAIT_MS);
-    });
-
-    const result = await Promise.race([
-      profileRequest.then((userProfile) => ({
-        source: "remote" as const,
-        userProfile,
-      })).catch((error) => {
-        request.log.warn(
-          {
-            requestId: request.id,
-            employeeId: authContext.employeeId,
-            tenantId: authContext.tenantId,
-            error,
-          },
-          "[employee-bootstrap] user profile load failed",
-        );
-        return {
-          source: "error" as const,
-          userProfile: null,
-        };
-      }),
-      timeout,
-    ]);
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    if (result.source === "timeout") {
-      void profileRequest.catch((error) => {
-        request.log.warn(
-          {
-            requestId: request.id,
-            employeeId: authContext.employeeId,
-            tenantId: authContext.tenantId,
-            error,
-          },
-          "[employee-bootstrap] deferred user profile load failed",
-        );
-      });
-    }
-
-    return result;
   }
 
   private async resolveBootstrapPersonalization(
@@ -252,6 +191,7 @@ export class EmployeeBootstrapHandler {
     request: FastifyRequest,
     authContext: TenantAuthContext,
     query: EmployeeBootstrapQuery,
+    debugTiming?: EmployeeBootstrapDebugTiming,
   ): Promise<EmployeeBootstrapResponse> {
     const startedAt = Date.now();
     const { home_mode: homeMode, tasks_mode: tasksMode } = query;
@@ -265,7 +205,7 @@ export class EmployeeBootstrapHandler {
     const [homeStats, taskSummary, profileResult, personalization] = await Promise.all([
       homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
       tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
-      this.getUserProfileForBootstrap(request, authContext),
+      getUserProfileForBootstrap(request, authContext),
       this.resolveBootstrapPersonalization(request, authContext, "employee_home"),
     ]);
 
@@ -282,10 +222,14 @@ export class EmployeeBootstrapHandler {
       },
       "[employee-bootstrap] synchronous data resolved",
     );
+    if (debugTiming) {
+      debugTiming.synchronous_ms = Date.now() - profileStartedAt;
+      debugTiming.profile_source = profileResult.source;
+    }
 
     const response = {
       context: authContext,
-      profile: this.serializeAuthProfile(authContext, profileResult.userProfile),
+      profile: serializeAuthProfile(authContext, profileResult.userProfile),
       home_stats: homeStats,
       home_mode: homeMode,
       task_summary: taskSummary,
@@ -318,12 +262,14 @@ export class EmployeeBootstrapHandler {
       skipCacheLookup?: boolean;
     } = {},
   ) {
+    const debugTiming: EmployeeBootstrapDebugTiming = {};
     const authContextStartedAt = Date.now();
     const authContext = await this.options.getRequiredTenantContext(request);
+    debugTiming.auth_context_ms = Date.now() - authContextStartedAt;
     request.log.info(
       {
         requestId: request.id,
-        durationMs: Date.now() - authContextStartedAt,
+        durationMs: debugTiming.auth_context_ms,
         employeeId: authContext.employeeId ?? null,
         tenantId: authContext.tenantId,
       },
@@ -334,8 +280,10 @@ export class EmployeeBootstrapHandler {
       throw Errors.business(403, "员工身份缺失，无法加载员工首页", "EMPLOYEE_MISSING");
     }
 
+    const permissionsStartedAt = Date.now();
     accessPolicyService.assertPermission(authContext, "dashboard.read");
     this.assertTaskSummaryReadable(authContext);
+    debugTiming.permissions_ms = Date.now() - permissionsStartedAt;
 
     const cacheKey = this.bootstrapCacheKey(authContext, query);
     if (!options.skipCacheLookup) {
@@ -351,7 +299,11 @@ export class EmployeeBootstrapHandler {
           "[employee-bootstrap] bootstrap cache hit",
         );
 
-        return cached;
+        return this.withBootstrapDebugTiming(cached, query, {
+          ...debugTiming,
+          cache: "hit",
+          total_ms: Date.now() - startedAt,
+        });
       }
 
       const existingRequest = this.bootstrapInFlight.get(cacheKey);
@@ -367,14 +319,21 @@ export class EmployeeBootstrapHandler {
           "[employee-bootstrap] bootstrap in-flight reused",
         );
 
-        return response;
+        return this.withBootstrapDebugTiming(response, query, {
+          ...debugTiming,
+          cache: "in_flight",
+          total_ms: Date.now() - startedAt,
+        });
       }
     } else {
+      const buildStartedAt = Date.now();
       const response = await this.buildEmployeeBootstrapResponse(
         request,
         authContext,
         query,
+        debugTiming,
       );
+      debugTiming.build_ms = Date.now() - buildStartedAt;
       this.setCachedBootstrap(cacheKey, response);
       request.log.info(
         {
@@ -386,13 +345,19 @@ export class EmployeeBootstrapHandler {
         "[employee-bootstrap] bootstrap resolved",
       );
 
-      return response;
+      return this.withBootstrapDebugTiming(response, query, {
+        ...debugTiming,
+        cache: "miss",
+        total_ms: Date.now() - startedAt,
+      });
     }
 
+    const buildStartedAt = Date.now();
     const responsePromise = this.buildEmployeeBootstrapResponse(
       request,
       authContext,
       query,
+      debugTiming,
     ).then((response) => {
       this.setCachedBootstrap(cacheKey, response);
       return response;
@@ -403,6 +368,7 @@ export class EmployeeBootstrapHandler {
     });
     this.bootstrapInFlight.set(cacheKey, responsePromise);
     const response = await responsePromise;
+    debugTiming.build_ms = Date.now() - buildStartedAt;
 
     request.log.info(
       {
@@ -414,7 +380,11 @@ export class EmployeeBootstrapHandler {
       "[employee-bootstrap] bootstrap resolved",
     );
 
-    return response;
+    return this.withBootstrapDebugTiming(response, query, {
+      ...debugTiming,
+      cache: "miss",
+      total_ms: Date.now() - startedAt,
+    });
   }
 
   async getEmployeeBootstrap(request: FastifyRequest) {
@@ -439,7 +409,10 @@ export class EmployeeBootstrapHandler {
           "[employee-bootstrap] bootstrap token cache hit",
         );
 
-        return cached;
+        return this.withBootstrapDebugTiming(cached, queryResult.data, {
+          cache: "token_hit",
+          total_ms: Date.now() - startedAt,
+        });
       }
 
       const existingRequest = this.bootstrapInFlight.get(tokenCacheKey);
@@ -456,7 +429,10 @@ export class EmployeeBootstrapHandler {
           "[employee-bootstrap] bootstrap token in-flight reused",
         );
 
-        return response;
+        return this.withBootstrapDebugTiming(response, queryResult.data, {
+          cache: "token_in_flight",
+          total_ms: Date.now() - startedAt,
+        });
       }
 
       const responsePromise = this.resolveEmployeeBootstrap(
@@ -465,7 +441,7 @@ export class EmployeeBootstrapHandler {
         startedAt,
         { skipCacheLookup: true },
       ).then((response) => {
-        this.setCachedBootstrap(tokenCacheKey, response);
+        this.setCachedBootstrap(tokenCacheKey, this.stripBootstrapDebugTiming(response));
         return response;
       }).finally(() => {
         if (this.bootstrapInFlight.get(tokenCacheKey) === responsePromise) {

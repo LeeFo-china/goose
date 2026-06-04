@@ -1,10 +1,22 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import { ResponseHandler } from "@/utils/response";
 import type { HomeStatsResponse } from "@/types/api";
 import { BaseController } from "@/controllers/BaseController";
+import { Errors } from "@/errors/error-factory";
 import { Get } from "@/utils/decorators/route";
 import { authorizationService } from "@/services/authorization";
 import { homeDashboardService } from "@/services/home-dashboard";
+
+const HomeStatsQuerySchema = z.object({
+    debug_timing: z.preprocess((value) => {
+        if (value == null || value === "") return false;
+        if (typeof value === "string") {
+            return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+        }
+        return value;
+    }, z.boolean().default(false)),
+});
 
 export class RpcController extends BaseController {
     constructor() {
@@ -16,6 +28,10 @@ export class RpcController extends BaseController {
         request: FastifyRequest,
         reply: FastifyReply,
     ) {
+        const queryResult = HomeStatsQuerySchema.safeParse(request.query);
+        if (!queryResult.success) {
+            throw Errors.fromZod(queryResult.error);
+        }
         const authContextStartedAt = Date.now();
         const authContext = await authorizationService.getRequiredAuthContext(
             request.user?.sub,
@@ -37,9 +53,20 @@ export class RpcController extends BaseController {
             "[home-stats] timings",
         );
 
-        return ResponseHandler.success<HomeStatsResponse>(
-            data,
-        );
+        return ResponseHandler.success<HomeStatsResponse & {
+            debug_timing?: Record<string, number | string | null>;
+        }>({
+            ...data,
+            ...(queryResult.data.debug_timing
+                ? {
+                    debug_timing: {
+                        auth_context_ms: authContextMs,
+                        service_ms: serviceMs,
+                        total_ms: authContextMs + serviceMs,
+                    },
+                }
+                : {}),
+        });
     }
 }
 

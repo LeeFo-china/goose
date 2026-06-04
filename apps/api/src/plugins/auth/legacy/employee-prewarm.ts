@@ -1,8 +1,17 @@
 import type { FastifyRequest } from "fastify";
+import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
 import { customerCoreService } from "@/services/customer-core";
 import { projectSer } from "@/services/projects";
 import type { VerifiedJwtPayload } from "./types";
+
+function resolveProjectHomeOwnership(authContext: Awaited<
+  ReturnType<typeof authorizationService.prewarmEmployeeAuthContext>
+>) {
+  return accessPolicyService.getScope(authContext, "project.read") === "self"
+    ? "self"
+    : "all";
+}
 
 export function shouldPrewarmEmployeeAuthContext(url: string, payload: VerifiedJwtPayload) {
   return (
@@ -43,8 +52,9 @@ export function prewarmEmployeeAuthContextForRequest(
         query: {
           page: 1,
           pageSize: 20,
-          ownership: "self",
+          ownership: resolveProjectHomeOwnership(authContext),
           mode: "home",
+          debug_timing: false,
         },
       }),
       customerCoreService.listCustomers({

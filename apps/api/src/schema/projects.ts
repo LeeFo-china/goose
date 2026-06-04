@@ -197,6 +197,7 @@ export const ProjectListQuerySchema = PaginationQuerySchema.extend({
   mode: optionalQueryValue(z.enum(["home"], {
     message: "mode must be one of: home",
   })),
+  debug_timing: booleanQueryValue(false),
 });
 
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;

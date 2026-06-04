@@ -1,4 +1,5 @@
 import type { AuthContext } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 import { customerCoreService } from "@/services/customer-core";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { projectSer } from "@/services/projects";
@@ -7,30 +8,45 @@ import type { FastifyRequest } from "fastify";
 
 type TenantAuthContext = AuthContext & { tenantId: string };
 
+function resolveProjectHomeOwnership(authContext: TenantAuthContext) {
+  const scope = accessPolicyService.getScope(authContext, "project.read");
+  return scope === "self" ? "self" : "all";
+}
+
 export function prewarmDeferredHomeData(
   request: FastifyRequest,
   authContext: TenantAuthContext,
 ) {
   const startedAt = Date.now();
-  void Promise.allSettled([
-    projectSer.listProjects({
+  const tasks: Promise<unknown>[] = [];
+  if (accessPolicyService.hasPermission(authContext, "project.read")) {
+    tasks.push(projectSer.listProjects({
       authContext,
       query: {
         page: 1,
         pageSize: 20,
-        ownership: "self",
+        ownership: resolveProjectHomeOwnership(authContext),
         mode: "home",
+        debug_timing: false,
       },
-    }),
-    customerCoreService.listCustomers({
+    }));
+  }
+  if (accessPolicyService.hasPermission(authContext, "customer.read")) {
+    tasks.push(customerCoreService.listCustomers({
       authContext,
       query: {
         page: 1,
         pageSize: 20,
         mode: "home",
       },
-    }),
-  ]).then((results) => {
+    }));
+  }
+
+  if (tasks.length === 0) {
+    return;
+  }
+
+  void Promise.allSettled(tasks).then((results) => {
     request.log.info(
       {
         requestId: request.id,

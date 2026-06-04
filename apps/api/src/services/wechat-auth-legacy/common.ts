@@ -14,6 +14,7 @@ import {
   WechatRebindRequestSchema,
 } from "@/schema/wechat";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import { accessPolicyService } from "@/services/access-policy";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
 import { tenantShareLinkService } from "@/services/tenant-share-links";
@@ -134,8 +135,11 @@ export function prewarmEmployeeAuthContext(this: any,
         query: {
           page: 1,
           pageSize: 20,
-          ownership: "self",
+          ownership: accessPolicyService.getScope(authContext, "project.read") === "self"
+            ? "self"
+            : "all",
           mode: "home",
+          debug_timing: false,
         },
       }),
       customerCoreService.listCustomers({

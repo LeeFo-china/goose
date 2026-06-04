@@ -30,4 +30,5 @@ export type EmployeeBootstrapResponse = {
   projects: null;
   customers_mode: "defer";
   customers: null;
+  debug_timing?: Record<string, number | string | null>;
 };
