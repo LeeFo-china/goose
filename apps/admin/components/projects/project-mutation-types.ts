@@ -28,6 +28,9 @@ export type ProjectRecord = {
   id: string;
   name: string;
   status: string | null;
+  status_label?: string | null;
+  display_status?: string | null;
+  display_status_label?: string | null;
   budget: number | null;
   signed_amount?: number | null;
   start_date: string | null;

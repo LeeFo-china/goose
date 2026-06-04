@@ -31,6 +31,8 @@ import {
     type ProjectStatusTransitionListQuery,
     type UpdateProjectInput,
 } from "./shared";
+import { attachCurrentConstructionStages } from "./current-stage";
+import { attachProjectDisplayStatuses } from "./display-status";
 
 export async function listProjects(this: any, input: {
     authContext: AuthContext;
@@ -167,9 +169,21 @@ export async function loadProjects(this: any, input: {
             to: from + pageSize,
         });
         const rowsDurationMs = Date.now() - rowsStartedAt;
-        const rows = await this.attachPrimaryAssignees(
+        const assignmentStartedAt = Date.now();
+        const rowsWithAssignees = await this.attachPrimaryAssignees(
             rowsWithLookahead.slice(0, pageSize),
         );
+        const assignmentDurationMs = Date.now() - assignmentStartedAt;
+        const stageStartedAt = Date.now();
+        const rowsWithStages = await attachCurrentConstructionStages({
+            rows: rowsWithAssignees,
+            tenantId,
+        });
+        const rows = await attachProjectDisplayStatuses({
+            rows: rowsWithStages,
+            tenantId,
+        });
+        const stageDurationMs = Date.now() - stageStartedAt;
         const hasMore = rowsWithLookahead.length > pageSize;
         const total = from + rows.length + (hasMore ? 1 : 0);
 
@@ -185,6 +199,8 @@ export async function loadProjects(this: any, input: {
                 cache: "miss",
                 scopeMs: scopeDurationMs,
                 rowsMs: rowsDurationMs,
+                assigneesMs: assignmentDurationMs,
+                stagesMs: stageDurationMs,
                 totalMs: Date.now() - startedAt,
                 visibleProjectCount: visibleProjectIds?.length ?? null,
                 todayProjectCount: todayProjectIds?.length ?? null,
@@ -198,7 +214,13 @@ export async function loadProjects(this: any, input: {
         projectRepository.count(filters),
         projectRepository.listRows({ filters, from, to }),
     ]);
-    const rows = from >= total ? [] : await this.attachPrimaryAssignees(rawRows);
+    const rowsWithAssignees = from >= total
+        ? []
+        : await this.attachPrimaryAssignees(rawRows);
+    const rows = await attachProjectDisplayStatuses({
+        rows: rowsWithAssignees,
+        tenantId,
+    });
 
     return {
         rows,

@@ -14,6 +14,8 @@ import {
   formatDate,
   formatDateTime,
   personName,
+  projectDisplayStatusBadgeVariant,
+  projectDisplayStatusLabel,
   projectActionLabel,
   projectStatusBadgeVariant,
   projectStatusLabel,
@@ -61,8 +63,8 @@ export function ProjectStatusPanel({
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={projectStatusBadgeVariant(panel.currentStatus)}>
-              {projectStatusLabel(panel.currentStatus)}
+            <Badge variant={projectDisplayStatusBadgeVariant(project)}>
+              {projectDisplayStatusLabel(project)}
             </Badge>
             {panel.actionsData?.paused_from_status ? (
               <Badge variant="outline">
