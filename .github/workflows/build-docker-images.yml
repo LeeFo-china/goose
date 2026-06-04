@@ -18,11 +18,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-docker-images-feature-multi-tenant
+  group: build-docker-images-main
   cancel-in-progress: true
 
 env:
-  IMAGE_TAG: feature-multi-tenant
+  IMAGE_TAG: main
   TENCENT_CCR_REGISTRY: ccr.ccs.tencentyun.com
   RELEASE_SERVICE: ${{ github.event.inputs.service || 'all' }}
 

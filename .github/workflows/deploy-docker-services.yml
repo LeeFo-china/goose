@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-docker-services-feature-multi-tenant
+  group: deploy-docker-services-main
   cancel-in-progress: true
 
 env:

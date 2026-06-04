@@ -8,7 +8,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && format('Dev deploy {0}
 on:
   push:
     branches:
-      - feature/multi-tenant
+      - main
     paths:
       - ".github/workflows/deploy-dev.yml"
       - "deploy/docker-compose.dev.yml"
