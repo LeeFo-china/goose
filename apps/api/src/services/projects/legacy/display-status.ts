@@ -22,7 +22,7 @@ export async function attachProjectDisplayStatuses(input: {
     const acceptanceProjectIds = input.rows
         .filter((row) =>
             row.status === "acceptance" &&
-            typeof row.display_status !== "string"
+            row.display_status !== FINAL_ACCEPTANCE_COMPLETED_STATUS
         )
         .map((row) => getProjectId(row))
         .filter((id): id is string => Boolean(id));
@@ -70,8 +70,10 @@ function appendProjectDisplayStatus(
         ? ProjectStatusConfig[status].label
         : null;
     const projectId = getProjectId(row);
-    const isFinalAcceptanceCompleted = status === "acceptance" &&
-        Boolean(projectId && completedProjectIds.has(projectId));
+    const isFinalAcceptanceCompleted =
+        row.display_status === FINAL_ACCEPTANCE_COMPLETED_STATUS ||
+        (status === "acceptance" &&
+            Boolean(projectId && completedProjectIds.has(projectId)));
 
     return {
         ...row,

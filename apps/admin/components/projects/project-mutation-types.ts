@@ -31,6 +31,10 @@ export type ProjectRecord = {
   status_label?: string | null;
   display_status?: string | null;
   display_status_label?: string | null;
+  current_stage?: string | null;
+  current_stage_label?: string | null;
+  stage_code?: string | null;
+  stage_label?: string | null;
   budget: number | null;
   signed_amount?: number | null;
   start_date: string | null;

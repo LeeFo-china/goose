@@ -220,8 +220,12 @@ export async function loadProjects(this: any, input: {
     const rowsWithAssignees = from >= total
         ? []
         : await this.attachPrimaryAssignees(rawRows);
-    const rows = await attachProjectDisplayStatuses({
+    const rowsWithStages = await attachCurrentConstructionStages({
         rows: rowsWithAssignees,
+        tenantId,
+    });
+    const rows = await attachProjectDisplayStatuses({
+        rows: rowsWithStages,
         tenantId,
     });
 
