@@ -32,6 +32,7 @@ import {
     type UpdateProjectInput,
 } from "./shared";
 import { attachCurrentConstructionStages } from "./current-stage";
+import { attachProjectDisplayStatuses } from "./display-status";
 
 export async function listProjects(this: any, input: {
     authContext: AuthContext;
@@ -174,8 +175,12 @@ export async function loadProjects(this: any, input: {
         );
         const assignmentDurationMs = Date.now() - assignmentStartedAt;
         const stageStartedAt = Date.now();
-        const rows = await attachCurrentConstructionStages({
+        const rowsWithStages = await attachCurrentConstructionStages({
             rows: rowsWithAssignees,
+            tenantId,
+        });
+        const rows = await attachProjectDisplayStatuses({
+            rows: rowsWithStages,
             tenantId,
         });
         const stageDurationMs = Date.now() - stageStartedAt;
@@ -209,7 +214,13 @@ export async function loadProjects(this: any, input: {
         projectRepository.count(filters),
         projectRepository.listRows({ filters, from, to }),
     ]);
-    const rows = from >= total ? [] : await this.attachPrimaryAssignees(rawRows);
+    const rowsWithAssignees = from >= total
+        ? []
+        : await this.attachPrimaryAssignees(rawRows);
+    const rows = await attachProjectDisplayStatuses({
+        rows: rowsWithAssignees,
+        tenantId,
+    });
 
     return {
         rows,

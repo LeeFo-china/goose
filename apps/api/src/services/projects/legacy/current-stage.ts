@@ -5,8 +5,10 @@ import {
     PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
     PROJECT_LOG_STAGE_CONFIG,
     ProjectAcceptanceStatusConfig,
+    ProjectStatusConfig,
     getPreviousProjectConstructionStage,
     isProjectLogStageCode,
+    isProjectStatus,
     type ProjectAcceptanceStatus,
     type ProjectConstructionStageCode,
     type ProjectConstructionStageStatus,
@@ -59,6 +61,8 @@ const CONSTRUCTION_STAGE_STATUS_LABELS: Record<ProjectConstructionStageStatus, s
     rework_required: "需整改",
     accepted: "已验收",
 };
+const FINAL_ACCEPTANCE_COMPLETED_STATUS = "final_acceptance_completed";
+const FINAL_ACCEPTANCE_COMPLETED_LABEL = "已完成";
 
 export async function attachCurrentConstructionStages(input: {
     rows: ProjectHomeRow[];
@@ -321,13 +325,29 @@ function appendCurrentStageFields(
     row: ProjectHomeRow,
     stage: CurrentConstructionStage | null | undefined,
 ) {
+    const isFinalAcceptanceCompleted = row.status === "acceptance" &&
+        stage?.stage_code === PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE &&
+        stage.status === "accepted" &&
+        stage.acceptance_status === "customer_confirmed";
+    const status = typeof row.status === "string" ? row.status : null;
+    const statusLabel = isProjectStatus(status)
+        ? ProjectStatusConfig[status].label
+        : null;
+
     return {
         ...row,
+        status_label: statusLabel,
         current_construction_stage: stage ?? null,
         current_stage: stage?.stage_code ?? null,
         current_stage_label: stage?.stage_label ?? null,
         stage_code: stage?.stage_code ?? null,
         stage_label: stage?.stage_label ?? null,
+        display_status: isFinalAcceptanceCompleted
+            ? FINAL_ACCEPTANCE_COMPLETED_STATUS
+            : status,
+        display_status_label: isFinalAcceptanceCompleted
+            ? FINAL_ACCEPTANCE_COMPLETED_LABEL
+            : statusLabel,
     };
 }
 
