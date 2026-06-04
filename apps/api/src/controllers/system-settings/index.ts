@@ -6,7 +6,8 @@ import {
 } from "@/schema/system-settings";
 import type { AuthContext } from "@/services/authorization";
 import { systemSettingsService } from "@/services/system-settings";
-import { Get, Patch } from "@/utils/decorators/route";
+import { tencentLbsService } from "@/services/tencent-lbs";
+import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -54,6 +55,14 @@ class SystemSettingsController extends TenantBaseController {
       paramsResult.data.key,
       bodyResult.data.value,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/system-settings/tencent-lbs/test")
+  async testPlatformTencentLbs(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredPlatformSettingsContext(request);
+
+    const data = await tencentLbsService.testWebserviceConfig();
     return ResponseHandler.success(data);
   }
 
@@ -110,6 +119,14 @@ class SystemSettingsController extends TenantBaseController {
       paramsResult.data.key,
       bodyResult.data.value,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/admin/system-settings/tencent-lbs/test")
+  async testTencentLbs(request: FastifyRequest, reply: FastifyReply) {
+    await this.getRequiredPlatformSettingsContext(request);
+
+    const data = await tencentLbsService.testWebserviceConfig();
     return ResponseHandler.success(data);
   }
 }

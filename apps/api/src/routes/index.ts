@@ -50,6 +50,7 @@ import SocialVideoController from "@/controllers/social-video";
 import PlatformLeadsController from "@/controllers/platform-leads";
 import PlatformTenantsController from "@/controllers/platform-tenants";
 import PlatformAuditLogsController from "@/controllers/platform-audit-logs";
+import AdministrativeAreasController from "@/controllers/administrative-areas";
 import TenantShareLinksController from "@/controllers/tenant-share-links";
 import TenantDeviceController from "@/controllers/tenant-devices";
 import TenantServiceAreasController from "@/controllers/tenant-service-areas";
@@ -108,6 +109,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformLeadsController.registerExtraRoutes(app);
   PlatformTenantsController.registerExtraRoutes(app);
   PlatformAuditLogsController.registerExtraRoutes(app);
+  AdministrativeAreasController.registerExtraRoutes(app);
   TenantShareLinksController.registerExtraRoutes(app);
   TenantDeviceController.registerExtraRoutes(app);
   TenantServiceAreasController.registerExtraRoutes(app);

@@ -7,6 +7,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import {
   SettingEditor,
   SocialVideoTranscriptionTester,
+  TencentLbsConfigTester,
   updateSetting,
 } from "@/components/settings/settings-actions";
 import type { SystemSetting } from "@/components/settings/settings-types";
@@ -270,6 +271,9 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
           <CardContent className="p-0">
             {activeGroup.code === "social_video" ? (
               <SocialVideoTranscriptionTester />
+            ) : null}
+            {activeGroup.code === "tencent_lbs" ? (
+              <TencentLbsConfigTester />
             ) : null}
             {activeGroup.settings.map((setting) => (
               <SettingEditor key={setting.key} setting={setting} />

@@ -48,6 +48,22 @@ async function testSocialVideoTranscription(url: string) {
   });
 }
 
+async function testTencentLbsWebservice() {
+  return requestBackendJson<{
+    ok: boolean;
+    status: number;
+    message: string;
+    request_id: string | null;
+    level_counts: number[];
+    has_webservice_key: boolean;
+    has_webservice_sk: boolean;
+    has_miniprogram_key: boolean;
+  }>("/admin/system-settings/tencent-lbs/test", {
+    method: "POST",
+    fallbackMessage: "腾讯位置服务配置测试失败",
+  });
+}
+
 function formatValue(value: string | null) {
   return value && value.trim() ? value : "-";
 }
@@ -248,6 +264,66 @@ export function SocialVideoTranscriptionTester() {
           <Button type="button" onClick={submit} disabled={pending || !url.trim()}>
             {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <TestTube2 data-icon="inline-start" />}
             测试
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TencentLbsConfigTester() {
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<Awaited<ReturnType<typeof testTencentLbsWebservice>> | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    setError("");
+    setResult(null);
+    startTransition(async () => {
+      try {
+        setResult(await testTencentLbsWebservice());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "腾讯位置服务配置测试失败");
+      }
+    });
+  }
+
+  return (
+    <div className="border-t bg-muted/20 px-5 py-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.9fr)_minmax(260px,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
+          <div className="font-medium">WebService 配置测试</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            使用当前 WebService Key 和 SecretKey/SK 调用腾讯行政区划接口，验证签名和配额配置是否可用。
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {error ? <StatusAlert>{error}</StatusAlert> : null}
+          {result ? (
+            <StatusAlert tone={result.ok ? "success" : "warning"}>
+              <div className="flex flex-col gap-1">
+                <div>{result.ok ? "腾讯位置服务调用成功" : `腾讯位置服务返回异常：${result.message}`}</div>
+                <div className="break-all text-xs">
+                  status={result.status}，request_id={result.request_id || "-"}
+                </div>
+                <div className="text-xs">
+                  行政区划层级数量：{result.level_counts.length ? result.level_counts.join(" / ") : "-"}
+                </div>
+                <div className="text-xs">
+                  WebService Key：{result.has_webservice_key ? "已配置" : "未配置"}，
+                  WebService SK：{result.has_webservice_sk ? "已配置" : "未配置"}，
+                  小程序 Key：{result.has_miniprogram_key ? "已配置" : "未配置"}
+                </div>
+              </div>
+            </StatusAlert>
+          ) : null}
+        </div>
+
+        <div className="flex gap-2 lg:justify-end">
+          <Button type="button" onClick={submit} disabled={pending}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <TestTube2 data-icon="inline-start" />}
+            测试配置
           </Button>
         </div>
       </div>

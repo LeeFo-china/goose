@@ -20,6 +20,7 @@ const groupLabels: Record<string, string> = {
   storage: "平台存储",
   ai: "AI 配置",
   social_video: "短视频识别",
+  tencent_lbs: "腾讯位置",
   notify: "通知配置",
   wechat: "微信配置",
 };
@@ -81,7 +82,7 @@ export default async function SettingsPage() {
       secretCount: settings.filter((item) => item.is_secret).length,
     }))
     .sort((left, right) => {
-      const order = ["sms", "customer_service", "storage", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
+      const order = ["sms", "customer_service", "storage", "tencent_lbs", "ai", "social_video", "ezviz", "tencent_iot_video", "wechat", "notify"];
       const leftOrder = order.indexOf(left.code);
       const rightOrder = order.indexOf(right.code);
       return (leftOrder === -1 ? order.length : leftOrder) - (rightOrder === -1 ? order.length : rightOrder);

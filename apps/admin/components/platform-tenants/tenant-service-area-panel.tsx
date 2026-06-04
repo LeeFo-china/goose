@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Edit3, Loader2, MapPin, Plus } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -24,6 +24,7 @@ import {
   type TenantServiceAreaRecord,
 } from "./platform-tenant-types";
 import { requestPlatformTenantJson } from "./platform-tenant-requests";
+import { SearchableLocationSelect, type SearchableLocationOption } from "./searchable-location-select";
 
 type FormState = {
   province: string;
@@ -35,6 +36,14 @@ type FormState = {
   service_radius_km: string;
   priority: string;
   status: string;
+};
+
+type AdministrativeAreaOption = {
+  adcode: string;
+  name: string;
+  level: "province" | "city" | "district";
+  parent_adcode: string | null;
+  full_name: string;
 };
 
 const initialForm: FormState = {
@@ -86,6 +95,25 @@ function getStatusMeta(status: string | null | undefined) {
   return { label: status || "未知", variant: "outline" as const };
 }
 
+async function fetchAdministrativeAreas(query: Record<string, string>) {
+  const params = new URLSearchParams(query);
+  const data = await requestPlatformTenantJson<{ list: AdministrativeAreaOption[] }>(
+    `/api/backend/platform/administrative-areas?${params.toString()}`,
+    { fallbackMessage: "行政区划加载失败" },
+  );
+  return data.list || [];
+}
+
+function toUniqueOptions(values: Array<SearchableLocationOption | null | undefined>) {
+  const map = new Map<string, SearchableLocationOption>();
+  for (const item of values) {
+    const value = item?.value.trim();
+    if (!value || map.has(value)) continue;
+    map.set(value, { ...item, value });
+  }
+  return [...map.values()];
+}
+
 export function TenantServiceAreaPanel({
   tenantId,
   areas,
@@ -100,13 +128,105 @@ export function TenantServiceAreaPanel({
   const [editing, setEditing] = useState<TenantServiceAreaRecord | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitError, setSubmitError] = useState("");
+  const [areaError, setAreaError] = useState("");
+  const [provinceRows, setProvinceRows] = useState<AdministrativeAreaOption[]>([]);
+  const [cityRows, setCityRows] = useState<AdministrativeAreaOption[]>([]);
+  const [districtRows, setDistrictRows] = useState<AdministrativeAreaOption[]>([]);
   const [pending, startTransition] = useTransition();
+  const selectedProvince = useMemo(
+    () => provinceRows.find((province) => province.name === form.province) ?? null,
+    [form.province, provinceRows],
+  );
+  const selectedCity = useMemo(
+    () => cityRows.find((city) => city.name === form.city) ?? null,
+    [cityRows, form.city],
+  );
+  const provinceOptions = useMemo(
+    () => toUniqueOptions([
+      ...provinceRows.map((province) => ({
+        value: province.name,
+        label: province.adcode,
+        keywords: [province.adcode, province.full_name],
+      })),
+      ...areas.map((area) => area.province ? { value: area.province, label: "已配置区域" } : null),
+    ]),
+    [areas, provinceRows],
+  );
+  const cityOptions = useMemo(() => {
+    return toUniqueOptions([
+      ...cityRows.map((city) => ({
+        value: city.name,
+        label: city.adcode,
+        keywords: [city.adcode, city.full_name],
+      })),
+      ...areas
+        .filter((area) => !form.province || area.province === form.province)
+        .map((area) => ({ value: area.city, label: "已配置区域" })),
+    ]);
+  }, [areas, cityRows, form.province]);
+  const districtOptions = useMemo(() => {
+    return toUniqueOptions([
+      ...districtRows.map((district) => ({
+        value: district.name,
+        label: district.adcode,
+        keywords: [district.adcode, district.full_name],
+      })),
+      ...areas
+        .filter((area) => {
+          if (!area.district) return false;
+          if (form.province && area.province !== form.province) return false;
+          return !form.city || area.city === form.city;
+        })
+        .map((area) => ({ value: area.district || "", label: "已配置区域" })),
+    ]);
+  }, [areas, districtRows, form.city, form.province]);
+
+  useEffect(() => {
+    if (!open || !selectedProvince) return;
+    if (cityRows.some((city) => city.parent_adcode === selectedProvince.adcode)) return;
+    void loadCities(selectedProvince.adcode);
+  }, [cityRows, open, selectedProvince]);
+
+  useEffect(() => {
+    if (!open || !selectedCity) return;
+    if (districtRows.some((district) => district.parent_adcode === selectedCity.adcode)) return;
+    void loadDistricts(selectedCity.adcode);
+  }, [districtRows, open, selectedCity]);
+
+  async function loadProvinces() {
+    if (provinceRows.length) return;
+    try {
+      setAreaError("");
+      setProvinceRows(await fetchAdministrativeAreas({ level: "province" }));
+    } catch (err) {
+      setAreaError(err instanceof Error ? err.message : "省份加载失败");
+    }
+  }
+
+  async function loadCities(parentAdcode: string) {
+    try {
+      setAreaError("");
+      setCityRows(await fetchAdministrativeAreas({ parent_adcode: parentAdcode }));
+    } catch (err) {
+      setAreaError(err instanceof Error ? err.message : "城市加载失败");
+    }
+  }
+
+  async function loadDistricts(parentAdcode: string) {
+    try {
+      setAreaError("");
+      setDistrictRows(await fetchAdministrativeAreas({ parent_adcode: parentAdcode }));
+    } catch (err) {
+      setAreaError(err instanceof Error ? err.message : "区县加载失败");
+    }
+  }
 
   function openCreate() {
     setEditing(null);
     setForm(initialForm);
     setSubmitError("");
     setOpen(true);
+    void loadProvinces();
   }
 
   function openEdit(area: TenantServiceAreaRecord) {
@@ -114,6 +234,7 @@ export function TenantServiceAreaPanel({
     setForm(toFormState(area));
     setSubmitError("");
     setOpen(true);
+    void loadProvinces();
   }
 
   function close() {
@@ -124,6 +245,41 @@ export function TenantServiceAreaPanel({
 
   function updateField(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateProvince(value: string) {
+    const province = provinceRows.find((item) => item.name === value);
+    setForm((current) => ({
+      ...current,
+      province: value,
+      city: "",
+      district: "",
+      adcode: "",
+    }));
+    setCityRows([]);
+    setDistrictRows([]);
+    if (province) void loadCities(province.adcode);
+  }
+
+  function updateCity(value: string) {
+    const city = cityRows.find((item) => item.name === value);
+    setForm((current) => ({
+      ...current,
+      city: value,
+      district: "",
+      adcode: city?.adcode || "",
+    }));
+    setDistrictRows([]);
+    if (city) void loadDistricts(city.adcode);
+  }
+
+  function updateDistrict(value: string) {
+    const district = districtRows.find((item) => item.name === value);
+    setForm((current) => ({
+      ...current,
+      district: value,
+      adcode: district?.adcode || current.adcode,
+    }));
   }
 
   function buildPayload() {
@@ -233,30 +389,39 @@ export function TenantServiceAreaPanel({
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="tenant-area-province">省份</FieldLabel>
-              <Input
+              <SearchableLocationSelect
                 id="tenant-area-province"
                 value={form.province}
+                options={provinceOptions}
+                placeholder="搜索或选择省份"
+                searchPlaceholder="搜索省份"
                 disabled={pending}
-                onChange={(event) => updateField("province", event.target.value)}
+                onChange={updateProvince}
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="tenant-area-city">城市</FieldLabel>
-              <Input
+              <SearchableLocationSelect
                 id="tenant-area-city"
                 value={form.city}
-                disabled={pending}
+                options={cityOptions}
+                placeholder="搜索或选择城市"
+                searchPlaceholder="搜索城市或 adcode"
+                disabled={pending || Boolean(form.province && selectedProvince && !cityRows.length)}
                 required
-                onChange={(event) => updateField("city", event.target.value)}
+                onChange={updateCity}
               />
             </Field>
             <Field>
               <FieldLabel htmlFor="tenant-area-district">区县</FieldLabel>
-              <Input
+              <SearchableLocationSelect
                 id="tenant-area-district"
                 value={form.district}
-                disabled={pending}
-                onChange={(event) => updateField("district", event.target.value)}
+                options={districtOptions}
+                placeholder="搜索或选择区县"
+                searchPlaceholder="搜索区县或 adcode"
+                disabled={pending || Boolean(form.city && selectedCity && !districtRows.length)}
+                onChange={updateDistrict}
               />
             </Field>
             <Field>
@@ -326,6 +491,7 @@ export function TenantServiceAreaPanel({
               />
             </Field>
           </FieldGroup>
+          {areaError ? <StatusAlert>{areaError}</StatusAlert> : null}
           {submitError ? <StatusAlert>{submitError}</StatusAlert> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={pending}>

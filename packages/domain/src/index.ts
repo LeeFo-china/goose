@@ -15,3 +15,4 @@ export * from './project-log';
 export * from './project';
 export * from './referral';
 export * from './tenant';
+export * from './location';
