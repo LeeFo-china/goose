@@ -24,6 +24,7 @@ const statusMeta: Record<string, {
   constructing: { label: "施工中", variant: "warning" },
   on_hold: { label: "已暂停", variant: "danger" },
   acceptance: { label: "竣工验收", variant: "success" },
+  final_acceptance_completed: { label: "已完成", variant: "success" },
   invalid: { label: "无效项目", variant: "secondary" },
 };
 
@@ -65,6 +66,19 @@ function propertyLabel(value: ProjectRecord["property"]) {
   const item = relationOne(value);
   if (!item) return "-";
   return [item.community, item.building_info].filter(Boolean).join(" ") || "-";
+}
+
+function projectStatusMeta(project: ProjectRecord) {
+  const displayStatus = project.display_status || project.status || "";
+  const meta = statusMeta[displayStatus] || statusMeta[project.status || ""] || {
+    label: displayStatus || "未知",
+    variant: "outline" as const,
+  };
+
+  return {
+    ...meta,
+    label: project.display_status_label || project.status_label || meta.label,
+  };
 }
 
 function ProjectIdentityCell({
@@ -137,10 +151,7 @@ export function ProjectsTable({
         <tbody>
           {projects.length > 0 ? (
             projects.map((project) => {
-              const meta = statusMeta[project.status || ""] || {
-                label: project.status || "未知",
-                variant: "outline" as const,
-              };
+              const meta = projectStatusMeta(project);
 
               return (
                 <tr key={project.id} className="group border-t transition-colors hover:bg-muted/40">

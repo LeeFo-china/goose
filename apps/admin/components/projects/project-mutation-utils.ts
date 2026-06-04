@@ -102,6 +102,20 @@ export function projectStatusBadgeVariant(status: string | null | undefined) {
     : "outline";
 }
 
+export function projectDisplayStatusLabel(project: ProjectRecord) {
+  return project.display_status_label ||
+    project.status_label ||
+    projectStatusLabel(project.status);
+}
+
+export function projectDisplayStatusBadgeVariant(project: ProjectRecord) {
+  if (project.display_status === "final_acceptance_completed") {
+    return "success";
+  }
+
+  return projectStatusBadgeVariant(project.display_status || project.status);
+}
+
 export function projectActionLabel(action: string) {
   return action in ProjectStatusActionConfig
     ? ProjectStatusActionConfig[action as keyof typeof ProjectStatusActionConfig].label

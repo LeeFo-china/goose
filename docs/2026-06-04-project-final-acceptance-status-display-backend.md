@@ -29,6 +29,19 @@ display_status_label: string | null;
 `mode=home` 仍保留 `current_construction_stage` 阶段摘要，同时也补充上述展示字段，
 便于前端在不同列表入口复用同一展示逻辑。
 
+项目详情 `/projects/:id` 同步返回相同展示字段，避免 admin 端打开详情后刷新数据时
+回退显示项目主状态文案。
+
+## Admin 端同步
+
+admin 项目列表和项目详情状态徽标优先展示：
+
+1. `display_status_label`
+2. `status_label`
+3. 本地项目主状态配置
+
+竣工验收已完成时，admin 展示“已完成”，但筛选和流转逻辑仍使用项目主状态 `acceptance`。
+
 ## 验收标准
 
 1. 竣工验收未完成时，`display_status_label=竣工验收`。
@@ -69,3 +82,5 @@ bun run --cwd apps/api check
     `current_construction_stage.stage_code=completion`、
     `current_construction_stage.status=accepted`、
     `current_construction_stage.acceptance_status=customer_confirmed`。
+- admin 检查：
+  - `pnpm --dir apps/admin run check` 通过。

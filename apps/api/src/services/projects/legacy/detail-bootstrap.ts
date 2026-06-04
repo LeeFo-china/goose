@@ -31,6 +31,7 @@ import {
     type ProjectStatusTransitionListQuery,
     type UpdateProjectInput,
 } from "./shared";
+import { attachProjectDisplayStatuses } from "./display-status";
 
 export async function getProjectDetail(this: any, input: {
     authContext: AuthContext;
@@ -54,7 +55,12 @@ export async function getProjectDetail(this: any, input: {
         throw Errors.dbError("查询记录不存在");
     }
 
-    return project;
+    const [projectWithDisplayStatus] = await attachProjectDisplayStatuses({
+        rows: [project],
+        tenantId,
+    });
+
+    return projectWithDisplayStatus ?? project;
 }
 
 export async function getProjectDetailForEmployeeBootstrap(this: any, input: {
@@ -96,7 +102,13 @@ export async function getProjectDetailForEmployeeBootstrap(this: any, input: {
         }
     }
 
-    return this.attachPrimaryAssigneesToProject(project);
+    const projectWithAssignees = await this.attachPrimaryAssigneesToProject(project);
+    const [projectWithDisplayStatus] = await attachProjectDisplayStatuses({
+        rows: [projectWithAssignees],
+        tenantId,
+    });
+
+    return projectWithDisplayStatus ?? projectWithAssignees;
 }
 
 export async function getEmployeeProjectBootstrapBundle(this: any, input: {
