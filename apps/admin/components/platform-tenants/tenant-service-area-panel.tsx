@@ -31,8 +31,6 @@ type FormState = {
   city: string;
   district: string;
   adcode: string;
-  center_latitude: string;
-  center_longitude: string;
   service_radius_km: string;
   priority: string;
   status: string;
@@ -51,8 +49,6 @@ const initialForm: FormState = {
   city: "",
   district: "",
   adcode: "",
-  center_latitude: "",
-  center_longitude: "",
   service_radius_km: "",
   priority: "100",
   status: "active",
@@ -71,8 +67,6 @@ function toFormState(area?: TenantServiceAreaRecord | null): FormState {
     city: area.city || "",
     district: area.district || "",
     adcode: area.adcode || "",
-    center_latitude: area.center_latitude == null ? "" : String(area.center_latitude),
-    center_longitude: area.center_longitude == null ? "" : String(area.center_longitude),
     service_radius_km: area.service_radius_km == null ? "" : String(area.service_radius_km),
     priority: String(area.priority ?? 100),
     status: area.status || "active",
@@ -133,6 +127,9 @@ export function TenantServiceAreaPanel({
   const [cityRows, setCityRows] = useState<AdministrativeAreaOption[]>([]);
   const [districtRows, setDistrictRows] = useState<AdministrativeAreaOption[]>([]);
   const [pending, startTransition] = useTransition();
+  const hasEditableRadius = Boolean(
+    editing?.center_latitude != null && editing?.center_longitude != null,
+  );
   const selectedProvince = useMemo(
     () => provinceRows.find((province) => province.name === form.province) ?? null,
     [form.province, provinceRows],
@@ -289,9 +286,7 @@ export function TenantServiceAreaPanel({
       city: form.city.trim(),
       district: optionalText(form.district),
       adcode: optionalText(form.adcode),
-      center_latitude: optionalNumber(form.center_latitude),
-      center_longitude: optionalNumber(form.center_longitude),
-      service_radius_km: optionalNumber(form.service_radius_km),
+      service_radius_km: hasEditableRadius ? optionalNumber(form.service_radius_km) : undefined,
       priority: Number(form.priority || 100),
       status: form.status,
     };
@@ -384,7 +379,7 @@ export function TenantServiceAreaPanel({
         <DialogContent className="max-w-[720px]">
           <DialogHeader>
             <DialogTitle>{editing ? "编辑服务区域" : "新增服务区域"}</DialogTitle>
-            <DialogDescription>城市为必填项；adcode 和经纬度会提升定位匹配准确性。</DialogDescription>
+            <DialogDescription>城市为必填项；adcode 会提升定位匹配准确性。</DialogDescription>
           </DialogHeader>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Field>
@@ -434,28 +429,6 @@ export function TenantServiceAreaPanel({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="tenant-area-latitude">中心纬度</FieldLabel>
-              <Input
-                id="tenant-area-latitude"
-                type="number"
-                step="0.000001"
-                value={form.center_latitude}
-                disabled={pending}
-                onChange={(event) => updateField("center_latitude", event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="tenant-area-longitude">中心经度</FieldLabel>
-              <Input
-                id="tenant-area-longitude"
-                type="number"
-                step="0.000001"
-                value={form.center_longitude}
-                disabled={pending}
-                onChange={(event) => updateField("center_longitude", event.target.value)}
-              />
-            </Field>
-            <Field>
               <FieldLabel htmlFor="tenant-area-radius">服务半径 km</FieldLabel>
               <Input
                 id="tenant-area-radius"
@@ -463,10 +436,14 @@ export function TenantServiceAreaPanel({
                 min="0"
                 step="0.1"
                 value={form.service_radius_km}
-                disabled={pending}
+                disabled={pending || !hasEditableRadius}
                 onChange={(event) => updateField("service_radius_km", event.target.value)}
               />
-              <FieldDescription>为空时只按行政区划匹配，不做半径限制。</FieldDescription>
+              <FieldDescription>
+                {hasEditableRadius
+                  ? "为空时只按行政区划匹配，不做半径限制。"
+                  : "当前服务区域没有系统生成的中心坐标，暂不支持半径限制。"}
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="tenant-area-priority">优先级</FieldLabel>
