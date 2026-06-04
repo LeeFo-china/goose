@@ -82,7 +82,7 @@ export function ReleaseDeploymentsPanel({
       || "admin";
     resetEnvironment({
       environment: value,
-      defaultRef: nextEnvironment?.default_ref || "feature/multi-tenant",
+      defaultRef: nextEnvironment?.default_ref || "main",
       service: nextService,
     });
   }
@@ -90,7 +90,7 @@ export function ReleaseDeploymentsPanel({
   function onRefTypeChange(value: ReleaseRefType) {
     resetRefType({
       refType: value,
-      defaultRef: currentEnvironment?.default_ref || "feature/multi-tenant",
+      defaultRef: currentEnvironment?.default_ref || "main",
     });
   }
 
@@ -199,7 +199,7 @@ export function ReleaseDeploymentsPanel({
             reason: reason.trim() || `发布 ${tagData.tag}`,
             tagName: "",
             tagSourceRefType: "branch",
-            tagSourceRef: currentEnvironment?.default_ref || "feature/multi-tenant",
+            tagSourceRef: currentEnvironment?.default_ref || "main",
             tagMessage: "",
           });
           toast.success(tagData.message || "发布 Tag 已创建");

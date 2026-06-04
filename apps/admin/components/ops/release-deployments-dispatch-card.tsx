@@ -138,7 +138,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                     <ReleaseRefCombobox
                       type="tag"
                       value={ref}
-                      defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                      defaultRef={currentEnvironment?.default_ref || "main"}
                       disabled={!options?.configured}
                       onChange={(value) => setDraft({ ref: value, refType: "tag" })}
                     />
@@ -166,7 +166,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                             const nextType = value as ReleaseRefType;
                             setDraft({
                               tagSourceRefType: nextType,
-                              tagSourceRef: nextType === "branch" ? currentEnvironment?.default_ref || "feature/multi-tenant" : "",
+                              tagSourceRef: nextType === "branch" ? currentEnvironment?.default_ref || "main" : "",
                             });
                           }}
                         >
@@ -190,7 +190,7 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                         <ReleaseRefCombobox
                           type={tagSourceRefType}
                           value={tagSourceRef}
-                          defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                          defaultRef={currentEnvironment?.default_ref || "main"}
                           disabled={!options?.configured}
                           onChange={(value) => setDraft({ tagSourceRef: value })}
                         />
@@ -241,11 +241,11 @@ export function ReleaseDispatchCard({ state, actions }: { state: any; actions: a
                   <ReleaseRefCombobox
                     type={refType}
                     value={ref}
-                    defaultRef={currentEnvironment?.default_ref || "feature/multi-tenant"}
+                    defaultRef={currentEnvironment?.default_ref || "main"}
                     disabled={!options?.configured}
                     onChange={(value) => setDraft({ ref: value })}
                   />
-                  <FieldDescription>开发环境默认使用 feature/multi-tenant，也可以选择 Tag。</FieldDescription>
+                  <FieldDescription>开发环境默认使用 main，也可以选择 Tag。</FieldDescription>
                 </Field>
               </>
             )}

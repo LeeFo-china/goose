@@ -1,6 +1,6 @@
 services:
   gooes-admin:
-    image: ${GOOES_ADMIN_IMAGE:-ghcr.io/leefo-china/goose-admin:feature-multi-tenant}
+    image: ${GOOES_ADMIN_IMAGE:-ccr.ccs.tencentyun.com/gooes-goodcms/goose-admin:main}
     container_name: gooes-admin
     restart: unless-stopped
     env_file:

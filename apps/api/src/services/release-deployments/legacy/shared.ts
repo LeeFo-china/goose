@@ -38,14 +38,14 @@ export const RELEASE_WORKFLOWS: Record<ReleaseEnvironment, ReleaseWorkflow> = {
     environment: "dev",
     workflowId: "deploy-dev.yml",
     label: "开发环境",
-    defaultRef: "feature/multi-tenant",
+    defaultRef: "main",
     services: ["api", "admin", "social-video-worker", "cos-reconcile-worker"],
   },
   production: {
     environment: "production",
     workflowId: "build-docker-images.yml",
     label: "生产环境",
-    defaultRef: "feature/multi-tenant",
+    defaultRef: "main",
     services: ["all", "api", "admin", "social-video-worker", "cos-reconcile-worker"],
   },
 };
