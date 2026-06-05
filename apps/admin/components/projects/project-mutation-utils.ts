@@ -10,6 +10,7 @@ import type {
   ProjectFormState,
   ProjectRecord,
   ProjectStatusActionItem,
+  PropertyOption,
   RelationPerson,
   PropertyRelation,
   BadgeVariant,
@@ -49,6 +50,14 @@ export function propertyLabel(value: PropertyRelation | PropertyRelation[] | nul
   const item = relationOne(value);
   if (!item) return "-";
   return [item.community, item.building_info].filter(Boolean).join(" ") || "-";
+}
+
+export function hasCompletePropertyLocation(value: PropertyRelation | PropertyOption | null | undefined) {
+  return Boolean(
+    value?.adcode &&
+      typeof value.latitude === "number" &&
+      typeof value.longitude === "number",
+  );
 }
 
 export function formatMoney(value: number | string | null | undefined) {
@@ -273,6 +282,12 @@ export function buildDefaults(project?: ProjectRecord): ProjectFormState {
   return {
     name: project?.name || "",
     customer_id: project?.customer_id || relationOne(project?.customer)?.id || "",
+    property_id: project?.property_id || relationOne(project?.property)?.id || "",
+    property_mode: "existing",
+    new_property_community: "",
+    new_property_building_info: "",
+    new_property_area: "",
+    new_property_layout: "",
     designer_employee_id: relationOne(project?.designer)?.id || "",
     supervisor_employee_id: relationOne(project?.supervisor)?.id || "",
     budget: project?.budget != null ? String(project.budget) : "",
@@ -299,15 +314,54 @@ function optionRelation(
   };
 }
 
+function propertyOptionRelation(
+  value: string,
+  options: PropertyOption[],
+): PropertyRelation | null {
+  if (!value) return null;
+  const option = options.find((item) => item.id === value);
+  return option
+    ? {
+      id: option.id,
+      community: option.community ?? option.label,
+      building_info: option.building_info ?? null,
+      area: option.area ?? null,
+      layout: option.layout ?? null,
+      province: option.province ?? null,
+      city: option.city ?? null,
+      district: option.district ?? null,
+      adcode: option.adcode ?? null,
+      latitude: option.latitude ?? null,
+      longitude: option.longitude ?? null,
+      location_status: option.location_status ?? null,
+      location_source: option.location_source ?? null,
+      location_confidence: option.location_confidence ?? null,
+      location_confirmed_at: option.location_confirmed_at ?? null,
+    }
+    : null;
+}
+
 export function buildOptimisticProject(
   project: ProjectRecord,
   formState: ProjectFormState,
-  options: { designers: Option[]; supervisors: Option[]; customers: Option[] },
+  options: {
+    designers: Option[];
+    supervisors: Option[];
+    customers: Option[];
+    properties?: PropertyOption[];
+  },
 ): ProjectRecord {
+  const property = propertyOptionRelation(
+    formState.property_id,
+    options.properties ?? [],
+  );
+
   return {
     ...project,
     name: formState.name.trim() || project.name,
     customer_id: formState.customer_id || null,
+    property_id: formState.property_id || null,
+    property: property ?? project.property ?? null,
     designer: optionRelation(formState.designer_employee_id, options.designers),
     supervisor: optionRelation(formState.supervisor_employee_id, options.supervisors),
     budget: formState.budget ? Number(formState.budget) : null,

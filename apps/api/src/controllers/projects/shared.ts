@@ -24,6 +24,25 @@ export type ProjectCreateSelectCustomerRow = Pick<
   Tables<"customers">,
   "id" | "name" | "phone" | "owner_id"
 >;
+export type ProjectCreateSelectPropertyRow = Pick<
+  Tables<"properties">,
+  | "id"
+  | "customer_id"
+  | "community"
+  | "building_info"
+  | "area"
+  | "layout"
+  | "province"
+  | "city"
+  | "district"
+  | "adcode"
+  | "latitude"
+  | "longitude"
+  | "location_status"
+  | "location_source"
+  | "location_confidence"
+  | "location_confirmed_at"
+>;
 export type ProjectCreateEmployeeDepartmentRow = {
   id: string;
   name?: string | null;
@@ -52,6 +71,25 @@ export type ProjectCreateCustomerOption = {
   phone: string | null;
   phone_masked: string | null;
   can_view_phone: boolean;
+};
+
+export type ProjectCreatePropertyOption = {
+  id: string;
+  customer_id: string | null;
+  community: string | null;
+  building_info: string | null;
+  area: number | null;
+  layout: string | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  adcode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_status: string | null;
+  location_source: string | null;
+  location_confidence: number | null;
+  location_confirmed_at: string | null;
 };
 
 export type ProjectCreateEmployeeOption = {

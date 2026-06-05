@@ -4,6 +4,7 @@ import { ProjectListQuerySchema } from "@/schema/projects";
 import {
   ProjectCreateSelectCustomerQuerySchema,
   ProjectCreateSelectEmployeeQuerySchema,
+  ProjectCreateSelectPropertyQuerySchema,
   ProjectMemberCandidateQuerySchema,
 } from "@/schema/project-create-select";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
@@ -15,8 +16,10 @@ import {
   ProjectBaseController,
   type ProjectCreateCustomerOption,
   type ProjectCreateEmployeeOption,
+  type ProjectCreatePropertyOption,
   type ProjectCreateSelectCustomerRow,
   type ProjectCreateSelectEmployeeRow,
+  type ProjectCreateSelectPropertyRow,
 } from "./shared";
 
 function serializeEmployeeOption(item: ProjectCreateSelectEmployeeRow): ProjectCreateEmployeeOption {
@@ -51,6 +54,27 @@ function serializeEmployeeOption(item: ProjectCreateSelectEmployeeRow): ProjectC
       : null,
     post_code: post?.code || null,
     post_name: post?.name || null,
+  };
+}
+
+function serializePropertyOption(item: ProjectCreateSelectPropertyRow): ProjectCreatePropertyOption {
+  return {
+    id: item.id,
+    customer_id: item.customer_id,
+    community: item.community,
+    building_info: item.building_info,
+    area: item.area,
+    layout: item.layout,
+    province: item.province,
+    city: item.city,
+    district: item.district,
+    adcode: item.adcode,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    location_status: item.location_status,
+    location_source: item.location_source,
+    location_confidence: item.location_confidence,
+    location_confirmed_at: item.location_confirmed_at,
   };
 }
 
@@ -174,6 +198,27 @@ class ProjectCreateSelectController extends ProjectBaseController {
     return ResponseHandler.success({
       list: (result.rows as unknown as ProjectCreateSelectEmployeeRow[])
         .map(serializeEmployeeOption),
+      pagination: result.pagination,
+    });
+  }
+
+  @Get("/projects/create/properties")
+  async getProjectCreateProperties(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+
+    const queryResult = ProjectCreateSelectPropertyQuerySchema.safeParse(
+      request.query,
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const result = await projectSer.listProjectCreateProperties({
+      authContext,
+      query: queryResult.data,
+    });
+
+    return ResponseHandler.success({
+      list: (result.rows as unknown as ProjectCreateSelectPropertyRow[])
+        .map(serializePropertyOption),
       pagination: result.pagination,
     });
   }

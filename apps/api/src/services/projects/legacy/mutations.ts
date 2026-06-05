@@ -311,9 +311,12 @@ export async function assertProjectRelationsInTenant(this: any,
         const property = await projectRepository.findPropertyInTenant({
             propertyId: input.property_id,
             tenantId,
-        });
+        }) as { id: string; customer_id?: string | null } | null;
         if (!property) {
             throw Errors.badRequest("房产不存在或不属于当前租户");
+        }
+        if (input.customer_id && property.customer_id !== input.customer_id) {
+            throw Errors.badRequest("房产不属于所选客户");
         }
     }
 

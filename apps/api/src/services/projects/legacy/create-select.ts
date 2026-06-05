@@ -22,6 +22,7 @@ import {
     type EmployeeProjectBootstrapBundle,
     type ProjectCreateSelectCustomerQueryType,
     type ProjectCreateSelectEmployeeQueryType,
+    type ProjectCreateSelectPropertyQueryType,
     type ProjectDetailMembers,
     type ProjectListQuery,
     type ProjectListResult,
@@ -45,6 +46,36 @@ export async function listProjectCreateCustomers(this: any, input: {
     const result = await projectRepository.listCreateCustomers({
         filters: {
             tenantId,
+            keyword,
+        },
+        from,
+        to,
+    });
+
+    return {
+        rows: result.rows,
+        pagination: {
+            page,
+            pageSize,
+            total: result.total,
+            totalPages: result.total ? Math.ceil(result.total / pageSize) : 0,
+        },
+    };
+}
+
+export async function listProjectCreateProperties(this: any, input: {
+    authContext: AuthContext;
+    query: ProjectCreateSelectPropertyQueryType;
+}): Promise<ProjectSelectResult> {
+    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
+    accessPolicyService.assertPermission(input.authContext, "project.create");
+    const { page, pageSize, keyword, customer_id } = input.query;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const result = await projectRepository.listCreateProperties({
+        filters: {
+            tenantId,
+            customerId: customer_id,
             keyword,
         },
         from,

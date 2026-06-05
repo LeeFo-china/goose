@@ -3,6 +3,7 @@ import type {
   CreateProjectInput,
   ProjectCreateCustomerFilters,
   ProjectCreateEmployeeFilters,
+  ProjectCreatePropertyFilters,
 } from "./shared";
 
 export async function create(this: any, input: CreateProjectInput & { tenant_id: string }) {
@@ -60,7 +61,7 @@ export async function findCustomerInTenant(this: any, input: { customerId: strin
 export async function findPropertyInTenant(this: any, input: { propertyId: string; tenantId: string }) {
   const { data, error } = await SupabaseDB.getAdminClient()
     .from("properties")
-    .select("id")
+    .select("id, customer_id")
     .eq("id", input.propertyId)
     .eq("tenant_id", input.tenantId)
     .maybeSingle();
@@ -95,6 +96,55 @@ export async function listCreateCustomers(this: any, input: {
 
   if (error) {
     throw Errors.dbError("查询项目创建客户选择项失败", error);
+  }
+
+  return {
+    rows: (data || []) as unknown as Array<Record<string, unknown>>,
+    total: count ?? 0,
+  };
+}
+
+export async function listCreateProperties(this: any, input: {
+  filters: ProjectCreatePropertyFilters;
+  from: number;
+  to: number;
+}) {
+  let query = SupabaseDB.getAdminClient()
+    .from("properties")
+    .select(`
+      id,
+      customer_id,
+      community,
+      building_info,
+      area,
+      layout,
+      province,
+      city,
+      district,
+      adcode,
+      latitude,
+      longitude,
+      location_status,
+      location_source,
+      location_confidence,
+      location_confirmed_at
+    `, { count: "exact" })
+    .eq("tenant_id", input.filters.tenantId)
+    .eq("customer_id", input.filters.customerId)
+    .order("created_at", { ascending: false });
+
+  const normalizedKeyword = input.filters.keyword?.trim();
+  if (normalizedKeyword) {
+    const escapedKeyword = escapeSupabaseOrValue(normalizedKeyword);
+    query = query.or(
+      `community.ilike.%${escapedKeyword}%,building_info.ilike.%${escapedKeyword}%`,
+    );
+  }
+
+  const { data, error, count } = await query.range(input.from, input.to);
+
+  if (error) {
+    throw Errors.dbError("查询项目创建房产选择项失败", error);
   }
 
   return {

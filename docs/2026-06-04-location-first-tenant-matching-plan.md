@@ -589,6 +589,13 @@ user_location_contexts
    - 低于 `--min-confidence` 的记录只输出结果，不自动写库。
 9. admin 客户详情和项目详情已展示房产位置状态；已有完整
    `adcode + latitude + longitude` 的房产可由后台人工确认。
+10. admin 项目创建/编辑已优先关联房产：
+   - 新增 `/projects/create/properties` 房产候选接口。
+   - 选择客户后可选择该客户已有房产。
+   - 无房产时可在项目表单中新建客户房产，再把项目关联到新房产。
+   - 项目保存 payload 已带 `property_id`。
+   - 后端校验房产必须属于当前租户；同时传 `customer_id` 时，房产必须属于所选客户。
+   - 选中房产缺少完整位置时，表单展示“位置待补全”提示。
 
 开发库覆盖率基线（2026-06-05）：
 
@@ -606,7 +613,7 @@ user_location_contexts
 后续步骤：
 
 1. 对剩余 1 条异常测试房产补充更标准地址或通过后台人工确认。
-2. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
+2. 给小程序补阶段 4 对接文档，说明项目/房产位置字段和 `location_status` 展示规则。
 3. 生产执行前先跑 dry-run，确认候选结果和置信度，再小批量 apply。
 
 自动地理编码验收记录（2026-06-05）：
@@ -642,6 +649,12 @@ user_location_contexts
   - 只有已有完整 `adcode + latitude + longitude` 时才允许点击“确认位置”。
   - 确认动作调用 `/properties/:id`，写入 `location_status=confirmed`、
     `location_source=manual` 和 `location_confirmed_at`。
+- admin 项目表单关联房产已补：
+  - 新建项目和编辑项目支持选择已有房产。
+  - 支持在项目表单内新建客户房产后继续保存项目。
+  - 经纬度不交给用户填写，新建房产继续走后端自动地理编码。
+  - 已有关联房产的项目编辑时可默认回显当前 `property_id`。
+  - 选中房产缺少完整 `adcode + latitude + longitude` 时展示待补全提示。
 
 ## 参考资料
 

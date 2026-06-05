@@ -41,6 +41,7 @@ import {
 import {
     listProjectCreateCustomers,
     listProjectCreateEmployees,
+    listProjectCreateProperties,
     listProjectMemberCandidates,
     listEmployeeCandidates,
 } from "./legacy/create-select";
@@ -134,6 +135,7 @@ class ProjectService {
     listPublicProjectMembers = listPublicProjectMembers;
     prewarmPublicProjectDetailData = prewarmPublicProjectDetailData;
     listProjectCreateCustomers = listProjectCreateCustomers;
+    listProjectCreateProperties = listProjectCreateProperties;
     listProjectCreateEmployees = listProjectCreateEmployees;
     listProjectMemberCandidates = listProjectMemberCandidates;
     private listEmployeeCandidates = listEmployeeCandidates;

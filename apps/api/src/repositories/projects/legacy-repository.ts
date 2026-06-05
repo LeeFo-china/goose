@@ -20,6 +20,7 @@ import {
   findPropertyInTenant,
   listCreateCustomers,
   listCreateEmployees,
+  listCreateProperties,
 } from "./legacy/create-options";
 import { update, updateIfStatus, scheduleConstructionTransition } from "./legacy/mutations";
 import type { ProjectCoreListFilters } from "./legacy/shared";
@@ -36,6 +37,7 @@ export type {
   ProjectCoreListFilters,
   ProjectCreateCustomerFilters,
   ProjectCreateEmployeeFilters,
+  ProjectCreatePropertyFilters,
 } from "./legacy/shared";
 
 class ProjectRepository {
@@ -105,6 +107,7 @@ class ProjectRepository {
   findCustomerInTenant = findCustomerInTenant;
   findPropertyInTenant = findPropertyInTenant;
   listCreateCustomers = listCreateCustomers;
+  listCreateProperties = listCreateProperties;
   listCreateEmployees = listCreateEmployees;
   update = update;
   updateIfStatus = updateIfStatus;

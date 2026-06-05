@@ -16,6 +16,11 @@ export const ProjectCreateSelectCustomerQuerySchema = PaginationQuerySchema.exte
   keyword: z.string().trim().optional(),
 });
 
+export const ProjectCreateSelectPropertyQuerySchema = PaginationQuerySchema.extend({
+  customer_id: z.uuid("请选择有效的客户"),
+  keyword: z.string().trim().optional(),
+});
+
 export const ProjectCreateSelectEmployeeQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().optional(),
   scene: ProjectCreateSelectEmployeeSceneSchema,
@@ -30,6 +35,9 @@ export const ProjectMemberCandidateQuerySchema = PaginationQuerySchema.extend({
 
 export type ProjectCreateSelectCustomerQueryType = z.infer<
   typeof ProjectCreateSelectCustomerQuerySchema
+>;
+export type ProjectCreateSelectPropertyQueryType = z.infer<
+  typeof ProjectCreateSelectPropertyQuerySchema
 >;
 export type ProjectCreateSelectEmployeeQueryType = z.infer<
   typeof ProjectCreateSelectEmployeeQuerySchema

@@ -42,11 +42,13 @@ export const PROJECT_LIST_SELECT = `
   start_date,
   created_at,
   address,
+  property_id,
   customer:customers!projects_customer_id_fkey(
     id,
     name
   ),
   property:properties!projects_property_id_fkey(
+    id,
     community,
     building_info,
     province,
@@ -151,6 +153,7 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
   start_date,
   created_at,
   address,
+  property_id,
   style_tags,
   visibility_status,
   customer:customers!projects_customer_id_fkey(
@@ -217,6 +220,12 @@ export type ProjectCoreListFilters = {
 
 export type ProjectCreateCustomerFilters = {
   tenantId: string;
+  keyword?: string;
+};
+
+export type ProjectCreatePropertyFilters = {
+  tenantId: string;
+  customerId: string;
   keyword?: string;
 };
 

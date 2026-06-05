@@ -9,6 +9,7 @@ import type {
     ProjectCreateSelectCustomerQueryType,
     ProjectCreateSelectEmployeeQueryType,
     ProjectCreateSelectEmployeeScene,
+    ProjectCreateSelectPropertyQueryType,
     ProjectMemberCandidateQueryType,
 } from "@/schema/project-create-select";
 import { Errors } from "@/errors/error-factory";
@@ -106,6 +107,7 @@ export type {
     ProjectCreateSelectCustomerQueryType,
     ProjectCreateSelectEmployeeQueryType,
     ProjectCreateSelectEmployeeScene,
+    ProjectCreateSelectPropertyQueryType,
     ProjectMemberCandidateQueryType,
     EmployeeProjectBootstrapBundle,
     ProjectPrimaryAssignee,

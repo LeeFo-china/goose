@@ -58,6 +58,7 @@ export function serializeProjectListItem<T extends Record<string, unknown>>(
       ...customerPhoneFields,
     },
     property: normalizeRelation(row.property, {
+      id: null,
       community: null,
       building_info: null,
       area: null,
@@ -69,6 +70,9 @@ export function serializeProjectListItem<T extends Record<string, unknown>>(
       district: null,
       adcode: null,
       location_status: null,
+      location_source: null,
+      location_confidence: null,
+      location_confirmed_at: null,
     }),
     designer: normalizeRelation(row.designer, {
       id: null,
