@@ -1,4 +1,8 @@
-import { administrativeAreaRepository, type AdministrativeAreaRecord } from "@/repositories/administrative-areas";
+import {
+  administrativeAreaRepository,
+  type AdministrativeAreaRecord,
+  type PublicAdministrativeAreaRecord,
+} from "@/repositories/administrative-areas";
 import type { AdministrativeAreaListQuery } from "@/schema/administrative-areas";
 import type { AuthContext } from "@/services/authorization";
 import { Errors } from "@/errors/error-factory";
@@ -17,8 +21,18 @@ type PublicAdministrativeAreaNode = {
 };
 
 const PUBLIC_CACHE_SECONDS = 24 * 60 * 60;
+const PUBLIC_SNAPSHOT_CACHE_TTL_MS = 30 * 60 * 1000;
+
+type PublicAdministrativeAreaSnapshot = {
+  rows: PublicAdministrativeAreaRecord[];
+  version: string;
+  expiresAt: number;
+};
 
 class AdministrativeAreaService {
+  private publicSnapshotCache: PublicAdministrativeAreaSnapshot | null = null;
+  private publicSnapshotInFlight: Promise<PublicAdministrativeAreaSnapshot> | null = null;
+
   async list(query: AdministrativeAreaListQuery, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
     const list = await administrativeAreaRepository.list(query);
@@ -28,13 +42,57 @@ class AdministrativeAreaService {
   }
 
   async listPublic(query: AdministrativeAreaListQuery) {
-    const list = await administrativeAreaRepository.list(query);
+    const snapshot = await this.getPublicSnapshot();
+    const list = this.filterPublicRows(snapshot.rows, query);
     const publicList = list.map((item) => this.toPublicNode(item));
     return {
       list: query.tree ? this.toPublicTree(publicList) : publicList,
-      version: this.resolveVersion(list),
+      version: snapshot.version,
       expires_in: PUBLIC_CACHE_SECONDS,
     };
+  }
+
+  async prewarmPublicCache() {
+    await this.getPublicSnapshot();
+  }
+
+  private async getPublicSnapshot() {
+    const now = Date.now();
+    if (this.publicSnapshotCache && this.publicSnapshotCache.expiresAt > now) {
+      return this.publicSnapshotCache;
+    }
+
+    if (!this.publicSnapshotInFlight) {
+      this.publicSnapshotInFlight = administrativeAreaRepository.listPublicSnapshot()
+        .then((rows) => {
+          const snapshot = {
+            rows,
+            version: this.resolveVersion(rows),
+            expiresAt: Date.now() + PUBLIC_SNAPSHOT_CACHE_TTL_MS,
+          };
+          this.publicSnapshotCache = snapshot;
+          return snapshot;
+        })
+        .finally(() => {
+          this.publicSnapshotInFlight = null;
+        });
+    }
+
+    return this.publicSnapshotInFlight;
+  }
+
+  private filterPublicRows(rows: PublicAdministrativeAreaRecord[], query: AdministrativeAreaListQuery) {
+    const keyword = query.keyword?.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (query.level && row.level !== query.level) return false;
+      if (query.parent_adcode && row.parent_adcode !== query.parent_adcode) return false;
+      if (!query.parent_adcode && query.level === "province" && row.parent_adcode !== null) return false;
+      if (!keyword) return true;
+
+      return row.name.toLowerCase().includes(keyword)
+        || row.full_name.toLowerCase().includes(keyword)
+        || row.adcode.toLowerCase().includes(keyword);
+    });
   }
 
   private toTree(rows: AdministrativeAreaRecord[]) {
@@ -65,7 +123,7 @@ class AdministrativeAreaService {
     return roots;
   }
 
-  private toPublicNode(row: AdministrativeAreaRecord): PublicAdministrativeAreaNode {
+  private toPublicNode(row: PublicAdministrativeAreaRecord): PublicAdministrativeAreaNode {
     return {
       adcode: row.adcode,
       name: row.name,
@@ -104,7 +162,7 @@ class AdministrativeAreaService {
     }
   }
 
-  private resolveVersion(rows: AdministrativeAreaRecord[]) {
+  private resolveVersion(rows: Array<Pick<AdministrativeAreaRecord, "source_version" | "synced_at">>) {
     const sourceVersion = rows.find((item) => item.source_version)?.source_version;
     if (sourceVersion) return sourceVersion;
 

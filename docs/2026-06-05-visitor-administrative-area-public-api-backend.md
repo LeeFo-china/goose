@@ -156,3 +156,69 @@ POST /visitor/location-bootstrap
 | 缓存头检查 | 通过，`Cache-Control: public, max-age=86400` |
 | visitor token 访问懒加载接口 | 通过 |
 | 手动选择固始县后 visitor bootstrap | 通过，返回 2 家装修公司，`selection_status=pending` |
+
+## 后端性能优化记录（2026-06-05）
+
+小程序回写性能观察：
+
+| 接口 | 小程序实测耗时 |
+| --- | --- |
+| 完整树 `tree=true` | 约 7.8s、8.9s、17.8s |
+| 河南省懒加载 `parent_adcode=410000` | 约 1.1s |
+| 北京市懒加载 `parent_adcode=110000` | 约 26.5s |
+| 朝阳区搜索 `keyword=朝阳区` | 约 4.5s |
+
+后端已补充优化：
+
+- public 行政区接口改为读取轻字段快照，不再查询平台管理字段。
+- API 进程内缓存 active 行政区快照 30 分钟。
+- 并发请求复用同一个快照加载 promise，避免缓存失效时重复打 Supabase。
+- API 启动监听后后台预热 public 行政区快照，不阻塞服务启动。
+- `tree=true`、`level`、`parent_adcode`、`keyword` 保持原查询契约，从内存快照过滤和组树。
+
+开发库复测：
+
+| 接口 | 响应大小 | 本机 API 热态耗时 |
+| --- | ---: | ---: |
+| 完整树 `tree=true` | 475004 bytes | 0.0087s、0.0031s |
+| 河南省懒加载 `parent_adcode=410000` | 2145 bytes | 0.0015s |
+| 北京市懒加载 `parent_adcode=110000` | 1913 bytes | 0.0013s |
+| 朝阳区搜索 `keyword=朝阳区` | 333 bytes | 0.0019s |
+
+补充 smoke：
+
+| 用例 | 结果 |
+| --- | --- |
+| 完整树根节点数量 | 34 |
+| 完整树包含河南省/信阳市/固始县 | 通过 |
+| 完整树包含北京市/朝阳区 | 通过 |
+| 响应字段泄漏检查 | 通过，不返回平台管理字段和同步字段 |
+
+## 小程序二次复测回写（2026-06-05）
+
+小程序侧已基于后端性能优化后二次复测，接口地址和字段契约无需调整：
+
+```text
+GET /public/administrative-areas?tree=true
+```
+
+前端使用本机开发 API `http://192.168.1.5:3000` 复测：
+
+| 接口 | 结果 | 实测耗时 |
+| --- | --- | ---: |
+| `GET /public/administrative-areas?tree=true` 第 1 次 | 200，34 个省级根节点，包含河南省/信阳市/固始县和北京市/朝阳区 | 26ms |
+| `GET /public/administrative-areas?tree=true` 第 2 次 | 200，34 个省级根节点 | 5ms |
+| `GET /public/administrative-areas?tree=true` 第 3 次 | 200，34 个省级根节点 | 5ms |
+| `GET /public/administrative-areas?parent_adcode=410000` | 200，河南省下 18 个城市，包含信阳市 | 19ms |
+| `GET /public/administrative-areas?parent_adcode=110000` | 200，北京市下 16 个区县，包含朝阳区 | 2ms |
+| `GET /public/administrative-areas?keyword=朝阳区` | 200，返回北京市朝阳区和长春市朝阳区 | 2ms |
+
+缓存字段和缓存头：
+
+| 项 | 结果 |
+| --- | --- |
+| `version` | `webservice-district-v1` |
+| `expires_in` | `86400` |
+| `Cache-Control` | `public, max-age=86400` |
+
+结论：后端性能优化已被小程序侧验证，完整树接口从秒级降到毫秒级。当前小程序侧三级 Picker、行政区本地缓存、直辖市兼容和 bootstrap 提交字段均与后端契约一致。

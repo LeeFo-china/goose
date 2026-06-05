@@ -2,6 +2,9 @@ import { Errors } from "@/errors/error-factory";
 import type { AdministrativeAreaListQuery } from "@/schema/administrative-areas";
 import { SupabaseDB } from "@/utils/supabase";
 
+const ADMINISTRATIVE_AREA_PAGE_SIZE = 1000;
+const MAX_ADMINISTRATIVE_AREA_PAGES = 20;
+
 export type AdministrativeAreaRecord = {
   adcode: string;
   name: string;
@@ -17,6 +20,18 @@ export type AdministrativeAreaRecord = {
   updated_at: string;
 };
 
+export type PublicAdministrativeAreaRecord = Pick<
+  AdministrativeAreaRecord,
+  | "adcode"
+  | "name"
+  | "level"
+  | "parent_adcode"
+  | "full_name"
+  | "source_version"
+  | "synced_at"
+  | "sort_order"
+>;
+
 class AdministrativeAreaRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -25,11 +40,10 @@ class AdministrativeAreaRepository {
   }
 
   async list(query: AdministrativeAreaListQuery) {
-    const pageSize = 1000;
     const rows: AdministrativeAreaRecord[] = [];
-    for (let page = 0; page < 20; page += 1) {
-      const from = page * pageSize;
-      const to = from + pageSize - 1;
+    for (let page = 0; page < MAX_ADMINISTRATIVE_AREA_PAGES; page += 1) {
+      const from = page * ADMINISTRATIVE_AREA_PAGE_SIZE;
+      const to = from + ADMINISTRATIVE_AREA_PAGE_SIZE - 1;
       const request = this.buildListRequest(query).range(from, to);
       const { data, error } = await request;
 
@@ -39,7 +53,26 @@ class AdministrativeAreaRepository {
 
       const pageRows = (data || []) as AdministrativeAreaRecord[];
       rows.push(...pageRows);
-      if (pageRows.length < pageSize) break;
+      if (pageRows.length < ADMINISTRATIVE_AREA_PAGE_SIZE) break;
+    }
+
+    return rows;
+  }
+
+  async listPublicSnapshot(): Promise<PublicAdministrativeAreaRecord[]> {
+    const rows: PublicAdministrativeAreaRecord[] = [];
+    for (let page = 0; page < MAX_ADMINISTRATIVE_AREA_PAGES; page += 1) {
+      const from = page * ADMINISTRATIVE_AREA_PAGE_SIZE;
+      const to = from + ADMINISTRATIVE_AREA_PAGE_SIZE - 1;
+      const { data, error } = await this.buildPublicSnapshotRequest().range(from, to);
+
+      if (error) {
+        throw Errors.dbError("查询行政区划失败", error);
+      }
+
+      const pageRows = (data || []) as PublicAdministrativeAreaRecord[];
+      rows.push(...pageRows);
+      if (pageRows.length < ADMINISTRATIVE_AREA_PAGE_SIZE) break;
     }
 
     return rows;
@@ -59,6 +92,16 @@ class AdministrativeAreaRepository {
     }
 
     return request
+      .order("sort_order", { ascending: true })
+      .order("adcode", { ascending: true });
+  }
+
+  private buildPublicSnapshotRequest() {
+    return this.table()
+      .select(
+        "adcode,name,level,parent_adcode,full_name,source_version,synced_at,sort_order",
+      )
+      .eq("status", "active")
       .order("sort_order", { ascending: true })
       .order("adcode", { ascending: true });
   }
