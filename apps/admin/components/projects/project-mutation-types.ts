@@ -22,6 +22,16 @@ export type PropertyRelation = {
   building_info?: string | null;
   area?: number | null;
   layout?: string | null;
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  adcode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_status?: string | null;
+  location_source?: string | null;
+  location_confidence?: number | null;
+  location_confirmed_at?: string | null;
 };
 
 export type ProjectRecord = {

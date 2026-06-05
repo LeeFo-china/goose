@@ -23,6 +23,7 @@
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",
+    "property-location:backfill": "bun --env-file=.env src/scripts/property-location-backfill.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",

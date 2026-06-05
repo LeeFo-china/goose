@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { CustomerFollowUpRecord, CustomerRecord, CustomerSourceRecord } from "@/components/customers/customer-mutation-types";
 import { formatDate, formatDateTime, getSourceBadges, ownerName, requestCustomer, sourceActorName, sourceOptions, SourceTags } from "@/components/customers/customer-mutation-shared";
 import { CustomerStatusPanel } from "@/components/customers/customer-status-panel";
+import { PropertyLocationStatus } from "@/components/properties/property-location-status";
 
 export function CustomerDetailDialog({
   customer: initialCustomer,
@@ -243,7 +244,7 @@ export function CustomerDetailDialog({
             <h3 className="mb-3 text-sm font-semibold">房产列表</h3>
             <div className="grid gap-2 md:grid-cols-2">
               {(customer.properties || []).map((property) => (
-              <div key={property.id} className="rounded-md border p-3">
+                <div key={property.id} className="flex flex-col gap-3 rounded-md border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium">{property.community || "-"}</div>
                     {property.is_primary ? <Badge variant="success">主房产</Badge> : null}
@@ -253,6 +254,10 @@ export function CustomerDetailDialog({
                       .filter(Boolean)
                       .join(" · ") || "-"}
                   </div>
+                  <PropertyLocationStatus
+                    property={property}
+                    onConfirmed={refreshCustomer}
+                  />
                 </div>
               ))}
               {(customer.properties || []).length === 0 ? (

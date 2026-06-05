@@ -65,6 +65,9 @@ class CustomerPropertyService {
       district: property.district,
       adcode: property.adcode,
       location_status: property.location_status,
+      location_source: property.location_source,
+      location_confidence: property.location_confidence,
+      location_confirmed_at: property.location_confirmed_at,
       created_at: property.created_at,
     };
   }

@@ -23,6 +23,9 @@ export const CUSTOMER_PROPERTY_SUMMARY_SELECT = `
   district,
   adcode,
   location_status,
+  location_source,
+  location_confidence,
+  location_confirmed_at,
   created_at
 `;
 
@@ -46,6 +49,9 @@ export type CustomerPrimaryPropertySummary = {
   district: string | null;
   adcode: string | null;
   location_status: PropertyLocationStatus;
+  location_source: PropertyLocationSource | null;
+  location_confidence: number | null;
+  location_confirmed_at: string | null;
   created_at: string | null;
 };
 

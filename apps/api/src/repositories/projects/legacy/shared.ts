@@ -55,7 +55,10 @@ export const PROJECT_LIST_SELECT = `
     adcode,
     latitude,
     longitude,
-    location_status
+    location_status,
+    location_source,
+    location_confidence,
+    location_confirmed_at
   )
 `;
 
@@ -86,7 +89,10 @@ export const PROJECT_DETAIL_SELECT = `
     city,
     district,
     adcode,
-    location_status
+    location_status,
+    location_source,
+    location_confidence,
+    location_confirmed_at
   )
 `;
 
@@ -130,7 +136,10 @@ export const EMPLOYEE_PROJECT_BOOTSTRAP_SELECT = `
     city,
     district,
     adcode,
-    location_status
+    location_status,
+    location_source,
+    location_confidence,
+    location_confirmed_at
   )
 `;
 
@@ -160,7 +169,10 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
     city,
     district,
     adcode,
-    location_status
+    location_status,
+    location_source,
+    location_confidence,
+    location_confirmed_at
   )
 `;
 
@@ -188,7 +200,10 @@ export const PUBLIC_PROJECT_DETAIL_SELECT = `
     city,
     district,
     adcode,
-    location_status
+    location_status,
+    location_source,
+    location_confidence,
+    location_confirmed_at
   )
 `;
 

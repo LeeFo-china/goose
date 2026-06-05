@@ -13,7 +13,8 @@ import { ProjectConstructionStagesPanel } from "@/components/projects/project-co
 import { AddProjectMemberDialog } from "@/components/projects/project-member-dialog";
 import { ProjectStatusPanel } from "@/components/projects/project-status-panel";
 import type { ProjectDetailTab, ProjectRecord } from "@/components/projects/project-mutation-types";
-import { customerName, customerStatus, customerStatusLabel, getEmployeeMeta, personName, requestProject } from "@/components/projects/project-mutation-utils";
+import { customerName, customerStatus, customerStatusLabel, getEmployeeMeta, personName, propertyLabel, relationOne, requestProject } from "@/components/projects/project-mutation-utils";
+import { PropertyLocationStatus } from "@/components/properties/property-location-status";
 import { cn } from "@/lib/utils";
 
 export function ProjectDetailDialog({
@@ -33,6 +34,7 @@ export function ProjectDetailDialog({
   const [refreshing, setRefreshing] = useState(false);
   const [detailError, setDetailError] = useState("");
   const members = currentProject.members || [];
+  const property = relationOne(currentProject.property);
   const existingEmployeeIds = members
     .map((member) => member.employee?.id || member.employee_id)
     .filter((item): item is string => Boolean(item));
@@ -131,6 +133,29 @@ export function ProjectDetailDialog({
               <StatusAlert>{detailError}</StatusAlert>
             ) : null}
             <TabsContent value="overview" className="flex flex-col gap-5">
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold">房产位置</h3>
+                {property?.id ? (
+                  <div className="flex flex-col gap-3 rounded-md border p-3">
+                    <div>
+                      <div className="font-medium">{propertyLabel(property)}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {[property.layout, property.area != null ? `${property.area}㎡` : null]
+                          .filter(Boolean)
+                          .join(" · ") || currentProject.address || "-"}
+                      </div>
+                    </div>
+                    <PropertyLocationStatus
+                      property={{ ...property, id: property.id }}
+                      onConfirmed={refreshProject}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                    当前项目未关联房产，位置待补全。
+                  </div>
+                )}
+              </section>
               <ProjectConstructionStagesPanel
                 projectId={currentProject.id}
                 active={activeTab === "overview"}

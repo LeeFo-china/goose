@@ -580,15 +580,24 @@ user_location_contexts
    - 客户房产子接口创建/更新
    - 客户档案内嵌主房产 upsert
 7. 自动地理编码失败不阻断业务；`location_status=confirmed` 的房产不会被自动覆盖。
+8. 新增老数据补齐脚本：
+   `bun run api:property-location-backfill -- --limit 20`
+   - 默认 dry-run，不写库。
+   - 显式 `--apply` 才写入开发库/目标库。
+   - 从系统配置读取腾讯 WebService Key/SK，SK 通过后端配置解密逻辑读取。
+   - 不覆盖 `location_status=confirmed` 的房产。
+   - 低于 `--min-confidence` 的记录只输出结果，不自动写库。
+9. admin 客户详情和项目详情已展示房产位置状态；已有完整
+   `adcode + latitude + longitude` 的房产可由后台人工确认。
 
 开发库覆盖率基线（2026-06-05）：
 
 | 指标 | 数量 |
 | --- | ---: |
 | 房产总数 | 5 |
-| 房产有城市 | 0 |
-| 房产有 adcode | 0 |
-| 房产有经纬度 | 0 |
+| 房产有城市 | 2 |
+| 房产有 adcode | 2 |
+| 房产有经纬度 | 2 |
 | 房产已确认 | 0 |
 | 项目总数 | 7 |
 | 项目已关联房产 | 5 |
@@ -596,9 +605,9 @@ user_location_contexts
 
 后续步骤：
 
-1. 设计老数据补齐脚本，按 `community/building_info/address` 地理编码。
-2. 低置信度记录进入人工确认，禁止覆盖 `location_status=confirmed` 的记录。
-3. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
+1. 对剩余 3 条房产补充更标准地址或通过后台人工确认。
+2. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
+3. 生产执行前先跑 dry-run，确认候选结果和置信度，再小批量 apply。
 
 自动地理编码验收记录（2026-06-05）：
 
@@ -612,6 +621,21 @@ user_location_contexts
 - confirmed 保护测试通过：
   - 已有 `location_status=confirmed` 时不会自动覆盖坐标和 adcode。
 - 临时写库链路测试因本地 Supabase JS 远端请求无返回中止，已确认没有测试房产残留；后续通过接口 smoke 覆盖写库链路。
+- 老数据补齐 dry-run 验收通过：
+  - 候选房产：5 条。
+  - 可自动补齐：2 条。
+  - 跳过：3 条。
+  - 跳过原因：1 条置信度 `0.3` 低于阈值；2 条腾讯 geocoder 返回参数错误。
+- 开发库小批量 apply 已执行：
+  - 写入：2 条。
+  - `property_with_city/adcode/coordinate` 从 `0/5` 提升到 `2/5`。
+  - 二次 dry-run 候选收敛为 3 条，均未自动写入。
+- admin 人工确认入口已补：
+  - 客户详情房产列表展示位置状态、行政区、adcode、经纬度、来源和置信度。
+  - 项目详情概览展示关联房产的位置状态。
+  - 只有已有完整 `adcode + latitude + longitude` 时才允许点击“确认位置”。
+  - 确认动作调用 `/properties/:id`，写入 `location_status=confirmed`、
+    `location_source=manual` 和 `location_confirmed_at`。
 
 ## 参考资料
 
