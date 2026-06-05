@@ -156,6 +156,11 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
   property_id,
   style_tags,
   visibility_status,
+  tenant:tenants!projects_tenant_id_fkey(
+    id,
+    name,
+    slug
+  ),
   customer:customers!projects_customer_id_fkey(
     id,
     name
@@ -188,6 +193,11 @@ export const PUBLIC_PROJECT_DETAIL_SELECT = `
   address,
   style_tags,
   visibility_status,
+  tenant:tenants!projects_tenant_id_fkey(
+    id,
+    name,
+    slug
+  ),
   customer:customers!projects_customer_id_fkey(
     name
   ),

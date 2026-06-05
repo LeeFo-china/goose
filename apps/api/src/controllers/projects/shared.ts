@@ -303,9 +303,8 @@ export abstract class ProjectBaseController extends TenantBaseController<
       adcode: null,
       location_status: null,
     });
-    const normalizedCustomer = this.normalizeRelation(row.customer, {
-      name: null,
-    });
+    const normalizedCustomer = this.normalizeRelation(row.customer, { name: null });
+    const normalizedTenant = this.normalizeRelation(row.tenant, { id: null, name: null, slug: null });
     const projectId = typeof row.id === "string" ? row.id : "";
     const publicLogs = related?.publicLogs ??
       (projectId ? await this.getPublicProjectLogs(projectId) : []);
@@ -326,6 +325,8 @@ export abstract class ProjectBaseController extends TenantBaseController<
       start_date: typeof row.start_date === "string" ? row.start_date : null,
       cover_images: this.buildPublicProjectCoverImages(publicLogs),
       style_tags: this.normalizeStringArray(row.style_tags),
+      tenant: normalizedTenant,
+      tenant_name: typeof normalizedTenant.name === "string" ? normalizedTenant.name : null,
       property: normalizedProperty,
       customer: {
         name: typeof normalizedCustomer.name === "string" ? normalizedCustomer.name : null,

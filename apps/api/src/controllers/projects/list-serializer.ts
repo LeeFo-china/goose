@@ -33,6 +33,11 @@ export function serializeProjectListItem<T extends Record<string, unknown>>(
     phone: null,
     owner_id: null,
   });
+  const normalizedTenant = normalizeRelation(row.tenant, {
+    id: null,
+    name: null,
+    slug: null,
+  });
   const customerPhoneFields =
     typeof normalizedCustomer.id === "string" && phonePrivacyContext
       ? customerPhonePrivacyService.serializeCustomerPhoneFields(
@@ -53,6 +58,8 @@ export function serializeProjectListItem<T extends Record<string, unknown>>(
 
   return {
     ...row,
+    tenant: normalizedTenant,
+    tenant_name: typeof normalizedTenant.name === "string" ? normalizedTenant.name : null,
     customer: {
       ...normalizedCustomer,
       ...customerPhoneFields,
