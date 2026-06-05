@@ -20,7 +20,8 @@ export type UserLocationMatchedTenant = {
 
 export type UserLocationContextRecord = {
   id: string;
-  auth_user_id: string;
+  auth_user_id: string | null;
+  visitor_id: string | null;
   source: UserLocationContextSource;
   province: string | null;
   city: string | null;
@@ -32,6 +33,7 @@ export type UserLocationContextRecord = {
   matched_tenants: UserLocationMatchedTenant[];
   recommended_tenant_id: string | null;
   selected_tenant_id: string | null;
+  selection_status: "pending" | "selected" | "skipped" | "expired";
   fallback_reason: string | null;
   confirmed_at: string | null;
   expires_at: string;
@@ -40,7 +42,8 @@ export type UserLocationContextRecord = {
 };
 
 export type CreateUserLocationContextInput = {
-  auth_user_id: string;
+  auth_user_id?: string | null;
+  visitor_id?: string | null;
   source: UserLocationContextSource;
   province?: string | null;
   city?: string | null;
@@ -51,6 +54,8 @@ export type CreateUserLocationContextInput = {
   accuracy?: number | null;
   matched_tenants: UserLocationMatchedTenant[];
   recommended_tenant_id?: string | null;
+  selected_tenant_id?: string | null;
+  selection_status?: UserLocationContextRecord["selection_status"];
   fallback_reason?: string | null;
   expires_at: string;
 };
@@ -65,7 +70,8 @@ class UserLocationContextRepository {
   async create(input: CreateUserLocationContextInput) {
     const { data, error } = await this.table()
       .insert({
-        auth_user_id: input.auth_user_id,
+        auth_user_id: input.auth_user_id ?? null,
+        visitor_id: input.visitor_id ?? null,
         source: input.source,
         province: input.province ?? null,
         city: input.city ?? null,
@@ -76,6 +82,8 @@ class UserLocationContextRepository {
         accuracy: input.accuracy ?? null,
         matched_tenants: input.matched_tenants,
         recommended_tenant_id: input.recommended_tenant_id ?? null,
+        selected_tenant_id: input.selected_tenant_id ?? null,
+        selection_status: input.selection_status ?? "pending",
         fallback_reason: input.fallback_reason ?? null,
         expires_at: input.expires_at,
       })
@@ -104,6 +112,37 @@ class UserLocationContextRepository {
     return (data || null) as UserLocationContextRecord | null;
   }
 
+  async findActiveForVisitor(id: string, visitorId: string) {
+    const { data, error } = await this.table()
+      .select("*")
+      .eq("id", id)
+      .eq("visitor_id", visitorId)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 visitor 定位上下文失败", error);
+    }
+
+    return (data || null) as UserLocationContextRecord | null;
+  }
+
+  async findLatestActiveForVisitor(visitorId: string) {
+    const { data, error } = await this.table()
+      .select("*")
+      .eq("visitor_id", visitorId)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 visitor 当前定位上下文失败", error);
+    }
+
+    return (data || null) as UserLocationContextRecord | null;
+  }
+
   async confirm(input: {
     id: string;
     authUserId: string;
@@ -114,6 +153,7 @@ class UserLocationContextRepository {
     const { data, error } = await this.table()
       .update({
         selected_tenant_id: input.selectedTenantId,
+        selection_status: "selected",
         confirmed_at: input.confirmedAt,
       })
       .eq("id", input.id)
@@ -124,6 +164,35 @@ class UserLocationContextRepository {
 
     if (error) {
       throw Errors.dbError("确认定位租户失败", error);
+    }
+
+    return (data || null) as UserLocationContextRecord | null;
+  }
+
+  async confirmVisitor(input: {
+    id: string;
+    visitorId: string;
+    selectedTenantId: string | null;
+    selectionStatus: "selected" | "skipped";
+    confirmedAt: string;
+    expiresAt: string;
+  }) {
+    const now = new Date().toISOString();
+    const { data, error } = await this.table()
+      .update({
+        selected_tenant_id: input.selectedTenantId,
+        selection_status: input.selectionStatus,
+        confirmed_at: input.confirmedAt,
+        expires_at: input.expiresAt,
+      })
+      .eq("id", input.id)
+      .eq("visitor_id", input.visitorId)
+      .gt("expires_at", now)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("确认 visitor 定位上下文失败", error);
     }
 
     return (data || null) as UserLocationContextRecord | null;
