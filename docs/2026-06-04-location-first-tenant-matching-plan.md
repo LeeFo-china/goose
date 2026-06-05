@@ -492,8 +492,8 @@ MVP 验收标准：
 
 - 阶段 0：后端配置项已补齐，生产腾讯 LBS Key/SK/小程序 Key 已配置。
 - 阶段 1：服务区域表、admin 配置入口、行政区划表和行政区划数据同步已完成。
-- 阶段 2：后端已提供小程序定位选项接口和定位启动接口；小程序侧定位采集仍需对接验收。
-- 阶段 3：后端已提供定位上下文落库和用户确认接口；小程序侧多租户选择页仍需对接验收。
+- 阶段 2：已完成。后端定位选项/定位启动接口已完成，小程序定位采集、拒绝定位兜底、手动区域和无服务区域兜底已通过代码核验。
+- 阶段 3：已完成。定位上下文落库、用户确认、多装修公司选择、过期上下文处理和已绑定身份保护已通过验收。
 - 阶段 4-6：未开始。
 
 已完成后端接口：
@@ -546,15 +546,17 @@ user_location_contexts
 - `POST /customer/location-bootstrap/confirm` 本地 smoke 通过。
 - bootstrap 后开发库已生成定位上下文，confirm 后已写入 `selected_tenant_id`。
 - 默认未保存原始经纬度。
+- 小程序侧阶段 2/3 对接已完成代码核验。
+- 过期上下文 confirm 后端真实复测通过，返回 `定位上下文不存在或已过期`。
+- 已绑定客户身份 token 提交外地 GPS 时，后端仍以 `match_reason=identity` 的身份租户作为推荐租户。
 
-小程序下一步对接：
+阶段 4 下一步：
 
-1. 登录后调用 `GET /customer/location/options`。
-2. 如果 `location_match_enabled=true`，优先触发定位授权。
-3. 定位成功后提交 `POST /customer/location-bootstrap`。
-4. 如果 `requires_user_confirmation=true`，展示 `matched_tenants` 给用户选择。
-5. 用户选择后调用 `POST /customer/location-bootstrap/confirm`。
-6. 如果定位拒绝或失败，使用 `open_service_areas` 做手动城市/区县选择。
+1. 梳理 `properties`、`projects.property_id`、`projects.address` 当前数据覆盖率。
+2. 设计房产位置标准字段和“位置待补全”状态。
+3. 新建/编辑房产时补齐 `province/city/district/adcode/latitude/longitude/community/building_info`。
+4. 项目创建优先关联 `property_id`，缺位置时明确标记“位置待补全”。
+5. 编写老数据补齐脚本，低置信度记录进入人工确认，不覆盖人工确认过的位置。
 
 ## 参考资料
 
