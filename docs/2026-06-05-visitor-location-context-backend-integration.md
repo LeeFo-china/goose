@@ -403,3 +403,76 @@ TTL 实现：
 - 小程序是否按 `selection_status=pending` 展示多候选选择页。
 - 小程序是否在 `skipped` 状态下保留区域，但不写入租户上下文。
 - 已绑定客户/员工登录后是否继续走身份租户优先，不被 visitor 定位上下文覆盖。
+
+## 小程序对接回写（2026-06-05）
+
+orange 小程序已按后端回写契约完成 visitor 首页定位上下文接入。
+
+前端实现位置：
+
+- `src/services/visitor_location_context.ts`
+- `src/utils/location_context.ts`
+- `src/pages/visitor/hooks/useVisitorLocationContext.ts`
+- `src/pages/visitor/components/VisitorLocationPanel.tsx`
+- `src/pages/visitor/index.tsx`
+- `src/pages/visitor/VisitorView.tsx`
+- `src/pages/visitor/_index-part4.scss`
+
+接口契约对齐：
+
+- `GET /visitor/location/options`
+  - 已读取 `location_match_enabled`、`tencent_lbs`、`open_service_areas`、`context`。
+  - 已兼容 `requires_rebootstrap`；当后端要求重新 bootstrap 时，小程序不会复用旧上下文。
+- `POST /visitor/location-bootstrap`
+  - GPS 自动定位和手动区域选择都会提交行政区信息。
+  - 小程序只把经纬度用于当次 bootstrap，不在前端做长期坐标缓存。
+- `POST /visitor/location-bootstrap/confirm`
+  - 多候选场景支持按后端返回顺序选择装修公司。
+- `POST /visitor/location-bootstrap/skip`
+  - 支持用户只确认区域，不选择装修公司。
+- `GET /visitor/location-context`
+  - 类型已兼容 `context` 和 `requires_rebootstrap`，当前首页入口优先通过 options 获取上下文。
+
+小程序回写要求状态：
+
+| # | 回写项 | 小程序对接状态 |
+| --- | --- | --- |
+| 1 | visitor 首页读取已有 30 天上下文 | 已对接。`options.context && !requires_rebootstrap` 时直接展示当前区域和已选/跳过状态 |
+| 2 | 自动定位成功后展示当前区域 | 已对接。`Taro.getLocation` + 腾讯位置 SDK 逆地址解析后提交 bootstrap，并展示后端返回区域 |
+| 3 | 拒绝定位后进入手动区域选择 | 已对接。GPS 失败或未授权时展示手动服务区域选择 |
+| 4 | 多候选按后端顺序展示 | 已对接。`selection_status=pending` / `requires_user_confirmation=true` 时展示候选公司列表，不在前端重排 |
+| 5 | 选择第二家公司 confirm | 已对接。点击候选公司调用 confirm，成功后写入 `selected_tenant` 并回到当前区域展示 |
+| 6 | 跳过选择后保留区域且不绑定租户 | 已对接。skip 成功后保留区域，`selected_tenant_id=null`，`selection_status=skipped` |
+| 7 | 无服务区域展示平台内容和兜底文案 | 已对接。无候选或 `NO_SERVICE_AREA_MATCHED` 时保留 visitor 首页内容，并显示兜底提示 |
+| 8 | 已绑定客户/员工不被 visitor 定位切换租户 | 已对接。visitor 定位 hook 仅在 visitor/platform visitor 状态启用，客户/员工身份仍走现有身份租户优先链路 |
+
+本轮验证：
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm run check:file-size src/services/visitor_location_context.ts src/pages/visitor/hooks/useVisitorLocationContext.ts src/pages/visitor/components/VisitorLocationPanel.tsx src/utils/location_context.ts src/pages/visitor/index.tsx src/pages/visitor/VisitorView.tsx src/pages/visitor/index.scss src/pages/visitor/_index-part4.scss` | 通过 |
+| `pnpm run typecheck` | 通过 |
+| `pnpm run build:weapp:dev` | 通过，`TARO_APP_BASEURL=http://192.168.1.5:3000`，webpack compiled successfully in 14.44s |
+
+待人工补充：
+
+- 以上 8 项为代码对接和开发构建核验结果。
+- 仍建议小程序团队在微信开发者工具或真机用 visitor token 做一次端到端验收，并把实际请求响应、定位授权结果和 confirm/skip 行为补充到本节。
+
+## 后端收口确认（2026-06-05）
+
+后端已基于小程序回写重新做 visitor 核心接口 smoke，本轮暂无新增接口或字段阻塞项。
+
+复测结果：
+
+| 用例 | 结果 |
+| --- | --- |
+| 固始县 visitor bootstrap | 通过，返回 2 家装修公司，`selection_status=pending`，`requires_user_confirmation=true` |
+| confirm 第二家公司 | 通过，`selected_tenant_id=5f9404fd-23a7-4686-a606-b2627a65611d`，`selection_status=selected` |
+| 读取当前 visitor context | 通过，返回已选装修公司，`requires_rebootstrap=false` |
+
+当前结论：
+
+- 小程序代码对接和构建验证已完成。
+- 后端真实接口 smoke 已完成。
+- 剩余工作是小程序团队用微信开发者工具或真机补一次端到端人工复测，并把实际请求响应补充到本文。
