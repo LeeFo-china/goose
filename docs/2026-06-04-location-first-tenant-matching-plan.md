@@ -494,7 +494,7 @@ MVP 验收标准：
 - 阶段 1：服务区域表、admin 配置入口、行政区划表和行政区划数据同步已完成。
 - 阶段 2：已完成。后端定位选项/定位启动接口已完成，小程序定位采集、拒绝定位兜底、手动区域和无服务区域兜底已通过代码核验。
 - 阶段 3：已完成。定位上下文落库、用户确认、多装修公司选择、过期上下文处理和已绑定身份保护已通过验收。
-- 阶段 4：进行中。已补房产位置治理字段、后端返回字段和覆盖率检查脚本。
+- 阶段 4：已完成。房产位置治理字段、后端返回字段、覆盖率检查脚本、admin 人工确认入口、小程序字段契约和回写验收均已收口。
 - 阶段 5-6：未开始。
 
 已完成后端接口：
@@ -604,6 +604,12 @@ user_location_contexts
    - 首页 inline RPC `list_customer_home_projects` 返回顶层 `property_id` 和完整房产位置字段。
    - 开发库 migration 已执行：
      `20260605043000_refresh_customer_home_projects_property_location.sql`
+13. 小程序补充回写后，后端完成最终只读验收：
+   - 小程序已兼容顶层 `property_id` 回退、房产位置元数据字段和 `location_confidence` 数字校验。
+   - `GET /customer/projects?page=1&pageSize=5` 通过，返回顶层 `property_id` 和完整 `property` 位置字段。
+   - `GET /customer/bootstrap?page=1&pageSize=20&include=home_summary&projects_mode=inline` 通过，返回顶层 `property_id` 和完整 `property` 位置字段。
+   - `GET /customer/projects/:id/detail-bootstrap` 通过，返回顶层 `property_id` 和完整 `property` 位置字段。
+   - 开发库 migration 已确认包含 `20260605033000` 和 `20260605043000`。
 
 开发库覆盖率基线（2026-06-05）：
 
@@ -620,9 +626,9 @@ user_location_contexts
 
 后续步骤：
 
-1. 对剩余 1 条异常测试房产补充更标准地址或通过后台人工确认。
-2. 等小程序使用失败样例完成模拟器真实复测并回写用例 5。
-3. 生产执行前先跑 dry-run，确认候选结果和置信度，再小批量 apply。
+1. 剩余 1 条异常测试房产 `状态机回归小区20169123` 保留为后台人工治理样例，不阻塞阶段 4 对接。
+2. 生产执行前先跑 migration plan 和补齐脚本 dry-run，确认候选结果和置信度，再小批量 apply。
+3. 阶段 5 可开始做本地资源推荐，复用阶段 1-4 已沉淀的位置上下文、服务区域和项目房产位置数据。
 
 自动地理编码验收记录（2026-06-05）：
 

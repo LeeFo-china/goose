@@ -298,3 +298,60 @@ Boolean(property?.latitude && property?.longitude)
   - 展示“位置待补全/待确认”。
   - 不展示地图导航入口。
   - 不调用地图导航。
+
+## 小程序补充对接回写（2026-06-05）
+
+小程序已按后端补充字段完成兼容：
+
+- 项目列表/详情 normalizer 兼容顶层 `property_id`，当 `property.id` 缺失时回退使用 `project.property_id`。
+- 客户/员工项目 `property` 类型补齐：
+  - `location_source`
+  - `location_confidence`
+  - `location_confirmed_at`
+- 客户房产详情类型和房产 schema 补齐上述位置元数据字段，作为后端维护的可选返回字段消费。
+- `location_confidence` 做数字有效性校验，非数字或无穷值按 `null` 处理。
+
+本次小程序验证命令：
+
+- `pnpm run check:file-size src/schema/properties.ts src/types/api/customer_detail.d.ts src/types/tables/project.ts src/services/projects/normalizers/customer.ts src/services/projects/normalizers/core.ts src/services/projects/types/status.ts`：通过。
+- `pnpm run typecheck`：通过。
+- `pnpm run build:weapp:dev`：通过，Webpack 编译耗时约 14.36s，开发 API 为 `http://192.168.1.5:3000`。
+
+当前结论：
+
+- 后端新增字段契约已完成小程序侧兼容。
+- 房产位置展示、地址兜底和地图入口控制沿用前一轮逻辑；后端 smoke 通过后，小程序侧暂无新增后端阻塞项。
+
+## 后端收口确认（2026-06-05）
+
+后端已基于小程序补充回写完成最终只读验收，本轮无需新增接口或字段。
+
+开发库真实接口验收：
+
+| 接口 | 结果 |
+| --- | --- |
+| `GET /customer/projects?page=1&pageSize=5` | 通过，返回顶层 `property_id` 和完整 `property` 位置字段 |
+| `GET /customer/bootstrap?page=1&pageSize=20&include=home_summary&projects_mode=inline` | 通过，返回顶层 `property_id` 和完整 `property` 位置字段 |
+| `GET /customer/projects/:id/detail-bootstrap` | 通过，返回顶层 `property_id` 和完整 `property` 位置字段 |
+
+开发库覆盖率验收：
+
+| 指标 | 数量 |
+| --- | ---: |
+| 房产总数 | 5 |
+| 房产有城市 | 4 |
+| 房产有 adcode | 4 |
+| 房产有经纬度 | 4 |
+| 房产已确认 | 0 |
+| 项目总数 | 7 |
+| 项目已关联房产 | 5 |
+| 项目有地址但未关联房产 | 0 |
+
+迁移验收：
+
+- `20260605033000_add_property_location_governance.sql` 已在开发库执行。
+- `20260605043000_refresh_customer_home_projects_property_location.sql` 已在开发库执行。
+
+剩余治理项：
+
+- `状态机回归小区20169123` 是自动解析失败/位置待补全样例，继续作为后台人工治理和小程序无地图入口展示用例，不阻塞阶段 4 收口。
