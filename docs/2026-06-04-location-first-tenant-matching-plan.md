@@ -497,7 +497,7 @@ MVP 验收标准：
 - 阶段 3：已完成。定位上下文落库、用户确认、多装修公司选择、过期上下文处理和已绑定身份保护已通过验收。
 - 阶段 4：已完成。房产位置治理字段、后端返回字段、覆盖率检查脚本、admin 人工确认入口、小程序字段契约和回写验收均已收口。
 - 阶段 5：MVP 已完成。已支持同一区域多装修公司候选、强排序、用户确认和三类 smoke。
-- 阶段 6：未开始。
+- 阶段 6：MVP 已完成。已补定位匹配统计、admin 运维概览、过期未确认上下文清理脚本和对接文档。
 
 已完成后端接口：
 
@@ -560,6 +560,15 @@ user_location_contexts
   - 多候选 confirm 可选择第二家装修公司并写入 `confirmed_at`。
   - 小程序阶段 5 对接文档已落库：
     `docs/2026-06-05-miniprogram-local-resource-recommendation-stage5-integration.md`
+- 阶段 6 MVP 已完成：
+  - 新增平台超管只读统计接口：
+    `GET /admin/ops/location-metrics`
+  - admin 运维页健康监控 tab 已展示定位匹配治理卡。
+  - 新增过期未确认上下文清理脚本：
+    `bun run api:location-context-cleanup`
+  - ops 白名单脚本新增“清理定位上下文”，只删除 `expires_at < now AND confirmed_at IS NULL` 的记录。
+  - 小程序/运营阶段 6 对接文档已落库：
+    `docs/2026-06-05-location-governance-stage6-integration.md`
 
 阶段 4 下一步：
 

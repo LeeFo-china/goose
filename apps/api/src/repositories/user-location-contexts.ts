@@ -128,6 +128,63 @@ class UserLocationContextRepository {
 
     return (data || null) as UserLocationContextRecord | null;
   }
+
+  async listForMetrics(since: string, limit = 10000) {
+    const { data, error } = await this.table()
+      .select(`
+        id,
+        source,
+        province,
+        city,
+        district,
+        adcode,
+        latitude,
+        longitude,
+        accuracy,
+        matched_tenants,
+        fallback_reason,
+        confirmed_at,
+        expires_at,
+        created_at
+      `)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw Errors.dbError("查询定位匹配统计失败", error);
+    }
+
+    return (data || []) as UserLocationContextRecord[];
+  }
+
+  async countExpiredUnconfirmed(now = new Date().toISOString()) {
+    const { count, error } = await this.table()
+      .select("id", { count: "exact", head: true })
+      .lt("expires_at", now)
+      .is("confirmed_at", null);
+
+    if (error) {
+      throw Errors.dbError("统计过期定位上下文失败", error);
+    }
+
+    return count || 0;
+  }
+
+  async deleteExpiredUnconfirmed(now = new Date().toISOString()) {
+    const { data, error } = await this.table()
+      .delete()
+      .lt("expires_at", now)
+      .is("confirmed_at", null)
+      .select("id");
+
+    if (error) {
+      throw Errors.dbError("清理过期定位上下文失败", error);
+    }
+
+    return (data || []).length;
+  }
+
 }
 
 export const userLocationContextRepository = new UserLocationContextRepository();

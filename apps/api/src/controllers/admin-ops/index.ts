@@ -16,6 +16,7 @@ import {
   ReleaseSuccessfulRefListQuerySchema,
 } from "@/schema/release-deployments";
 import { dockerServiceHealthService } from "@/services/docker-service-health";
+import { locationGovernanceService } from "@/services/location-governance";
 import { opsScriptService } from "@/services/ops-scripts";
 import { releaseDeploymentService } from "@/services/release-deployments";
 import { Get, Post } from "@/utils/decorators/route";
@@ -58,6 +59,14 @@ class AdminOpsController extends PlatformBaseController {
     await this.getRequiredPlatformAdminContext(request);
 
     const data = await dockerServiceHealthService.getSnapshot();
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/admin/ops/location-metrics")
+  async getLocationMetrics(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+
+    const data = await locationGovernanceService.getMetrics(authContext);
     return ResponseHandler.success(data);
   }
 

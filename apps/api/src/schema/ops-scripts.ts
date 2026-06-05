@@ -4,6 +4,7 @@ import { PaginationQuerySchema } from "@/schema/request";
 export const OpsScriptKeySchema = z.enum([
   "health_check",
   "system_metrics",
+  "location_context_cleanup",
   "deploy_trace",
   "deploy_notify_test",
 ]);

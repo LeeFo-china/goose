@@ -52,6 +52,15 @@ const OPS_SCRIPT_DEFINITIONS: Record<OpsScriptKey, OpsScriptDefinition> = {
     timeoutMs: 5_000,
     dangerLevel: "low",
   },
+  location_context_cleanup: {
+    key: "location_context_cleanup",
+    label: "清理定位上下文",
+    description: "清理已过期且未确认的定位匹配上下文，保留已确认审计记录。",
+    command: "bash",
+    args: ["-lc", "cd apps/api && bun --env-file=.env src/scripts/location-context-cleanup.ts --apply"],
+    timeoutMs: 30_000,
+    dangerLevel: "medium",
+  },
   deploy_trace: {
     key: "deploy_trace",
     label: "部署 Trace",

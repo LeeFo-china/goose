@@ -54,6 +54,40 @@ export type OpsSystemMetrics = {
   checked_at: string;
 };
 
+export type LocationMetricsWindow = {
+  window: "24h" | "7d";
+  since: string;
+  total: number;
+  active: number;
+  expired_unconfirmed: number;
+  confirmed: number;
+  confirmation_rate: number;
+  single_tenant: number;
+  multi_tenant: number;
+  no_match: number;
+  identity_match: number;
+  raw_coordinate_stored: number;
+  low_accuracy: number;
+  source_counts: Record<string, number>;
+  match_reason_counts: Record<string, number>;
+  fallback_reason_counts: Record<string, number>;
+};
+
+export type LocationMetricsData = {
+  generated_at: string;
+  windows: LocationMetricsWindow[];
+  recent_no_match: Array<{
+    id: string;
+    source: "gps" | "manual_city" | "manual_address";
+    province: string | null;
+    city: string | null;
+    district: string | null;
+    adcode: string | null;
+    fallback_reason: string | null;
+    created_at: string;
+  }>;
+};
+
 export type OpsServiceHealth = {
   checked_at: string;
   docker_socket_path: string;

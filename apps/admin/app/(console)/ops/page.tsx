@@ -2,6 +2,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { OpsRunsPagination } from "@/components/ops/ops-list-actions";
 import { OpsRunsTable } from "@/components/ops/ops-runs-table";
 import { OpsScriptsPanel } from "@/components/ops/ops-scripts-panel";
+import { LocationMetricsPanel } from "@/components/ops/location-metrics-panel";
 import { ReleaseDeploymentsPanel } from "@/components/ops/release-deployments-panel";
 import { ServiceHealthPanel } from "@/components/ops/service-health-panel";
 import { SystemMetricsPanel } from "@/components/ops/system-metrics-panel";
@@ -9,6 +10,7 @@ import Link from "next/link";
 import type {
   OpsScript,
   OpsScriptRun,
+  LocationMetricsData,
   Pagination,
   ReleaseOptionsData,
   ReleaseRuntimeVersionData,
@@ -84,10 +86,12 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
       releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
+      locationMetrics: null as LocationMetricsData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
       releaseError: "缺少登录凭证",
       releaseRuntimeError: "缺少登录凭证",
+      locationMetricsError: "缺少登录凭证",
     };
   }
 
@@ -96,9 +100,15 @@ async function getOpsData(params: OpsPageSearchParams) {
       page: String(page),
       pageSize: String(OPS_RUNS_PAGE_SIZE),
     });
-    const [scriptData, runData, releaseOptionsResult, releaseRunsResult, releaseSuccessfulRefsResult, releaseRuntimeVersionsResult] = await Promise.all([
+    const [scriptData, runData, locationMetricsResult, releaseOptionsResult, releaseRunsResult, releaseSuccessfulRefsResult, releaseRuntimeVersionsResult] = await Promise.all([
       fetchBackendData<ScriptListData>(token, "/admin/ops/scripts"),
       fetchBackendData<RunListData>(token, `/admin/ops/script-runs?${query}`),
+      fetchBackendData<LocationMetricsData>(token, "/admin/ops/location-metrics")
+        .then((data) => ({ data, error: null as string | null }))
+        .catch((error) => ({
+          data: null as LocationMetricsData | null,
+          error: error instanceof Error ? error.message : "定位匹配统计加载失败",
+        })),
       fetchBackendData<ReleaseOptionsData>(token, "/admin/ops/releases/options")
         .then((data) => ({ data, error: null as string | null }))
         .catch((error) => ({
@@ -134,10 +144,12 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseSuccessfulRefs: releaseSuccessfulRefsResult.data?.list || [],
       releaseSuccessfulRefsPagination: releaseSuccessfulRefsResult.data?.pagination || { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: releaseRuntimeVersionsResult.data,
+      locationMetrics: locationMetricsResult.data,
       pagination: runData?.pagination || { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: null,
       releaseError: releaseOptionsResult.error || releaseRunsResult.error || releaseSuccessfulRefsResult.error,
       releaseRuntimeError: releaseRuntimeVersionsResult.error,
+      locationMetricsError: locationMetricsResult.error,
     };
   } catch (error) {
     return {
@@ -149,10 +161,12 @@ async function getOpsData(params: OpsPageSearchParams) {
       releaseSuccessfulRefs: [] as ReleaseSuccessfulRef[],
       releaseSuccessfulRefsPagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
       releaseRuntimeVersions: null as ReleaseRuntimeVersionData | null,
+      locationMetrics: null as LocationMetricsData | null,
       pagination: { page, pageSize: OPS_RUNS_PAGE_SIZE, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "运维脚本加载失败",
       releaseError: error instanceof Error ? error.message : "发布信息加载失败",
       releaseRuntimeError: error instanceof Error ? error.message : "运行版本加载失败",
+      locationMetricsError: error instanceof Error ? error.message : "定位匹配统计加载失败",
     };
   }
 }
@@ -172,10 +186,12 @@ export default async function OpsPage({
     releaseSuccessfulRefs,
     releaseSuccessfulRefsPagination,
     releaseRuntimeVersions,
+    locationMetrics,
     pagination,
     error,
     releaseError,
     releaseRuntimeError,
+    locationMetricsError,
   } = await getOpsData(params);
   const activeTab = normalizeTab(params.tab);
   const successCount = runs.filter((item) => item.status === "success").length;
@@ -188,6 +204,7 @@ export default async function OpsPage({
       count: "",
       content: (
         <div className="flex flex-col gap-3">
+          <LocationMetricsPanel metrics={locationMetrics} error={locationMetricsError} />
           <SystemMetricsPanel />
           <ServiceHealthPanel />
         </div>
