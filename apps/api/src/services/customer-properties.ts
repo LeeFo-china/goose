@@ -13,6 +13,7 @@ import type {
 } from "@/schema/properties";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { propertyLocationService } from "@/services/property-location";
 import type { PropertyLocationStatus } from "@gooes/domain";
 
 export type SerializedPropertySummary = CustomerPrimaryPropertySummary & {
@@ -144,18 +145,23 @@ class CustomerPropertyService {
       input.customerId,
       input.tenantId,
     );
+    const payload = await propertyLocationService.enrichPayload({
+      tenantId: input.tenantId,
+      payload: input.propertyPayload,
+      existing: primaryProperty,
+    });
 
     if (primaryProperty?.id) {
       await customerPropertyRepository.updateProperty({
         propertyId: primaryProperty.id,
         tenantId: input.tenantId,
-        payload: input.propertyPayload,
+        payload,
       });
     } else {
       await customerPropertyRepository.createPrimaryCandidate({
         customerId: input.customerId,
         tenantId: input.tenantId,
-        payload: input.propertyPayload,
+        payload,
       });
     }
 
@@ -195,10 +201,14 @@ class CustomerPropertyService {
       input.customerId,
       "customer.update",
     );
+    const payload = await propertyLocationService.enrichPayload({
+      tenantId,
+      payload: input.payload,
+    });
     const property = await customerPropertyRepository.createProperty({
       customerId: customer.id,
       tenantId,
-      payload: input.payload,
+      payload,
     });
     const shouldSetAsPrimary = !customer.property_id || input.payload.set_as_primary;
 
@@ -252,16 +262,25 @@ class CustomerPropertyService {
       input.customerId,
       "customer.update",
     );
-    await this.getRequiredCustomerPropertyRecord(customer.id, input.propertyId, tenantId);
+    const existing = await this.getRequiredCustomerPropertyRecord(
+      customer.id,
+      input.propertyId,
+      tenantId,
+    );
 
     if (Object.keys(input.payload).length === 0) {
       throw Errors.badRequest("至少需要提供一个待更新字段");
     }
 
+    const payload = await propertyLocationService.enrichPayload({
+      tenantId,
+      payload: input.payload,
+      existing,
+    });
     const property = await customerPropertyRepository.updateProperty({
       propertyId: input.propertyId,
       tenantId,
-      payload: input.payload,
+      payload,
     });
 
     return this.serializePropertySummary(property, customer.property_id);

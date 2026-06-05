@@ -572,6 +572,14 @@ user_location_contexts
    `bun run api:property-location-coverage -- --limit 20`
 4. 开发库 migration 已执行：
    `20260605033000_add_property_location_governance.sql`
+5. 已接入腾讯 LBS 地址解析：
+   - `tencentLbsService.geocodeAddress`
+   - `propertyLocationService.enrichPayload`
+6. 房产创建/更新链路已自动补齐位置：
+   - 租户后台 `/properties` 创建/更新
+   - 客户房产子接口创建/更新
+   - 客户档案内嵌主房产 upsert
+7. 自动地理编码失败不阻断业务；`location_status=confirmed` 的房产不会被自动覆盖。
 
 开发库覆盖率基线（2026-06-05）：
 
@@ -588,10 +596,22 @@ user_location_contexts
 
 后续步骤：
 
-1. 新建/编辑房产时接入腾讯地理编码，补齐标准位置字段。
-2. 设计老数据补齐脚本，按 `community/building_info/address` 地理编码。
-3. 低置信度记录进入人工确认，禁止覆盖 `location_status=confirmed` 的记录。
-4. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
+1. 设计老数据补齐脚本，按 `community/building_info/address` 地理编码。
+2. 低置信度记录进入人工确认，禁止覆盖 `location_status=confirmed` 的记录。
+3. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
+
+自动地理编码验收记录（2026-06-05）：
+
+- 腾讯地址解析测试通过：
+  - 地址：`河南省信阳市固始县蓼都廉租房`
+  - 返回：`adcode=411525`，坐标约 `32.190278,115.697316`
+  - `confidence=0.7`
+- 自动补位置 patch 测试通过：
+  - `location_status=geocoded`
+  - `location_source=tencent_geocoder`
+- confirmed 保护测试通过：
+  - 已有 `location_status=confirmed` 时不会自动覆盖坐标和 adcode。
+- 临时写库链路测试因本地 Supabase JS 远端请求无返回中止，已确认没有测试房产残留；后续通过接口 smoke 覆盖写库链路。
 
 ## 参考资料
 

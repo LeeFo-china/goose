@@ -5,6 +5,7 @@ import type {
   CreatePropertyInput,
   UpdatePropertyInput,
 } from "@/schema/properties";
+import { propertyLocationService } from "@/services/property-location";
 
 class PropertyService {
   private async assertCustomerBelongsToTenant(input: {
@@ -62,7 +63,14 @@ class PropertyService {
       tenantId: input.tenantId,
     });
 
-    return propertyRepository.create(input);
+    const payload = await propertyLocationService.enrichPayload({
+      tenantId: input.tenantId,
+      payload: input.payload,
+    });
+    return propertyRepository.create({
+      ...input,
+      payload,
+    });
   }
 
   async updateProperty(input: {
@@ -71,15 +79,27 @@ class PropertyService {
     payload: UpdatePropertyInput;
   }) {
     const { id: _bodyId, ...payload } = input.payload;
+    const existing = await propertyRepository.findById({
+      id: input.id,
+      tenantId: input.tenantId,
+    });
+    if (!existing) {
+      throw Errors.badRequest("房产不存在或更新失败");
+    }
     await this.assertCustomerBelongsToTenant({
       customerId: payload.customer_id,
       tenantId: input.tenantId,
+    });
+    const enrichedPayload = await propertyLocationService.enrichPayload({
+      tenantId: input.tenantId,
+      payload,
+      existing,
     });
 
     const property = await propertyRepository.update({
       id: input.id,
       tenantId: input.tenantId,
-      payload,
+      payload: enrichedPayload,
     });
     if (!property) {
       throw Errors.badRequest("房产不存在或更新失败");

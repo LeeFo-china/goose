@@ -5,7 +5,10 @@ import type {
   UpdateCustomerPropertyInput,
 } from "@/schema/properties";
 import { SupabaseDB } from "@/utils/supabase";
-import type { PropertyLocationStatus } from "@gooes/domain";
+import type {
+  PropertyLocationSource,
+  PropertyLocationStatus,
+} from "@gooes/domain";
 
 export const CUSTOMER_PROPERTY_SUMMARY_SELECT = `
   id,
@@ -55,6 +58,23 @@ export type NormalizedCustomerPropertyPayload = {
   building_info: string | null;
   area: number | null;
   layout: string | null;
+};
+
+export type CustomerPropertyMutationPayload = {
+  community?: string | null;
+  building_info?: string | null;
+  area?: number | null;
+  layout?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  province?: string | null;
+  city?: string | null;
+  district?: string | null;
+  adcode?: string | null;
+  location_status?: PropertyLocationStatus;
+  location_source?: PropertyLocationSource | null;
+  location_confidence?: number | null;
+  location_confirmed_at?: string | null;
 };
 
 class CustomerPropertyRepository {
@@ -149,7 +169,7 @@ class CustomerPropertyRepository {
   async createProperty(input: {
     customerId: string;
     tenantId: string;
-    payload: CreateCustomerPropertyInput;
+    payload: CreateCustomerPropertyInput & CustomerPropertyMutationPayload;
   }) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("properties")
@@ -167,6 +187,10 @@ class CustomerPropertyRepository {
         city: input.payload.city ?? null,
         district: input.payload.district ?? null,
         adcode: input.payload.adcode ?? null,
+        location_status: input.payload.location_status ?? "pending",
+        location_source: input.payload.location_source ?? null,
+        location_confidence: input.payload.location_confidence ?? null,
+        location_confirmed_at: input.payload.location_confirmed_at ?? null,
       })
       .select(CUSTOMER_PROPERTY_SUMMARY_SELECT)
       .single();
@@ -181,7 +205,7 @@ class CustomerPropertyRepository {
   async updateProperty(input: {
     propertyId: string;
     tenantId: string;
-    payload: UpdateCustomerPropertyInput | NormalizedCustomerPropertyPayload;
+    payload: UpdateCustomerPropertyInput | NormalizedCustomerPropertyPayload | CustomerPropertyMutationPayload;
   }) {
     const payload = input.payload;
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -211,6 +235,18 @@ class CustomerPropertyRepository {
         ...("adcode" in payload && payload.adcode !== undefined
           ? { adcode: payload.adcode ?? null }
           : {}),
+        ...("location_status" in payload && payload.location_status !== undefined
+          ? { location_status: payload.location_status }
+          : {}),
+        ...("location_source" in payload && payload.location_source !== undefined
+          ? { location_source: payload.location_source ?? null }
+          : {}),
+        ...("location_confidence" in payload && payload.location_confidence !== undefined
+          ? { location_confidence: payload.location_confidence ?? null }
+          : {}),
+        ...("location_confirmed_at" in payload && payload.location_confirmed_at !== undefined
+          ? { location_confirmed_at: payload.location_confirmed_at ?? null }
+          : {}),
       })
       .eq("id", input.propertyId)
       .eq("tenant_id", input.tenantId)
@@ -227,7 +263,7 @@ class CustomerPropertyRepository {
   async createPrimaryCandidate(input: {
     customerId: string;
     tenantId: string;
-    payload: NormalizedCustomerPropertyPayload;
+    payload: NormalizedCustomerPropertyPayload & CustomerPropertyMutationPayload;
   }) {
     const { error } = await SupabaseDB.getAdminClient()
       .from("properties")
@@ -236,6 +272,10 @@ class CustomerPropertyRepository {
         customer_id: input.customerId,
         tenant_id: input.tenantId,
         ...input.payload,
+        location_status: input.payload.location_status ?? "pending",
+        location_source: input.payload.location_source ?? null,
+        location_confidence: input.payload.location_confidence ?? null,
+        location_confirmed_at: input.payload.location_confirmed_at ?? null,
       })
       .select("id");
 
