@@ -2,11 +2,13 @@ import { PlatformBaseController } from "@/controllers/PlatformBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantServiceAreaSchema,
+  LocationBootstrapConfirmSchema,
   LocationBootstrapSchema,
   TenantServiceAreaIdParamsSchema,
   TenantServiceAreaListQuerySchema,
   UpdateTenantServiceAreaSchema,
 } from "@/schema/tenant-service-areas";
+import { customerLocationService } from "@/services/customer-location";
 import { locationMatchingService } from "@/services/location-matching";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -61,7 +63,28 @@ class TenantServiceAreasController extends PlatformBaseController {
     const bodyResult = LocationBootstrapSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
-    const data = await locationMatchingService.bootstrapLocation(bodyResult.data, authUserId);
+    const data = await customerLocationService.bootstrap(bodyResult.data, authUserId);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/customer/location/options")
+  async getCustomerLocationOptions(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = request.user?.sub;
+    if (!authUserId) throw Errors.unauthorized();
+
+    const data = await customerLocationService.getOptions();
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/customer/location-bootstrap/confirm")
+  async confirmCustomerLocation(request: FastifyRequest, reply: FastifyReply) {
+    const authUserId = request.user?.sub;
+    if (!authUserId) throw Errors.unauthorized();
+
+    const bodyResult = LocationBootstrapConfirmSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await customerLocationService.confirm(bodyResult.data, authUserId);
     return ResponseHandler.success(data);
   }
 }

@@ -64,8 +64,14 @@ export const LocationBootstrapSchema = z.object({
   message: "需要提供城市、行政区划代码或经纬度",
 });
 
+export const LocationBootstrapConfirmSchema = z.object({
+  context_id: z.uuid("无效的定位上下文 ID"),
+  tenant_id: z.uuid("请选择装修公司"),
+});
+
 export type TenantServiceAreaStatus = z.infer<typeof TenantServiceAreaStatusSchema>;
 export type TenantServiceAreaListQuery = z.infer<typeof TenantServiceAreaListQuerySchema>;
 export type CreateTenantServiceAreaInput = z.infer<typeof CreateTenantServiceAreaSchema>;
 export type UpdateTenantServiceAreaInput = z.infer<typeof UpdateTenantServiceAreaSchema>;
 export type LocationBootstrapInput = z.infer<typeof LocationBootstrapSchema>;
+export type LocationBootstrapConfirmInput = z.infer<typeof LocationBootstrapConfirmSchema>;

@@ -484,6 +484,78 @@ MVP 验收标准：
 - 无服务区域时有明确兜底页。
 - 关键链路日志能排查：定位来源、城市、候选租户、最终选择。
 
+## 实施进度
+
+更新时间：2026-06-05
+
+当前进度：
+
+- 阶段 0：后端配置项已补齐，生产腾讯 LBS Key/SK/小程序 Key 已配置。
+- 阶段 1：服务区域表、admin 配置入口、行政区划表和行政区划数据同步已完成。
+- 阶段 2：后端已提供小程序定位选项接口和定位启动接口；小程序侧定位采集仍需对接验收。
+- 阶段 3：后端已提供定位上下文落库和用户确认接口；小程序侧多租户选择页仍需对接验收。
+- 阶段 4-6：未开始。
+
+已完成后端接口：
+
+| 接口 | 状态 | 说明 |
+| --- | --- | --- |
+| `GET /customer/location/options` | 已完成 | 返回定位开关、腾讯小程序 Key、已开通服务区域和手动城市兜底能力 |
+| `POST /customer/location-bootstrap` | 已完成 | 返回候选装修公司、推荐租户、是否需要用户确认，并写入定位上下文 |
+| `POST /customer/location-bootstrap/confirm` | 已完成 | 用户确认候选装修公司后写入 `selected_tenant_id` 和 `confirmed_at` |
+| `GET /platform/administrative-areas` | 已完成 | admin 省/市/区县下拉数据源 |
+| `GET /platform/tenant-service-areas` | 已完成 | 超管查看服务区域 |
+| `POST /platform/tenant-service-areas` | 已完成 | 超管新增服务区域 |
+| `PATCH /platform/tenant-service-areas/:id` | 已完成 | 超管编辑服务区域 |
+
+新增数据表：
+
+```sql
+user_location_contexts
+```
+
+用途：
+
+- 记录本次定位来源、省/市/区县/adcode。
+- 记录候选租户快照 `matched_tenants`。
+- 记录后端推荐租户 `recommended_tenant_id`。
+- 记录用户最终确认租户 `selected_tenant_id`。
+- 通过 `expires_at` 控制定位上下文有效期。
+
+隐私策略：
+
+- 默认 `LOCATION_STORE_RAW_COORDINATE=false`。
+- 默认不保存用户原始 `latitude` / `longitude` / `accuracy`。
+- 如后续业务确实需要保存原始坐标，必须先打开配置并完成隐私说明。
+
+新增系统配置：
+
+| Key | 默认值 | 说明 |
+| --- | --- | --- |
+| `LOCATION_MATCH_ENABLED` | `true` | 是否启用定位匹配 |
+| `LOCATION_CONTEXT_TTL_HOURS` | `24` | 定位上下文有效期 |
+| `LOCATION_STORE_RAW_COORDINATE` | `false` | 是否保存原始经纬度 |
+
+后端开发验收结果：
+
+- 开发库 migration 已执行。
+- `user_location_contexts` 表已存在。
+- 定位配置项已写入开发库。
+- `GET /customer/location/options` 本地 smoke 通过。
+- `POST /customer/location-bootstrap` 本地 smoke 通过。
+- `POST /customer/location-bootstrap/confirm` 本地 smoke 通过。
+- bootstrap 后开发库已生成定位上下文，confirm 后已写入 `selected_tenant_id`。
+- 默认未保存原始经纬度。
+
+小程序下一步对接：
+
+1. 登录后调用 `GET /customer/location/options`。
+2. 如果 `location_match_enabled=true`，优先触发定位授权。
+3. 定位成功后提交 `POST /customer/location-bootstrap`。
+4. 如果 `requires_user_confirmation=true`，展示 `matched_tenants` 给用户选择。
+5. 用户选择后调用 `POST /customer/location-bootstrap/confirm`。
+6. 如果定位拒绝或失败，使用 `open_service_areas` 做手动城市/区县选择。
+
 ## 参考资料
 
 - 腾讯位置服务微信小程序 JavaScript SDK：
