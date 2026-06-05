@@ -249,3 +249,52 @@ Boolean(property?.latitude && property?.longitude)
 
 - 暂不需要后端调整字段契约。
 - 如果模拟器复测发现 `property` 未随项目详情/列表返回，或 `location_status` 枚举不一致，再由后端补充接口返回。
+
+## 后端对接补充（2026-06-05）
+
+小程序回写后，后端补充核验了客户侧真实接口：
+
+- `GET /customer/projects?page=1&pageSize=5`
+- `GET /customer/bootstrap?page=1&pageSize=20&include=home_summary&projects_mode=inline`
+- `GET /customer/projects/:id/detail-bootstrap`
+
+发现并修复：
+
+- 客户项目列表/详情已返回 `property`，但顶层 `property_id` 需要显式返回。
+- 首页 inline 使用的 `list_customer_home_projects` RPC 需要同步返回完整房产位置字段。
+
+后端处理：
+
+- 新增 migration：
+  `20260605043000_refresh_customer_home_projects_property_location.sql`
+- 更新 `list_customer_home_projects` 返回：
+  - 顶层 `property_id`
+  - `property.province`
+  - `property.city`
+  - `property.district`
+  - `property.adcode`
+  - `property.latitude`
+  - `property.longitude`
+  - `property.location_status`
+  - `property.location_source`
+  - `property.location_confidence`
+  - `property.location_confirmed_at`
+- 客户项目列表和详情序列化补充顶层 `property_id`。
+
+开发库 smoke 结果：
+
+| 接口 | 结果 |
+| --- | --- |
+| `GET /customer/projects?page=1&pageSize=5` | 通过，返回顶层 `property_id` 和 `property` 位置字段 |
+| `GET /customer/bootstrap?...projects_mode=inline` | 通过，返回顶层 `property_id` 和 `property` 位置字段 |
+| `GET /customer/projects/:id/detail-bootstrap` | 通过，返回顶层 `property_id` 和 `property` 位置字段 |
+
+可用于小程序用例 5 的失败样例：
+
+- 房产：`状态机回归小区20169123`
+- 当前状态：缺少城市、adcode、经纬度
+- 预期小程序表现：
+  - 展示业务地址。
+  - 展示“位置待补全/待确认”。
+  - 不展示地图导航入口。
+  - 不调用地图导航。

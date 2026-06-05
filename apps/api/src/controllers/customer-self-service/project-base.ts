@@ -227,6 +227,7 @@ export abstract class CustomerSelfServiceProjectBaseController
       status_label: status ? ProjectStatusConfig[status].label : null,
       budget: row.budget,
       address: row.address,
+      property_id: typeof row.property_id === "string" ? row.property_id : typeof property.id === "string" ? property.id : null,
       start_date: row.start_date,
       style_tags: this.normalizeStringArray(row.style_tags),
       designer: designer.id

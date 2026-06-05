@@ -598,6 +598,12 @@ user_location_contexts
    - 选中房产缺少完整位置时，表单展示“位置待补全”提示。
 11. 小程序阶段 4 对接文档已落库：
    `docs/2026-06-05-miniprogram-property-location-stage4-integration.md`
+12. 小程序回写后，后端已补齐客户侧真实接口字段：
+   - 客户项目列表返回顶层 `property_id`。
+   - 客户项目详情返回顶层 `property_id`。
+   - 首页 inline RPC `list_customer_home_projects` 返回顶层 `property_id` 和完整房产位置字段。
+   - 开发库 migration 已执行：
+     `20260605043000_refresh_customer_home_projects_property_location.sql`
 
 开发库覆盖率基线（2026-06-05）：
 
@@ -615,7 +621,7 @@ user_location_contexts
 后续步骤：
 
 1. 对剩余 1 条异常测试房产补充更标准地址或通过后台人工确认。
-2. 等小程序按阶段 4 对接文档复测并回写结果。
+2. 等小程序使用失败样例完成模拟器真实复测并回写用例 5。
 3. 生产执行前先跑 dry-run，确认候选结果和置信度，再小批量 apply。
 
 自动地理编码验收记录（2026-06-05）：
@@ -662,6 +668,11 @@ user_location_contexts
   - 明确小程序不能提交经纬度、adcode 和位置状态字段。
   - 明确老项目 `project.address` 回退策略。
   - 已列出小程序复测清单和回写要求。
+- 小程序回写后后端 smoke 已补：
+  - `GET /customer/projects?page=1&pageSize=5` 通过，返回顶层 `property_id` 和 `property` 位置字段。
+  - `GET /customer/bootstrap?...projects_mode=inline` 通过，返回顶层 `property_id` 和 `property` 位置字段。
+  - `GET /customer/projects/:id/detail-bootstrap` 通过，返回顶层 `property_id` 和 `property` 位置字段。
+  - 已向小程序提供 `状态机回归小区20169123` 作为自动解析失败/位置待补全复测样例。
 
 ## 参考资料
 

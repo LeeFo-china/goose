@@ -39,6 +39,7 @@ export type CustomerSelfServiceProjectListItem = {
   status: string | null;
   budget: number | null;
   address: string | null;
+  property_id?: string | null;
   start_date: string | null;
   style_tags: unknown;
   designer: {
@@ -175,6 +176,7 @@ class CustomerSelfServiceRepository {
     status,
     budget,
     address,
+    property_id,
     start_date,
     style_tags,
     property:properties!projects_property_id_fkey(

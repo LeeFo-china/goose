@@ -31,6 +31,7 @@ class CustomerProjectDetailRepository {
         project.status,
         project.budget::double precision AS budget,
         project.address,
+        project.property_id,
         project.start_date::text AS start_date,
         project.style_tags,
         NULL::jsonb AS designer,
@@ -74,6 +75,7 @@ class CustomerProjectDetailRepository {
         status,
         budget,
         address,
+        property_id,
         start_date,
         style_tags,
         property:properties!projects_property_id_fkey(
