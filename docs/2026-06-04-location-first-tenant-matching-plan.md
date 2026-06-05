@@ -596,6 +596,8 @@ user_location_contexts
    - 项目保存 payload 已带 `property_id`。
    - 后端校验房产必须属于当前租户；同时传 `customer_id` 时，房产必须属于所选客户。
    - 选中房产缺少完整位置时，表单展示“位置待补全”提示。
+11. 小程序阶段 4 对接文档已落库：
+   `docs/2026-06-05-miniprogram-property-location-stage4-integration.md`
 
 开发库覆盖率基线（2026-06-05）：
 
@@ -613,7 +615,7 @@ user_location_contexts
 后续步骤：
 
 1. 对剩余 1 条异常测试房产补充更标准地址或通过后台人工确认。
-2. 给小程序补阶段 4 对接文档，说明项目/房产位置字段和 `location_status` 展示规则。
+2. 等小程序按阶段 4 对接文档复测并回写结果。
 3. 生产执行前先跑 dry-run，确认候选结果和置信度，再小批量 apply。
 
 自动地理编码验收记录（2026-06-05）：
@@ -655,6 +657,11 @@ user_location_contexts
   - 经纬度不交给用户填写，新建房产继续走后端自动地理编码。
   - 已有关联房产的项目编辑时可默认回显当前 `property_id`。
   - 选中房产缺少完整 `adcode + latitude + longitude` 时展示待补全提示。
+- 小程序阶段 4 对接文档已补：
+  - 说明项目/房产位置字段、`location_status` 展示规则和地图入口启用条件。
+  - 明确小程序不能提交经纬度、adcode 和位置状态字段。
+  - 明确老项目 `project.address` 回退策略。
+  - 已列出小程序复测清单和回写要求。
 
 ## 参考资料
 
