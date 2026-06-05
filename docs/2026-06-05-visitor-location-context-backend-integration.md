@@ -321,6 +321,17 @@ visitor 选择的 `selected_tenant_id` 只能作为偏好，不是客户绑定�
 
 接口不应因为没有 `selected_tenant_id` 返回空白。
 
+## 报价线索归属约束
+
+报价业务保持平台派单为主。visitor 定位上下文中的 `selected_tenant_id` 只代表用户关注或偏好的本地服务商，不代表报价线索直接归属该装修公司。
+
+后端处理建议：
+
+- 报价或线索提交时，继续创建平台线索，由平台派单规则分配装修公司。
+- 可把 visitor `selected_tenant_id` 作为 `preferred_tenant_id` 或派单参考因子保存到线索扩展字段。
+- 不应仅因为 visitor 选择过服务商，就把线索 `tenant_id` 直接写成该服务商。
+- 如果后续支持“指定服务商报价”，需要新增显式业务字段和用户确认文案，不能复用 visitor 定位偏好语义。
+
 ## 隐私和风控
 
 - 默认 `LOCATION_STORE_RAW_COORDINATE=false`。
@@ -427,7 +438,7 @@ orange 小程序已按后端回写契约完成 visitor 首页定位上下文接�
   - GPS 自动定位和手动区域选择都会提交行政区信息。
   - 小程序只把经纬度用于当次 bootstrap，不在前端做长期坐标缓存。
 - `POST /visitor/location-bootstrap/confirm`
-  - 多候选场景支持按后端返回顺序选择装修公司。
+  - 多候选场景支持按后端返回顺序关注本地服务商，该选择只作为偏好参考。
 - `POST /visitor/location-bootstrap/skip`
   - 支持用户只确认区域，不选择装修公司。
 - `GET /visitor/location-context`
