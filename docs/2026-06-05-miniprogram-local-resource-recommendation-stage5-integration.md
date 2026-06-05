@@ -115,3 +115,29 @@ match_rank DESC, priority DESC, distance_km ASC, tenant_name ASC
 4. 无服务区域是否展示兜底页。
 5. 已绑定身份用户是否不会被定位切换租户。
 6. `match_rank` 是否只用于调试或埋点，没有参与前端重排。
+
+## 小程序对接回写（2026-06-05）
+
+小程序仓库：`/Users/leefo/Public/work/orange`
+
+对接结论：
+
+- 继续复用 `GET /customer/location/options`、`POST /customer/location-bootstrap`、`POST /customer/location-bootstrap/confirm`，未新增接口。
+- 候选装修公司列表直接使用后端 `matched_tenants` 返回顺序渲染，没有前端重排。
+- `matched_tenants[]` 类型已补齐 `match_rank`，当前仅作为后端排序/调试字段保留，不参与前端排序。
+- 多装修公司时展示候选列表，点击候选后调用 confirm，confirm 成功后写入小程序 auth tenant 上下文并进入客户首页。
+- 单装修公司且 `requires_user_confirmation=false` 时直接进入推荐租户上下文。
+- 首个候选 `match_reason=identity` 时直接进入身份绑定租户，不展示可切换候选列表，避免 GPS 或手动区域切换已绑定用户租户。
+- 无服务区域或 `fallback_reason=NO_SERVICE_AREA_MATCHED` 时展示明确兜底文案，不进入空白首页。
+- 城市兜底、区县/adcode 匹配、距离展示均按后端返回字段展示；距离仅在 `distance_km` 为有效数字时展示。
+
+验证命令：
+
+- `pnpm run check:file-size src/services/customer_location_bootstrap.ts src/packageCustomerPortal/pages/customer-location-bootstrap/index.tsx src/packageCustomerPortal/pages/customer-location-bootstrap/location_helpers.ts src/packageCustomerPortal/pages/customer-location-bootstrap/index.scss`：通过。
+- `pnpm run typecheck`：通过。
+- `pnpm run build:weapp:dev`：通过。
+
+当前需要后端继续关注：
+
+- 暂无新增字段或接口阻塞项。
+- 若后续要展示设计师、工程负责人、案例或营销活动，请另行补充返回字段契约。
