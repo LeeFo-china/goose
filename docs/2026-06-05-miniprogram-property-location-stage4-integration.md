@@ -189,3 +189,63 @@ Boolean(property?.latitude && property?.longitude)
 - 通过项。
 - 未通过项和截图/日志。
 - 是否需要后端继续调整。
+
+## 小程序对接回写（2026-06-05）
+
+复测日期：2026-06-05
+
+小程序仓库：`/Users/leefo/Public/work/orange`
+
+复测接口：
+
+- 客户首页/项目列表 bootstrap：消费项目对象 `property`。
+- 项目详情聚合接口：消费项目对象 `property`。
+- 创建/编辑房产接口：继续提交小区、楼栋门牌、面积、户型等业务字段，不提交经纬度和位置状态。
+
+页面路径：
+
+- 客户侧首页：`/packageCustomerPortal/pages/customer-home/index`
+- 客户侧项目详情：`/packageCustomerPortal/pages/customer-project-detail/index`
+- 员工侧项目详情：`/packageProjects/pages/detail/index`
+- 项目创建内联主房产：`/packageProjects/pages/index/index`
+- 项目创建新增房产：`/packageProjects/pages/propertyEdit/index`
+- 客户房产新增/编辑：`/packageCustomers/pages/customerPropertyEdit/index`
+
+已完成对接：
+
+- 项目 `property` 类型补齐 `province`、`city`、`district`、`adcode`、`location_status`。
+- 客户/员工项目 normalizer 已透传房产标准化位置字段。
+- 房产地址展示改为优先 `property.community + property.building_info`，再回退 `project.address`，最后展示“地址待补全”。
+- 行政区展示使用 `province / city / district`，没有行政区时不展示空字段。
+- 位置状态展示兼容 `confirmed`、`geocoded`、`partial`、`pending/null`。
+- 地图入口只在房产经纬度有效且非 0 时启用；缺少经纬度时不调用地图导航。
+- 客户侧项目详情抽屉增加房产位置卡片，展示业务地址、行政区和位置状态。
+- 员工侧项目详情抽屉补充行政区和位置状态。
+- 项目创建内联主房产、项目新增房产、客户房产新增/编辑均已去掉 `latitude`、`longitude` 提交。
+- 房产 schema 将标准化位置字段改为后端维护的可选返回字段，避免前端创建时被迫提交坐标。
+
+验证命令：
+
+- `pnpm run check:file-size src/schema/properties.ts src/types/api/customer_detail.d.ts src/types/tables/project.ts src/utils/project.ts src/utils/project_location.ts src/services/projects/normalizers/customer.ts src/services/projects/normalizers/core.ts src/services/projects/types/status.ts src/packageProjects/pages/index/actions.ts src/packageProjects/pages/propertyEdit/index.tsx src/packageCustomers/pages/customerPropertyEdit/index.tsx src/packageProjects/pages/detail/hooks/useProjectNavigationActions.ts src/packageProjects/pages/detail/sections/ProjectDrawer.tsx src/packageProjects/pages/detail/styles/_drawer.scss src/packageCustomerPortal/pages/customer-project-detail/components/CustomerProjectMenuDrawer.tsx src/packageCustomerPortal/pages/customer-project-detail/components/CustomerProjectDetailContent.tsx src/packageCustomerPortal/pages/customer-project-detail/_index-part1.scss`：通过。
+- `pnpm run typecheck`：通过。
+- `pnpm run build:weapp:dev`：通过，Webpack 编译耗时约 14.79s，开发 API 为 `http://192.168.1.5:3000`。
+
+复测清单结果：
+
+| # | 用例 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 项目详情有 `property` 且 `location_status=geocoded` | 通过（代码核验） | 项目详情已消费 `property`，展示小区/楼栋、行政区和位置状态；有效经纬度时可打开地图。 |
+| 2 | 项目详情有 `property` 但缺经纬度 | 通过（代码核验） | 经纬度缺失、为 0 或非数字时不调用地图导航；展示业务地址和待补全/待确认状态。 |
+| 3 | 项目详情没有 `property` 但有 `address` | 通过（代码核验） | 地址展示回退到 `project.address`；没有房产经纬度时不调用地图导航。 |
+| 4 | 创建/编辑客户房产 | 通过（代码核验） | 客户房产新增/编辑和项目创建相关入口均只提交业务字段，不提交经纬度和位置状态字段。 |
+| 5 | 后端自动解析失败 | 待真实接口复测 | 前端已兼容 `partial`、`pending/null` 和缺经纬度场景；仍需用后端解析失败样例在模拟器确认接口响应和页面文案。 |
+
+未通过项和截图/日志：
+
+- 暂无代码核验未通过项。
+- 用例 5 需要后端提供或保留解析失败样例后做模拟器复测。
+
+是否需要后端继续调整：
+
+- 暂不需要后端调整字段契约。
+- 如果模拟器复测发现 `property` 未随项目详情/列表返回，或 `location_status` 枚举不一致，再由后端补充接口返回。
