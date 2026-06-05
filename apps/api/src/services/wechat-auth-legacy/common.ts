@@ -197,6 +197,7 @@ export function createVisitorSessionResponse(this: any, input: {
 }) {
   return {
     mode: "platform_visitor",
+    authMode: "platform_visitor",
     token: this.signVisitorSession(input),
     user_id: null,
     visitor_id: input.visitorId,
@@ -285,19 +286,22 @@ export async function resolveMembershipVisitorState(this: any,
 export function createAuthUserVisitorResponse(this: any, input: {
   authUserId: string;
   openid: string;
+  unionid?: string | null;
   roles: string[];
   isNewUser: boolean;
 }) {
+  const visitorId = this.buildVisitorSessionId(input.openid);
   return {
     mode: "platform_visitor",
-    token: this.signWechatAuthToken({
-      sub: input.authUserId,
+    authMode: "platform_visitor",
+    token: this.signVisitorSession({
       openid: input.openid,
-      login_channel: "wechat",
-      roles: input.roles,
+      unionid: input.unionid ?? null,
+      visitorId,
     }),
-    user_id: input.authUserId,
-    roles: input.roles,
+    user_id: null,
+    visitor_id: visitorId,
+    roles: ["visitor"],
     is_new_user: input.isNewUser,
     tenant: null,
     employee: null,

@@ -233,19 +233,22 @@ export async function resolveCustomerLoginState(this: any,
   const customers = await this.listCustomerTenantOptionsByPhone(phone);
 
   if (customers.length === 0) {
-    const roles = await this.getUserRoles(authUserId);
-    const token = this.signWechatAuthToken({
-      sub: authUserId,
-      openid: openid ?? undefined,
-      roles,
-      verified_phone: phone,
-    });
+    if (!openid) {
+      throw Errors.unauthorized("当前登录态缺少微信身份，请重新登录");
+    }
+
+    const visitorId = this.buildVisitorSessionId(openid);
 
     return {
       mode: "platform_visitor",
-      token,
-      user_id: authUserId,
-      roles,
+      authMode: "platform_visitor",
+      token: this.signVisitorSession({
+        openid,
+        visitorId,
+      }),
+      user_id: null,
+      visitor_id: visitorId,
+      roles: ["visitor"],
       is_new_user: false,
       phone,
       has_customer_profile: false,

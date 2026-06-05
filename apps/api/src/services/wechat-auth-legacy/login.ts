@@ -203,6 +203,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
       this.createAuthUserVisitorResponse({
         authUserId: userId,
         openid: wxData.openid,
+        unionid: wxData.unionid ?? null,
         roles: ["visitor"],
         isNewUser,
       }),
@@ -383,26 +384,19 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
     );
   }
 
-  const token = this.signWechatAuthToken({
-    sub: userId,
-    openid: wxData.openid,
-    login_channel: "wechat",
-    roles,
-  });
   request.log.info(
     { requestId: request.id, userId, totalMs: Date.now() - startedAt },
     "[auth] resolved visitor login context",
   );
 
-  return ResponseHandler.success({
-    mode: "platform_visitor",
-    token,
-    user_id: userId,
-    roles,
-    is_new_user: isNewUser,
-    tenant: null,
-    employee: null,
-    customer: null,
-    has_customer_profile: false,
-  }, "登录成功");
+  return ResponseHandler.success(
+    this.createAuthUserVisitorResponse({
+      authUserId: userId,
+      openid: wxData.openid,
+      unionid: wxData.unionid ?? null,
+      roles,
+      isNewUser,
+    }),
+    "登录成功",
+  );
 }
