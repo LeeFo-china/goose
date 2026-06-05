@@ -185,6 +185,7 @@ class CustomerLocationService {
       district: input.district,
       adcode: input.adcode,
       match_reason: input.match_reason,
+      match_rank: input.match_rank,
       distance_km: input.distance_km,
       priority: input.priority,
     };

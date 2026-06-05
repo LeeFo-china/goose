@@ -23,7 +23,7 @@ type IdentityMatch = {
   reference_id: string | null;
 };
 
-type LocationMatchReason = "identity" | "adcode" | "district" | "city" | "distance";
+type LocationMatchReason = "identity" | "adcode" | "district" | "city" | "province" | "distance";
 
 type TenantLocationCandidate = {
   tenant_id: string;
@@ -35,11 +35,20 @@ type TenantLocationCandidate = {
   district: string | null;
   adcode: string | null;
   match_reason: LocationMatchReason;
+  match_rank: number;
   distance_km: number | null;
   priority: number;
 };
 
 const EARTH_RADIUS_KM = 6371;
+const MATCH_REASON_RANK: Record<LocationMatchReason, number> = {
+  identity: 100,
+  adcode: 90,
+  district: 80,
+  city: 70,
+  province: 60,
+  distance: 50,
+};
 
 class LocationMatchingService {
   async listServiceAreas(query: TenantServiceAreaListQuery, authContext: AuthContext) {
@@ -127,15 +136,7 @@ class LocationMatchingService {
     const candidates = areas
       .map((area) => this.matchArea(area, input))
       .filter((item): item is TenantLocationCandidate => Boolean(item))
-      .sort((left, right) => {
-        if (right.priority !== left.priority) return right.priority - left.priority;
-        if (left.distance_km != null && right.distance_km != null) {
-          return left.distance_km - right.distance_km;
-        }
-        if (left.distance_km != null) return -1;
-        if (right.distance_km != null) return 1;
-        return (left.tenant_name || "").localeCompare(right.tenant_name || "", "zh-CN");
-      });
+      .sort((left, right) => this.compareCandidates(left, right));
 
     const byTenant = new Map<string, TenantLocationCandidate>();
     for (const candidate of candidates) {
@@ -171,9 +172,21 @@ class LocationMatchingService {
       district: area.district,
       adcode: area.adcode,
       match_reason: reason,
+      match_rank: MATCH_REASON_RANK[reason],
       distance_km: distanceKm != null ? Math.round(distanceKm * 100) / 100 : null,
       priority: area.priority,
     };
+  }
+
+  private compareCandidates(left: TenantLocationCandidate, right: TenantLocationCandidate) {
+    if (right.match_rank !== left.match_rank) return right.match_rank - left.match_rank;
+    if (right.priority !== left.priority) return right.priority - left.priority;
+    if (left.distance_km != null && right.distance_km != null) {
+      return left.distance_km - right.distance_km;
+    }
+    if (left.distance_km != null) return -1;
+    if (right.distance_km != null) return 1;
+    return (left.tenant_name || "").localeCompare(right.tenant_name || "", "zh-CN");
   }
 
   private resolveAreaMatchReason(
@@ -183,7 +196,8 @@ class LocationMatchingService {
   ): LocationMatchReason | null {
     if (input.adcode && area.adcode && input.adcode === area.adcode) return "adcode";
     if (input.city && area.city === input.city && input.district && area.district === input.district) return "district";
-    if (input.city && area.city === input.city && !area.district) return "city";
+    if (input.city && area.city === input.city) return "city";
+    if (!input.city && input.province && area.province === input.province) return "province";
     if (!input.city && distanceKm != null) return "distance";
     if (input.city && area.city === input.city && distanceKm != null) return "distance";
     return null;
@@ -282,6 +296,7 @@ class LocationMatchingService {
       district: null,
       adcode: null,
       match_reason: "identity",
+      match_rank: MATCH_REASON_RANK.identity,
       distance_km: null,
       priority: 10000,
     };

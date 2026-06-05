@@ -191,6 +191,7 @@ GPS 定位请求示例：
         "district": "固始县",
         "adcode": "411525",
         "match_reason": "adcode",
+        "match_rank": 90,
         "distance_km": null,
         "priority": 100
       }
@@ -213,6 +214,7 @@ GPS 定位请求示例：
 | `recommended_tenant_id` | 后端推荐的装修公司 |
 | `requires_user_confirmation` | 是否必须展示选择页 |
 | `fallback_reason` | 无法正常匹配时的原因 |
+| `matched_tenants[].match_rank` | 后端匹配强度排序值，仅用于展示调试或埋点，不要在小程序端重排 |
 
 ## 接口 3：确认装修公司
 
@@ -299,6 +301,7 @@ Content-Type: application/json
 | `adcode` | 区县精确匹配 |
 | `district` | 区县匹配 |
 | `city` | 城市匹配 |
+| `province` | 省份兜底匹配 |
 | `distance` | 距离范围匹配 |
 
 ## 分支场景

@@ -13,6 +13,7 @@ export type UserLocationMatchedTenant = {
   district: string | null;
   adcode: string | null;
   match_reason: string;
+  match_rank?: number;
   distance_km: number | null;
   priority: number;
 };
