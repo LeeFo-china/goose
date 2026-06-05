@@ -25,6 +25,27 @@ class AdministrativeAreaRepository {
   }
 
   async list(query: AdministrativeAreaListQuery) {
+    const pageSize = 1000;
+    const rows: AdministrativeAreaRecord[] = [];
+    for (let page = 0; page < 20; page += 1) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const request = this.buildListRequest(query).range(from, to);
+      const { data, error } = await request;
+
+      if (error) {
+        throw Errors.dbError("查询行政区划失败", error);
+      }
+
+      const pageRows = (data || []) as AdministrativeAreaRecord[];
+      rows.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+    }
+
+    return rows;
+  }
+
+  private buildListRequest(query: AdministrativeAreaListQuery) {
     let request = this.table()
       .select("adcode,name,level,parent_adcode,full_name,source,source_version,sort_order,status,synced_at,created_at,updated_at")
       .eq("status", "active");
@@ -37,15 +58,9 @@ class AdministrativeAreaRepository {
       request = request.or(`name.ilike.${keyword},full_name.ilike.${keyword},adcode.ilike.${keyword}`);
     }
 
-    const { data, error } = await request
+    return request
       .order("sort_order", { ascending: true })
       .order("adcode", { ascending: true });
-
-    if (error) {
-      throw Errors.dbError("查询行政区划失败", error);
-    }
-
-    return (data || []) as AdministrativeAreaRecord[];
   }
 }
 

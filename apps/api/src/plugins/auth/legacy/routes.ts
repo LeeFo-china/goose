@@ -20,6 +20,13 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    (method === "GET" || method === "HEAD")
+    && url === "/public/administrative-areas"
+  ) {
+    return true;
+  }
+
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/")) {
     return true;
   }
@@ -100,6 +107,13 @@ export function isPublicRoute(method: string, url: string) {
 }
 
 export function isVisitorSessionRoute(method: string, url: string) {
+  if (
+    (method === "GET" || method === "HEAD")
+    && url === "/public/administrative-areas"
+  ) {
+    return true;
+  }
+
   if (
     (method === "GET" || method === "HEAD") &&
     (url === "/visitor/location/options" || url === "/visitor/location-context")
