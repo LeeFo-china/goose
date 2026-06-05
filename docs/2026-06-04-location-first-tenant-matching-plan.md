@@ -494,7 +494,8 @@ MVP 验收标准：
 - 阶段 1：服务区域表、admin 配置入口、行政区划表和行政区划数据同步已完成。
 - 阶段 2：已完成。后端定位选项/定位启动接口已完成，小程序定位采集、拒绝定位兜底、手动区域和无服务区域兜底已通过代码核验。
 - 阶段 3：已完成。定位上下文落库、用户确认、多装修公司选择、过期上下文处理和已绑定身份保护已通过验收。
-- 阶段 4-6：未开始。
+- 阶段 4：进行中。已补房产位置治理字段、后端返回字段和覆盖率检查脚本。
+- 阶段 5-6：未开始。
 
 已完成后端接口：
 
@@ -552,11 +553,45 @@ user_location_contexts
 
 阶段 4 下一步：
 
-1. 梳理 `properties`、`projects.property_id`、`projects.address` 当前数据覆盖率。
-2. 设计房产位置标准字段和“位置待补全”状态。
-3. 新建/编辑房产时补齐 `province/city/district/adcode/latitude/longitude/community/building_info`。
-4. 项目创建优先关联 `property_id`，缺位置时明确标记“位置待补全”。
-5. 编写老数据补齐脚本，低置信度记录进入人工确认，不覆盖人工确认过的位置。
+已完成：
+
+1. 新增房产位置治理字段：
+   - `location_status`
+   - `location_source`
+   - `location_confidence`
+   - `location_confirmed_at`
+2. 后端房产 schema、repository、客户房产摘要、项目关联房产返回字段已补齐：
+   - `province`
+   - `city`
+   - `district`
+   - `adcode`
+   - `latitude`
+   - `longitude`
+   - `location_status`
+3. 新增只读覆盖率脚本：
+   `bun run api:property-location-coverage -- --limit 20`
+4. 开发库 migration 已执行：
+   `20260605033000_add_property_location_governance.sql`
+
+开发库覆盖率基线（2026-06-05）：
+
+| 指标 | 数量 |
+| --- | ---: |
+| 房产总数 | 5 |
+| 房产有城市 | 0 |
+| 房产有 adcode | 0 |
+| 房产有经纬度 | 0 |
+| 房产已确认 | 0 |
+| 项目总数 | 7 |
+| 项目已关联房产 | 5 |
+| 项目有地址但未关联房产 | 0 |
+
+后续步骤：
+
+1. 新建/编辑房产时接入腾讯地理编码，补齐标准位置字段。
+2. 设计老数据补齐脚本，按 `community/building_info/address` 地理编码。
+3. 低置信度记录进入人工确认，禁止覆盖 `location_status=confirmed` 的记录。
+4. admin 项目创建页优先选择或创建 `property_id`，缺位置时明确展示“位置待补全”。
 
 ## 参考资料
 

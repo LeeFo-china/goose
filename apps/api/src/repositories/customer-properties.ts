@@ -5,6 +5,7 @@ import type {
   UpdateCustomerPropertyInput,
 } from "@/schema/properties";
 import { SupabaseDB } from "@/utils/supabase";
+import type { PropertyLocationStatus } from "@gooes/domain";
 
 export const CUSTOMER_PROPERTY_SUMMARY_SELECT = `
   id,
@@ -14,6 +15,11 @@ export const CUSTOMER_PROPERTY_SUMMARY_SELECT = `
   area,
   latitude,
   longitude,
+  province,
+  city,
+  district,
+  adcode,
+  location_status,
   created_at
 `;
 
@@ -32,6 +38,11 @@ export type CustomerPrimaryPropertySummary = {
   area: number | null;
   latitude: number | null;
   longitude: number | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  adcode: string | null;
+  location_status: PropertyLocationStatus;
   created_at: string | null;
 };
 
@@ -152,6 +163,10 @@ class CustomerPropertyRepository {
         layout: input.payload.layout ?? null,
         latitude: input.payload.latitude ?? null,
         longitude: input.payload.longitude ?? null,
+        province: input.payload.province ?? null,
+        city: input.payload.city ?? null,
+        district: input.payload.district ?? null,
+        adcode: input.payload.adcode ?? null,
       })
       .select(CUSTOMER_PROPERTY_SUMMARY_SELECT)
       .single();
@@ -183,6 +198,18 @@ class CustomerPropertyRepository {
           : {}),
         ...("longitude" in payload && payload.longitude !== undefined
           ? { longitude: payload.longitude ?? null }
+          : {}),
+        ...("province" in payload && payload.province !== undefined
+          ? { province: payload.province ?? null }
+          : {}),
+        ...("city" in payload && payload.city !== undefined
+          ? { city: payload.city ?? null }
+          : {}),
+        ...("district" in payload && payload.district !== undefined
+          ? { district: payload.district ?? null }
+          : {}),
+        ...("adcode" in payload && payload.adcode !== undefined
+          ? { adcode: payload.adcode ?? null }
           : {}),
       })
       .eq("id", input.propertyId)

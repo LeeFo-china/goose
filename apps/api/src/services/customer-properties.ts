@@ -13,6 +13,7 @@ import type {
 } from "@/schema/properties";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import type { PropertyLocationStatus } from "@gooes/domain";
 
 export type SerializedPropertySummary = CustomerPrimaryPropertySummary & {
   is_primary: boolean;
@@ -29,6 +30,11 @@ export type CustomerPropertySummaryBundle = {
   building_info: string | null;
   layout: string | null;
   area: number | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  adcode: string | null;
+  location_status: PropertyLocationStatus | null;
 };
 
 class CustomerPropertyService {
@@ -53,6 +59,11 @@ class CustomerPropertyService {
       area: property.area,
       latitude: property.latitude,
       longitude: property.longitude,
+      province: property.province,
+      city: property.city,
+      district: property.district,
+      adcode: property.adcode,
+      location_status: property.location_status,
       created_at: property.created_at,
     };
   }
@@ -85,6 +96,11 @@ class CustomerPropertyService {
       building_info: primaryProperty?.building_info ?? null,
       layout: primaryProperty?.layout ?? null,
       area: primaryProperty?.area ?? null,
+      province: primaryProperty?.province ?? null,
+      city: primaryProperty?.city ?? null,
+      district: primaryProperty?.district ?? null,
+      adcode: primaryProperty?.adcode ?? null,
+      location_status: primaryProperty?.location_status ?? null,
     };
   }
 

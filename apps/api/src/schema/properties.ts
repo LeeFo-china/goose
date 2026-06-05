@@ -1,5 +1,12 @@
 import { z } from "zod";
+import {
+  PROPERTY_LOCATION_SOURCE_VALUES,
+  PROPERTY_LOCATION_STATUS_VALUES,
+} from "@gooes/domain";
 import { PaginationQuerySchema } from "./request";
+
+const nullableText = (max: number, message: string) =>
+  z.string().trim().max(max, message).nullable();
 
 /**
  * Property (房产/工地地址) 校验 Schema
@@ -26,6 +33,15 @@ export const PropertySchema = z.object({
   // 经纬度：地理坐标标准范围校验
   latitude: z.number().min(-90).max(90, "纬度范围不合法").nullable(),
   longitude: z.number().min(-180).max(180, "经度范围不合法").nullable(),
+
+  province: nullableText(50, "省份不能超过 50 个字符"),
+  city: nullableText(50, "城市不能超过 50 个字符"),
+  district: nullableText(50, "区县不能超过 50 个字符"),
+  adcode: nullableText(20, "行政区划代码不能超过 20 个字符"),
+  location_status: z.enum(PROPERTY_LOCATION_STATUS_VALUES).default("pending"),
+  location_source: z.enum(PROPERTY_LOCATION_SOURCE_VALUES).nullable(),
+  location_confidence: z.number().min(0).max(1).nullable(),
+  location_confirmed_at: z.iso.datetime().nullable(),
 
   // 创建时间：ISO 字符串格式
   created_at: z.string().datetime().nullable(),
@@ -64,12 +80,20 @@ export const CustomerPropertyDetailParamsSchema = z.object({
 
 export const CreateCustomerPropertySchema = CreatePropertySchema.omit({
   customer_id: true,
+  location_status: true,
+  location_source: true,
+  location_confidence: true,
+  location_confirmed_at: true,
 }).extend({
   set_as_primary: z.boolean().default(false),
 });
 
 export const UpdateCustomerPropertySchema = CreatePropertySchema.omit({
   customer_id: true,
+  location_status: true,
+  location_source: true,
+  location_confidence: true,
+  location_confirmed_at: true,
 }).partial();
 
 export type CreateCustomerPropertyInput = z.infer<

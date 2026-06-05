@@ -4627,38 +4627,62 @@ export type Database = {
       properties: {
         Row: {
           area: number | null
+          adcode: string | null
           building_info: string | null
+          city: string | null
           community: string
           created_at: string | null
           customer_id: string | null
+          district: string | null
           id: string
           latitude: number | null
           layout: string | null
+          location_confidence: number | null
+          location_confirmed_at: string | null
+          location_source: string | null
+          location_status: string
           longitude: number | null
+          province: string | null
           tenant_id: string | null
         }
         Insert: {
           area?: number | null
+          adcode?: string | null
           building_info?: string | null
+          city?: string | null
           community: string
           created_at?: string | null
           customer_id?: string | null
+          district?: string | null
           id?: string
           latitude?: number | null
           layout?: string | null
+          location_confidence?: number | null
+          location_confirmed_at?: string | null
+          location_source?: string | null
+          location_status?: string
           longitude?: number | null
+          province?: string | null
           tenant_id?: string | null
         }
         Update: {
           area?: number | null
+          adcode?: string | null
           building_info?: string | null
+          city?: string | null
           community?: string
           created_at?: string | null
           customer_id?: string | null
+          district?: string | null
           id?: string
           latitude?: number | null
           layout?: string | null
+          location_confidence?: number | null
+          location_confirmed_at?: string | null
+          location_source?: string | null
+          location_status?: string
           longitude?: number | null
+          province?: string | null
           tenant_id?: string | null
         }
         Relationships: [

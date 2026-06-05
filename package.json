@@ -36,6 +36,7 @@
     "api:check-file-size": "bun scripts/check-api-file-size.ts",
     "api:check": "bun run api:typecheck && bun run api:build && bun run api:check-file-size",
     "api:construction-stage-check": "cd apps/api && bun src/scripts/construction-stage-consistency-check.ts",
+    "api:property-location-coverage": "cd apps/api && bun src/scripts/property-location-coverage-check.ts",
     "check:permission-boundaries": "bun scripts/check-permission-boundaries.ts",
     "audit:supabase-writes": "bun scripts/audit-supabase-writes.ts",
     "seed:tenant:phase3": "bun scripts/seed-phase3-tenant-verification.ts",

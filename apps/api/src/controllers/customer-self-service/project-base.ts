@@ -210,13 +210,9 @@ export abstract class CustomerSelfServiceProjectBaseController
   protected serializeCustomerProjectListItem(row: CustomerProjectListItem) {
     const status = isProjectStatus(row.status) ? row.status : null;
     const property = this.normalizeRelation(row.property, {
-      id: null,
-      community: null,
-      building_info: null,
-      layout: null,
-      area: null,
-      latitude: null,
-      longitude: null,
+      id: null, community: null, building_info: null, layout: null, area: null,
+      latitude: null, longitude: null, province: null, city: null, district: null,
+      adcode: null, location_status: null,
     });
     const designer = this.normalizeRelation(row.designer, {
       id: null,
@@ -243,13 +239,16 @@ export abstract class CustomerSelfServiceProjectBaseController
       property: {
         id: typeof property.id === "string" ? property.id : null,
         community: typeof property.community === "string" ? property.community : null,
-        building_info: typeof property.building_info === "string"
-          ? property.building_info
-          : null,
+        building_info: typeof property.building_info === "string" ? property.building_info : null,
         layout: typeof property.layout === "string" ? property.layout : null,
         area: typeof property.area === "number" ? property.area : null,
         latitude: typeof property.latitude === "number" ? property.latitude : null,
         longitude: typeof property.longitude === "number" ? property.longitude : null,
+        province: typeof property.province === "string" ? property.province : null,
+        city: typeof property.city === "string" ? property.city : null,
+        district: typeof property.district === "string" ? property.district : null,
+        adcode: typeof property.adcode === "string" ? property.adcode : null,
+        location_status: typeof property.location_status === "string" ? property.location_status : null,
       },
     };
   }

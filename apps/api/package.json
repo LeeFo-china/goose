@@ -22,6 +22,7 @@
     "customer:perf-smoke": "bun src/scripts/customer-performance-smoke.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
+    "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",

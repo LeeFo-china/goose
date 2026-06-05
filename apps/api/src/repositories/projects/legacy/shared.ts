@@ -48,7 +48,14 @@ export const PROJECT_LIST_SELECT = `
   ),
   property:properties!projects_property_id_fkey(
     community,
-    building_info
+    building_info,
+    province,
+    city,
+    district,
+    adcode,
+    latitude,
+    longitude,
+    location_status
   )
 `;
 
@@ -74,7 +81,12 @@ export const PROJECT_DETAIL_SELECT = `
     layout,
     area,
     latitude,
-    longitude
+    longitude,
+    province,
+    city,
+    district,
+    adcode,
+    location_status
   )
 `;
 
@@ -113,7 +125,12 @@ export const EMPLOYEE_PROJECT_BOOTSTRAP_SELECT = `
     layout,
     area,
     latitude,
-    longitude
+    longitude,
+    province,
+    city,
+    district,
+    adcode,
+    location_status
   )
 `;
 
@@ -138,7 +155,12 @@ export const PUBLIC_PROJECT_LIST_SELECT = `
     area,
     layout,
     latitude,
-    longitude
+    longitude,
+    province,
+    city,
+    district,
+    adcode,
+    location_status
   )
 `;
 
@@ -161,7 +183,12 @@ export const PUBLIC_PROJECT_DETAIL_SELECT = `
     layout,
     area,
     latitude,
-    longitude
+    longitude,
+    province,
+    city,
+    district,
+    adcode,
+    location_status
   )
 `;
 

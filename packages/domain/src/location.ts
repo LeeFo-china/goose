@@ -14,3 +14,24 @@ export type AdministrativeAreaNode = {
   status?: AdministrativeAreaStatus;
   children?: readonly AdministrativeAreaNode[];
 };
+
+export const PROPERTY_LOCATION_STATUS_VALUES = [
+  'pending',
+  'partial',
+  'geocoded',
+  'confirmed',
+] as const;
+
+export type PropertyLocationStatus =
+  (typeof PROPERTY_LOCATION_STATUS_VALUES)[number];
+
+export const PROPERTY_LOCATION_SOURCE_VALUES = [
+  'manual',
+  'tencent_geocoder',
+  'tencent_reverse_geocoder',
+  'backfill',
+  'import',
+] as const;
+
+export type PropertyLocationSource =
+  (typeof PROPERTY_LOCATION_SOURCE_VALUES)[number];

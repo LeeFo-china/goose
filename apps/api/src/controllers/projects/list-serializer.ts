@@ -64,6 +64,11 @@ export function serializeProjectListItem<T extends Record<string, unknown>>(
       layout: null,
       latitude: null,
       longitude: null,
+      province: null,
+      city: null,
+      district: null,
+      adcode: null,
+      location_status: null,
     }),
     designer: normalizeRelation(row.designer, {
       id: null,

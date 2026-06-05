@@ -58,6 +58,11 @@ export type CustomerSelfServiceProjectListItem = {
     area?: number | null;
     latitude?: number | null;
     longitude?: number | null;
+    province?: string | null;
+    city?: string | null;
+    district?: string | null;
+    adcode?: string | null;
+    location_status?: string | null;
   } | {
     id: string;
     community: string | null;
@@ -66,6 +71,11 @@ export type CustomerSelfServiceProjectListItem = {
     area?: number | null;
     latitude?: number | null;
     longitude?: number | null;
+    province?: string | null;
+    city?: string | null;
+    district?: string | null;
+    adcode?: string | null;
+    location_status?: string | null;
   }[] | null;
 };
 
@@ -174,7 +184,12 @@ class CustomerSelfServiceRepository {
       layout,
       area,
       latitude,
-      longitude
+      longitude,
+      province,
+      city,
+      district,
+      adcode,
+      location_status
     )
   `;
 

@@ -41,7 +41,12 @@ class CustomerProjectDetailRepository {
           'layout', property.layout,
           'area', property.area,
           'latitude', property.latitude,
-          'longitude', property.longitude
+          'longitude', property.longitude,
+          'province', property.province,
+          'city', property.city,
+          'district', property.district,
+          'adcode', property.adcode,
+          'location_status', property.location_status
         ) AS property
       FROM public.projects AS project
       LEFT JOIN public.properties AS property
@@ -78,7 +83,12 @@ class CustomerProjectDetailRepository {
           layout,
           area,
           latitude,
-          longitude
+          longitude,
+          province,
+          city,
+          district,
+          adcode,
+          location_status
         )
       `)
       .eq("id", input.projectId)

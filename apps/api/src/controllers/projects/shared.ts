@@ -259,6 +259,11 @@ export abstract class ProjectBaseController extends TenantBaseController<
       area: null,
       latitude: null,
       longitude: null,
+      province: null,
+      city: null,
+      district: null,
+      adcode: null,
+      location_status: null,
     });
     const normalizedCustomer = this.normalizeRelation(row.customer, {
       name: null,
@@ -428,6 +433,11 @@ export abstract class ProjectBaseController extends TenantBaseController<
         layout: null,
         latitude: null,
         longitude: null,
+        province: null,
+        city: null,
+        district: null,
+        adcode: null,
+        location_status: null,
       }),
       designer: this.normalizeRelation(row.designer, {
         id: null,

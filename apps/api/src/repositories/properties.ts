@@ -5,6 +5,10 @@ import type {
   UpdatePropertyInput,
 } from "@/schema/properties";
 import { SupabaseDB } from "@/utils/supabase/index";
+import type {
+  PropertyLocationSource,
+  PropertyLocationStatus,
+} from "@gooes/domain";
 
 export type PropertyRow = {
   id: string;
@@ -16,6 +20,14 @@ export type PropertyRow = {
   layout: string | null;
   latitude: number | null;
   longitude: number | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  adcode: string | null;
+  location_status: PropertyLocationStatus;
+  location_source: PropertyLocationSource | null;
+  location_confidence: number | null;
+  location_confirmed_at: string | null;
   created_at: string | null;
 };
 
