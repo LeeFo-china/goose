@@ -116,6 +116,10 @@ class VisitorPictureLibraryService {
     return this.toShareEvent(event);
   }
 
+  clearPublicCache() {
+    this.publicCache.clear();
+  }
+
   private async loadCategories() {
     const categories = await visitorPictureLibraryRepository.listCategories();
     const coverIds = categories
@@ -310,9 +314,6 @@ class VisitorPictureLibraryService {
     return value;
   }
 
-  private clearPublicCache() {
-    this.publicCache.clear();
-  }
 }
 
 export const visitorPictureLibraryService = new VisitorPictureLibraryService();

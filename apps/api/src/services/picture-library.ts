@@ -12,6 +12,7 @@ import type {
 } from "@/schema/picture-library";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
 import type { PlatformAuditLogAction } from "@/schema/platform-audit-logs";
 
 class PictureLibraryService {
@@ -28,6 +29,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, "picture_category_create", category.id, category.name, {
       slug: category.slug,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return category;
   }
 
@@ -43,6 +45,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, "picture_category_update", category.id, category.name, {
       input,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return category;
   }
 
@@ -53,6 +56,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, "picture_category_disable", category.id, category.name, {
       slug: category.slug,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return category;
   }
 
@@ -79,6 +83,7 @@ class PictureLibraryService {
       category_ids: input.category_ids,
       file_object_id: file.id,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return asset;
   }
 
@@ -91,6 +96,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, "picture_asset_update", asset.id, asset.title, {
       input,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return asset;
   }
 
@@ -105,6 +111,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, `picture_asset_${status}`, asset.id, asset.title, {
       status,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return asset;
   }
 
@@ -115,6 +122,7 @@ class PictureLibraryService {
     await this.recordAudit(authContext, "picture_asset_delete", asset.id, asset.title, {
       soft_deleted: true,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return asset;
   }
 
@@ -131,6 +139,19 @@ class PictureLibraryService {
       asset_id: comment.asset_id,
       visitor_id: comment.visitor_id,
     });
+    visitorPictureLibraryService.clearPublicCache();
+    return comment;
+  }
+
+  async showComment(id: string, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const comment = await pictureLibraryCommentsRepository.updateCommentStatus(id, "visible");
+    if (!comment) throw Errors.notFound("图片评论不存在");
+    await this.recordAudit(authContext, "picture_comment_show", comment.id, comment.content, {
+      asset_id: comment.asset_id,
+      visitor_id: comment.visitor_id,
+    });
+    visitorPictureLibraryService.clearPublicCache();
     return comment;
   }
 
@@ -143,6 +164,7 @@ class PictureLibraryService {
       visitor_id: comment.visitor_id,
       soft_deleted: true,
     });
+    visitorPictureLibraryService.clearPublicCache();
     return comment;
   }
 

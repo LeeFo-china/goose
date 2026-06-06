@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { EyeOff, Loader2, Search, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, Search, Trash2, X } from "lucide-react";
 import { requestPictureLibraryJson } from "@/components/picture-library/picture-library-requests";
 import type {
   PictureAssetListData,
@@ -218,6 +218,19 @@ export function HidePictureCommentButton({ comment }: { comment: PictureCommentR
       icon={EyeOff}
       disabled={comment.status === "hidden" || comment.status === "deleted"}
       fallbackMessage="隐藏评论失败"
+    />
+  );
+}
+
+export function ShowPictureCommentButton({ comment }: { comment: PictureCommentRecord }) {
+  return (
+    <PictureCommentMutationButton
+      comment={comment}
+      path={`/platform/picture-library/comments/${comment.id}/show`}
+      label="恢复"
+      icon={Eye}
+      disabled={comment.status === "visible" || comment.status === "deleted"}
+      fallbackMessage="恢复评论失败"
     />
   );
 }

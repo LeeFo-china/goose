@@ -743,6 +743,48 @@ picture-library-health-check script
 | API 检查 | `bun run api:check` 通过 |
 | Admin 检查 | `pnpm --dir apps/admin check` 通过 |
 
+### 阶段 7B 执行记录：评论基础风控
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- visitor 评论提交增加频率限制：
+  - 同一 visitor 对同一图片 60 秒最多 3 条。
+  - 同一 visitor 对同一图片 10 分钟最多 20 条。
+- 新增平台设置项 `PICTURE_COMMENT_DEFAULT_STATUS`：
+  - `visible`：评论提交后立即展示。
+  - `pending`：评论提交后进入待处理，不出现在 visitor 评论列表。
+  - 开发库默认已恢复为 `visible`。
+- admin 评论治理增加“恢复可见”能力：
+  - `POST /platform/picture-library/comments/:id/show`
+  - 支持将 `pending` / `hidden` 评论恢复为 `visible`。
+- 评论状态变更同步维护图片 `comment_count`：
+  - `pending` / `hidden` -> `visible` 时增加。
+  - `visible` -> `hidden` / `deleted` 时减少。
+  - 计数下限保护为 0。
+- admin 分类、图片、评论写操作会清理 visitor 图片库公开缓存，避免公开列表/详情短时间返回旧状态或旧计数。
+- 评论图片安全边界保持为：
+  - 单条最多 3 张。
+  - 只能引用 `scene=picture_comment` 且 `status=active` 的文件。
+  - 同一条评论不允许重复引用同一个文件。
+
+验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 60 秒第 4 条评论 | 429，`PICTURE_COMMENT_RATE_LIMITED` |
+| 默认 `visible` 提交评论 | 返回 `status=visible` |
+| 设置为 `pending` 后提交评论 | 返回 `status=pending` |
+| pending 评论 visitor 列表 | 不出现，命中数 0 |
+| pending 评论 admin 列表 | 出现，命中数 1 |
+| admin 恢复可见 | 返回 `status=visible` |
+| 恢复后 visitor 列表 | 出现，命中数 1 |
+| 隐藏/恢复评论计数 | `comment_count` 9 -> 8 -> 9 |
+| 设置项恢复 | 开发库 `PICTURE_COMMENT_DEFAULT_STATUS=visible` |
+| API 检查 | `bun run api:check` 通过 |
+| Admin 检查 | `pnpm --dir apps/admin check` 通过 |
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。

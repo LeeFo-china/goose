@@ -2,6 +2,7 @@ import { DEFINITIONS_SMS } from './definitions-sms';
 import { DEFINITIONS_INTEGRATIONS } from './definitions-integrations';
 import { DEFINITIONS_AI_SOCIAL } from './definitions-ai-social';
 import { DEFINITIONS_WECHAT_NOTIFY } from './definitions-wechat-notify';
+import { DEFINITIONS_PICTURE_LIBRARY } from './definitions-picture-library';
 import type { SettingDefinition } from './shared';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -9,6 +10,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   ...DEFINITIONS_INTEGRATIONS,
   ...DEFINITIONS_AI_SOCIAL,
   ...DEFINITIONS_WECHAT_NOTIFY,
+  ...DEFINITIONS_PICTURE_LIBRARY,
 ];
 
 export const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));

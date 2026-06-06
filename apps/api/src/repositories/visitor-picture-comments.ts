@@ -3,7 +3,14 @@ import type {
   CreateVisitorPictureCommentInput,
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
+import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
+
+const COMMENT_DEFAULT_STATUS_SETTING = "PICTURE_COMMENT_DEFAULT_STATUS";
+const COMMENT_RATE_LIMIT_SHORT_WINDOW_MS = 60 * 1000;
+const COMMENT_RATE_LIMIT_SHORT_MAX = 3;
+const COMMENT_RATE_LIMIT_LONG_WINDOW_MS = 10 * 60 * 1000;
+const COMMENT_RATE_LIMIT_LONG_MAX = 20;
 
 type PictureCommentRow = {
   id: string;
@@ -75,7 +82,9 @@ class VisitorPictureCommentsRepository {
     body: CreateVisitorPictureCommentInput;
   }) {
     await this.assertPublishedAsset(input.assetId);
+    await this.assertCommentRateLimit(input.assetId, input.visitorId);
     await this.assertCommentImages(input.body.image_file_ids);
+    const status = await this.resolveCreateStatus();
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_asset_comments")
@@ -83,7 +92,7 @@ class VisitorPictureCommentsRepository {
         asset_id: input.assetId,
         visitor_id: input.visitorId,
         content: input.body.content,
-        status: "visible",
+        status,
       })
       .select("*")
       .maybeSingle();
@@ -93,8 +102,52 @@ class VisitorPictureCommentsRepository {
     const comment = data as PictureCommentRow;
     await this.insertCommentImages(comment.id, input.body.image_file_ids);
     const list = await this.attachImages([comment]);
-    this.incrementCommentCountBestEffort(input.assetId);
+    if (status === "visible") this.incrementCommentCountBestEffort(input.assetId);
     return list[0] ?? { ...comment, images: [] };
+  }
+
+  private async resolveCreateStatus() {
+    const value = await systemSettingsService.getString(
+      COMMENT_DEFAULT_STATUS_SETTING,
+      "visible",
+    );
+    return value === "pending" ? "pending" : "visible";
+  }
+
+  private async assertCommentRateLimit(assetId: string, visitorId: string) {
+    const now = Date.now();
+    const shortSince = new Date(now - COMMENT_RATE_LIMIT_SHORT_WINDOW_MS).toISOString();
+    const longSince = new Date(now - COMMENT_RATE_LIMIT_LONG_WINDOW_MS).toISOString();
+    const [shortCount, longCount] = await Promise.all([
+      this.countRecentComments(assetId, visitorId, shortSince),
+      this.countRecentComments(assetId, visitorId, longSince),
+    ]);
+
+    if (shortCount >= COMMENT_RATE_LIMIT_SHORT_MAX) {
+      throw Errors.business(429, "评论太频繁，请稍后再试", "PICTURE_COMMENT_RATE_LIMITED", {
+        window_seconds: COMMENT_RATE_LIMIT_SHORT_WINDOW_MS / 1000,
+        limit: COMMENT_RATE_LIMIT_SHORT_MAX,
+      });
+    }
+
+    if (longCount >= COMMENT_RATE_LIMIT_LONG_MAX) {
+      throw Errors.business(429, "评论太频繁，请稍后再试", "PICTURE_COMMENT_RATE_LIMITED", {
+        window_seconds: COMMENT_RATE_LIMIT_LONG_WINDOW_MS / 1000,
+        limit: COMMENT_RATE_LIMIT_LONG_MAX,
+      });
+    }
+  }
+
+  private async countRecentComments(assetId: string, visitorId: string, since: string) {
+    const { count, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("asset_id", assetId)
+      .eq("visitor_id", visitorId)
+      .is("deleted_at", null)
+      .gte("created_at", since);
+    if (error) throw Errors.dbError("查询评论频率失败", error);
+    return count || 0;
   }
 
   private async assertPublishedAsset(assetId: string) {

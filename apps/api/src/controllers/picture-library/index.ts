@@ -132,6 +132,15 @@ class PictureLibraryController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/platform/picture-library/comments/:id/show")
+  async showComment(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const data = await pictureLibraryService.showComment(paramsResult.data.id, authContext);
+    return ResponseHandler.success(data);
+  }
+
   @Delete("/platform/picture-library/comments/:id")
   async deleteComment(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformAdminContext(request);

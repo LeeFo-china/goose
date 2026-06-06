@@ -92,17 +92,80 @@ class PictureLibraryCommentsRepository {
   }
 
   async updateCommentStatus(id: string, status: "hidden" | "visible") {
+    const existing = await this.findMutableComment(id);
+    if (!existing) return null;
     const row = await this.updateComment(id, { status }, "更新图片评论失败");
+    if (row) {
+      this.adjustCommentCountBestEffort(
+        row.asset_id,
+        this.getVisibleCountDelta(existing.status, status),
+      );
+    }
     return row ? this.attachSingleComment(row) : null;
   }
 
   async softDeleteComment(id: string) {
+    const existing = await this.findMutableComment(id);
+    if (!existing) return null;
     const row = await this.updateComment(
       id,
       { status: "deleted", deleted_at: new Date().toISOString() },
       "删除图片评论失败",
     );
+    if (row) {
+      this.adjustCommentCountBestEffort(
+        row.asset_id,
+        this.getVisibleCountDelta(existing.status, "deleted"),
+      );
+    }
     return row ? this.attachSingleComment(row) : null;
+  }
+
+  private async findMutableComment(id: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_comments")
+      .select("id,asset_id,visitor_id,content,status,created_at,updated_at,deleted_at")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询图片评论失败", error);
+    return (data as PictureCommentRow | null) ?? null;
+  }
+
+  private getVisibleCountDelta(previousStatus: string, nextStatus: string) {
+    const wasVisible = previousStatus === "visible";
+    const isVisible = nextStatus === "visible";
+    if (wasVisible === isVisible) return 0;
+    return isVisible ? 1 : -1;
+  }
+
+  private adjustCommentCountBestEffort(assetId: string, delta: number) {
+    if (delta === 0) return;
+    void this.adjustCommentCount(assetId, delta).catch(() => undefined);
+  }
+
+  private async adjustCommentCount(assetId: string, delta: number) {
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 2_000);
+    try {
+      const { data: asset, error: findError } = await SupabaseDB.getAdminClient()
+        .from("picture_assets")
+        .select("comment_count")
+        .eq("id", assetId)
+        .abortSignal(abortController.signal)
+        .maybeSingle();
+      if (findError) throw Errors.dbError("查询评论计数失败", findError);
+
+      const current = (asset?.comment_count as number | undefined) || 0;
+      const { error: updateError } = await SupabaseDB.getAdminClient()
+        .from("picture_assets")
+        .update({ comment_count: Math.max(current + delta, 0) })
+        .eq("id", assetId)
+        .abortSignal(abortController.signal);
+      if (updateError) throw Errors.dbError("更新评论计数失败", updateError);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async updateComment(

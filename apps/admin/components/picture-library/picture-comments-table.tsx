@@ -6,6 +6,7 @@ import { DataTable } from "@/components/admin/data-table";
 import {
   DeletePictureCommentButton,
   HidePictureCommentButton,
+  ShowPictureCommentButton,
 } from "@/components/picture-library/picture-comment-actions";
 import type { PictureCommentRecord } from "@/components/picture-library/picture-library-types";
 import {
@@ -108,6 +109,7 @@ function createColumns(): ColumnDef<PictureCommentRecord>[] {
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
           <HidePictureCommentButton comment={row.original} />
+          <ShowPictureCommentButton comment={row.original} />
           <DeletePictureCommentButton comment={row.original} />
         </div>
       ),

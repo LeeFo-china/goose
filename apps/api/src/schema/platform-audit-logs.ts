@@ -30,6 +30,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "picture_asset_draft",
   "picture_asset_delete",
   "picture_comment_hide",
+  "picture_comment_show",
   "picture_comment_delete",
   "wechat_rebind_approve",
   "wechat_rebind_reject",
