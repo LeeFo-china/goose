@@ -20,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PlatformTenantAddressPicker } from "@/components/platform-tenants/platform-tenant-address-picker";
 import type { PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
 import { requestPlatformTenantJson } from "@/components/platform-tenants/platform-tenant-requests";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
@@ -35,6 +36,76 @@ function generateTenantSlug() {
   }
 
   return `tenant-${suffix}`;
+}
+
+function optionalString(formData: FormData, key: string) {
+  const value = String(formData.get(key) || "").trim();
+  return value || undefined;
+}
+
+function optionalNumber(formData: FormData, key: string) {
+  const value = String(formData.get(key) || "").trim();
+  if (!value) return undefined;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : undefined;
+}
+
+function optionalNullableDate(formData: FormData, key: string) {
+  const value = String(formData.get(key) || "").trim();
+  return value || null;
+}
+
+function buildAddressPayload(formData: FormData) {
+  const address = optionalString(formData, "address");
+  const source = optionalString(formData, "address_source");
+  if (!address) {
+    return {
+      address: null,
+      address_title: null,
+      address_poi_id: null,
+      address_province: null,
+      address_city: null,
+      address_district: null,
+      address_adcode: null,
+      address_latitude: null,
+      address_longitude: null,
+      address_source: null,
+      address_confidence: null,
+      address_confirmed_at: null,
+    };
+  }
+
+  if (source === "manual") {
+    return {
+      address,
+      address_title: null,
+      address_poi_id: null,
+      address_province: null,
+      address_city: null,
+      address_district: null,
+      address_adcode: null,
+      address_latitude: null,
+      address_longitude: null,
+      address_source: "manual",
+      address_confidence: null,
+      address_confirmed_at: null,
+    };
+  }
+
+  return {
+    address,
+    address_title: optionalString(formData, "address_title"),
+    address_poi_id: optionalString(formData, "address_poi_id"),
+    address_province: optionalString(formData, "address_province"),
+    address_city: optionalString(formData, "address_city"),
+    address_district: optionalString(formData, "address_district"),
+    address_adcode: optionalString(formData, "address_adcode"),
+    address_latitude: optionalNumber(formData, "address_latitude"),
+    address_longitude: optionalNumber(formData, "address_longitude"),
+    address_source: source,
+    address_confidence: optionalNumber(formData, "address_confidence"),
+    address_confirmed_at: source === "manual" ? null : optionalNullableDate(formData, "address_confirmed_at"),
+  };
 }
 
 export function TenantDialog({
@@ -54,7 +125,6 @@ export function TenantDialog({
   const defaults = useMemo(() => ({
     name: tenant?.name || "",
     slug: tenant?.slug || "",
-    address: tenant?.address || "",
     contact_name: tenant?.contact_name || "",
     contact_phone: tenant?.contact_phone || "",
   }), [tenant]);
@@ -80,11 +150,11 @@ export function TenantDialog({
     const formData = new FormData(event.currentTarget);
     const name = String(formData.get("name") || "").trim();
     const slug = String(formData.get("slug") || "").trim();
-    const address = String(formData.get("address") || "").trim();
     const contactName = String(formData.get("contact_name") || "").trim();
     const contactPhone = String(formData.get("contact_phone") || "").trim();
     const adminName = String(formData.get("admin_name") || "").trim();
     const adminPhone = String(formData.get("admin_phone") || "").trim();
+    const addressPayload = buildAddressPayload(formData);
 
     setError("");
     startTransition(async () => {
@@ -93,7 +163,7 @@ export function TenantDialog({
           ? {
             name,
             slug,
-            address: address || undefined,
+            ...addressPayload,
             contact_name: contactName || undefined,
             contact_phone: contactPhone || undefined,
             admin: {
@@ -103,7 +173,7 @@ export function TenantDialog({
           }
           : {
             name,
-            address: address || undefined,
+            ...addressPayload,
             contact_name: contactName || undefined,
             contact_phone: contactPhone || undefined,
           };
@@ -219,18 +289,7 @@ export function TenantDialog({
                     />
                   </Field>
                 </div>
-                <Field>
-                  <FieldLabel htmlFor={`${mode}-tenant-address`}>公司地址</FieldLabel>
-                  <Input
-                    id={`${mode}-tenant-address`}
-                    name="address"
-                    defaultValue={defaults.address}
-                    maxLength={200}
-                    placeholder="真实办公地址或门店地址"
-                    disabled={pending}
-                  />
-                  <FieldDescription>用于小程序 visitor 本地服务商列表展示，留空时前端隐藏地址行。</FieldDescription>
-                </Field>
+                <PlatformTenantAddressPicker mode={mode} tenant={tenant} disabled={pending} />
               </FieldGroup>
             </div>
 

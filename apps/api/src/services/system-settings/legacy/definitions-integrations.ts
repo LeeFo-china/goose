@@ -158,6 +158,14 @@ export const DEFINITIONS_INTEGRATIONS: SettingDefinition[] = [  {
     envNames: ["TENCENT_LBS_MINIPROGRAM_KEY", "TENCENT_MAP_MINIPROGRAM_KEY"],
   },
   {
+    key: "TENCENT_LBS_WEB_JS_KEY",
+    groupCode: "tencent_lbs",
+    name: "腾讯位置服务 Web JS Key",
+    description: "admin 浏览器端腾讯 JavaScript API GL 使用的 Key，需在腾讯位置服务控制台配置 Referer 白名单。",
+    valueType: "string",
+    envNames: ["TENCENT_LBS_WEB_JS_KEY", "TENCENT_MAP_WEB_JS_KEY"],
+  },
+  {
     key: "LOCATION_MATCH_ENABLED",
     groupCode: "location",
     name: "定位匹配开关",

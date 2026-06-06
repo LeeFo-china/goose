@@ -3,6 +3,12 @@ import { DEPARTMENT_CODE_VALUES, EMPLOYEE_POST_CODE_VALUES } from "@gooes/domain
 import { z } from "zod";
 
 export const PlatformTenantStatusSchema = z.enum(["active", "suspended", "archived"]);
+export const PlatformTenantAddressSourceSchema = z.enum([
+  "manual",
+  "tencent_suggestion",
+  "tencent_geocoder",
+  "map_picker",
+]);
 
 export const PlatformTenantIdParamsSchema = z.object({
   id: z.uuid("无效的租户 ID"),
@@ -28,6 +34,40 @@ const optionalText = (max: number, message: string) =>
     z.string().trim().max(max, message).optional(),
   );
 
+const nullableText = (max: number, message: string) =>
+  z.preprocess((value) => {
+    if (value === undefined || value === "") return undefined;
+    if (value === null) return null;
+    return value;
+  }, z.string().trim().max(max, message).nullable().optional());
+
+const nullableCoordinate = (min: number, max: number, message: string) =>
+  z.preprocess((value) => {
+    if (value === undefined || value === "") return undefined;
+    if (value === null) return null;
+    return value;
+  }, z.coerce.number(message).min(min, message).max(max, message).nullable().optional());
+
+const nullableConfidence = z.preprocess((value) => {
+  if (value === undefined || value === "") return undefined;
+  if (value === null) return null;
+  return value;
+}, z.coerce.number("地址置信度必须是数字").min(0).max(1).nullable().optional());
+
+const TenantAddressMetadataSchema = {
+  address_title: nullableText(120, "地址标题不能超过 120 个字符"),
+  address_poi_id: nullableText(120, "POI ID 不能超过 120 个字符"),
+  address_province: nullableText(40, "地址省份不能超过 40 个字符"),
+  address_city: nullableText(40, "地址城市不能超过 40 个字符"),
+  address_district: nullableText(40, "地址区县不能超过 40 个字符"),
+  address_adcode: nullableText(20, "地址行政区划代码不能超过 20 个字符"),
+  address_latitude: nullableCoordinate(-90, 90, "地址纬度必须在 -90 到 90 之间"),
+  address_longitude: nullableCoordinate(-180, 180, "地址经度必须在 -180 到 180 之间"),
+  address_source: PlatformTenantAddressSourceSchema.nullable().optional(),
+  address_confidence: nullableConfidence,
+  address_confirmed_at: z.iso.datetime("地址确认时间格式不正确").optional().nullable(),
+};
+
 export const PlatformTenantListQuerySchema = PaginationQuerySchema.extend({
   status: PlatformTenantStatusSchema.optional(),
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
@@ -37,7 +77,8 @@ export const CreatePlatformTenantSchema = z.object({
   name: z.string().trim().min(1, "请输入租户名称").max(100, "租户名称不能超过 100 个字符"),
   slug: TenantSlugSchema,
   status: z.enum(["active", "suspended"]).optional().default("active"),
-  address: optionalText(200, "公司地址不能超过 200 个字符"),
+  address: nullableText(200, "公司地址不能超过 200 个字符"),
+  ...TenantAddressMetadataSchema,
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
   admin: z.object({
@@ -51,7 +92,8 @@ export const CreatePlatformTenantSchema = z.object({
 
 export const UpdatePlatformTenantSchema = z.object({
   name: z.string().trim().min(1, "请输入租户名称").max(100, "租户名称不能超过 100 个字符").optional(),
-  address: optionalText(200, "公司地址不能超过 200 个字符"),
+  address: nullableText(200, "公司地址不能超过 200 个字符"),
+  ...TenantAddressMetadataSchema,
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
 }).refine((value) => Object.keys(value).length > 0, {
@@ -59,6 +101,7 @@ export const UpdatePlatformTenantSchema = z.object({
 });
 
 export type PlatformTenantStatus = z.infer<typeof PlatformTenantStatusSchema>;
+export type PlatformTenantAddressSource = z.infer<typeof PlatformTenantAddressSourceSchema>;
 export type PlatformTenantListQuery = z.infer<typeof PlatformTenantListQuerySchema>;
 export type CreatePlatformTenantInput = z.infer<typeof CreatePlatformTenantSchema>;
 export type UpdatePlatformTenantInput = z.infer<typeof UpdatePlatformTenantSchema>;

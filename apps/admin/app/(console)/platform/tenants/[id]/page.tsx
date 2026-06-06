@@ -31,6 +31,19 @@ function text(value?: string | null) {
   return value && value.trim() ? value : "-";
 }
 
+function formatCoordinate(latitude?: number | null, longitude?: number | null) {
+  if (latitude == null || longitude == null) return "-";
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+}
+
+function addressSourceText(value?: string | null) {
+  if (value === "tencent_suggestion") return "腾讯搜索";
+  if (value === "tencent_geocoder") return "腾讯解析";
+  if (value === "map_picker") return "地图选点";
+  if (value === "manual") return "手动输入";
+  return "-";
+}
+
 async function getPlatformTenant(id: string) {
   const token = await getAdminToken();
   if (!token) {
@@ -216,7 +229,7 @@ export default async function PlatformTenantDetailPage({
                   </div>
                   <div>
                     <CardTitle>基础信息</CardTitle>
-                    <CardDescription>租户标识和联系人信息</CardDescription>
+                    <CardDescription>租户标识、联系人和公司地址信息</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -224,6 +237,15 @@ export default async function PlatformTenantDetailPage({
                 <InfoRow label="租户 ID" value={tenant.id} />
                 <InfoRow label="slug" value={tenant.slug} />
                 <InfoRow label="公司地址" value={text(tenant.address)} />
+                <InfoRow label="地址标题" value={text(tenant.address_title)} />
+                <InfoRow
+                  label="地址区域"
+                  value={text([tenant.address_province, tenant.address_city, tenant.address_district].filter(Boolean).join(" "))}
+                />
+                <InfoRow label="地址 adcode" value={text(tenant.address_adcode)} />
+                <InfoRow label="地址坐标" value={formatCoordinate(tenant.address_latitude, tenant.address_longitude)} />
+                <InfoRow label="地址来源" value={addressSourceText(tenant.address_source)} />
+                <InfoRow label="地址确认时间" value={formatDate(tenant.address_confirmed_at)} />
                 <InfoRow label="联系人" value={text(tenant.contact_name)} />
                 <InfoRow label="联系电话" value={text(tenant.contact_phone)} />
                 <InfoRow label="创建时间" value={formatDate(tenant.created_at)} />

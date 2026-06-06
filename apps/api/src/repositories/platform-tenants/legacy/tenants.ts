@@ -1,6 +1,39 @@
 import { Errors, EMPTY_USAGE } from "./shared";
 import type { CreatePlatformTenantInput, PlatformTenantListQuery, PlatformTenantRecord, PlatformTenantStatus, UpdatePlatformTenantInput } from "./shared";
 
+const TENANT_ADDRESS_FIELDS = [
+  "address",
+  "address_title",
+  "address_poi_id",
+  "address_province",
+  "address_city",
+  "address_district",
+  "address_adcode",
+  "address_latitude",
+  "address_longitude",
+  "address_source",
+  "address_confidence",
+  "address_confirmed_at",
+] as const;
+
+function toTenantAddressPatch(
+  input: CreatePlatformTenantInput | UpdatePlatformTenantInput,
+  options: { onlyProvided?: boolean } = {},
+) {
+  const patch: Partial<Record<
+    typeof TENANT_ADDRESS_FIELDS[number],
+    string | number | null
+  >> = {};
+  for (const field of TENANT_ADDRESS_FIELDS) {
+    if (options.onlyProvided && !(field in input)) continue;
+    patch[field] = input[field] ?? null;
+  }
+
+  return {
+    ...patch,
+  };
+}
+
 export async function list(this: any, query: PlatformTenantListQuery) {
   const from = (query.page - 1) * query.pageSize;
   const to = from + query.pageSize - 1;
@@ -15,10 +48,10 @@ export async function list(this: any, query: PlatformTenantListQuery) {
   }
 
   if (query.keyword) {
-      const keyword = query.keyword.replace(/[,()]/g, " ").trim();
-      if (keyword) {
-        request = request.or(
-        `name.ilike.%${keyword}%,slug.ilike.%${keyword}%,address.ilike.%${keyword}%,contact_name.ilike.%${keyword}%,contact_phone.ilike.%${keyword}%`,
+    const keyword = query.keyword.replace(/[,()]/g, " ").trim();
+    if (keyword) {
+      request = request.or(
+        `name.ilike.%${keyword}%,slug.ilike.%${keyword}%,address.ilike.%${keyword}%,address_title.ilike.%${keyword}%,address_city.ilike.%${keyword}%,address_district.ilike.%${keyword}%,contact_name.ilike.%${keyword}%,contact_phone.ilike.%${keyword}%`,
       );
     }
   }
@@ -77,7 +110,7 @@ export async function create(this: any, input: CreatePlatformTenantInput) {
       name: input.name,
       slug: input.slug,
       status: input.status,
-      address: input.address ?? null,
+      ...toTenantAddressPatch(input),
       contact_name: input.contact_name ?? null,
       contact_phone: input.contact_phone ?? null,
     })
@@ -95,7 +128,7 @@ export async function update(this: any, id: string, input: UpdatePlatformTenantI
   const { data, error } = await this.from("tenants")
     .update({
       ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.address !== undefined ? { address: input.address ?? null } : {}),
+      ...toTenantAddressPatch(input, { onlyProvided: true }),
       ...(input.contact_name !== undefined ? { contact_name: input.contact_name ?? null } : {}),
       ...(input.contact_phone !== undefined ? { contact_phone: input.contact_phone ?? null } : {}),
     })

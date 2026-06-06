@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type {
   CreatePlatformTenantInput,
   PlatformTenantListQuery,
+  PlatformTenantAddressSource,
   PlatformTenantStatus,
   UpdatePlatformTenantInput,
 } from "@/schema/platform-tenants";
@@ -19,6 +20,17 @@ export type PlatformTenantRecord = {
   slug: string;
   status: PlatformTenantStatus;
   address: string | null;
+  address_title: string | null;
+  address_poi_id: string | null;
+  address_province: string | null;
+  address_city: string | null;
+  address_district: string | null;
+  address_adcode: string | null;
+  address_latitude: number | null;
+  address_longitude: number | null;
+  address_source: PlatformTenantAddressSource | null;
+  address_confidence: number | null;
+  address_confirmed_at: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   created_at: string;
@@ -114,6 +126,7 @@ export {
 export type {
   CreatePlatformTenantInput,
   PlatformTenantListQuery,
+  PlatformTenantAddressSource,
   PlatformTenantStatus,
   UpdatePlatformTenantInput,
 };

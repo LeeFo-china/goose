@@ -6295,10 +6295,32 @@ export type Database = {
           slug: string
           status: string
           address: string | null
+          address_adcode: string | null
+          address_city: string | null
+          address_confidence: number | null
+          address_confirmed_at: string | null
+          address_district: string | null
+          address_latitude: number | null
+          address_longitude: number | null
+          address_poi_id: string | null
+          address_province: string | null
+          address_source: string | null
+          address_title: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          address_adcode?: string | null
+          address_city?: string | null
+          address_confidence?: number | null
+          address_confirmed_at?: string | null
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_poi_id?: string | null
+          address_province?: string | null
+          address_source?: string | null
+          address_title?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -6310,6 +6332,17 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          address_adcode?: string | null
+          address_city?: string | null
+          address_confidence?: number | null
+          address_confirmed_at?: string | null
+          address_district?: string | null
+          address_latitude?: number | null
+          address_longitude?: number | null
+          address_poi_id?: string | null
+          address_province?: string | null
+          address_source?: string | null
+          address_title?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string

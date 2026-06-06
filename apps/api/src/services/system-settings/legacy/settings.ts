@@ -40,8 +40,11 @@ export async function listSettings(this: any, authContext?: AuthContext) {
         tenantId,
         records,
       }) as EffectiveSetting[])
-      : records
-        .filter((record: SystemSettingRecord) => !record.tenant_id)
+      : SETTING_DEFINITIONS
+        .map((definition: SettingDefinition) =>
+          this.getPlatformRecordOrDefinition(records, definition.key)
+        )
+        .filter((record: SystemSettingRecord | null): record is SystemSettingRecord => Boolean(record))
         .map((platformRecord: SystemSettingRecord) => {
           const resolved = this.resolveEffectiveRecord({
             key: platformRecord.key,

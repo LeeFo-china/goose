@@ -1,4 +1,5 @@
 export type PlatformTenantStatus = "active" | "suspended" | "archived";
+export type PlatformTenantAddressSource = "manual" | "tencent_suggestion" | "tencent_geocoder" | "map_picker";
 
 export type PlatformTenantUsage = {
   employee_count: number;
@@ -54,6 +55,17 @@ export type PlatformTenantRecord = {
   slug: string;
   status: PlatformTenantStatus | string;
   address: string | null;
+  address_title: string | null;
+  address_poi_id: string | null;
+  address_province: string | null;
+  address_city: string | null;
+  address_district: string | null;
+  address_adcode: string | null;
+  address_latitude: number | null;
+  address_longitude: number | null;
+  address_source: PlatformTenantAddressSource | string | null;
+  address_confidence: number | null;
+  address_confirmed_at: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   created_at: string;
@@ -86,7 +98,32 @@ export type TenantServiceAreaRecord = {
     slug: string | null;
     status: string | null;
     address: string | null;
+    address_title: string | null;
+    address_poi_id: string | null;
+    address_province: string | null;
+    address_city: string | null;
+    address_district: string | null;
+    address_adcode: string | null;
+    address_latitude: number | null;
+    address_longitude: number | null;
+    address_source: string | null;
+    address_confidence: number | null;
+    address_confirmed_at: string | null;
   } | null;
+};
+
+export type PlatformTenantAddressSuggestion = {
+  id: string | null;
+  title: string | null;
+  address: string | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  adcode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  source: "tencent_suggestion";
+  confidence: number;
 };
 
 export type Pagination = {
