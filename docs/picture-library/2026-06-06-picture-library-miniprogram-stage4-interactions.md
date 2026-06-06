@@ -183,3 +183,46 @@ Authorization: Bearer <visitor_session_token>
 | 重复收藏 | `favorite_count` 保持 1 |
 | 取消收藏 | `favorite_count` 回到 0 |
 | 重复取消收藏 | `favorite_count` 保持 0 |
+
+## 小程序回写对接记录
+
+回写来源：
+
+```text
+/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage4-interactions.md
+```
+
+小程序侧已完成：
+
+- 图片列表、图片详情浏览接口改为可选携带登录态。
+- 存在 visitor session token 时，列表和详情可读取 `liked_by_me`、`favorited_by_me`。
+- 图片分类接口保持公开访问，不依赖登录态。
+- 列表项和详情页增加点赞、收藏轻量交互。
+- 操作中禁用当前图片交互，避免重复点击造成状态抖动。
+- 接口失败时保留原状态并提示用户稍后重试。
+
+小程序侧无登录态 smoke：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 图片列表公开访问 | 200 |
+| 列表返回 `liked_by_me` | `false` |
+| 列表返回 `favorited_by_me` | `false` |
+| 未登录点赞 | 401，`TOKEN_MISSING` |
+| 未登录收藏 | 401，`TOKEN_MISSING` |
+
+后端补充复测：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 未登录点赞 | 401 |
+| 带 visitor token 点赞 | `liked=true`，`like_count=1` |
+| 带 visitor token 收藏 | `favorited=true`，`favorite_count=1` |
+| 列表带 visitor token | `liked_by_me=true`，`favorited_by_me=true` |
+| 详情带 visitor token | `liked_by_me=true`，`favorited_by_me=true` |
+| 清理点赞/收藏 | 计数回到 0 |
+
+剩余待实机确认：
+
+- 小程序模拟器或真机内使用真实 visitor session token 复测完整点击链路。
+- 页面刷新后列表与详情状态一致。

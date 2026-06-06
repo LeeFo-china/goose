@@ -523,6 +523,13 @@ DELETE /visitor/picture-library/assets/:id/favorite
 | 重复收藏 | `favorite_count` 保持 1 |
 | 重复取消收藏 | `favorite_count` 保持 0 |
 
+小程序回写对接：
+
+- 小程序已完成阶段 4 点赞/收藏能力对接，回写文档位于 `/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage4-interactions.md`。
+- 小程序无登录态 smoke 已验证公开列表仍可访问，未登录写操作返回 401。
+- 后端补充使用模拟 visitor token 复测，列表和详情均可返回 `liked_by_me=true`、`favorited_by_me=true`。
+- 剩余待小程序在模拟器或真机内用真实 visitor session token 复测完整点击链路。
+
 ## 阶段 5：评论与评论图片上传
 
 ### 目标
