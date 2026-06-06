@@ -959,6 +959,44 @@ picture-library-health-check script
 - 这一步只导入 `法式` 分类前 20 张，没有执行 360 张全量导入。
 - 小批量链路已覆盖：源图上传、资产写入、分类关系、变体生成、COS 上传、健康检查、visitor 展示。
 
+### 阶段 7H 执行记录：分批导入安全闸门与批次报告
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- `api:picture-library-import` 增加 `--offset` 参数：
+  - 支持 `--apply --offset 20 --limit 50` 继续推进后续批次。
+  - dry-run 和 apply 输出 `batch`，包含总源图数、当前选中数、下一批 offset。
+- `api:picture-library-import` 报告逻辑拆分到独立 helper：
+  - 主脚本保持扫描、批次选择、导入执行职责。
+  - dry-run 统计继续保留分类、重复 checksum、预计上传量。
+- `api:picture-library-variants-backfill` 增强批次报告：
+  - 输出总候选资产数、当前选中数和本批执行后剩余数。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 下一批 dry-run | `offset=20`、`limit=50`，选中 50 张 |
+| 下一批待上传 | 已存在 4 张，待上传 46 张 |
+| 下一批预计上传 | cover 46 个，thumb/large 92 个，总文件 138 个 |
+| 全量 dry-run | 源图 360 张，已存在 61 张，待上传 299 张 |
+| 全量风险统计 | 重复 checksum 164，缺失尺寸 0 |
+| 变体补齐 dry-run | `candidate_asset_count=0`，`missing_variant_count=0` |
+
+后续批次建议：
+
+1. 每次先执行：
+   `bun run api:picture-library-import -- --dry-run --offset <offset> --limit 50`
+2. 确认 `pending_upload_count` 和 `estimated_uploads` 后再执行：
+   `bun run api:picture-library-import -- --apply --offset <offset> --limit 50`
+3. 每批导入后执行：
+   `bun run api:picture-library-variants-backfill -- --apply --limit 50`
+4. 每批补齐后执行健康检查：
+   `bun run api:picture-library-health-check -- --limit 50`
+5. 使用 dry-run 输出里的 `batch.next_offset` 作为下一批 offset。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。

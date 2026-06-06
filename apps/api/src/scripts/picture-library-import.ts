@@ -4,25 +4,14 @@ import { readdir } from "node:fs/promises";
 import { normalizeProvider } from "@/services/files/platform-file-storage/legacy/shared";
 import { platformFileStorageService } from "@/services/files/platform-file-storage";
 import { systemSettingsService } from "@/services/system-settings";
+import { buildPictureLibraryImportDryRunReport } from "./picture-library-import-plan";
+import type { PictureLibraryImportBatch, PictureLibraryImportCandidate } from "./picture-library-import-plan";
 
 type CliOptions = {
   source: string;
   apply: boolean;
+  offset: number;
   limit: number | null;
-};
-
-type ImageCandidate = {
-  filePath: string;
-  filename: string;
-  categoryName: string;
-  categorySlug: string;
-  title: string;
-  sortOrder: number;
-  mimeType: string;
-  sizeBytes: number;
-  checksum: string;
-  width: number | null;
-  height: number | null;
 };
 
 type ExistingAssetRow = {
@@ -33,19 +22,8 @@ type IdRow = {
   id: string;
 };
 
-type ImportPlanRow = {
-  checksum: string;
-  category_name: string;
-  category_slug: string;
-  size_bytes: number;
-  width: number | null;
-  height: number | null;
-  exists: boolean;
-};
-
 const DEFAULT_SOURCE = "/Users/leefo/Public/work/goose-server/picture";
 const IMAGE_EXTENSIONS = new Set([".webp", ".jpg", ".jpeg", ".png"]);
-const PLANNED_GENERATED_VARIANTS = ["thumb", "large"] as const;
 const databaseUrl = process.env.SUPABASE_DB_URL ||
   process.env.SUPABASE_DB_DIRECT_URL;
 
@@ -60,6 +38,7 @@ function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     source: process.env.PICTURE_LIBRARY_IMPORT_SOURCE || DEFAULT_SOURCE,
     apply: false,
+    offset: 0,
     limit: null,
   };
 
@@ -73,6 +52,10 @@ function parseArgs(argv: string[]): CliOptions {
       options.apply = true;
     } else if (arg === "--dry-run") {
       options.apply = false;
+    } else if (arg === "--offset") {
+      const offset = Number(argv[index + 1]);
+      options.offset = Number.isFinite(offset) && offset > 0 ? Math.trunc(offset) : 0;
+      index += 1;
     } else if (arg === "--limit") {
       const limit = Number(argv[index + 1]);
       options.limit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : null;
@@ -184,10 +167,10 @@ function readDimensions(buffer: Buffer, mimeType: string) {
   return null;
 }
 
-async function scanSource(source: string, limit: number | null) {
+async function scanSource(source: string) {
   const root = resolve(source);
   const categoryEntries = await readdir(root, { withFileTypes: true });
-  const candidates: ImageCandidate[] = [];
+  const candidates: PictureLibraryImportCandidate[] = [];
 
   for (const categoryEntry of categoryEntries.filter((item) => item.isDirectory())) {
     const categoryName = categoryEntry.name;
@@ -198,7 +181,6 @@ async function scanSource(source: string, limit: number | null) {
     for (const file of files.filter((item) => item.isFile())) {
       const extension = extname(file.name).toLowerCase();
       if (!IMAGE_EXTENSIONS.has(extension)) continue;
-      if (limit && candidates.length >= limit) return candidates;
 
       const filePath = join(categoryDir, file.name);
       const buffer = Buffer.from(await Bun.file(filePath).arrayBuffer());
@@ -224,6 +206,31 @@ async function scanSource(source: string, limit: number | null) {
   return candidates;
 }
 
+function selectBatch(
+  candidates: PictureLibraryImportCandidate[],
+  options: CliOptions,
+) {
+  const end = options.limit ? options.offset + options.limit : undefined;
+  return candidates.slice(options.offset, end);
+}
+
+function buildBatchInfo(input: {
+  totalSourceCount: number;
+  selectedSourceCount: number;
+  options: CliOptions;
+}): PictureLibraryImportBatch {
+  const nextOffset = input.options.offset + input.selectedSourceCount;
+  const hasMore = nextOffset < input.totalSourceCount;
+  return {
+    offset: input.options.offset,
+    limit: input.options.limit,
+    total_source_count: input.totalSourceCount,
+    selected_source_count: input.selectedSourceCount,
+    next_offset: hasMore ? nextOffset : null,
+    has_more: hasMore,
+  };
+}
+
 async function findAssetByChecksum(checksum: string) {
   const rows = await db<ExistingAssetRow[]>`
     select id
@@ -236,7 +243,7 @@ async function findAssetByChecksum(checksum: string) {
   return rows[0] ?? null;
 }
 
-async function ensureCategory(candidate: ImageCandidate) {
+async function ensureCategory(candidate: PictureLibraryImportCandidate) {
   const rows = await db<IdRow[]>`
     insert into public.picture_categories (name, slug, sort_order, status)
     values (${candidate.categoryName}, ${candidate.categorySlug}, 100, 'active')
@@ -248,7 +255,7 @@ async function ensureCategory(candidate: ImageCandidate) {
   return rows[0]?.id;
 }
 
-async function insertAsset(candidate: ImageCandidate) {
+async function insertAsset(candidate: PictureLibraryImportCandidate) {
   const rows = await db<IdRow[]>`
     insert into public.picture_assets (
       title,
@@ -288,7 +295,7 @@ async function insertCoverVariant(input: {
   assetId: string;
   fileObjectId: string;
   objectKey: string;
-  candidate: ImageCandidate;
+  candidate: PictureLibraryImportCandidate;
 }) {
   await db`
     insert into public.picture_asset_variants (
@@ -323,7 +330,7 @@ async function assertCosProvider() {
   }
 }
 
-async function importCandidate(candidate: ImageCandidate) {
+async function importCandidate(candidate: PictureLibraryImportCandidate) {
   const categoryId = await ensureCategory(candidate);
   if (!categoryId) throw new Error(`创建分类失败：${candidate.categoryName}`);
 
@@ -356,47 +363,8 @@ async function importCandidate(candidate: ImageCandidate) {
   return { status: "created" as const, assetId };
 }
 
-async function buildDryRunReport(candidates: ImageCandidate[]) {
-  const rows = await buildImportPlanRows(candidates);
-  const existingCount = rows.filter((item) => item.exists).length;
-  const pendingRows = rows.filter((item) => !item.exists);
-  const categories = new Set(rows.map((item) => item.category_name));
-  const duplicateChecksumCount = rows.length - new Set(rows.map((item) => item.checksum)).size;
-  const missingDimensionsCount = rows.filter((item) => !item.width || !item.height).length;
-  const pendingUploadCount = pendingRows.length;
-  const plannedVariantUploadCount = pendingUploadCount * PLANNED_GENERATED_VARIANTS.length;
-  return {
-    mode: "dry-run",
-    source_count: candidates.length,
-    category_count: categories.size,
-    existing_asset_count: existingCount,
-    pending_upload_count: pendingUploadCount,
-    estimated_uploads: {
-      cover_upload_count: pendingUploadCount,
-      generated_variant_upload_count: plannedVariantUploadCount,
-      total_file_upload_count: pendingUploadCount + plannedVariantUploadCount,
-      generated_variants: PLANNED_GENERATED_VARIANTS,
-      note: "导入 apply 只写入 cover，thumb/large 由 picture-library-variants-backfill 补齐。",
-    },
-    estimated_source_bytes: pendingRows.reduce((sum, item) => sum + item.size_bytes, 0),
-    risk_summary: {
-      duplicate_checksum_count: duplicateChecksumCount,
-      missing_dimensions_count: missingDimensionsCount,
-      post_import_variant_backfill_required: pendingUploadCount > 0,
-    },
-    category_breakdown: buildCategoryBreakdown(rows),
-    categories: [...categories].sort((left, right) => left.localeCompare(right, "zh-CN")),
-    recommended_steps: [
-      "先执行 --dry-run 确认 pending_upload_count 与 estimated_uploads。",
-      "执行 --apply 小批量导入并复跑健康检查。",
-      "执行 api:picture-library-variants-backfill 补齐 thumb/large。",
-      "执行 api:picture-library-health-check 确认 issue_total=0。",
-    ],
-  };
-}
-
-async function buildImportPlanRows(candidates: ImageCandidate[]) {
-  if (candidates.length === 0) return [];
+async function findExistingChecksums(candidates: PictureLibraryImportCandidate[]) {
+  if (candidates.length === 0) return new Set<string>();
   const checksums = Array.from(new Set(candidates.map((item) => item.checksum)));
   const existingRows = await db<Array<{ checksum: string }>>`
     select checksum
@@ -405,53 +373,33 @@ async function buildImportPlanRows(candidates: ImageCandidate[]) {
       and deleted_at is null
       and status <> 'deleted'
   `;
-  const existingChecksums = new Set(existingRows.map((item) => item.checksum));
-  return candidates.map((candidate): ImportPlanRow => ({
-    checksum: candidate.checksum,
-    category_name: candidate.categoryName,
-    category_slug: candidate.categorySlug,
-    size_bytes: candidate.sizeBytes,
-    width: candidate.width,
-    height: candidate.height,
-    exists: existingChecksums.has(candidate.checksum),
-  }));
+  return new Set(existingRows.map((item) => item.checksum));
 }
 
-function buildCategoryBreakdown(rows: ImportPlanRow[]) {
-  const result = new Map<string, {
-    category_slug: string;
-    source_count: number;
-    existing_asset_count: number;
-    pending_upload_count: number;
-  }>();
-
-  for (const row of rows) {
-    const current = result.get(row.category_name) || {
-      category_slug: row.category_slug,
-      source_count: 0,
-      existing_asset_count: 0,
-      pending_upload_count: 0,
-    };
-    current.source_count += 1;
-    if (row.exists) current.existing_asset_count += 1;
-    if (!row.exists) current.pending_upload_count += 1;
-    result.set(row.category_name, current);
-  }
-
-  return [...result.entries()]
-    .sort(([left], [right]) => left.localeCompare(right, "zh-CN"))
-    .map(([categoryName, value]) => ({
-      category_name: categoryName,
-      ...value,
-    }));
+async function buildDryRunReport(
+  candidates: PictureLibraryImportCandidate[],
+  batch: PictureLibraryImportBatch,
+) {
+  const existingChecksums = await findExistingChecksums(candidates);
+  return buildPictureLibraryImportDryRunReport({
+    candidates,
+    existingChecksums,
+    batch,
+  });
 }
 
 async function main() {
   const options = parseArgs(Bun.argv.slice(2));
-  const candidates = await scanSource(options.source, options.limit);
+  const allCandidates = await scanSource(options.source);
+  const candidates = selectBatch(allCandidates, options);
+  const batch = buildBatchInfo({
+    totalSourceCount: allCandidates.length,
+    selectedSourceCount: candidates.length,
+    options,
+  });
 
   if (!options.apply) {
-    console.log(JSON.stringify(await buildDryRunReport(candidates), null, 2));
+    console.log(JSON.stringify(await buildDryRunReport(candidates, batch), null, 2));
     return;
   }
 
@@ -459,6 +407,7 @@ async function main() {
   const result = {
     mode: "apply",
     source_count: candidates.length,
+    batch,
     created_count: 0,
     existing_count: 0,
     failed: [] as Array<{ file: string; reason: string }>,

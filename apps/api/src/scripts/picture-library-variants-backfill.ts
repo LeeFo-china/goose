@@ -40,6 +40,13 @@ type Candidate = {
   missing_variants: VariantName[];
 };
 
+type CandidateBatch = {
+  total_candidate_asset_count: number;
+  selected_candidate_asset_count: number;
+  limit: number | null;
+  remaining_after_batch: number;
+};
+
 type GeneratedVariant = {
   variant: VariantName;
   buffer: Buffer;
@@ -128,7 +135,16 @@ async function listCandidates(options: CliOptions) {
     candidates.push({ asset, source, missing_variants: missing });
   }
 
-  return options.limit ? candidates.slice(0, options.limit) : candidates;
+  const selectedCandidates = options.limit ? candidates.slice(0, options.limit) : candidates;
+  return {
+    candidates: selectedCandidates,
+    batch: {
+      total_candidate_asset_count: candidates.length,
+      selected_candidate_asset_count: selectedCandidates.length,
+      limit: options.limit,
+      remaining_after_batch: Math.max(candidates.length - selectedCandidates.length, 0),
+    },
+  };
 }
 
 function groupVariants(variants: VariantRow[]) {
@@ -343,10 +359,11 @@ async function applyCandidate(candidate: Candidate) {
   }
 }
 
-function buildDryRunReport(candidates: Candidate[]) {
+function buildDryRunReport(candidates: Candidate[], batch: CandidateBatch) {
   return {
     mode: "dry-run",
     candidate_asset_count: candidates.length,
+    batch,
     missing_variant_count: candidates.reduce(
       (sum, item) => sum + item.missing_variants.length,
       0,
@@ -362,9 +379,9 @@ function buildDryRunReport(candidates: Candidate[]) {
 
 async function main() {
   const options = parseArgs(Bun.argv.slice(2));
-  const candidates = await listCandidates(options);
+  const { candidates, batch } = await listCandidates(options);
   if (!options.apply) {
-    console.log(JSON.stringify(buildDryRunReport(candidates), null, 2));
+    console.log(JSON.stringify(buildDryRunReport(candidates, batch), null, 2));
     return;
   }
 
@@ -372,6 +389,7 @@ async function main() {
   const result = {
     mode: "apply",
     candidate_asset_count: candidates.length,
+    batch,
     uploaded_variant_count: 0,
     repaired: [] as Awaited<ReturnType<typeof applyCandidate>>[],
     failed: [] as Array<{ asset_id: string; title: string; reason: string }>,
