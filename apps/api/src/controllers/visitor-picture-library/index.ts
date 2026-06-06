@@ -4,6 +4,7 @@ import {
   CreateVisitorPictureCommentSchema,
   CreateVisitorPictureShareEventSchema,
   VisitorPictureAssetListQuerySchema,
+  VisitorPictureAssetNavigationQuerySchema,
   VisitorPictureAssetParamsSchema,
   VisitorPictureCommentListQuerySchema,
 } from "@/schema/visitor-picture-library";
@@ -42,6 +43,22 @@ class VisitorPictureLibraryController extends BaseController {
 
     const data = await visitorPictureLibraryService.getAssetDetail(
       paramsResult.data.id,
+      this.getOptionalVisitorId(request),
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/visitor/picture-library/assets/:id/navigation")
+  async getAssetNavigation(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = VisitorPictureAssetParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = VisitorPictureAssetNavigationQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await visitorPictureLibraryService.getAssetNavigation(
+      paramsResult.data.id,
+      queryResult.data,
       this.getOptionalVisitorId(request),
     );
     return ResponseHandler.success(data);

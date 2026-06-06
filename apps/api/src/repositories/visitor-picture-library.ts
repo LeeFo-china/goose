@@ -117,6 +117,7 @@ class VisitorPictureLibraryRepository {
     const { data, error, count } = await request
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, to);
     if (error) throw Errors.dbError("查询图片列表失败", error);
 
@@ -135,6 +136,26 @@ class VisitorPictureLibraryRepository {
     if (error) throw Errors.dbError("查询图片详情失败", error);
     const list = await this.attachRelations(data ? [data as VisitorPictureAssetRow] : []);
     return list[0] ?? null;
+  }
+
+  async findNavigationAssets(categoryId: string | null) {
+    const assetIds = categoryId ? await this.findAssetIdsByCategory(categoryId) : null;
+    if (assetIds && assetIds.length === 0) return [];
+
+    let request = SupabaseDB.getAdminClient()
+      .from("picture_assets")
+      .select("id,title,description,width,height,like_count,favorite_count,comment_count,share_count,sort_order,created_at,updated_at")
+      .eq("status", "published")
+      .is("deleted_at", null);
+
+    if (assetIds) request = request.in("id", assetIds);
+
+    const { data, error } = await request
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+    if (error) throw Errors.dbError("查询图片导航失败", error);
+    return this.attachRelations((data || []) as VisitorPictureAssetRow[]);
   }
 
   async findCoverAssets(assetIds: string[]) {

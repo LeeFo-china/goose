@@ -14,6 +14,7 @@ import {
 import type {
   CreateVisitorPictureCommentInput,
   CreateVisitorPictureShareEventInput,
+  VisitorPictureAssetNavigationQuery,
   VisitorPictureAssetListQuery,
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
@@ -23,6 +24,7 @@ const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
 const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
 const SHARE_IMAGE_VARIANTS = ["cover", "large", "thumb", "original"] as const;
 const DEFAULT_SHARE_TITLE = "装修效果图";
+const NAVIGATION_SORT = "sort_order asc, created_at desc, id desc";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type PublicCacheEntry<TValue> = {
@@ -55,6 +57,20 @@ class VisitorPictureLibraryService {
     }
 
     return this.loadAssetDetail(id, visitorId);
+  }
+
+  async getAssetNavigation(
+    id: string,
+    query: VisitorPictureAssetNavigationQuery,
+    visitorId: string | null = null,
+  ) {
+    if (!visitorId) {
+      return this.getPublicCached(this.buildNavigationCacheKey(id, query), () =>
+        this.loadAssetNavigation(id, query, null)
+      );
+    }
+
+    return this.loadAssetNavigation(id, query, visitorId);
   }
 
   async setLike(input: {
@@ -169,6 +185,47 @@ class VisitorPictureLibraryService {
     return this.toAssetDetail(asset, states.get(asset.id));
   }
 
+  private async loadAssetNavigation(
+    id: string,
+    query: VisitorPictureAssetNavigationQuery,
+    visitorId: string | null,
+  ) {
+    const current = await visitorPictureLibraryRepository.findAssetDetail(id);
+    if (!current) throw Errors.notFound("图片不存在或未发布");
+
+    const categoryId = this.resolveNavigationCategoryId(current, query.category_id);
+    const assets = await visitorPictureLibraryRepository.findNavigationAssets(categoryId);
+    const currentIndex = assets.findIndex((asset) => asset.id === current.id);
+    if (currentIndex < 0) throw Errors.badRequest("当前图片不在导航上下文中");
+
+    const prevAsset = currentIndex > 0 ? assets[currentIndex - 1] : null;
+    const nextAsset = currentIndex < assets.length - 1 ? assets[currentIndex + 1] : null;
+    const requestedPrev = query.direction !== "next" ? prevAsset : null;
+    const requestedNext = query.direction !== "prev" ? nextAsset : null;
+    const states = await visitorPictureLibraryRepository.findInteractionStates(
+      [current, requestedPrev, requestedNext]
+        .filter((asset): asset is VisitorPictureAssetRecord => Boolean(asset))
+        .map((asset) => asset.id),
+      visitorId,
+    );
+
+    return {
+      current: this.toAssetDetail(current, states.get(current.id)),
+      prev: requestedPrev ? this.toAssetDetail(requestedPrev, states.get(requestedPrev.id)) : null,
+      next: requestedNext ? this.toAssetDetail(requestedNext, states.get(requestedNext.id)) : null,
+      context: {
+        category_id: categoryId,
+        direction: query.direction,
+        limit: query.limit,
+        sort: NAVIGATION_SORT,
+        has_prev: Boolean(prevAsset),
+        has_next: Boolean(nextAsset),
+        prev_cursor: prevAsset?.id ?? null,
+        next_cursor: nextAsset?.id ?? null,
+      },
+    };
+  }
+
   private toAssetListItem(
     asset: VisitorPictureAssetRecord,
     state: VisitorPictureInteractionState | undefined,
@@ -256,6 +313,18 @@ class VisitorPictureLibraryService {
     return `${categoryName}${DEFAULT_SHARE_TITLE}`;
   }
 
+  private resolveNavigationCategoryId(
+    asset: VisitorPictureAssetRecord,
+    requestedCategoryId: string | undefined,
+  ) {
+    if (requestedCategoryId) {
+      const belongsToCategory = asset.categories.some((category) => category.id === requestedCategoryId);
+      if (!belongsToCategory) throw Errors.badRequest("当前图片不属于传入分类");
+      return requestedCategoryId;
+    }
+    return asset.categories[0]?.id ?? null;
+  }
+
   private toComment(comment: VisitorPictureCommentRecord) {
     return {
       id: comment.id,
@@ -302,6 +371,16 @@ class VisitorPictureLibraryService {
       query.category_id || "all",
       query.page,
       query.pageSize,
+    ].join(":");
+  }
+
+  private buildNavigationCacheKey(id: string, query: VisitorPictureAssetNavigationQuery) {
+    return [
+      "asset-navigation",
+      id,
+      query.category_id || "auto",
+      query.direction,
+      query.limit,
     ].join(":");
   }
 

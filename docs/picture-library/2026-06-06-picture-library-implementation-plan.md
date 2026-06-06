@@ -232,6 +232,7 @@ DELETE /admin/picture-library/comments/:id
 GET    /visitor/picture-library/categories
 GET    /visitor/picture-library/assets?category_id=&page=&pageSize=
 GET    /visitor/picture-library/assets/:id
+GET    /visitor/picture-library/assets/:id/navigation
 
 POST   /visitor/picture-library/assets/:id/like
 DELETE /visitor/picture-library/assets/:id/like
@@ -1314,6 +1315,49 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
 - 当前状态是后端已实现、小程序待对接；小程序可优先读取 `images.detail`。
 - `share-title` 文档为图片详情页分享标题契约。
 - 当前状态是后端已实现；小程序可优先使用后端 `share.title`。
+
+### 阶段 7Q 执行记录：详情页上一张下一张导航接口
+
+状态：后端已实现，等待小程序按文档对接。
+
+后端改动：
+
+- 新增 visitor 公开接口：
+  - `GET /visitor/picture-library/assets/:id/navigation`
+- 请求参数：
+  - `category_id` 可选。
+  - `direction` 支持 `prev` / `next` / `both`，默认 `both`。
+  - `limit` 默认 `1`，当前仅支持 `1`。
+- 返回结构：
+  - `current`
+  - `prev`
+  - `next`
+  - `context`
+- 排序规则：
+  - `sort_order asc, created_at desc, id desc`
+  - visitor 列表接口同步补充 `id desc` 兜底排序。
+- 未传 `category_id`：
+  - 使用当前图片排序后的第一个分类作为上下文。
+  - 图片无分类时在全部 visitor 可见图片中导航。
+- 传入 `category_id`：
+  - 只在该分类内计算上一张和下一张。
+  - 当前图片不属于传入分类时返回 HTTP 400。
+
+开发库验收结果：
+
+| 场景 | 结果 |
+| --- | --- |
+| 中间图片 | `prev`、`next` 均有值 |
+| 第一张边界 | `prev=null`，`has_prev=false` |
+| 分享进入不传分类 | 自动选择第一分类作为 `context.category_id` |
+| 当前图片不属于分类 | HTTP 400，`当前图片不属于传入分类` |
+| API 检查 | `bun run api:check` 通过 |
+
+对接文档：
+
+```text
+docs/picture-library/2026-06-06-picture-library-detail-navigation-backend.md
+```
 
 ### 阶段 7P 执行记录：分享标题按分类生成
 
