@@ -25,12 +25,12 @@ export function buildPictureLibraryHref(input: {
   keyword?: string;
 }) {
   const query = new URLSearchParams();
+  query.set("tab", "assets");
   if (input.page && input.page > 1) query.set("page", String(input.page));
   if (input.status && input.status !== "all") query.set("status", input.status);
   if (input.categoryId && input.categoryId !== "all") query.set("category_id", input.categoryId);
   if (input.keyword) query.set("keyword", input.keyword);
-  const value = query.toString();
-  return value ? `/platform/picture-library?${value}` : "/platform/picture-library";
+  return `/platform/picture-library?${query.toString()}`;
 }
 
 export function PictureLibraryFilters({
@@ -133,7 +133,7 @@ export function PictureLibraryFilters({
             setSelectedStatus("all");
             setSelectedCategoryId("all");
             setSelectedKeyword("");
-            startTransition(() => router.push("/platform/picture-library"));
+            startTransition(() => router.push("/platform/picture-library?tab=assets"));
           }}
         >
           <X data-icon="inline-start" />

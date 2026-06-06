@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreatePictureAssetButton } from "@/components/picture-library/picture-asset-actions";
@@ -22,10 +23,12 @@ import type {
 } from "@/components/picture-library/picture-library-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type SearchParams = Promise<{
+  tab?: string;
   page?: string;
   status?: string;
   category_id?: string;
@@ -34,6 +37,8 @@ type SearchParams = Promise<{
   comment_status?: string;
   comment_keyword?: string;
 }>;
+
+type PictureLibraryTab = "assets" | "categories" | "comments" | "health";
 
 function readPositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -48,6 +53,14 @@ function readCommentStatus(value: string | undefined) {
   return ["pending", "visible", "hidden", "rejected"].includes(value || "")
     ? value as string
     : "all";
+}
+
+function readTab(params: Awaited<SearchParams>): PictureLibraryTab {
+  if (["assets", "categories", "comments", "health"].includes(params.tab || "")) {
+    return params.tab as PictureLibraryTab;
+  }
+  if (params.comment_page || params.comment_status || params.comment_keyword) return "comments";
+  return "assets";
 }
 
 function buildAssetQuery(input: {
@@ -143,6 +156,28 @@ function summarize(input: {
   };
 }
 
+function buildTabHref(input: {
+  tab: PictureLibraryTab;
+  page: number;
+  status: string;
+  categoryId: string;
+  keyword: string;
+  commentPage: number;
+  commentStatus: string;
+  commentKeyword: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("tab", input.tab);
+  if (input.page > 1) query.set("page", String(input.page));
+  if (input.status !== "all") query.set("status", input.status);
+  if (input.categoryId) query.set("category_id", input.categoryId);
+  if (input.keyword) query.set("keyword", input.keyword);
+  if (input.commentPage > 1) query.set("comment_page", String(input.commentPage));
+  if (input.commentStatus !== "all") query.set("comment_status", input.commentStatus);
+  if (input.commentKeyword) query.set("comment_keyword", input.commentKeyword);
+  return `/platform/picture-library?${query.toString()}`;
+}
+
 export default async function PlatformPictureLibraryPage({
   searchParams,
 }: {
@@ -153,6 +188,7 @@ export default async function PlatformPictureLibraryPage({
 
   const hasPlatformAccess = session.roles.includes("platform_admin");
   const params = await searchParams;
+  const activeTab = readTab(params);
   const page = readPositiveInteger(params.page, 1);
   const status = readStatus(params.status);
   const categoryId = (params.category_id || "").trim();
@@ -194,6 +230,17 @@ export default async function PlatformPictureLibraryPage({
   }
 
   const summary = summarize({ categories, assets, comments });
+  const buildHref = (tab: PictureLibraryTab) => buildTabHref({
+    tab,
+    page,
+    status,
+    categoryId,
+    keyword,
+    commentPage,
+    commentStatus,
+    commentKeyword,
+  });
+  const issueTotal = health?.metrics.issue_total ?? 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -241,91 +288,128 @@ export default async function PlatformPictureLibraryPage({
         </Card>
       </div>
 
-      <PictureLibraryHealthCard health={health} />
+      <Tabs defaultValue={activeTab} className="flex flex-col gap-3">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsTrigger value="assets" asChild>
+            <Link href={buildHref("assets")}>
+              图片
+              <span className="ml-2 text-xs text-muted-foreground">{assets.pagination.total}</span>
+            </Link>
+          </TabsTrigger>
+          <TabsTrigger value="categories" asChild>
+            <Link href={buildHref("categories")}>
+              分类
+              <span className="ml-2 text-xs text-muted-foreground">{categories.length}</span>
+            </Link>
+          </TabsTrigger>
+          <TabsTrigger value="comments" asChild>
+            <Link href={buildHref("comments")}>
+              评论
+              <span className="ml-2 text-xs text-muted-foreground">{comments.pagination.total}</span>
+            </Link>
+          </TabsTrigger>
+          <TabsTrigger value="health" asChild>
+            <Link href={buildHref("health")}>
+              健康
+              <span className="ml-2 text-xs text-muted-foreground">{issueTotal}</span>
+            </Link>
+          </TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>图片列表</CardTitle>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                当前筛选：
-                <Badge variant="outline">{status === "all" ? "全部状态" : status}</Badge>
-                {categoryId ? <Badge variant="outline">已选分类</Badge> : <Badge variant="outline">全部分类</Badge>}
+        <TabsContent value="assets" className="mt-0">
+          <Card>
+            <CardHeader className="flex flex-col gap-3">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <CardTitle>图片列表</CardTitle>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    当前筛选：
+                    <Badge variant="outline">{status === "all" ? "全部状态" : status}</Badge>
+                    {categoryId ? <Badge variant="outline">已选分类</Badge> : <Badge variant="outline">全部分类</Badge>}
+                  </div>
+                </div>
+                <Badge variant="outline">共 {assets.pagination.total} 张</Badge>
               </div>
-            </div>
-            <Badge variant="outline">共 {assets.pagination.total} 张</Badge>
-          </div>
-          <PictureLibraryFilters
-            status={status}
-            categoryId={categoryId}
-            keyword={keyword}
-            categories={categories}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          <PictureAssetsTable assets={assets.list} categories={categories} />
-          <div className="px-4 pb-4">
-            <PictureLibraryPagination
-              pagination={assets.pagination}
-              status={status}
-              categoryId={categoryId}
-              keyword={keyword}
-            />
-          </div>
-        </CardContent>
-      </Card>
+              <PictureLibraryFilters
+                status={status}
+                categoryId={categoryId}
+                keyword={keyword}
+                categories={categories}
+              />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-0">
+              <PictureAssetsTable assets={assets.list} categories={categories} />
+              <div className="px-4 pb-4">
+                <PictureLibraryPagination
+                  pagination={assets.pagination}
+                  status={status}
+                  categoryId={categoryId}
+                  keyword={keyword}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle>分类管理</CardTitle>
-            <CardDescription>
-              已停用 {summary.inactiveCategories} 个，启用中的分类会提供给小程序端展示。
-            </CardDescription>
-          </div>
-          <Badge variant="outline">共 {categories.length} 个</Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          <PictureCategoryTable categories={categories} assets={assets.list} />
-        </CardContent>
-      </Card>
+        <TabsContent value="categories" className="mt-0">
+          <Card>
+            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle>分类管理</CardTitle>
+                <CardDescription>
+                  已停用 {summary.inactiveCategories} 个，启用中的分类会提供给小程序端展示。
+                </CardDescription>
+              </div>
+              <Badge variant="outline">共 {categories.length} 个</Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <PictureCategoryTable categories={categories} assets={assets.list} />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>评论治理</CardTitle>
-              <CardDescription>
-                本页可见 {summary.currentVisibleComments} 条，已隐藏 {summary.currentHiddenComments} 条。
-              </CardDescription>
-            </div>
-            <Badge variant="outline">共 {comments.pagination.total} 条</Badge>
-          </div>
-          <PictureCommentFilters
-            assetPage={page}
-            assetStatus={status}
-            categoryId={categoryId}
-            assetKeyword={keyword}
-            commentStatus={commentStatus}
-            commentKeyword={commentKeyword}
-          />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-0">
-          <PictureCommentsTable comments={comments.list} />
-          <div className="px-4 pb-4">
-            <PictureCommentPagination
-              pagination={comments.pagination}
-              assetPage={page}
-              assetStatus={status}
-              categoryId={categoryId}
-              assetKeyword={keyword}
-              commentStatus={commentStatus}
-              commentKeyword={commentKeyword}
-            />
-          </div>
-        </CardContent>
-      </Card>
+        <TabsContent value="comments" className="mt-0">
+          <Card>
+            <CardHeader className="flex flex-col gap-3">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <CardTitle>评论治理</CardTitle>
+                  <CardDescription>
+                    本页可见 {summary.currentVisibleComments} 条，已隐藏 {summary.currentHiddenComments} 条。
+                  </CardDescription>
+                </div>
+                <Badge variant="outline">共 {comments.pagination.total} 条</Badge>
+              </div>
+              <PictureCommentFilters
+                assetPage={page}
+                assetStatus={status}
+                categoryId={categoryId}
+                assetKeyword={keyword}
+                commentStatus={commentStatus}
+                commentKeyword={commentKeyword}
+              />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 p-0">
+              <PictureCommentsTable comments={comments.list} />
+              <div className="px-4 pb-4">
+                <PictureCommentPagination
+                  pagination={comments.pagination}
+                  assetPage={page}
+                  assetStatus={status}
+                  categoryId={categoryId}
+                  assetKeyword={keyword}
+                  commentStatus={commentStatus}
+                  commentKeyword={commentKeyword}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="health" className="mt-0">
+          <PictureLibraryHealthCard health={health} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

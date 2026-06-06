@@ -98,12 +98,12 @@ export function PictureLibraryHealthCard({
       hint: "进入人工治理池",
       tone: metrics?.pending_comment_total ? "warning" : "default",
       icon: MessageSquareWarning,
-      href: "/platform/picture-library?comment_status=pending",
+      href: "/platform/picture-library?tab=comments&comment_status=pending",
     },
     {
       label: "缺失规格图片",
       value: metrics?.missing_variant_asset_total ?? 0,
-      hint: "thumb / cover / large",
+      hint: "thumb / cover / large / detail",
       tone: metrics?.missing_variant_asset_total ? "warning" : "default",
       icon: ImageOff,
     },
@@ -130,7 +130,7 @@ export function PictureLibraryHealthCard({
             {metrics?.issue_total ? "需要处理" : "状态正常"}
           </Badge>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/platform/picture-library?comment_status=pending">处理评论</Link>
+            <Link href="/platform/picture-library?tab=comments&comment_status=pending">处理评论</Link>
           </Button>
         </div>
       </CardHeader>

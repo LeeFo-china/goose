@@ -31,6 +31,7 @@ export function buildPictureCommentHref(input: {
   commentKeyword?: string;
 }) {
   const query = new URLSearchParams();
+  query.set("tab", "comments");
   if (input.assetPage && input.assetPage > 1) query.set("page", String(input.assetPage));
   if (input.assetStatus && input.assetStatus !== "all") query.set("status", input.assetStatus);
   if (input.categoryId && input.categoryId !== "all") query.set("category_id", input.categoryId);
@@ -42,8 +43,7 @@ export function buildPictureCommentHref(input: {
     query.set("comment_status", input.commentStatus);
   }
   if (input.commentKeyword) query.set("comment_keyword", input.commentKeyword);
-  const value = query.toString();
-  return value ? `/platform/picture-library?${value}` : "/platform/picture-library";
+  return `/platform/picture-library?${query.toString()}`;
 }
 
 export function PictureCommentFilters({
