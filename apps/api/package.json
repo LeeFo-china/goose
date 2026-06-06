@@ -26,6 +26,7 @@
     "property-location:backfill": "bun --env-file=.env src/scripts/property-location-backfill.ts",
     "location-context:cleanup": "bun --env-file=.env src/scripts/location-context-cleanup.ts",
     "picture-library:import": "bun --env-file=.env src/scripts/picture-library-import.ts",
+    "picture-library:health-check": "bun --env-file=.env src/scripts/picture-library-health-check.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",

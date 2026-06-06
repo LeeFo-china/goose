@@ -106,3 +106,40 @@ export type PictureCommentListData = {
     totalPages: number;
   };
 };
+
+export type PictureLibraryHealthIssue = {
+  type:
+    | "missing_variant"
+    | "uncategorized_asset"
+    | "category_without_cover"
+    | "comment_count_mismatch";
+  severity: "warning" | "danger";
+  resource_type: "asset" | "category";
+  resource_id: string;
+  resource_label: string;
+  detail: string;
+};
+
+export type PictureLibraryHealthReport = {
+  generated_at: string;
+  metrics: {
+    category_total: number;
+    active_category_total: number;
+    inactive_category_total: number;
+    asset_total: number;
+    published_asset_total: number;
+    draft_asset_total: number;
+    hidden_asset_total: number;
+    deleted_asset_total: number;
+    pending_comment_total: number;
+    visible_comment_total: number;
+    hidden_comment_total: number;
+    deleted_comment_total: number;
+    missing_variant_asset_total: number;
+    uncategorized_asset_total: number;
+    category_without_cover_total: number;
+    comment_count_mismatch_asset_total: number;
+    issue_total: number;
+  };
+  issues: PictureLibraryHealthIssue[];
+};

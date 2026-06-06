@@ -9,6 +9,7 @@ import {
 import { PictureCommentsTable } from "@/components/picture-library/picture-comments-table";
 import { PictureAssetsTable } from "@/components/picture-library/picture-assets-table";
 import { PictureCategoryTable } from "@/components/picture-library/picture-category-table";
+import { PictureLibraryHealthCard } from "@/components/picture-library/picture-library-health-card";
 import {
   PictureLibraryFilters,
   PictureLibraryPagination,
@@ -17,6 +18,7 @@ import type {
   PictureAssetListData,
   PictureCategoryRecord,
   PictureCommentListData,
+  PictureLibraryHealthReport,
 } from "@/components/picture-library/picture-library-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,7 +106,7 @@ async function loadPictureLibraryData(input: {
     list: [],
     pagination: { page: input.commentPage, pageSize: 10, total: 0, totalPages: 0 },
   };
-  const [categories, assets, comments] = await Promise.all([
+  const [categories, assets, comments, health] = await Promise.all([
     requestPlatformData<PictureCategoryRecord[]>("/platform/picture-library/categories", []),
     requestPlatformData<PictureAssetListData>(
       `/platform/picture-library/assets?${buildAssetQuery(input)}`,
@@ -118,8 +120,12 @@ async function loadPictureLibraryData(input: {
       })}`,
       emptyComments,
     ),
+    requestPlatformData<PictureLibraryHealthReport | null>(
+      "/platform/picture-library/health?issue_limit=20",
+      null,
+    ),
   ]);
-  return { categories, assets, comments, error: null as string | null };
+  return { categories, assets, comments, health, error: null as string | null };
 }
 
 function summarize(input: {
@@ -164,6 +170,7 @@ export default async function PlatformPictureLibraryPage({
     list: [],
     pagination: { page: commentPage, pageSize: 10, total: 0, totalPages: 0 },
   };
+  let health: PictureLibraryHealthReport | null = null;
   let error = hasPlatformAccess ? null : "当前账号不是平台超管，无法访问图片资料库";
 
   if (hasPlatformAccess) {
@@ -180,6 +187,7 @@ export default async function PlatformPictureLibraryPage({
       categories = data.categories;
       assets = data.assets;
       comments = data.comments;
+      health = data.health;
     } catch (err) {
       error = err instanceof Error ? err.message : "图片资料库加载失败";
     }
@@ -232,6 +240,8 @@ export default async function PlatformPictureLibraryPage({
           </CardHeader>
         </Card>
       </div>
+
+      <PictureLibraryHealthCard health={health} />
 
       <Card>
         <CardHeader className="flex flex-col gap-3">

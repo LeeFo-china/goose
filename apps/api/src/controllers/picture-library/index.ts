@@ -6,10 +6,12 @@ import {
   PictureAssetListQuerySchema,
   PictureCategoryListQuerySchema,
   PictureCommentListQuerySchema,
+  PictureLibraryHealthQuerySchema,
   PictureLibraryIdParamsSchema,
   UpdatePictureAssetSchema,
   UpdatePictureCategorySchema,
 } from "@/schema/picture-library";
+import { pictureLibraryHealthService } from "@/services/picture-library-health";
 import { pictureLibraryService } from "@/services/picture-library";
 import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -120,6 +122,18 @@ class PictureLibraryController extends PlatformBaseController {
     const queryResult = PictureCommentListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await pictureLibraryService.listComments(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/picture-library/health")
+  async getHealthReport(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const queryResult = PictureLibraryHealthQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const data = await pictureLibraryHealthService.buildReport({
+      authContext,
+      issueLimit: queryResult.data.issue_limit,
+    });
     return ResponseHandler.success(data);
   }
 

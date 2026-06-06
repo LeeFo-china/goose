@@ -75,6 +75,15 @@ export const PictureCommentListQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
 });
 
+export const PictureLibraryHealthQuerySchema = z.object({
+  issue_limit: z.coerce.number()
+    .int("异常数量必须是整数")
+    .min(1, "异常数量必须大于 0")
+    .max(100, "异常数量不能超过 100")
+    .optional()
+    .default(20),
+});
+
 const CategoryIdsSchema = z.array(z.uuid("无效的分类 ID")).max(20, "单张图片最多关联 20 个分类");
 
 export const CreatePictureAssetSchema = z.object({
@@ -104,5 +113,6 @@ export type CreatePictureCategoryInput = z.infer<typeof CreatePictureCategorySch
 export type UpdatePictureCategoryInput = z.infer<typeof UpdatePictureCategorySchema>;
 export type PictureAssetListQuery = z.infer<typeof PictureAssetListQuerySchema>;
 export type PictureCommentListQuery = z.infer<typeof PictureCommentListQuerySchema>;
+export type PictureLibraryHealthQuery = z.infer<typeof PictureLibraryHealthQuerySchema>;
 export type CreatePictureAssetInput = z.infer<typeof CreatePictureAssetSchema>;
 export type UpdatePictureAssetInput = z.infer<typeof UpdatePictureAssetSchema>;

@@ -785,6 +785,43 @@ picture-library-health-check script
 | API 检查 | `bun run api:check` 通过 |
 | Admin 检查 | `pnpm --dir apps/admin check` 通过 |
 
+### 阶段 7C 执行记录：健康检查与运营看板
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 新增图片资料库健康检查服务：
+  - 缺失图片规格检查：`cover` / `thumb` / `large`。
+  - 未绑定分类图片检查。
+  - 启用分类未设置封面检查。
+  - 图片 `comment_count` 与实际可见评论数一致性检查。
+  - 评论状态统计：待处理、可见、隐藏、删除。
+- 新增平台超管接口：
+  - `GET /platform/picture-library/health?issue_limit=20`
+- 新增 CLI 脚本：
+  - `bun run api:picture-library-health-check -- --limit 5`
+  - `pnpm --dir apps/api picture-library:health-check -- --limit 5`
+- admin 图片资料库页新增“运营健康”卡片：
+  - 展示治理异常、待处理评论、缺失规格图片、启用分类。
+  - 展示前 6 条异常摘要。
+  - 待处理评论指标可跳转到评论治理筛选。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 健康检查脚本 | 可输出 JSON 报告 |
+| 健康接口 | 200，返回 `metrics` 和 `issues` |
+| 当前治理异常 | 7 |
+| 缺失规格图片 | 5 |
+| 启用分类无封面 | 1 |
+| 评论计数不一致 | 1 |
+| 待处理评论 | 0 |
+| API 检查 | `bun run api:check` 通过 |
+| Admin 检查 | `pnpm --dir apps/admin check` 通过 |
+| Diff 格式检查 | `git diff --check` 通过 |
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
