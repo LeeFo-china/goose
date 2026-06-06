@@ -822,6 +822,35 @@ picture-library-health-check script
 | Admin 检查 | `pnpm --dir apps/admin check` 通过 |
 | Diff 格式检查 | `git diff --check` 通过 |
 
+### 阶段 7D 执行记录：治理异常修复动作
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 新增评论计数修复接口：
+  - `POST /platform/picture-library/health/assets/:id/repair-comment-count`
+  - 按实际 `visible` 且未删除评论数重算单张图片 `comment_count`。
+- 新增分类封面快捷修复接口：
+  - `POST /platform/picture-library/health/categories/:id/set-cover-from-first-published`
+  - 选择分类下第一张已发布且未删除图片作为分类封面。
+- admin 运营健康卡片新增修复按钮：
+  - `comment_count_mismatch` 显示“修复计数”。
+  - `category_without_cover` 显示“设为首图封面”。
+  - `missing_variant` 只展示提示，不自动生成规格。
+- 两类修复都会清理 visitor 图片库公开缓存，并写入平台审计日志。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 评论计数修复 | `法式 14` 从 10 修复为 12 |
+| 分类封面修复 | `法式` 封面设为 `法式 14` |
+| 健康异常总数 | 7 -> 5 |
+| 启用分类无封面 | 1 -> 0 |
+| 评论计数不一致 | 1 -> 0 |
+| 剩余异常 | 5 个缺失 `thumb/large` 规格 |
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。

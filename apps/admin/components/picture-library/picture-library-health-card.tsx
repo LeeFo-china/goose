@@ -1,15 +1,24 @@
+"use client";
+
 import Link from "next/link";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
+  ImagePlus,
   ImageOff,
+  Loader2,
   MessageSquareWarning,
   ShieldCheck,
   Tags,
+  Wrench,
 } from "lucide-react";
+import { requestPictureLibraryJson } from "@/components/picture-library/picture-library-requests";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 import type {
   PictureLibraryHealthIssue,
   PictureLibraryHealthReport,
@@ -41,6 +50,26 @@ function issueTypeLabel(type: PictureLibraryHealthIssue["type"]) {
     case "comment_count_mismatch":
       return "计数不一致";
   }
+}
+
+function repairAction(issue: PictureLibraryHealthIssue) {
+  if (issue.type === "comment_count_mismatch" && issue.resource_type === "asset") {
+    return {
+      label: "修复计数",
+      path: `/platform/picture-library/health/assets/${issue.resource_id}/repair-comment-count`,
+      icon: Wrench,
+      fallbackMessage: "修复评论计数失败",
+    };
+  }
+  if (issue.type === "category_without_cover" && issue.resource_type === "category") {
+    return {
+      label: "设为首图封面",
+      path: `/platform/picture-library/health/categories/${issue.resource_id}/set-cover-from-first-published`,
+      icon: ImagePlus,
+      fallbackMessage: "设置分类封面失败",
+    };
+  }
+  return null;
 }
 
 function metricClassName(tone: MetricItem["tone"]) {
@@ -151,7 +180,10 @@ export function PictureLibraryHealthCard({
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">{issue.detail}</div>
                   </div>
-                  <span className="text-xs text-muted-foreground">{issue.resource_type}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{issue.resource_type}</span>
+                    <HealthIssueRepairButton issue={issue} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -163,5 +195,42 @@ export function PictureLibraryHealthCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function HealthIssueRepairButton({ issue }: { issue: PictureLibraryHealthIssue }) {
+  const action = repairAction(issue);
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  if (!action) return null;
+  const repair = action;
+  const Icon = action.icon;
+
+  function run() {
+    if (pending) return;
+    setError("");
+    startTransition(async () => {
+      try {
+        await requestPictureLibraryJson(repair.path, {
+          method: "POST",
+          fallbackMessage: repair.fallbackMessage,
+        });
+        refreshAfterDialogClose(router);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : repair.fallbackMessage);
+      }
+    });
+  }
+
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={run}>
+        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Icon data-icon="inline-start" />}
+        {repair.label}
+      </Button>
+      {error ? <span className="max-w-36 text-right text-xs text-destructive">{error}</span> : null}
+    </span>
   );
 }

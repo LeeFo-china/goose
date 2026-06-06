@@ -137,6 +137,30 @@ class PictureLibraryController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  @Post("/platform/picture-library/health/assets/:id/repair-comment-count")
+  async repairAssetCommentCount(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const data = await pictureLibraryHealthService.repairAssetCommentCount(
+      paramsResult.data.id,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/picture-library/health/categories/:id/set-cover-from-first-published")
+  async setCategoryCoverFromFirstPublishedAsset(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const data = await pictureLibraryHealthService.setCategoryCoverFromFirstPublishedAsset(
+      paramsResult.data.id,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Post("/platform/picture-library/comments/:id/hide")
   async hideComment(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformAdminContext(request);

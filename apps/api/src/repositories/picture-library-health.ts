@@ -104,6 +104,50 @@ class PictureLibraryHealthRepository {
     };
   }
 
+  async repairAssetCommentCount(assetId: string) {
+    const asset = await this.findActiveAsset(assetId);
+    if (!asset) throw Errors.notFound("图片不存在");
+    const visibleCommentCount = await this.countVisibleComments(assetId);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_assets")
+      .update({ comment_count: visibleCommentCount })
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .select("id,title,status,comment_count,deleted_at")
+      .maybeSingle();
+    if (error) throw Errors.dbError("修复图片评论计数失败", error);
+    if (!data) throw Errors.notFound("图片不存在");
+
+    return {
+      asset: data as PictureAssetRow,
+      previous_comment_count: asset.comment_count,
+      repaired_comment_count: visibleCommentCount,
+    };
+  }
+
+  async setCategoryCoverFromFirstPublishedAsset(categoryId: string) {
+    const category = await this.findActiveCategory(categoryId);
+    if (!category) throw Errors.notFound("图片分类不存在或未启用");
+    const asset = await this.findFirstPublishedAssetByCategory(categoryId);
+    if (!asset) throw Errors.business(409, "分类下没有已发布图片", "PICTURE_CATEGORY_NO_PUBLISHED_ASSET");
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_categories")
+      .update({ cover_asset_id: asset.id })
+      .eq("id", categoryId)
+      .eq("status", "active")
+      .select("id,name,status,cover_asset_id")
+      .maybeSingle();
+    if (error) throw Errors.dbError("设置分类封面失败", error);
+    if (!data) throw Errors.notFound("图片分类不存在或未启用");
+
+    return {
+      category: data as PictureCategoryRow,
+      cover_asset: asset,
+      previous_cover_asset_id: category.cover_asset_id,
+    };
+  }
+
   private async listCategories() {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_categories")
@@ -147,6 +191,61 @@ class PictureLibraryHealthRepository {
       .range(0, MAX_FETCH_ROWS - 1);
     if (error) throw Errors.dbError("查询图片资料库评论健康数据失败", error);
     return (data || []) as PictureCommentRow[];
+  }
+
+  private async findActiveAsset(assetId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_assets")
+      .select("id,title,status,comment_count,deleted_at")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .neq("status", "deleted")
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询图片失败", error);
+    return (data as PictureAssetRow | null) ?? null;
+  }
+
+  private async countVisibleComments(assetId: string) {
+    const { count, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_comments")
+      .select("id", { count: "exact", head: true })
+      .eq("asset_id", assetId)
+      .eq("status", "visible")
+      .is("deleted_at", null);
+    if (error) throw Errors.dbError("统计图片可见评论失败", error);
+    return count || 0;
+  }
+
+  private async findActiveCategory(categoryId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_categories")
+      .select("id,name,status,cover_asset_id")
+      .eq("id", categoryId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询图片分类失败", error);
+    return (data as PictureCategoryRow | null) ?? null;
+  }
+
+  private async findFirstPublishedAssetByCategory(categoryId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_categories")
+      .select("picture_assets(id,title,status,comment_count,deleted_at)")
+      .eq("category_id", categoryId)
+      .order("sort_order", { ascending: true })
+      .limit(20);
+    if (error) throw Errors.dbError("查询分类首图失败", error);
+
+    const rows = (data || []) as unknown as Array<{
+      picture_assets: PictureAssetRow | PictureAssetRow[] | null;
+    }>;
+    for (const row of rows) {
+      const asset = Array.isArray(row.picture_assets)
+        ? row.picture_assets[0] ?? null
+        : row.picture_assets;
+      if (asset && asset.status === "published" && !asset.deleted_at) return asset;
+    }
+    return null;
   }
 
   private buildIssues(input: {

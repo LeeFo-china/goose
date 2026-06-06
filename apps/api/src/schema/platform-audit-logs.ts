@@ -32,6 +32,8 @@ export const PlatformAuditLogActionSchema = z.enum([
   "picture_comment_hide",
   "picture_comment_show",
   "picture_comment_delete",
+  "picture_health_comment_count_repair",
+  "picture_health_category_cover_repair",
   "wechat_rebind_approve",
   "wechat_rebind_reject",
 ]);
