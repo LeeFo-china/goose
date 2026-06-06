@@ -851,6 +851,41 @@ picture-library-health-check script
 | 评论计数不一致 | 1 -> 0 |
 | 剩余异常 | 5 个缺失 `thumb/large` 规格 |
 
+### 阶段 7E 执行记录：图片变体补齐脚本
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 新增图片变体补齐脚本：
+  - `bun run api:picture-library-variants-backfill -- --dry-run`
+  - `bun run api:picture-library-variants-backfill -- --apply --limit 1`
+  - `pnpm --dir apps/api picture-library:variants-backfill -- --dry-run`
+- 脚本能力：
+  - 扫描缺失 `thumb` / `large` 的图片。
+  - 优先使用 `original`，其次使用 `cover` 作为源图。
+  - 使用 ImageMagick 生成 webp 变体。
+  - 通过统一平台文件存储服务上传到 COS。
+  - 写入 `platform_file_objects` 和 `picture_asset_variants`。
+  - 支持 `--dry-run`、`--apply`、`--limit`、`--variants thumb,large`。
+- 源图读取：
+  - 优先通过 COS SDK 直读对象，避免公开 URL 或签名 URL 403。
+  - COS 配置不可用时再回退到后端 URL resolver。
+- 写库策略：
+  - 变体写入使用 `Bun.SQL` 直连，避免 Supabase JS 写操作偶发挂起。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 初始 dry-run | 5 张图片，缺失 10 个变体 |
+| 小批量 apply | `法式 14` 补齐 `thumb` / `large` |
+| 小批量后健康异常 | 5 -> 4 |
+| 全量 apply | 剩余 4 张图片补齐 8 个变体 |
+| 最终 dry-run | `candidate_asset_count=0` |
+| 最终健康检查 | `issue_total=0` |
+| 失败重试清理 | 2 条未挂接文件对象已标记 `deleted` |
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。

@@ -42,6 +42,7 @@
     "api:tenant-address-coverage": "cd apps/api && bun --env-file=.env src/scripts/tenant-address-coverage-check.ts",
     "api:picture-library-import": "cd apps/api && bun --env-file=.env src/scripts/picture-library-import.ts",
     "api:picture-library-health-check": "cd apps/api && bun --env-file=.env src/scripts/picture-library-health-check.ts",
+    "api:picture-library-variants-backfill": "cd apps/api && bun --env-file=.env src/scripts/picture-library-variants-backfill.ts",
     "check:permission-boundaries": "bun scripts/check-permission-boundaries.ts",
     "audit:supabase-writes": "bun scripts/audit-supabase-writes.ts",
     "seed:tenant:phase3": "bun scripts/seed-phase3-tenant-verification.ts",
