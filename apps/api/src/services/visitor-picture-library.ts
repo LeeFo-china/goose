@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import {
   visitorPictureLibraryRepository,
+  type VisitorPictureInteractionState,
   type VisitorPictureAssetRecord,
   type VisitorPictureVariantRow,
 } from "@/repositories/visitor-picture-library";
@@ -40,21 +41,53 @@ class VisitorPictureLibraryService {
     });
   }
 
-  async listAssets(query: VisitorPictureAssetListQuery) {
+  async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
     const page = await visitorPictureLibraryRepository.listAssets(query);
+    const states = await visitorPictureLibraryRepository.findInteractionStates(
+      page.list.map((asset) => asset.id),
+      visitorId,
+    );
     return {
-      list: page.list.map((asset) => this.toAssetListItem(asset)),
+      list: page.list.map((asset) => this.toAssetListItem(asset, states.get(asset.id))),
       pagination: page.pagination,
     };
   }
 
-  async getAssetDetail(id: string) {
+  async getAssetDetail(id: string, visitorId: string | null = null) {
     const asset = await visitorPictureLibraryRepository.findAssetDetail(id);
     if (!asset) throw Errors.notFound("图片不存在或未发布");
-    return this.toAssetDetail(asset);
+    const states = await visitorPictureLibraryRepository.findInteractionStates([asset.id], visitorId);
+    return this.toAssetDetail(asset, states.get(asset.id));
   }
 
-  private toAssetListItem(asset: VisitorPictureAssetRecord) {
+  async setLike(input: {
+    assetId: string;
+    visitorId: string;
+    liked: boolean;
+  }) {
+    return visitorPictureLibraryRepository.setLike(
+      input.assetId,
+      input.visitorId,
+      input.liked,
+    );
+  }
+
+  async setFavorite(input: {
+    assetId: string;
+    visitorId: string;
+    favorited: boolean;
+  }) {
+    return visitorPictureLibraryRepository.setFavorite(
+      input.assetId,
+      input.visitorId,
+      input.favorited,
+    );
+  }
+
+  private toAssetListItem(
+    asset: VisitorPictureAssetRecord,
+    state: VisitorPictureInteractionState | undefined,
+  ) {
     return {
       id: asset.id,
       title: asset.title,
@@ -63,6 +96,8 @@ class VisitorPictureLibraryService {
       height: asset.height,
       like_count: asset.like_count,
       favorite_count: asset.favorite_count,
+      liked_by_me: state?.likedByMe ?? false,
+      favorited_by_me: state?.favoritedByMe ?? false,
       comment_count: asset.comment_count,
       share_count: asset.share_count,
       image: this.toImage(asset, LIST_IMAGE_VARIANTS),
@@ -72,9 +107,12 @@ class VisitorPictureLibraryService {
     };
   }
 
-  private toAssetDetail(asset: VisitorPictureAssetRecord) {
+  private toAssetDetail(
+    asset: VisitorPictureAssetRecord,
+    state: VisitorPictureInteractionState | undefined,
+  ) {
     return {
-      ...this.toAssetListItem(asset),
+      ...this.toAssetListItem(asset, state),
       image: this.toImage(asset, DETAIL_IMAGE_VARIANTS),
       images: {
         thumb: this.toVariantImage(asset.variants.find((item) => item.variant === "thumb") ?? null),

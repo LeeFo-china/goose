@@ -41,6 +41,23 @@ export type VisitorPictureAssetRecord = VisitorPictureAssetRow & {
   categories: VisitorPictureCategoryRow[];
 };
 
+export type VisitorPictureInteractionState = {
+  likedByMe: boolean;
+  favoritedByMe: boolean;
+};
+
+export type VisitorPictureLikeMutationResult = {
+  asset_id: string;
+  liked: boolean;
+  like_count: number;
+};
+
+export type VisitorPictureFavoriteMutationResult = {
+  asset_id: string;
+  favorited: boolean;
+  favorite_count: number;
+};
+
 class VisitorPictureLibraryRepository {
   async listCategories() {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -143,6 +160,68 @@ class VisitorPictureLibraryRepository {
     return result;
   }
 
+  async findInteractionStates(assetIds: string[], visitorId: string | null) {
+    const result = new Map<string, VisitorPictureInteractionState>();
+    for (const assetId of assetIds) {
+      result.set(assetId, { likedByMe: false, favoritedByMe: false });
+    }
+    if (!visitorId || assetIds.length === 0) return result;
+
+    const [likes, favorites] = await Promise.all([
+      this.findLikedAssetIds(assetIds, visitorId),
+      this.findFavoritedAssetIds(assetIds, visitorId),
+    ]);
+    for (const assetId of likes) {
+      result.set(assetId, {
+        ...(result.get(assetId) || { likedByMe: false, favoritedByMe: false }),
+        likedByMe: true,
+      });
+    }
+    for (const assetId of favorites) {
+      result.set(assetId, {
+        ...(result.get(assetId) || { likedByMe: false, favoritedByMe: false }),
+        favoritedByMe: true,
+      });
+    }
+    return result;
+  }
+
+  async setLike(assetId: string, visitorId: string, liked: boolean) {
+    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (name: string, params: Record<string, unknown>) => Promise<{
+        data: VisitorPictureLikeMutationResult[] | null;
+        error: { code?: string; message?: string } | null;
+      }>;
+    }).rpc("picture_asset_set_like", {
+      p_asset_id: assetId,
+      p_visitor_id: visitorId,
+      p_liked: liked,
+    });
+    if (error?.code === "P0002") throw Errors.notFound("图片不存在或未发布");
+    if (error) throw Errors.dbError("更新图片点赞失败", error);
+    const result = data?.[0];
+    if (!result) throw Errors.badRequest("更新图片点赞失败");
+    return result;
+  }
+
+  async setFavorite(assetId: string, visitorId: string, favorited: boolean) {
+    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (name: string, params: Record<string, unknown>) => Promise<{
+        data: VisitorPictureFavoriteMutationResult[] | null;
+        error: { code?: string; message?: string } | null;
+      }>;
+    }).rpc("picture_asset_set_favorite", {
+      p_asset_id: assetId,
+      p_visitor_id: visitorId,
+      p_favorited: favorited,
+    });
+    if (error?.code === "P0002") throw Errors.notFound("图片不存在或未发布");
+    if (error) throw Errors.dbError("更新图片收藏失败", error);
+    const result = data?.[0];
+    if (!result) throw Errors.badRequest("更新图片收藏失败");
+    return result;
+  }
+
   private async findActiveCategory(id: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_categories")
@@ -224,6 +303,26 @@ class VisitorPictureLibraryRepository {
       result.set(item.category_id, (result.get(item.category_id) || 0) + 1);
     }
     return result;
+  }
+
+  private async findLikedAssetIds(assetIds: string[], visitorId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_likes")
+      .select("asset_id")
+      .in("asset_id", assetIds)
+      .eq("visitor_id", visitorId);
+    if (error) throw Errors.dbError("查询图片点赞状态失败", error);
+    return new Set((data || []).map((item) => item.asset_id));
+  }
+
+  private async findFavoritedAssetIds(assetIds: string[], visitorId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_favorites")
+      .select("asset_id")
+      .in("asset_id", assetIds)
+      .eq("visitor_id", visitorId);
+    if (error) throw Errors.dbError("查询图片收藏状态失败", error);
+    return new Set((data || []).map((item) => item.asset_id));
   }
 
   private toAssetPage(

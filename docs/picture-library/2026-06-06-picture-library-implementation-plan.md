@@ -488,6 +488,33 @@ DELETE /visitor/picture-library/assets/:id/favorite
 - 未带 visitor token 的写操作返回鉴权错误。
 - 热点图片重复点击不会造成计数负数。
 
+### 执行记录
+
+执行日期：2026-06-06
+
+本轮已完成：
+
+- 新增点赞接口：`POST /visitor/picture-library/assets/:id/like`。
+- 新增取消点赞接口：`DELETE /visitor/picture-library/assets/:id/like`。
+- 新增收藏接口：`POST /visitor/picture-library/assets/:id/favorite`。
+- 新增取消收藏接口：`DELETE /visitor/picture-library/assets/:id/favorite`。
+- 图片列表和详情支持返回 `liked_by_me`、`favorited_by_me`。
+- 写操作必须携带 visitor session token，未登录返回 401。
+- 新增数据库 RPC 原子维护点赞/收藏计数，重复操作幂等，取消时使用 `greatest(count - 1, 0)` 防止负数。
+- 小程序对接文档已落在 `docs/picture-library/2026-06-06-picture-library-miniprogram-stage4-interactions.md`。
+
+验收结果：
+
+| 项目 | 结果 |
+| --- | --- |
+| `bun run api:check` | 通过 |
+| `supabase db push --yes` | 已应用阶段 4 RPC migration |
+| 未登录点赞 | 401 |
+| 重复点赞 | `like_count` 保持 1 |
+| 重复取消点赞 | `like_count` 保持 0 |
+| 重复收藏 | `favorite_count` 保持 1 |
+| 重复取消收藏 | `favorite_count` 保持 0 |
+
 ## 阶段 5：评论与评论图片上传
 
 ### 目标
