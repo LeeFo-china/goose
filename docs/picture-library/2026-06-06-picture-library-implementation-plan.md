@@ -1264,7 +1264,13 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-stage3-integration.m
 docs/picture-library/2026-06-06-picture-library-miniprogram-stage4-interactions.md
 docs/picture-library/2026-06-06-picture-library-miniprogram-stage5-comments.md
 docs/picture-library/2026-06-06-picture-library-miniprogram-stage6-share.md
+docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integration.md
 ```
+
+补充说明：
+
+- `detail-3-4` 文档为图片详情页统一比例展示图契约。
+- 当前状态是后端待实现、小程序待对接；后端上线 `images.detail` 后再进入联调。
 
 ## 推荐执行顺序
 
