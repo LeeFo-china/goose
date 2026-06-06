@@ -927,6 +927,38 @@ picture-library-health-check script
 4. `bun run api:picture-library-health-check -- --limit 50`
 5. 小批量无异常后再执行全量 apply 与全量 variants backfill。
 
+### 阶段 7G 执行记录：全量导入小批量实操与回归验收
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 执行 20 张小批量导入实操：
+  - `bun run api:picture-library-import -- --apply --limit 20`
+- 执行小批量变体补齐：
+  - `bun run api:picture-library-variants-backfill -- --apply --limit 20`
+- 执行健康检查、visitor 列表、平台健康接口回归。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 导入前 dry-run | 20 张源图，5 张已存在，15 张待上传 |
+| 小批量导入 | 新增 15 张，已存在 5 张，失败 0 |
+| 变体补齐 dry-run | 15 张待补齐，30 个变体 |
+| 小批量变体补齐 | 上传 30 个变体，失败 0 |
+| 健康检查 | 20 张图片，`issue_total=0` |
+| 变体补齐复跑 dry-run | `candidate_asset_count=0` |
+| visitor 列表 | 总数 20，首图返回 `thumb` URL |
+| 平台健康接口 | HTTP 200，`issue_total=0` |
+| API 检查 | `bun run api:check` 通过 |
+| Admin 检查 | `pnpm --dir apps/admin check` 通过 |
+
+说明：
+
+- 这一步只导入 `法式` 分类前 20 张，没有执行 360 张全量导入。
+- 小批量链路已覆盖：源图上传、资产写入、分类关系、变体生成、COS 上传、健康检查、visitor 展示。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
