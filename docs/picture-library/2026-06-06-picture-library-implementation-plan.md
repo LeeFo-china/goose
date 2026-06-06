@@ -1147,6 +1147,44 @@ picture-library-health-check script
   导入逻辑会复用同一资产并补充新的分类关系。
 - 下一批 offset 使用本批 dry-run 输出的 `batch.next_offset=220`。
 
+### 阶段 7M 执行记录：全量导入第六批与质量闭环
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 执行第六批素材 dry-run：
+  - `bun run api:picture-library-import -- --dry-run --offset 220 --limit 50`
+- 执行第六批真实导入：
+  - `bun run api:picture-library-import -- --apply --offset 220 --limit 50`
+- 执行本批变体补齐：
+  - `bun run api:picture-library-variants-backfill -- --apply --limit 50`
+- 对新导入分类执行封面回填：
+  - `原木` -> `原木 9`
+  - `ins风` -> `极简风 15`
+  - `欧式` -> `极简风 6`
+- 执行健康检查、变体复跑和 visitor 列表冒烟验证。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 导入 dry-run | 选中 50 张，已存在 22 张，待上传 28 张 |
+| 第六批导入 | 新增 28 张，已存在 22 张，失败 0 |
+| 变体补齐 dry-run | 28 张待补齐，56 个变体 |
+| 第六批变体补齐 | 上传 56 个变体，失败 0 |
+| 变体补齐复跑 dry-run | `candidate_asset_count=0`，`missing_variant_count=0` |
+| 分类封面回填 | 3 个新分类已设置封面 |
+| 健康检查 | 178 张图片，`missing_variant_asset_total=0`，`issue_total=0` |
+| 全量剩余 dry-run | 源图 360 张，已存在 341 张，待上传 19 张 |
+| visitor 列表 | 总数 178，首屏返回 `thumb` URL |
+
+说明：
+
+- `ins风` 和 `欧式` 分类首图复用了已有资产，原因是源素材存在重复 checksum；
+  导入逻辑会复用同一资产并补充新的分类关系。
+- 下一批 offset 使用本批 dry-run 输出的 `batch.next_offset=270`。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
