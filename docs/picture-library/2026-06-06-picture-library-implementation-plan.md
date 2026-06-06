@@ -641,6 +641,35 @@ GET  /visitor/picture-library/assets/:id
 - 分享事件写入成功。
 - 分享入口不依赖用户已选择装修公司。
 
+### 后端执行记录
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 图片详情接口返回 `share.title`、`share.image`、`share.path`。
+- `POST /visitor/picture-library/assets/:id/share-events` 分享事件写入。
+- 支持 `wechat_session`、`wechat_timeline`、`poster` 三种分享渠道。
+- 写入分享事件后更新图片 `share_count`，并清理公开详情缓存。
+
+后端验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 详情接口返回分享标题 | `share.title` 有值 |
+| 详情接口返回分享图 | `share.image.url` 有值 |
+| 详情接口返回分享路径 | `share.path` 有值 |
+| 未登录写分享事件 | 401 |
+| visitor token 写分享事件 | 返回事件 ID 和 `share_count` |
+| 非法分享渠道 | 400 |
+| 写入事件后重新查详情 | `share_count` 已增加 |
+
+小程序对接文档：
+
+```text
+docs/picture-library/2026-06-06-picture-library-miniprogram-stage6-share.md
+```
+
 ## 阶段 7：运营治理与质量优化
 
 ### 目标

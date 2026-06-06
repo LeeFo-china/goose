@@ -9,9 +9,11 @@ import {
   type VisitorPictureInteractionState,
   type VisitorPictureAssetRecord,
   type VisitorPictureVariantRow,
+  type VisitorPictureShareEventRecord,
 } from "@/repositories/visitor-picture-library";
 import type {
   CreateVisitorPictureCommentInput,
+  CreateVisitorPictureShareEventInput,
   VisitorPictureAssetListQuery,
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
@@ -19,6 +21,7 @@ import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
 const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
+const SHARE_IMAGE_VARIANTS = ["cover", "large", "thumb", "original"] as const;
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type PublicCacheEntry<TValue> = {
@@ -97,6 +100,20 @@ class VisitorPictureLibraryService {
     const comment = await visitorPictureCommentsRepository.create(input);
     this.clearPublicCache();
     return this.toComment(comment);
+  }
+
+  async recordShareEvent(input: {
+    assetId: string;
+    visitorId: string;
+    body: CreateVisitorPictureShareEventInput;
+  }) {
+    const event = await visitorPictureLibraryRepository.recordShareEvent(
+      input.assetId,
+      input.visitorId,
+      input.body.channel,
+    );
+    this.clearPublicCache();
+    return this.toShareEvent(event);
   }
 
   private async loadCategories() {
@@ -183,6 +200,11 @@ class VisitorPictureLibraryService {
         large: this.toVariantImage(asset.variants.find((item) => item.variant === "large") ?? null),
         original: this.toVariantImage(asset.variants.find((item) => item.variant === "original") ?? null),
       },
+      share: {
+        title: asset.title,
+        image: this.toImage(asset, SHARE_IMAGE_VARIANTS),
+        path: `/packageVisitor/pages/picture-library-detail/index?id=${asset.id}`,
+      },
     };
   }
 
@@ -247,6 +269,17 @@ class VisitorPictureLibraryService {
       height: fileObject.height,
       file_size: fileObject.size_bytes,
       mime_type: fileObject.mime_type,
+    };
+  }
+
+  private toShareEvent(event: VisitorPictureShareEventRecord) {
+    return {
+      id: event.id,
+      asset_id: event.asset_id,
+      visitor_id: event.visitor_id,
+      channel: event.channel,
+      share_count: event.share_count,
+      created_at: event.created_at,
     };
   }
 

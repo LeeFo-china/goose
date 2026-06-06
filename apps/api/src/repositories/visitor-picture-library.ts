@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import type { VisitorPictureAssetListQuery } from "@/schema/visitor-picture-library";
+import type {
+  CreateVisitorPictureShareEventInput,
+  VisitorPictureAssetListQuery,
+} from "@/schema/visitor-picture-library";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type VisitorPictureCategoryRow = {
@@ -56,6 +59,15 @@ export type VisitorPictureFavoriteMutationResult = {
   asset_id: string;
   favorited: boolean;
   favorite_count: number;
+};
+
+export type VisitorPictureShareEventRecord = {
+  id: string;
+  asset_id: string;
+  visitor_id: string | null;
+  channel: CreateVisitorPictureShareEventInput["channel"];
+  share_count: number;
+  created_at: string;
 };
 
 class VisitorPictureLibraryRepository {
@@ -222,6 +234,33 @@ class VisitorPictureLibraryRepository {
     return result;
   }
 
+  async recordShareEvent(
+    assetId: string,
+    visitorId: string,
+    channel: CreateVisitorPictureShareEventInput["channel"],
+  ) {
+    const asset = await this.findPublishedAssetCounter(assetId);
+    if (!asset) throw Errors.notFound("图片不存在或未发布");
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_asset_share_events")
+      .insert({
+        asset_id: assetId,
+        visitor_id: visitorId,
+        channel,
+      })
+      .select("id,asset_id,visitor_id,channel,created_at")
+      .maybeSingle();
+    if (error) throw Errors.dbError("记录图片分享事件失败", error);
+    if (!data) throw Errors.badRequest("记录图片分享事件失败");
+
+    const shareCount = await this.incrementShareCount(assetId, asset.share_count);
+    return {
+      ...(data as Omit<VisitorPictureShareEventRecord, "share_count">),
+      share_count: shareCount,
+    };
+  }
+
   private async findActiveCategory(id: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_categories")
@@ -231,6 +270,39 @@ class VisitorPictureLibraryRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("查询图片分类失败", error);
     return data;
+  }
+
+  private async findPublishedAssetCounter(assetId: string) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("picture_assets")
+      .select("id,share_count")
+      .eq("id", assetId)
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询图片失败", error);
+    return data as { id: string; share_count: number } | null;
+  }
+
+  private async incrementShareCount(assetId: string, currentCount: number) {
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 2_000);
+    try {
+      const nextCount = currentCount + 1;
+      const { data, error } = await SupabaseDB.getAdminClient()
+        .from("picture_assets")
+        .update({ share_count: nextCount })
+        .eq("id", assetId)
+        .select("share_count")
+        .abortSignal(abortController.signal)
+        .maybeSingle();
+      if (error) throw Errors.dbError("更新图片分享计数失败", error);
+      return Number(data?.share_count ?? nextCount);
+    } catch {
+      return currentCount;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async findAssetIdsByCategory(categoryId: string) {

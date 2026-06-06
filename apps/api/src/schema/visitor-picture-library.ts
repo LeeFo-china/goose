@@ -22,6 +22,15 @@ export const CreateVisitorPictureCommentSchema = z.object({
     .default([]),
 });
 
+export const CreateVisitorPictureShareEventSchema = z.object({
+  channel: z.enum(["wechat_session", "wechat_timeline", "poster"], {
+    message: "无效的分享渠道",
+  }),
+});
+
 export type VisitorPictureAssetListQuery = z.infer<typeof VisitorPictureAssetListQuerySchema>;
 export type VisitorPictureCommentListQuery = z.infer<typeof VisitorPictureCommentListQuerySchema>;
 export type CreateVisitorPictureCommentInput = z.infer<typeof CreateVisitorPictureCommentSchema>;
+export type CreateVisitorPictureShareEventInput = z.infer<
+  typeof CreateVisitorPictureShareEventSchema
+>;

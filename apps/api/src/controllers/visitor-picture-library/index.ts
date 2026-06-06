@@ -2,6 +2,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateVisitorPictureCommentSchema,
+  CreateVisitorPictureShareEventSchema,
   VisitorPictureAssetListQuerySchema,
   VisitorPictureAssetParamsSchema,
   VisitorPictureCommentListQuerySchema,
@@ -113,6 +114,23 @@ class VisitorPictureLibraryController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await visitorPictureLibraryService.createComment({
+      assetId: paramsResult.data.id,
+      visitorId,
+      body: bodyResult.data,
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/visitor/picture-library/assets/:id/share-events")
+  async recordShareEvent(request: FastifyRequest, reply: FastifyReply) {
+    const visitorId = this.getRequiredVisitorId(request);
+    const paramsResult = VisitorPictureAssetParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = CreateVisitorPictureShareEventSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await visitorPictureLibraryService.recordShareEvent({
       assetId: paramsResult.data.id,
       visitorId,
       body: bodyResult.data,
