@@ -343,11 +343,16 @@ class VisitorPictureLibraryRepository {
   private async findCategoriesByAssetIds(assetIds: string[]) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("picture_asset_categories")
-      .select("asset_id, picture_categories(id,name,slug,description,cover_asset_id,sort_order)")
-      .in("asset_id", assetIds);
+      .select("asset_id,sort_order,created_at, picture_categories(id,name,slug,description,cover_asset_id,sort_order)")
+      .in("asset_id", assetIds)
+      .order("asset_id", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
     if (error) throw Errors.dbError("查询图片分类失败", error);
     return ((data || []) as unknown as Array<{
       asset_id: string;
+      sort_order: number;
+      created_at: string;
       picture_categories: VisitorPictureCategoryRow | VisitorPictureCategoryRow[] | null;
     }>)
       .map((item) => ({

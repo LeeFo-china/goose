@@ -1312,6 +1312,43 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
 
 - `detail-3-4` 文档为图片详情页统一比例展示图契约。
 - 当前状态是后端已实现、小程序待对接；小程序可优先读取 `images.detail`。
+- `share-title` 文档为图片详情页分享标题契约。
+- 当前状态是后端已实现；小程序可优先使用后端 `share.title`。
+
+### 阶段 7P 执行记录：分享标题按分类生成
+
+状态：后端已实现，等待小程序按文档对接。
+
+后端改动：
+
+- `GET /visitor/picture-library/assets/:id`
+  - `data.share.title` 不再直接使用随机导入标题。
+  - 改为按图片主分类生成 `${分类名称}装修效果图`。
+  - 无分类兜底为 `装修效果图`。
+- 图片分类排序稳定化：
+  - 使用 `picture_asset_categories.sort_order ASC`。
+  - 同排序值下使用 `created_at ASC`。
+  - 当前没有显式主分类字段，排序后的第一个分类即主分类。
+- `POST /visitor/picture-library/assets/:id/share-events` 未改动。
+
+开发库验收结果：
+
+| 场景 | 图片 ID | 原标题 | 分类 | 分享标题 |
+| --- | --- | --- | --- | --- |
+| 单分类 | `791d57a9-83c5-4e3a-96aa-8bec7fab910f` | `原木 9` | `原木` | `原木装修效果图` |
+| 多分类 | `da3f792f-c6e7-4f65-9d8e-58672f812c6b` | `欧美 9` | `欧美`、`美式` | `欧美装修效果图` |
+
+验证：
+
+- `bun run api:check` 通过。
+- 详情接口抽查通过。
+- `categories` 字段继续返回，供小程序兜底。
+
+对接文档：
+
+```text
+docs/picture-library/2026-06-06-picture-library-share-title-backend.md
+```
 
 ## 推荐执行顺序
 

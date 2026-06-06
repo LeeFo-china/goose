@@ -22,6 +22,7 @@ import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
 const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
 const SHARE_IMAGE_VARIANTS = ["cover", "large", "thumb", "original"] as const;
+const DEFAULT_SHARE_TITLE = "装修效果图";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type PublicCacheEntry<TValue> = {
@@ -206,7 +207,7 @@ class VisitorPictureLibraryService {
         original: this.toVariantImage(asset.variants.find((item) => item.variant === "original") ?? null),
       },
       share: {
-        title: asset.title,
+        title: this.buildShareTitle(asset),
         image: this.toImage(asset, SHARE_IMAGE_VARIANTS),
         path: `/packageVisitor/pages/picture-library-detail/index?id=${asset.id}`,
       },
@@ -246,6 +247,13 @@ class VisitorPictureLibraryService {
       file_size: variant.file_size,
       mime_type: variant.mime_type,
     };
+  }
+
+  private buildShareTitle(asset: VisitorPictureAssetRecord) {
+    const categoryName = asset.categories[0]?.name.trim();
+    if (!categoryName) return DEFAULT_SHARE_TITLE;
+    if (categoryName.includes("效果图")) return categoryName;
+    return `${categoryName}${DEFAULT_SHARE_TITLE}`;
   }
 
   private toComment(comment: VisitorPictureCommentRecord) {
