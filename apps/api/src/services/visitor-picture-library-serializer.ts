@@ -16,8 +16,6 @@ const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
 const SHARE_IMAGE_VARIANTS = ["cover", "large", "thumb", "original"] as const;
 const DEFAULT_SHARE_TITLE = "装修效果图";
 
-export const NAVIGATION_SORT = "sort_order asc, created_at desc, id desc";
-
 export function toAssetCoverImage(asset: VisitorPictureAssetRecord | null) {
   return toImage(asset, LIST_IMAGE_VARIANTS);
 }

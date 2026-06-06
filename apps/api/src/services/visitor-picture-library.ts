@@ -18,7 +18,6 @@ import type {
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
 import {
-  NAVIGATION_SORT,
   resolveNavigationCategoryId,
   toAssetCoverImage,
   toAssetDetail,
@@ -27,6 +26,7 @@ import {
   toShareEvent,
 } from "@/services/visitor-picture-library-serializer";
 
+const PUBLIC_CACHE_VERSION = "picture-library:v2";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type AssetListDebugTiming = Record<string, number | string | null>;
@@ -302,7 +302,6 @@ class VisitorPictureLibraryService {
         ...context,
         direction: query.direction,
         limit: query.limit,
-        sort: NAVIGATION_SORT,
       },
     };
     if (timing) timing.serialize_ms = Date.now() - startedAt;
@@ -368,6 +367,7 @@ class VisitorPictureLibraryService {
 
   private buildAssetListCacheKey(query: VisitorPictureAssetListQuery) {
     return [
+      PUBLIC_CACHE_VERSION,
       "assets",
       query.category_id || "all",
       query.page,
@@ -433,6 +433,7 @@ class VisitorPictureLibraryService {
 
   private buildNavigationCacheKey(id: string, query: VisitorPictureAssetNavigationQuery) {
     return [
+      PUBLIC_CACHE_VERSION,
       "asset-navigation",
       id,
       query.category_id || "auto",
