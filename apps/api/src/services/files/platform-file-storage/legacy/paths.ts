@@ -30,6 +30,7 @@ export function buildLegacyObjectPath(this: any, input: {
     project_acceptance: input.projectId?.trim()
       ? `${input.projectId.trim()}/acceptance`
       : "project-acceptance",
+    picture_library: "picture-library",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;

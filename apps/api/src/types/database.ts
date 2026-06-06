@@ -59,6 +59,62 @@ export type Database = {
         }
         Relationships: []
       }
+      administrative_areas: {
+        Row: {
+          adcode: string
+          created_at: string
+          full_name: string
+          level: string
+          name: string
+          parent_adcode: string | null
+          raw_payload: Json | null
+          sort_order: number
+          source: string
+          source_version: string | null
+          status: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          adcode: string
+          created_at?: string
+          full_name: string
+          level: string
+          name: string
+          parent_adcode?: string | null
+          raw_payload?: Json | null
+          sort_order?: number
+          source?: string
+          source_version?: string | null
+          status?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          adcode?: string
+          created_at?: string
+          full_name?: string
+          level?: string
+          name?: string
+          parent_adcode?: string | null
+          raw_payload?: Json | null
+          sort_order?: number
+          source?: string
+          source_version?: string | null
+          status?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "administrative_areas_parent_fkey"
+            columns: ["parent_adcode"]
+            isOneToOne: false
+            referencedRelation: "administrative_areas"
+            referencedColumns: ["adcode"]
+          },
+        ]
+      }
       ai_call_logs: {
         Row: {
           billable: boolean
@@ -3079,6 +3135,380 @@ export type Database = {
         }
         Relationships: []
       }
+      picture_asset_categories: {
+        Row: {
+          asset_id: string
+          category_id: string
+          created_at: string
+          sort_order: number
+        }
+        Insert: {
+          asset_id: string
+          category_id: string
+          created_at?: string
+          sort_order?: number
+        }
+        Update: {
+          asset_id?: string
+          category_id?: string
+          created_at?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_categories_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "picture_asset_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "picture_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_comment_images: {
+        Row: {
+          comment_id: string
+          created_at: string
+          file_object_id: string
+          id: string
+          sort_order: number
+          status: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          file_object_id: string
+          id?: string
+          sort_order?: number
+          status?: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          file_object_id?: string
+          id?: string
+          sort_order?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_comment_images_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "picture_asset_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "picture_asset_comment_images_file_object_id_fkey"
+            columns: ["file_object_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_comments: {
+        Row: {
+          asset_id: string
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          status: string
+          updated_at: string
+          visitor_id: string
+        }
+        Insert: {
+          asset_id: string
+          content: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          status?: string
+          updated_at?: string
+          visitor_id: string
+        }
+        Update: {
+          asset_id?: string
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          status?: string
+          updated_at?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_comments_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_favorites: {
+        Row: {
+          asset_id: string
+          created_at: string
+          visitor_id: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          visitor_id: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_favorites_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_likes: {
+        Row: {
+          asset_id: string
+          created_at: string
+          visitor_id: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          visitor_id: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_likes_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_share_events: {
+        Row: {
+          asset_id: string
+          channel: string
+          created_at: string
+          id: string
+          visitor_id: string | null
+        }
+        Insert: {
+          asset_id: string
+          channel: string
+          created_at?: string
+          id?: string
+          visitor_id?: string | null
+        }
+        Update: {
+          asset_id?: string
+          channel?: string
+          created_at?: string
+          id?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_share_events_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_asset_variants: {
+        Row: {
+          asset_id: string
+          created_at: string
+          file_object_id: string
+          file_size: number
+          height: number | null
+          id: string
+          mime_type: string
+          object_key: string
+          variant: string
+          width: number | null
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          file_object_id: string
+          file_size?: number
+          height?: number | null
+          id?: string
+          mime_type: string
+          object_key: string
+          variant: string
+          width?: number | null
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          file_object_id?: string
+          file_size?: number
+          height?: number | null
+          id?: string
+          mime_type?: string
+          object_key?: string
+          variant?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_asset_variants_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "picture_asset_variants_file_object_id_fkey"
+            columns: ["file_object_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      picture_assets: {
+        Row: {
+          checksum: string | null
+          comment_count: number
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          dominant_color: string | null
+          favorite_count: number
+          height: number | null
+          id: string
+          like_count: number
+          original_filename: string | null
+          share_count: number
+          sort_order: number
+          source: string
+          status: string
+          title: string
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          checksum?: string | null
+          comment_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          dominant_color?: string | null
+          favorite_count?: number
+          height?: number | null
+          id?: string
+          like_count?: number
+          original_filename?: string | null
+          share_count?: number
+          sort_order?: number
+          source?: string
+          status?: string
+          title: string
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          checksum?: string | null
+          comment_count?: number
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          dominant_color?: string | null
+          favorite_count?: number
+          height?: number | null
+          id?: string
+          like_count?: number
+          original_filename?: string | null
+          share_count?: number
+          sort_order?: number
+          source?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: []
+      }
+      picture_categories: {
+        Row: {
+          cover_asset_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          slug: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cover_asset_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          slug: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cover_asset_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          slug?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "picture_categories_cover_asset_id_fkey"
+            columns: ["cover_asset_id"]
+            isOneToOne: false
+            referencedRelation: "picture_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "picture_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "picture_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_audit_logs: {
         Row: {
           action: string
@@ -4626,8 +5056,8 @@ export type Database = {
       }
       properties: {
         Row: {
-          area: number | null
           adcode: string | null
+          area: number | null
           building_info: string | null
           city: string | null
           community: string
@@ -4646,8 +5076,8 @@ export type Database = {
           tenant_id: string | null
         }
         Insert: {
-          area?: number | null
           adcode?: string | null
+          area?: number | null
           building_info?: string | null
           city?: string | null
           community: string
@@ -4666,8 +5096,8 @@ export type Database = {
           tenant_id?: string | null
         }
         Update: {
-          area?: number | null
           adcode?: string | null
+          area?: number | null
           building_info?: string | null
           city?: string | null
           community?: string
@@ -6045,6 +6475,62 @@ export type Database = {
           },
         ]
       }
+      tenant_service_areas: {
+        Row: {
+          adcode: string | null
+          center_latitude: number | null
+          center_longitude: number | null
+          city: string
+          created_at: string
+          district: string | null
+          id: string
+          priority: number
+          province: string | null
+          service_radius_km: number | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          adcode?: string | null
+          center_latitude?: number | null
+          center_longitude?: number | null
+          city: string
+          created_at?: string
+          district?: string | null
+          id?: string
+          priority?: number
+          province?: string | null
+          service_radius_km?: number | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          adcode?: string | null
+          center_latitude?: number | null
+          center_longitude?: number | null
+          city?: string
+          created_at?: string
+          district?: string | null
+          id?: string
+          priority?: number
+          province?: string | null
+          service_radius_km?: number | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_areas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_share_links: {
         Row: {
           created_at: string
@@ -6287,13 +6773,6 @@ export type Database = {
       }
       tenants: {
         Row: {
-          contact_name: string | null
-          contact_phone: string | null
-          created_at: string
-          id: string
-          name: string
-          slug: string
-          status: string
           address: string | null
           address_adcode: string | null
           address_city: string | null
@@ -6306,6 +6785,13 @@ export type Database = {
           address_province: string | null
           address_source: string | null
           address_title: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          name: string
+          slug: string
+          status: string
           updated_at: string
         }
         Insert: {
@@ -6431,6 +6917,90 @@ export type Database = {
           {
             foreignKeyName: "user_business_memberships_tenant_id_fkey"
             columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_location_contexts: {
+        Row: {
+          accuracy: number | null
+          adcode: string | null
+          auth_user_id: string | null
+          city: string | null
+          confirmed_at: string | null
+          created_at: string
+          district: string | null
+          expires_at: string
+          fallback_reason: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          matched_tenants: Json
+          province: string | null
+          recommended_tenant_id: string | null
+          selected_tenant_id: string | null
+          selection_status: string
+          source: string
+          updated_at: string
+          visitor_id: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          adcode?: string | null
+          auth_user_id?: string | null
+          city?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          district?: string | null
+          expires_at: string
+          fallback_reason?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          matched_tenants?: Json
+          province?: string | null
+          recommended_tenant_id?: string | null
+          selected_tenant_id?: string | null
+          selection_status?: string
+          source?: string
+          updated_at?: string
+          visitor_id?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          adcode?: string | null
+          auth_user_id?: string | null
+          city?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          district?: string | null
+          expires_at?: string
+          fallback_reason?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          matched_tenants?: Json
+          province?: string | null
+          recommended_tenant_id?: string | null
+          selected_tenant_id?: string | null
+          selection_status?: string
+          source?: string
+          updated_at?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_location_contexts_recommended_tenant_id_fkey"
+            columns: ["recommended_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_location_contexts_selected_tenant_id_fkey"
+            columns: ["selected_tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
@@ -6832,11 +7402,38 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      create_project_log_fast: {
+        Args: {
+          p_content: string
+          p_employee_id: string
+          p_images?: Json
+          p_node_name: string
+          p_project_id: string
+          p_project_log_scope?: string
+          p_stage_code: string
+          p_tenant_department_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       find_auth_user_by_email: {
         Args: { p_email: string }
         Returns: {
           email: string
           id: string
+        }[]
+      }
+      get_customer_project_construction_stage_bootstrap: {
+        Args: {
+          p_customer_id: string
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: {
+          acceptance_rows: Json
+          latest_log_rows: Json
+          log_rows: Json
+          project: Json
         }[]
       }
       get_customer_project_recent_log_summaries: {
@@ -6884,6 +7481,89 @@ export type Database = {
           count: number
           date: string
           node_name: string
+          stage_code: string
+        }[]
+      }
+      list_customer_home_projects: {
+        Args: {
+          p_customer_id: string
+          p_page?: number
+          p_page_size?: number
+          p_recent_logs_per_project?: number
+          p_tenant_id: string
+        }
+        Returns: {
+          address: string
+          budget: number
+          id: string
+          name: string
+          property: Json
+          property_id: string
+          recent_logs: Json
+          start_date: string
+          status: string
+          style_tags: Json
+          tenant_id: string
+        }[]
+      }
+      list_customer_project_acceptance_summaries: {
+        Args: {
+          p_customer_id: string
+          p_page?: number
+          p_page_size?: number
+          p_project_id: string
+          p_stage_code?: string
+          p_status?: string
+          p_tenant_id: string
+        }
+        Returns: {
+          acceptance_type: string
+          completed_at: string
+          created_at: string
+          customer_confirmed_at: string
+          customer_id: string
+          id: string
+          initiator_id: string
+          project_id: string
+          project_valid: boolean
+          reject_reason: string
+          reject_source: string
+          rejected_at: string
+          reviewed_at: string
+          reviewer_id: string
+          stage_code: string
+          status: string
+          submitted_at: string
+          summary: string
+          template_id: string
+          template_snapshot: Json
+          template_version: number
+          tenant_id: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      list_customer_project_detail_logs: {
+        Args: {
+          p_customer_id: string
+          p_page_size?: number
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: {
+          comment_count: number
+          content: string
+          created_at: string
+          employee_avatar: string
+          employee_id: string
+          employee_name: string
+          id: string
+          images: Json
+          my_rating: number
+          node_name: string
+          project_id: string
+          rating_count: number
+          rating_sum: number
           stage_code: string
         }[]
       }
@@ -7020,6 +7700,44 @@ export type Database = {
           unionid: string
           updated_at: string
           user_id: string
+        }[]
+      }
+      verify_wechat_customer_bootstrap: {
+        Args: {
+          p_customer_id?: string
+          p_employee_id?: string
+          p_openid: string
+          p_page?: number
+          p_page_size?: number
+          p_recent_logs_per_project?: number
+          p_tenant_id?: string
+          p_user_id: string
+        }
+        Returns: {
+          customer_context: Json
+          customer_membership_matched: boolean
+          employee_membership_matched: boolean
+          employee_user_matched: boolean
+          home_projects: Json
+          oauth_matched: boolean
+          user_profile: Json
+        }[]
+      }
+      verify_wechat_identity_binding: {
+        Args: {
+          p_customer_id?: string
+          p_employee_id?: string
+          p_openid: string
+          p_tenant_id?: string
+          p_user_id: string
+        }
+        Returns: {
+          customer_context: Json
+          customer_membership_matched: boolean
+          employee_membership_matched: boolean
+          employee_user_matched: boolean
+          oauth_matched: boolean
+          user_profile: Json
         }[]
       }
     }

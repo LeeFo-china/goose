@@ -282,6 +282,50 @@ bun apps/api/src/scripts/picture-library-import.ts -- --source /Users/leefo/Publ
 - 数据库能查询到分类、图片资产、变体和分类关系。
 - 重新执行导入不会重复创建同一张图片。
 
+### 执行记录
+
+执行时间：2026-06-06
+
+已完成：
+
+- 新增 `20260606170000_create_picture_library.sql` migration。
+- 新增 `picture_categories`、`picture_assets`、`picture_asset_variants`、`picture_asset_categories`。
+- 预留 `picture_asset_likes`、`picture_asset_favorites`、`picture_asset_comments`、`picture_asset_comment_images`、`picture_asset_share_events`。
+- 新增 `picture-library-import.ts` 导入脚本。
+- 新增 `api:picture-library-import` 脚本入口。
+- 平台文件上传场景新增 `picture_library`，导入链路走统一 COS 文件对象索引。
+
+开发库验证：
+
+```text
+supabase db push --yes
+bun run api:check
+bun run api:picture-library-import -- --dry-run
+bun run api:picture-library-import -- --apply --limit 5
+bun run api:picture-library-import -- --dry-run --limit 5
+```
+
+验证结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| dry-run 分类数 | 18 |
+| dry-run 可导入图片数 | 360 |
+| dry-run 已存在资产数 | 0 |
+| 小批量 apply | 创建 5 张图片资产 |
+| `picture_categories` | 1 |
+| `picture_assets` | 5 |
+| `picture_asset_variants` | 5 |
+| `picture_asset_categories` | 5 |
+| `platform_file_objects(scene=picture_library)` | 5 |
+| 重复 dry-run | 前 5 张识别为 existing，pending_upload_count=0 |
+
+说明：
+
+- 初次扫描统计的是可导入图片文件，过滤非图片文件后为 360 张。
+- 当前仅执行小批量导入验证，未全量导入 360 张素材。
+- 全量导入建议在 admin 管理页和回滚/隐藏策略完成后执行。
+
 ## 阶段 2：admin 分类与图片管理
 
 ### 目标

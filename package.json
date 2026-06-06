@@ -40,6 +40,7 @@
     "api:property-location-backfill": "cd apps/api && bun --env-file=.env src/scripts/property-location-backfill.ts",
     "api:location-context-cleanup": "cd apps/api && bun --env-file=.env src/scripts/location-context-cleanup.ts",
     "api:tenant-address-coverage": "cd apps/api && bun --env-file=.env src/scripts/tenant-address-coverage-check.ts",
+    "api:picture-library-import": "cd apps/api && bun --env-file=.env src/scripts/picture-library-import.ts",
     "check:permission-boundaries": "bun scripts/check-permission-boundaries.ts",
     "audit:supabase-writes": "bun scripts/audit-supabase-writes.ts",
     "seed:tenant:phase3": "bun scripts/seed-phase3-tenant-verification.ts",
