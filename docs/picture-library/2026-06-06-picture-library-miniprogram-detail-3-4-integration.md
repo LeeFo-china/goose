@@ -6,20 +6,22 @@
 
 产品要求图片详情页实现“统一高度 + 不留白 + 小程序侧不裁切”。由于源图比例不一致，小程序直接使用原图无法同时满足这三个条件。
 
-后端将新增统一展示图字段 `images.detail`，固定比例为 3:4。小程序详情页优先使用 `images.detail` 渲染固定比例图片区域。
+后端已新增统一展示图字段 `images.detail`，固定比例为 3:4。小程序详情页优先使用 `images.detail` 渲染固定比例图片区域。
 
 ## 当前状态
 
-当前后端尚未返回 `images.detail`。
+当前后端已返回 `images.detail`。
 
-现有详情接口只返回：
+详情接口现在返回：
 
+- `images.detail`
 - `images.thumb`
 - `images.cover`
 - `images.large`
 - `images.original`
 
-现有 `thumb` / `large` 是等比例缩放图，不是固定比例图，不能直接用于统一高度场景。
+其中 `images.detail` 是固定 3:4 安全裁剪展示图；`thumb` / `large`
+仍是等比例缩放图，不建议用于统一高度详情主图场景。
 
 ## 接口范围
 
@@ -29,7 +31,7 @@
 GET /visitor/picture-library/assets/:id
 ```
 
-后端后续会在详情接口 `data.images` 下新增：
+详情接口 `data.images` 下已新增：
 
 ```json
 {
@@ -133,14 +135,18 @@ images.detail -> images.large -> images.cover -> images.original -> images.thumb
 
 ## 后端实现要求
 
-后端后续实现时需要完成：
+后端已完成：
 
 1. `picture_asset_variants.variant` 支持新值 `detail`。
 2. 变体补齐脚本支持生成 `detail`。
-3. 生成策略固定为 3:4。
+3. 生成策略固定为 3:4，开发库当前尺寸为 `900x1200`。
 4. 详情接口 `GET /visitor/picture-library/assets/:id` 返回 `images.detail`。
 5. 现有 `image` 字段保持兼容，不因为新增 `detail` 改变含义。
-6. 小程序已接入后，可逐步考虑列表页是否也需要同类固定比例字段。
+6. 健康检查已纳入 `detail` 缺失规格检测。
+
+后续可选扩展：
+
+- 小程序已接入后，可逐步考虑列表页是否也需要同类固定比例字段。
 
 ## 验收标准
 
@@ -152,6 +158,16 @@ images.detail -> images.large -> images.cover -> images.original -> images.thumb
 - `images.detail.url` 可访问。
 - `images.thumb`、`images.cover`、`images.large` 等旧字段不受影响。
 - 变体补齐复跑后 `detail` 缺失数为 0。
+
+开发库后端验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `detail` 补齐 dry-run | `candidate_asset_count=0`，`missing_variant_count=0` |
+| 健康检查 | 196 张图片，18 个分类，`missing_variant_asset_total=0`，`issue_total=0` |
+| 详情接口抽查 | `images.detail.variant=detail` |
+| 详情图尺寸 | `900x1200` |
+| 旧字段兼容 | `images.thumb` / `images.cover` / `images.large` 正常返回 |
 
 小程序验收：
 
@@ -170,7 +186,6 @@ images.detail -> images.large -> images.cover -> images.original -> images.thumb
 ## 对接状态
 
 - 后端文档：已提供。
-- 后端实现：待开发。
+- 后端实现：已完成。
 - 小程序实现：待对接。
-- 联调前置：后端上线 `images.detail` 后，小程序再切换优先读取该字段。
-
+- 联调前置：小程序可以开始优先读取 `images.detail`，并保留旧字段回退链路。

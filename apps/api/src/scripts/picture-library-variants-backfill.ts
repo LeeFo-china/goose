@@ -7,7 +7,7 @@ import { COS, DEFAULT_COS_REGION, systemSettingsService, trimSlashes } from "@/s
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { SupabaseDB } from "@/utils/supabase";
 
-type VariantName = "thumb" | "large";
+type VariantName = "thumb" | "large" | "detail";
 
 type CliOptions = {
   apply: boolean;
@@ -67,18 +67,22 @@ if (!databaseUrl) {
 const sql = new Bun.SQL(databaseUrl);
 
 const VARIANT_CONFIG: Record<VariantName, {
-  maxSize: number;
+  mode: "fit" | "crop";
+  maxSize?: number;
+  width?: number;
+  height?: number;
   quality: number;
 }> = {
-  thumb: { maxSize: 320, quality: 78 },
-  large: { maxSize: 1600, quality: 86 },
+  thumb: { mode: "fit", maxSize: 320, quality: 78 },
+  large: { mode: "fit", maxSize: 1600, quality: 86 },
+  detail: { mode: "crop", width: 900, height: 1200, quality: 86 },
 };
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     apply: false,
     limit: null,
-    variants: ["thumb", "large"],
+    variants: ["thumb", "large", "detail"],
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -104,8 +108,10 @@ function parseVariants(value: string): VariantName[] {
   const variants = value
     .split(",")
     .map((item) => item.trim())
-    .filter((item): item is VariantName => item === "thumb" || item === "large");
-  if (variants.length === 0) throw new Error("--variants 仅支持 thumb,large");
+    .filter((item): item is VariantName =>
+      item === "thumb" || item === "large" || item === "detail"
+    );
+  if (variants.length === 0) throw new Error("--variants 仅支持 thumb,large,detail");
   return Array.from(new Set(variants));
 }
 
@@ -158,6 +164,8 @@ function groupVariants(variants: VariantRow[]) {
 function pickSourceVariant(variants: VariantRow[]) {
   return variants.find((item) => item.variant === "original") ||
     variants.find((item) => item.variant === "cover") ||
+    variants.find((item) => item.variant === "large") ||
+    variants.find((item) => item.variant === "thumb") ||
     variants[0] ||
     null;
 }
@@ -229,15 +237,30 @@ async function generateVariant(input: {
   const outputPath = join(input.tempDir, `${input.variant}.webp`);
   await writeFile(sourcePath, input.sourceBuffer);
   const config = VARIANT_CONFIG[input.variant];
-  await runMagick([
-    sourcePath,
-    "-auto-orient",
-    "-resize",
-    `${config.maxSize}x${config.maxSize}>`,
-    "-quality",
-    String(config.quality),
-    outputPath,
-  ]);
+  const args = config.mode === "crop"
+    ? [
+      sourcePath,
+      "-auto-orient",
+      "-resize",
+      `${config.width}x${config.height}^`,
+      "-gravity",
+      "center",
+      "-extent",
+      `${config.width}x${config.height}`,
+      "-quality",
+      String(config.quality),
+      outputPath,
+    ]
+    : [
+      sourcePath,
+      "-auto-orient",
+      "-resize",
+      `${config.maxSize}x${config.maxSize}>`,
+      "-quality",
+      String(config.quality),
+      outputPath,
+    ];
+  await runMagick(args);
   const dimensions = await identifyDimensions(outputPath);
   const buffer = Buffer.from(await Bun.file(outputPath).arrayBuffer());
   return {

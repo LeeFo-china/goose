@@ -31,7 +31,7 @@ type ImportPlanRow = {
   exists: boolean;
 };
 
-const PLANNED_GENERATED_VARIANTS = ["thumb", "large"] as const;
+const PLANNED_GENERATED_VARIANTS = ["thumb", "large", "detail"] as const;
 
 export function buildPictureLibraryImportDryRunReport(input: {
   candidates: PictureLibraryImportCandidate[];
@@ -59,7 +59,7 @@ export function buildPictureLibraryImportDryRunReport(input: {
       generated_variant_upload_count: plannedVariantUploadCount,
       total_file_upload_count: pendingUploadCount + plannedVariantUploadCount,
       generated_variants: PLANNED_GENERATED_VARIANTS,
-      note: "导入 apply 只写入 cover，thumb/large 由 picture-library-variants-backfill 补齐。",
+      note: "导入 apply 只写入 cover，thumb/large/detail 由 picture-library-variants-backfill 补齐。",
     },
     estimated_source_bytes: pendingRows.reduce((sum, item) => sum + item.size_bytes, 0),
     risk_summary: {
@@ -72,7 +72,7 @@ export function buildPictureLibraryImportDryRunReport(input: {
     recommended_steps: [
       "先执行 --dry-run 确认 pending_upload_count 与 estimated_uploads。",
       "执行 --apply 小批量导入并复跑健康检查。",
-      "执行 api:picture-library-variants-backfill 补齐 thumb/large。",
+      "执行 api:picture-library-variants-backfill 补齐 thumb/large/detail。",
       "执行 api:picture-library-health-check 确认 issue_total=0。",
     ],
   };

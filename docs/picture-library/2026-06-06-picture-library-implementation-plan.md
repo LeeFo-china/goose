@@ -1234,6 +1234,47 @@ picture-library-health-check script
 - 所有已发布图片均已补齐 `cover` / `thumb` / `large` 可展示规格。
 - 18 个启用分类均已设置封面，visitor 列表可正常返回缩略图。
 
+### 阶段 7O 执行记录：detail 3:4 详情展示图后端落地
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 新增数据库迁移：
+  - `supabase/migrations/20260606193000_add_picture_library_detail_variant.sql`
+  - `picture_asset_variants.variant` 支持新值 `detail`。
+- 扩展变体补齐脚本：
+  - `api:picture-library-variants-backfill` 支持 `--variants detail`。
+  - 默认补齐 `thumb` / `large` / `detail`。
+  - `detail` 固定生成 `900x1200` WebP，比例为 3:4。
+- 扩展 visitor 图片详情接口：
+  - `GET /visitor/picture-library/assets/:id`
+  - `data.images.detail` 返回 `variant=detail` 的 3:4 展示图。
+  - `data.image` 和旧 `images.thumb/cover/large/original` 字段保持兼容。
+- 扩展健康检查：
+  - 缺失规格检查包含 `detail`。
+- 补齐开发库现有图片：
+  - 196 张已发布图片均已生成 `detail` 变体。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `detail` 补齐批次 | 50 + 50 + 50 + 46 |
+| `detail` 上传结果 | 196 个，失败 0 |
+| 变体补齐复跑 dry-run | `candidate_asset_count=0`，`missing_variant_count=0` |
+| 健康检查 | 196 张图片，18 个分类，`missing_variant_asset_total=0`，`issue_total=0` |
+| 详情接口抽查 | 返回 `images.detail` |
+| 详情图尺寸 | `900x1200` |
+| 旧字段兼容 | `images.thumb` / `images.cover` / `images.large` 正常返回 |
+| API 检查 | `bun run api:check` 通过 |
+| Admin 检查 | `pnpm --dir apps/admin check` 通过 |
+
+小程序对接文档：
+
+- `docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integration.md`
+- 小程序可以开始优先读取 `images.detail`，并保留旧字段回退链路。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
@@ -1270,7 +1311,7 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
 补充说明：
 
 - `detail-3-4` 文档为图片详情页统一比例展示图契约。
-- 当前状态是后端待实现、小程序待对接；后端上线 `images.detail` 后再进入联调。
+- 当前状态是后端已实现、小程序待对接；小程序可优先读取 `images.detail`。
 
 ## 推荐执行顺序
 

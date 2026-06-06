@@ -1,7 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 
-const REQUIRED_VARIANTS = ["cover", "thumb", "large"] as const;
+const REQUIRED_VARIANTS = ["cover", "thumb", "large", "detail"] as const;
 const MAX_FETCH_ROWS = 10_000;
 
 type PictureCategoryRow = {

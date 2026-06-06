@@ -199,6 +199,7 @@ class VisitorPictureLibraryService {
       ...this.toAssetListItem(asset, state),
       image: this.toImage(asset, DETAIL_IMAGE_VARIANTS),
       images: {
+        detail: this.toVariantImage(asset.variants.find((item) => item.variant === "detail") ?? null),
         thumb: this.toVariantImage(asset.variants.find((item) => item.variant === "thumb") ?? null),
         cover: this.toVariantImage(asset.variants.find((item) => item.variant === "cover") ?? null),
         large: this.toVariantImage(asset.variants.find((item) => item.variant === "large") ?? null),
