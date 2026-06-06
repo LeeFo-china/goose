@@ -36,6 +36,7 @@ const DIRECT_UPLOAD_SCENES = [
   "h5_marketing_page",
   "project_acceptance",
   "picture_library",
+  "picture_comment",
 ] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>([
@@ -46,10 +47,12 @@ const PUBLIC_STORED_FILE_SCENES = new Set([
   "h5_marketing_page",
   "panorama_tiles",
   "picture_library",
+  "picture_comment",
 ]);
 const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "h5_marketing_page",
   "picture_library",
+  "picture_comment",
 ]);
 
 const DirectUploadInitSchema = z.object({
@@ -98,6 +101,7 @@ type UploadActorContext = {
   tenantId: string | null;
   employeeId: string | null;
   customerId: string | null;
+  visitorId: string | null;
   isPlatformAdmin: boolean;
 };
 
@@ -157,7 +161,8 @@ class UploadController extends BaseController {
 
   @Get("/uploads/public-url")
   async getPublicUrl(request: FastifyRequest, reply: FastifyReply) {
-    if (!request.user?.sub) {
+    const user = request.user;
+    if (!this.hasUploadIdentity(user)) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
 
@@ -166,7 +171,7 @@ class UploadController extends BaseController {
       throw Errors.fromZod(queryResult.error);
     }
 
-    const actorContext = await this.resolveUploadActorContext(request.user);
+    const actorContext = await this.resolveUploadActorContext(user);
     this.assertStoredFileAccess(queryResult.data.path, actorContext);
 
     const publicUrl = resolveStoredFileUrl(queryResult.data.path);
@@ -180,7 +185,8 @@ class UploadController extends BaseController {
   @Post("/uploads/cos/direct-init")
   async initDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
     const requestStartedAt = now();
-    if (!request.user?.sub) {
+    const user = request.user;
+    if (!this.hasUploadIdentity(user)) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
 
@@ -191,9 +197,9 @@ class UploadController extends BaseController {
 
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(request.user);
+    const actorContext = await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
-      request.user,
+      user,
       scene,
       result.data.project_id,
       actorContext,
@@ -205,7 +211,7 @@ class UploadController extends BaseController {
       scene,
       projectId: result.data.project_id,
       tenantId: actorContext.tenantId,
-      authUserId: request.user.sub,
+      authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,
       customerId: actorContext.customerId,
     });
@@ -223,7 +229,8 @@ class UploadController extends BaseController {
   @Post("/uploads/cos/direct-complete")
   async completeDirectCosUpload(request: FastifyRequest, reply: FastifyReply) {
     const requestStartedAt = now();
-    if (!request.user?.sub) {
+    const user = request.user;
+    if (!this.hasUploadIdentity(user)) {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
 
@@ -234,9 +241,9 @@ class UploadController extends BaseController {
 
     const scene = result.data.scene;
     this.assertAllowedFile(result.data.mimetype, result.data.size_bytes, scene);
-    const actorContext = await this.resolveUploadActorContext(request.user);
+    const actorContext = await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
-      request.user,
+      user,
       scene,
       result.data.project_id,
       actorContext,
@@ -255,7 +262,7 @@ class UploadController extends BaseController {
       scene,
       projectId: result.data.project_id,
       tenantId: actorContext.tenantId,
-      authUserId: request.user.sub,
+      authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,
       customerId: actorContext.customerId,
       objectKey: result.data.object_key,
@@ -316,6 +323,13 @@ class UploadController extends BaseController {
     projectId: string | undefined,
     actorContext: UploadActorContext,
   ) {
+    if (actorContext.visitorId) {
+      if (scene !== "picture_comment") {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+
     if (!actorContext.tenantId && !PUBLIC_DIRECT_UPLOAD_SCENES.has(scene)) {
       throw Errors.forbidden();
     }
@@ -389,11 +403,22 @@ class UploadController extends BaseController {
     const tokenEmployeeId = user.employee_id ?? null;
     const tokenCustomerId = user.customer_id ?? null;
 
+    if (user.token_type === "visitor_session" && user.visitor_id) {
+      return {
+        tenantId: null,
+        employeeId: null,
+        customerId: null,
+        visitorId: user.visitor_id,
+        isPlatformAdmin: false,
+      };
+    }
+
     if (tokenTenantId && tokenEmployeeId) {
       return {
         tenantId: tokenTenantId,
         employeeId: tokenEmployeeId,
         customerId: null,
+        visitorId: null,
         isPlatformAdmin: false,
       };
     }
@@ -403,6 +428,7 @@ class UploadController extends BaseController {
         tenantId: tokenTenantId,
         employeeId: null,
         customerId: tokenCustomerId,
+        visitorId: null,
         isPlatformAdmin: false,
       };
     }
@@ -417,6 +443,7 @@ class UploadController extends BaseController {
         tenantId: authContext.tenantId,
         employeeId: authContext.employeeId,
         customerId: null,
+        visitorId: null,
         isPlatformAdmin: authContext.isPlatformAdmin,
       };
     }
@@ -427,6 +454,7 @@ class UploadController extends BaseController {
         tenantId: membership.tenant_id,
         employeeId: null,
         customerId: membership.identity_id,
+        visitorId: null,
         isPlatformAdmin: false,
       };
     }
@@ -436,6 +464,7 @@ class UploadController extends BaseController {
       tenantId: customer?.tenant_id ?? null,
       employeeId: null,
       customerId: customer?.id ?? null,
+      visitorId: null,
       isPlatformAdmin: false,
     };
   }
@@ -445,9 +474,13 @@ class UploadController extends BaseController {
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {
-    return scene === "h5_marketing_page" || scene === "picture_library"
+    return scene === "h5_marketing_page" || scene === "picture_library" || scene === "picture_comment"
       ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
       : DEFAULT_MAX_UPLOAD_FILE_SIZE;
+  }
+
+  private hasUploadIdentity(user: JwtPayload | undefined): user is JwtPayload {
+    return Boolean(user?.sub || (user?.token_type === "visitor_session" && user.visitor_id));
   }
 
 }

@@ -162,6 +162,21 @@ export function isVisitorSessionRoute(method: string, url: string) {
     return true;
   }
 
+  if (
+    method === "POST"
+    && url.startsWith("/visitor/picture-library/assets/")
+    && url.endsWith("/comments")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && (url === "/uploads/cos/direct-init" || url === "/uploads/cos/direct-complete")
+  ) {
+    return true;
+  }
+
   if (method === "POST" && url === "/auth/verify-role") {
     return true;
   }

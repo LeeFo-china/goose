@@ -241,8 +241,8 @@ DELETE /visitor/picture-library/assets/:id/favorite
 GET    /visitor/picture-library/assets/:id/comments
 POST   /visitor/picture-library/assets/:id/comments
 
-POST   /visitor/picture-library/comment-images/direct-init
-POST   /visitor/picture-library/comment-images/direct-complete
+POST   /uploads/cos/direct-init      scene=picture_comment
+POST   /uploads/cos/direct-complete  scene=picture_comment
 
 POST   /visitor/picture-library/assets/:id/share-events
 ```
@@ -550,8 +550,8 @@ DELETE /visitor/picture-library/assets/:id/favorite
 ### 测试
 
 ```text
-POST /visitor/picture-library/comment-images/direct-init
-POST /visitor/picture-library/comment-images/direct-complete
+POST /uploads/cos/direct-init        scene=picture_comment
+POST /uploads/cos/direct-complete    scene=picture_comment
 POST /visitor/picture-library/assets/:id/comments
 GET  /visitor/picture-library/assets/:id/comments
 GET  /admin/picture-library/comments
@@ -567,6 +567,41 @@ POST /admin/picture-library/comments/:id/hide
 - 隐藏评论后 visitor 侧不可见。
 - 评论图片 URL 可访问且不会由小程序拼接。
 - 删除评论后业务侧不可见，COS 对象进入后续清理范围。
+
+### 后端执行记录
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- `GET /visitor/picture-library/assets/:id/comments` 评论列表。
+- `POST /visitor/picture-library/assets/:id/comments` 评论提交。
+- 平台统一上传接口支持 visitor 使用 `scene=picture_comment`。
+- visitor 上传权限限制为 `picture_comment`，不能上传 `picture_library` 等 admin 场景。
+- 评论提交支持纯文字和最多 3 张评论图片。
+
+暂未纳入本阶段：
+
+- admin 评论审核、隐藏、删除页面。
+- 评论内容敏感词和频率限制。
+- 分享事件统计。
+
+后端验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 评论列表公开访问 | 200 |
+| 未登录提交评论 | 401 |
+| visitor token 提交纯文字评论 | 返回 `status=visible` |
+| 提交后评论列表可见 | 最新评论出现在列表顶部 |
+| visitor 初始化 `picture_comment` 直传 | 返回 `object_key` |
+| visitor 初始化 `picture_library` 直传 | 403 |
+
+小程序对接文档：
+
+```text
+docs/picture-library/2026-06-06-picture-library-miniprogram-stage5-comments.md
+```
 
 ## 阶段 6：分享好友、朋友圈与分享统计
 

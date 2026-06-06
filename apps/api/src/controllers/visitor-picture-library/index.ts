@@ -1,8 +1,10 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  CreateVisitorPictureCommentSchema,
   VisitorPictureAssetListQuerySchema,
   VisitorPictureAssetParamsSchema,
+  VisitorPictureCommentListQuerySchema,
 } from "@/schema/visitor-picture-library";
 import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
 import { Delete, Get, Post } from "@/utils/decorators/route";
@@ -82,6 +84,38 @@ class VisitorPictureLibraryController extends BaseController {
       assetId: paramsResult.data.id,
       visitorId,
       favorited: true,
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/visitor/picture-library/assets/:id/comments")
+  async listComments(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = VisitorPictureAssetParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = VisitorPictureCommentListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await visitorPictureLibraryService.listComments(
+      paramsResult.data.id,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/visitor/picture-library/assets/:id/comments")
+  async createComment(request: FastifyRequest, reply: FastifyReply) {
+    const visitorId = this.getRequiredVisitorId(request);
+    const paramsResult = VisitorPictureAssetParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = CreateVisitorPictureCommentSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await visitorPictureLibraryService.createComment({
+      assetId: paramsResult.data.id,
+      visitorId,
+      body: bodyResult.data,
     });
     return ResponseHandler.success(data);
   }

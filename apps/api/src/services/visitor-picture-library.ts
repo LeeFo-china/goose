@@ -1,11 +1,20 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  visitorPictureCommentsRepository,
+  type VisitorPictureCommentRecord,
+  type PictureCommentImageRecord,
+} from "@/repositories/visitor-picture-comments";
+import {
   visitorPictureLibraryRepository,
   type VisitorPictureInteractionState,
   type VisitorPictureAssetRecord,
   type VisitorPictureVariantRow,
 } from "@/repositories/visitor-picture-library";
-import type { VisitorPictureAssetListQuery } from "@/schema/visitor-picture-library";
+import type {
+  CreateVisitorPictureCommentInput,
+  VisitorPictureAssetListQuery,
+  VisitorPictureCommentListQuery,
+} from "@/schema/visitor-picture-library";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
@@ -70,6 +79,24 @@ class VisitorPictureLibraryService {
     );
     this.clearPublicCache();
     return result;
+  }
+
+  async listComments(assetId: string, query: VisitorPictureCommentListQuery) {
+    const page = await visitorPictureCommentsRepository.list(assetId, query);
+    return {
+      list: page.list.map((comment) => this.toComment(comment)),
+      pagination: page.pagination,
+    };
+  }
+
+  async createComment(input: {
+    assetId: string;
+    visitorId: string;
+    body: CreateVisitorPictureCommentInput;
+  }) {
+    const comment = await visitorPictureCommentsRepository.create(input);
+    this.clearPublicCache();
+    return this.toComment(comment);
   }
 
   private async loadCategories() {
@@ -191,6 +218,35 @@ class VisitorPictureLibraryService {
       height: variant.height,
       file_size: variant.file_size,
       mime_type: variant.mime_type,
+    };
+  }
+
+  private toComment(comment: VisitorPictureCommentRecord) {
+    return {
+      id: comment.id,
+      asset_id: comment.asset_id,
+      visitor_id: comment.visitor_id,
+      content: comment.content,
+      status: comment.status,
+      images: comment.images.map((image) => this.toCommentImage(image)).filter(Boolean),
+      created_at: comment.created_at,
+      updated_at: comment.updated_at,
+    };
+  }
+
+  private toCommentImage(image: PictureCommentImageRecord) {
+    const fileObject = image.file_object;
+    if (!fileObject) return null;
+    const url = resolveStoredFileUrl(fileObject.object_key);
+    if (!url) return null;
+    return {
+      id: image.id,
+      file_object_id: image.file_object_id,
+      url,
+      width: fileObject.width,
+      height: fileObject.height,
+      file_size: fileObject.size_bytes,
+      mime_type: fileObject.mime_type,
     };
   }
 

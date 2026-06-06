@@ -33,7 +33,8 @@ export type PlatformUploadScene =
   | "customer_douyin_screenshot"
   | "h5_marketing_page"
   | "project_acceptance"
-  | "picture_library";
+  | "picture_library"
+  | "picture_comment";
 
 export type UploadImageInput = {
   buffer: Buffer;
