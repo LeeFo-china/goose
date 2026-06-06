@@ -27,6 +27,8 @@ const DEFAULT_SHARE_TITLE = "装修效果图";
 const NAVIGATION_SORT = "sort_order asc, created_at desc, id desc";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
+type AssetListDebugTiming = Record<string, number | string | null>;
+
 type PublicCacheEntry<TValue> = {
   expiresAt: number;
   value: TValue;
@@ -34,19 +36,26 @@ type PublicCacheEntry<TValue> = {
 
 class VisitorPictureLibraryService {
   private publicCache = new Map<string, PublicCacheEntry<unknown>>();
+  private publicInFlight = new Map<string, Promise<unknown>>();
 
   async listCategories() {
     return this.getPublicCached("categories", () => this.loadCategories());
   }
 
   async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
-    if (!visitorId) {
-      return this.getPublicCached(this.buildAssetListCacheKey(query), () =>
-        this.loadAssets(query, null)
-      );
-    }
-
-    return this.loadAssets(query, visitorId);
+    const timing = query.debug_timing ? this.createAssetListTiming() : null;
+    const startedAt = Date.now();
+    const cacheResult = await this.getPublicCachedResult(
+      this.buildAssetListCacheKey(query),
+      () => this.loadPublicAssets(query, timing),
+    );
+    if (timing) timing.cache = cacheResult.cache;
+    const data = visitorId
+      ? await this.withInteractionStates(cacheResult.value, visitorId, timing)
+      : cacheResult.value;
+    if (!timing) return data;
+    timing.total_ms = Date.now() - startedAt;
+    return { ...data, debug_timing: timing };
   }
 
   async getAssetDetail(id: string, visitorId: string | null = null) {
@@ -166,15 +175,44 @@ class VisitorPictureLibraryService {
     });
   }
 
-  private async loadAssets(query: VisitorPictureAssetListQuery, visitorId: string | null) {
-    const page = await visitorPictureLibraryRepository.listAssets(query);
-    const states = await visitorPictureLibraryRepository.findInteractionStates(
-      page.list.map((asset) => asset.id),
-      visitorId,
+  private async loadPublicAssets(
+    query: VisitorPictureAssetListQuery,
+    timing: AssetListDebugTiming | null,
+  ) {
+    const page = await this.measureAssetListStep(timing, "query_ms", () =>
+      visitorPictureLibraryRepository.listAssets(query)
+    );
+    if (timing) timing.row_count = page.list.length;
+    const startedAt = Date.now();
+    const list = page.list.map((asset) => this.toAssetListItem(asset, undefined));
+    if (timing) timing.serialize_ms = Date.now() - startedAt;
+    return {
+      list,
+      pagination: page.pagination,
+    };
+  }
+
+  private async withInteractionStates(
+    data: Awaited<ReturnType<VisitorPictureLibraryService["loadPublicAssets"]>>,
+    visitorId: string,
+    timing: AssetListDebugTiming | null,
+  ) {
+    const states = await this.measureAssetListStep(timing, "visitor_state_ms", () =>
+      visitorPictureLibraryRepository.findInteractionStates(
+        data.list.map((asset) => asset.id),
+        visitorId,
+      )
     );
     return {
-      list: page.list.map((asset) => this.toAssetListItem(asset, states.get(asset.id))),
-      pagination: page.pagination,
+      ...data,
+      list: data.list.map((asset) => {
+        const state = states.get(asset.id);
+        return {
+          ...asset,
+          liked_by_me: state?.likedByMe ?? false,
+          favorited_by_me: state?.favoritedByMe ?? false,
+        };
+      }),
     };
   }
 
@@ -374,6 +412,29 @@ class VisitorPictureLibraryService {
     ].join(":");
   }
 
+  private createAssetListTiming(): AssetListDebugTiming {
+    return {
+      cache: null,
+      total_ms: 0,
+      query_ms: 0,
+      visitor_state_ms: 0,
+      serialize_ms: 0,
+      row_count: 0,
+    };
+  }
+
+  private async measureAssetListStep<TValue>(
+    timing: AssetListDebugTiming | null,
+    key: string,
+    loader: () => Promise<TValue>,
+  ) {
+    if (!timing) return loader();
+    const startedAt = Date.now();
+    const value = await loader();
+    timing[key] = Date.now() - startedAt;
+    return value;
+  }
+
   private buildNavigationCacheKey(id: string, query: VisitorPictureAssetNavigationQuery) {
     return [
       "asset-navigation",
@@ -388,18 +449,29 @@ class VisitorPictureLibraryService {
     key: string,
     loader: () => Promise<TValue>,
   ) {
+    return (await this.getPublicCachedResult(key, loader)).value;
+  }
+
+  private async getPublicCachedResult<TValue>(
+    key: string,
+    loader: () => Promise<TValue>,
+  ): Promise<{ value: TValue; cache: "hit" | "miss" | "shared" }> {
     const now = Date.now();
     const cached = this.publicCache.get(key) as PublicCacheEntry<TValue> | undefined;
-    if (cached && cached.expiresAt > now) {
-      return cached.value;
-    }
+    if (cached && cached.expiresAt > now) return { value: cached.value, cache: "hit" };
 
-    const value = await loader();
-    this.publicCache.set(key, {
-      value,
-      expiresAt: now + PUBLIC_CACHE_TTL_MS,
-    });
-    return value;
+    const shared = this.publicInFlight.get(key) as Promise<TValue> | undefined;
+    if (shared) return { value: await shared, cache: "shared" };
+
+    const promise = loader();
+    this.publicInFlight.set(key, promise);
+    try {
+      const value = await promise;
+      this.publicCache.set(key, { value, expiresAt: Date.now() + PUBLIC_CACHE_TTL_MS });
+      return { value, cache: "miss" };
+    } finally {
+      this.publicInFlight.delete(key);
+    }
   }
 
 }

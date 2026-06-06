@@ -5,6 +5,8 @@ import type {
 } from "@/schema/visitor-picture-library";
 import { SupabaseDB } from "@/utils/supabase";
 
+const LIST_VARIANTS = ["thumb", "cover", "original", "large"] as const;
+
 export type VisitorPictureCategoryRow = {
   id: string;
   name: string;
@@ -70,6 +72,14 @@ export type VisitorPictureShareEventRecord = {
   created_at: string;
 };
 
+type VisitorPictureAssetRpcRow = {
+  asset: (VisitorPictureAssetRow & {
+    variants: VisitorPictureVariantRow[];
+    categories: VisitorPictureCategoryRow[];
+  }) | null;
+  total_count: number | string;
+};
+
 class VisitorPictureLibraryRepository {
   async listCategories() {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -89,40 +99,24 @@ class VisitorPictureLibraryRepository {
   }
 
   async listAssets(query: VisitorPictureAssetListQuery) {
-    if (query.category_id) {
-      const category = await this.findActiveCategory(query.category_id);
-      if (!category) return this.toAssetPage([], query.page, query.pageSize, 0);
-    }
-
-    const assetIds = query.category_id
-      ? await this.findAssetIdsByCategory(query.category_id)
-      : null;
-    if (assetIds && assetIds.length === 0) {
-      return this.toAssetPage([], query.page, query.pageSize, 0);
-    }
-
-    let request = SupabaseDB.getAdminClient()
-      .from("picture_assets")
-      .select(
-        "id,title,description,width,height,like_count,favorite_count,comment_count,share_count,sort_order,created_at,updated_at",
-        { count: "exact" },
-      )
-      .eq("status", "published")
-      .is("deleted_at", null);
-
-    if (assetIds) request = request.in("id", assetIds);
-
-    const from = (query.page - 1) * query.pageSize;
-    const to = from + query.pageSize - 1;
-    const { data, error, count } = await request
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, to);
+    const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
+      rpc: (name: string, params: Record<string, unknown>) => Promise<{
+        data: VisitorPictureAssetRpcRow[] | null;
+        error: { message?: string } | null;
+      }>;
+    }).rpc("list_visitor_picture_assets", {
+      p_category_id: query.category_id ?? null,
+      p_page: query.page,
+      p_page_size: query.pageSize,
+    });
     if (error) throw Errors.dbError("查询图片列表失败", error);
 
-    const list = await this.attachRelations((data || []) as VisitorPictureAssetRow[]);
-    return this.toAssetPage(list, query.page, query.pageSize, count || 0);
+    const rows = data || [];
+    const list = rows
+      .map((row) => row.asset)
+      .filter((asset): asset is VisitorPictureAssetRecord => Boolean(asset));
+    const total = Number(rows[0]?.total_count ?? 0);
+    return this.toAssetPage(list, query.page, query.pageSize, total);
   }
 
   async findAssetDetail(id: string) {
@@ -336,11 +330,14 @@ class VisitorPictureLibraryRepository {
     return (data || []).map((item) => item.asset_id);
   }
 
-  private async attachRelations(assets: VisitorPictureAssetRow[]) {
+  private async attachRelations(
+    assets: VisitorPictureAssetRow[],
+    variantNames?: readonly string[],
+  ) {
     if (assets.length === 0) return [];
     const ids = assets.map((item) => item.id);
     const [variants, categories] = await Promise.all([
-      this.findVariants(ids),
+      this.findVariants(ids, variantNames),
       this.findCategoriesByAssetIds(ids),
     ]);
     return assets.map((asset) => ({
@@ -352,11 +349,15 @@ class VisitorPictureLibraryRepository {
     }));
   }
 
-  private async findVariants(assetIds: string[]) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+  private async findVariants(assetIds: string[], variantNames?: readonly string[]) {
+    let request = SupabaseDB.getAdminClient()
       .from("picture_asset_variants")
       .select("asset_id,variant,object_key,width,height,file_size,mime_type")
       .in("asset_id", assetIds);
+
+    if (variantNames && variantNames.length > 0) request = request.in("variant", [...variantNames]);
+
+    const { data, error } = await request;
     if (error) throw Errors.dbError("查询图片规格失败", error);
     return (data || []) as VisitorPictureVariantRow[];
   }

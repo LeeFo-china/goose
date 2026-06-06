@@ -1,8 +1,17 @@
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
 
+const BooleanQuerySchema = z.preprocess((value) => {
+  if (value == null || value === "") return false;
+  if (typeof value === "string") {
+    return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+  }
+  return value;
+}, z.boolean().default(false));
+
 export const VisitorPictureAssetListQuerySchema = PaginationQuerySchema.extend({
   category_id: z.uuid("无效的分类 ID").optional(),
+  debug_timing: BooleanQuerySchema.optional().default(false),
 });
 
 export const VisitorPictureAssetParamsSchema = z.object({

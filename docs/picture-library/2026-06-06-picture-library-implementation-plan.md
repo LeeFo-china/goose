@@ -1316,6 +1316,47 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
 - `share-title` 文档为图片详情页分享标题契约。
 - 当前状态是后端已实现；小程序可优先使用后端 `share.title`。
 
+### 阶段 7R 执行记录：列表接口冷态性能治理
+
+状态：第一轮后端治理已实现，冷态明显改善但未完全达到 `<800ms` 目标。
+
+后端改动：
+
+- `GET /visitor/picture-library/assets`
+  - 支持 `debug_timing=true`。
+  - 带 visitor token 的请求复用公开列表基础缓存。
+  - visitor 点赞/收藏态改为当前页批量合并。
+- 公开缓存：
+  - 增加同 key in-flight 去重。
+  - 缓存 key 不包含 visitor 个性化状态。
+- 数据库：
+  - 新增 `list_visitor_picture_assets` RPC。
+  - 一次返回当前页图片、列表变体、分类和总数。
+  - 新增 visitor 列表相关索引。
+
+开发库复测：
+
+| 场景 | 结果 |
+| --- | --- |
+| 治理前冷态 | 约 `4.9s - 7.2s` |
+| 本轮后冷态 | 约 `1.0s - 1.7s` |
+| 本轮后热态 | 毫秒级，debug 样例为 `0ms` |
+| 越界分页 | 保留 `pagination.total` |
+| 主剩余耗时 | `query_ms` |
+| API 检查 | `bun run api:check` 通过 |
+
+剩余风险：
+
+- 当前缓存是 API 进程内缓存，多实例不共享。
+- 服务重启或缓存未命中时仍有 `1s+` 冷态长尾。
+- 后续需要继续定位 RPC 数据库执行耗时与 Supabase 网关耗时占比。
+
+对接文档：
+
+```text
+docs/picture-library/2026-06-06-picture-library-list-performance-backend.md
+```
+
 ### 阶段 7Q 执行记录：详情页上一张下一张导航接口
 
 状态：后端已实现，等待小程序按文档对接。
