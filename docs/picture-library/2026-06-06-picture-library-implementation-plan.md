@@ -453,6 +453,14 @@ curl GET /visitor/picture-library/assets/:id
 - 阶段 3 浏览接口不要求 visitor token，便于首页冷启动展示。
 - 点赞、收藏、评论、分享仍在后续阶段实现，届时写操作会要求 visitor session。
 
+小程序回写对接：
+
+- 小程序已完成阶段 3 浏览能力对接，回写文档位于 `/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage3-integration.md`。
+- 小程序侧 smoke 显示公开接口冷态偏慢：分类约 5-6s，列表约 2.3-2.5s，详情约 2.1-2.3s。
+- 后端已为不带 visitor token 的公开分类、列表、详情接口增加 5 分钟内存缓存。
+- 点赞/收藏写操作会清空公开缓存，避免公开计数长期不一致。
+- 后端复测缓存命中后耗时约 2-4ms；首个冷态请求仍可能受远程数据库和运行时冷缓存影响。
+
 ## 阶段 4：点赞与收藏
 
 ### 目标

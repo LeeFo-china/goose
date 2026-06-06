@@ -10,9 +10,69 @@ import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 
 const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
 const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
+const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type PublicCacheEntry<TValue> = {
+  expiresAt: number;
+  value: TValue;
+};
 
 class VisitorPictureLibraryService {
+  private publicCache = new Map<string, PublicCacheEntry<unknown>>();
+
   async listCategories() {
+    return this.getPublicCached("categories", () => this.loadCategories());
+  }
+
+  async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
+    if (!visitorId) {
+      return this.getPublicCached(this.buildAssetListCacheKey(query), () =>
+        this.loadAssets(query, null)
+      );
+    }
+
+    return this.loadAssets(query, visitorId);
+  }
+
+  async getAssetDetail(id: string, visitorId: string | null = null) {
+    if (!visitorId) {
+      return this.getPublicCached(`asset-detail:${id}`, () =>
+        this.loadAssetDetail(id, null)
+      );
+    }
+
+    return this.loadAssetDetail(id, visitorId);
+  }
+
+  async setLike(input: {
+    assetId: string;
+    visitorId: string;
+    liked: boolean;
+  }) {
+    const result = await visitorPictureLibraryRepository.setLike(
+      input.assetId,
+      input.visitorId,
+      input.liked,
+    );
+    this.clearPublicCache();
+    return result;
+  }
+
+  async setFavorite(input: {
+    assetId: string;
+    visitorId: string;
+    favorited: boolean;
+  }) {
+    const result = await visitorPictureLibraryRepository.setFavorite(
+      input.assetId,
+      input.visitorId,
+      input.favorited,
+    );
+    this.clearPublicCache();
+    return result;
+  }
+
+  private async loadCategories() {
     const categories = await visitorPictureLibraryRepository.listCategories();
     const coverIds = categories
       .map((item) => item.cover_asset_id)
@@ -41,7 +101,7 @@ class VisitorPictureLibraryService {
     });
   }
 
-  async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
+  private async loadAssets(query: VisitorPictureAssetListQuery, visitorId: string | null) {
     const page = await visitorPictureLibraryRepository.listAssets(query);
     const states = await visitorPictureLibraryRepository.findInteractionStates(
       page.list.map((asset) => asset.id),
@@ -53,35 +113,11 @@ class VisitorPictureLibraryService {
     };
   }
 
-  async getAssetDetail(id: string, visitorId: string | null = null) {
+  private async loadAssetDetail(id: string, visitorId: string | null) {
     const asset = await visitorPictureLibraryRepository.findAssetDetail(id);
     if (!asset) throw Errors.notFound("图片不存在或未发布");
     const states = await visitorPictureLibraryRepository.findInteractionStates([asset.id], visitorId);
     return this.toAssetDetail(asset, states.get(asset.id));
-  }
-
-  async setLike(input: {
-    assetId: string;
-    visitorId: string;
-    liked: boolean;
-  }) {
-    return visitorPictureLibraryRepository.setLike(
-      input.assetId,
-      input.visitorId,
-      input.liked,
-    );
-  }
-
-  async setFavorite(input: {
-    assetId: string;
-    visitorId: string;
-    favorited: boolean;
-  }) {
-    return visitorPictureLibraryRepository.setFavorite(
-      input.assetId,
-      input.visitorId,
-      input.favorited,
-    );
   }
 
   private toAssetListItem(
@@ -156,6 +192,37 @@ class VisitorPictureLibraryService {
       file_size: variant.file_size,
       mime_type: variant.mime_type,
     };
+  }
+
+  private buildAssetListCacheKey(query: VisitorPictureAssetListQuery) {
+    return [
+      "assets",
+      query.category_id || "all",
+      query.page,
+      query.pageSize,
+    ].join(":");
+  }
+
+  private async getPublicCached<TValue>(
+    key: string,
+    loader: () => Promise<TValue>,
+  ) {
+    const now = Date.now();
+    const cached = this.publicCache.get(key) as PublicCacheEntry<TValue> | undefined;
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+
+    const value = await loader();
+    this.publicCache.set(key, {
+      value,
+      expiresAt: now + PUBLIC_CACHE_TTL_MS,
+    });
+    return value;
+  }
+
+  private clearPublicCache() {
+    this.publicCache.clear();
   }
 }
 

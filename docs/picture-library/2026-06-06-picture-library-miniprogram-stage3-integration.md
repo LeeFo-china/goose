@@ -224,3 +224,47 @@ curl http://localhost:3000/visitor/picture-library/categories
 curl "http://localhost:3000/visitor/picture-library/assets?page=1&pageSize=20"
 curl "http://localhost:3000/visitor/picture-library/assets/:id"
 ```
+
+## 小程序回写对接记录
+
+回写来源：
+
+```text
+/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage3-integration.md
+```
+
+小程序侧已完成：
+
+- 新增 `src/services/picture_library.ts`。
+- 新增图片库列表页和详情页。
+- visitor 首页新增“装修灵感图库”轻量入口。
+- 首页首屏只请求分类列表和首个有图片分类第一页预览。
+- 预览最多展示 6 张图，列表页按 `category_id + page + pageSize` 分页。
+
+小程序侧 smoke 反馈：
+
+| 接口 | 反馈耗时 |
+| --- | ---: |
+| `GET /visitor/picture-library/categories` | 约 5-6s |
+| `GET /visitor/picture-library/assets?page=1&pageSize=3` | 约 2.3-2.5s |
+| `GET /visitor/picture-library/assets/:id` | 约 2.1-2.3s |
+
+后端已按反馈处理：
+
+- visitor 公开分类、列表、详情接口增加 5 分钟短 TTL 内存缓存。
+- 缓存只用于不带 visitor token 的公开浏览请求。
+- 带 visitor token 的请求仍实时返回 `liked_by_me`、`favorited_by_me`。
+- 点赞/收藏写操作后会清空公开缓存，避免公开计数长期不一致。
+
+后端复测结果：
+
+| 轮次 | categories | assets | detail |
+| --- | ---: | ---: | ---: |
+| 冷态 | 5.491s | 2.205s | 2.063s |
+| 缓存命中 1 | 0.004s | 0.003s | 0.002s |
+| 缓存命中 2 | 0.002s | 0.002s | 0.002s |
+
+剩余风险：
+
+- 首次冷态请求仍可能秒级，主要受远程数据库冷查询、对象存储 URL 解析和运行时冷缓存影响。
+- 当前缓存为单 API 进程内存缓存，多实例部署时各实例独立缓存。
