@@ -9,6 +9,7 @@ import authPlugin from "./plugins/auth";
 import requestLoggingPlugin from "./plugins/request-logging";
 import { refreshPlatformCosPublicBaseUrlCache } from "@/services/files/file-url-resolver";
 import { administrativeAreaService } from "@/services/administrative-areas";
+import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -73,6 +74,9 @@ refreshPlatformCosPublicBaseUrlCache().finally(() => {
 
     administrativeAreaService.prewarmPublicCache().catch((cacheError) => {
       app.log.warn({ err: cacheError }, "prewarm administrative area public cache failed");
+    });
+    visitorPictureLibraryService.prewarmPublicListCache().catch((cacheError) => {
+      app.log.warn({ err: cacheError }, "prewarm picture library public list cache failed");
     });
   });
 });

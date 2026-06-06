@@ -1333,13 +1333,19 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
   - 新增 `list_visitor_picture_assets` RPC。
   - 一次返回当前页图片、列表变体、分类和总数。
   - 新增 visitor 列表相关索引。
+- 直连优化：
+  - API 优先使用 `SUPABASE_DB_URL` / `SUPABASE_DB_DIRECT_URL` 直连 Postgres 调用列表 RPC。
+  - 直连不可用时回退 Supabase RPC。
+  - API 启动后异步预热首个有图分类第一页。
 
 开发库复测：
 
 | 场景 | 结果 |
 | --- | --- |
 | 治理前冷态 | 约 `4.9s - 7.2s` |
-| 本轮后冷态 | 约 `1.0s - 1.7s` |
+| 数据库内部执行 | `12.764ms` |
+| Supabase RPC 冷态 | 约 `1.0s - 1.7s` |
+| API 直连已建连冷态 | 约 `108ms - 238ms` |
 | 本轮后热态 | 毫秒级，debug 样例为 `0ms` |
 | 越界分页 | 保留 `pagination.total` |
 | 主剩余耗时 | `query_ms` |
@@ -1348,8 +1354,8 @@ docs/picture-library/2026-06-06-picture-library-miniprogram-detail-3-4-integrati
 剩余风险：
 
 - 当前缓存是 API 进程内缓存，多实例不共享。
-- 服务重启或缓存未命中时仍有 `1s+` 冷态长尾。
-- 后续需要继续定位 RPC 数据库执行耗时与 Supabase 网关耗时占比。
+- 服务重启后首次直连建连仍可能有一次性长尾，已通过启动预热缓解。
+- 后续如果生产多实例部署，需要评估共享缓存。
 
 对接文档：
 

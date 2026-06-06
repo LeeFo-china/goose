@@ -3,6 +3,7 @@ import type {
   CreateVisitorPictureShareEventInput,
   VisitorPictureAssetListQuery,
 } from "@/schema/visitor-picture-library";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import { SupabaseDB } from "@/utils/supabase";
 
 const LIST_VARIANTS = ["thumb", "cover", "original", "large"] as const;
@@ -80,6 +81,10 @@ type VisitorPictureAssetRpcRow = {
   total_count: number | string;
 };
 
+type VisitorPictureAssetSqlRow = VisitorPictureAssetRpcRow & {
+  total_count: number | string | bigint;
+};
+
 class VisitorPictureLibraryRepository {
   async listCategories() {
     const { data, error } = await SupabaseDB.getAdminClient()
@@ -99,6 +104,34 @@ class VisitorPictureLibraryRepository {
   }
 
   async listAssets(query: VisitorPictureAssetListQuery) {
+    const directSql = getDirectPostgresSql();
+    if (directSql) {
+      try {
+        return await this.listAssetsDirect(query, directSql);
+      } catch {
+        return this.listAssetsRpc(query);
+      }
+    }
+
+    return this.listAssetsRpc(query);
+  }
+
+  private async listAssetsDirect(
+    query: VisitorPictureAssetListQuery,
+    sql: NonNullable<ReturnType<typeof getDirectPostgresSql>>,
+  ) {
+    const rows = await sql<VisitorPictureAssetSqlRow[]>`
+      select *
+      from public.list_visitor_picture_assets(
+        ${query.category_id ?? null}::uuid,
+        ${query.page},
+        ${query.pageSize}
+      )
+    `;
+    return this.toAssetRpcPage(rows, query);
+  }
+
+  private async listAssetsRpc(query: VisitorPictureAssetListQuery) {
     const { data, error } = await (SupabaseDB.getAdminClient() as unknown as {
       rpc: (name: string, params: Record<string, unknown>) => Promise<{
         data: VisitorPictureAssetRpcRow[] | null;
@@ -111,7 +144,13 @@ class VisitorPictureLibraryRepository {
     });
     if (error) throw Errors.dbError("查询图片列表失败", error);
 
-    const rows = data || [];
+    return this.toAssetRpcPage(data || [], query);
+  }
+
+  private toAssetRpcPage(
+    rows: VisitorPictureAssetSqlRow[],
+    query: VisitorPictureAssetListQuery,
+  ) {
     const list = rows
       .map((row) => row.asset)
       .filter((asset): asset is VisitorPictureAssetRecord => Boolean(asset));

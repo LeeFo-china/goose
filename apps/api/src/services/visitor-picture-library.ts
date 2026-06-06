@@ -146,6 +146,17 @@ class VisitorPictureLibraryService {
     this.publicCache.clear();
   }
 
+  async prewarmPublicListCache() {
+    const categories = await this.listCategories();
+    const category = categories.find((item) => item.asset_count > 0);
+    await this.listAssets({
+      category_id: category?.id,
+      page: 1,
+      pageSize: 20,
+      debug_timing: false,
+    }, null);
+  }
+
   private async loadCategories() {
     const categories = await visitorPictureLibraryRepository.listCategories();
     const coverIds = categories
