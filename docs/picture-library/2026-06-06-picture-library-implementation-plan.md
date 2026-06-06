@@ -364,6 +364,41 @@ bun run api:check
 - 页面无明显布局错位，移动宽度下表单可用。
 - 无未授权普通租户后台访问入口。
 
+### 执行记录
+
+执行日期：2026-06-06
+
+本轮已完成：
+
+- 后端新增平台超管接口：`/platform/picture-library/categories` 与 `/platform/picture-library/assets`。
+- 分类支持列表、新建、编辑、停用、排序、设置封面。
+- 图片支持列表、分类筛选、标题搜索、状态筛选、上传、编辑、发布、隐藏、软删除。
+- 图片上传复用现有 COS 直传链路，新增上传场景 `picture_library`。
+- admin 新增入口：`/platform/picture-library`，并加入平台运营导航。
+- admin 页面包含图片 KPI、图片列表、筛选分页、分类管理区和上传/编辑弹窗。
+
+本轮实现取舍：
+
+- 管理端上传第一版将同一张图登记为 `original` 与 `cover` 两个变体。
+- 暂未引入服务端缩略图/高清图自动生成，后续可在阶段 7 做变体治理和补图脚本。
+- 删除图片为软删除图片元数据，不立即删除 COS 对象，便于误删回滚和对账。
+
+验收结果：
+
+| 项目 | 结果 |
+| --- | --- |
+| `bun run api:check` | 通过 |
+| `pnpm --dir apps/admin check` | 通过 |
+| API 文件行数检查 | 通过，新增后端文件均小于 500 行 |
+| admin 文件行数检查 | 通过，新增前端文件均小于 500 行 |
+| `GET /platform/picture-library/categories` | 平台 token 验证通过，返回 1 条 |
+| `GET /platform/picture-library/assets?page=1&pageSize=5` | 平台 token 验证通过，返回 5/5 |
+| `GET /platform/picture-library` | admin 登录 cookie 验证通过，HTTP 200 |
+
+后续依赖：
+
+- 阶段 3 visitor 公开接口落地前，图片上下架状态只在 admin 管理侧完成；visitor 可见性需要由阶段 3 接口正式消费 `status=published`。
+
 ## 阶段 3：visitor 首页分类展示与图片浏览
 
 ### 目标

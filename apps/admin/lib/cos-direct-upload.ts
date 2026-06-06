@@ -9,6 +9,7 @@ export type DirectUploadInitResult = {
 };
 
 export type DirectUploadCompleteResult = {
+  file_id?: string;
   url?: string;
   public_url?: string;
   path?: string;
@@ -17,6 +18,7 @@ export type DirectUploadCompleteResult = {
 };
 
 export type DirectUploadResult = {
+  fileId?: string;
   storagePath: string;
   objectKey?: string;
   url?: string;
@@ -114,6 +116,7 @@ export async function uploadDirectToCos(
   }
 
   return {
+    fileId: completed.file_id,
     storagePath,
     objectKey: completed.object_key || init.object_key,
     url: completed.url,

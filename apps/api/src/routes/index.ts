@@ -61,6 +61,7 @@ import UsageController from "@/controllers/usage";
 import BillingController from "@/controllers/billing";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
+import PictureLibraryController from "@/controllers/picture-library";
 
 const fullCrudRoutes = {
   list: true,
@@ -122,6 +123,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   BillingController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
+  PictureLibraryController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

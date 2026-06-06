@@ -35,6 +35,7 @@ const DIRECT_UPLOAD_SCENES = [
   "customer_douyin_screenshot",
   "h5_marketing_page",
   "project_acceptance",
+  "picture_library",
 ] as const;
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
 const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>([
@@ -44,9 +45,11 @@ const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>([
 const PUBLIC_STORED_FILE_SCENES = new Set([
   "h5_marketing_page",
   "panorama_tiles",
+  "picture_library",
 ]);
 const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "h5_marketing_page",
+  "picture_library",
 ]);
 
 const DirectUploadInitSchema = z.object({
@@ -442,7 +445,7 @@ class UploadController extends BaseController {
   }
 
   private getMaxUploadFileSize(scene: UploadScene) {
-    return scene === "h5_marketing_page"
+    return scene === "h5_marketing_page" || scene === "picture_library"
       ? H5_MARKETING_MAX_UPLOAD_FILE_SIZE
       : DEFAULT_MAX_UPLOAD_FILE_SIZE;
   }
