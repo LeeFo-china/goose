@@ -27,6 +27,8 @@ export type TenantServiceAreaRecord = {
     slug: string | null;
     status: string | null;
     address: string | null;
+    address_latitude: number | null;
+    address_longitude: number | null;
   } | null;
 };
 
@@ -45,7 +47,7 @@ class TenantServiceAreaRepository {
     let request = this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
       `, { count: "exact" });
 
     if (query.tenant_id) request = request.eq("tenant_id", query.tenant_id);
@@ -80,7 +82,7 @@ class TenantServiceAreaRepository {
     const { data, error } = await this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
       `)
       .eq("status", "active")
       .order("priority", { ascending: false });
@@ -97,7 +99,7 @@ class TenantServiceAreaRepository {
     const { data, error } = await this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
       `)
       .eq("id", id)
       .maybeSingle();
@@ -114,7 +116,7 @@ class TenantServiceAreaRepository {
       .insert(input)
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
       `)
       .single();
 
@@ -131,7 +133,7 @@ class TenantServiceAreaRepository {
       .eq("id", id)
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)
       `)
       .maybeSingle();
 

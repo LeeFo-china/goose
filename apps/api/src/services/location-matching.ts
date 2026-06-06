@@ -16,6 +16,8 @@ type TenantLite = {
   slug: string | null;
   status: string | null;
   address: string | null;
+  address_latitude: number | null;
+  address_longitude: number | null;
 };
 
 type IdentityMatch = {
@@ -33,6 +35,12 @@ type TenantLocationCandidate = {
   address: string | null;
   company_address: string | null;
   tenant_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  lat: number | null;
+  lng: number | null;
+  address_latitude: number | null;
+  address_longitude: number | null;
   service_area_id: string | null;
   province: string | null;
   city: string | null;
@@ -173,6 +181,7 @@ class LocationMatchingService {
       address: this.normalizeAddress(area.tenant.address),
       company_address: this.normalizeAddress(area.tenant.address),
       tenant_address: this.normalizeAddress(area.tenant.address),
+      ...this.toTenantAddressCoordinates(area.tenant),
       service_area_id: area.id,
       province: area.province,
       city: area.city,
@@ -244,7 +253,7 @@ class LocationMatchingService {
   private async findEmployeeTenant(authUserId: string): Promise<IdentityMatch | null> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
-      .select("id, tenant_id, status, tenant:tenants!employees_tenant_id_fkey(id,name,slug,status,address)")
+      .select("id, tenant_id, status, tenant:tenants!employees_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)")
       .eq("user_id", authUserId)
       .eq("status", "active")
       .not("tenant_id", "is", null)
@@ -261,7 +270,7 @@ class LocationMatchingService {
   private async findCustomerTenant(authUserId: string): Promise<IdentityMatch | null> {
     const { data: customers, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, tenant_id, status, tenant:tenants!customers_tenant_id_fkey(id,name,slug,status,address)")
+      .select("id, tenant_id, status, tenant:tenants!customers_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)")
       .eq("user_id", authUserId)
       .not("tenant_id", "is", null)
       .limit(20);
@@ -274,7 +283,7 @@ class LocationMatchingService {
     const customerIds = customerRows.map((item) => item.id).filter(Boolean);
     const { data: projects, error: projectError } = await SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, tenant_id, status, customer_id, tenant:tenants!projects_tenant_id_fkey(id,name,slug,status,address)")
+      .select("id, tenant_id, status, customer_id, tenant:tenants!projects_tenant_id_fkey(id,name,slug,status,address,address_latitude,address_longitude)")
       .in("customer_id", customerIds)
       .neq("status", "invalid")
       .limit(20);
@@ -300,6 +309,7 @@ class LocationMatchingService {
       address: this.normalizeAddress(match.tenant.address),
       company_address: this.normalizeAddress(match.tenant.address),
       tenant_address: this.normalizeAddress(match.tenant.address),
+      ...this.toTenantAddressCoordinates(match.tenant),
       service_area_id: null,
       province: null,
       city: null,
@@ -319,6 +329,28 @@ class LocationMatchingService {
   private normalizeAddress(address: string | null | undefined) {
     const value = address?.trim();
     return value || null;
+  }
+
+  private normalizeCoordinate(value: number | string | null | undefined) {
+    if (value == null) return null;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  private toTenantAddressCoordinates(tenant: {
+    address_latitude?: number | string | null;
+    address_longitude?: number | string | null;
+  }) {
+    const latitude = this.normalizeCoordinate(tenant.address_latitude);
+    const longitude = this.normalizeCoordinate(tenant.address_longitude);
+    return {
+      latitude,
+      longitude,
+      lat: latitude,
+      lng: longitude,
+      address_latitude: latitude,
+      address_longitude: longitude,
+    };
   }
 
   private assertPlatformAdmin(authContext: AuthContext) {

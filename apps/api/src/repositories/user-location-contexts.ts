@@ -10,6 +10,12 @@ export type UserLocationMatchedTenant = {
   address?: string | null;
   company_address?: string | null;
   tenant_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  address_latitude?: number | null;
+  address_longitude?: number | null;
   service_area_id: string | null;
   province: string | null;
   city: string | null;
