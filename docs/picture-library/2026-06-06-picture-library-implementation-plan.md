@@ -433,6 +433,26 @@ curl GET /visitor/picture-library/assets/:id
 - 首屏接口响应不返回全量 363 张图。
 - 小程序能展示分类 tab、图片列表和详情页。
 
+### 执行记录
+
+执行日期：2026-06-06
+
+本轮已完成：
+
+- 新增 visitor 公开接口：`GET /visitor/picture-library/categories`。
+- 新增 visitor 图片分页接口：`GET /visitor/picture-library/assets`。
+- 新增 visitor 图片详情接口：`GET /visitor/picture-library/assets/:id`。
+- 接口只返回 active 分类、published 且未删除图片。
+- 列表图片按 `thumb -> cover -> original -> large` 回退。
+- 详情图片按 `large -> cover -> original -> thumb` 回退。
+- 图片对象返回可直接展示的 `url`，小程序无需自行拼接对象存储路径。
+- 小程序对接文档已落在 `docs/picture-library/2026-06-06-picture-library-miniprogram-stage3-integration.md`。
+
+本轮实现取舍：
+
+- 阶段 3 浏览接口不要求 visitor token，便于首页冷启动展示。
+- 点赞、收藏、评论、分享仍在后续阶段实现，届时写操作会要求 visitor session。
+
 ## 阶段 4：点赞与收藏
 
 ### 目标

@@ -65,6 +65,17 @@ export function isPublicRoute(method: string, url: string) {
   }
 
   if (
+    (method === "GET" || method === "HEAD")
+    && (
+      url === "/visitor/picture-library/categories" ||
+      url === "/visitor/picture-library/assets" ||
+      url.startsWith("/visitor/picture-library/assets/")
+    )
+  ) {
+    return true;
+  }
+
+  if (
     method === "POST"
     && url.startsWith("/public/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))
