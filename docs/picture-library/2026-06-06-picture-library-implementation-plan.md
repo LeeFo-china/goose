@@ -1185,6 +1185,55 @@ picture-library-health-check script
   导入逻辑会复用同一资产并补充新的分类关系。
 - 下一批 offset 使用本批 dry-run 输出的 `batch.next_offset=270`。
 
+### 阶段 7N 执行记录：全量导入第七批与最终收尾
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 执行第七批素材 dry-run：
+  - `bun run api:picture-library-import -- --dry-run --offset 270 --limit 50`
+- 执行第七批真实导入：
+  - `bun run api:picture-library-import -- --apply --offset 270 --limit 50`
+- 执行第七批变体补齐：
+  - `bun run api:picture-library-variants-backfill -- --apply --limit 50`
+- 对第七批新导入分类执行封面回填：
+  - `简约` -> `简约风 13`
+  - `古典风格` -> `法式 5`
+- 执行最终批 dry-run：
+  - `bun run api:picture-library-import -- --dry-run --offset 320 --limit 50`
+- 执行最终批真实导入：
+  - `bun run api:picture-library-import -- --apply --offset 320 --limit 50`
+- 执行最终批变体补齐：
+  - `bun run api:picture-library-variants-backfill -- --apply --limit 50`
+- 对最终新增分类执行封面回填：
+  - `北欧风` -> `2`
+  - `意式` -> `轻奢 18`
+- 执行全量 dry-run、健康检查、变体复跑和 visitor 列表冒烟验证。
+
+开发库验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 第七批 dry-run | 选中 50 张，已存在 39 张，待上传 11 张 |
+| 第七批导入 | 新增 11 张，已存在 39 张，失败 0 |
+| 第七批变体补齐 | 上传 22 个变体，失败 0 |
+| 第七批后剩余 dry-run | 源图 360 张，已存在 353 张，待上传 7 张 |
+| 最终批 dry-run | 选中 40 张，已存在 33 张，待上传 7 张 |
+| 最终批导入 | 新增 7 张，已存在 33 张，失败 0 |
+| 最终批变体补齐 | 上传 14 个变体，失败 0 |
+| 最终全量 dry-run | 源图 360 张，已存在 360 张，待上传 0 张 |
+| 变体补齐复跑 dry-run | `candidate_asset_count=0`，`missing_variant_count=0` |
+| 健康检查 | 196 张图片，18 个分类，`missing_variant_asset_total=0`，`issue_total=0` |
+| visitor 列表 | 总数 196，首屏返回 `thumb` URL |
+
+最终结论：
+
+- `/Users/leefo/Public/work/goose-server/picture` 下 360 张源图已全部完成导入或复用。
+- 开发库最终形成 196 张已发布图片资产；差异来自源素材重复 checksum。
+- 所有已发布图片均已补齐 `cover` / `thumb` / `large` 可展示规格。
+- 18 个启用分类均已设置封面，visitor 列表可正常返回缩略图。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
