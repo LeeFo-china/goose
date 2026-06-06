@@ -4,6 +4,7 @@ import type {
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
 import { systemSettingsService } from "@/services/system-settings";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import { SupabaseDB } from "@/utils/supabase";
 
 const COMMENT_DEFAULT_STATUS_SETTING = "PICTURE_COMMENT_DEFAULT_STATUS";
@@ -50,30 +51,92 @@ type PictureCommentImageRow = Omit<PictureCommentImageRecord, "file_object"> & {
     | null;
 };
 
+type PictureCommentSqlRow = PictureCommentRow & {
+  total_count: number | string | bigint;
+};
+
+type PictureCommentImageSqlRow = Omit<PictureCommentImageRecord, "file_object"> & {
+  file_object: PictureCommentImageRecord["file_object"];
+};
+
+type CommentListTiming = Record<string, number | string | null>;
+
 class VisitorPictureCommentsRepository {
-  async list(assetId: string, query: VisitorPictureCommentListQuery) {
+  async list(
+    assetId: string,
+    query: VisitorPictureCommentListQuery,
+    timing: CommentListTiming | null = null,
+  ) {
+    const directSql = getDirectPostgresSql();
+    if (directSql) {
+      try {
+        return await this.listDirect(assetId, query, timing, directSql);
+      } catch {
+        return this.listSupabase(assetId, query, timing);
+      }
+    }
+
+    return this.listSupabase(assetId, query, timing);
+  }
+
+  private async listDirect(
+    assetId: string,
+    query: VisitorPictureCommentListQuery,
+    timing: CommentListTiming | null,
+    sql: NonNullable<ReturnType<typeof getDirectPostgresSql>>,
+  ) {
+    const from = (query.page - 1) * query.pageSize;
+    const rows = await this.measureStep(timing, "query_ms", () => sql<PictureCommentSqlRow[]>`
+      SELECT
+        id,
+        asset_id,
+        visitor_id,
+        content,
+        status,
+        created_at,
+        updated_at,
+        deleted_at,
+        count(*) OVER() AS total_count
+      FROM public.picture_asset_comments
+      WHERE asset_id = ${assetId}::uuid
+        AND status = 'visible'
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC, id DESC
+      OFFSET ${from}
+      LIMIT ${query.pageSize}
+    `);
+    const comments = rows.map(({ total_count: _totalCount, ...row }) => row);
+    const list = await this.measureStep(timing, "images_ms", () =>
+      this.attachImagesDirect(comments, sql)
+    );
+    const total = Number(rows[0]?.total_count ?? 0);
+    return this.toPage(list, query, total);
+  }
+
+  private async listSupabase(
+    assetId: string,
+    query: VisitorPictureCommentListQuery,
+    timing: CommentListTiming | null,
+  ) {
     const from = (query.page - 1) * query.pageSize;
     const to = from + query.pageSize - 1;
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("picture_asset_comments")
-      .select("*", { count: "exact" })
-      .eq("asset_id", assetId)
-      .eq("status", "visible")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    const { data, error, count } = await this.measureStep(timing, "query_ms", async () =>
+      SupabaseDB.getAdminClient()
+        .from("picture_asset_comments")
+        .select("*", { count: "exact" })
+        .eq("asset_id", assetId)
+        .eq("status", "visible")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to)
+    );
     if (error) throw Errors.dbError("查询图片评论失败", error);
 
-    const list = await this.attachImages((data || []) as PictureCommentRow[]);
-    return {
-      list,
-      pagination: {
-        page: query.page,
-        pageSize: query.pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / query.pageSize),
-      },
-    };
+    const list = await this.measureStep(timing, "images_ms", () =>
+      this.attachImages((data || []) as PictureCommentRow[])
+    );
+    return this.toPage(list, query, count || 0);
   }
 
   async create(input: {
@@ -226,6 +289,34 @@ class VisitorPictureCommentsRepository {
     }
   }
 
+  private toPage(
+    list: VisitorPictureCommentRecord[],
+    query: VisitorPictureCommentListQuery,
+    total: number,
+  ) {
+    return {
+      list,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.ceil(total / query.pageSize),
+      },
+    };
+  }
+
+  private async measureStep<TValue>(
+    timing: CommentListTiming | null,
+    key: string,
+    loader: () => Promise<TValue>,
+  ) {
+    if (!timing) return loader();
+    const startedAt = Date.now();
+    const value = await loader();
+    timing[key] = Date.now() - startedAt;
+    return value;
+  }
+
   private async attachImages(comments: PictureCommentRow[]) {
     if (comments.length === 0) return [];
     const commentIds = comments.map((item) => item.id);
@@ -255,6 +346,48 @@ class VisitorPictureCommentsRepository {
       ...comment,
       images: images.filter((image) => image.comment_id === comment.id),
     }));
+  }
+
+  private async attachImagesDirect(
+    comments: PictureCommentRow[],
+    sql: NonNullable<ReturnType<typeof getDirectPostgresSql>>,
+  ) {
+    if (comments.length === 0) return [];
+    const commentIds = comments.map((item) => item.id);
+    const rows = await sql<PictureCommentImageSqlRow[]>`
+      SELECT
+        pci.id,
+        pci.comment_id,
+        pci.file_object_id,
+        pci.sort_order,
+        pci.status,
+        pci.created_at,
+        CASE
+          WHEN pfo.id IS NULL THEN NULL
+          ELSE jsonb_build_object(
+            'id', pfo.id,
+            'object_key', pfo.object_key,
+            'mime_type', pfo.mime_type,
+            'size_bytes', pfo.size_bytes,
+            'width', pfo.width,
+            'height', pfo.height
+          )
+        END AS file_object
+      FROM public.picture_asset_comment_images pci
+      LEFT JOIN public.platform_file_objects pfo
+        ON pfo.id = pci.file_object_id
+      WHERE pci.comment_id = ANY(${this.toPostgresUuidArray(commentIds)}::uuid[])
+        AND pci.status = 'visible'
+      ORDER BY pci.comment_id ASC, pci.sort_order ASC, pci.created_at ASC
+    `;
+    return comments.map((comment) => ({
+      ...comment,
+      images: rows.filter((image) => image.comment_id === comment.id),
+    }));
+  }
+
+  private toPostgresUuidArray(ids: string[]) {
+    return `{${ids.join(",")}}`;
   }
 }
 

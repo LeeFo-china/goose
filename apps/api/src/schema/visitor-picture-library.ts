@@ -29,9 +29,12 @@ export const VisitorPictureAssetNavigationQuerySchema = z.object({
     .max(1, "当前仅支持每个方向返回 1 张")
     .optional()
     .default(1),
+  debug_timing: BooleanQuerySchema.optional().default(false),
 });
 
-export const VisitorPictureCommentListQuerySchema = PaginationQuerySchema;
+export const VisitorPictureCommentListQuerySchema = PaginationQuerySchema.extend({
+  debug_timing: BooleanQuerySchema.optional().default(false),
+});
 
 export const CreateVisitorPictureCommentSchema = z.object({
   content: z.string()

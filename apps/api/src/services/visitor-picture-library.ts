@@ -1,16 +1,15 @@
 import { Errors } from "@/errors/error-factory";
 import {
   visitorPictureCommentsRepository,
-  type VisitorPictureCommentRecord,
-  type PictureCommentImageRecord,
 } from "@/repositories/visitor-picture-comments";
 import {
   visitorPictureLibraryRepository,
-  type VisitorPictureInteractionState,
   type VisitorPictureAssetRecord,
-  type VisitorPictureVariantRow,
-  type VisitorPictureShareEventRecord,
 } from "@/repositories/visitor-picture-library";
+import {
+  visitorPictureNavigationRepository,
+  type VisitorPictureNavigationContext,
+} from "@/repositories/visitor-picture-navigation";
 import type {
   CreateVisitorPictureCommentInput,
   CreateVisitorPictureShareEventInput,
@@ -18,16 +17,28 @@ import type {
   VisitorPictureAssetListQuery,
   VisitorPictureCommentListQuery,
 } from "@/schema/visitor-picture-library";
-import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  NAVIGATION_SORT,
+  resolveNavigationCategoryId,
+  toAssetCoverImage,
+  toAssetDetail,
+  toAssetListItem,
+  toComment,
+  toShareEvent,
+} from "@/services/visitor-picture-library-serializer";
 
-const LIST_IMAGE_VARIANTS = ["thumb", "cover", "original", "large"] as const;
-const DETAIL_IMAGE_VARIANTS = ["large", "cover", "original", "thumb"] as const;
-const SHARE_IMAGE_VARIANTS = ["cover", "large", "thumb", "original"] as const;
-const DEFAULT_SHARE_TITLE = "装修效果图";
-const NAVIGATION_SORT = "sort_order asc, created_at desc, id desc";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type AssetListDebugTiming = Record<string, number | string | null>;
+type DebugTiming = Record<string, number | string | null>;
+type AssetDetailResponse = ReturnType<typeof toAssetDetail>;
+
+type NavigationResponse = {
+  current: AssetDetailResponse;
+  prev: AssetDetailResponse | null;
+  next: AssetDetailResponse | null;
+  context: VisitorPictureNavigationContext;
+};
 
 type PublicCacheEntry<TValue> = {
   expiresAt: number;
@@ -73,13 +84,24 @@ class VisitorPictureLibraryService {
     query: VisitorPictureAssetNavigationQuery,
     visitorId: string | null = null,
   ) {
-    if (!visitorId) {
-      return this.getPublicCached(this.buildNavigationCacheKey(id, query), () =>
-        this.loadAssetNavigation(id, query, null)
-      );
-    }
+    const timing = query.debug_timing ? this.createNavigationTiming() : null;
+    const startedAt = Date.now();
+    const baseQuery = { ...query, direction: "both" as const };
+    const cacheResult = await this.getPublicCachedResult(
+      this.buildNavigationCacheKey(id, baseQuery),
+      () => this.loadAssetNavigation(id, baseQuery, timing),
+    );
+    if (timing) timing.cache = cacheResult.cache;
 
-    return this.loadAssetNavigation(id, query, visitorId);
+    const filtered = this.filterNavigationDirection(cacheResult.value, query);
+    const data = visitorId
+      ? await this.withNavigationInteractionStates(filtered, visitorId, timing)
+      : filtered;
+    if (!timing) return data;
+
+    timing.row_count = this.countNavigationRows(data);
+    timing.total_ms = Date.now() - startedAt;
+    return { ...data, debug_timing: timing };
   }
 
   async setLike(input: {
@@ -111,10 +133,18 @@ class VisitorPictureLibraryService {
   }
 
   async listComments(assetId: string, query: VisitorPictureCommentListQuery) {
-    const page = await visitorPictureCommentsRepository.list(assetId, query);
+    const timing = query.debug_timing ? this.createCommentTiming() : null;
+    const startedAt = Date.now();
+    const page = await visitorPictureCommentsRepository.list(assetId, query, timing);
+    const serializeStartedAt = Date.now();
+    const list = page.list.map((comment) => toComment(comment));
+    if (timing) timing.serialize_ms = Date.now() - serializeStartedAt;
+    if (timing) timing.total_ms = Date.now() - startedAt;
+    if (timing) timing.row_count = list.length;
     return {
-      list: page.list.map((comment) => this.toComment(comment)),
+      list,
       pagination: page.pagination,
+      ...(timing ? { debug_timing: timing } : {}),
     };
   }
 
@@ -125,7 +155,7 @@ class VisitorPictureLibraryService {
   }) {
     const comment = await visitorPictureCommentsRepository.create(input);
     this.clearPublicCache();
-    return this.toComment(comment);
+    return toComment(comment);
   }
 
   async recordShareEvent(input: {
@@ -139,7 +169,7 @@ class VisitorPictureLibraryService {
       input.body.channel,
     );
     this.clearPublicCache();
-    return this.toShareEvent(event);
+    return toShareEvent(event);
   }
 
   clearPublicCache() {
@@ -149,12 +179,22 @@ class VisitorPictureLibraryService {
   async prewarmPublicListCache() {
     const categories = await this.listCategories();
     const category = categories.find((item) => item.asset_count > 0);
-    await this.listAssets({
+    const assets = await this.listAssets({
       category_id: category?.id,
       page: 1,
       pageSize: 20,
       debug_timing: false,
     }, null);
+    await Promise.all(
+      assets.list.slice(0, 5).map((asset) =>
+        this.getAssetNavigation(asset.id, {
+          category_id: category?.id,
+          direction: "both",
+          limit: 1,
+          debug_timing: false,
+        }, null).catch(() => null)
+      )
+    );
   }
 
   private async loadCategories() {
@@ -181,7 +221,7 @@ class VisitorPictureLibraryService {
         description: category.description,
         sort_order: category.sort_order,
         asset_count: category.asset_count,
-        cover_image: this.toImage(coverAsset ?? fallbackCoverAsset, LIST_IMAGE_VARIANTS),
+        cover_image: toAssetCoverImage(coverAsset ?? fallbackCoverAsset),
       };
     });
   }
@@ -195,7 +235,7 @@ class VisitorPictureLibraryService {
     );
     if (timing) timing.row_count = page.list.length;
     const startedAt = Date.now();
-    const list = page.list.map((asset) => this.toAssetListItem(asset, undefined));
+    const list = page.list.map((asset) => toAssetListItem(asset, undefined));
     if (timing) timing.serialize_ms = Date.now() - startedAt;
     return {
       list,
@@ -231,186 +271,98 @@ class VisitorPictureLibraryService {
     const asset = await visitorPictureLibraryRepository.findAssetDetail(id);
     if (!asset) throw Errors.notFound("图片不存在或未发布");
     const states = await visitorPictureLibraryRepository.findInteractionStates([asset.id], visitorId);
-    return this.toAssetDetail(asset, states.get(asset.id));
+    return toAssetDetail(asset, states.get(asset.id));
   }
 
   private async loadAssetNavigation(
     id: string,
     query: VisitorPictureAssetNavigationQuery,
-    visitorId: string | null,
-  ) {
-    const current = await visitorPictureLibraryRepository.findAssetDetail(id);
-    if (!current) throw Errors.notFound("图片不存在或未发布");
-
-    const categoryId = this.resolveNavigationCategoryId(current, query.category_id);
-    const assets = await visitorPictureLibraryRepository.findNavigationAssets(categoryId);
-    const currentIndex = assets.findIndex((asset) => asset.id === current.id);
-    if (currentIndex < 0) throw Errors.badRequest("当前图片不在导航上下文中");
-
-    const prevAsset = currentIndex > 0 ? assets[currentIndex - 1] : null;
-    const nextAsset = currentIndex < assets.length - 1 ? assets[currentIndex + 1] : null;
-    const requestedPrev = query.direction !== "next" ? prevAsset : null;
-    const requestedNext = query.direction !== "prev" ? nextAsset : null;
-    const states = await visitorPictureLibraryRepository.findInteractionStates(
-      [current, requestedPrev, requestedNext]
-        .filter((asset): asset is VisitorPictureAssetRecord => Boolean(asset))
-        .map((asset) => asset.id),
-      visitorId,
+    timing: DebugTiming | null,
+  ): Promise<NavigationResponse> {
+    const bundle = await this.measureStep(timing, "query_ms", () =>
+      visitorPictureNavigationRepository.findBundle({
+        assetId: id,
+        categoryId: query.category_id ?? null,
+        direction: query.direction,
+        limit: query.limit,
+      })
     );
+    if (!bundle.current || !bundle.context) {
+      await this.assertNavigationAssetContext(id, query.category_id);
+    }
 
-    return {
-      current: this.toAssetDetail(current, states.get(current.id)),
-      prev: requestedPrev ? this.toAssetDetail(requestedPrev, states.get(requestedPrev.id)) : null,
-      next: requestedNext ? this.toAssetDetail(requestedNext, states.get(requestedNext.id)) : null,
+    const startedAt = Date.now();
+    const current = bundle.current as VisitorPictureAssetRecord;
+    const context = bundle.context as VisitorPictureNavigationContext;
+    const response = {
+      current: toAssetDetail(current, undefined),
+      prev: bundle.prev ? toAssetDetail(bundle.prev, undefined) : null,
+      next: bundle.next ? toAssetDetail(bundle.next, undefined) : null,
       context: {
-        category_id: categoryId,
+        ...context,
         direction: query.direction,
         limit: query.limit,
         sort: NAVIGATION_SORT,
-        has_prev: Boolean(prevAsset),
-        has_next: Boolean(nextAsset),
-        prev_cursor: prevAsset?.id ?? null,
-        next_cursor: nextAsset?.id ?? null,
+      },
+    };
+    if (timing) timing.serialize_ms = Date.now() - startedAt;
+    return response;
+  }
+
+  private async assertNavigationAssetContext(id: string, categoryId: string | undefined) {
+    const asset = await visitorPictureLibraryRepository.findAssetDetail(id);
+    if (!asset) throw Errors.notFound("图片不存在或未发布");
+    if (categoryId) resolveNavigationCategoryId(asset, categoryId);
+    throw Errors.badRequest("当前图片不在导航上下文中");
+  }
+
+  private filterNavigationDirection(
+    data: NavigationResponse,
+    query: VisitorPictureAssetNavigationQuery,
+  ): NavigationResponse {
+    return {
+      ...data,
+      prev: query.direction !== "next" ? data.prev : null,
+      next: query.direction !== "prev" ? data.next : null,
+      context: {
+        ...data.context,
+        direction: query.direction,
+        limit: query.limit,
       },
     };
   }
 
-  private toAssetListItem(
-    asset: VisitorPictureAssetRecord,
-    state: VisitorPictureInteractionState | undefined,
-  ) {
+  private async withNavigationInteractionStates(
+    data: NavigationResponse,
+    visitorId: string,
+    timing: DebugTiming | null,
+  ): Promise<NavigationResponse> {
+    const assets = [data.current, data.prev, data.next].filter(
+      (asset): asset is AssetDetailResponse => Boolean(asset),
+    );
+    const states = await this.measureStep(timing, "visitor_state_ms", () =>
+      visitorPictureLibraryRepository.findInteractionStates(
+        assets.map((asset) => asset.id),
+        visitorId,
+      )
+    );
     return {
-      id: asset.id,
-      title: asset.title,
-      description: asset.description,
-      width: asset.width,
-      height: asset.height,
-      like_count: asset.like_count,
-      favorite_count: asset.favorite_count,
+      ...data,
+      current: this.applyInteractionState(data.current, states),
+      prev: data.prev ? this.applyInteractionState(data.prev, states) : null,
+      next: data.next ? this.applyInteractionState(data.next, states) : null,
+    };
+  }
+
+  private applyInteractionState(
+    asset: AssetDetailResponse,
+    states: Awaited<ReturnType<typeof visitorPictureLibraryRepository.findInteractionStates>>,
+  ) {
+    const state = states.get(asset.id);
+    return {
+      ...asset,
       liked_by_me: state?.likedByMe ?? false,
       favorited_by_me: state?.favoritedByMe ?? false,
-      comment_count: asset.comment_count,
-      share_count: asset.share_count,
-      image: this.toImage(asset, LIST_IMAGE_VARIANTS),
-      categories: this.toCategories(asset),
-      created_at: asset.created_at,
-      updated_at: asset.updated_at,
-    };
-  }
-
-  private toAssetDetail(
-    asset: VisitorPictureAssetRecord,
-    state: VisitorPictureInteractionState | undefined,
-  ) {
-    return {
-      ...this.toAssetListItem(asset, state),
-      image: this.toImage(asset, DETAIL_IMAGE_VARIANTS),
-      images: {
-        detail: this.toVariantImage(asset.variants.find((item) => item.variant === "detail") ?? null),
-        thumb: this.toVariantImage(asset.variants.find((item) => item.variant === "thumb") ?? null),
-        cover: this.toVariantImage(asset.variants.find((item) => item.variant === "cover") ?? null),
-        large: this.toVariantImage(asset.variants.find((item) => item.variant === "large") ?? null),
-        original: this.toVariantImage(asset.variants.find((item) => item.variant === "original") ?? null),
-      },
-      share: {
-        title: this.buildShareTitle(asset),
-        image: this.toImage(asset, SHARE_IMAGE_VARIANTS),
-        path: `/packageVisitor/pages/picture-library-detail/index?id=${asset.id}`,
-      },
-    };
-  }
-
-  private toCategories(asset: VisitorPictureAssetRecord) {
-    return asset.categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      slug: category.slug,
-    }));
-  }
-
-  private toImage(
-    asset: VisitorPictureAssetRecord | null,
-    variantOrder: readonly string[],
-  ) {
-    if (!asset) return null;
-    for (const variant of variantOrder) {
-      const matched = asset.variants.find((item) => item.variant === variant);
-      const image = this.toVariantImage(matched ?? null);
-      if (image) return image;
-    }
-    return null;
-  }
-
-  private toVariantImage(variant: VisitorPictureVariantRow | null) {
-    if (!variant) return null;
-    const url = resolveStoredFileUrl(variant.object_key);
-    if (!url) return null;
-    return {
-      url,
-      variant: variant.variant,
-      width: variant.width,
-      height: variant.height,
-      file_size: variant.file_size,
-      mime_type: variant.mime_type,
-    };
-  }
-
-  private buildShareTitle(asset: VisitorPictureAssetRecord) {
-    const categoryName = asset.categories[0]?.name.trim();
-    if (!categoryName) return DEFAULT_SHARE_TITLE;
-    if (categoryName.includes("效果图")) return categoryName;
-    return `${categoryName}${DEFAULT_SHARE_TITLE}`;
-  }
-
-  private resolveNavigationCategoryId(
-    asset: VisitorPictureAssetRecord,
-    requestedCategoryId: string | undefined,
-  ) {
-    if (requestedCategoryId) {
-      const belongsToCategory = asset.categories.some((category) => category.id === requestedCategoryId);
-      if (!belongsToCategory) throw Errors.badRequest("当前图片不属于传入分类");
-      return requestedCategoryId;
-    }
-    return asset.categories[0]?.id ?? null;
-  }
-
-  private toComment(comment: VisitorPictureCommentRecord) {
-    return {
-      id: comment.id,
-      asset_id: comment.asset_id,
-      visitor_id: comment.visitor_id,
-      content: comment.content,
-      status: comment.status,
-      images: comment.images.map((image) => this.toCommentImage(image)).filter(Boolean),
-      created_at: comment.created_at,
-      updated_at: comment.updated_at,
-    };
-  }
-
-  private toCommentImage(image: PictureCommentImageRecord) {
-    const fileObject = image.file_object;
-    if (!fileObject) return null;
-    const url = resolveStoredFileUrl(fileObject.object_key);
-    if (!url) return null;
-    return {
-      id: image.id,
-      file_object_id: image.file_object_id,
-      url,
-      width: fileObject.width,
-      height: fileObject.height,
-      file_size: fileObject.size_bytes,
-      mime_type: fileObject.mime_type,
-    };
-  }
-
-  private toShareEvent(event: VisitorPictureShareEventRecord) {
-    return {
-      id: event.id,
-      asset_id: event.asset_id,
-      visitor_id: event.visitor_id,
-      channel: event.channel,
-      share_count: event.share_count,
-      created_at: event.created_at,
     };
   }
 
@@ -434,8 +386,41 @@ class VisitorPictureLibraryService {
     };
   }
 
+  private createNavigationTiming(): DebugTiming {
+    return {
+      cache: null,
+      total_ms: 0,
+      query_ms: 0,
+      visitor_state_ms: 0,
+      serialize_ms: 0,
+      row_count: 0,
+    };
+  }
+
+  private createCommentTiming(): DebugTiming {
+    return {
+      total_ms: 0,
+      query_ms: 0,
+      images_ms: 0,
+      serialize_ms: 0,
+      row_count: 0,
+    };
+  }
+
+  private countNavigationRows(data: NavigationResponse) {
+    return [data.current, data.prev, data.next].filter(Boolean).length;
+  }
+
   private async measureAssetListStep<TValue>(
     timing: AssetListDebugTiming | null,
+    key: string,
+    loader: () => Promise<TValue>,
+  ) {
+    return this.measureStep(timing, key, loader);
+  }
+
+  private async measureStep<TValue>(
+    timing: DebugTiming | null,
     key: string,
     loader: () => Promise<TValue>,
   ) {
