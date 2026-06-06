@@ -18,6 +18,8 @@ export type VisitorPictureNavigationBundle = {
   current: VisitorPictureAssetRecord | null;
   prev: VisitorPictureAssetRecord | null;
   next: VisitorPictureAssetRecord | null;
+  prevList: VisitorPictureAssetRecord[];
+  nextList: VisitorPictureAssetRecord[];
   context: VisitorPictureNavigationContext | null;
 };
 
@@ -81,13 +83,15 @@ class VisitorPictureNavigationRepository {
 
   private toBundle(rows: VisitorPictureNavigationRpcRow[]): VisitorPictureNavigationBundle {
     const current = rows.find((row) => row.nav_position === "current") ?? null;
-    const prev = rows.find((row) => row.nav_position === "prev") ?? null;
-    const next = rows.find((row) => row.nav_position === "next") ?? null;
+    const prevRows = rows.filter((row) => row.nav_position === "prev");
+    const nextRows = rows.filter((row) => row.nav_position === "next");
     return {
       current: current?.asset ?? null,
-      prev: prev?.asset ?? null,
-      next: next?.asset ?? null,
-      context: current?.context ?? prev?.context ?? next?.context ?? null,
+      prev: prevRows[0]?.asset ?? null,
+      next: nextRows[0]?.asset ?? null,
+      prevList: prevRows.map((row) => row.asset),
+      nextList: nextRows.map((row) => row.asset),
+      context: current?.context ?? prevRows[0]?.context ?? nextRows[0]?.context ?? null,
     };
   }
 }

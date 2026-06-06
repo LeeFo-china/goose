@@ -26,7 +26,7 @@ export const VisitorPictureAssetNavigationQuerySchema = z.object({
   limit: z.coerce.number()
     .int("导航数量必须是整数")
     .min(1, "导航数量必须大于 0")
-    .max(1, "当前仅支持每个方向返回 1 张")
+    .max(5, "当前每个方向最多返回 5 张")
     .optional()
     .default(1),
   debug_timing: BooleanQuerySchema.optional().default(false),

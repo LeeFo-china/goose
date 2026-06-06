@@ -26,7 +26,7 @@ import {
   toShareEvent,
 } from "@/services/visitor-picture-library-serializer";
 
-const PUBLIC_CACHE_VERSION = "picture-library:v2";
+const PUBLIC_CACHE_VERSION = "picture-library:v3";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type AssetListDebugTiming = Record<string, number | string | null>;
@@ -37,6 +37,8 @@ type NavigationResponse = {
   current: AssetDetailResponse;
   prev: AssetDetailResponse | null;
   next: AssetDetailResponse | null;
+  prev_list: AssetDetailResponse[];
+  next_list: AssetDetailResponse[];
   context: VisitorPictureNavigationContext;
 };
 
@@ -190,7 +192,7 @@ class VisitorPictureLibraryService {
         this.getAssetNavigation(asset.id, {
           category_id: category?.id,
           direction: "both",
-          limit: 1,
+          limit: 5,
           debug_timing: false,
         }, null).catch(() => null)
       )
@@ -298,6 +300,8 @@ class VisitorPictureLibraryService {
       current: toAssetDetail(current, undefined),
       prev: bundle.prev ? toAssetDetail(bundle.prev, undefined) : null,
       next: bundle.next ? toAssetDetail(bundle.next, undefined) : null,
+      prev_list: bundle.prevList.map((asset) => toAssetDetail(asset, undefined)),
+      next_list: bundle.nextList.map((asset) => toAssetDetail(asset, undefined)),
       context: {
         ...context,
         direction: query.direction,
@@ -323,6 +327,8 @@ class VisitorPictureLibraryService {
       ...data,
       prev: query.direction !== "next" ? data.prev : null,
       next: query.direction !== "prev" ? data.next : null,
+      prev_list: query.direction !== "next" ? data.prev_list : [],
+      next_list: query.direction !== "prev" ? data.next_list : [],
       context: {
         ...data.context,
         direction: query.direction,
@@ -336,7 +342,7 @@ class VisitorPictureLibraryService {
     visitorId: string,
     timing: DebugTiming | null,
   ): Promise<NavigationResponse> {
-    const assets = [data.current, data.prev, data.next].filter(
+    const assets = [data.current, ...data.prev_list, ...data.next_list].filter(
       (asset): asset is AssetDetailResponse => Boolean(asset),
     );
     const states = await this.measureStep(timing, "visitor_state_ms", () =>
@@ -350,6 +356,8 @@ class VisitorPictureLibraryService {
       current: this.applyInteractionState(data.current, states),
       prev: data.prev ? this.applyInteractionState(data.prev, states) : null,
       next: data.next ? this.applyInteractionState(data.next, states) : null,
+      prev_list: data.prev_list.map((asset) => this.applyInteractionState(asset, states)),
+      next_list: data.next_list.map((asset) => this.applyInteractionState(asset, states)),
     };
   }
 
@@ -408,7 +416,7 @@ class VisitorPictureLibraryService {
   }
 
   private countNavigationRows(data: NavigationResponse) {
-    return [data.current, data.prev, data.next].filter(Boolean).length;
+    return 1 + data.prev_list.length + data.next_list.length;
   }
 
   private async measureAssetListStep<TValue>(
