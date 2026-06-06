@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const PictureAssetStatusSchema = z.enum(["draft", "published", "hidden", "deleted"]);
 export const PictureCategoryStatusSchema = z.enum(["active", "inactive"]);
+export const PictureCommentStatusSchema = z.enum(["pending", "visible", "hidden", "rejected", "deleted"]);
 
 export const PictureLibraryIdParamsSchema = z.object({
   id: z.uuid("无效的 ID"),
@@ -68,6 +69,12 @@ export const PictureAssetListQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
 });
 
+export const PictureCommentListQuerySchema = PaginationQuerySchema.extend({
+  status: z.union([PictureCommentStatusSchema, z.literal("all")]).optional(),
+  asset_id: z.uuid("无效的图片 ID").optional(),
+  keyword: z.string().trim().max(80, "关键词不能超过 80 个字符").optional(),
+});
+
 const CategoryIdsSchema = z.array(z.uuid("无效的分类 ID")).max(20, "单张图片最多关联 20 个分类");
 
 export const CreatePictureAssetSchema = z.object({
@@ -91,9 +98,11 @@ export const UpdatePictureAssetSchema = z.object({
 
 export type PictureAssetStatus = z.infer<typeof PictureAssetStatusSchema>;
 export type PictureCategoryStatus = z.infer<typeof PictureCategoryStatusSchema>;
+export type PictureCommentStatus = z.infer<typeof PictureCommentStatusSchema>;
 export type PictureCategoryListQuery = z.infer<typeof PictureCategoryListQuerySchema>;
 export type CreatePictureCategoryInput = z.infer<typeof CreatePictureCategorySchema>;
 export type UpdatePictureCategoryInput = z.infer<typeof UpdatePictureCategorySchema>;
 export type PictureAssetListQuery = z.infer<typeof PictureAssetListQuerySchema>;
+export type PictureCommentListQuery = z.infer<typeof PictureCommentListQuerySchema>;
 export type CreatePictureAssetInput = z.infer<typeof CreatePictureAssetSchema>;
 export type UpdatePictureAssetInput = z.infer<typeof UpdatePictureAssetSchema>;

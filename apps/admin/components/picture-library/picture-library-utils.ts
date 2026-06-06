@@ -2,6 +2,7 @@ import type {
   PictureAssetRecord,
   PictureAssetStatus,
   PictureAssetVariant,
+  PictureCommentStatus,
   PictureCategoryStatus,
 } from "@/components/picture-library/picture-library-types";
 
@@ -45,6 +46,21 @@ export function getCategoryStatusMeta(status: PictureCategoryStatus) {
   return status === "active"
     ? { label: "启用", variant: "default" as const }
     : { label: "停用", variant: "secondary" as const };
+}
+
+export function getCommentStatusMeta(status: PictureCommentStatus) {
+  switch (status) {
+    case "visible":
+      return { label: "可见", variant: "default" as const };
+    case "hidden":
+      return { label: "已隐藏", variant: "secondary" as const };
+    case "rejected":
+      return { label: "已拒绝", variant: "danger" as const };
+    case "deleted":
+      return { label: "已删除", variant: "danger" as const };
+    default:
+      return { label: "待处理", variant: "outline" as const };
+  }
 }
 
 export function generatePictureSlug(prefix: string) {

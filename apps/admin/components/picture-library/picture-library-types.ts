@@ -1,5 +1,6 @@
 export type PictureCategoryStatus = "active" | "inactive";
 export type PictureAssetStatus = "draft" | "published" | "hidden" | "deleted";
+export type PictureCommentStatus = "pending" | "visible" | "hidden" | "rejected" | "deleted";
 
 export type PictureAssetVariant = {
   id: string;
@@ -54,6 +55,50 @@ export type PictureAssetRecord = {
 
 export type PictureAssetListData = {
   list: PictureAssetRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type PictureCommentImageRecord = {
+  id: string;
+  comment_id: string;
+  file_object_id: string;
+  sort_order: number;
+  status: string;
+  created_at: string;
+  file_object: {
+    id: string;
+    object_key: string;
+    mime_type: string;
+    size_bytes: number;
+    width: number | null;
+    height: number | null;
+  } | null;
+};
+
+export type PictureCommentRecord = {
+  id: string;
+  asset_id: string;
+  visitor_id: string;
+  content: string;
+  status: PictureCommentStatus;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  asset: {
+    id: string;
+    title: string;
+    status: PictureAssetStatus;
+  } | null;
+  images: PictureCommentImageRecord[];
+};
+
+export type PictureCommentListData = {
+  list: PictureCommentRecord[];
   pagination: {
     page: number;
     pageSize: number;

@@ -207,3 +207,54 @@ Content-Type: application/json
 - 评论列表能展示新评论和评论图片。
 - 上传失败时不提交无效 `image_file_ids`。
 - visitor token 无法上传非 `picture_comment` 场景。
+
+## 小程序回写对接记录
+
+回写来源：
+
+```text
+/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage5-comments.md
+```
+
+小程序侧已完成：
+
+- 图片详情页增加评论区。
+- 评论列表公开读取，按 `page + pageSize` 分页加载。
+- 评论提交需要 visitor session token。
+- 评论支持纯文字和最多 3 张图片附件。
+- 评论图片上传复用现有 COS 直传工具，上传场景为 `picture_comment`。
+- 图片附件先完成 `direct-init`、COS PUT、`direct-complete`，再把文件对象 ID 放入评论提交的 `image_file_ids`。
+- 评论发布成功后插入列表顶部，并同步本地 `comment_count`。
+- 发布失败时保留输入内容和已选图片，方便用户重试。
+
+小程序侧已更新文件：
+
+- `src/services/picture_library.ts`
+- `src/packageVisitor/pages/picture-library-detail/index.tsx`
+- `src/packageVisitor/pages/picture-library-detail/index.scss`
+- `src/packageVisitor/pages/picture-library-detail/components/PictureCommentSection.tsx`
+
+小程序侧接口复测：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 评论列表公开访问 | 200 |
+| 评论列表返回 `status=visible` 评论 | 通过 |
+| 未登录提交评论 | 401，`TOKEN_MISSING` |
+| 使用旧纯 visitor token 提交评论 | 401，`UNAUTHORIZED` |
+| 使用旧纯 visitor token 初始化直传 | 401，`TOKEN_INVALID` |
+
+构建校验已通过：
+
+```bash
+pnpm run check:file-size src/services/picture_library.ts src/packageVisitor/pages/picture-library-detail/index.tsx src/packageVisitor/pages/picture-library-detail/index.scss src/packageVisitor/pages/picture-library-detail/components/PictureCommentSection.tsx
+pnpm run typecheck
+git diff --check
+pnpm run build:weapp:dev
+```
+
+剩余真机验收：
+
+- 使用当前 `/auth` 新签发的 `visitor_session` token 提交纯文字评论。
+- 使用当前 visitor session token 上传 1-3 张评论图片并提交评论。
+- 评论列表能展示新评论和评论图片。

@@ -2,6 +2,11 @@ import { redirect } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CreatePictureAssetButton } from "@/components/picture-library/picture-asset-actions";
 import { CreatePictureCategoryButton } from "@/components/picture-library/picture-category-actions";
+import {
+  PictureCommentFilters,
+  PictureCommentPagination,
+} from "@/components/picture-library/picture-comment-actions";
+import { PictureCommentsTable } from "@/components/picture-library/picture-comments-table";
 import { PictureAssetsTable } from "@/components/picture-library/picture-assets-table";
 import { PictureCategoryTable } from "@/components/picture-library/picture-category-table";
 import {
@@ -11,6 +16,7 @@ import {
 import type {
   PictureAssetListData,
   PictureCategoryRecord,
+  PictureCommentListData,
 } from "@/components/picture-library/picture-library-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +28,9 @@ type SearchParams = Promise<{
   status?: string;
   category_id?: string;
   keyword?: string;
+  comment_page?: string;
+  comment_status?: string;
+  comment_keyword?: string;
 }>;
 
 function readPositiveInteger(value: string | undefined, fallback: number) {
@@ -31,6 +40,12 @@ function readPositiveInteger(value: string | undefined, fallback: number) {
 
 function readStatus(value: string | undefined) {
   return ["draft", "published", "hidden"].includes(value || "") ? value as string : "all";
+}
+
+function readCommentStatus(value: string | undefined) {
+  return ["pending", "visible", "hidden", "rejected"].includes(value || "")
+    ? value as string
+    : "all";
 }
 
 function buildAssetQuery(input: {
@@ -44,6 +59,19 @@ function buildAssetQuery(input: {
   query.set("pageSize", "20");
   if (input.status && input.status !== "all") query.set("status", input.status);
   if (input.categoryId) query.set("category_id", input.categoryId);
+  if (input.keyword) query.set("keyword", input.keyword);
+  return query.toString();
+}
+
+function buildCommentQuery(input: {
+  page: number;
+  status: string;
+  keyword: string;
+}) {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page));
+  query.set("pageSize", "10");
+  if (input.status && input.status !== "all") query.set("status", input.status);
   if (input.keyword) query.set("keyword", input.keyword);
   return query.toString();
 }
@@ -64,30 +92,48 @@ async function loadPictureLibraryData(input: {
   status: string;
   categoryId: string;
   keyword: string;
+  commentPage: number;
+  commentStatus: string;
+  commentKeyword: string;
 }) {
   const emptyAssets: PictureAssetListData = {
     list: [],
     pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
   };
-  const [categories, assets] = await Promise.all([
+  const emptyComments: PictureCommentListData = {
+    list: [],
+    pagination: { page: input.commentPage, pageSize: 10, total: 0, totalPages: 0 },
+  };
+  const [categories, assets, comments] = await Promise.all([
     requestPlatformData<PictureCategoryRecord[]>("/platform/picture-library/categories", []),
     requestPlatformData<PictureAssetListData>(
       `/platform/picture-library/assets?${buildAssetQuery(input)}`,
       emptyAssets,
     ),
+    requestPlatformData<PictureCommentListData>(
+      `/platform/picture-library/comments?${buildCommentQuery({
+        page: input.commentPage,
+        status: input.commentStatus,
+        keyword: input.commentKeyword,
+      })}`,
+      emptyComments,
+    ),
   ]);
-  return { categories, assets, error: null as string | null };
+  return { categories, assets, comments, error: null as string | null };
 }
 
 function summarize(input: {
   categories: PictureCategoryRecord[];
   assets: PictureAssetListData;
+  comments: PictureCommentListData;
 }) {
   return {
     activeCategories: input.categories.filter((item) => item.status === "active").length,
     inactiveCategories: input.categories.filter((item) => item.status === "inactive").length,
     currentPublished: input.assets.list.filter((item) => item.status === "published").length,
     currentDraft: input.assets.list.filter((item) => item.status === "draft").length,
+    currentVisibleComments: input.comments.list.filter((item) => item.status === "visible").length,
+    currentHiddenComments: input.comments.list.filter((item) => item.status === "hidden").length,
   };
 }
 
@@ -105,25 +151,41 @@ export default async function PlatformPictureLibraryPage({
   const status = readStatus(params.status);
   const categoryId = (params.category_id || "").trim();
   const keyword = (params.keyword || "").trim().slice(0, 80);
+  const commentPage = readPositiveInteger(params.comment_page, 1);
+  const commentStatus = readCommentStatus(params.comment_status);
+  const commentKeyword = (params.comment_keyword || "").trim().slice(0, 80);
 
   let categories: PictureCategoryRecord[] = [];
   let assets: PictureAssetListData = {
     list: [],
     pagination: { page, pageSize: 20, total: 0, totalPages: 0 },
   };
+  let comments: PictureCommentListData = {
+    list: [],
+    pagination: { page: commentPage, pageSize: 10, total: 0, totalPages: 0 },
+  };
   let error = hasPlatformAccess ? null : "当前账号不是平台超管，无法访问图片资料库";
 
   if (hasPlatformAccess) {
     try {
-      const data = await loadPictureLibraryData({ page, status, categoryId, keyword });
+      const data = await loadPictureLibraryData({
+        page,
+        status,
+        categoryId,
+        keyword,
+        commentPage,
+        commentStatus,
+        commentKeyword,
+      });
       categories = data.categories;
       assets = data.assets;
+      comments = data.comments;
     } catch (err) {
       error = err instanceof Error ? err.message : "图片资料库加载失败";
     }
   }
 
-  const summary = summarize({ categories, assets });
+  const summary = summarize({ categories, assets, comments });
 
   return (
     <div className="flex flex-col gap-5">
@@ -216,6 +278,42 @@ export default async function PlatformPictureLibraryPage({
         </CardHeader>
         <CardContent className="p-0">
           <PictureCategoryTable categories={categories} assets={assets.list} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <CardTitle>评论治理</CardTitle>
+              <CardDescription>
+                本页可见 {summary.currentVisibleComments} 条，已隐藏 {summary.currentHiddenComments} 条。
+              </CardDescription>
+            </div>
+            <Badge variant="outline">共 {comments.pagination.total} 条</Badge>
+          </div>
+          <PictureCommentFilters
+            assetPage={page}
+            assetStatus={status}
+            categoryId={categoryId}
+            assetKeyword={keyword}
+            commentStatus={commentStatus}
+            commentKeyword={commentKeyword}
+          />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 p-0">
+          <PictureCommentsTable comments={comments.list} />
+          <div className="px-4 pb-4">
+            <PictureCommentPagination
+              pagination={comments.pagination}
+              assetPage={page}
+              assetStatus={status}
+              categoryId={categoryId}
+              assetKeyword={keyword}
+              commentStatus={commentStatus}
+              commentKeyword={commentKeyword}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -1,10 +1,12 @@
 import { Errors } from "@/errors/error-factory";
+import { pictureLibraryCommentsRepository } from "@/repositories/picture-library-comments";
 import { pictureLibraryRepository } from "@/repositories/picture-library";
 import type {
   CreatePictureAssetInput,
   CreatePictureCategoryInput,
   PictureAssetListQuery,
   PictureCategoryListQuery,
+  PictureCommentListQuery,
   UpdatePictureAssetInput,
   UpdatePictureCategoryInput,
 } from "@/schema/picture-library";
@@ -114,6 +116,34 @@ class PictureLibraryService {
       soft_deleted: true,
     });
     return asset;
+  }
+
+  async listComments(query: PictureCommentListQuery, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    return pictureLibraryCommentsRepository.listComments(query);
+  }
+
+  async hideComment(id: string, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const comment = await pictureLibraryCommentsRepository.updateCommentStatus(id, "hidden");
+    if (!comment) throw Errors.notFound("图片评论不存在");
+    await this.recordAudit(authContext, "picture_comment_hide", comment.id, comment.content, {
+      asset_id: comment.asset_id,
+      visitor_id: comment.visitor_id,
+    });
+    return comment;
+  }
+
+  async deleteComment(id: string, authContext: AuthContext) {
+    this.assertPlatformAdmin(authContext);
+    const comment = await pictureLibraryCommentsRepository.softDeleteComment(id);
+    if (!comment) throw Errors.notFound("图片评论不存在");
+    await this.recordAudit(authContext, "picture_comment_delete", comment.id, comment.content, {
+      asset_id: comment.asset_id,
+      visitor_id: comment.visitor_id,
+      soft_deleted: true,
+    });
+    return comment;
   }
 
   private assertPlatformAdmin(authContext: AuthContext) {

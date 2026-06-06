@@ -603,6 +603,14 @@ POST /admin/picture-library/comments/:id/hide
 docs/picture-library/2026-06-06-picture-library-miniprogram-stage5-comments.md
 ```
 
+小程序回写对接：
+
+- 小程序已完成阶段 5 评论区代码对接，回写文档位于 `/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage5-comments.md`。
+- 已接入评论列表、评论提交、评论图片 COS 直传、发布成功插入列表顶部和本地 `comment_count` 同步。
+- 小程序构建校验已通过：`check:file-size`、`typecheck`、`git diff --check`、`build:weapp:dev`。
+- 小程序公开评论列表 smoke 通过；未登录写接口返回 401。
+- 写接口完整真机复测仍需要当前 `/auth` 新签发的 `visitor_session` token。
+
 ## 阶段 6：分享好友、朋友圈与分享统计
 
 ### 目标
@@ -670,6 +678,16 @@ GET  /visitor/picture-library/assets/:id
 docs/picture-library/2026-06-06-picture-library-miniprogram-stage6-share.md
 ```
 
+小程序回写对接：
+
+- 小程序已完成阶段 6 分享代码对接，回写文档位于 `/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage6-share.md`。
+- 已接入好友分享、朋友圈分享、分享菜单、分享计数按钮和分享事件上报。
+- `onShareAppMessage` 使用 `share.title`、`share.path`、`share.image.url`。
+- `onShareTimeline` 使用 `share.title`、`share.image.url`，并从 `share.path` 提取详情页 query。
+- 小程序构建校验已通过：`check:file-size`、`typecheck`、`git diff --check`、`build:weapp:dev`。
+- 小程序详情分享字段 smoke 通过；未登录写分享事件返回 401。
+- 分享事件完整真机复测仍需要当前 `/auth` 新签发的 `visitor_session` token。
+
 ## 阶段 7：运营治理与质量优化
 
 ### 目标
@@ -699,6 +717,31 @@ picture-library-health-check script
 - 图片变体缺失能被脚本发现。
 - 已删除图片不会被 visitor 接口返回。
 - admin 有基本运营数据入口。
+
+### 阶段 7A 执行记录：admin 评论治理
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- `GET /platform/picture-library/comments` 评论列表，支持状态、关键词分页筛选。
+- `POST /platform/picture-library/comments/:id/hide` 隐藏评论。
+- `DELETE /platform/picture-library/comments/:id` 软删除评论。
+- admin 图片资料库页新增“评论治理”卡片，支持筛选、分页、隐藏、删除。
+- 隐藏和删除评论写入平台审计日志。
+- visitor 评论列表仍只返回 `visible` 且 `deleted_at IS NULL` 的评论。
+
+验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| admin 评论列表 | 可返回评论、关联图片标题、状态和图片附件 |
+| admin 隐藏评论 | 返回 `status=hidden` |
+| 隐藏后 visitor 评论列表 | 不再出现该评论 |
+| admin 删除评论 | 返回 `status=deleted` 且 `deleted_at` 有值 |
+| 删除后 admin 默认列表 | 不再出现该评论 |
+| API 检查 | `bun run api:check` 通过 |
+| Admin 检查 | `pnpm --dir apps/admin check` 通过 |
 
 ## 权限与安全
 

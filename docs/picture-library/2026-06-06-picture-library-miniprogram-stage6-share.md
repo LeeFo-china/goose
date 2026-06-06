@@ -154,3 +154,54 @@ Content-Type: application/json
 - 从分享入口打开详情页可正常加载图片。
 - 分享事件接口失败不影响微信分享动作。
 - 触发分享后详情页 `share_count` 可刷新。
+
+## 小程序回写对接记录
+
+回写来源：
+
+```text
+/Users/leefo/Public/work/orange/docs/2026-06-06-picture-library-miniprogram-stage6-share.md
+```
+
+小程序侧已完成：
+
+- 图片详情页启用好友分享和朋友圈分享。
+- `onShareAppMessage` 使用后端返回的 `share.title`、`share.path`、`share.image.url`。
+- `onShareTimeline` 使用后端返回的 `share.title`、`share.image.url`，并从 `share.path` 中提取详情页 query。
+- 分享菜单启用 `shareAppMessage` 和 `shareTimeline`。
+- 互动区增加轻量分享计数按钮，好友分享通过 `openType=share` 触发。
+- 用户触发好友分享时上报 `wechat_session` 分享事件。
+- 用户触发朋友圈分享时上报 `wechat_timeline` 分享事件。
+- 分享事件上报失败只记录日志，不阻断微信分享返回值。
+- 分享事件返回 `share_count` 后同步更新详情页计数。
+
+小程序侧已更新文件：
+
+- `src/services/picture_library.ts`
+- `src/packageVisitor/pages/picture-library-detail/index.tsx`
+- `src/packageVisitor/pages/picture-library-detail/index.scss`
+- `src/packageVisitor/pages/picture-library-detail/index.config.ts`
+
+小程序侧接口复测：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 详情接口返回 `share.title` | 200，有值 |
+| 详情接口返回 `share.image.url` | 200，有值 |
+| 详情接口返回 `share.path` | 200，有值 |
+| 详情接口返回 `share_count` | 200，有值 |
+| 未登录写分享事件 | 401，`TOKEN_MISSING` |
+
+构建校验已通过：
+
+```bash
+pnpm run check:file-size src/services/picture_library.ts src/packageVisitor/pages/picture-library-detail/index.tsx src/packageVisitor/pages/picture-library-detail/index.scss src/packageVisitor/pages/picture-library-detail/index.config.ts src/packageVisitor/pages/picture-library-detail/components/PictureCommentSection.tsx
+pnpm run typecheck
+git diff --check
+pnpm run build:weapp:dev
+```
+
+剩余真机验收：
+
+- 使用当前 `/auth` 新签发的 `visitor_session` token 上报分享事件。
+- 好友分享、朋友圈分享和详情页打开链路在真机内复测。

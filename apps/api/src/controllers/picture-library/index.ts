@@ -5,6 +5,7 @@ import {
   CreatePictureCategorySchema,
   PictureAssetListQuerySchema,
   PictureCategoryListQuerySchema,
+  PictureCommentListQuerySchema,
   PictureLibraryIdParamsSchema,
   UpdatePictureAssetSchema,
   UpdatePictureCategorySchema,
@@ -110,6 +111,33 @@ class PictureLibraryController extends PlatformBaseController {
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.deleteAsset(paramsResult.data.id, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/picture-library/comments")
+  async listComments(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const queryResult = PictureCommentListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const data = await pictureLibraryService.listComments(queryResult.data, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/picture-library/comments/:id/hide")
+  async hideComment(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const data = await pictureLibraryService.hideComment(paramsResult.data.id, authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Delete("/platform/picture-library/comments/:id")
+  async deleteComment(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const data = await pictureLibraryService.deleteComment(paramsResult.data.id, authContext);
     return ResponseHandler.success(data);
   }
 
