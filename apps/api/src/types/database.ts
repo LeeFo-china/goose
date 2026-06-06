@@ -6294,9 +6294,11 @@ export type Database = {
           name: string
           slug: string
           status: string
+          address: string | null
           updated_at: string
         }
         Insert: {
+          address?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -6307,6 +6309,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string

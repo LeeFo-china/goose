@@ -37,6 +37,7 @@ export const CreatePlatformTenantSchema = z.object({
   name: z.string().trim().min(1, "请输入租户名称").max(100, "租户名称不能超过 100 个字符"),
   slug: TenantSlugSchema,
   status: z.enum(["active", "suspended"]).optional().default("active"),
+  address: optionalText(200, "公司地址不能超过 200 个字符"),
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
   admin: z.object({
@@ -50,6 +51,7 @@ export const CreatePlatformTenantSchema = z.object({
 
 export const UpdatePlatformTenantSchema = z.object({
   name: z.string().trim().min(1, "请输入租户名称").max(100, "租户名称不能超过 100 个字符").optional(),
+  address: optionalText(200, "公司地址不能超过 200 个字符"),
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
 }).refine((value) => Object.keys(value).length > 0, {

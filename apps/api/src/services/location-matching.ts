@@ -15,6 +15,7 @@ type TenantLite = {
   name: string | null;
   slug: string | null;
   status: string | null;
+  address: string | null;
 };
 
 type IdentityMatch = {
@@ -29,6 +30,9 @@ type TenantLocationCandidate = {
   tenant_id: string;
   tenant_name: string | null;
   tenant_slug: string | null;
+  address: string | null;
+  company_address: string | null;
+  tenant_address: string | null;
   service_area_id: string | null;
   province: string | null;
   city: string | null;
@@ -166,6 +170,9 @@ class LocationMatchingService {
       tenant_id: area.tenant_id,
       tenant_name: area.tenant.name,
       tenant_slug: area.tenant.slug,
+      address: this.normalizeAddress(area.tenant.address),
+      company_address: this.normalizeAddress(area.tenant.address),
+      tenant_address: this.normalizeAddress(area.tenant.address),
       service_area_id: area.id,
       province: area.province,
       city: area.city,
@@ -237,7 +244,7 @@ class LocationMatchingService {
   private async findEmployeeTenant(authUserId: string): Promise<IdentityMatch | null> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("employees")
-      .select("id, tenant_id, status, tenant:tenants!employees_tenant_id_fkey(id,name,slug,status)")
+      .select("id, tenant_id, status, tenant:tenants!employees_tenant_id_fkey(id,name,slug,status,address)")
       .eq("user_id", authUserId)
       .eq("status", "active")
       .not("tenant_id", "is", null)
@@ -254,7 +261,7 @@ class LocationMatchingService {
   private async findCustomerTenant(authUserId: string): Promise<IdentityMatch | null> {
     const { data: customers, error } = await SupabaseDB.getAdminClient()
       .from("customers")
-      .select("id, tenant_id, status, tenant:tenants!customers_tenant_id_fkey(id,name,slug,status)")
+      .select("id, tenant_id, status, tenant:tenants!customers_tenant_id_fkey(id,name,slug,status,address)")
       .eq("user_id", authUserId)
       .not("tenant_id", "is", null)
       .limit(20);
@@ -267,7 +274,7 @@ class LocationMatchingService {
     const customerIds = customerRows.map((item) => item.id).filter(Boolean);
     const { data: projects, error: projectError } = await SupabaseDB.getAdminClient()
       .from("projects")
-      .select("id, tenant_id, status, customer_id, tenant:tenants!projects_tenant_id_fkey(id,name,slug,status)")
+      .select("id, tenant_id, status, customer_id, tenant:tenants!projects_tenant_id_fkey(id,name,slug,status,address)")
       .in("customer_id", customerIds)
       .neq("status", "invalid")
       .limit(20);
@@ -290,6 +297,9 @@ class LocationMatchingService {
       tenant_id: match.tenant.id,
       tenant_name: match.tenant.name,
       tenant_slug: match.tenant.slug,
+      address: this.normalizeAddress(match.tenant.address),
+      company_address: this.normalizeAddress(match.tenant.address),
+      tenant_address: this.normalizeAddress(match.tenant.address),
       service_area_id: null,
       province: null,
       city: null,
@@ -304,6 +314,11 @@ class LocationMatchingService {
 
   private formatAreaLabel(area: TenantServiceAreaRecord) {
     return [area.city, area.district].filter(Boolean).join(" ") || area.adcode || area.id;
+  }
+
+  private normalizeAddress(address: string | null | undefined) {
+    const value = address?.trim();
+    return value || null;
   }
 
   private assertPlatformAdmin(authContext: AuthContext) {

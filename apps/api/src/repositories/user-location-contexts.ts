@@ -7,6 +7,9 @@ export type UserLocationMatchedTenant = {
   tenant_id: string;
   tenant_name: string | null;
   tenant_slug: string | null;
+  address?: string | null;
+  company_address?: string | null;
+  tenant_address?: string | null;
   service_area_id: string | null;
   province: string | null;
   city: string | null;

@@ -223,6 +223,7 @@ export default async function PlatformTenantDetailPage({
               <CardContent className="grid gap-3 md:grid-cols-2">
                 <InfoRow label="租户 ID" value={tenant.id} />
                 <InfoRow label="slug" value={tenant.slug} />
+                <InfoRow label="公司地址" value={text(tenant.address)} />
                 <InfoRow label="联系人" value={text(tenant.contact_name)} />
                 <InfoRow label="联系电话" value={text(tenant.contact_phone)} />
                 <InfoRow label="创建时间" value={formatDate(tenant.created_at)} />

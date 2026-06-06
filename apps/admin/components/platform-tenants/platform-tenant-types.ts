@@ -53,6 +53,7 @@ export type PlatformTenantRecord = {
   name: string;
   slug: string;
   status: PlatformTenantStatus | string;
+  address: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   created_at: string;
@@ -84,6 +85,7 @@ export type TenantServiceAreaRecord = {
     name: string | null;
     slug: string | null;
     status: string | null;
+    address: string | null;
   } | null;
 };
 

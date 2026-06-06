@@ -26,6 +26,7 @@ export type TenantServiceAreaRecord = {
     name: string | null;
     slug: string | null;
     status: string | null;
+    address: string | null;
   } | null;
 };
 
@@ -44,7 +45,7 @@ class TenantServiceAreaRepository {
     let request = this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
       `, { count: "exact" });
 
     if (query.tenant_id) request = request.eq("tenant_id", query.tenant_id);
@@ -79,7 +80,7 @@ class TenantServiceAreaRepository {
     const { data, error } = await this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
       `)
       .eq("status", "active")
       .order("priority", { ascending: false });
@@ -96,7 +97,7 @@ class TenantServiceAreaRepository {
     const { data, error } = await this.from("tenant_service_areas")
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
       `)
       .eq("id", id)
       .maybeSingle();
@@ -113,7 +114,7 @@ class TenantServiceAreaRepository {
       .insert(input)
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
       `)
       .single();
 
@@ -130,7 +131,7 @@ class TenantServiceAreaRepository {
       .eq("id", id)
       .select(`
         *,
-        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status)
+        tenant:tenants!tenant_service_areas_tenant_id_fkey(id,name,slug,status,address)
       `)
       .maybeSingle();
 

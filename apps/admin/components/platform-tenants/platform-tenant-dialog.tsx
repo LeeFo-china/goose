@@ -54,6 +54,7 @@ export function TenantDialog({
   const defaults = useMemo(() => ({
     name: tenant?.name || "",
     slug: tenant?.slug || "",
+    address: tenant?.address || "",
     contact_name: tenant?.contact_name || "",
     contact_phone: tenant?.contact_phone || "",
   }), [tenant]);
@@ -79,6 +80,7 @@ export function TenantDialog({
     const formData = new FormData(event.currentTarget);
     const name = String(formData.get("name") || "").trim();
     const slug = String(formData.get("slug") || "").trim();
+    const address = String(formData.get("address") || "").trim();
     const contactName = String(formData.get("contact_name") || "").trim();
     const contactPhone = String(formData.get("contact_phone") || "").trim();
     const adminName = String(formData.get("admin_name") || "").trim();
@@ -91,6 +93,7 @@ export function TenantDialog({
           ? {
             name,
             slug,
+            address: address || undefined,
             contact_name: contactName || undefined,
             contact_phone: contactPhone || undefined,
             admin: {
@@ -100,6 +103,7 @@ export function TenantDialog({
           }
           : {
             name,
+            address: address || undefined,
             contact_name: contactName || undefined,
             contact_phone: contactPhone || undefined,
           };
@@ -215,6 +219,18 @@ export function TenantDialog({
                     />
                   </Field>
                 </div>
+                <Field>
+                  <FieldLabel htmlFor={`${mode}-tenant-address`}>公司地址</FieldLabel>
+                  <Input
+                    id={`${mode}-tenant-address`}
+                    name="address"
+                    defaultValue={defaults.address}
+                    maxLength={200}
+                    placeholder="真实办公地址或门店地址"
+                    disabled={pending}
+                  />
+                  <FieldDescription>用于小程序 visitor 本地服务商列表展示，留空时前端隐藏地址行。</FieldDescription>
+                </Field>
               </FieldGroup>
             </div>
 

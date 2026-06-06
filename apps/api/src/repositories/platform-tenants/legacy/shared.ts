@@ -18,6 +18,7 @@ export type PlatformTenantRecord = {
   name: string;
   slug: string;
   status: PlatformTenantStatus;
+  address: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   created_at: string;

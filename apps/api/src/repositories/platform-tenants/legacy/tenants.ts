@@ -15,10 +15,10 @@ export async function list(this: any, query: PlatformTenantListQuery) {
   }
 
   if (query.keyword) {
-    const keyword = query.keyword.replace(/[,()]/g, " ").trim();
-    if (keyword) {
-      request = request.or(
-        `name.ilike.%${keyword}%,slug.ilike.%${keyword}%,contact_name.ilike.%${keyword}%,contact_phone.ilike.%${keyword}%`,
+      const keyword = query.keyword.replace(/[,()]/g, " ").trim();
+      if (keyword) {
+        request = request.or(
+        `name.ilike.%${keyword}%,slug.ilike.%${keyword}%,address.ilike.%${keyword}%,contact_name.ilike.%${keyword}%,contact_phone.ilike.%${keyword}%`,
       );
     }
   }
@@ -77,6 +77,7 @@ export async function create(this: any, input: CreatePlatformTenantInput) {
       name: input.name,
       slug: input.slug,
       status: input.status,
+      address: input.address ?? null,
       contact_name: input.contact_name ?? null,
       contact_phone: input.contact_phone ?? null,
     })
@@ -94,6 +95,7 @@ export async function update(this: any, id: string, input: UpdatePlatformTenantI
   const { data, error } = await this.from("tenants")
     .update({
       ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.address !== undefined ? { address: input.address ?? null } : {}),
       ...(input.contact_name !== undefined ? { contact_name: input.contact_name ?? null } : {}),
       ...(input.contact_phone !== undefined ? { contact_phone: input.contact_phone ?? null } : {}),
     })
