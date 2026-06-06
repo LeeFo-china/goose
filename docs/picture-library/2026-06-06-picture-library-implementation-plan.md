@@ -886,6 +886,47 @@ picture-library-health-check script
 | 最终健康检查 | `issue_total=0` |
 | 失败重试清理 | 2 条未挂接文件对象已标记 `deleted` |
 
+### 阶段 7F 执行记录：首批素材全量导入前治理策略
+
+执行日期：2026-06-06
+
+已完成范围：
+
+- 增强 `picture-library-import` dry-run 报告：
+  - 输出待导入图片数、已存在图片数、分类分布。
+  - 输出预计基础 `cover` 上传数。
+  - 输出预计 `thumb` / `large` 生成变体上传数。
+  - 输出预计总文件上传数。
+  - 输出源图字节数、重复 checksum 数、缺失尺寸数。
+  - 输出全量导入推荐步骤。
+- 明确导入策略：
+  - `picture-library-import --apply` 仍只导入源图并写 `cover`。
+  - `thumb` / `large` 由 `api:picture-library-variants-backfill` 在导入后补齐。
+  - 全量导入前必须先跑 dry-run，再小批量 apply，再健康检查。
+
+开发库全量 dry-run 结果：
+
+| 指标 | 结果 |
+| --- | ---: |
+| 源图片数 | 360 |
+| 分类数 | 18 |
+| 已存在匹配项 | 18 |
+| 待上传源图 | 342 |
+| 预计 cover 上传 | 342 |
+| 预计 thumb/large 上传 | 684 |
+| 预计总文件上传 | 1026 |
+| 待上传源图字节数 | 3,527,186 |
+| 源目录重复 checksum | 164 |
+| 缺失尺寸图片 | 0 |
+
+全量导入推荐顺序：
+
+1. `bun run api:picture-library-import -- --dry-run`
+2. `bun run api:picture-library-import -- --apply --limit 20`
+3. `bun run api:picture-library-variants-backfill -- --apply --limit 20`
+4. `bun run api:picture-library-health-check -- --limit 50`
+5. 小批量无异常后再执行全量 apply 与全量 variants backfill。
+
 ## 权限与安全
 
 - admin 管理接口仅平台超管可访问。
