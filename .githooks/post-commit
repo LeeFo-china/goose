@@ -4,11 +4,11 @@ node scripts/post-commit-rag-sync.mjs
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 LOG_FILE="$REPO_ROOT/.git/codegraph-sync.log"
-NPX_BIN="$(command -v npx || true)"
+CODEGRAPH_BIN="$(command -v codegraph || true)"
 
-[ -n "$NPX_BIN" ] || exit 0
+[ -n "$CODEGRAPH_BIN" ] || exit 0
 
 (
   cd "$REPO_ROOT" || exit 0
-  "$NPX_BIN" -y @colbymchenry/codegraph sync --quiet .
+  "$CODEGRAPH_BIN" sync --quiet .
 ) >>"$LOG_FILE" 2>&1 &
