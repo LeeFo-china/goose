@@ -1,0 +1,11 @@
+{
+  "repoRoot": "/Users/leefo/Public/work/gooes",
+  "profile": "gooes-curated",
+  "logPrefix": "gooes-rag-sync",
+  "disableEnvVar": "GOOES_RAG_SYNC",
+  "candidate": {
+    "includeRootFiles": ["AGENTS.md"],
+    "includePrefixes": ["docs/"],
+    "extensions": [".md", ".txt", ".sql"]
+  }
+}

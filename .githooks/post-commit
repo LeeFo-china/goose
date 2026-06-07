@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+node scripts/post-commit-rag-sync.mjs
