@@ -6,6 +6,7 @@ import {
   VisitorPictureAssetListQuerySchema,
   VisitorPictureAssetNavigationQuerySchema,
   VisitorPictureAssetParamsSchema,
+  VisitorPictureCategoryListQuerySchema,
   VisitorPictureCommentListQuerySchema,
 } from "@/schema/visitor-picture-library";
 import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
@@ -20,7 +21,10 @@ class VisitorPictureLibraryController extends BaseController {
 
   @Get("/visitor/picture-library/categories")
   async listCategories(request: FastifyRequest, reply: FastifyReply) {
-    const data = await visitorPictureLibraryService.listCategories();
+    const queryResult = VisitorPictureCategoryListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await visitorPictureLibraryService.listCategories(queryResult.data);
     return ResponseHandler.success(data);
   }
 

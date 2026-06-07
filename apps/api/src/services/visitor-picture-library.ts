@@ -25,12 +25,19 @@ import {
   toComment,
   toShareEvent,
 } from "@/services/visitor-picture-library-serializer";
+import {
+  PublicCacheStore,
+  applyPublicCacheTiming,
+  type PublicCacheTiming,
+} from "@/services/visitor-picture-public-cache";
 
 const PUBLIC_CACHE_VERSION = "picture-library:v3";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
+const PUBLIC_PREVIEW_PAGE_SIZE = 6;
 
-type AssetListDebugTiming = Record<string, number | string | null>;
-type DebugTiming = Record<string, number | string | null>;
+type AssetListDebugTiming = PublicCacheTiming;
+type DebugTiming = PublicCacheTiming;
+type CommentDebugTiming = Record<string, number | string | null>;
 type AssetDetailResponse = ReturnType<typeof toAssetDetail>;
 
 type NavigationResponse = {
@@ -42,27 +49,36 @@ type NavigationResponse = {
   context: VisitorPictureNavigationContext;
 };
 
-type PublicCacheEntry<TValue> = {
-  expiresAt: number;
-  value: TValue;
-};
-
 class VisitorPictureLibraryService {
-  private publicCache = new Map<string, PublicCacheEntry<unknown>>();
-  private publicInFlight = new Map<string, Promise<unknown>>();
+  private publicCache = new PublicCacheStore(PUBLIC_CACHE_TTL_MS);
 
-  async listCategories() {
-    return this.getPublicCached("categories", () => this.loadCategories());
+  async listCategories(query: { debug_timing?: boolean } = {}) {
+    const timing = query.debug_timing ? this.createCategoryTiming() : null;
+    const startedAt = Date.now();
+    const cacheResult = await this.publicCache.getResult(
+      "categories",
+      () => this.loadCategories(),
+      timing,
+    );
+    applyPublicCacheTiming(timing, cacheResult);
+    if (!timing) return cacheResult.value;
+    timing.total_ms = Date.now() - startedAt;
+    timing.row_count = cacheResult.value.length;
+    return {
+      list: cacheResult.value,
+      debug_timing: timing,
+    };
   }
 
   async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
     const timing = query.debug_timing ? this.createAssetListTiming() : null;
     const startedAt = Date.now();
-    const cacheResult = await this.getPublicCachedResult(
+    const cacheResult = await this.publicCache.getResult(
       this.buildAssetListCacheKey(query),
-      () => this.loadPublicAssets(query, timing),
+      (loaderTiming) => this.loadPublicAssets(query, loaderTiming as AssetListDebugTiming | null),
+      timing,
     );
-    if (timing) timing.cache = cacheResult.cache;
+    applyPublicCacheTiming(timing, cacheResult);
     const data = visitorId
       ? await this.withInteractionStates(cacheResult.value, visitorId, timing)
       : cacheResult.value;
@@ -73,7 +89,7 @@ class VisitorPictureLibraryService {
 
   async getAssetDetail(id: string, visitorId: string | null = null) {
     if (!visitorId) {
-      return this.getPublicCached(`asset-detail:${id}`, () =>
+      return this.publicCache.get(`asset-detail:${id}`, () =>
         this.loadAssetDetail(id, null)
       );
     }
@@ -89,11 +105,12 @@ class VisitorPictureLibraryService {
     const timing = query.debug_timing ? this.createNavigationTiming() : null;
     const startedAt = Date.now();
     const baseQuery = { ...query, direction: "both" as const };
-    const cacheResult = await this.getPublicCachedResult(
+    const cacheResult = await this.publicCache.getResult(
       this.buildNavigationCacheKey(id, baseQuery),
-      () => this.loadAssetNavigation(id, baseQuery, timing),
+      (loaderTiming) => this.loadAssetNavigation(id, baseQuery, loaderTiming),
+      timing,
     );
-    if (timing) timing.cache = cacheResult.cache;
+    applyPublicCacheTiming(timing, cacheResult);
 
     const filtered = this.filterNavigationDirection(cacheResult.value, query);
     const data = visitorId
@@ -178,17 +195,31 @@ class VisitorPictureLibraryService {
     this.publicCache.clear();
   }
 
+  refreshPublicCacheSoon() {
+    this.clearPublicCache();
+    this.prewarmPublicListCache().catch(() => null);
+  }
+
   async prewarmPublicListCache() {
-    const categories = await this.listCategories();
+    const categories = await this.publicCache.get("categories", () => this.loadCategories());
     const category = categories.find((item) => item.asset_count > 0);
-    const assets = await this.listAssets({
-      category_id: category?.id,
-      page: 1,
-      pageSize: 20,
-      debug_timing: false,
-    }, null);
+    const [previewAssets, assets] = await Promise.all([
+      this.listAssets({
+        category_id: category?.id,
+        page: 1,
+        pageSize: PUBLIC_PREVIEW_PAGE_SIZE,
+        debug_timing: false,
+      }, null),
+      this.listAssets({
+        category_id: category?.id,
+        page: 1,
+        pageSize: 20,
+        debug_timing: false,
+      }, null),
+    ]);
+    const navigationAssets = assets.list.length > 0 ? assets : previewAssets;
     await Promise.all(
-      assets.list.slice(0, 5).map((asset) =>
+      navigationAssets.list.slice(0, 5).map((asset) =>
         this.getAssetNavigation(asset.id, {
           category_id: category?.id,
           direction: "both",
@@ -232,7 +263,7 @@ class VisitorPictureLibraryService {
     query: VisitorPictureAssetListQuery,
     timing: AssetListDebugTiming | null,
   ) {
-    const page = await this.measureAssetListStep(timing, "query_ms", () =>
+    const page = await this.measureStep(timing, "query_ms", () =>
       visitorPictureLibraryRepository.listAssets(query)
     );
     if (timing) timing.row_count = page.list.length;
@@ -250,7 +281,7 @@ class VisitorPictureLibraryService {
     visitorId: string,
     timing: AssetListDebugTiming | null,
   ) {
-    const states = await this.measureAssetListStep(timing, "visitor_state_ms", () =>
+    const states = await this.measureStep(timing, "visitor_state_ms", () =>
       visitorPictureLibraryRepository.findInteractionStates(
         data.list.map((asset) => asset.id),
         visitorId,
@@ -391,6 +422,18 @@ class VisitorPictureLibraryService {
       visitor_state_ms: 0,
       serialize_ms: 0,
       row_count: 0,
+      refresh_in_flight: false,
+      shared_wait_ms: 0,
+    };
+  }
+
+  private createCategoryTiming(): DebugTiming {
+    return {
+      cache: null,
+      total_ms: 0,
+      row_count: 0,
+      refresh_in_flight: false,
+      shared_wait_ms: 0,
     };
   }
 
@@ -402,10 +445,12 @@ class VisitorPictureLibraryService {
       visitor_state_ms: 0,
       serialize_ms: 0,
       row_count: 0,
+      refresh_in_flight: false,
+      shared_wait_ms: 0,
     };
   }
 
-  private createCommentTiming(): DebugTiming {
+  private createCommentTiming(): CommentDebugTiming {
     return {
       total_ms: 0,
       query_ms: 0,
@@ -417,14 +462,6 @@ class VisitorPictureLibraryService {
 
   private countNavigationRows(data: NavigationResponse) {
     return 1 + data.prev_list.length + data.next_list.length;
-  }
-
-  private async measureAssetListStep<TValue>(
-    timing: AssetListDebugTiming | null,
-    key: string,
-    loader: () => Promise<TValue>,
-  ) {
-    return this.measureStep(timing, key, loader);
   }
 
   private async measureStep<TValue>(
@@ -448,35 +485,6 @@ class VisitorPictureLibraryService {
       query.direction,
       query.limit,
     ].join(":");
-  }
-
-  private async getPublicCached<TValue>(
-    key: string,
-    loader: () => Promise<TValue>,
-  ) {
-    return (await this.getPublicCachedResult(key, loader)).value;
-  }
-
-  private async getPublicCachedResult<TValue>(
-    key: string,
-    loader: () => Promise<TValue>,
-  ): Promise<{ value: TValue; cache: "hit" | "miss" | "shared" }> {
-    const now = Date.now();
-    const cached = this.publicCache.get(key) as PublicCacheEntry<TValue> | undefined;
-    if (cached && cached.expiresAt > now) return { value: cached.value, cache: "hit" };
-
-    const shared = this.publicInFlight.get(key) as Promise<TValue> | undefined;
-    if (shared) return { value: await shared, cache: "shared" };
-
-    const promise = loader();
-    this.publicInFlight.set(key, promise);
-    try {
-      const value = await promise;
-      this.publicCache.set(key, { value, expiresAt: Date.now() + PUBLIC_CACHE_TTL_MS });
-      return { value, cache: "miss" };
-    } finally {
-      this.publicInFlight.delete(key);
-    }
   }
 
 }

@@ -14,6 +14,10 @@ export const VisitorPictureAssetListQuerySchema = PaginationQuerySchema.extend({
   debug_timing: BooleanQuerySchema.optional().default(false),
 });
 
+export const VisitorPictureCategoryListQuerySchema = z.object({
+  debug_timing: BooleanQuerySchema.optional().default(false),
+});
+
 export const VisitorPictureAssetParamsSchema = z.object({
   id: z.uuid("无效的图片 ID"),
 });
@@ -54,6 +58,7 @@ export const CreateVisitorPictureShareEventSchema = z.object({
 });
 
 export type VisitorPictureAssetListQuery = z.infer<typeof VisitorPictureAssetListQuerySchema>;
+export type VisitorPictureCategoryListQuery = z.infer<typeof VisitorPictureCategoryListQuerySchema>;
 export type VisitorPictureAssetNavigationQuery = z.infer<
   typeof VisitorPictureAssetNavigationQuerySchema
 >;

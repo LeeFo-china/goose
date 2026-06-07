@@ -19,7 +19,7 @@ class PictureLibraryHealthService {
   async repairAssetCommentCount(assetId: string, authContext: AuthContext) {
     this.assertPlatformAdmin(authContext);
     const result = await pictureLibraryHealthRepository.repairAssetCommentCount(assetId);
-    visitorPictureLibraryService.clearPublicCache();
+    visitorPictureLibraryService.refreshPublicCacheSoon();
     await this.recordAudit(
       authContext,
       "picture_health_comment_count_repair",
@@ -41,7 +41,7 @@ class PictureLibraryHealthService {
     const result = await pictureLibraryHealthRepository.setCategoryCoverFromFirstPublishedAsset(
       categoryId,
     );
-    visitorPictureLibraryService.clearPublicCache();
+    visitorPictureLibraryService.refreshPublicCacheSoon();
     await this.recordAudit(
       authContext,
       "picture_health_category_cover_repair",
