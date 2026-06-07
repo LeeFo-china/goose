@@ -3,10 +3,9 @@ import type {
   CreateVisitorPictureShareEventInput,
   VisitorPictureAssetListQuery,
 } from "@/schema/visitor-picture-library";
+import { listVisitorPictureAssetsFast } from "@/repositories/visitor-picture-library-list";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import { SupabaseDB } from "@/utils/supabase";
-
-const LIST_VARIANTS = ["thumb", "cover", "original", "large"] as const;
 
 export type VisitorPictureCategoryRow = {
   id: string;
@@ -104,6 +103,12 @@ class VisitorPictureLibraryRepository {
   }
 
   async listAssets(query: VisitorPictureAssetListQuery) {
+    try {
+      return await listVisitorPictureAssetsFast(query);
+    } catch {
+      // Fall back to the existing RPC implementation.
+    }
+
     const directSql = getDirectPostgresSql();
     if (directSql) {
       try {
