@@ -33,6 +33,7 @@ export function ProjectDetailPageClient({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    refreshRequestIdRef.current += 1;
     latestProjectIdRef.current = project.id;
     setCurrentProject(project);
     setError("");
