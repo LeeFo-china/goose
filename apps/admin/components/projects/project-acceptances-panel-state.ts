@@ -263,10 +263,10 @@ export function useProjectAcceptancesPanel(
 
   useEffect(() => {
     if (!firstAvailableStage) return;
-    if (!stageCode || occupiedStages.has(stageCode)) {
+    if (!stageCode || occupiedStages.has(stageCode) || selectedStageBlocked) {
       setStageCode(firstAvailableStage.value);
     }
-  }, [firstAvailableStage?.value, occupiedStages, stageCode]);
+  }, [firstAvailableStage?.value, occupiedStages, selectedStageBlocked, stageCode]);
 
   const runAction = async (action: () => Promise<void>) => {
     setActionLoading(true);
@@ -303,9 +303,14 @@ export function useProjectAcceptancesPanel(
       if (!canCreateAcceptance) {
         throw new Error("当前无可发起的工序验收");
       }
+      const effectiveStageCode =
+        stageCode && !selectedStageBlocked ? stageCode : firstAvailableStage?.value;
+      if (!effectiveStageCode) {
+        throw new Error("当前无可发起的工序验收");
+      }
       const created = await createStageAcceptance({
         projectId: project.id,
-        stageCode,
+        stageCode: effectiveStageCode,
       });
       selectAcceptanceId(created.id, { preferReload: true });
     });

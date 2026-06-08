@@ -79,7 +79,7 @@ export function ProjectRowActions({
         </Link>
       </Button>
       <Button asChild type="button" variant="outline" size="sm">
-        <Link href={projectDetailHref(project.id, "overview")}>
+        <Link href={projectDetailHref(project.id, "acceptances")}>
           详情
         </Link>
       </Button>

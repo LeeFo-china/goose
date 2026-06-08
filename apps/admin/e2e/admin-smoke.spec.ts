@@ -74,7 +74,7 @@ test.describe("admin smoke", () => {
       return;
     }
 
-    const detailLink = page.getByRole("link", { name: "工序验收" }).first();
+    const detailLink = page.getByRole("link", { name: "详情" }).first();
     await expect(detailLink).toBeVisible();
     await detailLink.click();
     await expect(page).toHaveURL(/\/projects\/[^/?]+(?:\?tab=acceptances(?:&acceptanceId=[^&]+)?)?$/);

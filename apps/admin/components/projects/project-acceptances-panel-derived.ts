@@ -46,9 +46,7 @@ export function getProjectAcceptancesPanelDerived(input: {
   const selectedStageBlocked = Boolean(selectedStageBlockedReason);
   const canCreateByProjectStatus =
     input.projectStatus === "constructing" || input.projectStatus === "acceptance";
-  const canCreateAcceptance = canCreateByProjectStatus &&
-    Boolean(firstAvailableStage) &&
-    !selectedStageBlocked;
+  const canCreateAcceptance = canCreateByProjectStatus && Boolean(firstAvailableStage);
   const canCreateFinalAcceptance = input.projectStatus === "constructing" &&
     !openFinalAcceptance &&
     input.constructionStages.length > 0 &&
