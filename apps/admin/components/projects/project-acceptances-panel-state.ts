@@ -63,6 +63,9 @@ export function useProjectAcceptancesPanel(
   const externalSelectedIdRef = useRef(options.selectedAcceptanceId || "");
   const localPreferredSelectedIdRef = useRef("");
   const acceptancesProjectIdRef = useRef("");
+  const latestProjectIdRef = useRef(project.id);
+  const loadRequestIdRef = useRef(0);
+  latestProjectIdRef.current = project.id;
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
@@ -129,23 +132,32 @@ export function useProjectAcceptancesPanel(
       localPreferredSelectedIdRef.current = id;
     }
 
-    if (id !== selectedIdRef.current) {
+    const selectedChanged = id !== selectedIdRef.current;
+    if (selectedChanged) {
       selectedIdRef.current = id;
       setSelectedId(id);
     }
 
-    if (settings.emit !== false) {
+    if (settings.emit !== false && (selectedChanged || settings.forceEmit)) {
       emitSelectedAcceptanceId(id, settings.forceEmit);
     }
   };
 
   const loadAcceptances = async () => {
+    const projectId = project.id;
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+    const isCurrentRequest = () =>
+      loadRequestIdRef.current === requestId
+      && latestProjectIdRef.current === projectId;
+
     setLoading(true);
     setError("");
     try {
-      const [data, stageData] = await loadProjectAcceptanceData(project.id);
+      const [data, stageData] = await loadProjectAcceptanceData(projectId);
+      if (!isCurrentRequest()) return;
       const list = data.list || [];
-      acceptancesProjectIdRef.current = project.id;
+      acceptancesProjectIdRef.current = projectId;
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
       const pendingPreferredId = localPreferredSelectedIdRef.current;
@@ -169,6 +181,7 @@ export function useProjectAcceptancesPanel(
         localPreferredSelectedIdRef.current = "";
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
       setConstructionStages([]);
@@ -176,7 +189,9 @@ export function useProjectAcceptancesPanel(
       localPreferredSelectedIdRef.current = "";
       selectAcceptanceId("", { emit: false });
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) {
+        setLoading(false);
+      }
     }
   };
 
@@ -193,6 +208,7 @@ export function useProjectAcceptancesPanel(
     const preferredId = localPreferredSelectedIdRef.current;
     if (externalSelectionChanged) {
       externalSelectedIdRef.current = requestedId;
+      lastEmittedSelectedIdRef.current = requestedId;
       if (requestedId !== preferredId) {
         localPreferredSelectedIdRef.current = "";
       }
