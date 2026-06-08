@@ -62,6 +62,7 @@ export function useProjectAcceptancesPanel(
   const lastEmittedSelectedIdRef = useRef("");
   const externalSelectedIdRef = useRef(options.selectedAcceptanceId || "");
   const localPreferredSelectedIdRef = useRef("");
+  const acceptancesProjectIdRef = useRef("");
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
@@ -144,6 +145,7 @@ export function useProjectAcceptancesPanel(
     try {
       const [data, stageData] = await loadProjectAcceptanceData(project.id);
       const list = data.list || [];
+      acceptancesProjectIdRef.current = project.id;
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
       const nextSelectedId = resolveSelectedAcceptanceId(
@@ -166,8 +168,9 @@ export function useProjectAcceptancesPanel(
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
       setConstructionStages([]);
+      acceptancesProjectIdRef.current = "";
       localPreferredSelectedIdRef.current = "";
-      selectAcceptanceId("");
+      selectAcceptanceId("", { emit: false });
     } finally {
       setLoading(false);
     }
@@ -180,6 +183,7 @@ export function useProjectAcceptancesPanel(
   }, [active, project.id]);
 
   useEffect(() => {
+    if (acceptancesProjectIdRef.current !== project.id) return;
     const requestedId = options.selectedAcceptanceId || "";
     const externalSelectionChanged = requestedId !== externalSelectedIdRef.current;
     const preferredId = localPreferredSelectedIdRef.current;
@@ -229,7 +233,7 @@ export function useProjectAcceptancesPanel(
       localPreferredSelectedIdRef.current = "";
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.selectedAcceptanceId, acceptances]);
+  }, [options.selectedAcceptanceId, acceptances, project.id]);
 
   useEffect(() => {
     if (!firstAvailableStage) return;
