@@ -148,6 +148,10 @@ export function useProjectAcceptancesPanel(
       acceptancesProjectIdRef.current = project.id;
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
+      const pendingPreferredId = localPreferredSelectedIdRef.current;
+      if (pendingPreferredId && !hasAcceptance(list, pendingPreferredId)) {
+        return;
+      }
       const nextSelectedId = resolveSelectedAcceptanceId(
         list,
         options.selectedAcceptanceId,
