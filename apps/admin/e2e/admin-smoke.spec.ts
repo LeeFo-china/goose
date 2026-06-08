@@ -65,17 +65,17 @@ test.describe("admin smoke", () => {
     await expect(dialog.getByRole("button", { name: "创建项目" })).toBeVisible();
   });
 
-  test("项目详情工序验收页签可打开", async ({ page }) => {
+  test("项目详情独立页默认展示工序验收工作区", async ({ page }) => {
     await gotoAdminPage(page, "/projects");
 
-    const detailButton = page.getByRole("button", { name: "详情" }).first();
+    const detailButton = page.getByRole("link", { name: "详情" }).first();
     if (await detailButton.count()) {
       await expect(detailButton).toBeVisible();
       await detailButton.click();
-      const dialog = page.getByRole("dialog").filter({ hasText: "工序验收" });
-      await expect(dialog).toBeVisible();
-      await dialog.getByRole("tab", { name: "工序验收" }).click();
-      await expect(dialog.getByRole("tabpanel", { name: "工序验收" })).toBeVisible();
+      await expect(page).toHaveURL(/\/projects\/[^/?]+(?:\?tab=acceptances)?/);
+      await expect(page.getByRole("heading", { name: "工序验收" })).toBeVisible();
+      await expect(page.getByText("项目档案")).toBeVisible();
+      await expect(page.getByText(/验收记录|暂无验收记录|当前无可发起的工序验收/)).toBeVisible();
     } else {
       await expect(page.getByText("没有符合条件的项目")).toBeVisible();
     }
