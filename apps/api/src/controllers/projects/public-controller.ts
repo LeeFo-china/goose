@@ -1,10 +1,16 @@
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
+import { systemSettingsService } from "@/services/system-settings";
 import { projectSer } from "@/services/projects";
+import { visitorProjectFollowService } from "@/services/visitor-project-follows";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { serializeProjectListItem } from "./list-serializer";
+import { serializePublicProjectDetailItem } from "./public-detail-serializer";
 import { ProjectBaseController } from "./shared";
+
+const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
+  "VISITOR_PROJECT_CONSULTATION_ENABLED";
 
 class PublicProjectsController extends ProjectBaseController {
   @Get("/front/projects")
@@ -63,7 +69,15 @@ class PublicProjectsController extends ProjectBaseController {
     const project = await projectSer.getPublicProjectDetail(projectId);
     const detailMs = Date.now() - detailStartedAt;
 
-    const [publicLogResult, publicMemberResult] = await Promise.all([
+    const tenantId = this.getPublicProjectTenantId(project);
+    const visitorId = this.getOptionalFollowerVisitorId(request);
+
+    const [
+      publicLogResult,
+      publicMemberResult,
+      consultationEnabled,
+      followState,
+    ] = await Promise.all([
       (async () => {
         const startedAt = Date.now();
         const rows = await projectSer.listPublicProjectLogs(projectId);
@@ -74,6 +88,14 @@ class PublicProjectsController extends ProjectBaseController {
         const rows = await projectSer.listPublicProjectMembers(projectId);
         return { rows, durationMs: Date.now() - startedAt };
       })(),
+      tenantId
+        ? systemSettingsService.getBoolean(
+          VISITOR_PROJECT_CONSULTATION_ENABLED_KEY,
+          false,
+          { tenantId },
+        )
+        : Promise.resolve(false),
+      visitorProjectFollowService.getProjectFollowState(projectId, visitorId),
     ]);
 
     const logsSerializeStartedAt = Date.now();
@@ -89,9 +111,16 @@ class PublicProjectsController extends ProjectBaseController {
     const membersSerializeMs = Date.now() - membersSerializeStartedAt;
 
     const serializeStartedAt = Date.now();
-    const data = await this.serializePublicProjectDetailItem(project, {
+    const data = serializePublicProjectDetailItem(project, {
       publicLogs,
       members,
+      consultation: {
+        enabled: consultationEnabled,
+        tenant_id: tenantId,
+        button_text: consultationEnabled ? "立即咨询" : null,
+      },
+      followedByMe: followState.followed_by_me,
+      followCount: followState.follow_count,
     });
     const serializeMs = Date.now() - serializeStartedAt;
 
@@ -114,6 +143,21 @@ class PublicProjectsController extends ProjectBaseController {
     );
 
     return ResponseHandler.success(data);
+  }
+
+  private getPublicProjectTenantId(project: Record<string, unknown>) {
+    const tenant = this.normalizeRelation(project.tenant, {
+      id: null,
+      name: null,
+      slug: null,
+    });
+
+    return typeof tenant.id === "string" ? tenant.id : null;
+  }
+
+  private getOptionalFollowerVisitorId(request: FastifyRequest) {
+    const user = request.user;
+    return user?.visitor_id ?? user?.sub ?? null;
   }
 }
 

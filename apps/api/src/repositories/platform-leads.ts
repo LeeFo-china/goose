@@ -17,6 +17,9 @@ export type PlatformLeadRecord = {
   budget: string | null;
   description: string | null;
   source: string;
+  tenant_id: string | null;
+  project_id: string | null;
+  source_context: unknown;
   status: PlatformLeadStatus;
   assigned_tenant_id: string | null;
   assigned_customer_id: string | null;
@@ -100,6 +103,9 @@ class PlatformLeadRepository {
         budget: input.budget ?? null,
         description: input.description ?? null,
         source: input.source,
+        tenant_id: input.tenant_id ?? null,
+        project_id: input.project_id ?? null,
+        source_context: input.source_context ?? {},
         status: "new",
       })
       .select("*")

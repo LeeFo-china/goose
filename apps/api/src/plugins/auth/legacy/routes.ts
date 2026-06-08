@@ -76,6 +76,13 @@ export function isPublicRoute(method: string, url: string) {
   }
 
   if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/front/projects" || url.startsWith("/front/projects/"))
+  ) {
+    return true;
+  }
+
+  if (
     method === "POST"
     && url.startsWith("/public/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))
@@ -192,6 +199,21 @@ export function isVisitorSessionRoute(method: string, url: string) {
   if (
     (method === "GET" || method === "HEAD")
     && (url === "/front/projects" || url.startsWith("/front/projects/"))
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/visitor/projects" || url === "/visitor/project-follows")
+  ) {
+    return true;
+  }
+
+  if (
+    (method === "POST" || method === "DELETE")
+    && url.startsWith("/visitor/projects/")
+    && url.endsWith("/follow")
   ) {
     return true;
   }

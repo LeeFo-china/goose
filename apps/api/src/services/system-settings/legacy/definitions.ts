@@ -3,6 +3,7 @@ import { DEFINITIONS_INTEGRATIONS } from './definitions-integrations';
 import { DEFINITIONS_AI_SOCIAL } from './definitions-ai-social';
 import { DEFINITIONS_WECHAT_NOTIFY } from './definitions-wechat-notify';
 import { DEFINITIONS_PICTURE_LIBRARY } from './definitions-picture-library';
+import { DEFINITIONS_VISITOR } from './definitions-visitor';
 import type { SettingDefinition } from './shared';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -11,6 +12,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   ...DEFINITIONS_AI_SOCIAL,
   ...DEFINITIONS_WECHAT_NOTIFY,
   ...DEFINITIONS_PICTURE_LIBRARY,
+  ...DEFINITIONS_VISITOR,
 ];
 
 export const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
@@ -56,11 +58,16 @@ export const TENANT_CUSTOMER_SERVICE_SETTING_KEYS = new Set([
   "CUSTOMER_SERVICE_NOTICE",
 ]);
 
+export const TENANT_VISITOR_SETTING_KEYS = new Set([
+  "VISITOR_PROJECT_CONSULTATION_ENABLED",
+]);
+
 export const TENANT_OVERRIDABLE_SETTING_KEYS = new Set([
   ...TENANT_SMS_BASE_SETTING_KEYS,
   ...TENANT_ALIYUN_SMS_SETTING_KEYS,
   ...TENANT_TENCENT_SMS_SETTING_KEYS,
   ...TENANT_CUSTOMER_SERVICE_SETTING_KEYS,
+  ...TENANT_VISITOR_SETTING_KEYS,
 ]);
 
 export const TENANT_SETTING_KEYS_HIDE_PLATFORM_VALUE = new Set([

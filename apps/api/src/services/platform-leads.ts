@@ -11,6 +11,11 @@ import type {
 import type { AuthContext } from "@/services/authorization";
 import { notificationService } from "@/services/notifications";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { projectSer } from "@/services/projects";
+import { systemSettingsService } from "@/services/system-settings";
+
+const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
+  "VISITOR_PROJECT_CONSULTATION_ENABLED";
 
 type VisitorLeadContext = {
   authUserId: string | null | undefined;
@@ -29,6 +34,10 @@ class PlatformLeadService {
 
     if (input.phone !== context.verifiedPhone) {
       throw Errors.badRequest("提交手机号必须与当前登录手机号一致");
+    }
+
+    if (input.source === "visitor_project_detail") {
+      await this.assertVisitorProjectConsultationEnabled(input);
     }
 
     const data = await platformLeadRepository.create({
@@ -117,6 +126,39 @@ class PlatformLeadService {
     }
   }
 
+  private async assertVisitorProjectConsultationEnabled(
+    input: PlatformLeadSubmitInput,
+  ) {
+    if (!input.tenant_id || !input.project_id) {
+      throw Errors.badRequest("项目咨询缺少项目上下文");
+    }
+
+    const project = await projectSer.getPublicProjectDetail(input.project_id);
+    const tenant = normalizeRelation(project.tenant, { id: null });
+    const projectTenantId = typeof tenant.id === "string" ? tenant.id : null;
+
+    if (!projectTenantId || projectTenantId !== input.tenant_id) {
+      throw Errors.business(
+        400,
+        "项目与租户不匹配",
+        "VISITOR_PROJECT_TENANT_MISMATCH",
+      );
+    }
+
+    const enabled = await systemSettingsService.getBoolean(
+      VISITOR_PROJECT_CONSULTATION_ENABLED_KEY,
+      false,
+      { tenantId: input.tenant_id },
+    );
+    if (!enabled) {
+      throw Errors.business(
+        403,
+        "该项目暂未开放咨询",
+        "VISITOR_PROJECT_CONSULTATION_DISABLED",
+      );
+    }
+  }
+
   private handleAssignError(error: unknown): never {
     const message = getDbErrorMessage(error);
 
@@ -153,6 +195,25 @@ function getDbErrorMessage(error: unknown) {
   }
 
   return "";
+}
+
+function normalizeRelation<T extends Record<string, unknown>>(
+  value: unknown,
+  fallback: T,
+): T {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first && typeof first === "object") {
+      return { ...fallback, ...(first as T) };
+    }
+    return fallback;
+  }
+
+  if (value && typeof value === "object") {
+    return { ...fallback, ...(value as T) };
+  }
+
+  return fallback;
 }
 
 export const platformLeadService = new PlatformLeadService();

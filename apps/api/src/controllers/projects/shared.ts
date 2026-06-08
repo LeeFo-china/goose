@@ -13,9 +13,7 @@ import type { Tables } from "@/types/database";
 import {
   PROJECT_LOG_STAGE_CONFIG,
   PROJECT_MEMBER_ROLE_CONFIG,
-  ProjectStatusConfig,
   isProjectLogStageCode,
-  isProjectStatus,
   type ProjectLogStageCode,
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
@@ -144,7 +142,7 @@ export type ProjectMemberRoleOption = {
   status: "active" | "inactive";
 };
 
-type PublicProjectMemberSummary = {
+export type PublicProjectMemberSummary = {
   id: string;
   role_code: ProjectMemberRoleCode;
   role_name: string;
@@ -274,65 +272,6 @@ export abstract class ProjectBaseController extends TenantBaseController<
   protected async getPublicProjectLogs(projectId: string) {
     const logs = await projectSer.listPublicProjectLogs(projectId);
     return logs.map((item) => this.serializePublicProjectLog(item));
-  }
-
-  protected buildPublicProjectCoverImages(logs: PublicProjectLogSummary[]) {
-    return Array.from(
-      new Set(logs.flatMap((item) => item.images).filter(Boolean)),
-    ).slice(0, 6);
-  }
-
-  protected async serializePublicProjectDetailItem(
-    row: Record<string, unknown>,
-    related?: {
-      publicLogs?: PublicProjectLogSummary[];
-      members?: PublicProjectMemberSummary[];
-    },
-  ) {
-    const normalizedProperty = this.normalizeRelation(row.property, {
-      id: null,
-      community: null,
-      building_info: null,
-      layout: null,
-      area: null,
-      latitude: null,
-      longitude: null,
-      province: null,
-      city: null,
-      district: null,
-      adcode: null,
-      location_status: null,
-    });
-    const normalizedCustomer = this.normalizeRelation(row.customer, { name: null });
-    const normalizedTenant = this.normalizeRelation(row.tenant, { id: null, name: null, slug: null });
-    const projectId = typeof row.id === "string" ? row.id : "";
-    const publicLogs = related?.publicLogs ??
-      (projectId ? await this.getPublicProjectLogs(projectId) : []);
-    const members = related?.members ??
-      (projectId ? await this.getPublicProjectMembers(projectId) : []);
-    const rawStatus = typeof row.status === "string" ? row.status : null;
-    const status = isProjectStatus(rawStatus) ? rawStatus : null;
-
-    return {
-      id: projectId,
-      name: typeof row.name === "string" ? row.name : null,
-      status,
-      status_label: status ? ProjectStatusConfig[status].label : null,
-      address: typeof row.address === "string" ? row.address : null,
-      latitude: normalizedProperty.latitude ?? null,
-      longitude: normalizedProperty.longitude ?? null,
-      budget: typeof row.budget === "number" ? row.budget : null,
-      start_date: typeof row.start_date === "string" ? row.start_date : null,
-      cover_images: this.buildPublicProjectCoverImages(publicLogs),
-      style_tags: this.normalizeStringArray(row.style_tags),
-      tenant: normalizedTenant,
-      tenant_name: typeof normalizedTenant.name === "string" ? normalizedTenant.name : null,
-      property: normalizedProperty,
-      customer: {
-        name: typeof normalizedCustomer.name === "string" ? normalizedCustomer.name : null,
-      },
-      members,
-    };
   }
 
   protected serializeProjectMember(item: {

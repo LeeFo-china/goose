@@ -9,6 +9,7 @@ import {
 import {
   applyPublicProjectVisibilityQuery,
   listPublicProjects,
+  listPublicProjectsByIds,
   findPublicVisibilityById,
   findPublicDetailById,
   listPublicProjectLogs,
@@ -99,6 +100,7 @@ class ProjectRepository {
   getEmployeeBootstrapBundle = getEmployeeBootstrapBundle;
   private applyPublicProjectVisibilityQuery = applyPublicProjectVisibilityQuery;
   listPublicProjects = listPublicProjects;
+  listPublicProjectsByIds = listPublicProjectsByIds;
   findPublicVisibilityById = findPublicVisibilityById;
   findPublicDetailById = findPublicDetailById;
   listPublicProjectLogs = listPublicProjectLogs;

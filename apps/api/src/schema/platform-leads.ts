@@ -20,6 +20,34 @@ export const PlatformLeadSubmitSchema = z.object({
   budget: z.string().trim().max(80, "预算不能超过 80 个字符").optional(),
   description: z.string().trim().max(1000, "需求描述不能超过 1000 个字符").optional(),
   source: z.string().trim().min(1).max(80).optional().default("platform_visitor"),
+  tenant_id: z.uuid("无效的租户 ID").optional(),
+  project_id: z.uuid("无效的项目 ID").optional(),
+  source_context: z.object({
+    project_name: z.string().trim().max(100, "项目名称不能超过 100 个字符").nullable().optional(),
+    entry: z.enum(["bottom_cta", "inline_prompt"], {
+      message: "无效的咨询入口",
+    }).nullable().optional(),
+  }).optional(),
+}).superRefine((value, ctx) => {
+  if (value.source !== "visitor_project_detail") {
+    return;
+  }
+
+  if (!value.tenant_id) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["tenant_id"],
+      message: "项目咨询必须提供租户 ID",
+    });
+  }
+
+  if (!value.project_id) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["project_id"],
+      message: "项目咨询必须提供项目 ID",
+    });
+  }
 });
 
 export const PlatformLeadListQuerySchema = PaginationQuerySchema.extend({
