@@ -4,6 +4,7 @@ import type {
   VisitorPictureAssetListQuery,
 } from "@/schema/visitor-picture-library";
 import { listVisitorPictureAssetsFast } from "@/repositories/visitor-picture-library-list";
+import * as personalPictureLibraryRepository from "@/repositories/visitor-picture-library-personal";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -102,7 +103,12 @@ class VisitorPictureLibraryRepository {
     }));
   }
 
-  async listAssets(query: VisitorPictureAssetListQuery) {
+  async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
+    if (personalPictureLibraryRepository.isPersonalPictureLibraryScope(query.scope)) {
+      if (!visitorId) throw Errors.unauthorized("请先完成手机号验证");
+      return personalPictureLibraryRepository.listVisitorPicturePersonalAssets(query, visitorId);
+    }
+
     try {
       return await listVisitorPictureAssetsFast(query);
     } catch {

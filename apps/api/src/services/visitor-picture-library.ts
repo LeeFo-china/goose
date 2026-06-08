@@ -16,6 +16,7 @@ import type {
   VisitorPictureAssetNavigationQuery,
   VisitorPictureAssetListQuery,
   VisitorPictureCommentListQuery,
+  VisitorPictureLibraryScope,
 } from "@/schema/visitor-picture-library";
 import {
   resolveNavigationCategoryId,
@@ -30,6 +31,7 @@ import {
   applyPublicCacheTiming,
   type PublicCacheTiming,
 } from "@/services/visitor-picture-public-cache";
+import * as pictureLibraryTiming from "@/services/visitor-picture-library-timing";
 
 const PUBLIC_CACHE_VERSION = "picture-library:v3";
 const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -37,7 +39,7 @@ const PUBLIC_PREVIEW_PAGE_SIZE = 6;
 
 type AssetListDebugTiming = PublicCacheTiming;
 type DebugTiming = PublicCacheTiming;
-type CommentDebugTiming = Record<string, number | string | null>;
+type CommentDebugTiming = pictureLibraryTiming.CommentDebugTiming;
 type AssetDetailResponse = ReturnType<typeof toAssetDetail>;
 
 type NavigationResponse = {
@@ -53,7 +55,7 @@ class VisitorPictureLibraryService {
   private publicCache = new PublicCacheStore(PUBLIC_CACHE_TTL_MS);
 
   async listCategories(query: { debug_timing?: boolean } = {}) {
-    const timing = query.debug_timing ? this.createCategoryTiming() : null;
+    const timing = query.debug_timing ? pictureLibraryTiming.createCategoryTiming() : null;
     const startedAt = Date.now();
     const cacheResult = await this.publicCache.getResult(
       "categories",
@@ -71,11 +73,20 @@ class VisitorPictureLibraryService {
   }
 
   async listAssets(query: VisitorPictureAssetListQuery, visitorId: string | null = null) {
-    const timing = query.debug_timing ? this.createAssetListTiming() : null;
+    const timing = query.debug_timing ? pictureLibraryTiming.createAssetListTiming() : null;
     const startedAt = Date.now();
+    if (this.isPersonalScope(query.scope)) {
+      const requiredVisitorId = this.requireVisitorId(visitorId);
+      const personalData = await this.loadAssets(query, requiredVisitorId, timing);
+      const data = await this.withInteractionStates(personalData, requiredVisitorId, timing);
+      if (!timing) return data;
+      timing.total_ms = Date.now() - startedAt;
+      return { ...data, debug_timing: timing };
+    }
+
     const cacheResult = await this.publicCache.getResult(
       this.buildAssetListCacheKey(query),
-      (loaderTiming) => this.loadPublicAssets(query, loaderTiming as AssetListDebugTiming | null),
+      (loaderTiming) => this.loadAssets(query, null, loaderTiming as AssetListDebugTiming | null),
       timing,
     );
     applyPublicCacheTiming(timing, cacheResult);
@@ -102,12 +113,24 @@ class VisitorPictureLibraryService {
     query: VisitorPictureAssetNavigationQuery,
     visitorId: string | null = null,
   ) {
-    const timing = query.debug_timing ? this.createNavigationTiming() : null;
+    const timing = query.debug_timing ? pictureLibraryTiming.createNavigationTiming() : null;
     const startedAt = Date.now();
     const baseQuery = { ...query, direction: "both" as const };
+    if (this.isPersonalScope(query.scope)) {
+      const requiredVisitorId = this.requireVisitorId(visitorId);
+      const loaded = await this.loadAssetNavigation(id, baseQuery, timing, requiredVisitorId);
+      const filtered = this.filterNavigationDirection(loaded, query);
+      const data = await this.withNavigationInteractionStates(filtered, requiredVisitorId, timing);
+      if (!timing) return data;
+
+      timing.row_count = this.countNavigationRows(data);
+      timing.total_ms = Date.now() - startedAt;
+      return { ...data, debug_timing: timing };
+    }
+
     const cacheResult = await this.publicCache.getResult(
       this.buildNavigationCacheKey(id, baseQuery),
-      (loaderTiming) => this.loadAssetNavigation(id, baseQuery, loaderTiming),
+      (loaderTiming) => this.loadAssetNavigation(id, baseQuery, loaderTiming, null),
       timing,
     );
     applyPublicCacheTiming(timing, cacheResult);
@@ -152,7 +175,7 @@ class VisitorPictureLibraryService {
   }
 
   async listComments(assetId: string, query: VisitorPictureCommentListQuery) {
-    const timing = query.debug_timing ? this.createCommentTiming() : null;
+    const timing = query.debug_timing ? pictureLibraryTiming.createCommentTiming() : null;
     const startedAt = Date.now();
     const page = await visitorPictureCommentsRepository.list(assetId, query, timing);
     const serializeStartedAt = Date.now();
@@ -205,12 +228,14 @@ class VisitorPictureLibraryService {
     const category = categories.find((item) => item.asset_count > 0);
     const [previewAssets, assets] = await Promise.all([
       this.listAssets({
+        scope: "all",
         category_id: category?.id,
         page: 1,
         pageSize: PUBLIC_PREVIEW_PAGE_SIZE,
         debug_timing: false,
       }, null),
       this.listAssets({
+        scope: "all",
         category_id: category?.id,
         page: 1,
         pageSize: 20,
@@ -222,6 +247,7 @@ class VisitorPictureLibraryService {
       navigationAssets.list.slice(0, 5).map((asset) =>
         this.getAssetNavigation(asset.id, {
           category_id: category?.id,
+          scope: "all",
           direction: "both",
           limit: 5,
           debug_timing: false,
@@ -259,12 +285,13 @@ class VisitorPictureLibraryService {
     });
   }
 
-  private async loadPublicAssets(
+  private async loadAssets(
     query: VisitorPictureAssetListQuery,
+    visitorId: string | null,
     timing: AssetListDebugTiming | null,
   ) {
     const page = await this.measureStep(timing, "query_ms", () =>
-      visitorPictureLibraryRepository.listAssets(query)
+      visitorPictureLibraryRepository.listAssets(query, visitorId)
     );
     if (timing) timing.row_count = page.list.length;
     const startedAt = Date.now();
@@ -277,7 +304,7 @@ class VisitorPictureLibraryService {
   }
 
   private async withInteractionStates(
-    data: Awaited<ReturnType<VisitorPictureLibraryService["loadPublicAssets"]>>,
+    data: Awaited<ReturnType<VisitorPictureLibraryService["loadAssets"]>>,
     visitorId: string,
     timing: AssetListDebugTiming | null,
   ) {
@@ -311,17 +338,20 @@ class VisitorPictureLibraryService {
     id: string,
     query: VisitorPictureAssetNavigationQuery,
     timing: DebugTiming | null,
+    visitorId: string | null,
   ): Promise<NavigationResponse> {
     const bundle = await this.measureStep(timing, "query_ms", () =>
       visitorPictureNavigationRepository.findBundle({
         assetId: id,
         categoryId: query.category_id ?? null,
+        scope: query.scope,
+        visitorId,
         direction: query.direction,
         limit: query.limit,
       })
     );
     if (!bundle.current || !bundle.context) {
-      await this.assertNavigationAssetContext(id, query.category_id);
+      await this.assertNavigationAssetContext(id, query);
     }
 
     const startedAt = Date.now();
@@ -343,10 +373,20 @@ class VisitorPictureLibraryService {
     return response;
   }
 
-  private async assertNavigationAssetContext(id: string, categoryId: string | undefined) {
+  private async assertNavigationAssetContext(
+    id: string,
+    query: VisitorPictureAssetNavigationQuery,
+  ) {
     const asset = await visitorPictureLibraryRepository.findAssetDetail(id);
     if (!asset) throw Errors.notFound("图片不存在或未发布");
-    if (categoryId) resolveNavigationCategoryId(asset, categoryId);
+    if (this.isPersonalScope(query.scope)) {
+      throw Errors.business(
+        400,
+        query.scope === "favorites" ? "当前图片不在收藏集合中" : "当前图片不在点赞集合中",
+        "PICTURE_LIBRARY_ASSET_NOT_IN_COLLECTION",
+      );
+    }
+    if (query.category_id) resolveNavigationCategoryId(asset, query.category_id);
     throw Errors.badRequest("当前图片不在导航上下文中");
   }
 
@@ -408,56 +448,11 @@ class VisitorPictureLibraryService {
     return [
       PUBLIC_CACHE_VERSION,
       "assets",
+      query.scope,
       query.category_id || "all",
       query.page,
       query.pageSize,
     ].join(":");
-  }
-
-  private createAssetListTiming(): AssetListDebugTiming {
-    return {
-      cache: null,
-      total_ms: 0,
-      query_ms: 0,
-      visitor_state_ms: 0,
-      serialize_ms: 0,
-      row_count: 0,
-      refresh_in_flight: false,
-      shared_wait_ms: 0,
-    };
-  }
-
-  private createCategoryTiming(): DebugTiming {
-    return {
-      cache: null,
-      total_ms: 0,
-      row_count: 0,
-      refresh_in_flight: false,
-      shared_wait_ms: 0,
-    };
-  }
-
-  private createNavigationTiming(): DebugTiming {
-    return {
-      cache: null,
-      total_ms: 0,
-      query_ms: 0,
-      visitor_state_ms: 0,
-      serialize_ms: 0,
-      row_count: 0,
-      refresh_in_flight: false,
-      shared_wait_ms: 0,
-    };
-  }
-
-  private createCommentTiming(): CommentDebugTiming {
-    return {
-      total_ms: 0,
-      query_ms: 0,
-      images_ms: 0,
-      serialize_ms: 0,
-      row_count: 0,
-    };
   }
 
   private countNavigationRows(data: NavigationResponse) {
@@ -481,10 +476,20 @@ class VisitorPictureLibraryService {
       PUBLIC_CACHE_VERSION,
       "asset-navigation",
       id,
+      query.scope,
       query.category_id || "auto",
       query.direction,
       query.limit,
     ].join(":");
+  }
+
+  private isPersonalScope(scope: VisitorPictureLibraryScope) {
+    return scope === "favorites" || scope === "likes";
+  }
+
+  private requireVisitorId(visitorId: string | null) {
+    if (!visitorId) throw Errors.unauthorized("请先完成手机号验证");
+    return visitorId;
   }
 
 }

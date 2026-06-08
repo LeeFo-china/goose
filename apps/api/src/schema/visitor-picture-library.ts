@@ -9,10 +9,26 @@ const BooleanQuerySchema = z.preprocess((value) => {
   return value;
 }, z.boolean().default(false));
 
+const VisitorPictureLibraryScopeSchema = z.enum(["all", "favorites", "likes"]);
+
+function rejectCategoryInPersonalScope(
+  value: { scope: z.infer<typeof VisitorPictureLibraryScopeSchema>; category_id?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (value.scope !== "all" && value.category_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["category_id"],
+      message: "个人集合不支持分类筛选",
+    });
+  }
+}
+
 export const VisitorPictureAssetListQuerySchema = PaginationQuerySchema.extend({
   category_id: z.uuid("无效的分类 ID").optional(),
+  scope: VisitorPictureLibraryScopeSchema.optional().default("all"),
   debug_timing: BooleanQuerySchema.optional().default(false),
-});
+}).superRefine(rejectCategoryInPersonalScope);
 
 export const VisitorPictureCategoryListQuerySchema = z.object({
   debug_timing: BooleanQuerySchema.optional().default(false),
@@ -24,6 +40,7 @@ export const VisitorPictureAssetParamsSchema = z.object({
 
 export const VisitorPictureAssetNavigationQuerySchema = z.object({
   category_id: z.uuid("无效的分类 ID").optional(),
+  scope: VisitorPictureLibraryScopeSchema.optional().default("all"),
   direction: z.enum(["prev", "next", "both"], {
     message: "无效的导航方向",
   }).optional().default("both"),
@@ -34,7 +51,7 @@ export const VisitorPictureAssetNavigationQuerySchema = z.object({
     .optional()
     .default(1),
   debug_timing: BooleanQuerySchema.optional().default(false),
-});
+}).superRefine(rejectCategoryInPersonalScope);
 
 export const VisitorPictureCommentListQuerySchema = PaginationQuerySchema.extend({
   debug_timing: BooleanQuerySchema.optional().default(false),
@@ -58,6 +75,7 @@ export const CreateVisitorPictureShareEventSchema = z.object({
 });
 
 export type VisitorPictureAssetListQuery = z.infer<typeof VisitorPictureAssetListQuerySchema>;
+export type VisitorPictureLibraryScope = z.infer<typeof VisitorPictureLibraryScopeSchema>;
 export type VisitorPictureCategoryListQuery = z.infer<typeof VisitorPictureCategoryListQuerySchema>;
 export type VisitorPictureAssetNavigationQuery = z.infer<
   typeof VisitorPictureAssetNavigationQuerySchema

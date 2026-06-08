@@ -76,6 +76,14 @@ export function isPublicRoute(method: string, url: string) {
   }
 
   if (
+    (method === "POST" || method === "DELETE")
+    && url.startsWith("/visitor/picture-library/assets/")
+    && (url.endsWith("/like") || url.endsWith("/favorite"))
+  ) {
+    return true;
+  }
+
+  if (
     method === "POST"
     && url.startsWith("/public/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))
