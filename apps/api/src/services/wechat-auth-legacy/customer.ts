@@ -275,6 +275,7 @@ export async function resolveCustomerLoginState(this: any,
       },
       roles: ["customer"],
       request,
+      verifiedPhone: phone,
     });
   }
 
@@ -335,6 +336,7 @@ export async function resolveCustomerLoginStateByShareToken(this: any, input: {
         ...customer,
         user_id: input.authUserId,
       },
+      verifiedPhone: input.phone,
     })),
     share_binding: {
       share_link_id: bound.share_link_id,
@@ -395,6 +397,7 @@ export async function selectCustomerTenantForAuthUser(this: any, input: {
       ...customer,
       user_id: customerAuthUserId,
     },
+    verifiedPhone: input.verifiedPhone,
   });
 }
 

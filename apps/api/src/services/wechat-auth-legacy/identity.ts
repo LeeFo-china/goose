@@ -357,11 +357,13 @@ export async function signCustomerSession(this: any, input: {
   customer: CustomerTenantOption;
   roles?: string[];
   request?: FastifyRequest;
+  verifiedPhone?: string | null;
 }) {
   const tenant = this.normalizeTenantRelation(input.customer.tenant);
   this.assertCustomerTenantAvailable(input.customer);
   const roles = input.roles ?? await this.getUserRoles(input.authUserId);
   const normalizedRoles = roles.includes("customer") ? roles : [...roles, "customer"];
+  const verifiedPhone = input.verifiedPhone ?? null;
   const token = this.signWechatAuthToken({
     sub: input.authUserId,
     openid: input.openid ?? undefined,
@@ -369,6 +371,7 @@ export async function signCustomerSession(this: any, input: {
     tenant_id: input.customer.tenant_id,
     tenant_slug: tenant?.slug ?? null,
     customer_id: input.customer.id,
+    verified_phone: verifiedPhone ?? undefined,
   });
   if (input.request) {
     this.runAuthBackgroundTask(input.request, "prewarm_customer_context", () =>
@@ -395,6 +398,7 @@ export async function signCustomerSession(this: any, input: {
     user_id: input.authUserId,
     roles: normalizedRoles,
     is_new_user: false,
+    ...(verifiedPhone ? { phone: verifiedPhone, verified_phone: verifiedPhone } : {}),
     tenant: {
       id: input.customer.tenant_id,
       name: tenant?.name ?? null,
