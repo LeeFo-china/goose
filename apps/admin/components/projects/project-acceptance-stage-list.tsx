@@ -138,6 +138,7 @@ export function ProjectAcceptanceStageList({
                     : "bg-background",
                 )}
                 onClick={() => panel.setSelectedId(item.id)}
+                aria-current={item.id === panel.selectedId ? "true" : undefined}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0 truncate text-sm font-medium">
