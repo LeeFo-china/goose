@@ -35,10 +35,10 @@ async function getProject(projectId: string) {
 
     const payload = await parseBackendJson<ProjectRecord>(response);
     return { project: payload.data || null, error: null };
-  } catch (error) {
+  } catch {
     return {
       project: null,
-      error: error instanceof Error ? error.message : "项目详情加载失败",
+      error: "项目详情加载失败",
     };
   }
 }
