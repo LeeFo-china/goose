@@ -7,13 +7,22 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
+import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
 import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
 import {
   projectDetailHref,
   type ProjectDetailPageTab,
 } from "@/components/projects/project-detail-page-tabs";
+import { ProjectLogsPanel } from "@/components/projects/project-logs-dialog";
+import { ProjectMembersPanel } from "@/components/projects/project-members-panel";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
-import { requestProject } from "@/components/projects/project-mutation-utils";
+import {
+  propertyLabel,
+  relationOne,
+  requestProject,
+} from "@/components/projects/project-mutation-utils";
+import { ProjectStatusPanel } from "@/components/projects/project-status-panel";
+import { PropertyLocationStatus } from "@/components/properties/property-location-status";
 
 export function ProjectDetailPageClient({
   project,
@@ -63,34 +72,40 @@ export function ProjectDetailPageClient({
     router.push(projectDetailHref(currentProject.id, tab, nextAcceptanceId));
   }
 
-  function refreshProject() {
+  function refreshProject(): Promise<void> {
     const projectId = currentProject.id;
     const requestId = refreshRequestIdRef.current + 1;
     refreshRequestIdRef.current = requestId;
     setError("");
-    startRefreshTransition(async () => {
-      try {
-        const nextProject = await requestProject<ProjectRecord>({
-          path: `/projects/${projectId}`,
-        });
-        if (
-          refreshRequestIdRef.current === requestId &&
-          latestProjectIdRef.current === projectId
-        ) {
-          setCurrentProject(nextProject);
+    return new Promise((resolve) => {
+      startRefreshTransition(async () => {
+        try {
+          const nextProject = await requestProject<ProjectRecord>({
+            path: `/projects/${projectId}`,
+          });
+          if (
+            refreshRequestIdRef.current === requestId &&
+            latestProjectIdRef.current === projectId
+          ) {
+            setCurrentProject(nextProject);
+          }
+        } catch (err) {
+          if (
+            refreshRequestIdRef.current === requestId &&
+            latestProjectIdRef.current === projectId
+          ) {
+            setError(
+              err instanceof Error && err.message ? err.message : "项目详情刷新失败",
+            );
+          }
+        } finally {
+          resolve();
         }
-      } catch (err) {
-        if (
-          refreshRequestIdRef.current === requestId &&
-          latestProjectIdRef.current === projectId
-        ) {
-          setError(
-            err instanceof Error && err.message ? err.message : "项目详情刷新失败",
-          );
-        }
-      }
+      });
     });
   }
+
+  const property = relationOne(currentProject.property);
 
   return (
     <div className="grid min-h-[calc(100vh-4rem)] gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -146,10 +161,55 @@ export function ProjectDetailPageClient({
                 );
               }}
             />
+          ) : activeTab === "logs" ? (
+            <div className="flex flex-col gap-5">
+              <ProjectConstructionStagesPanel
+                projectId={currentProject.id}
+                active={activeTab === "logs"}
+                compact
+              />
+              <ProjectLogsPanel project={currentProject} active={activeTab === "logs"} />
+            </div>
+          ) : activeTab === "members" ? (
+            <div className="flex flex-col gap-5">
+              <ProjectMembersPanel
+                project={currentProject}
+                refreshing={refreshing}
+                onChanged={refreshProject}
+              />
+              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+            </div>
           ) : (
-            <section className="rounded-md border bg-card p-5 text-sm text-muted-foreground">
-              {title} 模块加载中
-            </section>
+            <div className="flex flex-col gap-5">
+              <section className="rounded-lg border bg-card p-4">
+                <h3 className="text-base font-semibold">房产位置</h3>
+                {property?.id ? (
+                  <div className="mt-3 rounded-md border bg-background p-3">
+                    <div className="font-medium">{propertyLabel(property)}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {[property.layout, property.area != null ? `${property.area}㎡` : null]
+                        .filter(Boolean)
+                        .join(" · ") || currentProject.address || "-"}
+                    </div>
+                    <div className="mt-3">
+                      <PropertyLocationStatus
+                        property={{ ...property, id: property.id }}
+                        onConfirmed={refreshProject}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    当前项目未关联房产，位置待补全。
+                  </div>
+                )}
+              </section>
+              <ProjectConstructionStagesPanel
+                projectId={currentProject.id}
+                active={activeTab === "overview"}
+              />
+              <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+            </div>
           )}
         </div>
       </main>
