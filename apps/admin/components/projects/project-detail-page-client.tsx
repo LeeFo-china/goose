@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,18 @@ export function ProjectDetailPageClient({
   const [acceptanceId, setAcceptanceId] = useState(initialAcceptanceId);
   const [refreshing, startRefreshTransition] = useTransition();
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setCurrentProject(project);
+  }, [project]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    setAcceptanceId(initialAcceptanceId);
+  }, [initialAcceptanceId]);
 
   const title = useMemo(() => {
     if (activeTab === "logs") return "施工日志";

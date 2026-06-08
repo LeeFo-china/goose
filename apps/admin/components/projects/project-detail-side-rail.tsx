@@ -109,6 +109,7 @@ export function ProjectDetailSideRail({
               key={item.value}
               type="button"
               variant="ghost"
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "justify-start border border-transparent px-3 text-left focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
