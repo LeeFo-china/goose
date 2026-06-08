@@ -92,6 +92,13 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
   优先使用游标分页。仅当数据源明确保证总量 `<= 50` 且属于内部/辅助功能时可豁免，
   但必须在代码注释中说明原因。
 
+- **后端查询必须考虑性能边界。**
+  新增或修改列表、搜索、统计、高频读写接口时，必须避免 N+1 查询，Supabase
+  查询必须限定必要字段，列表查询必须使用 `.range()`、`.limit()` 或游标分页。
+  涉及大表过滤、排序、JOIN、RPC 或新增索引时，必须通过 migration 管理索引，
+  并在必要时用 `EXPLAIN ANALYZE` 验证执行计划。禁止为了性能规则随意引入缓存、
+  队列、Redis 或新依赖；确需引入时必须先说明原因和替代方案。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
