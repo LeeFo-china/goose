@@ -28,6 +28,16 @@ import {
   getAcceptanceDisplayTitle,
 } from "@/components/projects/project-acceptance-utils";
 
+function resolveSelectedAcceptanceId(
+  list: ProjectAcceptance[],
+  requestedId: string | undefined,
+  currentId: string,
+): string {
+  if (requestedId && list.some((item) => item.id === requestedId)) return requestedId;
+  if (currentId && list.some((item) => item.id === currentId)) return currentId;
+  return list[0]?.id || "";
+}
+
 export function useProjectAcceptancesPanel(
   project: ProjectRecord,
   active: boolean,
@@ -91,6 +101,7 @@ export function useProjectAcceptancesPanel(
   });
 
   const selectAcceptanceId = (id: string) => {
+    if (id === selectedIdRef.current) return;
     selectedIdRef.current = id;
     setSelectedId(id);
     options.onSelectedAcceptanceIdChange?.(id);
@@ -104,12 +115,11 @@ export function useProjectAcceptancesPanel(
       const list = data.list || [];
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
-      const selectedOptionId = options.selectedAcceptanceId;
-      const nextSelectedId = selectedOptionId && list.some((item) => item.id === selectedOptionId)
-        ? selectedOptionId
-        : selectedIdRef.current && list.some((item) => item.id === selectedIdRef.current)
-        ? selectedIdRef.current
-        : list[0]?.id || "";
+      const nextSelectedId = resolveSelectedAcceptanceId(
+        list,
+        options.selectedAcceptanceId,
+        selectedIdRef.current,
+      );
       selectAcceptanceId(nextSelectedId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "验收列表加载失败");
@@ -128,10 +138,13 @@ export function useProjectAcceptancesPanel(
   }, [active, project.id]);
 
   useEffect(() => {
-    const selectedOptionId = options.selectedAcceptanceId;
-    if (!selectedOptionId || selectedOptionId === selectedIdRef.current) return;
-    if (!acceptances.some((item) => item.id === selectedOptionId)) return;
-    selectAcceptanceId(selectedOptionId);
+    if (acceptances.length === 0) return;
+    const nextSelectedId = resolveSelectedAcceptanceId(
+      acceptances,
+      options.selectedAcceptanceId,
+      selectedIdRef.current,
+    );
+    selectAcceptanceId(nextSelectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.selectedAcceptanceId, acceptances]);
 
