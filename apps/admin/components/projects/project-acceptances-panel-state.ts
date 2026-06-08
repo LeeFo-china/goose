@@ -60,12 +60,16 @@ export function useProjectAcceptancesPanel(
   const [selectedId, setSelectedId] = useState("");
   const selectedIdRef = useRef("");
   const lastEmittedSelectedIdRef = useRef("");
+  const selectedAcceptanceIdOptionRef = useRef(options.selectedAcceptanceId || "");
+  const onSelectedAcceptanceIdChangeRef = useRef(options.onSelectedAcceptanceIdChange);
   const externalSelectedIdRef = useRef(options.selectedAcceptanceId || "");
   const localPreferredSelectedIdRef = useRef("");
   const acceptancesProjectIdRef = useRef("");
   const latestProjectIdRef = useRef(project.id);
   const loadRequestIdRef = useRef(0);
   latestProjectIdRef.current = project.id;
+  selectedAcceptanceIdOptionRef.current = options.selectedAcceptanceId || "";
+  onSelectedAcceptanceIdChangeRef.current = options.onSelectedAcceptanceIdChange;
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
@@ -114,10 +118,11 @@ export function useProjectAcceptancesPanel(
   });
 
   const emitSelectedAcceptanceId = (id: string, force = false) => {
-    if (!options.onSelectedAcceptanceIdChange) return;
+    const onSelectedAcceptanceIdChange = onSelectedAcceptanceIdChangeRef.current;
+    if (!onSelectedAcceptanceIdChange) return;
     if (!force && id === lastEmittedSelectedIdRef.current) return;
     lastEmittedSelectedIdRef.current = id;
-    options.onSelectedAcceptanceIdChange(id);
+    onSelectedAcceptanceIdChange(id);
   };
 
   const selectAcceptanceId = (
@@ -165,18 +170,18 @@ export function useProjectAcceptancesPanel(
       if (pendingPreferredId && !hasAcceptance(list, pendingPreferredId)) {
         return;
       }
+      const requestedId = selectedAcceptanceIdOptionRef.current;
       const nextSelectedId = resolveSelectedAcceptanceId(
         list,
-        options.selectedAcceptanceId,
+        requestedId,
         selectedIdRef.current,
         localPreferredSelectedIdRef.current,
       );
       const requestedValid = Boolean(
-        options.selectedAcceptanceId
-        && hasAcceptance(list, options.selectedAcceptanceId),
+        requestedId && hasAcceptance(list, requestedId),
       );
       selectAcceptanceId(nextSelectedId, {
-        emit: !requestedValid || nextSelectedId !== options.selectedAcceptanceId,
+        emit: !requestedValid || nextSelectedId !== requestedId,
       });
       if (nextSelectedId && nextSelectedId === localPreferredSelectedIdRef.current) {
         localPreferredSelectedIdRef.current = "";
@@ -204,7 +209,7 @@ export function useProjectAcceptancesPanel(
 
   useEffect(() => {
     if (acceptancesProjectIdRef.current !== project.id) return;
-    const requestedId = options.selectedAcceptanceId || "";
+    const requestedId = selectedAcceptanceIdOptionRef.current;
     const externalSelectionChanged = requestedId !== externalSelectedIdRef.current;
     const preferredId = localPreferredSelectedIdRef.current;
     if (externalSelectionChanged) {
@@ -221,7 +226,7 @@ export function useProjectAcceptancesPanel(
     if (acceptances.length === 0) {
       if (requestedMatchesPendingCreate) return;
       const shouldClearUrl = Boolean(
-        options.onSelectedAcceptanceIdChange && requestedId,
+        onSelectedAcceptanceIdChangeRef.current && requestedId,
       );
       selectAcceptanceId("", { forceEmit: shouldClearUrl });
       return;
@@ -242,7 +247,7 @@ export function useProjectAcceptancesPanel(
       requestedId && hasAcceptance(acceptances, requestedId),
     );
     const shouldNormalizeUrl = Boolean(
-      options.onSelectedAcceptanceIdChange
+      onSelectedAcceptanceIdChangeRef.current
       && nextSelectedId
       && ((requestedId && !requestedValid) || (!requestedId && nextSelectedId)),
     );
