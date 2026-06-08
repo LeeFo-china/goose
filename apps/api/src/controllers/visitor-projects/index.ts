@@ -47,7 +47,10 @@ class VisitorProjectsController extends BaseController {
       projectId: paramsResult.data.id,
       actor,
     });
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      followed: data.followed_by_me,
+      follow_count: data.follow_count,
+    });
   }
 
   @Delete("/visitor/projects/:id/follow")
@@ -60,7 +63,10 @@ class VisitorProjectsController extends BaseController {
       projectId: paramsResult.data.id,
       actor,
     });
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      followed: data.followed_by_me,
+      follow_count: data.follow_count,
+    });
   }
 
   private getRequiredVerifiedVisitorActor(request: FastifyRequest) {

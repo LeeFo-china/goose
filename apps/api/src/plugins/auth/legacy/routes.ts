@@ -76,13 +76,6 @@ export function isPublicRoute(method: string, url: string) {
   }
 
   if (
-    (method === "GET" || method === "HEAD")
-    && (url === "/front/projects" || url.startsWith("/front/projects/"))
-  ) {
-    return true;
-  }
-
-  if (
     method === "POST"
     && url.startsWith("/public/marketing-pages/")
     && (url.endsWith("/leads") || url.endsWith("/events"))

@@ -52,13 +52,25 @@ class VisitorProjectFollowService {
       });
 
     const rows = await projectRepository.listPublicProjectsByIds(projectIds);
+    const followCounts = await Promise.all(
+      rows.map(async (item) => {
+        const projectId = typeof item.id === "string" ? item.id : null;
+        if (!projectId) return 0;
+        const state = await this.getProjectFollowState(projectId, input.actor.visitorId);
+        return state.follow_count;
+      }),
+    );
     const visibleIds = new Set(rows.map((item) => item.id).filter(Boolean));
     const visibleTotal = projectIds.filter((id) => visibleIds.has(id)).length === projectIds.length
       ? total
       : rows.length;
 
     return {
-      rows,
+      rows: rows.map((item, index) => ({
+        ...item,
+        followed_by_me: true,
+        follow_count: followCounts[index] ?? 0,
+      })),
       pagination: {
         page: input.query.page,
         pageSize: input.query.pageSize,
