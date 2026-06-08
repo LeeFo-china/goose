@@ -145,6 +145,7 @@ export function useProjectAcceptancesPanel(
 
   const loadAcceptances = async () => {
     const projectId = project.id;
+    if (latestProjectIdRef.current !== projectId) return;
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const isCurrentRequest = () =>
