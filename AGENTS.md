@@ -86,6 +86,12 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
   仅允许只读参考，禁止修改其中任何文件、运行格式化/生成脚本、执行 git add/commit/push
   或其他会改变 orange 工作区状态的操作。需要 orange 变更时，只能说明应由小程序团队处理。
 
+- **列表接口必须分页。**
+  所有返回列表的接口必须支持分页，禁止无上限返回全量数据。默认使用
+  `page=1&pageSize=20`，`pageSize` 最大值不得超过 `100`。大数据量或高频列表
+  优先使用游标分页。仅当数据源明确保证总量 `<= 50` 且属于内部/辅助功能时可豁免，
+  但必须在代码注释中说明原因。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
