@@ -95,7 +95,7 @@ export function ProjectAcceptanceStageList({
           <Button
             type="button"
             size="sm"
-            onClick={panel.createAcceptance}
+            onClick={() => panel.createAcceptanceForStage(panel.firstAvailableStage?.value)}
             disabled={panel.actionLoading || !panel.canCreateAcceptance}
           >
             {panel.actionLoading ? (

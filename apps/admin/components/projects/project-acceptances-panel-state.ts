@@ -298,13 +298,13 @@ export function useProjectAcceptancesPanel(
     setActionDialogError("");
   };
 
-  const createAcceptance = () =>
+  const createAcceptanceForStage = (targetStageCode?: ProjectLogStageCode) =>
     runAction(async () => {
       if (!canCreateAcceptance) {
         throw new Error("当前无可发起的工序验收");
       }
-      const effectiveStageCode =
-        stageCode && !selectedStageBlocked ? stageCode : firstAvailableStage?.value;
+      const effectiveStageCode = targetStageCode ||
+        (stageCode && !selectedStageBlocked ? stageCode : firstAvailableStage?.value);
       if (!effectiveStageCode) {
         throw new Error("当前无可发起的工序验收");
       }
@@ -314,6 +314,8 @@ export function useProjectAcceptancesPanel(
       });
       selectAcceptanceId(created.id, { preferReload: true });
     });
+
+  const createAcceptance = () => createAcceptanceForStage();
 
   const createFinalAcceptance = () =>
     runAction(async () => {
@@ -433,6 +435,7 @@ export function useProjectAcceptancesPanel(
     openActionDialog,
     closeActionDialog,
     createAcceptance,
+    createAcceptanceForStage,
     createFinalAcceptance,
     openTemplateDialog,
     saveAcceptance,
