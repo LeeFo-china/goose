@@ -6,6 +6,7 @@ node_modules
 # local Codex workspace files
 .codex/skills/backend/SKILL.md
 .superpowers/
+.worktrees/
 
 # output
 out
