@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Edit3, Eye, Loader2, Plus, Trash2 } from "lucide-react";
+import { ClipboardCheck, Edit3, Plus, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from "@/components/admin/action-dialogs";
 import { Button } from "@/components/ui/button";
+import { projectDetailHref } from "@/components/projects/project-detail-page-tabs";
 import { ProjectDialog } from "@/components/projects/project-form-dialog";
-import { ProjectDetailDialog } from "@/components/projects/project-detail-dialog";
-import type { ProjectDetailTab, ProjectRecord } from "@/components/projects/project-mutation-types";
+import type { ProjectRecord } from "@/components/projects/project-mutation-types";
 import { requestProject } from "@/components/projects/project-mutation-utils";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
@@ -43,19 +44,7 @@ export function ProjectRowActions({
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [detail, setDetail] = useState<{
-    project: ProjectRecord;
-    initialTab: ProjectDetailTab;
-  } | null>(null);
   const disabled = pending || project.status === "invalid";
-
-  function openDetail(initialTab: ProjectDetailTab = "overview") {
-    setError("");
-    setDetail({
-      project,
-      initialTab,
-    });
-  }
 
   function deleteProject() {
     setError("");
@@ -82,10 +71,17 @@ export function ProjectRowActions({
   }
 
   return (
-    <div className="flex min-w-[220px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-      <Button type="button" variant="outline" size="sm" onClick={() => openDetail()} disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : <Eye />}
-        详情
+    <div className="flex min-w-[300px] flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+      <Button asChild type="button" variant="outline" size="sm">
+        <Link href={projectDetailHref(project.id, "acceptances")}>
+          <ClipboardCheck />
+          工序验收
+        </Link>
+      </Button>
+      <Button asChild type="button" variant="outline" size="sm">
+        <Link href={projectDetailHref(project.id, "overview")}>
+          详情
+        </Link>
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} disabled={disabled}>
         <Edit3 />
@@ -102,14 +98,6 @@ export function ProjectRowActions({
         onOpenChange={setEditOpen}
         onSaved={onChanged}
       />
-      {detail ? (
-        <ProjectDetailDialog
-          project={detail.project}
-          initialTab={detail.initialTab}
-          onClose={() => setDetail(null)}
-          onChanged={onChanged}
-        />
-      ) : null}
       <ConfirmActionDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
