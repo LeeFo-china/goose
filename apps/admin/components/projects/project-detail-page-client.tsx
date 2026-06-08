@@ -39,6 +39,7 @@ export function ProjectDetailPageClient({
   const [currentProject, setCurrentProject] = useState(project);
   const [activeTab, setActiveTab] = useState<ProjectDetailPageTab>(initialTab);
   const [acceptanceId, setAcceptanceId] = useState(initialAcceptanceId);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [refreshing, startRefreshTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -88,6 +89,7 @@ export function ProjectDetailPageClient({
             latestProjectIdRef.current === projectId
           ) {
             setCurrentProject(nextProject);
+            setRefreshVersion((value) => value + 1);
           }
         } catch (err) {
           if (
@@ -164,6 +166,7 @@ export function ProjectDetailPageClient({
           ) : activeTab === "logs" ? (
             <div className="flex flex-col gap-5">
               <ProjectConstructionStagesPanel
+                key={`logs-${currentProject.id}-${refreshVersion}`}
                 projectId={currentProject.id}
                 active={activeTab === "logs"}
                 compact
@@ -205,6 +208,7 @@ export function ProjectDetailPageClient({
                 )}
               </section>
               <ProjectConstructionStagesPanel
+                key={`overview-${currentProject.id}-${refreshVersion}`}
                 projectId={currentProject.id}
                 active={activeTab === "overview"}
               />

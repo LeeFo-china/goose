@@ -17,6 +17,7 @@ export function ProjectMembersPanel({
 }) {
   const members = project.members || [];
   const existingEmployeeIds = members
+    .filter((member) => !member.is_virtual)
     .map((member) => member.employee?.id || member.employee_id)
     .filter((item): item is string => Boolean(item));
 
