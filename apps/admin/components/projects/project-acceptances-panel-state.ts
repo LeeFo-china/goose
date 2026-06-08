@@ -221,7 +221,10 @@ export function useProjectAcceptancesPanel(
       && nextSelectedId
       && ((requestedId && !requestedValid) || (!requestedId && nextSelectedId)),
     );
-    selectAcceptanceId(nextSelectedId, { forceEmit: shouldNormalizeUrl });
+    selectAcceptanceId(nextSelectedId, {
+      emit: shouldNormalizeUrl || nextSelectedId !== requestedId,
+      forceEmit: shouldNormalizeUrl,
+    });
     if (nextSelectedId && nextSelectedId === activePreferredId) {
       localPreferredSelectedIdRef.current = "";
     }
