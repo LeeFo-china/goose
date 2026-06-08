@@ -181,11 +181,13 @@ export function signVisitorSession(this: any, input: {
   openid: string;
   unionid?: string | null;
   visitorId: string;
+  verifiedPhone?: string | null;
 }) {
   return signVisitorSessionToken({
     openid: input.openid,
     visitor_id: input.visitorId,
     unionid: input.unionid ?? undefined,
+    verified_phone: input.verifiedPhone ?? undefined,
   });
 }
 
