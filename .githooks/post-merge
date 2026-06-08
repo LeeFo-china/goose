@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
+
+[ "$BRANCH" = "main" ] || exit 0
+[ "${GOOES_RAG_SYNC:-}" = "0" ] && exit 0
+
+RAG_DIR="${LIGHTRAG_MCP_DIR:-/Users/leefo/Public/work/mcp/rag}"
+
+if [ ! -f "$RAG_DIR/scripts/post-commit-rag-sync.mjs" ]; then
+  echo "[gooes-rag-sync] skip: shared runner not found at $RAG_DIR/scripts/post-commit-rag-sync.mjs"
+  exit 0
+fi
+
+(
+  cd "$REPO_ROOT" || exit 0
+  LIGHTRAG_MCP_DIR="$RAG_DIR" node scripts/post-commit-rag-sync.mjs --force
+) || echo "[gooes-rag-sync] non-blocking failure: post-merge force sync failed"
+
+exit 0

@@ -1,9 +1,22 @@
 #!/usr/bin/env sh
 
-node scripts/post-commit-rag-sync.mjs
-
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-LOG_FILE="$REPO_ROOT/.git/codegraph-sync.log"
+BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
+
+if [ "$BRANCH" = "main" ] && [ "${GOOES_RAG_SYNC:-}" != "0" ]; then
+  RAG_DIR="${LIGHTRAG_MCP_DIR:-/Users/leefo/Public/work/mcp/rag}"
+  if [ -f "$RAG_DIR/scripts/post-commit-rag-sync.mjs" ]; then
+    (
+      cd "$REPO_ROOT" || exit 0
+      LIGHTRAG_MCP_DIR="$RAG_DIR" node scripts/post-commit-rag-sync.mjs
+    ) || echo "[gooes-rag-sync] non-blocking failure: post-commit sync failed"
+  else
+    echo "[gooes-rag-sync] skip: shared runner not found at $RAG_DIR/scripts/post-commit-rag-sync.mjs"
+  fi
+fi
+
+GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || exit 0
+LOG_FILE="$GIT_COMMON_DIR/codegraph-sync.log"
 CODEGRAPH_BIN="$(command -v codegraph || true)"
 
 [ -n "$CODEGRAPH_BIN" ] || exit 0
