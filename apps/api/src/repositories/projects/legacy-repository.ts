@@ -13,6 +13,7 @@ import {
   findPublicVisibilityById,
   findPublicDetailById,
   listPublicProjectLogs,
+  listPublicProjectLogsPage,
 } from "./legacy/public";
 import {
   create,
@@ -104,6 +105,7 @@ class ProjectRepository {
   findPublicVisibilityById = findPublicVisibilityById;
   findPublicDetailById = findPublicDetailById;
   listPublicProjectLogs = listPublicProjectLogs;
+  listPublicProjectLogsPage = listPublicProjectLogsPage;
   create = create;
   findActiveByCustomerProperty = findActiveByCustomerProperty;
   findCustomerInTenant = findCustomerInTenant;

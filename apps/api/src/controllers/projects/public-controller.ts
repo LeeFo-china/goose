@@ -1,4 +1,5 @@
 import type { FastifyRequest } from "fastify";
+import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { systemSettingsService } from "@/services/system-settings";
 import { projectSer } from "@/services/projects";
@@ -11,6 +12,15 @@ import { ProjectBaseController } from "./shared";
 
 const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
   "VISITOR_PROJECT_CONSULTATION_ENABLED";
+
+const PublicProjectLogsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1, "页码必须大于 0").default(1),
+  pageSize: z.coerce.number()
+    .int()
+    .min(1, "每页条数必须大于 0")
+    .max(100, "每页条数不能超过 100")
+    .default(10),
+});
 
 class PublicProjectsController extends ProjectBaseController {
   @Get("/front/projects")
@@ -29,22 +39,32 @@ class PublicProjectsController extends ProjectBaseController {
     if (!idVerify.success) throw Errors.fromZod(idVerify.error);
     const projectId = idVerify.data.id;
 
+    const queryResult = PublicProjectLogsQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
     const visibilityStartedAt = Date.now();
     await projectSer.getPublicProjectDetail(projectId);
     const visibilityMs = Date.now() - visibilityStartedAt;
 
     const logsStartedAt = Date.now();
-    const rows = await projectSer.listPublicProjectLogs(projectId);
+    const result = await projectSer.listPublicProjectLogsPage({
+      projectId,
+      page: queryResult.data.page,
+      pageSize: queryResult.data.pageSize,
+    });
     const logsFetchMs = Date.now() - logsStartedAt;
 
     const serializeStartedAt = Date.now();
-    const logs = rows.map((item) => this.serializePublicProjectLog(item));
+    const logs = result.rows.map((item) => this.serializePublicProjectLog(item));
     const serializeMs = Date.now() - serializeStartedAt;
 
     request.log.info(
       {
         requestId: request.id,
         projectId,
+        page: result.pagination.page,
+        pageSize: result.pagination.pageSize,
+        total: result.pagination.total,
         visibilityMs,
         logsFetchMs,
         serializeMs,
@@ -55,7 +75,10 @@ class PublicProjectsController extends ProjectBaseController {
       "[public-project-logs] timings",
     );
 
-    return ResponseHandler.success(logs);
+    return ResponseHandler.success({
+      list: logs,
+      pagination: result.pagination,
+    });
   }
 
   @Get("/front/projects/:id")

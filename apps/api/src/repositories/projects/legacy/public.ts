@@ -89,3 +89,37 @@ export async function listPublicProjectLogs(this: any, projectId: string) {
 
   return (data || []) as unknown as Array<Record<string, unknown>>;
 }
+
+export async function listPublicProjectLogsPage(this: any, input: {
+  projectId: string;
+  page: number;
+  pageSize: number;
+}) {
+  const from = (input.page - 1) * input.pageSize;
+  const to = from + input.pageSize - 1;
+
+  const { data, error, count } = await SupabaseDB.getAdminClient()
+    .from("project_logs")
+    .select("id, project_id, stage_code, node_name, content, images, created_at", {
+      count: "exact",
+    })
+    .eq("project_id", input.projectId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw Errors.dbError("查询公开项目日志失败", error);
+  }
+
+  const total = count || 0;
+
+  return {
+    rows: (data || []) as unknown as Array<Record<string, unknown>>,
+    pagination: {
+      page: input.page,
+      pageSize: input.pageSize,
+      total,
+      totalPages: total ? Math.ceil(total / input.pageSize) : 0,
+    },
+  };
+}

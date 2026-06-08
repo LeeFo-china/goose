@@ -35,6 +35,7 @@ import {
     getRequiredPublicProjectVisibility,
     getPublicProjectDetail,
     listPublicProjectLogs,
+    listPublicProjectLogsPage,
     listPublicProjectMembers,
     prewarmPublicProjectDetailData,
 } from "./legacy/public-cache";
@@ -132,6 +133,7 @@ class ProjectService {
     getRequiredPublicProjectVisibility = getRequiredPublicProjectVisibility;
     getPublicProjectDetail = getPublicProjectDetail;
     listPublicProjectLogs = listPublicProjectLogs;
+    listPublicProjectLogsPage = listPublicProjectLogsPage;
     listPublicProjectMembers = listPublicProjectMembers;
     prewarmPublicProjectDetailData = prewarmPublicProjectDetailData;
     listProjectCreateCustomers = listProjectCreateCustomers;

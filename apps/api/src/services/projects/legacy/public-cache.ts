@@ -264,6 +264,23 @@ export async function listPublicProjectLogs(this: any, projectId: string): Promi
     return request;
 }
 
+export async function listPublicProjectLogsPage(this: any, input: {
+    projectId: string;
+    page: number;
+    pageSize: number;
+}): Promise<{
+    rows: Array<Record<string, unknown>>;
+    pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+    };
+}> {
+    await this.getPublicProjectDetail(input.projectId);
+    return projectRepository.listPublicProjectLogsPage(input);
+}
+
 export async function listPublicProjectMembers(this: any, projectId: string): Promise<PublicProjectMembers> {
     await this.getPublicProjectDetail(projectId);
 
