@@ -112,7 +112,7 @@ export function ProjectDetailSideRail({
               className={cn(
                 "justify-start border border-transparent px-3 text-left focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
-                  ? "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                  ? "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => onNavigate(item.value)}
