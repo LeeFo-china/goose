@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { ProjectDetailPageClient } from "@/components/projects/project-detail-page-client";
 import { parseProjectDetailTab } from "@/components/projects/project-detail-page-tabs";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
@@ -11,8 +12,8 @@ type ProjectDetailPageParams = {
 };
 
 type ProjectDetailPageSearchParams = {
-  tab?: string;
-  acceptanceId?: string;
+  tab?: string | string[];
+  acceptanceId?: string | string[];
 };
 
 async function getProject(projectId: string) {
@@ -50,8 +51,14 @@ export default async function ProjectDetailPage({
   params: Promise<ProjectDetailPageParams>;
   searchParams: Promise<ProjectDetailPageSearchParams>;
 }) {
+  const accessDenied = await getTenantBusinessAccessDenied();
+  if (accessDenied) return accessDenied;
+
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { project, error } = await getProject(id);
+  const initialAcceptanceId = Array.isArray(query.acceptanceId)
+    ? query.acceptanceId[0] || ""
+    : query.acceptanceId || "";
 
   if (!project && !error) {
     notFound();
@@ -65,7 +72,7 @@ export default async function ProjectDetailPage({
     <ProjectDetailPageClient
       project={project}
       initialTab={parseProjectDetailTab(query.tab)}
-      initialAcceptanceId={query.acceptanceId || ""}
+      initialAcceptanceId={initialAcceptanceId}
     />
   );
 }
