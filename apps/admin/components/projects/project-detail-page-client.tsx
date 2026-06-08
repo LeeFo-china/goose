@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ export function ProjectDetailPageClient({
   initialAcceptanceId: string;
 }) {
   const router = useRouter();
+  const latestProjectIdRef = useRef(project.id);
+  const refreshRequestIdRef = useRef(0);
   const [currentProject, setCurrentProject] = useState(project);
   const [activeTab, setActiveTab] = useState<ProjectDetailPageTab>(initialTab);
   const [acceptanceId, setAcceptanceId] = useState(initialAcceptanceId);
@@ -31,7 +33,9 @@ export function ProjectDetailPageClient({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    latestProjectIdRef.current = project.id;
     setCurrentProject(project);
+    setError("");
   }, [project]);
 
   useEffect(() => {
@@ -58,17 +62,30 @@ export function ProjectDetailPageClient({
   }
 
   function refreshProject() {
+    const projectId = currentProject.id;
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     setError("");
     startRefreshTransition(async () => {
       try {
         const nextProject = await requestProject<ProjectRecord>({
-          path: `/projects/${currentProject.id}`,
+          path: `/projects/${projectId}`,
         });
-        setCurrentProject(nextProject);
+        if (
+          refreshRequestIdRef.current === requestId &&
+          latestProjectIdRef.current === projectId
+        ) {
+          setCurrentProject(nextProject);
+        }
       } catch (err) {
-        setError(
-          err instanceof Error && err.message ? err.message : "项目详情刷新失败",
-        );
+        if (
+          refreshRequestIdRef.current === requestId &&
+          latestProjectIdRef.current === projectId
+        ) {
+          setError(
+            err instanceof Error && err.message ? err.message : "项目详情刷新失败",
+          );
+        }
       }
     });
   }
