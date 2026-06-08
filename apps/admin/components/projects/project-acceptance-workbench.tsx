@@ -32,8 +32,14 @@ export function ProjectAcceptanceWorkbench({
     <div className="flex min-h-0 flex-col gap-4">
       {panel.loading ? (
         <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[260px_1fr]">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
+          <div className="rounded-lg border bg-card p-4">
+            <div className="text-sm font-semibold">验收记录</div>
+            <Skeleton className="mt-4 h-56" />
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="text-sm font-semibold">验收详情</div>
+            <Skeleton className="mt-4 h-56" />
+          </div>
         </div>
       ) : (
         <>
