@@ -75,6 +75,17 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
 
 ## STRICT RULES
 
+- **数据库变更必须使用 migration。**
+  任何表结构、索引、约束、RLS/policy、函数、触发器、枚举、字典/初始化数据变更，
+  都必须通过 `supabase/migrations/` 下的 migration 文件完成并纳入版本控制。
+  禁止手动在远端数据库执行 DDL/DML 修库。应用前需确认待执行 migration，
+  应用后需用 `supabase migration list` 验证 Local/Remote 对齐；破坏性变更必须说明回滚方案。
+
+- **禁止改动 orange 仓库内容。**
+  Agent 只负责 gooes 仓库的代码、文档、Git 和服务操作。`/Users/leefo/Public/work/orange`
+  仅允许只读参考，禁止修改其中任何文件、运行格式化/生成脚本、执行 git add/commit/push
+  或其他会改变 orange 工作区状态的操作。需要 orange 变更时，只能说明应由小程序团队处理。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
