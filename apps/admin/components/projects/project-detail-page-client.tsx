@@ -35,6 +35,7 @@ export function ProjectDetailPageClient({
 }) {
   const router = useRouter();
   const latestProjectIdRef = useRef(project.id);
+  const latestActiveTabRef = useRef(initialTab);
   const refreshRequestIdRef = useRef(0);
   const [currentProject, setCurrentProject] = useState(project);
   const [activeTab, setActiveTab] = useState<ProjectDetailPageTab>(initialTab);
@@ -55,6 +56,10 @@ export function ProjectDetailPageClient({
   }, [initialTab]);
 
   useEffect(() => {
+    latestActiveTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
     setAcceptanceId(initialAcceptanceId);
   }, [initialAcceptanceId]);
 
@@ -66,6 +71,7 @@ export function ProjectDetailPageClient({
   }, [activeTab]);
 
   function navigate(tab: ProjectDetailPageTab, nextAcceptanceId = "") {
+    latestActiveTabRef.current = tab;
     setActiveTab(tab);
     if (tab === "acceptances") {
       setAcceptanceId(nextAcceptanceId);
@@ -156,6 +162,7 @@ export function ProjectDetailPageClient({
               active={activeTab === "acceptances"}
               acceptanceId={acceptanceId}
               onAcceptanceIdChange={(id) => {
+                if (latestActiveTabRef.current !== "acceptances") return;
                 setAcceptanceId(id);
                 router.replace(
                   projectDetailHref(currentProject.id, "acceptances", id),

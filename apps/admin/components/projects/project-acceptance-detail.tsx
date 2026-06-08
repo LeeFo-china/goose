@@ -48,7 +48,7 @@ export function ProjectAcceptanceDetail({
   uploadImages,
 }: ProjectAcceptanceDetailProps) {
   return selected ? (
-            <section className="flex min-h-0 flex-col rounded-md border bg-card">
+            <section className="flex min-h-0 min-w-0 flex-col rounded-md border bg-card">
               <div className="h-[86px] shrink-0 overflow-hidden border-b bg-card px-4 py-3">
                 <div className="flex h-8 items-center justify-between gap-3 overflow-hidden">
                   <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
