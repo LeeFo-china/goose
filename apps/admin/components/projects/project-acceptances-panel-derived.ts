@@ -65,8 +65,15 @@ export function getProjectAcceptancesPanelDerived(input: {
     : canCreateFinalAcceptance
     ? ""
     : "必需施工阶段全部完成后才可发起竣工交付验收";
+  const summary = {
+    total: input.acceptances.length,
+    completed: input.acceptances.filter((item) => item.status === "customer_confirmed").length,
+    pending: input.acceptances.filter((item) => openAcceptanceStatuses.has(item.status)).length,
+    blocked: selectableStageOptions.filter((item) => item.constructionStage?.blocked_reason).length,
+  };
 
   return {
+    summary,
     selected,
     latestCustomerDispute: getLatestCustomerDispute(selected),
     latestRejectAction: getLatestRejectAction(selected),

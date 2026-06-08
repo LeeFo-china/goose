@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type ProjectLogStageCode } from "@gooes/domain";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
@@ -31,6 +31,10 @@ import {
 export function useProjectAcceptancesPanel(
   project: ProjectRecord,
   active: boolean,
+  options: {
+    selectedAcceptanceId?: string;
+    onSelectedAcceptanceIdChange?: (id: string) => void;
+  } = {},
 ) {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -38,6 +42,7 @@ export function useProjectAcceptancesPanel(
   const [acceptances, setAcceptances] = useState<ProjectAcceptance[]>([]);
   const [constructionStages, setConstructionStages] = useState<ConstructionStageItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const selectedIdRef = useRef("");
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
@@ -62,6 +67,7 @@ export function useProjectAcceptancesPanel(
     canCreateAcceptance,
     canCreateFinalAcceptance,
     finalAcceptanceBlockedReason,
+    summary,
   } = useMemo(
     () => getProjectAcceptancesPanelDerived({
       acceptances,
@@ -84,6 +90,12 @@ export function useProjectAcceptancesPanel(
     setError,
   });
 
+  const selectAcceptanceId = (id: string) => {
+    selectedIdRef.current = id;
+    setSelectedId(id);
+    options.onSelectedAcceptanceIdChange?.(id);
+  };
+
   const loadAcceptances = async () => {
     setLoading(true);
     setError("");
@@ -92,16 +104,18 @@ export function useProjectAcceptancesPanel(
       const list = data.list || [];
       setAcceptances(list);
       setConstructionStages(stageData.stages || []);
-      setSelectedId((current) =>
-        current && list.some((item) => item.id === current)
-          ? current
-          : list[0]?.id || "",
-      );
+      const selectedOptionId = options.selectedAcceptanceId;
+      const nextSelectedId = selectedOptionId && list.some((item) => item.id === selectedOptionId)
+        ? selectedOptionId
+        : selectedIdRef.current && list.some((item) => item.id === selectedIdRef.current)
+        ? selectedIdRef.current
+        : list[0]?.id || "";
+      selectAcceptanceId(nextSelectedId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
       setConstructionStages([]);
-      setSelectedId("");
+      selectAcceptanceId("");
     } finally {
       setLoading(false);
     }
@@ -112,6 +126,14 @@ export function useProjectAcceptancesPanel(
     void loadAcceptances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, project.id]);
+
+  useEffect(() => {
+    const selectedOptionId = options.selectedAcceptanceId;
+    if (!selectedOptionId || selectedOptionId === selectedIdRef.current) return;
+    if (!acceptances.some((item) => item.id === selectedOptionId)) return;
+    selectAcceptanceId(selectedOptionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.selectedAcceptanceId, acceptances]);
 
   useEffect(() => {
     if (!firstAvailableStage) return;
@@ -159,7 +181,7 @@ export function useProjectAcceptancesPanel(
         projectId: project.id,
         stageCode,
       });
-      setSelectedId(created.id);
+      selectAcceptanceId(created.id);
     });
 
   const createFinalAcceptance = () =>
@@ -168,7 +190,7 @@ export function useProjectAcceptancesPanel(
         throw new Error(finalAcceptanceBlockedReason || "当前不可发起竣工交付验收");
       }
       const created = await createFinalProjectAcceptance(project.id);
-      setSelectedId(created.id);
+      selectAcceptanceId(created.id);
     });
 
   const openTemplateDialog = async () => {
@@ -260,6 +282,7 @@ export function useProjectAcceptancesPanel(
     latestRejectAction,
     selectedStats,
     selectedSections,
+    summary,
     selectableStageOptions,
     firstAvailableStage,
     selectedStageBlockedReason,
@@ -270,7 +293,7 @@ export function useProjectAcceptancesPanel(
     finalAcceptanceBlockedReason,
     loadAcceptances,
     setStageCode,
-    setSelectedId,
+    setSelectedId: selectAcceptanceId,
     setTemplateDialogOpen,
     setFinalTemplate,
     setEditable,
