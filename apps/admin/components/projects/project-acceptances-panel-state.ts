@@ -32,7 +32,9 @@ function resolveSelectedAcceptanceId(
   list: ProjectAcceptance[],
   requestedId: string | undefined,
   currentId: string,
+  preferredId = "",
 ): string {
+  if (preferredId && list.some((item) => item.id === preferredId)) return preferredId;
   if (requestedId && list.some((item) => item.id === requestedId)) return requestedId;
   if (currentId && list.some((item) => item.id === currentId)) return currentId;
   return list[0]?.id || "";
@@ -53,6 +55,9 @@ export function useProjectAcceptancesPanel(
   const [constructionStages, setConstructionStages] = useState<ConstructionStageItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const selectedIdRef = useRef("");
+  const lastEmittedSelectedIdRef = useRef("");
+  const externalSelectedIdRef = useRef(options.selectedAcceptanceId || "");
+  const localPreferredSelectedIdRef = useRef("");
   const [stageCode, setStageCode] = useState<ProjectLogStageCode>(
     "plumbing_electrical",
   );
@@ -100,11 +105,33 @@ export function useProjectAcceptancesPanel(
     setError,
   });
 
-  const selectAcceptanceId = (id: string) => {
-    if (id === selectedIdRef.current) return;
-    selectedIdRef.current = id;
-    setSelectedId(id);
-    options.onSelectedAcceptanceIdChange?.(id);
+  const emitSelectedAcceptanceId = (id: string, force = false) => {
+    if (!options.onSelectedAcceptanceIdChange) return;
+    if (!force && id === lastEmittedSelectedIdRef.current) return;
+    lastEmittedSelectedIdRef.current = id;
+    options.onSelectedAcceptanceIdChange(id);
+  };
+
+  const selectAcceptanceId = (
+    id: string,
+    settings: {
+      emit?: boolean;
+      forceEmit?: boolean;
+      preferReload?: boolean;
+    } = {},
+  ) => {
+    if (settings.preferReload) {
+      localPreferredSelectedIdRef.current = id;
+    }
+
+    if (id !== selectedIdRef.current) {
+      selectedIdRef.current = id;
+      setSelectedId(id);
+    }
+
+    if (settings.emit !== false) {
+      emitSelectedAcceptanceId(id, settings.forceEmit);
+    }
   };
 
   const loadAcceptances = async () => {
@@ -119,6 +146,7 @@ export function useProjectAcceptancesPanel(
         list,
         options.selectedAcceptanceId,
         selectedIdRef.current,
+        localPreferredSelectedIdRef.current,
       );
       selectAcceptanceId(nextSelectedId);
     } catch (err) {
@@ -139,12 +167,28 @@ export function useProjectAcceptancesPanel(
 
   useEffect(() => {
     if (acceptances.length === 0) return;
+    const requestedId = options.selectedAcceptanceId || "";
+    const externalSelectionChanged = requestedId !== externalSelectedIdRef.current;
+    if (externalSelectionChanged) {
+      externalSelectedIdRef.current = requestedId;
+      localPreferredSelectedIdRef.current = "";
+    }
+    const preferredId = localPreferredSelectedIdRef.current;
     const nextSelectedId = resolveSelectedAcceptanceId(
       acceptances,
-      options.selectedAcceptanceId,
+      requestedId,
       selectedIdRef.current,
+      preferredId,
     );
-    selectAcceptanceId(nextSelectedId);
+    const requestedValid = Boolean(
+      requestedId && acceptances.some((item) => item.id === requestedId),
+    );
+    const shouldNormalizeUrl = Boolean(
+      options.onSelectedAcceptanceIdChange
+      && nextSelectedId
+      && ((requestedId && !requestedValid) || (!requestedId && nextSelectedId)),
+    );
+    selectAcceptanceId(nextSelectedId, { forceEmit: shouldNormalizeUrl });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.selectedAcceptanceId, acceptances]);
 
@@ -194,7 +238,7 @@ export function useProjectAcceptancesPanel(
         projectId: project.id,
         stageCode,
       });
-      selectAcceptanceId(created.id);
+      selectAcceptanceId(created.id, { preferReload: true });
     });
 
   const createFinalAcceptance = () =>
@@ -203,7 +247,7 @@ export function useProjectAcceptancesPanel(
         throw new Error(finalAcceptanceBlockedReason || "当前不可发起竣工交付验收");
       }
       const created = await createFinalProjectAcceptance(project.id);
-      selectAcceptanceId(created.id);
+      selectAcceptanceId(created.id, { preferReload: true });
     });
 
   const openTemplateDialog = async () => {
@@ -306,7 +350,7 @@ export function useProjectAcceptancesPanel(
     finalAcceptanceBlockedReason,
     loadAcceptances,
     setStageCode,
-    setSelectedId: selectAcceptanceId,
+    setSelectedId: (id: string) => selectAcceptanceId(id, { preferReload: true }),
     setTemplateDialogOpen,
     setFinalTemplate,
     setEditable,
