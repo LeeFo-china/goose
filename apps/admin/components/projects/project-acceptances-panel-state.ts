@@ -40,6 +40,10 @@ function resolveSelectedAcceptanceId(
   return list[0]?.id || "";
 }
 
+function hasAcceptance(list: ProjectAcceptance[], id: string) {
+  return Boolean(id && list.some((item) => item.id === id));
+}
+
 export function useProjectAcceptancesPanel(
   project: ProjectRecord,
   active: boolean,
@@ -148,11 +152,21 @@ export function useProjectAcceptancesPanel(
         selectedIdRef.current,
         localPreferredSelectedIdRef.current,
       );
-      selectAcceptanceId(nextSelectedId);
+      const requestedValid = Boolean(
+        options.selectedAcceptanceId
+        && hasAcceptance(list, options.selectedAcceptanceId),
+      );
+      selectAcceptanceId(nextSelectedId, {
+        emit: !requestedValid || nextSelectedId !== options.selectedAcceptanceId,
+      });
+      if (nextSelectedId && nextSelectedId === localPreferredSelectedIdRef.current) {
+        localPreferredSelectedIdRef.current = "";
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "验收列表加载失败");
       setAcceptances([]);
       setConstructionStages([]);
+      localPreferredSelectedIdRef.current = "";
       selectAcceptanceId("");
     } finally {
       setLoading(false);
@@ -166,22 +180,41 @@ export function useProjectAcceptancesPanel(
   }, [active, project.id]);
 
   useEffect(() => {
-    if (acceptances.length === 0) return;
     const requestedId = options.selectedAcceptanceId || "";
     const externalSelectionChanged = requestedId !== externalSelectedIdRef.current;
+    const preferredId = localPreferredSelectedIdRef.current;
     if (externalSelectionChanged) {
       externalSelectedIdRef.current = requestedId;
-      localPreferredSelectedIdRef.current = "";
+      if (requestedId !== preferredId) {
+        localPreferredSelectedIdRef.current = "";
+      }
     }
-    const preferredId = localPreferredSelectedIdRef.current;
+    const activePreferredId = localPreferredSelectedIdRef.current;
+    const requestedMatchesPendingCreate = Boolean(
+      activePreferredId && requestedId === activePreferredId,
+    );
+    if (acceptances.length === 0) {
+      if (requestedMatchesPendingCreate) return;
+      const shouldClearUrl = Boolean(
+        options.onSelectedAcceptanceIdChange && requestedId,
+      );
+      selectAcceptanceId("", { forceEmit: shouldClearUrl });
+      return;
+    }
+    if (
+      requestedMatchesPendingCreate
+      && !hasAcceptance(acceptances, activePreferredId)
+    ) {
+      return;
+    }
     const nextSelectedId = resolveSelectedAcceptanceId(
       acceptances,
       requestedId,
       selectedIdRef.current,
-      preferredId,
+      activePreferredId,
     );
     const requestedValid = Boolean(
-      requestedId && acceptances.some((item) => item.id === requestedId),
+      requestedId && hasAcceptance(acceptances, requestedId),
     );
     const shouldNormalizeUrl = Boolean(
       options.onSelectedAcceptanceIdChange
@@ -189,6 +222,9 @@ export function useProjectAcceptancesPanel(
       && ((requestedId && !requestedValid) || (!requestedId && nextSelectedId)),
     );
     selectAcceptanceId(nextSelectedId, { forceEmit: shouldNormalizeUrl });
+    if (nextSelectedId && nextSelectedId === activePreferredId) {
+      localPreferredSelectedIdRef.current = "";
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.selectedAcceptanceId, acceptances]);
 
