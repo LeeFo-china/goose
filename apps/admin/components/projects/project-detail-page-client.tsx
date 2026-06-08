@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
 import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
 import {
   projectDetailHref,
@@ -133,12 +134,18 @@ export function ProjectDetailPageClient({
           {error ? <StatusAlert>{error}</StatusAlert> : null}
 
           {activeTab === "acceptances" ? (
-            <section
-              data-acceptance-id={acceptanceId}
-              className="rounded-md border bg-card p-5 text-sm text-muted-foreground"
-            >
-              工序验收工作区加载中
-            </section>
+            <ProjectAcceptanceWorkbench
+              project={currentProject}
+              active={activeTab === "acceptances"}
+              acceptanceId={acceptanceId}
+              onAcceptanceIdChange={(id) => {
+                setAcceptanceId(id);
+                router.replace(
+                  projectDetailHref(currentProject.id, "acceptances", id),
+                  { scroll: false },
+                );
+              }}
+            />
           ) : (
             <section className="rounded-md border bg-card p-5 text-sm text-muted-foreground">
               {title} 模块加载中

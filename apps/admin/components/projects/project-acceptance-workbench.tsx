@@ -5,6 +5,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AcceptanceActionDialog } from "@/components/projects/project-acceptance-action-dialog";
 import { ProjectAcceptanceDetail } from "@/components/projects/project-acceptance-detail";
+import { ProjectAcceptanceStageList } from "@/components/projects/project-acceptance-stage-list";
 import { useProjectAcceptancesPanel } from "@/components/projects/project-acceptances-panel-state";
 import { FinalAcceptanceTemplateDialog } from "@/components/projects/project-final-acceptance-template-dialog";
 import type { ProjectRecord } from "@/components/projects/project-mutations";
@@ -39,9 +40,7 @@ export function ProjectAcceptanceWorkbench({
           {panel.error ? <StatusAlert>{panel.error}</StatusAlert> : null}
 
           <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <aside className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-              验收记录加载中
-            </aside>
+            <ProjectAcceptanceStageList panel={panel} />
             <ProjectAcceptanceDetail
               selected={panel.selected}
               selectedStats={panel.selectedStats}
