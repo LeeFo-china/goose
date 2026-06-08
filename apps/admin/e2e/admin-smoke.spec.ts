@@ -68,17 +68,19 @@ test.describe("admin smoke", () => {
   test("项目详情独立页默认展示工序验收工作区", async ({ page }) => {
     await gotoAdminPage(page, "/projects");
 
-    const detailButton = page.getByRole("link", { name: "详情" }).first();
-    if (await detailButton.count()) {
-      await expect(detailButton).toBeVisible();
-      await detailButton.click();
-      await expect(page).toHaveURL(/\/projects\/[^/?]+(?:\?tab=acceptances)?/);
-      await expect(page.getByRole("heading", { name: "工序验收" })).toBeVisible();
-      await expect(page.getByText("项目档案")).toBeVisible();
-      await expect(page.getByText(/验收记录|暂无验收记录|当前无可发起的工序验收/)).toBeVisible();
-    } else {
-      await expect(page.getByText("没有符合条件的项目")).toBeVisible();
+    const emptyState = page.getByText("没有符合条件的项目");
+    if (await emptyState.isVisible()) {
+      await expect(emptyState).toBeVisible();
+      return;
     }
+
+    const detailLink = page.getByRole("link", { name: "详情" }).first();
+    await expect(detailLink).toBeVisible();
+    await detailLink.click();
+    await expect(page).toHaveURL(/\/projects\/[^/?]+(?:\?tab=acceptances(?:&acceptanceId=[^&]+)?)?$/);
+    await expect(page.getByRole("heading", { name: "工序验收" })).toBeVisible();
+    await expect(page.getByText("项目档案")).toBeVisible();
+    await expect(page.getByText(/验收记录|暂无验收记录|当前无可发起的工序验收/)).toBeVisible();
   });
 
   test("员工新增和角色配置弹窗可打开", async ({ page }) => {
