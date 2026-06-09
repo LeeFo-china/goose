@@ -30,6 +30,10 @@ function numericField(message: string) {
   return z.coerce.number({ error: message });
 }
 
+function booleanField(message: string) {
+  return z.boolean({ error: message });
+}
+
 export const WorkflowCategorySchema = z.enum(WORKFLOW_CATEGORY_VALUES, {
   message: "无效的流程分类",
 });
@@ -102,14 +106,14 @@ const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
 const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
   stage_key: textField("所属施工阶段不能为空").min(1, "所属施工阶段不能为空").max(100, "施工阶段编码过长"),
   work_instructions: textField("作业说明格式无效").max(1000, "作业说明过长").nullable().optional(),
-  require_log: z.boolean().default(false),
+  require_log: booleanField("是否要求日志格式无效").default(false),
   min_image_count: numericField("最少图片数量必须为数字")
     .int("最少图片数量必须为整数")
     .min(0, "最少图片数量不能为负数")
     .max(20, "最少图片数量不能超过 20")
     .default(0),
-  trigger_acceptance: z.boolean().default(false),
-  customer_visible: z.boolean().default(false),
+  trigger_acceptance: booleanField("是否触发验收格式无效").default(false),
+  customer_visible: booleanField("是否客户可见格式无效").default(false),
 });
 
 const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
