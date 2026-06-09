@@ -72,7 +72,7 @@ const BaseNodeConfigSchema = z.object({
   required_permissions: z.array(z.string().trim().min(1)).max(20).default([]),
   timeout_hours: z.coerce.number().int().min(1).max(720).nullable().optional(),
   rollback_target_key: z.string().trim().max(100).nullable().optional(),
-});
+}).strict();
 
 const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
   assignee_rule: z.enum(["employee", "department", "role"], {
@@ -82,7 +82,7 @@ const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
   amount_threshold: z.coerce.number().nonnegative("金额阈值不能为负数").nullable().optional(),
   approve_mode: z.enum(["any", "all"], { message: "无效的审批方式" }).default("any"),
   reject_target_key: z.string().trim().max(100).nullable().optional(),
-});
+}).strict();
 
 const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
   stage_key: z.string().trim().min(1, "所属施工阶段不能为空").max(100, "施工阶段编码过长"),
@@ -91,7 +91,7 @@ const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
   min_image_count: z.coerce.number().int().min(0).max(20).default(0),
   trigger_acceptance: z.boolean().default(false),
   customer_visible: z.boolean().default(false),
-});
+}).strict();
 
 const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
   channels: z.array(z.enum(["mini_program", "sms", "todo"])).min(1, "至少选择一个通知渠道").max(3),
@@ -99,13 +99,13 @@ const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
     message: "无效的通知对象",
   }),
   template: z.string().trim().min(1, "通知模板不能为空").max(500, "通知模板过长"),
-});
+}).strict();
 
 export const WorkflowNodeConfigSchema = z.union([
+  BaseNodeConfigSchema,
   ApprovalNodeConfigSchema,
   ProcedureNodeConfigSchema,
   NotificationNodeConfigSchema,
-  BaseNodeConfigSchema,
 ]);
 
 export const WorkflowNodeInputSchema = z.object({
