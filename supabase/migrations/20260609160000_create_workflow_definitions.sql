@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS public.workflow_definitions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES public.platform_tenants(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   workflow_key text NOT NULL,
   name text NOT NULL,
   description text NULL,
@@ -27,7 +27,7 @@ ON public.workflow_definitions(tenant_id, status, category, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS public.workflow_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES public.platform_tenants(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   definition_id uuid NOT NULL REFERENCES public.workflow_definitions(id) ON DELETE CASCADE,
   version_number integer NOT NULL,
   status text NOT NULL DEFAULT 'published',
@@ -58,7 +58,7 @@ ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS public.workflow_nodes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES public.platform_tenants(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   definition_id uuid NOT NULL REFERENCES public.workflow_definitions(id) ON DELETE CASCADE,
   node_key text NOT NULL,
   node_type text NOT NULL,
@@ -98,7 +98,7 @@ ON public.workflow_nodes(tenant_id, definition_id, sort_order, created_at);
 
 CREATE TABLE IF NOT EXISTS public.workflow_edges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES public.platform_tenants(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   definition_id uuid NOT NULL REFERENCES public.workflow_definitions(id) ON DELETE CASCADE,
   source_node_id uuid NOT NULL REFERENCES public.workflow_nodes(id) ON DELETE CASCADE,
   target_node_id uuid NOT NULL REFERENCES public.workflow_nodes(id) ON DELETE CASCADE,
