@@ -17,7 +17,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+function isCustomerMainWorkflow(workflow: WorkflowDefinition) {
+  return workflow.workflow_key === "customer_main";
+}
+
 function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
+  const customerMain = isCustomerMainWorkflow(workflow);
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -30,11 +36,21 @@ function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
         <div className="w-[15em] truncate text-xs text-muted-foreground">
           {workflow.workflow_key}
         </div>
+        {customerMain ? (
+          <Badge variant="secondary" className="mt-1 w-fit">
+            客户状态已接入
+          </Badge>
+        ) : null}
       </TooltipTrigger>
       <TooltipContent align="start" className="max-w-[320px]">
         <div className="flex flex-col gap-1">
           <div className="break-all font-medium">{workflow.name}</div>
           <div className="break-all text-xs opacity-90">编码：{workflow.workflow_key}</div>
+          {customerMain ? (
+            <div className="text-xs opacity-90">
+              自动接入客户开始跟进、到店、设计、签约状态动作
+            </div>
+          ) : null}
           <div className="break-all text-xs opacity-90">流程 ID：{workflow.id}</div>
         </div>
       </TooltipContent>
@@ -71,7 +87,7 @@ export function WorkflowTable({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1120px] table-fixed border-t text-sm">
         <colgroup>
-          <col className="w-[250px]" />
+          <col className="w-[270px]" />
           <col className="w-[120px]" />
           <col className="w-[110px]" />
           <col className="w-[130px]" />
