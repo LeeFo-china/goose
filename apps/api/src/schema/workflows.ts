@@ -22,6 +22,14 @@ function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
   }, schema.optional());
 }
 
+function textField(message: string) {
+  return z.string({ error: message }).trim();
+}
+
+function numericField(message: string) {
+  return z.coerce.number({ error: message });
+}
+
 export const WorkflowCategorySchema = z.enum(WORKFLOW_CATEGORY_VALUES, {
   message: "无效的流程分类",
 });
@@ -47,66 +55,72 @@ export const WorkflowEdgeConditionOperatorSchema = z.enum(
 export const WorkflowListQuerySchema = PaginationQuerySchema.extend({
   status: optionalQueryValue(WorkflowDefinitionStatusSchema),
   category: optionalQueryValue(WorkflowCategorySchema),
-  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
+  keyword: optionalQueryValue(textField("关键词格式无效").max(100, "关键词过长")),
 });
 
 export const WorkflowDefinitionCreateSchema = z.object({
-  workflow_key: z.string().trim().min(1, "流程编码不能为空").max(100, "流程编码过长"),
-  name: z.string().trim().min(1, "流程名称不能为空").max(100, "流程名称过长"),
-  description: z.string().trim().max(500, "流程说明过长").nullable().optional(),
+  workflow_key: textField("流程编码不能为空").min(1, "流程编码不能为空").max(100, "流程编码过长"),
+  name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长"),
+  description: textField("流程说明格式无效").max(500, "流程说明过长").nullable().optional(),
   category: WorkflowCategorySchema,
 });
 
 export const WorkflowDefinitionUpdateSchema = z.object({
-  name: z.string().trim().min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),
-  description: z.string().trim().max(500, "流程说明过长").nullable().optional(),
+  name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),
+  description: textField("流程说明格式无效").max(500, "流程说明过长").nullable().optional(),
   status: WorkflowDefinitionStatusSchema.optional(),
 });
 
 export const WorkflowNodePositionSchema = z.object({
-  x: z.coerce.number().finite("节点 X 坐标无效").default(0),
-  y: z.coerce.number().finite("节点 Y 坐标无效").default(0),
+  x: numericField("节点 X 坐标必须为数字").finite("节点 X 坐标无效").default(0),
+  y: numericField("节点 Y 坐标必须为数字").finite("节点 Y 坐标无效").default(0),
 });
 
 const BaseNodeConfigSchema = z.strictObject({
   required_permissions: z.array(
-    z.string().trim().min(1, "权限编码不能为空"),
+    textField("权限编码格式无效").min(1, "权限编码不能为空"),
+    { error: "权限列表格式无效" },
   ).max(20, "权限数量不能超过 20").default([]),
-  timeout_hours: z.coerce.number({
-    error: "超时时长必须为数字",
-  }).int("超时时长必须为整数")
+  timeout_hours: numericField("超时时长必须为数字").int("超时时长必须为整数")
     .min(1, "超时时长必须大于 0")
     .max(720, "超时时长不能超过 720 小时")
     .nullable()
     .optional(),
-  rollback_target_key: z.string().trim().max(100).nullable().optional(),
+  rollback_target_key: textField("回退目标节点格式无效").max(100, "回退目标节点编码过长").nullable().optional(),
 }, { error: "节点配置包含不支持的字段" });
 
 const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
   assignee_rule: z.enum(["employee", "department", "role"], {
     message: "无效的审批人规则",
   }).default("role"),
-  assignee_id: z.string().trim().max(100).nullable().optional(),
-  amount_threshold: z.coerce.number().nonnegative("金额阈值不能为负数").nullable().optional(),
+  assignee_id: textField("审批人 ID 格式无效").max(100, "审批人 ID 过长").nullable().optional(),
+  amount_threshold: numericField("金额阈值必须为数字").nonnegative("金额阈值不能为负数").nullable().optional(),
   approve_mode: z.enum(["any", "all"], { message: "无效的审批方式" }).default("any"),
-  reject_target_key: z.string().trim().max(100).nullable().optional(),
+  reject_target_key: textField("驳回目标节点格式无效").max(100, "驳回目标节点编码过长").nullable().optional(),
 });
 
 const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
-  stage_key: z.string().trim().min(1, "所属施工阶段不能为空").max(100, "施工阶段编码过长"),
-  work_instructions: z.string().trim().max(1000, "作业说明过长").nullable().optional(),
+  stage_key: textField("所属施工阶段不能为空").min(1, "所属施工阶段不能为空").max(100, "施工阶段编码过长"),
+  work_instructions: textField("作业说明格式无效").max(1000, "作业说明过长").nullable().optional(),
   require_log: z.boolean().default(false),
-  min_image_count: z.coerce.number().int().min(0).max(20).default(0),
+  min_image_count: numericField("最少图片数量必须为数字")
+    .int("最少图片数量必须为整数")
+    .min(0, "最少图片数量不能为负数")
+    .max(20, "最少图片数量不能超过 20")
+    .default(0),
   trigger_acceptance: z.boolean().default(false),
   customer_visible: z.boolean().default(false),
 });
 
 const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
-  channels: z.array(z.enum(["mini_program", "sms", "todo"])).min(1, "至少选择一个通知渠道").max(3),
+  channels: z.array(
+    z.enum(["mini_program", "sms", "todo"], { message: "无效的通知渠道" }),
+    { error: "通知渠道格式无效" },
+  ).min(1, "至少选择一个通知渠道").max(3, "通知渠道不能超过 3 个"),
   recipient_rule: z.enum(["owner", "assignee", "customer", "role"], {
     message: "无效的通知对象",
   }),
-  template: z.string().trim().min(1, "通知模板不能为空").max(500, "通知模板过长"),
+  template: textField("通知模板不能为空").min(1, "通知模板不能为空").max(500, "通知模板过长"),
 });
 
 export const WorkflowNodeConfigSchema = z.union([
@@ -118,45 +132,58 @@ export const WorkflowNodeConfigSchema = z.union([
 
 export const WorkflowNodeInputSchema = z.object({
   id: z.uuid("无效的节点 ID").optional(),
-  node_key: z.string().trim().min(1, "节点编码不能为空").max(100, "节点编码过长"),
+  node_key: textField("节点编码不能为空").min(1, "节点编码不能为空").max(100, "节点编码过长"),
   node_type: WorkflowNodeTypeSchema,
   business_kind: WorkflowBusinessKindSchema.nullable().optional(),
-  title: z.string().trim().min(1, "节点标题不能为空").max(100, "节点标题过长"),
-  description: z.string().trim().max(500, "节点说明过长").nullable().optional(),
+  title: textField("节点标题不能为空").min(1, "节点标题不能为空").max(100, "节点标题过长"),
+  description: textField("节点说明格式无效").max(500, "节点说明过长").nullable().optional(),
   position: WorkflowNodePositionSchema.default({ x: 0, y: 0 }),
   config: WorkflowNodeConfigSchema.prefault({}),
-  sort_order: z.coerce.number().int().min(0).max(100000).default(100),
+  sort_order: numericField("节点排序必须为数字")
+    .int("节点排序必须为整数")
+    .min(0, "节点排序不能为负数")
+    .max(100000, "节点排序不能超过 100000")
+    .default(100),
 });
 
 export const WorkflowEdgeConditionSchema = z.object({
   operator: WorkflowEdgeConditionOperatorSchema.default("always"),
-  field: z.string().trim().max(100).nullable().optional(),
-  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]).nullable().optional(),
+  field: textField("条件字段格式无效").max(100, "条件字段过长").nullable().optional(),
+  value: z.union([
+    z.string({ error: "条件值格式无效" }),
+    z.number({ error: "条件值格式无效" }),
+    z.boolean({ error: "条件值格式无效" }),
+    z.array(z.string({ error: "条件值格式无效" }), { error: "条件值格式无效" }),
+  ], { error: "条件值格式无效" }).nullable().optional(),
 });
 
 export const WorkflowEdgeInputSchema = z.object({
   id: z.uuid("无效的连线 ID").optional(),
-  source_node_key: z.string().trim().min(1, "来源节点不能为空").max(100),
-  target_node_key: z.string().trim().min(1, "目标节点不能为空").max(100),
-  label: z.string().trim().max(100, "连线标签过长").nullable().optional(),
+  source_node_key: textField("来源节点不能为空").min(1, "来源节点不能为空").max(100, "来源节点编码过长"),
+  target_node_key: textField("目标节点不能为空").min(1, "目标节点不能为空").max(100, "目标节点编码过长"),
+  label: textField("连线标签格式无效").max(100, "连线标签过长").nullable().optional(),
   condition: WorkflowEdgeConditionSchema.default({ operator: "always" }),
-  priority: z.coerce.number().int().min(0).max(100000).default(100),
+  priority: numericField("连线优先级必须为数字")
+    .int("连线优先级必须为整数")
+    .min(0, "连线优先级不能为负数")
+    .max(100000, "连线优先级不能超过 100000")
+    .default(100),
 });
 
 export const WorkflowGraphSaveSchema = z.object({
-  nodes: z.array(WorkflowNodeInputSchema).max(200, "节点数量不能超过 200"),
-  edges: z.array(WorkflowEdgeInputSchema).max(400, "连线数量不能超过 400"),
+  nodes: z.array(WorkflowNodeInputSchema, { error: "节点列表格式无效" }).max(200, "节点数量不能超过 200"),
+  edges: z.array(WorkflowEdgeInputSchema, { error: "连线列表格式无效" }).max(400, "连线数量不能超过 400"),
 });
 
 export const WorkflowTemplateCreateSchema = z.object({
   template_key: z.enum(["sales_main", "construction_main", "procedure_standard", "expense_approval"], {
     message: "无效的流程模板",
   }),
-  name: z.string().trim().min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),
+  name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),
 });
 
 export const WorkflowSimulationSchema = z.object({
-  context: z.record(z.string(), z.unknown()).default({}),
+  context: z.object({}, { error: "上下文必须是对象" }).catchall(z.unknown()).default({}),
 });
 
 export type WorkflowListQuery = z.infer<typeof WorkflowListQuerySchema>;
