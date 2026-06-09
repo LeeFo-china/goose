@@ -16,3 +16,4 @@ export * from './project';
 export * from './referral';
 export * from './tenant';
 export * from './location';
+export * from './workflow';
