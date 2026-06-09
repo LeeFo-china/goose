@@ -64,6 +64,7 @@ import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
 import PictureLibraryController from "@/controllers/picture-library";
 import VisitorPictureLibraryController from "@/controllers/visitor-picture-library";
+import WorkflowController from "@/controllers/workflows";
 
 const fullCrudRoutes = {
   list: true,
@@ -154,6 +155,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   app.register(createResourceRoutes("projects", ProjectController, projectCrudRoutes));
   app.register(createResourceRoutes("roles", RolesController, fullCrudRoutes));
   app.register(createResourceRoutes("permissions", PermissionsController, fullCrudRoutes));
+  app.register(createResourceRoutes("workflows", WorkflowController, fullCrudRoutes));
   app.register(createResourceRoutes("external-referrers", ExternalReferrersController, fullCrudRoutes));
   app.register(createResourceRoutes("project-referrals", ProjectReferralsController, fullCrudRoutes));
   app.register(createResourceRoutes("project-logs", ProjectLogController, projectLogCrudRoutes));
