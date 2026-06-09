@@ -7,6 +7,7 @@ import {
   Camera,
   CircleDollarSign,
   Clapperboard,
+  GitBranch,
   Inbox,
   Images,
   KeyRound,
@@ -75,6 +76,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       { href: "/customers", label: "客户", icon: Users },
       { href: "/customer-service", label: "客服问题", icon: MessageSquareWarning },
       { href: "/projects", label: "项目", icon: BriefcaseBusiness },
+      {
+        href: "/workflows",
+        label: "流程编排",
+        icon: GitBranch,
+        permission: "employee.permission_manage",
+      },
       { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
       { href: "/marketing", label: "营销活动", icon: Megaphone },
       {
