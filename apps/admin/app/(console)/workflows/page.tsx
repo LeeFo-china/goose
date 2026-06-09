@@ -5,14 +5,22 @@ import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type WorkflowPageSearchParams = {
-  page?: string;
-  status?: string;
-  category?: string;
-  keyword?: string;
+  page?: string | string[];
+  status?: string | string[];
+  category?: string | string[];
+  keyword?: string | string[];
 };
 
-function normalizePage(value: string | undefined) {
-  const page = Number(value || 1);
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeTextParam(value: string | string[] | undefined) {
+  return firstSearchParam(value)?.trim() || "";
+}
+
+function normalizePage(value: string | string[] | undefined) {
+  const page = Number(firstSearchParam(value) || 1);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
@@ -27,9 +35,9 @@ async function getWorkflows(params: WorkflowPageSearchParams) {
   }
 
   const page = normalizePage(params.page);
-  const status = params.status?.trim() || "";
-  const category = params.category?.trim() || "";
-  const keyword = params.keyword?.trim() || "";
+  const status = normalizeTextParam(params.status);
+  const category = normalizeTextParam(params.category);
+  const keyword = normalizeTextParam(params.keyword);
   const query = new URLSearchParams({
     page: String(page),
     pageSize: "20",
@@ -71,9 +79,9 @@ export default async function WorkflowsPage({
   if (accessDenied) return accessDenied;
 
   const params = await searchParams;
-  const status = params.status?.trim() || "";
-  const category = params.category?.trim() || "";
-  const keyword = params.keyword?.trim() || "";
+  const status = normalizeTextParam(params.status);
+  const category = normalizeTextParam(params.category);
+  const keyword = normalizeTextParam(params.keyword);
   const { list, pagination, error } = await getWorkflows(params);
 
   return (

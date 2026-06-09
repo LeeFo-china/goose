@@ -18,6 +18,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
 
 type Navigate = (href: string) => void;
 
@@ -88,6 +89,9 @@ export function WorkflowFilters({
     >
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="category" value={selectedCategory} />
+      <Label className="sr-only" htmlFor="workflow-status-filter">
+        流程状态
+      </Label>
       <FormSelect
         id="workflow-status-filter"
         value={selectedStatus || "__all"}
@@ -102,6 +106,9 @@ export function WorkflowFilters({
           applySelectFilters({ status: nextStatus });
         }}
       />
+      <Label className="sr-only" htmlFor="workflow-category-filter">
+        流程分类
+      </Label>
       <FormSelect
         id="workflow-category-filter"
         value={selectedCategory || "__all"}
@@ -121,6 +128,7 @@ export function WorkflowFilters({
           <Search aria-hidden="true" />
         </InputGroupAddon>
         <InputGroupInput
+          aria-label="搜索流程"
           name="keyword"
           value={selectedKeyword}
           placeholder="搜索流程名称、编码或说明"
