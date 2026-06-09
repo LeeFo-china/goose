@@ -5,11 +5,13 @@ import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow
 import { Badge } from "@/components/ui/badge";
 
 export function WorkflowCanvas({
+  disabled,
   nodes,
   edges,
   selectedNodeKey,
   onSelectNode,
 }: {
+  disabled?: boolean;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   selectedNodeKey: string | null;
@@ -67,6 +69,7 @@ export function WorkflowCanvas({
                   ? "border-primary ring-2 ring-primary/20"
                   : "border-border hover:border-primary/60",
               ].join(" ")}
+              disabled={disabled}
               style={{ left: node.position.x, top: node.position.y }}
               onClick={() => onSelectNode(node.node_key)}
             >

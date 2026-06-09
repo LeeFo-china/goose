@@ -352,12 +352,17 @@ export function WorkflowDesignerShell({
       <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
         <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
         <WorkflowCanvas
+          disabled={pending}
           nodes={graph.nodes}
           edges={graph.edges}
           selectedNodeKey={selectedNodeKey}
           onSelectNode={setSelectedNodeKey}
         />
-        <WorkflowPropertyPanel node={selectedNode} onChangeNode={updateNode} />
+        <WorkflowPropertyPanel
+          disabled={pending}
+          node={selectedNode}
+          onChangeNode={updateNode}
+        />
       </div>
       <WorkflowValidationPanel validation={validation} />
     </div>

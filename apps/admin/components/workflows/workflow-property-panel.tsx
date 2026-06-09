@@ -18,9 +18,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 export function WorkflowPropertyPanel({
+  disabled,
   node,
   onChangeNode,
 }: {
+  disabled?: boolean;
   node: WorkflowNode | null;
   onChangeNode: (node: WorkflowNode) => void;
 }) {
@@ -45,6 +47,7 @@ export function WorkflowPropertyPanel({
         <Input
           id="workflow-node-title"
           value={node.title}
+          disabled={disabled}
           maxLength={100}
           onChange={(event) => onChangeNode({ ...node, title: event.target.value })}
         />
@@ -52,6 +55,7 @@ export function WorkflowPropertyPanel({
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-type">节点类型</Label>
         <Select
+          disabled={disabled}
           value={node.node_type}
           onValueChange={(value) => onChangeNode({
             ...node,
@@ -75,6 +79,7 @@ export function WorkflowPropertyPanel({
         <Textarea
           id="workflow-node-description"
           value={node.description || ""}
+          disabled={disabled}
           maxLength={500}
           onChange={(event) => onChangeNode({
             ...node,
