@@ -1,5 +1,6 @@
 import {
   createDefinition,
+  findDefinitionByKey,
   findDefinitionById,
   getDefinitionById,
   listDefinitions,
@@ -16,6 +17,7 @@ import {
   getLatestVersion,
   getNextVersionNumber,
   getVersionById,
+  publishDefinition,
 } from "./workflows/versions";
 
 export * from "./workflows/types";
@@ -25,6 +27,7 @@ class WorkflowRepository {
   getDefinitionById = getDefinitionById;
   findDefinitionById = findDefinitionById;
   createDefinition = createDefinition;
+  findDefinitionByKey = findDefinitionByKey;
   updateDefinition = updateDefinition;
   getDraftGraph = getDraftGraph;
   getGraph = getGraph;
@@ -33,6 +36,7 @@ class WorkflowRepository {
   getVersionById = getVersionById;
   getNextVersionNumber = getNextVersionNumber;
   createVersion = createVersion;
+  publishDefinition = publishDefinition;
   updateActiveVersion = updateActiveVersion;
 }
 

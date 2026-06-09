@@ -6,7 +6,9 @@ export type WorkflowTableName =
   | "workflow_nodes"
   | "workflow_edges";
 
-export type WorkflowRpcName = "replace_workflow_draft_graph";
+export type WorkflowRpcName =
+  | "replace_workflow_draft_graph"
+  | "publish_workflow_definition";
 
 export type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;

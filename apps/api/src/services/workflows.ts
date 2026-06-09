@@ -1,5 +1,13 @@
 import { Errors } from "@/errors/error-factory";
-import { workflowRepository, type JsonObject, type WorkflowDefinitionRow, type WorkflowDraftGraphReplaceResult, type WorkflowEdgeRow, type WorkflowGraphResult, type WorkflowNodeRow } from "@/repositories/workflows";
+import {
+  workflowRepository,
+  type JsonObject,
+  type WorkflowDefinitionRow,
+  type WorkflowDraftGraphReplaceResult,
+  type WorkflowEdgeRow,
+  type WorkflowGraphResult,
+  type WorkflowNodeRow,
+} from "@/repositories/workflows";
 import type {
   WorkflowDefinitionCreateInput,
   WorkflowDefinitionUpdateInput,
@@ -146,41 +154,32 @@ class WorkflowService {
 
     const publishedAt = new Date().toISOString();
     const validationResult = this.validatePublishGraph(draftGraph.nodes, draftGraph.edges);
-    const versionNumber = await workflowRepository.getNextVersionNumber(
-      definitionId,
-      tenantId,
-    );
     const snapshot = this.buildSnapshot({
       definition,
       nodes: draftGraph.nodes,
       edges: draftGraph.edges,
-      versionNumber,
       publishedAt,
     });
 
-    const version = await workflowRepository.createVersion({
+    const publishResult = await workflowRepository.publishDefinition({
       tenantId,
       definitionId,
-      versionNumber,
       snapshot,
       validationResult,
       publishedBy: authContext.employeeId,
-    });
-
-    const updatedDefinition = await workflowRepository.updateActiveVersion({
-      tenantId,
-      definitionId,
-      versionId: version.id,
-      status: "active",
       updatedBy: authContext.employeeId,
     });
 
+    if (!publishResult.ok) {
+      throw Errors.notFound("流程定义不存在");
+    }
+
     return {
-      definition: updatedDefinition,
-      version,
+      definition: publishResult.definition,
+      version: publishResult.version,
       graph: {
-        definition: updatedDefinition,
-        version,
+        definition: publishResult.definition,
+        version: publishResult.version,
         nodes: draftGraph.nodes,
         edges: draftGraph.edges,
       },
@@ -220,38 +219,15 @@ class WorkflowService {
   }
 
   private async assertWorkflowKeyAvailable(tenantId: string, workflowKey: string) {
-    const existing = await this.findDefinitionByWorkflowKey(tenantId, workflowKey);
+    const existing = await workflowRepository.findDefinitionByKey(
+      tenantId,
+      workflowKey,
+    );
     if (existing) {
       throw Errors.business(409, "流程编码已存在", "WORKFLOW_KEY_EXISTS", {
         workflow_key: workflowKey,
         definition_id: existing.id,
       });
-    }
-  }
-
-  private async findDefinitionByWorkflowKey(
-    tenantId: string,
-    workflowKey: string,
-  ): Promise<WorkflowDefinitionRow | null> {
-    let page = 1;
-
-    while (true) {
-      const result = await workflowRepository.listDefinitions({
-        tenantId,
-        page,
-        pageSize: 100,
-        keyword: workflowKey,
-      });
-      const matched = result.list.find((item) => item.workflow_key === workflowKey);
-      if (matched) {
-        return matched;
-      }
-
-      if (page >= result.pagination.totalPages || result.list.length === 0) {
-        return null;
-      }
-
-      page += 1;
     }
   }
 
@@ -280,14 +256,20 @@ class WorkflowService {
     }
 
     const nodeIds = new Set<string>();
+    const nodeKeys = new Set<string>();
     const nodeKeyCounts = new Map<string, number>();
     let startNodeCount = 0;
+    let endNodeCount = 0;
 
     for (const node of nodes) {
       nodeIds.add(node.id);
+      nodeKeys.add(node.node_key);
       nodeKeyCounts.set(node.node_key, (nodeKeyCounts.get(node.node_key) ?? 0) + 1);
       if (node.node_type === "start") {
         startNodeCount += 1;
+      }
+      if (node.node_type === "end") {
+        endNodeCount += 1;
       }
     }
 
@@ -298,14 +280,20 @@ class WorkflowService {
       throw Errors.badRequest(`节点编码重复: ${duplicateNodeKeys.join("、")}`);
     }
 
-    if (startNodeCount > 1) {
-      throw Errors.badRequest("开始节点最多只能有一个");
+    if (startNodeCount !== 1) {
+      throw Errors.badRequest("发布前必须且只能配置一个开始节点");
+    }
+
+    if (endNodeCount < 1) {
+      throw Errors.badRequest("发布前至少需要配置一个结束节点");
     }
 
     const invalidNodeIds = new Set<string>();
     const selfLoopNodeIds = new Set<string>();
+    const sourceNodeIds = new Set<string>();
 
     for (const edge of edges) {
+      sourceNodeIds.add(edge.source_node_id);
       if (!nodeIds.has(edge.source_node_id)) {
         invalidNodeIds.add(edge.source_node_id);
       }
@@ -329,6 +317,24 @@ class WorkflowService {
       );
     }
 
+    const deadEndNodes = nodes.filter((node) =>
+      node.node_type !== "end" && !sourceNodeIds.has(node.id)
+    );
+    if (deadEndNodes.length > 0) {
+      throw Errors.badRequest(
+        `非结束节点必须至少有一条出边: ${
+          deadEndNodes.map((node) => node.node_key).join("、")
+        }`,
+      );
+    }
+
+    const invalidConfigRefs = this.findInvalidConfigReferences(nodes, nodeKeys);
+    if (invalidConfigRefs.length > 0) {
+      throw Errors.badRequest(
+        `节点配置引用了不存在的节点: ${invalidConfigRefs.join("、")}`,
+      );
+    }
+
     return {
       valid: true,
       issues: [] as string[],
@@ -340,18 +346,34 @@ class WorkflowService {
     definition: WorkflowDefinitionRow;
     nodes: WorkflowNodeRow[];
     edges: WorkflowEdgeRow[];
-    versionNumber: number;
     publishedAt: string;
   }): JsonObject {
     return {
       definition_id: input.definition.id,
       workflow_key: input.definition.workflow_key,
       category: input.definition.category,
-      version_number: input.versionNumber,
       published_at: input.publishedAt,
       nodes: input.nodes,
       edges: input.edges,
     };
+  }
+
+  private findInvalidConfigReferences(
+    nodes: WorkflowNodeRow[],
+    nodeKeys: Set<string>,
+  ) {
+    const invalidRefs = new Set<string>();
+
+    for (const node of nodes) {
+      for (const field of ["rollback_target_key", "reject_target_key"] as const) {
+        const value = node.config[field];
+        if (typeof value === "string" && value.trim() && !nodeKeys.has(value)) {
+          invalidRefs.add(`${node.node_key}.${field}=${value}`);
+        }
+      }
+    }
+
+    return Array.from(invalidRefs);
   }
 }
 

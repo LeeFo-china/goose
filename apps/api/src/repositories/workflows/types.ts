@@ -180,3 +180,23 @@ export type WorkflowActiveVersionUpdateInput = {
   status?: WorkflowDefinitionStatus;
   updatedBy?: string | null;
 };
+
+export type WorkflowDefinitionPublishInput = {
+  tenantId: string;
+  definitionId: string;
+  snapshot: JsonObject;
+  validationResult: JsonObject;
+  publishedBy?: string | null;
+  updatedBy?: string | null;
+};
+
+export type WorkflowDefinitionPublishResult =
+  | {
+      ok: true;
+      definition: WorkflowDefinitionRow;
+      version: WorkflowVersionRow;
+    }
+  | {
+      ok: false;
+      reason: "definition_not_found";
+    };

@@ -1,7 +1,10 @@
 import { Errors } from "@/errors/error-factory";
-import { workflowTable } from "./client";
+import { workflowRpc, workflowTable } from "./client";
 import { WORKFLOW_VERSION_SELECT } from "./shared";
 import type {
+  WorkflowDefinitionPublishInput,
+  WorkflowDefinitionPublishResult,
+  WorkflowDefinitionRow,
   WorkflowVersionCreateInput,
   WorkflowVersionRow,
 } from "./types";
@@ -76,4 +79,47 @@ export async function createVersion(
   }
 
   return data as WorkflowVersionRow;
+}
+
+export async function publishDefinition(
+  input: WorkflowDefinitionPublishInput,
+): Promise<WorkflowDefinitionPublishResult> {
+  const { data, error } = await workflowRpc("publish_workflow_definition", {
+    p_tenant_id: input.tenantId,
+    p_definition_id: input.definitionId,
+    p_snapshot: input.snapshot,
+    p_validation_result: input.validationResult,
+    p_published_by: input.publishedBy ?? null,
+    p_updated_by: input.updatedBy ?? input.publishedBy ?? null,
+  });
+
+  if (error) {
+    throw Errors.dbError("发布流程失败", error);
+  }
+
+  return normalizePublishResult(data);
+}
+
+function normalizePublishResult(data: unknown): WorkflowDefinitionPublishResult {
+  if (!isRecord(data)) {
+    throw Errors.badRequest("发布流程失败");
+  }
+
+  if (data.ok === false && data.reason === "definition_not_found") {
+    return { ok: false, reason: "definition_not_found" };
+  }
+
+  if (data.ok !== true || !isRecord(data.definition) || !isRecord(data.version)) {
+    throw Errors.badRequest("发布流程失败");
+  }
+
+  return {
+    ok: true,
+    definition: data.definition as WorkflowDefinitionRow,
+    version: data.version as WorkflowVersionRow,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

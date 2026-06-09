@@ -77,6 +77,23 @@ export async function getDefinitionById(
 
 export const findDefinitionById = getDefinitionById;
 
+export async function findDefinitionByKey(
+  tenantId: string,
+  workflowKey: string,
+): Promise<WorkflowDefinitionRow | null> {
+  const { data, error } = await workflowTable("workflow_definitions")
+    .select(WORKFLOW_DEFINITION_SELECT)
+    .eq("tenant_id", tenantId)
+    .eq("workflow_key", workflowKey)
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询流程编码失败", error);
+  }
+
+  return (data ?? null) as WorkflowDefinitionRow | null;
+}
+
 export async function createDefinition(
   input: WorkflowDefinitionCreateRepositoryInput,
 ): Promise<WorkflowDefinitionRow> {
@@ -94,6 +111,11 @@ export async function createDefinition(
     .select(WORKFLOW_DEFINITION_SELECT)
     .single();
 
+  if (isUniqueViolation(error)) {
+    throw Errors.business(409, "流程编码已存在", "WORKFLOW_KEY_EXISTS", {
+      workflow_key: input.workflow_key,
+    });
+  }
   if (error) {
     throw Errors.dbError("创建流程定义失败", error);
   }
@@ -102,6 +124,15 @@ export async function createDefinition(
   }
 
   return data as WorkflowDefinitionRow;
+}
+
+function isUniqueViolation(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "23505",
+  );
 }
 
 export async function updateDefinition(
