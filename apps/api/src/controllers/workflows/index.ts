@@ -7,6 +7,10 @@ import {
   WorkflowGraphQuerySchema,
   WorkflowGraphSaveSchema,
   WorkflowListQuerySchema,
+  WorkflowRuntimeCompleteNodeSchema,
+  WorkflowRuntimeInstanceIdParamsSchema,
+  WorkflowRuntimeInstanceListQuerySchema,
+  WorkflowRuntimeInstanceStartSchema,
 } from "@/schema/workflows";
 import { workflowService } from "@/services/workflows";
 import { Get, Post, Put } from "@/utils/decorators/route";
@@ -135,6 +139,58 @@ class WorkflowController extends TenantBaseController<
     const data = await workflowService.archiveDefinition(
       authContext,
       paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/workflows/:id/runtime/instances")
+  async listRuntimeInstances(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const queryResult = WorkflowRuntimeInstanceListQuerySchema.safeParse(request.query);
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await workflowService.listRuntimeInstances(
+      authContext,
+      paramsResult.data.id,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/workflows/:id/runtime/instances")
+  async startRuntimeInstance(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = WorkflowRuntimeInstanceStartSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await workflowService.startRuntimeInstance(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/workflows/:id/runtime/instances/:instanceId/complete-node")
+  async completeRuntimeNode(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowRuntimeInstanceIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = WorkflowRuntimeCompleteNodeSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await workflowService.completeRuntimeNode(
+      authContext,
+      paramsResult.data.id,
+      paramsResult.data.instanceId,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

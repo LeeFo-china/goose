@@ -16,6 +16,7 @@ import {
   publishWorkflowDefinition,
   saveWorkflowGraph,
 } from "@/components/workflows/workflow-requests";
+import { WorkflowRuntimePanel } from "@/components/workflows/workflow-runtime-panel";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import type {
   WorkflowDefinitionDetail,
@@ -388,81 +389,84 @@ export function WorkflowDesignerShell({
       : "本地校验通过后才能发布";
 
   return (
-    <div className="flex h-[calc(100vh-104px)] min-h-[760px] flex-col overflow-hidden rounded-md border bg-background">
-      <div className="flex flex-col gap-3 border-b p-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <Button asChild variant="ghost" className="mb-1 px-0">
-            <Link href="/workflows">
-              <ArrowLeft data-icon="inline-start" />
-              返回流程列表
-            </Link>
-          </Button>
-          <h1 className="text-xl font-semibold tracking-normal">
-            {graph.definition.name}
-          </h1>
-          <p className="mt-1 break-all text-xs text-muted-foreground">
-            {graph.definition.workflow_key}
-          </p>
+    <div className="flex flex-col gap-4">
+      <div className="flex h-[calc(100vh-248px)] min-h-[640px] flex-col overflow-hidden rounded-md border bg-background">
+        <div className="flex flex-col gap-3 border-b p-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Button asChild variant="ghost" className="mb-1 px-0">
+              <Link href="/workflows">
+                <ArrowLeft data-icon="inline-start" />
+                返回流程列表
+              </Link>
+            </Button>
+            <h1 className="text-xl font-semibold tracking-normal">
+              {graph.definition.name}
+            </h1>
+            <p className="mt-1 break-all text-xs text-muted-foreground">
+              {graph.definition.workflow_key}
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={handleValidate}
+            >
+              <ShieldCheck data-icon="inline-start" />
+              本地校验
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={handleSave}
+            >
+              <Save data-icon="inline-start" />
+              保存草稿
+            </Button>
+            <Button
+              type="button"
+              disabled={publishDisabled}
+              title={publishTitle}
+              onClick={handlePublish}
+            >
+              {pending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <GitBranch data-icon="inline-start" />
+              )}
+              发布
+            </Button>
+            <p className="basis-full text-xs text-muted-foreground">
+              发布前需要保存草稿，并通过开始/结束节点、连线引用和出边校验。
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
+        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
+          <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
+          <WorkflowCanvas
+            connectingNodeId={connectingNodeId}
             disabled={pending}
-            onClick={handleValidate}
-          >
-            <ShieldCheck data-icon="inline-start" />
-            本地校验
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
+            nodes={graph.nodes}
+            edges={graph.edges}
+            selectedNodeId={selectedNodeId}
+            onBeginConnect={setConnectingNodeId}
+            onDeleteEdge={deleteEdge}
+            onFinishConnect={connectToNode}
+            onMoveNode={moveNode}
+            onSelectNode={setSelectedNodeId}
+          />
+          <WorkflowPropertyPanel
             disabled={pending}
-            onClick={handleSave}
-          >
-            <Save data-icon="inline-start" />
-            保存草稿
-          </Button>
-          <Button
-            type="button"
-            disabled={publishDisabled}
-            title={publishTitle}
-            onClick={handlePublish}
-          >
-            {pending ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <GitBranch data-icon="inline-start" />
-            )}
-            发布
-          </Button>
-          <p className="basis-full text-xs text-muted-foreground">
-            发布前需要保存草稿，并通过开始/结束节点、连线引用和出边校验。
-          </p>
+            node={selectedNode}
+            onDeleteNode={deleteNode}
+            onChangeNode={updateNode}
+          />
         </div>
+        <WorkflowValidationPanel validation={validation} />
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
-        <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
-        <WorkflowCanvas
-          connectingNodeId={connectingNodeId}
-          disabled={pending}
-          nodes={graph.nodes}
-          edges={graph.edges}
-          selectedNodeId={selectedNodeId}
-          onBeginConnect={setConnectingNodeId}
-          onDeleteEdge={deleteEdge}
-          onFinishConnect={connectToNode}
-          onMoveNode={moveNode}
-          onSelectNode={setSelectedNodeId}
-        />
-        <WorkflowPropertyPanel
-          disabled={pending}
-          node={selectedNode}
-          onDeleteNode={deleteNode}
-          onChangeNode={updateNode}
-        />
-      </div>
-      <WorkflowValidationPanel validation={validation} />
+      <WorkflowRuntimePanel workflowId={workflowId} />
     </div>
   );
 }

@@ -10,6 +10,10 @@ import type {
   WorkflowGraphSaveInput,
   WorkflowGraphSaveResult,
   WorkflowPublishResult,
+  WorkflowRuntimeCompleteNodeResult,
+  WorkflowRuntimeInstanceListData,
+  WorkflowRuntimeInstanceListQuery,
+  WorkflowRuntimeStartResult,
 } from "./workflow-types";
 
 function buildWorkflowListQuery(query: WorkflowDefinitionListQuery = {}) {
@@ -20,6 +24,19 @@ function buildWorkflowListQuery(query: WorkflowDefinitionListQuery = {}) {
   if (query.status) params.set("status", query.status);
   if (query.category) params.set("category", query.category);
   if (query.keyword?.trim()) params.set("keyword", query.keyword.trim());
+
+  return params.toString();
+}
+
+function buildWorkflowRuntimeListQuery(
+  query: WorkflowRuntimeInstanceListQuery = {},
+) {
+  const params = new URLSearchParams();
+  params.set("page", String(query.page ?? 1));
+  params.set("pageSize", String(query.pageSize ?? 20));
+
+  if (query.status) params.set("status", query.status);
+  if (query.subject_type) params.set("subject_type", query.subject_type);
 
   return params.toString();
 }
@@ -112,6 +129,57 @@ export async function archiveWorkflowDefinition(id: string) {
     {
       method: "POST",
       fallbackMessage: "归档流程失败",
+    },
+  );
+}
+
+export async function fetchWorkflowRuntimeInstances(
+  id: string,
+  query: WorkflowRuntimeInstanceListQuery = {},
+) {
+  const params = buildWorkflowRuntimeListQuery(query);
+  return requestBackendJson<WorkflowRuntimeInstanceListData>(
+    `/workflows/${encodeURIComponent(id)}/runtime/instances?${params}`,
+    {
+      cache: "no-store",
+      fallbackMessage: "流程运行实例加载失败",
+    },
+  );
+}
+
+export async function startWorkflowRuntimeInstance(
+  id: string,
+  input: {
+    subject_type?: string;
+    subject_id: string;
+    context?: Record<string, unknown>;
+  },
+) {
+  return requestBackendJson<WorkflowRuntimeStartResult>(
+    `/workflows/${encodeURIComponent(id)}/runtime/instances`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      fallbackMessage: "启动流程实例失败",
+    },
+  );
+}
+
+export async function completeWorkflowRuntimeNode(
+  id: string,
+  instanceId: string,
+  input: {
+    node_key: string;
+    action?: string;
+    output?: Record<string, unknown>;
+  },
+) {
+  return requestBackendJson<WorkflowRuntimeCompleteNodeResult>(
+    `/workflows/${encodeURIComponent(id)}/runtime/instances/${encodeURIComponent(instanceId)}/complete-node`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      fallbackMessage: "完成流程节点失败",
     },
   );
 }

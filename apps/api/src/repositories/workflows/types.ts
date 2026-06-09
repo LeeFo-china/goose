@@ -4,11 +4,14 @@ import type {
   WorkflowGraphSaveInput,
 } from "@/schema/workflows";
 import type {
+  WorkflowInstanceStatus,
   WorkflowBusinessKind,
   WorkflowCategory,
   WorkflowDefinitionStatus,
   WorkflowEdgeConditionOperator,
   WorkflowNodeType,
+  WorkflowSubjectType,
+  WorkflowTaskStatus,
   WorkflowVersionStatus,
 } from "@gooes/domain";
 
@@ -200,4 +203,119 @@ export type WorkflowDefinitionPublishResult =
   | {
       ok: false;
       reason: "definition_not_found" | "stale_draft";
+    };
+
+export type WorkflowInstanceRow = {
+  id: string;
+  tenant_id: string;
+  definition_id: string;
+  version_id: string;
+  subject_type: WorkflowSubjectType;
+  subject_id: string;
+  status: WorkflowInstanceStatus;
+  context: JsonObject;
+  current_node_id: string | null;
+  current_node_key: string | null;
+  current_node_snapshot: JsonObject | null;
+  started_by: string | null;
+  completed_by: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowTaskRow = {
+  id: string;
+  tenant_id: string;
+  instance_id: string;
+  instance_node_id: string | null;
+  definition_id: string;
+  version_id: string;
+  node_id: string;
+  node_key: string;
+  node_type: WorkflowNodeType;
+  title: string;
+  status: WorkflowTaskStatus;
+  assignee_employee_id: string | null;
+  assignee_role_code: string | null;
+  due_at: string | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowRuntimeInstanceListInput = {
+  tenantId: string;
+  definitionId: string;
+  page?: number;
+  pageSize?: number;
+  status?: WorkflowInstanceStatus;
+  subjectType?: WorkflowSubjectType;
+};
+
+export type WorkflowRuntimeInstanceListResult = {
+  list: WorkflowInstanceRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type WorkflowRuntimeStartInput = {
+  tenantId: string;
+  definitionId: string;
+  subjectType: WorkflowSubjectType;
+  subjectId: string;
+  context: JsonObject;
+  startedBy?: string | null;
+};
+
+export type WorkflowRuntimeCompleteNodeInput = {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+  nodeKey: string;
+  action: string;
+  output: JsonObject;
+  actorEmployeeId?: string | null;
+};
+
+export type WorkflowRuntimeStartResult =
+  | {
+      ok: true;
+      instance: WorkflowInstanceRow;
+      currentNode: JsonObject;
+      task: WorkflowTaskRow | null;
+    }
+  | {
+      ok: false;
+      reason:
+        | "active_version_not_found"
+        | "graph_invalid"
+        | "invalid_context"
+        | "running_instance_exists";
+    };
+
+export type WorkflowRuntimeCompleteNodeResult =
+  | {
+      ok: true;
+      instance: WorkflowInstanceRow;
+      completedNode: JsonObject;
+      nextNode: JsonObject | null;
+      task: WorkflowTaskRow | null;
+    }
+  | {
+      ok: false;
+      reason:
+        | "instance_not_found"
+        | "instance_not_running"
+        | "node_not_current"
+        | "node_run_not_found"
+        | "graph_invalid"
+        | "invalid_output";
+      currentNodeKey?: string | null;
     };
