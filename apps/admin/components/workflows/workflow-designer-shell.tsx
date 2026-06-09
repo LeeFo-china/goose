@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import type { WorkflowNodeType } from "@gooes/domain";
 import { ArrowLeft, GitBranch, Loader2, Save, ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
-import type {
-  WorkflowDesignerGraph,
-  WorkflowValidationResult,
-} from "@/components/workflows/workflow-designer-types";
+import type { WorkflowValidationResult } from "@/components/workflows/workflow-designer-types";
+import {
+  createNodeFromPreset,
+  detailToGraph,
+  toEdgeInput,
+  toNodeInput,
+  validateGraph,
+} from "@/components/workflows/workflow-designer-graph-utils";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
+import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
 import {
   publishWorkflowDefinition,
@@ -23,178 +27,11 @@ import type {
   WorkflowEdge,
   WorkflowEdgeInput,
   WorkflowNode,
-  WorkflowNodeConfig,
-  WorkflowNodeInput,
 } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-
-function detailToGraph(detail: WorkflowDefinitionDetail): WorkflowDesignerGraph {
-  return {
-    definition: detail.definition,
-    nodes: detail.draftGraph?.nodes || [],
-    edges: detail.draftGraph?.edges || [],
-  };
-}
-
-function defaultConfig(nodeType: WorkflowNodeType): WorkflowNodeConfig {
-  if (nodeType === "procedure") {
-    return {
-      stage_key: "default_stage",
-      require_log: false,
-      min_image_count: 0,
-      trigger_acceptance: false,
-      customer_visible: false,
-    };
-  }
-  if (nodeType === "notification") {
-    return {
-      channels: ["todo"],
-      recipient_rule: "owner",
-      template: "请处理流程节点",
-    };
-  }
-  return {};
-}
-
-function createNode(
-  nodeType: WorkflowNodeType,
-  index: number,
-  definitionId: string,
-  tenantId: string,
-): WorkflowNode {
-  const nodeKey = `${nodeType}_${index}`;
-  const now = new Date().toISOString();
-
-  return {
-    id: `local-${Date.now()}-${index}`,
-    tenant_id: tenantId,
-    definition_id: definitionId,
-    node_key: nodeKey,
-    node_type: nodeType,
-    business_kind: null,
-    title: "新节点",
-    description: null,
-    position: { x: 120 + index * 220, y: 240 },
-    config: defaultConfig(nodeType),
-    sort_order: index * 10,
-    created_at: now,
-    updated_at: now,
-  };
-}
-
-function toNodeInput(node: WorkflowNode): WorkflowNodeInput {
-  return {
-    id: node.id.startsWith("local-") ? undefined : node.id,
-    node_key: node.node_key,
-    node_type: node.node_type,
-    business_kind: node.business_kind,
-    title: node.title,
-    description: node.description,
-    position: node.position,
-    config: node.config,
-    sort_order: node.sort_order,
-  };
-}
-
-function toEdgeInput(
-  edge: WorkflowEdge,
-  nodeById: Map<string, WorkflowNode>,
-): WorkflowEdgeInput | null {
-  const source = nodeById.get(edge.source_node_id);
-  const target = nodeById.get(edge.target_node_id);
-  if (!source || !target) return null;
-
-  const input: WorkflowEdgeInput = {
-    source_node_key: source.node_key,
-    target_node_key: target.node_key,
-    label: edge.label,
-    condition: edge.condition,
-    priority: edge.priority,
-  };
-
-  return edge.id.startsWith("local-") ? input : { ...input, id: edge.id };
-}
-
-function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
-  const issues: WorkflowValidationResult["issues"] = [];
-  const nodeKeys = new Set<string>();
-  const allNodeKeys = new Set(graph.nodes.map((node) => node.node_key));
-  const nodeIds = new Set(graph.nodes.map((node) => node.id));
-  const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
-
-  graph.nodes.forEach((node) => {
-    if (!node.node_key.trim()) {
-      issues.push({ code: "node_key_required", message: "节点编码不能为空" });
-    }
-    if (nodeKeys.has(node.node_key)) {
-      issues.push({
-        code: "node_key_duplicate",
-        message: "节点编码重复",
-        nodeKey: node.node_key,
-      });
-    }
-    nodeKeys.add(node.node_key);
-    if (!node.title.trim()) {
-      issues.push({
-        code: "node_title_required",
-        message: "节点标题不能为空",
-        nodeKey: node.node_key,
-      });
-    }
-    const configReferences = [
-      ["rollback_target_key", node.config.rollback_target_key],
-      [
-        "reject_target_key",
-        "reject_target_key" in node.config ? node.config.reject_target_key : null,
-      ],
-    ] as const;
-    for (const [field, value] of configReferences) {
-      if (typeof value === "string" && value.trim() && !allNodeKeys.has(value)) {
-        issues.push({
-          code: "config_reference_missing",
-          message: `${field} 指向的节点不存在：${value}`,
-          nodeKey: node.node_key,
-        });
-      }
-    }
-  });
-
-  const startCount = graph.nodes.filter((node) => node.node_type === "start").length;
-  if (startCount !== 1) {
-    issues.push({
-      code: "start_exactly_one",
-      message: "发布前需要且只能有一个开始节点",
-    });
-  }
-  if (!graph.nodes.some((node) => node.node_type === "end")) {
-    issues.push({ code: "end_required", message: "发布前需要一个结束节点" });
-  }
-  graph.edges.forEach((edge) => {
-    if (!nodeIds.has(edge.source_node_id)) {
-      issues.push({ code: "edge_source_missing", message: "连线来源节点不存在" });
-    }
-    if (!nodeIds.has(edge.target_node_id)) {
-      issues.push({ code: "edge_target_missing", message: "连线目标节点不存在" });
-    }
-    if (edge.source_node_id === edge.target_node_id) {
-      issues.push({ code: "edge_self_loop", message: "连线不能指向自身" });
-    }
-  });
-  graph.nodes.forEach((node) => {
-    if (node.node_type !== "end" && !outgoingNodeIds.has(node.id)) {
-      issues.push({
-        code: "node_outgoing_required",
-        message: "非结束节点需要至少一条出边",
-        nodeKey: node.node_key,
-      });
-    }
-  });
-
-  return { valid: issues.length === 0, issues };
-}
 
 export function WorkflowDesignerShell({
   workflowId,
@@ -231,14 +68,24 @@ export function WorkflowDesignerShell({
     setDirty(true);
   }
 
-  function addNode(nodeType: WorkflowNodeType) {
+  function addNode(presetKey: string, position?: WorkflowNode["position"]) {
     if (!graph) return;
-    const nextNode = createNode(
-      nodeType,
-      graph.nodes.length + 1,
-      graph.definition.id,
-      graph.definition.tenant_id,
-    );
+    const preset = getWorkflowNodePreset(presetKey);
+    if (!preset) {
+      toast.error("平台节点不存在");
+      return;
+    }
+    if (graph.nodes.some((node) => node.node_key === preset.key)) {
+      toast.error(`流程中已经有“${preset.label}”节点`);
+      return;
+    }
+    const nextNode = createNodeFromPreset({
+      presetKey: preset.key,
+      index: graph.nodes.length + 1,
+      definitionId: graph.definition.id,
+      tenantId: graph.definition.tenant_id,
+      position,
+    });
     setGraph({ ...graph, nodes: [...graph.nodes, nextNode] });
     setSelectedNodeId(nextNode.id);
     setDirty(true);
@@ -455,11 +302,11 @@ export function WorkflowDesignerShell({
               </span>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              绑定节点编码：following、arrived、designing、signed。修改这些节点编码会影响客户详情页的流程推进。
+              节点编码由平台预置选择：following、arrived、designing、signed 会驱动客户详情页的流程推进。
             </div>
           </div>
         ) : null}
-        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
+        <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px]">
           <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
           <WorkflowCanvas
             connectingNodeId={connectingNodeId}
@@ -468,7 +315,9 @@ export function WorkflowDesignerShell({
             edges={graph.edges}
             selectedNodeId={selectedNodeId}
             onBeginConnect={setConnectingNodeId}
+            onCancelConnect={() => setConnectingNodeId(null)}
             onDeleteEdge={deleteEdge}
+            onDropNodePreset={addNode}
             onFinishConnect={connectToNode}
             onMoveNode={moveNode}
             onSelectNode={setSelectedNodeId}
@@ -476,6 +325,9 @@ export function WorkflowDesignerShell({
           <WorkflowPropertyPanel
             disabled={pending}
             node={selectedNode}
+            usedNodeKeys={graph.nodes
+              .filter((node) => node.id !== selectedNode?.id)
+              .map((node) => node.node_key)}
             onDeleteNode={deleteNode}
             onChangeNode={updateNode}
           />
