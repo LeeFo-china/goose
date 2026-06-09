@@ -32,6 +32,7 @@ export async function listRuntimeInstances(
 
   if (input.status) request = request.eq("status", input.status);
   if (input.subjectType) request = request.eq("subject_type", input.subjectType);
+  if (input.subjectId) request = request.eq("subject_id", input.subjectId);
 
   const { data, error, count } = await request
     .order("updated_at", { ascending: false })

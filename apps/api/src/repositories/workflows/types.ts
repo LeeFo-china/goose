@@ -253,6 +253,7 @@ export type WorkflowRuntimeInstanceListInput = {
   pageSize?: number;
   status?: WorkflowInstanceStatus;
   subjectType?: WorkflowSubjectType;
+  subjectId?: string;
 };
 
 export type WorkflowRuntimeInstanceListResult = {

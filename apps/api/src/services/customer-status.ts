@@ -9,6 +9,7 @@ import type {
 } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
 import {
   CustomerStatusActionConfig,
   inferCustomerStatusAction,
@@ -167,6 +168,24 @@ class CustomerStatusService {
       },
     });
 
+    const designProjectMetadata = designProjectResult?.project.id
+      ? {
+          project_id: designProjectResult.project.id,
+          project_auto_created: designProjectResult.created,
+        }
+      : {};
+    const workflowRuntimeMetadata =
+      await customerWorkflowRuntimeService.syncStatusTransition({
+        authContext: input.authContext,
+        tenantId,
+        customerId: input.customerId,
+        fromStatus: transition.fromStatus,
+        toStatus: transition.toStatus,
+        action: input.payload.action,
+        reason,
+        extraContext: designProjectMetadata,
+      });
+
     await customerStatusTransitionRepository.create({
       tenantId,
       customerId: input.customerId,
@@ -178,12 +197,8 @@ class CustomerStatusService {
       reason,
       metadata: {
         ...input.payload.metadata,
-        ...(designProjectResult?.project.id
-          ? {
-            project_id: designProjectResult.project.id,
-            project_auto_created: designProjectResult.created,
-          }
-          : {}),
+        ...designProjectMetadata,
+        workflow_runtime: workflowRuntimeMetadata,
       },
     });
 

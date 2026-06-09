@@ -218,6 +218,7 @@ class WorkflowService {
       pageSize: query.pageSize,
       status: query.status,
       subjectType: query.subject_type,
+      subjectId: query.subject_id?.trim() || undefined,
     });
   }
 
