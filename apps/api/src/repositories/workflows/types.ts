@@ -184,6 +184,7 @@ export type WorkflowActiveVersionUpdateInput = {
 export type WorkflowDefinitionPublishInput = {
   tenantId: string;
   definitionId: string;
+  expectedUpdatedAt: string;
   snapshot: JsonObject;
   validationResult: JsonObject;
   publishedBy?: string | null;
@@ -198,5 +199,5 @@ export type WorkflowDefinitionPublishResult =
     }
   | {
       ok: false;
-      reason: "definition_not_found";
+      reason: "definition_not_found" | "stale_draft";
     };

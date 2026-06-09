@@ -91,6 +91,7 @@ export async function publishDefinition(
     p_validation_result: input.validationResult,
     p_published_by: input.publishedBy ?? null,
     p_updated_by: input.updatedBy ?? input.publishedBy ?? null,
+    p_expected_updated_at: input.expectedUpdatedAt,
   });
 
   if (error) {
@@ -107,6 +108,9 @@ function normalizePublishResult(data: unknown): WorkflowDefinitionPublishResult 
 
   if (data.ok === false && data.reason === "definition_not_found") {
     return { ok: false, reason: "definition_not_found" };
+  }
+  if (data.ok === false && data.reason === "stale_draft") {
+    return { ok: false, reason: "stale_draft" };
   }
 
   if (data.ok !== true || !isRecord(data.definition) || !isRecord(data.version)) {

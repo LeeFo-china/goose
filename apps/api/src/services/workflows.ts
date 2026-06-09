@@ -164,6 +164,7 @@ class WorkflowService {
     const publishResult = await workflowRepository.publishDefinition({
       tenantId,
       definitionId,
+      expectedUpdatedAt: definition.updated_at,
       snapshot,
       validationResult,
       publishedBy: authContext.employeeId,
@@ -171,6 +172,9 @@ class WorkflowService {
     });
 
     if (!publishResult.ok) {
+      if (publishResult.reason === "stale_draft") {
+        throw Errors.business(409, "流程草稿已变更，请重新发布", "WORKFLOW_DRAFT_STALE");
+      }
       throw Errors.notFound("流程定义不存在");
     }
 
