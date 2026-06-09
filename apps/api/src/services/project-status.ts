@@ -12,6 +12,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
 import { projectMemberService } from "@/services/project-members";
 import {
   inferProjectStatusAction,
@@ -390,6 +391,21 @@ class ProjectStatusService {
       payload: { status: "signed" },
     });
 
+    const workflowRuntimeMetadata =
+      await customerWorkflowRuntimeService.syncStatusTransition({
+        authContext: input.authContext,
+        tenantId: input.tenantId,
+        customerId,
+        fromStatus,
+        toStatus: "signed",
+        action: "mark_signed",
+        source: "project_status",
+        extraContext: {
+          project_id: input.project.id,
+          project_action: "sign_contract",
+        },
+      });
+
     await customerStatusTransitionRepository.create({
       tenantId: input.tenantId,
       customerId,
@@ -403,6 +419,7 @@ class ProjectStatusService {
         source: "project_status",
         project_id: input.project.id,
         project_action: "sign_contract",
+        workflow_runtime: workflowRuntimeMetadata,
       },
     });
   }

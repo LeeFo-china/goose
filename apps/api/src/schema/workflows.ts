@@ -218,6 +218,7 @@ export const WorkflowSimulationSchema = z.object({
 export const WorkflowRuntimeInstanceListQuerySchema = PaginationQuerySchema.extend({
   status: optionalQueryValue(WorkflowInstanceStatusSchema),
   subject_type: optionalQueryValue(WorkflowSubjectTypeSchema),
+  subject_id: optionalQueryValue(textField("流程对象 ID 格式无效").max(200, "流程对象 ID 过长")),
 });
 
 export const WorkflowRuntimeInstanceStartSchema = z.object({
