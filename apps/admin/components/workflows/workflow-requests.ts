@@ -8,6 +8,7 @@ import type {
   WorkflowDefinitionUpdateInput,
   WorkflowGraph,
   WorkflowGraphSaveInput,
+  WorkflowGraphSaveResult,
   WorkflowPublishResult,
 } from "./workflow-types";
 
@@ -85,7 +86,7 @@ export async function saveWorkflowGraph(
   id: string,
   input: WorkflowGraphSaveInput,
 ) {
-  return requestBackendJson<{ nodes: WorkflowGraph["nodes"]; edges: WorkflowGraph["edges"] }>(
+  return requestBackendJson<WorkflowGraphSaveResult>(
     `/workflows/${encodeURIComponent(id)}/graph`,
     {
       method: "PUT",
