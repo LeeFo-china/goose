@@ -143,8 +143,12 @@ function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
     }
   });
 
-  if (!graph.nodes.some((node) => node.node_type === "start")) {
-    issues.push({ code: "start_required", message: "发布前需要一个开始节点" });
+  const startCount = graph.nodes.filter((node) => node.node_type === "start").length;
+  if (startCount !== 1) {
+    issues.push({
+      code: "start_exactly_one",
+      message: "发布前需要且只能有一个开始节点",
+    });
   }
   if (!graph.nodes.some((node) => node.node_type === "end")) {
     issues.push({ code: "end_required", message: "发布前需要一个结束节点" });
