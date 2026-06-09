@@ -113,12 +113,10 @@ export function WorkflowCanvas({
           return (
             <div
               key={node.id}
-              role="button"
-              tabIndex={disabled ? -1 : 0}
               className={[
                 "absolute flex h-[72px] w-[180px] flex-col items-start",
                 "justify-center rounded-md border bg-background px-3 text-left",
-                "shadow-sm transition focus-visible:outline-none focus-visible:ring-2",
+                "shadow-sm transition",
                 disabled ? "cursor-not-allowed opacity-70" : "cursor-move",
                 connecting
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -127,15 +125,6 @@ export function WorkflowCanvas({
                   : "border-border hover:border-primary/60",
               ].join(" ")}
               style={{ left: node.position.x, top: node.position.y }}
-              onClick={() => {
-                if (!disabled) onSelectNode(node.id);
-              }}
-              onKeyDown={(event) => {
-                if (!disabled && (event.key === "Enter" || event.key === " ")) {
-                  event.preventDefault();
-                  onSelectNode(node.id);
-                }
-              }}
               onPointerDown={(event) => {
                 if (disabled) return;
                 if (event.target instanceof HTMLElement && event.target.closest("[data-node-action]")) {
@@ -163,12 +152,23 @@ export function WorkflowCanvas({
                 dragRef.current = null;
               }}
             >
-              <span className="max-w-full truncate text-sm font-medium">
-                {node.title}
-              </span>
-              <Badge variant="outline" className="mt-1">
-                {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
-              </Badge>
+              <button
+                data-node-action="select"
+                type="button"
+                className="min-w-0 border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={disabled}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectNode(node.id);
+                }}
+              >
+                <span className="block max-w-[118px] truncate text-sm font-medium">
+                  {node.title}
+                </span>
+                <Badge variant="outline" className="mt-1">
+                  {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
+                </Badge>
+              </button>
               <Button
                 data-node-action="connect"
                 type="button"

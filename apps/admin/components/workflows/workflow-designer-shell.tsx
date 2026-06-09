@@ -119,6 +119,7 @@ function toEdgeInput(
 function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
   const issues: WorkflowValidationResult["issues"] = [];
   const nodeKeys = new Set<string>();
+  const allNodeKeys = new Set(graph.nodes.map((node) => node.node_key));
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
 
@@ -140,6 +141,22 @@ function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
         message: "节点标题不能为空",
         nodeKey: node.node_key,
       });
+    }
+    const configReferences = [
+      ["rollback_target_key", node.config.rollback_target_key],
+      [
+        "reject_target_key",
+        "reject_target_key" in node.config ? node.config.reject_target_key : null,
+      ],
+    ] as const;
+    for (const [field, value] of configReferences) {
+      if (typeof value === "string" && value.trim() && !allNodeKeys.has(value)) {
+        issues.push({
+          code: "config_reference_missing",
+          message: `${field} 指向的节点不存在：${value}`,
+          nodeKey: node.node_key,
+        });
+      }
     }
   });
 
