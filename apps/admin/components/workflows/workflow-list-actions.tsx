@@ -8,6 +8,7 @@ import {
   workflowCategoryOptions,
   workflowStatusOptions,
 } from "@/components/workflows/workflow-labels";
+import { WorkflowTemplateActions } from "@/components/workflows/workflow-template-actions";
 import type {
   WorkflowDefinition,
   WorkflowPagination as WorkflowPaginationMeta,
@@ -85,7 +86,7 @@ export function WorkflowFilters({
   return (
     <form
       onSubmit={submit}
-      className="grid gap-3 lg:grid-cols-[150px_160px_1fr_72px_auto]"
+      className="grid gap-3 lg:grid-cols-[150px_160px_minmax(220px,1fr)_72px_auto]"
     >
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="category" value={selectedCategory} />
@@ -140,7 +141,10 @@ export function WorkflowFilters({
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
-      <WorkflowCreateDialog disabled={pending} onCreated={onCreated} />
+      <div className="flex flex-wrap gap-2">
+        <WorkflowTemplateActions disabled={pending} onCreated={onCreated} />
+        <WorkflowCreateDialog disabled={pending} onCreated={onCreated} />
+      </div>
     </form>
   );
 }

@@ -155,6 +155,11 @@ export type WorkflowDefinitionCreateInput = {
   category: WorkflowCategory;
 };
 
+export type WorkflowTemplateCreateInput = {
+  template_key: "customer_main";
+  name?: string;
+};
+
 export type WorkflowDefinitionUpdateInput = {
   name?: string;
   description?: string | null;
