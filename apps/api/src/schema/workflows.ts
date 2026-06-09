@@ -62,6 +62,14 @@ export const WorkflowListQuerySchema = PaginationQuerySchema.extend({
   keyword: optionalQueryValue(textField("关键词格式无效").max(100, "关键词过长")),
 });
 
+export const WorkflowDefinitionIdParamsSchema = z.object({
+  id: z.uuid("无效的流程 ID"),
+});
+
+export const WorkflowGraphQuerySchema = z.object({
+  version_id: optionalQueryValue(z.uuid("无效的流程版本 ID")),
+});
+
 export const WorkflowDefinitionCreateSchema = z.object({
   workflow_key: textField("流程编码不能为空").min(1, "流程编码不能为空").max(100, "流程编码过长"),
   name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长"),
