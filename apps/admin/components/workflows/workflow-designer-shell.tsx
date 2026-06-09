@@ -119,6 +119,8 @@ function toEdgeInput(
 function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
   const issues: WorkflowValidationResult["issues"] = [];
   const nodeKeys = new Set<string>();
+  const nodeIds = new Set(graph.nodes.map((node) => node.id));
+  const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
 
   graph.nodes.forEach((node) => {
     if (!node.node_key.trim()) {
@@ -147,6 +149,26 @@ function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
   if (!graph.nodes.some((node) => node.node_type === "end")) {
     issues.push({ code: "end_required", message: "发布前需要一个结束节点" });
   }
+  graph.edges.forEach((edge) => {
+    if (!nodeIds.has(edge.source_node_id)) {
+      issues.push({ code: "edge_source_missing", message: "连线来源节点不存在" });
+    }
+    if (!nodeIds.has(edge.target_node_id)) {
+      issues.push({ code: "edge_target_missing", message: "连线目标节点不存在" });
+    }
+    if (edge.source_node_id === edge.target_node_id) {
+      issues.push({ code: "edge_self_loop", message: "连线不能指向自身" });
+    }
+  });
+  graph.nodes.forEach((node) => {
+    if (node.node_type !== "end" && !outgoingNodeIds.has(node.id)) {
+      issues.push({
+        code: "node_outgoing_required",
+        message: "非结束节点需要至少一条出边",
+        nodeKey: node.node_key,
+      });
+    }
+  });
 
   return { valid: issues.length === 0, issues };
 }
@@ -166,6 +188,7 @@ export function WorkflowDesignerShell({
   const [selectedNodeKey, setSelectedNodeKey] = useState(
     graph?.nodes[0]?.node_key || null,
   );
+  const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
   const [pending, startTransition] = useTransition();
   const selectedNode = useMemo(
@@ -181,6 +204,7 @@ export function WorkflowDesignerShell({
         node.id === nextNode.id ? nextNode : node
       )),
     });
+    setDirty(true);
   }
 
   function addNode(nodeType: WorkflowNodeType) {
@@ -193,6 +217,7 @@ export function WorkflowDesignerShell({
     );
     setGraph({ ...graph, nodes: [...graph.nodes, nextNode] });
     setSelectedNodeKey(nextNode.node_key);
+    setDirty(true);
   }
 
   function handleValidate() {
@@ -215,6 +240,7 @@ export function WorkflowDesignerShell({
         });
         setGraph({ ...graph, nodes: saved.nodes, edges: saved.edges });
         setSelectedNodeKey(saved.nodes[0]?.node_key || null);
+        setDirty(false);
         toast.success("流程草稿已保存");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "保存流程草稿失败");
@@ -224,6 +250,17 @@ export function WorkflowDesignerShell({
 
   function handlePublish() {
     if (!graph) return;
+    const nextValidation = validateGraph(graph);
+    setValidation(nextValidation);
+    if (!nextValidation.valid) {
+      toast.error("本地校验未通过，暂不能发布");
+      return;
+    }
+    if (dirty) {
+      toast.error("请先保存草稿，再发布流程");
+      return;
+    }
+
     startTransition(async () => {
       try {
         const result = await publishWorkflowDefinition(workflowId);
@@ -232,6 +269,7 @@ export function WorkflowDesignerShell({
           nodes: result.graph.nodes,
           edges: result.graph.edges,
         });
+        setDirty(false);
         toast.success("流程已发布");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "发布流程失败");
@@ -248,6 +286,14 @@ export function WorkflowDesignerShell({
       </Card>
     );
   }
+
+  const publishValidation = validateGraph(graph);
+  const publishDisabled = pending || dirty || !publishValidation.valid;
+  const publishTitle = dirty
+    ? "请先保存草稿"
+    : publishValidation.valid
+      ? "发布当前已保存流程"
+      : "本地校验通过后才能发布";
 
   return (
     <div className="flex h-[calc(100vh-104px)] min-h-[760px] flex-col overflow-hidden rounded-md border bg-background">
@@ -266,7 +312,7 @@ export function WorkflowDesignerShell({
             {graph.definition.workflow_key}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -285,7 +331,12 @@ export function WorkflowDesignerShell({
             <Save data-icon="inline-start" />
             保存草稿
           </Button>
-          <Button type="button" disabled={pending} onClick={handlePublish}>
+          <Button
+            type="button"
+            disabled={publishDisabled}
+            title={publishTitle}
+            onClick={handlePublish}
+          >
             {pending ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
@@ -293,6 +344,9 @@ export function WorkflowDesignerShell({
             )}
             发布
           </Button>
+          <p className="basis-full text-xs text-muted-foreground">
+            发布前需要保存草稿，并通过开始/结束节点、连线引用和出边校验。
+          </p>
         </div>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">

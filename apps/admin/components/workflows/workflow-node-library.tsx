@@ -8,6 +8,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const nodeTypes: WorkflowNodeType[] = [
+  "start",
   "business",
   "construction_stage",
   "procedure",
@@ -16,6 +17,7 @@ const nodeTypes: WorkflowNodeType[] = [
   "notification",
   "automation",
   "subflow",
+  "end",
 ];
 
 export function WorkflowNodeLibrary({
