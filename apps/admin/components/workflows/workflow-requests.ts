@@ -14,6 +14,7 @@ import type {
   WorkflowRuntimeInstanceListData,
   WorkflowRuntimeInstanceListQuery,
   WorkflowRuntimeStartResult,
+  WorkflowTemplateCreateInput,
 } from "./workflow-types";
 
 function buildWorkflowListQuery(query: WorkflowDefinitionListQuery = {}) {
@@ -68,6 +69,16 @@ export async function createWorkflowDefinition(
     method: "POST",
     body: JSON.stringify(input),
     fallbackMessage: "创建流程失败",
+  });
+}
+
+export async function createWorkflowFromTemplate(
+  input: WorkflowTemplateCreateInput,
+) {
+  return requestBackendJson<WorkflowPublishResult>("/workflows/templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+    fallbackMessage: "创建流程模板失败",
   });
 }
 

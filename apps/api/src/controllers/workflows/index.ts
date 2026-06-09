@@ -11,7 +11,9 @@ import {
   WorkflowRuntimeInstanceIdParamsSchema,
   WorkflowRuntimeInstanceListQuerySchema,
   WorkflowRuntimeInstanceStartSchema,
+  WorkflowTemplateCreateSchema,
 } from "@/schema/workflows";
+import { workflowTemplateService } from "@/services/workflow-templates";
 import { workflowService } from "@/services/workflows";
 import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -139,6 +141,19 @@ class WorkflowController extends TenantBaseController<
     const data = await workflowService.archiveDefinition(
       authContext,
       paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/workflows/templates")
+  async createFromTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = WorkflowTemplateCreateSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await workflowTemplateService.createFromTemplate(
+      authContext,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }
