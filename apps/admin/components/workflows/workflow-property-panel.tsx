@@ -5,7 +5,9 @@ import {
   WorkflowNodeTypeConfig,
   type WorkflowNodeType,
 } from "@gooes/domain";
+import { Trash2 } from "lucide-react";
 import type { WorkflowNode } from "@/components/workflows/workflow-types";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,10 +22,12 @@ import { Textarea } from "@/components/ui/textarea";
 export function WorkflowPropertyPanel({
   disabled,
   node,
+  onDeleteNode,
   onChangeNode,
 }: {
   disabled?: boolean;
   node: WorkflowNode | null;
+  onDeleteNode: (nodeId: string) => void;
   onChangeNode: (node: WorkflowNode) => void;
 }) {
   if (!node) {
@@ -41,6 +45,19 @@ export function WorkflowPropertyPanel({
         <p className="mt-1 break-all text-xs text-muted-foreground">
           {node.node_key}
         </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="workflow-node-key">节点编码</Label>
+        <Input
+          id="workflow-node-key"
+          value={node.node_key}
+          disabled={disabled}
+          maxLength={100}
+          onChange={(event) => onChangeNode({
+            ...node,
+            node_key: event.target.value,
+          })}
+        />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-title">标题</Label>
@@ -90,6 +107,16 @@ export function WorkflowPropertyPanel({
       <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
         当前任务先开放公共属性。审批人、工序要求、通知模板等结构化配置会在画布交互任务中继续细化。
       </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="justify-start text-destructive hover:text-destructive"
+        disabled={disabled}
+        onClick={() => onDeleteNode(node.id)}
+      >
+        <Trash2 data-icon="inline-start" />
+        删除节点
+      </Button>
     </aside>
   );
 }

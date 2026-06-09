@@ -189,15 +189,16 @@ export function WorkflowDesignerShell({
   const [graph, setGraph] = useState(
     initialDetail ? detailToGraph(initialDetail) : null,
   );
-  const [selectedNodeKey, setSelectedNodeKey] = useState(
-    graph?.nodes[0]?.node_key || null,
+  const [selectedNodeId, setSelectedNodeId] = useState(
+    graph?.nodes[0]?.id || null,
   );
+  const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
   const [pending, startTransition] = useTransition();
   const selectedNode = useMemo(
-    () => graph?.nodes.find((node) => node.node_key === selectedNodeKey) || null,
-    [graph?.nodes, selectedNodeKey],
+    () => graph?.nodes.find((node) => node.id === selectedNodeId) || null,
+    [graph?.nodes, selectedNodeId],
   );
 
   function updateNode(nextNode: WorkflowNode) {
@@ -220,7 +221,72 @@ export function WorkflowDesignerShell({
       graph.definition.tenant_id,
     );
     setGraph({ ...graph, nodes: [...graph.nodes, nextNode] });
-    setSelectedNodeKey(nextNode.node_key);
+    setSelectedNodeId(nextNode.id);
+    setDirty(true);
+  }
+
+  function moveNode(nodeId: string, position: WorkflowNode["position"]) {
+    if (!graph) return;
+    setGraph({
+      ...graph,
+      nodes: graph.nodes.map((node) => (
+        node.id === nodeId ? { ...node, position } : node
+      )),
+    });
+    setDirty(true);
+  }
+
+  function deleteNode(nodeId: string) {
+    if (!graph) return;
+    const nextNodes = graph.nodes.filter((node) => node.id !== nodeId);
+    setGraph({
+      ...graph,
+      nodes: nextNodes,
+      edges: graph.edges.filter((edge) => (
+        edge.source_node_id !== nodeId && edge.target_node_id !== nodeId
+      )),
+    });
+    setSelectedNodeId(nextNodes[0]?.id || null);
+    if (connectingNodeId === nodeId) setConnectingNodeId(null);
+    setDirty(true);
+  }
+
+  function connectToNode(targetNodeId: string) {
+    if (!graph || !connectingNodeId || connectingNodeId === targetNodeId) return;
+    const duplicate = graph.edges.some((edge) => (
+      edge.source_node_id === connectingNodeId &&
+      edge.target_node_id === targetNodeId
+    ));
+    if (duplicate) {
+      toast.error("这两个节点之间已经存在连线");
+      setConnectingNodeId(null);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextEdge: WorkflowEdge = {
+      id: `local-edge-${Date.now()}`,
+      tenant_id: graph.definition.tenant_id,
+      definition_id: graph.definition.id,
+      source_node_id: connectingNodeId,
+      target_node_id: targetNodeId,
+      label: null,
+      condition: { operator: "always" },
+      priority: graph.edges.length + 1,
+      created_at: now,
+      updated_at: now,
+    };
+    setGraph({ ...graph, edges: [...graph.edges, nextEdge] });
+    setConnectingNodeId(null);
+    setDirty(true);
+  }
+
+  function deleteEdge(edgeId: string) {
+    if (!graph) return;
+    setGraph({
+      ...graph,
+      edges: graph.edges.filter((edge) => edge.id !== edgeId),
+    });
     setDirty(true);
   }
 
@@ -232,6 +298,7 @@ export function WorkflowDesignerShell({
   function handleSave() {
     if (!graph) return;
     startTransition(async () => {
+      const selectedNodeKey = selectedNode?.node_key || null;
       const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
       const edgeInputs = graph.edges
         .map((edge) => toEdgeInput(edge, nodeById))
@@ -243,7 +310,11 @@ export function WorkflowDesignerShell({
           edges: edgeInputs,
         });
         setGraph({ ...graph, nodes: saved.nodes, edges: saved.edges });
-        setSelectedNodeKey(saved.nodes[0]?.node_key || null);
+        const nextSelectedNode = saved.nodes.find((node) => (
+          node.node_key === selectedNodeKey
+        ));
+        setSelectedNodeId(nextSelectedNode?.id || saved.nodes[0]?.id || null);
+        setConnectingNodeId(null);
         setDirty(false);
         toast.success("流程草稿已保存");
       } catch (error) {
@@ -356,15 +427,21 @@ export function WorkflowDesignerShell({
       <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
         <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
         <WorkflowCanvas
+          connectingNodeId={connectingNodeId}
           disabled={pending}
           nodes={graph.nodes}
           edges={graph.edges}
-          selectedNodeKey={selectedNodeKey}
-          onSelectNode={setSelectedNodeKey}
+          selectedNodeId={selectedNodeId}
+          onBeginConnect={setConnectingNodeId}
+          onDeleteEdge={deleteEdge}
+          onFinishConnect={connectToNode}
+          onMoveNode={moveNode}
+          onSelectNode={setSelectedNodeId}
         />
         <WorkflowPropertyPanel
           disabled={pending}
           node={selectedNode}
+          onDeleteNode={deleteNode}
           onChangeNode={updateNode}
         />
       </div>
