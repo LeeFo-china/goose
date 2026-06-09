@@ -13,6 +13,9 @@ import type {
   WorkflowDefinitionUpdateInput,
   WorkflowGraphSaveInput,
   WorkflowListQuery,
+  WorkflowRuntimeCompleteNodeInput,
+  WorkflowRuntimeInstanceListQuery,
+  WorkflowRuntimeInstanceStartInput,
 } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -200,6 +203,74 @@ class WorkflowService {
     });
   }
 
+  async listRuntimeInstances(
+    authContext: AuthContext,
+    definitionId: string,
+    query: WorkflowRuntimeInstanceListQuery,
+  ) {
+    const tenantId = this.assertManagePermission(authContext);
+    await this.getRequiredDefinition(tenantId, definitionId);
+
+    return workflowRepository.listRuntimeInstances({
+      tenantId,
+      definitionId,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      subjectType: query.subject_type,
+    });
+  }
+
+  async startRuntimeInstance(
+    authContext: AuthContext,
+    definitionId: string,
+    input: WorkflowRuntimeInstanceStartInput,
+  ) {
+    const tenantId = this.assertManagePermission(authContext);
+    await this.getRequiredDefinition(tenantId, definitionId);
+
+    const result = await workflowRepository.startRuntimeInstance({
+      tenantId,
+      definitionId,
+      subjectType: input.subject_type,
+      subjectId: input.subject_id.trim(),
+      context: input.context as JsonObject,
+      startedBy: authContext.employeeId,
+    });
+
+    if (!result.ok) {
+      this.throwRuntimeStartError(result);
+    }
+
+    return result;
+  }
+
+  async completeRuntimeNode(
+    authContext: AuthContext,
+    definitionId: string,
+    instanceId: string,
+    input: WorkflowRuntimeCompleteNodeInput,
+  ) {
+    const tenantId = this.assertManagePermission(authContext);
+    await this.getRequiredDefinition(tenantId, definitionId);
+
+    const result = await workflowRepository.completeRuntimeNode({
+      tenantId,
+      definitionId,
+      instanceId,
+      nodeKey: input.node_key.trim(),
+      action: input.action.trim(),
+      output: input.output as JsonObject,
+      actorEmployeeId: authContext.employeeId,
+    });
+
+    if (!result.ok) {
+      this.throwRuntimeCompleteError(result);
+    }
+
+    return result;
+  }
+
   private assertManagePermission(authContext: AuthContext) {
     const tenantId = accessPolicyService.assertTenantId(authContext);
     if (!tenantId) {
@@ -251,6 +322,42 @@ class WorkflowService {
         throw Errors.badRequest(
           `节点不能连接到自身: ${result.nodeKeys.join("、")}`,
         );
+    }
+  }
+
+  private throwRuntimeStartError(
+    result: Exclude<Awaited<ReturnType<typeof workflowRepository.startRuntimeInstance>>, { ok: true }>,
+  ): never {
+    switch (result.reason) {
+      case "active_version_not_found":
+        throw Errors.badRequest("流程尚未发布，无法启动实例");
+      case "graph_invalid":
+        throw Errors.badRequest("流程发布版本图结构无效");
+      case "invalid_context":
+        throw Errors.badRequest("流程上下文必须是对象");
+      case "running_instance_exists":
+        throw Errors.business(409, "该业务对象已有运行中的流程实例", "WORKFLOW_INSTANCE_EXISTS");
+    }
+  }
+
+  private throwRuntimeCompleteError(
+    result: Exclude<Awaited<ReturnType<typeof workflowRepository.completeRuntimeNode>>, { ok: true }>,
+  ): never {
+    switch (result.reason) {
+      case "instance_not_found":
+        throw Errors.notFound("流程实例不存在");
+      case "instance_not_running":
+        throw Errors.badRequest("流程实例不在运行中");
+      case "node_not_current":
+        throw Errors.business(409, "节点不是当前待处理节点", "WORKFLOW_NODE_NOT_CURRENT", {
+          current_node_key: result.currentNodeKey ?? null,
+        });
+      case "node_run_not_found":
+        throw Errors.badRequest("当前节点运行记录不存在");
+      case "graph_invalid":
+        throw Errors.badRequest("流程发布版本图结构无效");
+      case "invalid_output":
+        throw Errors.badRequest("节点输出必须是对象");
     }
   }
 

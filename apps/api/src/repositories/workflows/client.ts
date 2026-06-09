@@ -4,11 +4,17 @@ export type WorkflowTableName =
   | "workflow_definitions"
   | "workflow_versions"
   | "workflow_nodes"
-  | "workflow_edges";
+  | "workflow_edges"
+  | "workflow_instances"
+  | "workflow_instance_nodes"
+  | "workflow_tasks"
+  | "workflow_transition_logs";
 
 export type WorkflowRpcName =
   | "replace_workflow_draft_graph"
-  | "publish_workflow_definition";
+  | "publish_workflow_definition"
+  | "start_workflow_instance"
+  | "complete_workflow_instance_node";
 
 export type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;

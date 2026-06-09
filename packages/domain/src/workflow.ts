@@ -15,6 +15,36 @@ export const WORKFLOW_VERSION_STATUS_VALUES = [
 export type WorkflowVersionStatus =
   (typeof WORKFLOW_VERSION_STATUS_VALUES)[number];
 
+export const WORKFLOW_INSTANCE_STATUS_VALUES = [
+  'running',
+  'completed',
+  'canceled',
+  'failed',
+] as const;
+
+export type WorkflowInstanceStatus =
+  (typeof WORKFLOW_INSTANCE_STATUS_VALUES)[number];
+
+export const WORKFLOW_TASK_STATUS_VALUES = [
+  'pending',
+  'completed',
+  'canceled',
+] as const;
+
+export type WorkflowTaskStatus =
+  (typeof WORKFLOW_TASK_STATUS_VALUES)[number];
+
+export const WORKFLOW_SUBJECT_TYPE_VALUES = [
+  'manual',
+  'customer',
+  'project',
+  'expense_request',
+  'procedure',
+] as const;
+
+export type WorkflowSubjectType =
+  (typeof WORKFLOW_SUBJECT_TYPE_VALUES)[number];
+
 export const WORKFLOW_CATEGORY_VALUES = [
   'main',
   'sales',

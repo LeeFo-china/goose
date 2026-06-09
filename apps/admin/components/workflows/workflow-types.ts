@@ -3,7 +3,10 @@ import type {
   WorkflowCategory,
   WorkflowDefinitionStatus,
   WorkflowEdgeConditionOperator,
+  WorkflowInstanceStatus,
   WorkflowNodeType,
+  WorkflowSubjectType,
+  WorkflowTaskStatus,
   WorkflowVersionStatus,
 } from "@gooes/domain";
 
@@ -194,4 +197,72 @@ export type WorkflowPublishResult = {
   definition: WorkflowDefinition;
   version: WorkflowVersion;
   graph: WorkflowGraph;
+};
+
+export type WorkflowRuntimeInstance = {
+  id: string;
+  tenant_id: string;
+  definition_id: string;
+  version_id: string;
+  subject_type: WorkflowSubjectType;
+  subject_id: string;
+  status: WorkflowInstanceStatus;
+  context: Record<string, unknown>;
+  current_node_id: string | null;
+  current_node_key: string | null;
+  current_node_snapshot: Record<string, unknown> | null;
+  started_by: string | null;
+  completed_by: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowRuntimeTask = {
+  id: string;
+  tenant_id: string;
+  instance_id: string;
+  instance_node_id: string | null;
+  definition_id: string;
+  version_id: string;
+  node_id: string;
+  node_key: string;
+  node_type: WorkflowNodeType;
+  title: string;
+  status: WorkflowTaskStatus;
+  assignee_employee_id: string | null;
+  assignee_role_code: string | null;
+  due_at: string | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowRuntimeInstanceListData = {
+  list: WorkflowRuntimeInstance[];
+  pagination: WorkflowPagination;
+};
+
+export type WorkflowRuntimeInstanceListQuery = {
+  page?: number;
+  pageSize?: number;
+  status?: WorkflowInstanceStatus;
+  subject_type?: WorkflowSubjectType;
+};
+
+export type WorkflowRuntimeStartResult = {
+  ok: true;
+  instance: WorkflowRuntimeInstance;
+  currentNode: Record<string, unknown>;
+  task: WorkflowRuntimeTask | null;
+};
+
+export type WorkflowRuntimeCompleteNodeResult = {
+  ok: true;
+  instance: WorkflowRuntimeInstance;
+  completedNode: Record<string, unknown>;
+  nextNode: Record<string, unknown> | null;
+  task: WorkflowRuntimeTask | null;
 };

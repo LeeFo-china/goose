@@ -19,6 +19,11 @@ import {
   getVersionById,
   publishDefinition,
 } from "./workflows/versions";
+import {
+  completeRuntimeNode,
+  listRuntimeInstances,
+  startRuntimeInstance,
+} from "./workflows/runtime";
 
 export * from "./workflows/types";
 
@@ -38,6 +43,9 @@ class WorkflowRepository {
   createVersion = createVersion;
   publishDefinition = publishDefinition;
   updateActiveVersion = updateActiveVersion;
+  listRuntimeInstances = listRuntimeInstances;
+  startRuntimeInstance = startRuntimeInstance;
+  completeRuntimeNode = completeRuntimeNode;
 }
 
 export const workflowRepository = new WorkflowRepository();

@@ -3,7 +3,9 @@ import {
   WORKFLOW_CATEGORY_VALUES,
   WORKFLOW_DEFINITION_STATUS_VALUES,
   WORKFLOW_EDGE_CONDITION_OPERATOR_VALUES,
+  WORKFLOW_INSTANCE_STATUS_VALUES,
   WORKFLOW_NODE_TYPE_VALUES,
+  WORKFLOW_SUBJECT_TYPE_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
@@ -43,6 +45,16 @@ export const WorkflowDefinitionStatusSchema = z.enum(
   { message: "无效的流程状态" },
 );
 
+export const WorkflowInstanceStatusSchema = z.enum(
+  WORKFLOW_INSTANCE_STATUS_VALUES,
+  { message: "无效的流程实例状态" },
+);
+
+export const WorkflowSubjectTypeSchema = z.enum(
+  WORKFLOW_SUBJECT_TYPE_VALUES,
+  { message: "无效的流程对象类型" },
+);
+
 export const WorkflowNodeTypeSchema = z.enum(WORKFLOW_NODE_TYPE_VALUES, {
   message: "无效的节点类型",
 });
@@ -68,6 +80,11 @@ export const WorkflowDefinitionIdParamsSchema = z.object({
 
 export const WorkflowGraphQuerySchema = z.object({
   version_id: optionalQueryValue(z.uuid("无效的流程版本 ID")),
+});
+
+export const WorkflowRuntimeInstanceIdParamsSchema = z.object({
+  id: z.uuid("无效的流程 ID"),
+  instanceId: z.uuid("无效的流程实例 ID"),
 });
 
 export const WorkflowDefinitionCreateSchema = z.object({
@@ -198,9 +215,29 @@ export const WorkflowSimulationSchema = z.object({
   context: z.object({}, { error: "上下文必须是对象" }).catchall(z.unknown()).default({}),
 });
 
+export const WorkflowRuntimeInstanceListQuerySchema = PaginationQuerySchema.extend({
+  status: optionalQueryValue(WorkflowInstanceStatusSchema),
+  subject_type: optionalQueryValue(WorkflowSubjectTypeSchema),
+});
+
+export const WorkflowRuntimeInstanceStartSchema = z.object({
+  subject_type: WorkflowSubjectTypeSchema.default("manual"),
+  subject_id: textField("流程对象 ID 不能为空").min(1, "流程对象 ID 不能为空").max(200, "流程对象 ID 过长"),
+  context: z.object({}, { error: "上下文必须是对象" }).catchall(z.unknown()).default({}),
+});
+
+export const WorkflowRuntimeCompleteNodeSchema = z.object({
+  node_key: textField("节点编码不能为空").min(1, "节点编码不能为空").max(100, "节点编码过长"),
+  action: textField("操作不能为空").min(1, "操作不能为空").max(100, "操作过长").default("complete"),
+  output: z.object({}, { error: "节点输出必须是对象" }).catchall(z.unknown()).default({}),
+});
+
 export type WorkflowListQuery = z.infer<typeof WorkflowListQuerySchema>;
 export type WorkflowDefinitionCreateInput = z.infer<typeof WorkflowDefinitionCreateSchema>;
 export type WorkflowDefinitionUpdateInput = z.infer<typeof WorkflowDefinitionUpdateSchema>;
 export type WorkflowGraphSaveInput = z.infer<typeof WorkflowGraphSaveSchema>;
 export type WorkflowTemplateCreateInput = z.infer<typeof WorkflowTemplateCreateSchema>;
 export type WorkflowSimulationInput = z.infer<typeof WorkflowSimulationSchema>;
+export type WorkflowRuntimeInstanceListQuery = z.infer<typeof WorkflowRuntimeInstanceListQuerySchema>;
+export type WorkflowRuntimeInstanceStartInput = z.infer<typeof WorkflowRuntimeInstanceStartSchema>;
+export type WorkflowRuntimeCompleteNodeInput = z.infer<typeof WorkflowRuntimeCompleteNodeSchema>;

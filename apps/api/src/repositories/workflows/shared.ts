@@ -61,6 +61,47 @@ export const WORKFLOW_EDGE_SELECT = [
   "updated_at",
 ].join(", ");
 
+export const WORKFLOW_INSTANCE_SELECT = [
+  "id",
+  "tenant_id",
+  "definition_id",
+  "version_id",
+  "subject_type",
+  "subject_id",
+  "status",
+  "context",
+  "current_node_id",
+  "current_node_key",
+  "current_node_snapshot",
+  "started_by",
+  "completed_by",
+  "started_at",
+  "completed_at",
+  "created_at",
+  "updated_at",
+].join(", ");
+
+export const WORKFLOW_TASK_SELECT = [
+  "id",
+  "tenant_id",
+  "instance_id",
+  "instance_node_id",
+  "definition_id",
+  "version_id",
+  "node_id",
+  "node_key",
+  "node_type",
+  "title",
+  "status",
+  "assignee_employee_id",
+  "assignee_role_code",
+  "due_at",
+  "completed_by",
+  "completed_at",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 export const MAX_GRAPH_NODES = 200;
 export const MAX_GRAPH_EDGES = 400;
 
