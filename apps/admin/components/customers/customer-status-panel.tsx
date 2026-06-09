@@ -8,9 +8,76 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import type { CustomerRecord, CustomerStatusActionsResponse, CustomerStatusActionItem, CustomerStatusTransitionRecord } from "@/components/customers/customer-mutation-types";
+import type { BadgeVariant, CustomerRecord, CustomerStatusActionsResponse, CustomerStatusActionItem, CustomerStatusTransitionRecord } from "@/components/customers/customer-mutation-types";
 import { customerActionLabel, customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
 import { DesignProjectBeforeStatusDialog } from "@/components/customers/design-project-before-status-dialog";
+
+type CustomerWorkflowRuntimeMetadata = {
+  status: string;
+  workflow_key?: string;
+  instance_id?: string;
+  node_key?: string;
+  current_node_key?: string | null;
+  next_node_key?: string | null;
+  reason?: string;
+  error_message?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function getWorkflowRuntimeMetadata(
+  transition: CustomerStatusTransitionRecord,
+): CustomerWorkflowRuntimeMetadata | null {
+  const runtime = transition.metadata?.workflow_runtime;
+  if (!isRecord(runtime)) return null;
+
+  const status = optionalString(runtime.status);
+  if (!status) return null;
+
+  return {
+    status,
+    workflow_key: optionalString(runtime.workflow_key),
+    instance_id: optionalString(runtime.instance_id),
+    node_key: optionalString(runtime.node_key),
+    current_node_key: optionalString(runtime.current_node_key) ?? null,
+    next_node_key: optionalString(runtime.next_node_key) ?? null,
+    reason: optionalString(runtime.reason),
+    error_message: optionalString(runtime.error_message),
+  };
+}
+
+function getLatestWorkflowRuntimeMetadata(
+  transitions: CustomerStatusTransitionRecord[],
+): CustomerWorkflowRuntimeMetadata | null {
+  for (const transition of transitions) {
+    const runtime = getWorkflowRuntimeMetadata(transition);
+    if (runtime) return runtime;
+  }
+  return null;
+}
+
+function workflowRuntimeStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    started: "已启动",
+    advanced: "已推进",
+    skipped: "未接入",
+    failed: "同步失败",
+  };
+  return labels[status] || status;
+}
+
+function workflowRuntimeStatusVariant(status: string): BadgeVariant {
+  if (status === "started" || status === "advanced") return "success";
+  if (status === "failed") return "danger";
+  if (status === "skipped") return "warning";
+  return "outline";
+}
 
 export function CustomerStatusPanel({
   customer,
@@ -118,6 +185,11 @@ export function CustomerStatusPanel({
   const primaryProperty = getPrimaryCustomerProperty(customer);
   const propertyName = formatPropertySummary(primaryProperty) ||
     [customer.community, customer.building_info].filter(Boolean).join(" ");
+  const workflowRuntime = getLatestWorkflowRuntimeMetadata(transitions);
+  const workflowNodeKey = workflowRuntime?.current_node_key ||
+    workflowRuntime?.next_node_key ||
+    workflowRuntime?.node_key ||
+    null;
 
   return (
     <section className="rounded-md border bg-muted/20 p-4">
@@ -160,6 +232,47 @@ export function CustomerStatusPanel({
             <Badge variant="outline">暂无可执行动作</Badge>
           ) : null}
         </div>
+      </div>
+      <div className="mt-4 rounded-md border bg-background p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">客户主流程</Badge>
+            <span className="text-sm font-medium">已接入客户状态流转</span>
+          </div>
+          {workflowRuntime ? (
+            <Badge variant={workflowRuntimeStatusVariant(workflowRuntime.status)}>
+              {workflowRuntimeStatusLabel(workflowRuntime.status)}
+            </Badge>
+          ) : (
+            <Badge variant="outline">等待首次动作</Badge>
+          )}
+        </div>
+        {workflowRuntime ? (
+          <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+            <div>
+              <span className="text-foreground">流程编码：</span>
+              {workflowRuntime.workflow_key || "customer_main"}
+            </div>
+            <div>
+              <span className="text-foreground">当前节点：</span>
+              {workflowNodeKey || "-"}
+            </div>
+            <div>
+              <span className="text-foreground">实例：</span>
+              {workflowRuntime.instance_id ? workflowRuntime.instance_id.slice(0, 8) : "-"}
+            </div>
+            {workflowRuntime.reason || workflowRuntime.error_message ? (
+              <div className="sm:col-span-3">
+                <span className="text-foreground">说明：</span>
+                {workflowRuntime.error_message || workflowRuntime.reason}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            执行“开始跟进”会自动启动 customer_main，后续到店、设计、签约动作会推进对应节点。
+          </p>
+        )}
       </div>
       {error ? (
         <div className="mt-3">

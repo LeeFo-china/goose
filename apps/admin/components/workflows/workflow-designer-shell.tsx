@@ -26,6 +26,7 @@ import type {
   WorkflowNodeConfig,
   WorkflowNodeInput,
 } from "@/components/workflows/workflow-types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -387,6 +388,7 @@ export function WorkflowDesignerShell({
     : publishValidation.valid
       ? "发布当前已保存流程"
       : "本地校验通过后才能发布";
+  const customerMainWorkflow = graph.definition.workflow_key === "customer_main";
 
   return (
     <div className="flex flex-col gap-4">
@@ -443,6 +445,20 @@ export function WorkflowDesignerShell({
             </p>
           </div>
         </div>
+        {customerMainWorkflow ? (
+          <div className="border-b bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="secondary">客户主流程</Badge>
+              <span className="font-medium">已接入客户状态流转</span>
+              <span className="text-muted-foreground">
+                开始跟进会启动实例，到店、设计、签约会推进对应节点。
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              绑定节点编码：following、arrived、designing、signed。修改这些节点编码会影响客户详情页的流程推进。
+            </div>
+          </div>
+        ) : null}
         <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px]">
           <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
           <WorkflowCanvas
