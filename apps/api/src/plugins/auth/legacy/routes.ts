@@ -227,6 +227,24 @@ export function isVisitorSessionRoute(method: string, url: string) {
   }
 
   if (
+    (method === "GET" || method === "HEAD")
+    && (url === "/visitor/location/options" || url === "/visitor/location-context")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST"
+    && (
+      url === "/visitor/location-bootstrap"
+      || url === "/visitor/location-bootstrap/confirm"
+      || url === "/visitor/location-bootstrap/skip"
+    )
+  ) {
+    return true;
+  }
+
+  if (
     method === "POST"
     && (url === "/ai/decoration-qa" || url === "/ai/decoration-qa/stream")
   ) {
