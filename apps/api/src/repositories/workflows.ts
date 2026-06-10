@@ -22,6 +22,7 @@ import {
 import {
   completeRuntimeNode,
   getRuntimeInstanceById,
+  listCompletedRuntimeProcedureNodes,
   listRuntimeInstances,
   startRuntimeInstance,
 } from "./workflows/runtime";
@@ -46,6 +47,7 @@ class WorkflowRepository {
   updateActiveVersion = updateActiveVersion;
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
+  listCompletedRuntimeProcedureNodes = listCompletedRuntimeProcedureNodes;
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;
 }

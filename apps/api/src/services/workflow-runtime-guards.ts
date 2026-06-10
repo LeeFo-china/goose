@@ -8,6 +8,10 @@ import {
   type WorkflowNodeRow,
 } from "@/repositories/workflows";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import {
+  isProjectConstructionStageCode,
+  type ProjectConstructionStageCode,
+} from "@gooes/domain";
 
 export async function assertRuntimeNodeCompletionAllowed(input: {
   tenantId: string;
@@ -78,19 +82,61 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     return;
   }
 
+  const completedStageCodes = await listRuntimeCompletedProcedureStageCodes({
+    tenantId: input.tenantId,
+    definitionId: input.definitionId,
+    instanceId: input.instanceId,
+  });
+  const currentProcedureStageCode = getProcedureStageCode(currentNode);
+  if (currentProcedureStageCode) {
+    completedStageCodes.add(currentProcedureStageCode);
+  }
+
+  const missingRequiredStages = stages.missing_required_stages.filter((stage) =>
+    isMissingRuntimeProcedureStage(stage.stage_code, completedStageCodes)
+  );
+  if (missingRequiredStages.length === 0) {
+    return;
+  }
+
   throw Errors.business(
     409,
     `请先完成必需工序后再进入竣工验收：${
-      stages.missing_required_stages
+      missingRequiredStages
         .map((stage) => stage.stage_label)
         .join("、")
     }`,
     ErrorCodes.WORKFLOW_FINAL_ACCEPTANCE_BLOCKED,
     {
       project_id: instance.subject_id,
-      missing_required_stages: stages.missing_required_stages,
+      missing_required_stages: missingRequiredStages,
     },
   );
+}
+
+async function listRuntimeCompletedProcedureStageCodes(input: {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+}): Promise<Set<ProjectConstructionStageCode>> {
+  const nodes = await workflowRepository.listCompletedRuntimeProcedureNodes(input);
+  return new Set(
+    nodes
+      .map((node) => getProcedureStageCode(node.node_snapshot))
+      .filter((stageCode): stageCode is ProjectConstructionStageCode =>
+        Boolean(stageCode)
+      ),
+  );
+}
+
+function isMissingRuntimeProcedureStage(
+  stageCode: string,
+  completedStageCodes: Set<ProjectConstructionStageCode>,
+): boolean {
+  if (!isProjectConstructionStageCode(stageCode)) {
+    return true;
+  }
+  return !completedStageCodes.has(stageCode);
 }
 
 async function assertPaymentCollectionRequirements(input: {
@@ -155,6 +201,26 @@ function getPaymentCollectionMinAmount(value: unknown) {
     return value;
   }
   return null;
+}
+
+function getProcedureStageCode(
+  node: WorkflowNodeRow | JsonObject | null | undefined,
+): ProjectConstructionStageCode | null {
+  if (!node || node.node_type !== "procedure") {
+    return null;
+  }
+
+  const config = node.config;
+  if (!isRecord(config)) {
+    return null;
+  }
+
+  const stageKey = config.stage_key;
+  if (typeof stageKey !== "string" || !isProjectConstructionStageCode(stageKey)) {
+    return null;
+  }
+
+  return stageKey;
 }
 
 function assertProcedureNodeRequirements(
@@ -244,4 +310,8 @@ function getOutputImageCount(output: JsonObject) {
 
 function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -226,6 +226,27 @@ export type WorkflowInstanceRow = {
   updated_at: string;
 };
 
+export type WorkflowInstanceNodeRow = {
+  id: string;
+  tenant_id: string;
+  instance_id: string;
+  definition_id: string;
+  version_id: string;
+  node_id: string;
+  node_key: string;
+  node_type: WorkflowNodeType;
+  node_snapshot: JsonObject;
+  status: WorkflowInstanceStatus;
+  input: JsonObject;
+  output: JsonObject;
+  started_by: string | null;
+  completed_by: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkflowTaskRow = {
   id: string;
   tenant_id: string;
