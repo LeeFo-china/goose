@@ -17,6 +17,7 @@ const nodePresetGroups: WorkflowNodePresetGroup[] = [
   "business",
   "construction",
   "procedure",
+  "finance",
   "approval",
   "system",
 ];
