@@ -79,6 +79,7 @@ export const WORKFLOW_BUSINESS_KIND_VALUES = [
   'design',
   'quote',
   'deposit',
+  'payment_collection',
   'contract',
   'construction_start',
   'final_acceptance',

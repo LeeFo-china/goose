@@ -1,4 +1,5 @@
 import {
+  PAYMENT_TYPE_VALUES,
   WORKFLOW_BUSINESS_KIND_VALUES,
   WORKFLOW_CATEGORY_VALUES,
   WORKFLOW_DEFINITION_STATUS_VALUES,
@@ -121,6 +122,14 @@ const BaseNodeConfigSchema = z.strictObject({
   rollback_target_key: textField("回退目标节点格式无效").max(100, "回退目标节点编码过长").nullable().optional(),
 }, { error: "节点配置包含不支持的字段" });
 
+const WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES = [
+  "deposit",
+  "stage_1",
+  "stage_2",
+  "stage_3",
+  "add_on",
+] as const satisfies ReadonlyArray<(typeof PAYMENT_TYPE_VALUES)[number]>;
+
 const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
   assignee_rule: z.enum(["employee", "department", "role"], {
     message: "无效的审批人规则",
@@ -146,6 +155,20 @@ const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
   customer_visible: booleanField("是否客户可见格式无效").default(false),
 });
 
+const PaymentCollectionNodeConfigSchema = BaseNodeConfigSchema.extend({
+  payment_type: z.enum(WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES, {
+    message: "请选择有效的收款类型",
+  }).default("deposit"),
+  min_amount: numericField("最低收款金额必须为数字")
+    .nonnegative("最低收款金额不能为负数")
+    .nullable()
+    .optional(),
+  block_message: textField("阻塞提示格式无效")
+    .max(200, "阻塞提示不能超过 200 字")
+    .nullable()
+    .optional(),
+});
+
 const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
   channels: z.array(
     z.enum(["mini_program", "sms", "todo"], { message: "无效的通知渠道" }),
@@ -161,6 +184,7 @@ export const WorkflowNodeConfigSchema = z.union([
   BaseNodeConfigSchema,
   ApprovalNodeConfigSchema,
   ProcedureNodeConfigSchema,
+  PaymentCollectionNodeConfigSchema,
   NotificationNodeConfigSchema,
 ], { error: "无效的节点配置" });
 
