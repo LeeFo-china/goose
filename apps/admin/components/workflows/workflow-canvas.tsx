@@ -2,7 +2,7 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { LayoutDashboard, Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
 import {
   HANDLE_HIT_SIZE,
   MAX_ZOOM,
@@ -42,6 +42,7 @@ export function WorkflowCanvas({
   onDeleteEdge,
   onDropNodePreset,
   onFinishConnect,
+  onArrangeNodes,
   onMoveNode,
   onSelectNode,
 }: {
@@ -55,6 +56,7 @@ export function WorkflowCanvas({
   onDeleteEdge: (edgeId: string) => void;
   onDropNodePreset: (presetKey: string, position: WorkflowNode["position"]) => void;
   onFinishConnect: (nodeId: string) => void;
+  onArrangeNodes: () => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onSelectNode: (nodeId: string) => void;
 }) {
@@ -207,6 +209,53 @@ export function WorkflowCanvas({
         panRef.current = null; dragRef.current = null; updateConnectionDraft(null); onCancelConnect();
       }}
     >
+      <div className="sticky left-3 top-3 z-30 h-0 w-fit">
+        <div className="flex w-fit items-center gap-2 rounded-md border bg-background/95 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
+          <MousePointer2 className="size-3.5" />
+          <span>{nodes.length} 节点</span>
+          <span className="text-border">|</span>
+          <Link2 className="size-3.5" />
+          <span>{edges.length} 连线</span>
+          <span className="text-border">|</span>
+          <Button
+            aria-label="整理画布"
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-9 px-2 text-muted-foreground"
+            disabled={disabled || nodes.length === 0}
+            onClick={onArrangeNodes}
+          >
+            <LayoutDashboard data-icon="inline-start" />
+            整理画布
+          </Button>
+          <Button
+            aria-label="缩小画布"
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-9 text-muted-foreground"
+            disabled={disabled || zoom <= MIN_ZOOM}
+            onClick={() => applyZoom(zoom - ZOOM_STEP)}
+          >
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <span data-workflow-canvas-zoom="true" className="w-10 text-center tabular-nums">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button
+            aria-label="放大画布"
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-9 text-muted-foreground"
+            disabled={disabled || zoom >= MAX_ZOOM}
+            onClick={() => applyZoom(zoom + ZOOM_STEP)}
+          >
+            <ZoomIn className="size-3.5" />
+          </Button>
+        </div>
+      </div>
       <div
         className="relative"
         style={{
@@ -229,39 +278,6 @@ export function WorkflowCanvas({
             backgroundSize: "32px 32px",
           }}
         >
-          <div className="sticky left-3 top-3 z-20 flex w-fit items-center gap-2 rounded-md border bg-background/95 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-            <MousePointer2 className="size-3.5" />
-            <span>{nodes.length} 节点</span>
-            <span className="text-border">|</span>
-            <Link2 className="size-3.5" />
-            <span>{edges.length} 连线</span>
-            <span className="text-border">|</span>
-            <Button
-              aria-label="缩小画布"
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-11 text-muted-foreground"
-              disabled={disabled || zoom <= MIN_ZOOM}
-              onClick={() => applyZoom(zoom - ZOOM_STEP)}
-            >
-              <ZoomOut className="size-3.5" />
-            </Button>
-            <span data-workflow-canvas-zoom="true" className="w-10 text-center tabular-nums">
-              {Math.round(zoom * 100)}%
-            </span>
-            <Button
-              aria-label="放大画布"
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-11 text-muted-foreground"
-              disabled={disabled || zoom >= MAX_ZOOM}
-              onClick={() => applyZoom(zoom + ZOOM_STEP)}
-            >
-              <ZoomIn className="size-3.5" />
-            </Button>
-          </div>
         <svg
           className="pointer-events-none absolute inset-0"
           width={canvasSize.width}

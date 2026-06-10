@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
+import { arrangeWorkflowCanvasNodes } from "@/components/workflows/workflow-canvas-geometry";
 import type { WorkflowValidationResult } from "@/components/workflows/workflow-designer-types";
 import {
   createNodeFromPreset,
@@ -122,6 +123,16 @@ export function WorkflowDesignerShell({
       )),
     });
     setDirty(true);
+  }
+
+  function arrangeNodes() {
+    if (!graph) return;
+    setGraph({
+      ...graph,
+      nodes: arrangeWorkflowCanvasNodes(graph.nodes, graph.edges),
+    });
+    setDirty(true);
+    toast.success("画布已整理");
   }
 
   function deleteNode(nodeId: string) {
@@ -382,6 +393,7 @@ export function WorkflowDesignerShell({
                 onDeleteEdge={deleteEdge}
                 onDropNodePreset={addNode}
                 onFinishConnect={connectToNode}
+                onArrangeNodes={arrangeNodes}
                 onMoveNode={moveNode}
                 onSelectNode={selectNode}
               />
