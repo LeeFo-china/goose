@@ -290,6 +290,6 @@ function getRollbackTargetNodes({
 
   const orderByNodeId = new Map(nodes.map((item, index) => [item.id, index]));
   return result.sort((left, right) =>
-    (orderByNodeId.get(left.id) ?? 0) - (orderByNodeId.get(right.id) ?? 0)
+    (orderByNodeId.get(right.id) ?? 0) - (orderByNodeId.get(left.id) ?? 0)
   );
 }
