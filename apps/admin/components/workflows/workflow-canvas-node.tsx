@@ -1,6 +1,7 @@
 "use client";
 
 import type { PointerEvent } from "react";
+import { Settings2 } from "lucide-react";
 import {
   HANDLE_HIT_SIZE,
   NODE_HEIGHT,
@@ -110,13 +111,15 @@ export function WorkflowCanvasNode({
     <div
       data-workflow-node="true"
       className={[
-        "group absolute z-20 overflow-visible rounded-lg border bg-background text-left",
-        "shadow-[0_8px_20px_hsl(var(--foreground)/0.06)] transition",
+        "group absolute overflow-visible rounded-lg border bg-background text-left",
+        "transform-gpu shadow-[0_8px_20px_hsl(var(--foreground)/0.06)]",
+        "transition-[transform,box-shadow,border-color,background-color] duration-150",
+        selected ? "z-30 scale-[1.08]" : "z-20 scale-100",
         disabled ? "cursor-not-allowed opacity-70" : "cursor-move",
         connecting
           ? "border-primary bg-primary/5 ring-2 ring-primary/20"
           : selected
-            ? "border-primary ring-2 ring-primary/25"
+            ? "border-primary bg-primary/[0.03] ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.18)]"
             : "border-border hover:border-primary/45 hover:shadow-md",
       ].join(" ")}
       style={{
@@ -163,6 +166,14 @@ export function WorkflowCanvasNode({
           {displayLabels.specificLabel}
         </span>
       </button>
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-2 -right-2 z-10 flex size-7 items-center justify-center rounded-full border border-primary/30 bg-background text-primary shadow-sm ring-4 ring-background"
+        >
+          <Settings2 className="size-3.5" />
+        </span>
+      ) : null}
       {node.node_type !== "start" ? (
         <button
           data-node-port="input"
