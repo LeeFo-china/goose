@@ -15,7 +15,6 @@ import {
   createConnectionPath,
   getCanvasPoint,
   getExpandedCanvasSize,
-  getFitCanvasSize,
   getInputPoint,
   getOutputPoint,
   arrangeWorkflowCanvasNodes,
@@ -70,18 +69,11 @@ export function WorkflowCanvas({
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState(false);
-  const [fitPositionScale, setFitPositionScale] = useState(1);
+  const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  const canvasSize = fitMode
-    ? getFitCanvasSize(viewportSize, zoom)
-    : getExpandedCanvasSize(viewportSize, zoom);
-  const displayNodes = fitMode && fitPositionScale !== 1
-    ? nodes.map((node) => ({
-      ...node,
-      position: { x: node.position.x * fitPositionScale, y: node.position.y * fitPositionScale },
-    }))
-    : nodes;
-  const nodeById = new Map(displayNodes.map((node) => [node.id, node]));
+  const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
+  const canvasTransform = fitMode ? `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})` : `scale(${zoom})`;
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
   function updateConnectionDraft(draft: ConnectionDraft | null) {
@@ -107,15 +99,21 @@ export function WorkflowCanvas({
     const scrollElement = scrollRef.current;
     const clampedZoom = clampZoom(nextZoom);
     if (fitMode) {
-      const scaleRatio = zoom / clampedZoom;
+      const anchor = origin
+        ? { x: origin.x * zoom + fitPan.x, y: origin.y * zoom + fitPan.y }
+        : {
+          x: scrollElement ? scrollElement.clientWidth / 2 : viewportSize.width / 2,
+          y: scrollElement ? scrollElement.clientHeight / 2 : viewportSize.height / 2,
+      };
+      const scaleRatio = clampedZoom / zoom;
       setZoom(clampedZoom);
-      setFitPositionScale((current) => current * scaleRatio);
+      setFitPan((current) => ({ x: anchor.x - (anchor.x - current.x) * scaleRatio, y: anchor.y - (anchor.y - current.y) * scaleRatio }));
       return;
     }
     if (!scrollElement) {
       setZoom(clampedZoom);
       setFitMode(false);
-      setFitPositionScale(1);
+      setFitPan({ x: 0, y: 0 });
       return;
     }
 
@@ -132,7 +130,7 @@ export function WorkflowCanvas({
 
     setZoom(clampedZoom);
     setFitMode(false);
-    setFitPositionScale(1);
+    setFitPan({ x: 0, y: 0 });
     requestAnimationFrame(() => {
       scrollElement.scrollLeft = Math.max(0, currentOrigin.x * clampedZoom - viewportX);
       scrollElement.scrollTop = Math.max(0, currentOrigin.y * clampedZoom - viewportY);
@@ -166,7 +164,7 @@ export function WorkflowCanvas({
     const arranged = arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
     setZoom(arranged.zoom);
     setFitMode(true);
-    setFitPositionScale(1);
+    setFitPan({ x: 0, y: 0 });
     updateConnectionDraft(null);
     onCancelConnect();
     onArrangeNodes(arranged.nodes);
@@ -191,7 +189,7 @@ export function WorkflowCanvas({
 
     scrollElement.addEventListener("wheel", handleWheel, { passive: false });
     return () => scrollElement.removeEventListener("wheel", handleWheel);
-  }, [disabled, zoom]);
+  }, [disabled, fitMode, fitPan.x, fitPan.y, viewportSize.height, viewportSize.width, zoom]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -232,7 +230,7 @@ export function WorkflowCanvas({
         event.preventDefault();
         const point = getCanvasPoint(event, canvasRef.current, zoom);
         setFitMode(false);
-        setFitPositionScale(1);
+        setFitPan({ x: 0, y: 0 });
         onDropNodePreset(presetKey, clampPosition({
           x: point.x - NODE_WIDTH / 2,
           y: point.y - NODE_HEIGHT / 2,
@@ -277,7 +275,7 @@ export function WorkflowCanvas({
           style={{
             width: canvasSize.width,
             height: canvasSize.height,
-            transform: `scale(${zoom})`,
+            transform: canvasTransform,
             backgroundImage: [
               "linear-gradient(hsl(var(--border) / 0.65) 1px, transparent 1px)",
               "linear-gradient(90deg, hsl(var(--border) / 0.65) 1px, transparent 1px)",
@@ -354,7 +352,7 @@ export function WorkflowCanvas({
             </button>
           );
         })}
-        {displayNodes.map((node) => {
+        {nodes.map((node) => {
           const selected = node.id === selectedNodeId;
           const connecting = node.id === connectingNodeId;
           const displayLabels = getWorkflowNodeDisplayLabels(node);
@@ -401,7 +399,7 @@ export function WorkflowCanvas({
                 const drag = dragRef.current;
                 if (!drag || drag.nodeId !== node.id) return;
                 setFitMode(false);
-                setFitPositionScale(1);
+                setFitPan({ x: 0, y: 0 });
                 onMoveNode(node.id, clampPosition({
                   x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
                   y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
