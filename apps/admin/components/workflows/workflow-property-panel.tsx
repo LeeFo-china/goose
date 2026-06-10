@@ -83,6 +83,8 @@ export function WorkflowPropertyPanel({
   const selectedNode = node;
   const selectedPresetKey = selectedNode.node_type === "procedure"
     ? "procedure_template"
+    : selectedNode.business_kind === "payment_collection"
+      ? "payment_collection"
     : selectedNode.node_key;
   const currentPreset = getWorkflowNodePreset(selectedPresetKey);
 
