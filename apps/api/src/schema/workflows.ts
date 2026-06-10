@@ -88,7 +88,9 @@ export const WorkflowRuntimeInstanceIdParamsSchema = z.object({
 });
 
 export const WorkflowDefinitionCreateSchema = z.object({
-  workflow_key: textField("流程编码不能为空").min(1, "流程编码不能为空").max(100, "流程编码过长"),
+  workflow_key: optionalQueryValue(
+    textField("流程编码格式无效").max(100, "流程编码过长"),
+  ),
   name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长"),
   description: textField("流程说明格式无效").max(500, "流程说明过长").nullable().optional(),
   category: WorkflowCategorySchema,

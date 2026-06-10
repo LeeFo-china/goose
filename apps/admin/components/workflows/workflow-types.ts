@@ -149,7 +149,7 @@ export type WorkflowDefinitionListQuery = {
 };
 
 export type WorkflowDefinitionCreateInput = {
-  workflow_key: string;
+  workflow_key?: string;
   name: string;
   description?: string | null;
   category: WorkflowCategory;

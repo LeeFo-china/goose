@@ -19,6 +19,7 @@ import type {
 } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { resolveWorkflowKey } from "@/services/workflow-key";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -75,9 +76,7 @@ class WorkflowService {
     input: WorkflowDefinitionCreateInput,
   ) {
     const tenantId = this.assertManagePermission(authContext);
-    const workflowKey = this.normalizeWorkflowKey(input.workflow_key);
-
-    await this.assertWorkflowKeyAvailable(tenantId, workflowKey);
+    const workflowKey = await resolveWorkflowKey(tenantId, input);
 
     return workflowRepository.createDefinition({
       ...input,
@@ -281,10 +280,6 @@ class WorkflowService {
     return tenantId;
   }
 
-  private normalizeWorkflowKey(workflowKey: string) {
-    return workflowKey.trim().toLowerCase();
-  }
-
   private async getRequiredDefinition(tenantId: string, id: string) {
     const definition = await workflowRepository.getDefinitionById(id, tenantId);
     if (!definition) {
@@ -292,19 +287,6 @@ class WorkflowService {
     }
 
     return definition;
-  }
-
-  private async assertWorkflowKeyAvailable(tenantId: string, workflowKey: string) {
-    const existing = await workflowRepository.findDefinitionByKey(
-      tenantId,
-      workflowKey,
-    );
-    if (existing) {
-      throw Errors.business(409, "流程编码已存在", "WORKFLOW_KEY_EXISTS", {
-        workflow_key: workflowKey,
-        definition_id: existing.id,
-      });
-    }
   }
 
   private throwDraftGraphReplaceError(result: Exclude<WorkflowDraftGraphReplaceResult, { ok: true }>): never {
