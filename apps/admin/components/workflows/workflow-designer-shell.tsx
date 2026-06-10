@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { ArrowLeft, GitBranch, Loader2, Save, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CircleAlert,
+  GitBranch,
+  Layers3,
+  Loader2,
+  Network,
+  Save,
+  ShieldCheck,
+} from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 import type { WorkflowValidationResult } from "@/components/workflows/workflow-designer-types";
@@ -14,6 +24,7 @@ import {
   validateGraph,
 } from "@/components/workflows/workflow-designer-graph-utils";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
+import { workflowStatusLabel } from "@/components/workflows/workflow-labels";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
 import {
@@ -236,103 +247,130 @@ export function WorkflowDesignerShell({
       ? "发布当前已保存流程"
       : "本地校验通过后才能发布";
   const customerMainWorkflow = graph.definition.workflow_key === "customer_main";
+  const readiness = publishValidation.valid
+    ? { label: "可发布", icon: CheckCircle2, badge: "success" as const }
+    : { label: `${publishValidation.issues.length} 项待处理`, icon: CircleAlert, badge: "warning" as const };
+  const ReadinessIcon = readiness.icon;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex h-[calc(100vh-248px)] min-h-[640px] flex-col overflow-hidden rounded-md border bg-background">
-        <div className="flex flex-col gap-3 border-b p-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <Button asChild variant="ghost" className="mb-1 px-0">
-              <Link href="/workflows">
-                <ArrowLeft data-icon="inline-start" />
-                返回流程列表
-              </Link>
-            </Button>
-            <h1 className="text-xl font-semibold tracking-normal">
-              {graph.definition.name}
-            </h1>
-            <p className="mt-1 break-all text-xs text-muted-foreground">
-              {graph.definition.workflow_key}
-            </p>
+    <div className="flex flex-col gap-5">
+      <div className="overflow-hidden rounded-md border bg-background shadow-sm">
+        <div className="border-b bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.38))] p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 text-muted-foreground">
+                <Link href="/workflows">
+                  <ArrowLeft data-icon="inline-start" />
+                  返回流程列表
+                </Link>
+              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-normal">
+                  {graph.definition.name}
+                </h1>
+                <Badge variant={dirty ? "warning" : "secondary"}>
+                  {dirty ? "草稿未保存" : "草稿已同步"}
+                </Badge>
+                <Badge variant={readiness.badge}>
+                  <ReadinessIcon className="mr-1 size-3" />
+                  {readiness.label}
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-[760px] break-all text-sm text-muted-foreground">
+                {graph.definition.workflow_key}
+                {customerMainWorkflow
+                  ? " · 已接入客户状态流转，关键节点会驱动客户详情页推进。"
+                  : " · 编排租户自己的业务、施工、工序和审批流程。"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              <Button type="button" variant="outline" disabled={pending} onClick={handleValidate}>
+                <ShieldCheck data-icon="inline-start" />
+                本地校验
+              </Button>
+              <Button type="button" variant="outline" disabled={pending} onClick={handleSave}>
+                <Save data-icon="inline-start" />
+                保存草稿
+              </Button>
+              <Button type="button" disabled={publishDisabled} title={publishTitle} onClick={handlePublish}>
+                {pending ? (
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
+                ) : (
+                  <GitBranch data-icon="inline-start" />
+                )}
+                发布
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={handleValidate}
-            >
-              <ShieldCheck data-icon="inline-start" />
-              本地校验
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={handleSave}
-            >
-              <Save data-icon="inline-start" />
-              保存草稿
-            </Button>
-            <Button
-              type="button"
-              disabled={publishDisabled}
-              title={publishTitle}
-              onClick={handlePublish}
-            >
-              {pending ? (
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <GitBranch data-icon="inline-start" />
-              )}
-              发布
-            </Button>
-            <p className="basis-full text-xs text-muted-foreground">
-              发布前需要保存草稿，并通过开始/结束节点、连线引用和出边校验。
-            </p>
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
+            <div className="rounded-md border bg-background/80 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Layers3 className="size-3.5" />
+                节点
+              </div>
+              <div className="mt-1 text-lg font-semibold">{graph.nodes.length}</div>
+            </div>
+            <div className="rounded-md border bg-background/80 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Network className="size-3.5" />
+                连线
+              </div>
+              <div className="mt-1 text-lg font-semibold">{graph.edges.length}</div>
+            </div>
+            <div className="rounded-md border bg-background/80 px-3 py-2">
+              <div className="text-xs text-muted-foreground">流程状态</div>
+              <div className="mt-1 text-sm font-medium">
+                {workflowStatusLabel(graph.definition.status)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-background/80 px-3 py-2">
+              <div className="text-xs text-muted-foreground">发布前置</div>
+              <div className="mt-1 truncate text-sm font-medium">{publishTitle}</div>
+            </div>
           </div>
         </div>
+
         {customerMainWorkflow ? (
-          <div className="border-b bg-muted/30 px-3 py-2">
+          <div className="border-b bg-accent/18 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant="secondary">客户主流程</Badge>
-              <span className="font-medium">已接入客户状态流转</span>
+              <span className="font-medium">关键节点已接入客户状态</span>
               <span className="text-muted-foreground">
-                开始跟进会启动实例，到店、设计、签约会推进对应节点。
+                following、arrived、designing、signed 会驱动客户详情页流程推进。
               </span>
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              节点编码由平台预置选择：following、arrived、designing、signed 会驱动客户详情页的流程推进。
             </div>
           </div>
         ) : null}
-        <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px]">
-          <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
-          <WorkflowCanvas
-            connectingNodeId={connectingNodeId}
-            disabled={pending}
-            nodes={graph.nodes}
-            edges={graph.edges}
-            selectedNodeId={selectedNodeId}
-            onBeginConnect={setConnectingNodeId}
-            onCancelConnect={() => setConnectingNodeId(null)}
-            onDeleteEdge={deleteEdge}
-            onDropNodePreset={addNode}
-            onFinishConnect={connectToNode}
-            onMoveNode={moveNode}
-            onSelectNode={setSelectedNodeId}
-          />
-          <WorkflowPropertyPanel
-            disabled={pending}
-            node={selectedNode}
-            usedNodeKeys={graph.nodes
-              .filter((node) => node.id !== selectedNode?.id)
-              .map((node) => node.node_key)}
-            onDeleteNode={deleteNode}
-            onChangeNode={updateNode}
-          />
+
+        <div className="flex h-[calc(100vh-300px)] min-h-[660px] flex-col overflow-hidden">
+          <div className="grid min-h-0 flex-1 grid-cols-[292px_minmax(0,1fr)_336px] bg-muted/20">
+            <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
+            <WorkflowCanvas
+              connectingNodeId={connectingNodeId}
+              disabled={pending}
+              nodes={graph.nodes}
+              edges={graph.edges}
+              selectedNodeId={selectedNodeId}
+              onBeginConnect={setConnectingNodeId}
+              onCancelConnect={() => setConnectingNodeId(null)}
+              onDeleteEdge={deleteEdge}
+              onDropNodePreset={addNode}
+              onFinishConnect={connectToNode}
+              onMoveNode={moveNode}
+              onSelectNode={setSelectedNodeId}
+            />
+            <WorkflowPropertyPanel
+              disabled={pending}
+              node={selectedNode}
+              usedNodeKeys={graph.nodes
+                .filter((node) => node.id !== selectedNode?.id)
+                .map((node) => node.node_key)}
+              onDeleteNode={deleteNode}
+              onChangeNode={updateNode}
+            />
+          </div>
+          <WorkflowValidationPanel validation={validation} />
         </div>
-        <WorkflowValidationPanel validation={validation} />
       </div>
       <WorkflowRuntimePanel workflowId={workflowId} />
     </div>

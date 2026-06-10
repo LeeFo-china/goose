@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Activity, Loader2, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,13 +86,18 @@ export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
   const instances = data?.list ?? [];
 
   return (
-    <section className="rounded-md border bg-background">
-      <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-base font-semibold tracking-normal">运行实例</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            查看已发布流程创建的最近运行记录。
-          </p>
+    <section className="overflow-hidden rounded-md border bg-background shadow-sm">
+      <div className="flex flex-col gap-3 border-b bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex size-9 items-center justify-center rounded-md border bg-background">
+            <Activity className="size-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold tracking-normal">运行实例</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              最近 5 条已发布流程运行记录。
+            </p>
+          </div>
         </div>
         <Button
           type="button"
@@ -169,7 +174,7 @@ export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
         </Table>
       </div>
 
-      <div className="border-t px-4 py-3 text-sm text-muted-foreground">
+      <div className="border-t bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
         共 {data?.pagination.total ?? 0} 条，仅展示最近 5 条。
       </div>
     </section>

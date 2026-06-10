@@ -1,7 +1,7 @@
 "use client";
 
 import { WorkflowNodeTypeConfig } from "@gooes/domain";
-import { GripVertical, Plus } from "lucide-react";
+import { Blocks, GripVertical, Plus } from "lucide-react";
 import {
   WorkflowNodePresetGroupLabels,
   WorkflowNodePresets,
@@ -28,19 +28,30 @@ export function WorkflowNodeLibrary({
   onAddNode: (presetKey: string) => void;
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-r bg-muted/20">
-      <div>
-        <div className="border-b bg-background px-3 py-2">
-          <h2 className="text-sm font-semibold">节点库</h2>
+    <aside className="flex min-h-0 flex-col border-r bg-background">
+      <div className="border-b px-3 py-3">
+        <div className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Blocks className="size-4" />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold">节点库</h2>
+            <p className="text-xs text-muted-foreground">点击添加，或拖到画布</p>
+          </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-3">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3">
         {nodePresetGroups.map((group) => {
           const presets = WorkflowNodePresets.filter((preset) => preset.group === group);
           return (
-            <div key={group} className="mb-4 last:mb-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                {WorkflowNodePresetGroupLabels[group]}
+            <section key={group} className="mb-4 last:mb-0">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-semibold text-foreground">
+                  {WorkflowNodePresetGroupLabels[group]}
+                </div>
+                <Badge variant="outline" className="bg-background text-[11px] text-muted-foreground">
+                  {presets.length}
+                </Badge>
               </div>
               <div className="grid gap-2">
                 {presets.map((preset) => (
@@ -51,8 +62,8 @@ export function WorkflowNodeLibrary({
                     draggable={!disabled}
                     disabled={disabled}
                     className={[
-                      "group rounded-md border bg-background p-2 text-left shadow-sm transition",
-                      "hover:border-primary/60 hover:bg-primary/5",
+                      "group rounded-md border bg-background p-2.5 text-left shadow-sm transition",
+                      "hover:-translate-y-px hover:border-primary/60 hover:bg-accent/15",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       disabled ? "cursor-not-allowed opacity-60" : "cursor-grab active:cursor-grabbing",
                     ].join(" ")}
@@ -76,14 +87,14 @@ export function WorkflowNodeLibrary({
                           {preset.description}
                         </div>
                       </div>
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-60 group-hover:bg-muted group-hover:opacity-100">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground opacity-70 group-hover:bg-background group-hover:text-foreground group-hover:opacity-100">
                         <Plus className="size-4" />
                       </span>
                     </div>
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>

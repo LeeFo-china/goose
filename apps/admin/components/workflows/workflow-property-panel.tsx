@@ -1,7 +1,7 @@
 "use client";
 
 import { WorkflowNodeTypeConfig } from "@gooes/domain";
-import { Trash2 } from "lucide-react";
+import { PanelRight, Settings2, Trash2 } from "lucide-react";
 import {
   applyWorkflowNodePreset,
   getWorkflowNodePreset,
@@ -50,24 +50,44 @@ export function WorkflowPropertyPanel({
 }) {
   if (!node) {
     return (
-      <aside className="border-l bg-background p-4 text-sm text-muted-foreground">
-        选择一个节点后编辑属性。
+      <aside className="flex min-h-0 flex-col border-l bg-background">
+        <div className="border-b px-4 py-3">
+          <h2 className="text-sm font-semibold">属性配置</h2>
+        </div>
+        <div className="flex flex-1 items-center justify-center p-6 text-center">
+          <div>
+            <span className="mx-auto flex size-10 items-center justify-center rounded-md border bg-muted/40">
+              <PanelRight className="size-5 text-muted-foreground" />
+            </span>
+            <div className="mt-3 text-sm font-medium">未选择节点</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              在画布中选择一个节点后，可以编辑平台节点、标题和说明。
+            </p>
+          </div>
+        </div>
       </aside>
     );
   }
   const currentPreset = getWorkflowNodePreset(node.node_key);
 
   return (
-    <aside className="flex min-h-0 flex-col gap-4 overflow-auto border-l bg-background p-4">
-      <div>
-        <h2 className="text-sm font-semibold">节点属性</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge variant="outline">
-            {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
-          </Badge>
-          <span className="break-all text-xs text-muted-foreground">{node.node_key}</span>
+    <aside className="flex min-h-0 flex-col border-l bg-background">
+      <div className="border-b px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Settings2 className="size-4" />
+          节点属性
+        </div>
+        <div className="mt-3 rounded-md border bg-muted/25 p-3">
+          <div className="truncate text-sm font-medium">{node.title}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="bg-background">
+              {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
+            </Badge>
+            <span className="break-all text-xs text-muted-foreground">{node.node_key}</span>
+          </div>
         </div>
       </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-preset">平台节点</Label>
         <Select
@@ -138,10 +158,11 @@ export function WorkflowPropertyPanel({
       <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
         审批人、工序要求、通知模板等结构化配置会在后续节点配置面板继续细化。
       </div>
+      </div>
       <Button
         type="button"
         variant="outline"
-        className="justify-start text-destructive hover:text-destructive"
+        className="m-4 mt-0 justify-start text-destructive hover:text-destructive"
         disabled={disabled}
         onClick={() => onDeleteNode(node.id)}
       >
