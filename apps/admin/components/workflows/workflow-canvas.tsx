@@ -73,6 +73,7 @@ export function WorkflowCanvas({
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
   const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
   const canvasTransform = fitMode ? `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})` : `scale(${zoom})`;
+  const minNodePosition = fitMode ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
@@ -400,7 +401,7 @@ export function WorkflowCanvas({
                 onMoveNode(node.id, clampPosition({
                   x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
                   y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
-                }, canvasSize));
+                }, canvasSize, minNodePosition));
               }}
               onPointerUp={() => {
                 dragRef.current = null;
