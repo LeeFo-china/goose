@@ -9,6 +9,7 @@ import type {
 } from "@/components/workflows/workflow-types";
 import { getWorkflowNodeCapability } from "@/components/workflows/workflow-node-capabilities";
 import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
+import { WorkflowPermissionMultiSelect } from "@/components/workflows/workflow-permission-multi-select";
 import { ProcedureConfigFields } from "@/components/workflows/workflow-procedure-config-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -116,10 +117,6 @@ function CommonConfigFields({
   disabled?: boolean;
   onChangeConfig: (patch: Partial<WorkflowBaseNodeConfig>) => void;
 }) {
-  const permissions = Array.isArray(config.required_permissions)
-    ? config.required_permissions.join("\n")
-    : "";
-
   return (
     <section className="space-y-3">
       <div>
@@ -129,15 +126,15 @@ function CommonConfigFields({
         </p>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="workflow-node-permissions">所需权限</Label>
-        <Textarea
-          id="workflow-node-permissions"
-          value={permissions}
+        <Label>所需权限</Label>
+        <WorkflowPermissionMultiSelect
+          value={Array.isArray(config.required_permissions)
+            ? config.required_permissions
+            : []}
           disabled={disabled}
-          placeholder="每行一个权限编码，例如 project.manage"
-          onChange={(event) =>
+          onChange={(value) =>
             onChangeConfig({
-              required_permissions: splitListInput(event.target.value),
+              required_permissions: value,
             })
           }
         />
@@ -389,15 +386,6 @@ function CheckboxField({
       <span>{label}</span>
     </label>
   );
-}
-
-function splitListInput(value: string) {
-  const items = value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-  return items.length > 0 ? items : undefined;
 }
 
 function formatOptionalNumber(value: number | null | undefined) {
