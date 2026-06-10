@@ -114,7 +114,7 @@ export function WorkflowPermissionMultiSelect({
           variant="outline"
           disabled={disabled}
           aria-label="所需权限"
-          className="min-h-10 justify-between px-3 font-normal"
+          className="min-h-10 w-full justify-between px-3 font-normal"
         >
           <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {value.length === 0 ? (
