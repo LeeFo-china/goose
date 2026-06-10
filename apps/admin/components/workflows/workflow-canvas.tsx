@@ -14,7 +14,7 @@ const CANVAS_WIDTH = 1800;
 const CANVAS_HEIGHT = 1200;
 const NODE_WIDTH = 210;
 const NODE_HEIGHT = 84;
-const HANDLE_SIZE = 14;
+const HANDLE_HIT_SIZE = 44;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
@@ -30,11 +30,7 @@ type DragState = {
 
 type CanvasPoint = { x: number; y: number };
 
-type ConnectionDraft = {
-  sourceNodeId: string;
-  from: CanvasPoint;
-  to: CanvasPoint;
-};
+type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
 
 function clampPosition(position: CanvasPoint): CanvasPoint {
   return {
@@ -266,10 +262,11 @@ export function WorkflowCanvas({
             <span>{edges.length} 连线</span>
             <span className="text-border">|</span>
             <Button
+              aria-label="缩小画布"
               type="button"
               size="icon"
               variant="ghost"
-              className="size-6 text-muted-foreground"
+              className="size-10 text-muted-foreground"
               disabled={disabled || zoom <= MIN_ZOOM}
               onClick={() => applyZoom(zoom - ZOOM_STEP)}
             >
@@ -279,10 +276,11 @@ export function WorkflowCanvas({
               {Math.round(zoom * 100)}%
             </span>
             <Button
+              aria-label="放大画布"
               type="button"
               size="icon"
               variant="ghost"
-              className="size-6 text-muted-foreground"
+              className="size-10 text-muted-foreground"
               disabled={disabled || zoom >= MAX_ZOOM}
               onClick={() => applyZoom(zoom + ZOOM_STEP)}
             >
@@ -346,11 +344,12 @@ export function WorkflowCanvas({
           return (
             <Button
               data-edge-action="delete"
+              aria-label="删除连线"
               key={`${edge.id}-delete`}
               type="button"
               size="icon"
               variant="outline"
-              className="absolute z-10 size-7 bg-background"
+              className="absolute z-10 size-10 bg-background"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
               onClick={() => onDeleteEdge(edge.id)}
@@ -444,17 +443,18 @@ export function WorkflowCanvas({
                   type="button"
                   aria-label={`${node.title} 输入端口`}
                   className={[
-                    "absolute top-1/2 rounded-full border-2 bg-background",
+                    "absolute top-1/2 rounded-full bg-transparent",
+                    "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     connectingNodeId && connectingNodeId !== node.id
-                      ? "border-primary ring-4 ring-primary/15"
-                      : "border-muted-foreground/50 hover:border-primary",
+                      ? "after:border-primary ring-4 ring-primary/15"
+                      : "after:border-muted-foreground/50 hover:after:border-primary",
                   ].join(" ")}
                   disabled={disabled}
                   style={{
-                    left: -HANDLE_SIZE / 2,
-                    width: HANDLE_SIZE,
-                    height: HANDLE_SIZE,
+                    left: -HANDLE_HIT_SIZE / 2,
+                    width: HANDLE_HIT_SIZE,
+                    height: HANDLE_HIT_SIZE,
                     transform: "translateY(-50%)",
                   }}
                   onPointerUp={(event) => {
@@ -474,16 +474,17 @@ export function WorkflowCanvas({
                   type="button"
                   aria-label={`${node.title} 输出端口`}
                   className={[
-                    "absolute top-1/2 rounded-full border-2 bg-background",
+                    "absolute top-1/2 rounded-full bg-transparent",
+                    "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    connecting ? "border-primary ring-4 ring-primary/15" : "border-primary",
+                    connecting ? "after:border-primary ring-4 ring-primary/15" : "after:border-primary",
                     disabled ? "cursor-not-allowed" : "cursor-crosshair",
                   ].join(" ")}
                   disabled={disabled}
                   style={{
-                    right: -HANDLE_SIZE / 2,
-                    width: HANDLE_SIZE,
-                    height: HANDLE_SIZE,
+                    right: -HANDLE_HIT_SIZE / 2,
+                    width: HANDLE_HIT_SIZE,
+                    height: HANDLE_HIT_SIZE,
                     transform: "translateY(-50%)",
                   }}
                   onPointerDown={(event) => handleConnectionStart(event, node)}
