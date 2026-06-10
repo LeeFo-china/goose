@@ -4,13 +4,17 @@ import { PanelRight, Settings2, Trash2 } from "lucide-react";
 import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
   applyWorkflowBusinessKind,
+  applyWorkflowConstructionStageKind,
   applyWorkflowNodeCapability,
   getWorkflowBusinessFlowOption,
+  getWorkflowConstructionStageKind,
   getWorkflowNodeCapability,
   getWorkflowNodeDisplayLabels,
   isWorkflowControlNode,
   WORKFLOW_BUSINESS_FLOW_OPTIONS,
+  WORKFLOW_CONSTRUCTION_STAGE_OPTIONS,
   WORKFLOW_NODE_CAPABILITY_OPTIONS,
+  type WorkflowConstructionStageKind,
   type WorkflowNodeCapability,
 } from "@/components/workflows/workflow-node-capabilities";
 import {
@@ -82,6 +86,8 @@ export function WorkflowPropertyPanel({
   const selectedBusinessOption = getWorkflowBusinessFlowOption(
     selectedNode.business_kind,
   );
+  const selectedConstructionStageKind =
+    getWorkflowConstructionStageKind(selectedNode);
   const rollbackTargetNodes = getRollbackTargetNodes({
     currentNode: selectedNode,
     edges,
@@ -204,6 +210,35 @@ export function WorkflowPropertyPanel({
               </SelectTrigger>
               <SelectContent>
                 {WORKFLOW_BUSINESS_FLOW_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {!isControlNode && selectedCapability === "construction" ? (
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-construction-stage">阶段类型</Label>
+            <Select
+              disabled={disabled}
+              value={selectedConstructionStageKind}
+              onValueChange={(value) =>
+                onChangeNode(
+                  applyWorkflowConstructionStageKind({
+                    node: selectedNode,
+                    stageKind: value as WorkflowConstructionStageKind,
+                    usedNodeKeys,
+                  }),
+                )
+              }
+            >
+              <SelectTrigger id="workflow-node-construction-stage">
+                <SelectValue placeholder="选择阶段类型" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_CONSTRUCTION_STAGE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

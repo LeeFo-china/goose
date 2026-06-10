@@ -16,7 +16,6 @@ export type WorkflowNodeCapability =
   | "construction"
   | "procedure"
   | "payment_collection"
-  | "final_acceptance"
   | "finance"
   | "approval"
   | "notification"
@@ -32,6 +31,11 @@ export type WorkflowBusinessFlowKind = Extract<
   | "design"
   | "quote"
   | "contract"
+>;
+
+export type WorkflowConstructionStageKind = Extract<
+  WorkflowBusinessKind,
+  "construction_start" | "final_acceptance"
 >;
 
 type CapabilityDefaults = {
@@ -53,7 +57,6 @@ export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
   { value: "construction", label: "施工阶段" },
   { value: "procedure", label: "工序" },
   { value: "payment_collection", label: "收款" },
-  { value: "final_acceptance", label: "竣工验收" },
   { value: "finance", label: "财务" },
   { value: "approval", label: "审批" },
   { value: "notification", label: "通知" },
@@ -114,6 +117,26 @@ export const WORKFLOW_BUSINESS_FLOW_OPTIONS = [
   description: string;
 }>;
 
+export const WORKFLOW_CONSTRUCTION_STAGE_OPTIONS = [
+  {
+    value: "construction_start",
+    label: "开工",
+    nodeKeyBase: "construction_start",
+    description: "项目进入施工的阶段节点。",
+  },
+  {
+    value: "final_acceptance",
+    label: "竣工验收",
+    nodeKeyBase: "final_acceptance",
+    description: "施工完成后的最终验收节点。",
+  },
+] as const satisfies ReadonlyArray<{
+  value: WorkflowConstructionStageKind;
+  label: string;
+  nodeKeyBase: string;
+  description: string;
+}>;
+
 const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = {
   business: {
     label: "客户线索",
@@ -129,7 +152,7 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     nodeType: "construction_stage",
     businessKind: "construction_start",
     nodeKeyBase: "construction_start",
-    config: { required_permissions: [] },
+    config: { required_permissions: [], stage_type: "construction_start" },
   },
   procedure: {
     label: "工序节点",
@@ -160,14 +183,6 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
       block_message: null,
       finance_reviewer_employee_id: null,
     },
-  },
-  final_acceptance: {
-    label: "竣工验收",
-    description: "施工完成后的验收节点。",
-    nodeType: "confirmation",
-    businessKind: "final_acceptance",
-    nodeKeyBase: "final_acceptance",
-    config: { required_permissions: [] },
   },
   finance: {
     label: "结算",
@@ -233,13 +248,13 @@ export function isWorkflowControlNode(node: WorkflowNode) {
 export function getWorkflowNodeCapability(node: WorkflowNode): WorkflowNodeCapability {
   if (
     node.node_type === "construction_stage" ||
-    node.business_kind === "construction_start"
+    node.business_kind === "construction_start" ||
+    node.business_kind === "final_acceptance"
   ) {
     return "construction";
   }
   if (node.node_type === "procedure") return "procedure";
   if (node.business_kind === "payment_collection") return "payment_collection";
-  if (node.business_kind === "final_acceptance") return "final_acceptance";
   if (node.business_kind === "settlement") return "finance";
   if (node.business_kind === "expense_approval") return "approval";
   if (node.node_type === "approval") return "approval";
@@ -282,6 +297,14 @@ export function getWorkflowBusinessFlowOption(
 ) {
   return WORKFLOW_BUSINESS_FLOW_OPTIONS.find((option) =>
     option.value === businessKind
+) ?? null;
+}
+
+export function getWorkflowConstructionStageOption(
+  stageKind: WorkflowBusinessKind | null | undefined,
+) {
+  return WORKFLOW_CONSTRUCTION_STAGE_OPTIONS.find((option) =>
+    option.value === stageKind
   ) ?? null;
 }
 
@@ -315,13 +338,13 @@ function getWorkflowNodeSpecificLabel(
       return getWorkflowBusinessFlowOption(node.business_kind)?.label ||
         node.title;
     case "construction":
-      return "开工";
+      return getWorkflowConstructionStageOption(
+        getWorkflowConstructionStageKind(node),
+      )?.label || node.title;
     case "procedure":
       return getProcedureSpecificLabel(node);
     case "payment_collection":
       return getPaymentSpecificLabel(node);
-    case "final_acceptance":
-      return "竣工验收";
     case "finance":
       return "结算";
     case "approval":
@@ -380,6 +403,46 @@ export function applyWorkflowBusinessKind(input: {
     description: option.description,
     config: mergeWithCommonConfig({ required_permissions: [] }, input.node.config),
   };
+}
+
+export function applyWorkflowConstructionStageKind(input: {
+  node: WorkflowNode;
+  stageKind: WorkflowConstructionStageKind;
+  usedNodeKeys: string[];
+}): WorkflowNode {
+  const option = getWorkflowConstructionStageOption(input.stageKind);
+  if (!option) {
+    return input.node;
+  }
+
+  return {
+    ...input.node,
+    node_key: buildUniqueWorkflowNodeKey(option.nodeKeyBase, input.usedNodeKeys),
+    node_type: "construction_stage",
+    business_kind: option.value,
+    title: option.label,
+    description: option.description,
+    config: mergeWithCommonConfig(
+      { required_permissions: [], stage_type: option.value },
+      input.node.config,
+    ),
+  };
+}
+
+export function getWorkflowConstructionStageKind(
+  node: WorkflowNode,
+): WorkflowConstructionStageKind {
+  const stageType = "stage_type" in node.config ? node.config.stage_type : null;
+  if (stageType === "construction_start" || stageType === "final_acceptance") {
+    return stageType;
+  }
+  if (
+    node.business_kind === "construction_start" ||
+    node.business_kind === "final_acceptance"
+  ) {
+    return node.business_kind;
+  }
+  return "construction_start";
 }
 
 export function buildUniqueWorkflowNodeKey(

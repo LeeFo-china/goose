@@ -387,9 +387,14 @@ function getNextWorkflowNode(
 }
 
 function isFinalAcceptanceNode(node: WorkflowNodeRow | null | undefined) {
+  const configStageType = isRecord(node?.config)
+    ? node.config.stage_type
+    : null;
+
   return (
     node?.business_kind === "final_acceptance" ||
-    node?.node_key === "final_acceptance"
+    node?.node_key === "final_acceptance" ||
+    configStageType === "final_acceptance"
   );
 }
 

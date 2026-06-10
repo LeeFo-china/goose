@@ -41,11 +41,6 @@ const WORKFLOW_NODE_VISUAL_STYLES: Record<WorkflowNodeCapability, WorkflowNodeVi
     badge: "border-amber-200 bg-amber-50 text-amber-700",
     dot: "bg-amber-500",
   },
-  final_acceptance: {
-    accent: "bg-teal-500",
-    badge: "border-teal-200 bg-teal-50 text-teal-700",
-    dot: "bg-teal-500",
-  },
   finance: {
     accent: "bg-orange-500",
     badge: "border-orange-200 bg-orange-50 text-orange-700",

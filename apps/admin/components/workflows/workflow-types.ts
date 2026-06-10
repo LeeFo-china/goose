@@ -56,6 +56,10 @@ export type WorkflowBaseNodeConfig = {
   rollback_target_key?: string | null;
 };
 
+export type WorkflowConstructionStageNodeConfig = WorkflowBaseNodeConfig & {
+  stage_type?: "construction_start" | "final_acceptance";
+};
+
 export type WorkflowApprovalNodeConfig = WorkflowBaseNodeConfig & {
   assignee_rule?: "employee" | "department" | "role";
   assignee_id?: string | null;
@@ -107,6 +111,7 @@ export type WorkflowNotificationNodeConfig = WorkflowBaseNodeConfig & {
 
 export type WorkflowNodeConfig =
   | WorkflowBaseNodeConfig
+  | WorkflowConstructionStageNodeConfig
   | WorkflowApprovalNodeConfig
   | WorkflowProcedureNodeConfig
   | WorkflowPaymentCollectionNodeConfig
