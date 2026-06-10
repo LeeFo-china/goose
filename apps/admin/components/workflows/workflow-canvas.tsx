@@ -21,9 +21,7 @@ const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
-
 type CanvasPoint = { x: number; y: number };
-
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
 
 function clampPosition(position: CanvasPoint): CanvasPoint {
@@ -420,18 +418,15 @@ export function WorkflowCanvas({
                 }}
               >
                 <span className="block truncate text-sm font-medium">
-                  {node.title}
+                  {displayLabels.specificLabel}
                 </span>
                 <span className="mt-1 flex min-w-0 items-center gap-1.5">
                   <Badge variant="outline" className="shrink-0 bg-background text-[11px]">
                     {displayLabels.capabilityLabel}
                   </Badge>
                   <span className="truncate text-xs text-muted-foreground">
-                    {displayLabels.specificLabel}
+                    {node.node_key}
                   </span>
-                </span>
-                <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
-                  {node.node_key}
                 </span>
               </button>
               {node.node_type !== "start" ? (
@@ -440,7 +435,7 @@ export function WorkflowCanvas({
                   data-node-input="true"
                   data-node-id={node.id}
                   type="button"
-                  aria-label={`${node.title} 输入端口`}
+                  aria-label={`${displayLabels.specificLabel} 输入端口`}
                   className={[
                     "absolute top-1/2 rounded-full bg-transparent",
                     "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",
@@ -471,7 +466,7 @@ export function WorkflowCanvas({
                   data-node-action="output"
                   data-node-port="output"
                   type="button"
-                  aria-label={`${node.title} 输出端口`}
+                  aria-label={`${displayLabels.specificLabel} 输出端口`}
                   className={[
                     "absolute top-1/2 rounded-full bg-transparent",
                     "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",

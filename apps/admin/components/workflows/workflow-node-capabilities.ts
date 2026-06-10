@@ -46,7 +46,6 @@ type CapabilityDefaults = {
 export type WorkflowNodeDisplayLabels = {
   capabilityLabel: string;
   specificLabel: string;
-  summaryLabel: string;
 };
 
 export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
@@ -263,7 +262,6 @@ export function getWorkflowNodeDisplayLabels(
     return {
       capabilityLabel: "流程控制",
       specificLabel: node.title,
-      summaryLabel: `流程控制 · ${node.title}`,
     };
   }
 
@@ -274,9 +272,6 @@ export function getWorkflowNodeDisplayLabels(
   return {
     capabilityLabel,
     specificLabel,
-    summaryLabel: specificLabel && specificLabel !== capabilityLabel
-      ? `${capabilityLabel} · ${specificLabel}`
-      : capabilityLabel,
   };
 }
 

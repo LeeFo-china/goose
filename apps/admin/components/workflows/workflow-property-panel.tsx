@@ -121,14 +121,13 @@ export function WorkflowPropertyPanel({
           节点属性
         </div>
         <div className="mt-3 rounded-md border bg-muted/25 p-3">
-          <div className="truncate text-sm font-medium">{selectedNode.title}</div>
+          <div className="truncate text-sm font-medium">
+            {displayLabels.specificLabel}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="bg-background">
               {displayLabels.capabilityLabel}
             </Badge>
-            <span className="text-xs text-muted-foreground">
-              {displayLabels.specificLabel}
-            </span>
             <span className="break-all text-xs text-muted-foreground">{selectedNode.node_key}</span>
           </div>
         </div>
