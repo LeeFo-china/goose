@@ -22,6 +22,7 @@ import {
   requestProject,
 } from "@/components/projects/project-mutation-utils";
 import { ProjectStatusPanel } from "@/components/projects/project-status-panel";
+import { ProjectWorkflowRuntimePanel } from "@/components/projects/project-workflow-runtime-panel";
 import { PropertyLocationStatus } from "@/components/properties/property-location-status";
 
 export function ProjectDetailPageClient({
@@ -188,6 +189,10 @@ export function ProjectDetailPageClient({
                 onChanged={refreshProject}
               />
               <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+              <ProjectWorkflowRuntimePanel
+                project={currentProject}
+                active={activeTab === "members"}
+              />
             </div>
           ) : (
             <div className="flex flex-col gap-5">
@@ -220,6 +225,10 @@ export function ProjectDetailPageClient({
                 active={activeTab === "overview"}
               />
               <ProjectStatusPanel project={currentProject} onChanged={refreshProject} />
+              <ProjectWorkflowRuntimePanel
+                project={currentProject}
+                active={activeTab === "overview"}
+              />
             </div>
           )}
         </div>

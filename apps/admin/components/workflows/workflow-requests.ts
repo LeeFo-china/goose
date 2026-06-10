@@ -38,6 +38,7 @@ function buildWorkflowRuntimeListQuery(
 
   if (query.status) params.set("status", query.status);
   if (query.subject_type) params.set("subject_type", query.subject_type);
+  if (query.subject_id?.trim()) params.set("subject_id", query.subject_id.trim());
 
   return params.toString();
 }

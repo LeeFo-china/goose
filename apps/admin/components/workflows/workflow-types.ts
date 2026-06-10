@@ -255,6 +255,7 @@ export type WorkflowRuntimeInstanceListQuery = {
   pageSize?: number;
   status?: WorkflowInstanceStatus;
   subject_type?: WorkflowSubjectType;
+  subject_id?: string;
 };
 
 export type WorkflowRuntimeStartResult = {
