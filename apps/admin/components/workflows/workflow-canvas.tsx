@@ -199,7 +199,7 @@ export function WorkflowCanvas({
     <div
       ref={scrollRef}
       data-workflow-canvas-scroll="true"
-      className="relative min-h-0 overflow-auto bg-muted/30"
+      className="relative h-full min-h-0 overflow-auto bg-muted/30"
       onDragOver={(event) => {
         if (disabled) return;
         event.preventDefault();
