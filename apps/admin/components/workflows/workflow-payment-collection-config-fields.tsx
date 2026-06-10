@@ -109,12 +109,6 @@ export function WorkflowPaymentCollectionConfigFields({
 
   return (
     <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">收款配置</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          选择需要确认入账的款项，未入账时流程不能继续。
-        </p>
-      </div>
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-payment-type">收款类型</Label>
         <Select
@@ -328,9 +322,6 @@ function PaymentFinanceReviewerSelect({
           </Command>
         </PopoverContent>
       </Popover>
-      <p className="text-xs leading-5 text-muted-foreground">
-        仅展示财务部门或财务角色员工，支持按手机号尾数搜索。
-      </p>
     </div>
   );
 }

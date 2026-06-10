@@ -38,12 +38,6 @@ export function ProcedureConfigFields({
 
   return (
     <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">工序配置</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          绑定施工阶段，并定义日志、图片和客户可见要求。
-        </p>
-      </div>
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-stage-key">工序类型</Label>
         <Select

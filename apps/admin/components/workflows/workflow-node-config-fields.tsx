@@ -72,7 +72,7 @@ export function WorkflowNodeConfigFields({
   const capability = getWorkflowNodeCapability(node);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <CommonConfigFields
         config={node.config}
         disabled={disabled}
@@ -125,19 +125,17 @@ function CommonConfigFields({
 }) {
   return (
     <section className="space-y-3">
-      <div className="grid gap-2">
-        <WorkflowPermissionMultiSelect
-          value={Array.isArray(config.required_permissions)
-            ? config.required_permissions
-            : []}
-          disabled={disabled}
-          onChange={(value) =>
-            onChangeConfig({
-              required_permissions: value,
-            })
-          }
-        />
-      </div>
+      <WorkflowPermissionMultiSelect
+        value={Array.isArray(config.required_permissions)
+          ? config.required_permissions
+          : []}
+        disabled={disabled}
+        onChange={(value) =>
+          onChangeConfig({
+            required_permissions: value,
+          })
+        }
+      />
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-timeout">超时小时</Label>
@@ -186,12 +184,6 @@ function ApprovalConfigFields({
 
   return (
     <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">审批配置</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          设置审批人规则、金额阈值和驳回目标。
-        </p>
-      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-assignee-rule">审批人规则</Label>
@@ -303,12 +295,6 @@ function NotificationConfigFields({
 
   return (
     <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">通知配置</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          设置通知渠道、接收人规则和消息模板。
-        </p>
-      </div>
       <div className="space-y-2">
         <Label>通知渠道</Label>
         <div className="grid grid-cols-3 gap-2">

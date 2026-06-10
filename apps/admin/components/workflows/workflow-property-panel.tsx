@@ -24,6 +24,7 @@ import type {
   WorkflowNode,
   WorkflowNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -128,14 +129,24 @@ export function WorkflowPropertyPanel({
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
       <div className="shrink-0 border-b px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Settings2 className="size-4" />
-          节点属性
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Settings2 className="size-3.5" />
+              节点属性
+            </div>
+            <div className="mt-1 truncate text-sm font-semibold">
+              {displayLabels.specificLabel}
+            </div>
+          </div>
+          <Badge variant="outline" className="shrink-0 bg-background">
+            {displayLabels.capabilityLabel}
+          </Badge>
         </div>
       </div>
       <div
         data-workflow-property-scroll="true"
-        className="min-h-0 flex-1 space-y-4 overflow-auto p-4"
+        className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-3"
       >
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-capability">
@@ -209,12 +220,13 @@ export function WorkflowPropertyPanel({
           onChangeConfig={handleChangeConfig}
         />
         <div className="grid gap-2">
-          <Label htmlFor="workflow-node-description">说明</Label>
           <Textarea
             id="workflow-node-description"
+            aria-label="节点说明"
             value={selectedNode.description || ""}
             disabled={disabled}
             maxLength={500}
+            placeholder="节点说明"
             onChange={(event) =>
               onChangeNode({
                 ...selectedNode,
