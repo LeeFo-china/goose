@@ -21,6 +21,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { resolveWorkflowKey } from "@/services/workflow-key";
+import { findProcedureStageIssues } from "@/services/workflow-procedure-node-validation";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
 
@@ -435,6 +436,11 @@ class WorkflowService {
       throw Errors.badRequest(
         `节点配置引用了不存在的节点: ${invalidConfigRefs.join("、")}`,
       );
+    }
+
+    const procedureStageIssues = findProcedureStageIssues(nodes);
+    if (procedureStageIssues.length > 0) {
+      throw Errors.badRequest(procedureStageIssues.join("；"));
     }
 
     return {

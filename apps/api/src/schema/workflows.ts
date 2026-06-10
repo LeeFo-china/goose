@@ -6,6 +6,7 @@ import {
   WORKFLOW_INSTANCE_STATUS_VALUES,
   WORKFLOW_NODE_TYPE_VALUES,
   WORKFLOW_SUBJECT_TYPE_VALUES,
+  PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
@@ -131,7 +132,9 @@ const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
 });
 
 const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
-  stage_key: textField("所属施工阶段不能为空").min(1, "所属施工阶段不能为空").max(100, "施工阶段编码过长"),
+  stage_key: z.enum(PROJECT_CONSTRUCTION_STAGE_CODE_VALUES, {
+    message: "工序类型必须是拆改、水电、瓦工、木工、油工或安装",
+  }),
   work_instructions: textField("作业说明格式无效").max(1000, "作业说明过长").nullable().optional(),
   require_log: booleanField("是否要求日志格式无效").default(false),
   min_image_count: numericField("最少图片数量必须为数字")

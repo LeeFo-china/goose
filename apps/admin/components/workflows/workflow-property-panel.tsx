@@ -13,7 +13,12 @@ import {
   WorkflowNodePresets,
   type WorkflowNodePresetGroup,
 } from "@/components/workflows/workflow-node-presets";
-import type { WorkflowNode } from "@/components/workflows/workflow-types";
+import {
+  createWorkflowProcedureNodeKey,
+  getWorkflowProcedureStageLabel,
+  isWorkflowProcedureStageKey,
+} from "@/components/workflows/workflow-procedure-stages";
+import type { WorkflowNode, WorkflowNodeConfig } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,12 +47,14 @@ export function WorkflowPropertyPanel({
   disabled,
   node,
   usedNodeKeys,
+  usedProcedureStageKeys,
   onDeleteNode,
   onChangeNode,
 }: {
   disabled?: boolean;
   node: WorkflowNode | null;
   usedNodeKeys: string[];
+  usedProcedureStageKeys?: string[];
   onDeleteNode: (nodeId: string) => void;
   onChangeNode: (node: WorkflowNode) => void;
 }) {
@@ -71,7 +78,34 @@ export function WorkflowPropertyPanel({
       </aside>
     );
   }
-  const currentPreset = getWorkflowNodePreset(node.node_key);
+  const selectedNode = node;
+  const selectedPresetKey = selectedNode.node_type === "procedure"
+    ? "procedure_template"
+    : selectedNode.node_key;
+  const currentPreset = getWorkflowNodePreset(selectedPresetKey);
+
+  function handleChangeConfig(config: WorkflowNodeConfig) {
+    if (
+      selectedNode.node_type === "procedure" &&
+      "stage_key" in config &&
+      isWorkflowProcedureStageKey(config.stage_key)
+    ) {
+      const title =
+        getWorkflowProcedureStageLabel(config.stage_key) || selectedNode.title;
+      onChangeNode({
+        ...selectedNode,
+        node_key: createWorkflowProcedureNodeKey(config.stage_key),
+        title,
+        config,
+      });
+      return;
+    }
+
+    onChangeNode({
+      ...selectedNode,
+      config,
+    });
+  }
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
@@ -81,14 +115,14 @@ export function WorkflowPropertyPanel({
           节点属性
         </div>
         <div className="mt-3 rounded-md border bg-muted/25 p-3">
-          <div className="truncate text-sm font-medium">{node.title}</div>
+          <div className="truncate text-sm font-medium">{selectedNode.title}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {shouldShowWorkflowNodeTypeBadge(node.title, node.node_type) ? (
+            {shouldShowWorkflowNodeTypeBadge(selectedNode.title, selectedNode.node_type) ? (
               <Badge variant="outline" className="bg-background">
-                {getWorkflowNodeTypeLabel(node.node_type)}
+                {getWorkflowNodeTypeLabel(selectedNode.node_type)}
               </Badge>
             ) : null}
-            <span className="break-all text-xs text-muted-foreground">{node.node_key}</span>
+            <span className="break-all text-xs text-muted-foreground">{selectedNode.node_key}</span>
           </div>
         </div>
       </div>
@@ -100,11 +134,11 @@ export function WorkflowPropertyPanel({
           <Label htmlFor="workflow-node-preset">平台节点</Label>
           <Select
             disabled={disabled}
-            value={node.node_key}
+            value={selectedPresetKey}
             onValueChange={(value) => {
               const preset = getWorkflowNodePreset(value);
               if (!preset) return;
-              onChangeNode(applyWorkflowNodePreset(node, preset));
+              onChangeNode(applyWorkflowNodePreset(selectedNode, preset));
             }}
           >
             <SelectTrigger id="workflow-node-preset">
@@ -113,8 +147,8 @@ export function WorkflowPropertyPanel({
             <SelectContent>
               {!currentPreset ? (
                 <>
-                  <SelectItem value={node.node_key}>
-                    未识别节点：{node.node_key}
+                  <SelectItem value={selectedNode.node_key}>
+                    未识别节点：{selectedNode.node_key}
                   </SelectItem>
                   <SelectSeparator />
                 </>
@@ -127,7 +161,10 @@ export function WorkflowPropertyPanel({
                     <SelectItem
                       key={preset.key}
                       value={preset.key}
-                      disabled={usedNodeKeys.includes(preset.key)}
+                      disabled={
+                        preset.nodeType !== "procedure" &&
+                        usedNodeKeys.includes(preset.key)
+                      }
                     >
                       {preset.label}
                     </SelectItem>
@@ -137,19 +174,19 @@ export function WorkflowPropertyPanel({
             </SelectContent>
           </Select>
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            节点编码：<span className="font-medium text-foreground">{node.node_key}</span>
+            节点编码：<span className="font-medium text-foreground">{selectedNode.node_key}</span>
           </div>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-description">说明</Label>
           <Textarea
             id="workflow-node-description"
-            value={node.description || ""}
+            value={selectedNode.description || ""}
             disabled={disabled}
             maxLength={500}
             onChange={(event) =>
               onChangeNode({
-                ...node,
+                ...selectedNode,
                 description: event.target.value || null,
               })
             }
@@ -157,13 +194,9 @@ export function WorkflowPropertyPanel({
         </div>
         <WorkflowNodeConfigFields
           disabled={disabled}
-          node={node}
-          onChangeConfig={(config) =>
-            onChangeNode({
-              ...node,
-              config,
-            })
-          }
+          node={selectedNode}
+          usedProcedureStageKeys={usedProcedureStageKeys}
+          onChangeConfig={handleChangeConfig}
         />
       </div>
       <Button
@@ -171,7 +204,7 @@ export function WorkflowPropertyPanel({
         variant="outline"
         className="m-4 mt-0 shrink-0 justify-start text-destructive hover:text-destructive"
         disabled={disabled}
-        onClick={() => onDeleteNode(node.id)}
+        onClick={() => onDeleteNode(selectedNode.id)}
       >
         <Trash2 data-icon="inline-start" />
         删除节点

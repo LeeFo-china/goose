@@ -93,7 +93,10 @@ export function WorkflowDesignerShell({
       toast.error("平台节点不存在");
       return;
     }
-    if (graph.nodes.some((node) => node.node_key === preset.key)) {
+    if (
+      preset.nodeType !== "procedure" &&
+      graph.nodes.some((node) => node.node_key === preset.key)
+    ) {
       toast.error(`流程中已经有“${preset.label}”节点`);
       return;
     }
@@ -391,6 +394,18 @@ export function WorkflowDesignerShell({
                   usedNodeKeys={graph.nodes
                     .filter((node) => node.id !== selectedNode.id)
                     .map((node) => node.node_key)}
+                  usedProcedureStageKeys={graph.nodes
+                    .flatMap((node) => {
+                      if (
+                        node.id === selectedNode.id ||
+                        node.node_type !== "procedure" ||
+                        !("stage_key" in node.config) ||
+                        typeof node.config.stage_key !== "string"
+                      ) {
+                        return [];
+                      }
+                      return [node.config.stage_key];
+                    })}
                   onDeleteNode={deleteNode}
                   onChangeNode={updateNode}
                 />

@@ -147,12 +147,12 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
   {
     key: "procedure_template",
     label: "工序节点",
-    description: "具体施工工序，支持后续配置日志、图片和验收要求。",
+    description: "具体施工工序，选择拆改、水电、瓦工、木工、油工或安装。",
     group: "procedure",
     nodeType: "procedure",
     businessKind: "procedure_template",
     config: {
-      stage_key: "default_stage",
+      stage_key: "",
       require_log: false,
       min_image_count: 0,
       trigger_acceptance: false,
@@ -206,9 +206,13 @@ export function applyWorkflowNodePreset(
   node: WorkflowNode,
   preset: WorkflowNodePreset,
 ): WorkflowNode {
+  const nextNodeKey = preset.nodeType === "procedure"
+    ? `procedure_${Date.now()}`
+    : preset.key;
+
   return {
     ...node,
-    node_key: preset.key,
+    node_key: nextNodeKey,
     node_type: preset.nodeType,
     business_kind: preset.businessKind,
     title: preset.label,

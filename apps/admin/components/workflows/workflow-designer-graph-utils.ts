@@ -1,5 +1,9 @@
 import type { WorkflowNodeType } from "@gooes/domain";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
+import {
+  getWorkflowProcedureStageLabel,
+  isWorkflowProcedureStageKey,
+} from "@/components/workflows/workflow-procedure-stages";
 import type {
   WorkflowDefinitionDetail,
   WorkflowEdge,
@@ -24,7 +28,7 @@ export function detailToGraph(detail: WorkflowDefinitionDetail): WorkflowDesigne
 function defaultConfig(nodeType: WorkflowNodeType): WorkflowNodeConfig {
   if (nodeType === "procedure") {
     return {
-      stage_key: "default_stage",
+      stage_key: "",
       require_log: false,
       min_image_count: 0,
       trigger_acceptance: false,
@@ -51,6 +55,9 @@ export function createNodeFromPreset(input: {
   const preset = getWorkflowNodePreset(input.presetKey);
   const nodeType = preset?.nodeType || "business";
   const now = new Date().toISOString();
+  const nodeKey = nodeType === "procedure"
+    ? `procedure_${input.index}`
+    : preset?.key || `business_${input.index}`;
   const defaultPosition = {
     x: 120 + ((input.index - 1) % 4) * 260,
     y: 160 + Math.floor((input.index - 1) / 4) * 140,
@@ -60,7 +67,7 @@ export function createNodeFromPreset(input: {
     id: `local-${Date.now()}-${input.index}`,
     tenant_id: input.tenantId,
     definition_id: input.definitionId,
-    node_key: preset?.key || `business_${input.index}`,
+    node_key: nodeKey,
     node_type: nodeType,
     business_kind: preset?.businessKind || null,
     title: preset?.label || "业务节点",
@@ -109,6 +116,7 @@ export function toEdgeInput(
 export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationResult {
   const issues: WorkflowValidationResult["issues"] = [];
   const nodeKeys = new Set<string>();
+  const procedureStageKeys = new Map<string, string>();
   const allNodeKeys = new Set(graph.nodes.map((node) => node.node_key));
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
@@ -131,6 +139,24 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
         message: "节点标题不能为空",
         nodeKey: node.node_key,
       });
+    }
+    if (node.node_type === "procedure") {
+      const stageKey = "stage_key" in node.config ? node.config.stage_key : "";
+      if (!isWorkflowProcedureStageKey(stageKey)) {
+        issues.push({
+          code: "procedure_stage_required",
+          message: "工序节点必须选择拆改、水电、瓦工、木工、油工或安装",
+          nodeKey: node.node_key,
+        });
+      } else if (procedureStageKeys.has(stageKey)) {
+        issues.push({
+          code: "procedure_stage_duplicate",
+          message: `${getWorkflowProcedureStageLabel(stageKey) || stageKey}工序重复`,
+          nodeKey: node.node_key,
+        });
+      } else {
+        procedureStageKeys.set(stageKey, node.node_key);
+      }
     }
     const configReferences = [
       ["rollback_target_key", node.config.rollback_target_key],

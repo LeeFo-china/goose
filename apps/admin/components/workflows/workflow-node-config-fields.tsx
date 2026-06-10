@@ -6,8 +6,8 @@ import type {
   WorkflowNode,
   WorkflowNodeConfig,
   WorkflowNotificationNodeConfig,
-  WorkflowProcedureNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { ProcedureConfigFields } from "@/components/workflows/workflow-procedure-config-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,10 +49,12 @@ type NodeConfigChangeHandler = (config: WorkflowNodeConfig) => void;
 export function WorkflowNodeConfigFields({
   disabled,
   node,
+  usedProcedureStageKeys,
   onChangeConfig,
 }: {
   disabled?: boolean;
   node: WorkflowNode;
+  usedProcedureStageKeys?: string[];
   onChangeConfig: NodeConfigChangeHandler;
 }) {
   function updateConfig(patch: Partial<WorkflowNodeConfig>) {
@@ -73,6 +75,7 @@ export function WorkflowNodeConfigFields({
         <ProcedureConfigFields
           config={node.config}
           disabled={disabled}
+          usedStageKeys={usedProcedureStageKeys ?? []}
           onChangeConfig={updateConfig}
         />
       ) : null}
@@ -160,91 +163,6 @@ function CommonConfigFields({
           />
         </div>
       </div>
-    </section>
-  );
-}
-
-function ProcedureConfigFields({
-  config,
-  disabled,
-  onChangeConfig,
-}: {
-  config: WorkflowNodeConfig;
-  disabled?: boolean;
-  onChangeConfig: (patch: Partial<WorkflowProcedureNodeConfig>) => void;
-}) {
-  const procedureConfig = config as WorkflowProcedureNodeConfig;
-
-  return (
-    <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">工序配置</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          绑定施工阶段，并定义日志、图片和客户可见要求。
-        </p>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-stage-key">工序阶段</Label>
-        <Input
-          id="workflow-node-stage-key"
-          value={procedureConfig.stage_key || ""}
-          disabled={disabled}
-          placeholder="例如 demolition 或 hydropower"
-          onChange={(event) =>
-            onChangeConfig({ stage_key: event.target.value.trim() })
-          }
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-instructions">作业要求</Label>
-        <Textarea
-          id="workflow-node-instructions"
-          value={procedureConfig.work_instructions || ""}
-          disabled={disabled}
-          maxLength={800}
-          onChange={(event) =>
-            onChangeConfig({
-              work_instructions: event.target.value || null,
-            })
-          }
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-min-images">最少图片数</Label>
-        <Input
-          id="workflow-node-min-images"
-          type="number"
-          min={0}
-          max={50}
-          value={formatOptionalNumber(procedureConfig.min_image_count ?? 0)}
-          disabled={disabled}
-          onChange={(event) =>
-            onChangeConfig({
-              min_image_count: parseOptionalNumber(event.target.value) ?? 0,
-            })
-          }
-        />
-      </div>
-      <CheckboxField
-        checked={procedureConfig.require_log === true}
-        disabled={disabled}
-        label="必须填写施工日志"
-        onCheckedChange={(checked) => onChangeConfig({ require_log: checked })}
-      />
-      <CheckboxField
-        checked={procedureConfig.trigger_acceptance === true}
-        disabled={disabled}
-        label="完成后触发阶段验收"
-        onCheckedChange={(checked) =>
-          onChangeConfig({ trigger_acceptance: checked })
-        }
-      />
-      <CheckboxField
-        checked={procedureConfig.customer_visible === true}
-        disabled={disabled}
-        label="客户可见"
-        onCheckedChange={(checked) => onChangeConfig({ customer_visible: checked })}
-      />
     </section>
   );
 }
