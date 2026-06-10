@@ -72,8 +72,9 @@ export function WorkflowCanvas({
   const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
   const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
-  const canvasTransform = fitMode ? `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})` : `scale(${zoom})`;
-  const minNodePosition = fitMode ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
+  const hasPanOffset = fitPan.x !== 0 || fitPan.y !== 0;
+  const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
+  const minNodePosition = hasPanOffset ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
@@ -99,42 +100,32 @@ export function WorkflowCanvas({
   function applyZoom(nextZoom: number, origin?: CanvasPoint) {
     const scrollElement = scrollRef.current;
     const clampedZoom = clampZoom(nextZoom);
-    if (fitMode) {
-      const anchor = origin
-        ? { x: origin.x * zoom + fitPan.x, y: origin.y * zoom + fitPan.y }
-        : {
-          x: scrollElement ? scrollElement.clientWidth / 2 : viewportSize.width / 2,
-          y: scrollElement ? scrollElement.clientHeight / 2 : viewportSize.height / 2,
-      };
-      const scaleRatio = clampedZoom / zoom;
-      setZoom(clampedZoom);
-      setFitPan((current) => ({ x: anchor.x - (anchor.x - current.x) * scaleRatio, y: anchor.y - (anchor.y - current.y) * scaleRatio }));
-      return;
-    }
     if (!scrollElement) {
       setZoom(clampedZoom);
-      setFitMode(false);
-      setFitPan({ x: 0, y: 0 });
       return;
     }
 
+    const viewportX = origin ? origin.x * zoom + fitPan.x - scrollElement.scrollLeft : scrollElement.clientWidth / 2;
+    const viewportY = origin ? origin.y * zoom + fitPan.y - scrollElement.scrollTop : scrollElement.clientHeight / 2;
     const currentOrigin = origin || {
-      x: (scrollElement.scrollLeft + scrollElement.clientWidth / 2) / zoom,
-      y: (scrollElement.scrollTop + scrollElement.clientHeight / 2) / zoom,
+      x: (scrollElement.scrollLeft + viewportX - fitPan.x) / zoom,
+      y: (scrollElement.scrollTop + viewportY - fitPan.y) / zoom,
     };
-    const viewportX = origin
-      ? currentOrigin.x * zoom - scrollElement.scrollLeft
-      : scrollElement.clientWidth / 2;
-    const viewportY = origin
-      ? currentOrigin.y * zoom - scrollElement.scrollTop
-      : scrollElement.clientHeight / 2;
+    const nextFitPan = { ...fitPan };
+    let nextScrollLeft = currentOrigin.x * clampedZoom + nextFitPan.x - viewportX;
+    let nextScrollTop = currentOrigin.y * clampedZoom + nextFitPan.y - viewportY;
+    if (nextScrollLeft < 0) { nextFitPan.x -= nextScrollLeft; nextScrollLeft = 0; }
+    if (nextScrollTop < 0) { nextFitPan.y -= nextScrollTop; nextScrollTop = 0; }
+    const normalizedX = Math.min(Math.max(0, nextFitPan.x), Math.max(0, nextScrollLeft));
+    const normalizedY = Math.min(Math.max(0, nextFitPan.y), Math.max(0, nextScrollTop));
+    nextFitPan.x -= normalizedX; nextScrollLeft -= normalizedX;
+    nextFitPan.y -= normalizedY; nextScrollTop -= normalizedY;
 
     setZoom(clampedZoom);
-    setFitMode(false);
-    setFitPan({ x: 0, y: 0 });
+    setFitPan(nextFitPan);
     requestAnimationFrame(() => {
-      scrollElement.scrollLeft = Math.max(0, currentOrigin.x * clampedZoom - viewportX);
-      scrollElement.scrollTop = Math.max(0, currentOrigin.y * clampedZoom - viewportY);
+      scrollElement.scrollLeft = nextScrollLeft;
+      scrollElement.scrollTop = nextScrollTop;
     });
   }
 
@@ -265,8 +256,8 @@ export function WorkflowCanvas({
       <div
         className="relative"
         style={{
-          width: canvasSize.width * zoom,
-          height: canvasSize.height * zoom,
+          width: canvasSize.width * zoom + Math.max(0, fitPan.x),
+          height: canvasSize.height * zoom + Math.max(0, fitPan.y),
         }}
       >
         <div
