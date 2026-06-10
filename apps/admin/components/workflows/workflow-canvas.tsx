@@ -338,20 +338,18 @@ export function WorkflowCanvas({
           const top = (sourcePoint.y + targetPoint.y) / 2;
 
           return (
-            <Button
+            <button
               data-edge-action="delete"
               aria-label="删除连线"
               key={`${edge.id}-delete`}
               type="button"
-              size="icon"
-              variant="outline"
-              className="absolute z-10 size-11 bg-background"
+              className="absolute z-10 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
               onClick={() => onDeleteEdge(edge.id)}
             >
-              <X className="size-3.5" />
-            </Button>
+              <X className="size-4" />
+            </button>
           );
         })}
         {nodes.map((node) => {
