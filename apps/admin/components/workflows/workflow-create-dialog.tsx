@@ -34,7 +34,6 @@ export function WorkflowCreateDialog({
   onCreated: (workflow: WorkflowDefinition) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [workflowKey, setWorkflowKey] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<WorkflowCategory>("main");
   const [description, setDescription] = useState("");
@@ -42,7 +41,6 @@ export function WorkflowCreateDialog({
   const [error, setError] = useState("");
 
   function resetForm() {
-    setWorkflowKey("");
     setName("");
     setCategory("main");
     setDescription("");
@@ -51,12 +49,11 @@ export function WorkflowCreateDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextWorkflowKey = workflowKey.trim();
     const nextName = name.trim();
     const nextDescription = description.trim();
 
-    if (!nextWorkflowKey || !nextName) {
-      setError("流程编码和流程名称不能为空");
+    if (!nextName) {
+      setError("流程名称不能为空");
       return;
     }
 
@@ -65,7 +62,6 @@ export function WorkflowCreateDialog({
 
     try {
       const workflow = await createWorkflowDefinition({
-        workflow_key: nextWorkflowKey,
         name: nextName,
         category,
         description: nextDescription || null,
@@ -104,17 +100,6 @@ export function WorkflowCreateDialog({
 
         <form onSubmit={submit} className="flex flex-col gap-4">
           {error ? <StatusAlert>{error}</StatusAlert> : null}
-          <div className="grid gap-2">
-            <Label htmlFor="workflow-create-key">流程编码</Label>
-            <Input
-              id="workflow-create-key"
-              value={workflowKey}
-              maxLength={100}
-              placeholder="例如 sales_default"
-              disabled={submitting}
-              onChange={(event) => setWorkflowKey(event.target.value)}
-            />
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="workflow-create-name">流程名称</Label>
             <Input

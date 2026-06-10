@@ -105,7 +105,8 @@ export type WorkflowDefinitionListResult = {
 };
 
 export type WorkflowDefinitionCreateRepositoryInput =
-  WorkflowDefinitionCreateInput & {
+  Omit<WorkflowDefinitionCreateInput, "workflow_key"> & {
+    workflow_key: string;
     tenantId: string;
     createdBy?: string | null;
   };
