@@ -32,7 +32,7 @@ export function WorkflowNodeLibrary({
   return (
     <aside
       className={[
-        "flex min-h-0 flex-col bg-background",
+        "flex h-full min-h-0 flex-col overflow-hidden bg-background",
         placement === "right" ? "border-l" : "border-r",
       ].join(" ")}
     >

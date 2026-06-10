@@ -361,7 +361,7 @@ export function WorkflowDesignerShell({
             })}
           </div>
           <div className="min-h-0 flex-1 bg-muted/20 lg:grid lg:grid-cols-[minmax(0,1fr)_336px]">
-            <div className={mobilePanel === "library" ? "h-full min-h-0 lg:hidden" : "hidden h-full min-h-0"}>
+            <div className={mobilePanel === "library" ? "h-full min-h-0 overflow-hidden lg:hidden" : "hidden h-full min-h-0"}>
               <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
             </div>
             <div
@@ -383,7 +383,7 @@ export function WorkflowDesignerShell({
                 onSelectNode={selectNode}
               />
             </div>
-            <div className={mobilePanel === "properties" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+            <div className={mobilePanel === "properties" ? "h-full min-h-0 overflow-hidden" : "hidden h-full min-h-0 overflow-hidden lg:block"}>
               {selectedNode ? (
                 <WorkflowPropertyPanel
                   disabled={pending}
