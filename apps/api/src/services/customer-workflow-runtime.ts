@@ -5,6 +5,7 @@ import {
   type WorkflowInstanceRow,
 } from "@/repositories/workflows";
 import type { AuthContext } from "@/services/authorization";
+import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import type { CustomerStatus, CustomerStatusAction } from "@gooes/domain";
 
 const CUSTOMER_WORKFLOW_KEYS = ["customer_main", "sales_main"] as const;
@@ -142,6 +143,16 @@ class CustomerWorkflowRuntimeService {
       };
     }
 
+    const output = this.buildRuntimeContext(input);
+
+    await assertRuntimeNodeCompletionAllowed({
+      tenantId: input.tenantId,
+      definitionId: definition.id,
+      instanceId: instance.id,
+      nodeKey,
+      output,
+    });
+
     const result = await workflowRepository.completeRuntimeNode({
       tenantId: input.tenantId,
       definitionId: definition.id,
@@ -149,7 +160,7 @@ class CustomerWorkflowRuntimeService {
       nodeKey,
       action: input.action,
       actorEmployeeId: input.authContext.employeeId,
-      output: this.buildRuntimeContext(input),
+      output,
     });
 
     if (!result.ok) {

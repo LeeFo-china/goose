@@ -54,6 +54,25 @@ export async function listRuntimeInstances(
   };
 }
 
+export async function getRuntimeInstanceById(input: {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+}): Promise<WorkflowInstanceRow | null> {
+  const { data, error } = await workflowTable("workflow_instances")
+    .select(WORKFLOW_INSTANCE_SELECT)
+    .eq("tenant_id", input.tenantId)
+    .eq("definition_id", input.definitionId)
+    .eq("id", input.instanceId)
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询流程运行实例失败", error);
+  }
+
+  return data as WorkflowInstanceRow | null;
+}
+
 export async function startRuntimeInstance(
   input: WorkflowRuntimeStartInput,
 ): Promise<WorkflowRuntimeStartResult> {

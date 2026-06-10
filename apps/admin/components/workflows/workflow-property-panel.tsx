@@ -5,6 +5,7 @@ import {
   getWorkflowNodeTypeLabel,
   shouldShowWorkflowNodeTypeBadge,
 } from "@/components/workflows/workflow-node-labels";
+import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
   applyWorkflowNodePreset,
   getWorkflowNodePreset,
@@ -151,9 +152,16 @@ export function WorkflowPropertyPanel({
             }
           />
         </div>
-        <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
-          审批人、工序要求、通知模板等结构化配置会在后续节点配置面板继续细化。
-        </div>
+        <WorkflowNodeConfigFields
+          disabled={disabled}
+          node={node}
+          onChangeConfig={(config) =>
+            onChangeNode({
+              ...node,
+              config,
+            })
+          }
+        />
       </div>
       <Button
         type="button"

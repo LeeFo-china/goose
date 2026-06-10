@@ -19,6 +19,7 @@ import type {
 } from "@/schema/workflows";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { resolveWorkflowKey } from "@/services/workflow-key";
 
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
@@ -253,6 +254,13 @@ class WorkflowService {
   ) {
     const tenantId = this.assertManagePermission(authContext);
     await this.getRequiredDefinition(tenantId, definitionId);
+    await assertRuntimeNodeCompletionAllowed({
+      tenantId,
+      definitionId,
+      instanceId,
+      nodeKey: input.node_key.trim(),
+      output: input.output as JsonObject,
+    });
 
     const result = await workflowRepository.completeRuntimeNode({
       tenantId,
