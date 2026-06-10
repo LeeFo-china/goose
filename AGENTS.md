@@ -99,6 +99,12 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
   并在必要时用 `EXPLAIN ANALYZE` 验证执行计划。禁止为了性能规则随意引入缓存、
   队列、Redis 或新依赖；确需引入时必须先说明原因和替代方案。
 
+- **AI 代码改动必须小步、守边界、可验证。**
+  修改代码前必须先阅读相关文件、邻近实现和项目配置，复用现有模式，禁止凭空引入新架构。
+  每次改动只解决一个明确目标，禁止顺手重构无关文件、复制一套相似实现或新增未获确认的依赖。
+  后端必须遵守 controller/service/repository 分层，前端必须优先复用现有 shadcn/ui 和本地业务组件。
+  完成后必须运行最小必要验证（类型检查、构建、smoke 或 migration 状态检查），无法验证时必须说明原因和剩余风险。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
