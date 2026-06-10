@@ -105,6 +105,15 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
   后端必须遵守 controller/service/repository 分层，前端必须优先复用现有 shadcn/ui 和本地业务组件。
   完成后必须运行最小必要验证（类型检查、构建、smoke 或 migration 状态检查），无法验证时必须说明原因和剩余风险。
 
+- **缺陷修复必须定位根因。**
+  对任何 bug、异常、测试失败或线上问题，修复前必须先复现问题、阅读错误信息、
+  追踪数据流并说明 Root Cause。禁止提交只掩盖表面现象的补丁式修复，
+  例如无依据判空、硬编码特殊值、吞掉异常、绕过校验或跳过权限检查。
+  如因紧急情况需要先止血，必须在代码、提交说明或任务记录中标记
+  `[HOTFIX]` 或 `[WORKAROUND]`，说明临时方案的风险，并记录后续根因修复事项。
+  修复完成后必须提供验证方式：自动化测试、复现步骤、接口 smoke、日志证据或
+  其他能证明根因已消除的检查。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
