@@ -1,7 +1,10 @@
 "use client";
 
-import { WorkflowNodeTypeConfig } from "@gooes/domain";
 import { Blocks, GripVertical, Plus } from "lucide-react";
+import {
+  getWorkflowNodeTypeLabel,
+  shouldShowWorkflowNodeTypeBadge,
+} from "@/components/workflows/workflow-node-labels";
 import {
   WorkflowNodePresetGroupLabels,
   WorkflowNodePresets,
@@ -86,9 +89,11 @@ export function WorkflowNodeLibrary({
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-sm font-medium">{preset.label}</span>
-                          <Badge variant="outline" className="shrink-0">
-                            {WorkflowNodeTypeConfig[preset.nodeType].label}
-                          </Badge>
+                          {shouldShowWorkflowNodeTypeBadge(preset.label, preset.nodeType) ? (
+                            <Badge variant="outline" className="shrink-0">
+                              {getWorkflowNodeTypeLabel(preset.nodeType)}
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="mt-1 truncate text-xs text-muted-foreground">
                           {preset.description}

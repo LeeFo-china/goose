@@ -2,10 +2,10 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { WorkflowNodeTypeConfig } from "@gooes/domain";
 import { Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
+import { getWorkflowNodeTypeLabel, shouldShowWorkflowNodeTypeBadge } from "@/components/workflows/workflow-node-labels";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
@@ -424,9 +424,11 @@ export function WorkflowCanvas({
                   {node.title}
                 </span>
                 <span className="mt-1 flex min-w-0 items-center gap-2">
-                  <Badge variant="outline" className="shrink-0">
-                    {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
-                  </Badge>
+                  {shouldShowWorkflowNodeTypeBadge(node.title, node.node_type) ? (
+                    <Badge variant="outline" className="shrink-0">
+                      {getWorkflowNodeTypeLabel(node.node_type)}
+                    </Badge>
+                  ) : null}
                   <span className="truncate text-xs text-muted-foreground">
                     {node.node_key}
                   </span>

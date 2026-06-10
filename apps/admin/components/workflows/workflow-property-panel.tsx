@@ -1,7 +1,10 @@
 "use client";
 
-import { WorkflowNodeTypeConfig } from "@gooes/domain";
 import { PanelRight, Settings2, Trash2 } from "lucide-react";
+import {
+  getWorkflowNodeTypeLabel,
+  shouldShowWorkflowNodeTypeBadge,
+} from "@/components/workflows/workflow-node-labels";
 import {
   applyWorkflowNodePreset,
   getWorkflowNodePreset,
@@ -79,9 +82,11 @@ export function WorkflowPropertyPanel({
         <div className="mt-3 rounded-md border bg-muted/25 p-3">
           <div className="truncate text-sm font-medium">{node.title}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="bg-background">
-              {WorkflowNodeTypeConfig[node.node_type]?.label || node.node_type}
-            </Badge>
+            {shouldShowWorkflowNodeTypeBadge(node.title, node.node_type) ? (
+              <Badge variant="outline" className="bg-background">
+                {getWorkflowNodeTypeLabel(node.node_type)}
+              </Badge>
+            ) : null}
             <span className="break-all text-xs text-muted-foreground">{node.node_key}</span>
           </div>
         </div>
