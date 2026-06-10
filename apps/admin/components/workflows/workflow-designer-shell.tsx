@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { type PointerEvent, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -64,9 +64,7 @@ export function WorkflowDesignerShell({
   const [graph, setGraph] = useState(
     initialDetail ? detailToGraph(initialDetail) : null,
   );
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    graph?.nodes[0]?.id || null,
-  );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
@@ -108,6 +106,7 @@ export function WorkflowDesignerShell({
     });
     setGraph({ ...graph, nodes: [...graph.nodes, nextNode] });
     setSelectedNodeId(nextNode.id);
+    setMobilePanel("properties");
     setDirty(true);
   }
 
@@ -132,7 +131,7 @@ export function WorkflowDesignerShell({
         edge.source_node_id !== nodeId && edge.target_node_id !== nodeId
       )),
     });
-    setSelectedNodeId(nextNodes[0]?.id || null);
+    setSelectedNodeId(null);
     if (connectingNodeId === nodeId) setConnectingNodeId(null);
     setDirty(true);
   }
@@ -181,6 +180,23 @@ export function WorkflowDesignerShell({
     setValidation(validateGraph(graph));
   }
 
+  function selectNode(nodeId: string) {
+    setSelectedNodeId(nodeId);
+  }
+
+  function showNodeLibrary() {
+    setSelectedNodeId(null);
+    if (mobilePanel === "properties") setMobilePanel("library");
+  }
+
+  function handleCanvasPointerDownCapture(event: PointerEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.closest("[data-workflow-canvas='true']")) return;
+    if (target.closest("button, [data-edge-action], [data-node-port]")) return;
+    showNodeLibrary();
+  }
+
   function handleSave() {
     if (!graph) return;
     startTransition(async () => {
@@ -199,7 +215,7 @@ export function WorkflowDesignerShell({
         const nextSelectedNode = saved.nodes.find((node) => (
           node.node_key === selectedNodeKey
         ));
-        setSelectedNodeId(nextSelectedNode?.id || saved.nodes[0]?.id || null);
+        setSelectedNodeId(selectedNodeKey ? nextSelectedNode?.id || null : null);
         setConnectingNodeId(null);
         setDirty(false);
         toast.success("流程草稿已保存");
@@ -344,11 +360,14 @@ export function WorkflowDesignerShell({
               );
             })}
           </div>
-          <div className="min-h-0 flex-1 bg-muted/20 lg:grid lg:grid-cols-[292px_minmax(0,1fr)_336px]">
-            <div className={mobilePanel === "library" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+          <div className="min-h-0 flex-1 bg-muted/20 lg:grid lg:grid-cols-[minmax(0,1fr)_336px]">
+            <div className={mobilePanel === "library" ? "h-full min-h-0 lg:hidden" : "hidden h-full min-h-0"}>
               <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
             </div>
-            <div className={mobilePanel === "canvas" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+            <div
+              className={mobilePanel === "canvas" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}
+              onPointerDownCapture={handleCanvasPointerDownCapture}
+            >
               <WorkflowCanvas
                 connectingNodeId={connectingNodeId}
                 disabled={pending}
@@ -361,19 +380,27 @@ export function WorkflowDesignerShell({
                 onDropNodePreset={addNode}
                 onFinishConnect={connectToNode}
                 onMoveNode={moveNode}
-                onSelectNode={setSelectedNodeId}
+                onSelectNode={selectNode}
               />
             </div>
             <div className={mobilePanel === "properties" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
-              <WorkflowPropertyPanel
-                disabled={pending}
-                node={selectedNode}
-                usedNodeKeys={graph.nodes
-                  .filter((node) => node.id !== selectedNode?.id)
-                  .map((node) => node.node_key)}
-                onDeleteNode={deleteNode}
-                onChangeNode={updateNode}
-              />
+              {selectedNode ? (
+                <WorkflowPropertyPanel
+                  disabled={pending}
+                  node={selectedNode}
+                  usedNodeKeys={graph.nodes
+                    .filter((node) => node.id !== selectedNode.id)
+                    .map((node) => node.node_key)}
+                  onDeleteNode={deleteNode}
+                  onChangeNode={updateNode}
+                />
+              ) : (
+                <WorkflowNodeLibrary
+                  disabled={pending}
+                  placement="right"
+                  onAddNode={addNode}
+                />
+              )}
             </div>
           </div>
           <WorkflowValidationPanel validation={validation} />

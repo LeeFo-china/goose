@@ -23,12 +23,19 @@ export const WORKFLOW_NODE_PRESET_DRAG_TYPE = "application/x-gooes-workflow-node
 export function WorkflowNodeLibrary({
   disabled,
   onAddNode,
+  placement = "left",
 }: {
   disabled?: boolean;
   onAddNode: (presetKey: string) => void;
+  placement?: "left" | "right";
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-r bg-background">
+    <aside
+      className={[
+        "flex min-h-0 flex-col bg-background",
+        placement === "right" ? "border-l" : "border-r",
+      ].join(" ")}
+    >
       <div className="border-b px-3 py-3">
         <div className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
