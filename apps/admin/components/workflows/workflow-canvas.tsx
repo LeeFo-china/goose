@@ -3,6 +3,23 @@
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  HANDLE_HIT_SIZE,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  ZOOM_STEP,
+  clampPosition,
+  clampZoom,
+  createConnectionPath,
+  getCanvasPoint,
+  getExpandedCanvasSize,
+  getInputPoint,
+  getOutputPoint,
+  type CanvasPoint,
+  type CanvasSize,
+} from "@/components/workflows/workflow-canvas-geometry";
 import { getWorkflowNodeDisplayLabels } from "@/components/workflows/workflow-node-capabilities";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
@@ -11,63 +28,8 @@ import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const CANVAS_WIDTH = 1800;
-const CANVAS_HEIGHT = 1200;
-const NODE_WIDTH = 210;
-const NODE_HEIGHT = 84;
-const HANDLE_HIT_SIZE = 44;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 1.8;
-const ZOOM_STEP = 0.1;
-
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
-type CanvasPoint = { x: number; y: number };
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
-
-function clampPosition(position: CanvasPoint): CanvasPoint {
-  return {
-    x: Math.max(0, Math.min(CANVAS_WIDTH - NODE_WIDTH, position.x)),
-    y: Math.max(0, Math.min(CANVAS_HEIGHT - NODE_HEIGHT, position.y)),
-  };
-}
-
-function getInputPoint(node: WorkflowNode): CanvasPoint {
-  return { x: node.position.x, y: node.position.y + NODE_HEIGHT / 2 };
-}
-
-function getOutputPoint(node: WorkflowNode): CanvasPoint {
-  return { x: node.position.x + NODE_WIDTH, y: node.position.y + NODE_HEIGHT / 2 };
-}
-
-function createConnectionPath(source: CanvasPoint, target: CanvasPoint) {
-  const controlOffset = Math.max(90, Math.abs(target.x - source.x) / 2);
-  const sourceControlX = source.x + controlOffset;
-  const targetControlX = target.x - controlOffset;
-
-  return [
-    `M ${source.x} ${source.y}`,
-    `C ${sourceControlX} ${source.y}`,
-    `${targetControlX} ${target.y}`,
-    `${target.x} ${target.y}`,
-  ].join(" ");
-}
-
-function getCanvasPoint(
-  event: { clientX: number; clientY: number },
-  canvasElement: HTMLDivElement | null,
-  zoom: number,
-) {
-  if (!canvasElement) return { x: 0, y: 0 };
-  const rect = canvasElement.getBoundingClientRect();
-  return {
-    x: (event.clientX - rect.left) / zoom,
-    y: (event.clientY - rect.top) / zoom,
-  };
-}
-
-function clampZoom(value: number) {
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
-}
 
 export function WorkflowCanvas({
   connectingNodeId,
@@ -103,6 +65,8 @@ export function WorkflowCanvas({
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
+  const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
@@ -189,6 +153,23 @@ export function WorkflowCanvas({
     return () => scrollElement.removeEventListener("wheel", handleWheel);
   }, [disabled, zoom]);
 
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+    const updateViewportSize = () => {
+      const width = scrollElement.clientWidth;
+      const height = scrollElement.clientHeight;
+      setViewportSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height });
+    };
+    updateViewportSize();
+    const observer = new ResizeObserver(updateViewportSize);
+    observer.observe(scrollElement);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
       ref={scrollRef}
@@ -210,7 +191,7 @@ export function WorkflowCanvas({
         onDropNodePreset(presetKey, clampPosition({
           x: point.x - NODE_WIDTH / 2,
           y: point.y - NODE_HEIGHT / 2,
-        }));
+        }, canvasSize));
       }}
       onPointerMove={(event) => {
         if (canvasPan.move(event)) return;
@@ -229,8 +210,8 @@ export function WorkflowCanvas({
       <div
         className="relative"
         style={{
-          width: CANVAS_WIDTH * zoom,
-          height: CANVAS_HEIGHT * zoom,
+          width: canvasSize.width * zoom,
+          height: canvasSize.height * zoom,
         }}
       >
         <div
@@ -238,8 +219,8 @@ export function WorkflowCanvas({
           data-workflow-canvas="true"
           className="relative origin-top-left"
           style={{
-            width: CANVAS_WIDTH,
-            height: CANVAS_HEIGHT,
+            width: canvasSize.width,
+            height: canvasSize.height,
             transform: `scale(${zoom})`,
             backgroundImage: [
               "linear-gradient(hsl(var(--border) / 0.65) 1px, transparent 1px)",
@@ -283,8 +264,8 @@ export function WorkflowCanvas({
           </div>
         <svg
           className="pointer-events-none absolute inset-0"
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
+          width={canvasSize.width}
+          height={canvasSize.height}
           aria-hidden="true"
         >
           <defs>
@@ -399,7 +380,7 @@ export function WorkflowCanvas({
                 onMoveNode(node.id, clampPosition({
                   x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
                   y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
-                }));
+                }, canvasSize));
               }}
               onPointerUp={() => {
                 dragRef.current = null;
