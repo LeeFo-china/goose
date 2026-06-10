@@ -126,7 +126,6 @@ function CommonConfigFields({
   return (
     <section className="space-y-3">
       <div className="grid gap-2">
-        <Label>所需权限</Label>
         <WorkflowPermissionMultiSelect
           value={Array.isArray(config.required_permissions)
             ? config.required_permissions
