@@ -203,6 +203,12 @@ export function WorkflowPropertyPanel({
             </Select>
           </div>
         ) : null}
+        <WorkflowNodeConfigFields
+          disabled={disabled}
+          node={selectedNode}
+          usedProcedureStageKeys={usedProcedureStageKeys}
+          onChangeConfig={handleChangeConfig}
+        />
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-description">说明</Label>
           <Textarea
@@ -218,12 +224,6 @@ export function WorkflowPropertyPanel({
             }
           />
         </div>
-        <WorkflowNodeConfigFields
-          disabled={disabled}
-          node={selectedNode}
-          usedProcedureStageKeys={usedProcedureStageKeys}
-          onChangeConfig={handleChangeConfig}
-        />
       </div>
       <Button
         type="button"
