@@ -19,7 +19,11 @@ import {
   isWorkflowProcedureStageKey,
 } from "@/components/workflows/workflow-procedure-stages";
 import { getWorkflowPaymentCollectionLabel } from "@/components/workflows/workflow-payment-collection-config-fields";
-import type { WorkflowNode, WorkflowNodeConfig } from "@/components/workflows/workflow-types";
+import type {
+  WorkflowEdge,
+  WorkflowNode,
+  WorkflowNodeConfig,
+} from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function WorkflowPropertyPanel({
   disabled,
+  edges,
   node,
   nodes,
   usedNodeKeys,
@@ -42,6 +47,7 @@ export function WorkflowPropertyPanel({
   onChangeNode,
 }: {
   disabled?: boolean;
+  edges: WorkflowEdge[];
   node: WorkflowNode | null;
   nodes: WorkflowNode[];
   usedNodeKeys: string[];
@@ -76,6 +82,11 @@ export function WorkflowPropertyPanel({
   const selectedBusinessOption = getWorkflowBusinessFlowOption(
     selectedNode.business_kind,
   );
+  const rollbackTargetNodes = getRollbackTargetNodes({
+    currentNode: selectedNode,
+    edges,
+    nodes,
+  });
 
   function handleChangeConfig(config: WorkflowNodeConfig) {
     if (
@@ -208,7 +219,7 @@ export function WorkflowPropertyPanel({
         <WorkflowNodeConfigFields
           disabled={disabled}
           node={selectedNode}
-          rollbackTargetNodes={nodes.filter((item) => item.id !== selectedNode.id)}
+          rollbackTargetNodes={rollbackTargetNodes}
           usedProcedureStageKeys={usedProcedureStageKeys}
           onChangeConfig={handleChangeConfig}
         />
@@ -239,5 +250,46 @@ export function WorkflowPropertyPanel({
         删除节点
       </Button>
     </aside>
+  );
+}
+
+function getRollbackTargetNodes({
+  currentNode,
+  edges,
+  nodes,
+}: {
+  currentNode: WorkflowNode;
+  edges: WorkflowEdge[];
+  nodes: WorkflowNode[];
+}) {
+  const nodesById = new Map(nodes.map((item) => [item.id, item]));
+  const incomingByTargetId = new Map<string, WorkflowEdge[]>();
+  for (const edge of edges) {
+    const incomingEdges = incomingByTargetId.get(edge.target_node_id) || [];
+    incomingEdges.push(edge);
+    incomingByTargetId.set(edge.target_node_id, incomingEdges);
+  }
+
+  const result: WorkflowNode[] = [];
+  const visitedNodeIds = new Set<string>([currentNode.id]);
+  const queue = [currentNode.id];
+
+  while (queue.length > 0) {
+    const targetNodeId = queue.shift();
+    if (!targetNodeId) continue;
+
+    for (const edge of incomingByTargetId.get(targetNodeId) || []) {
+      if (visitedNodeIds.has(edge.source_node_id)) continue;
+      visitedNodeIds.add(edge.source_node_id);
+      const sourceNode = nodesById.get(edge.source_node_id);
+      if (!sourceNode) continue;
+      result.push(sourceNode);
+      queue.push(sourceNode.id);
+    }
+  }
+
+  const orderByNodeId = new Map(nodes.map((item, index) => [item.id, index]));
+  return result.sort((left, right) =>
+    (orderByNodeId.get(left.id) ?? 0) - (orderByNodeId.get(right.id) ?? 0)
   );
 }

@@ -401,6 +401,7 @@ export function WorkflowDesignerShell({
               {selectedNode ? (
                 <WorkflowPropertyPanel
                   disabled={pending}
+                  edges={graph.edges}
                   node={selectedNode}
                   nodes={graph.nodes}
                   usedNodeKeys={graph.nodes
