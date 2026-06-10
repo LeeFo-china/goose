@@ -10,6 +10,7 @@ import {
   Layers3,
   Loader2,
   Network,
+  PanelRight,
   Save,
   ShieldCheck,
 } from "lucide-react";
@@ -44,6 +45,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 
+type DesignerPanel = "library" | "canvas" | "properties";
+
+const panelOptions: Array<{ value: DesignerPanel; label: string; icon: typeof Layers3 }> = [
+  { value: "library", label: "节点库", icon: Layers3 },
+  { value: "canvas", label: "画布", icon: Network },
+  { value: "properties", label: "属性", icon: PanelRight },
+];
+
 export function WorkflowDesignerShell({
   workflowId,
   initialDetail,
@@ -62,6 +71,7 @@ export function WorkflowDesignerShell({
   const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<DesignerPanel>("canvas");
   const [pending, startTransition] = useTransition();
   const selectedNode = useMemo(
     () => graph?.nodes.find((node) => node.id === selectedNodeId) || null,
@@ -342,32 +352,56 @@ export function WorkflowDesignerShell({
           </div>
         ) : null}
 
-        <div className="flex h-[calc(100vh-300px)] min-h-[660px] flex-col overflow-hidden">
-          <div className="grid min-h-0 flex-1 grid-cols-[292px_minmax(0,1fr)_336px] bg-muted/20">
-            <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
-            <WorkflowCanvas
-              connectingNodeId={connectingNodeId}
-              disabled={pending}
-              nodes={graph.nodes}
-              edges={graph.edges}
-              selectedNodeId={selectedNodeId}
-              onBeginConnect={setConnectingNodeId}
-              onCancelConnect={() => setConnectingNodeId(null)}
-              onDeleteEdge={deleteEdge}
-              onDropNodePreset={addNode}
-              onFinishConnect={connectToNode}
-              onMoveNode={moveNode}
-              onSelectNode={setSelectedNodeId}
-            />
-            <WorkflowPropertyPanel
-              disabled={pending}
-              node={selectedNode}
-              usedNodeKeys={graph.nodes
-                .filter((node) => node.id !== selectedNode?.id)
-                .map((node) => node.node_key)}
-              onDeleteNode={deleteNode}
-              onChangeNode={updateNode}
-            />
+        <div className="flex min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-300px)] lg:min-h-[660px]">
+          <div className="grid grid-cols-3 gap-2 border-b bg-background p-2 lg:hidden">
+            {panelOptions.map((option) => {
+              const Icon = option.icon;
+              const active = mobilePanel === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                  className="h-11"
+                  onClick={() => setMobilePanel(option.value)}
+                >
+                  <Icon data-icon="inline-start" />
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+          <div className="min-h-0 flex-1 bg-muted/20 lg:grid lg:grid-cols-[292px_minmax(0,1fr)_336px]">
+            <div className={mobilePanel === "library" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+              <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
+            </div>
+            <div className={mobilePanel === "canvas" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+              <WorkflowCanvas
+                connectingNodeId={connectingNodeId}
+                disabled={pending}
+                nodes={graph.nodes}
+                edges={graph.edges}
+                selectedNodeId={selectedNodeId}
+                onBeginConnect={setConnectingNodeId}
+                onCancelConnect={() => setConnectingNodeId(null)}
+                onDeleteEdge={deleteEdge}
+                onDropNodePreset={addNode}
+                onFinishConnect={connectToNode}
+                onMoveNode={moveNode}
+                onSelectNode={setSelectedNodeId}
+              />
+            </div>
+            <div className={mobilePanel === "properties" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}>
+              <WorkflowPropertyPanel
+                disabled={pending}
+                node={selectedNode}
+                usedNodeKeys={graph.nodes
+                  .filter((node) => node.id !== selectedNode?.id)
+                  .map((node) => node.node_key)}
+                onDeleteNode={deleteNode}
+                onChangeNode={updateNode}
+              />
+            </div>
           </div>
           <WorkflowValidationPanel validation={validation} />
         </div>
