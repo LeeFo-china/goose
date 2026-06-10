@@ -7,6 +7,7 @@ import type {
   WorkflowNodeConfig,
   WorkflowNotificationNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
 import { ProcedureConfigFields } from "@/components/workflows/workflow-procedure-config-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -76,6 +77,13 @@ export function WorkflowNodeConfigFields({
           config={node.config}
           disabled={disabled}
           usedStageKeys={usedProcedureStageKeys ?? []}
+          onChangeConfig={updateConfig}
+        />
+      ) : null}
+      {node.business_kind === "payment_collection" ? (
+        <WorkflowPaymentCollectionConfigFields
+          config={node.config}
+          disabled={disabled}
           onChangeConfig={updateConfig}
         />
       ) : null}

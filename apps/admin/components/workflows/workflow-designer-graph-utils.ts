@@ -25,7 +25,17 @@ export function detailToGraph(detail: WorkflowDefinitionDetail): WorkflowDesigne
   };
 }
 
-function defaultConfig(nodeType: WorkflowNodeType): WorkflowNodeConfig {
+function defaultConfig(
+  nodeType: WorkflowNodeType,
+  businessKind?: WorkflowNode["business_kind"],
+): WorkflowNodeConfig {
+  if (businessKind === "payment_collection") {
+    return {
+      payment_type: "deposit",
+      min_amount: null,
+      block_message: null,
+    };
+  }
   if (nodeType === "procedure") {
     return {
       stage_key: "",
@@ -73,7 +83,8 @@ export function createNodeFromPreset(input: {
     title: preset?.label || "业务节点",
     description: preset?.description || null,
     position: input.position || defaultPosition,
-    config: preset?.config || defaultConfig(nodeType),
+    config: preset?.config ||
+      defaultConfig(nodeType, preset?.businessKind || null),
     sort_order: input.index * 10,
     created_at: now,
     updated_at: now,
@@ -156,6 +167,34 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
         });
       } else {
         procedureStageKeys.set(stageKey, node.node_key);
+      }
+    }
+    if (node.business_kind === "payment_collection") {
+      const paymentType = "payment_type" in node.config
+        ? node.config.payment_type
+        : "";
+      if (
+        paymentType !== "deposit" &&
+        paymentType !== "stage_1" &&
+        paymentType !== "stage_2" &&
+        paymentType !== "stage_3" &&
+        paymentType !== "add_on"
+      ) {
+        issues.push({
+          code: "payment_collection_type_required",
+          message: "收款节点必须选择有效的收款类型",
+          nodeKey: node.node_key,
+        });
+      }
+      const minAmount = "min_amount" in node.config
+        ? node.config.min_amount
+        : null;
+      if (typeof minAmount === "number" && minAmount < 0) {
+        issues.push({
+          code: "payment_collection_min_amount_invalid",
+          message: "收款节点最低金额不能为负数",
+          nodeKey: node.node_key,
+        });
       }
     }
     const configReferences = [

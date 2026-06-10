@@ -18,6 +18,7 @@ import {
   getWorkflowProcedureStageLabel,
   isWorkflowProcedureStageKey,
 } from "@/components/workflows/workflow-procedure-stages";
+import { getWorkflowPaymentCollectionLabel } from "@/components/workflows/workflow-payment-collection-config-fields";
 import type { WorkflowNode, WorkflowNodeConfig } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ const nodePresetGroups: WorkflowNodePresetGroup[] = [
   "business",
   "construction",
   "procedure",
+  "finance",
   "approval",
   "system",
 ];
@@ -95,6 +97,21 @@ export function WorkflowPropertyPanel({
       onChangeNode({
         ...selectedNode,
         node_key: createWorkflowProcedureNodeKey(config.stage_key),
+        title,
+        config,
+      });
+      return;
+    }
+
+    if (
+      selectedNode.business_kind === "payment_collection" &&
+      "payment_type" in config
+    ) {
+      const title =
+        getWorkflowPaymentCollectionLabel(config.payment_type) ||
+        selectedNode.title;
+      onChangeNode({
+        ...selectedNode,
         title,
         config,
       });

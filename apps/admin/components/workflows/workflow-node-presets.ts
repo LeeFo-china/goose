@@ -9,6 +9,7 @@ export type WorkflowNodePresetGroup =
   | "business"
   | "construction"
   | "procedure"
+  | "finance"
   | "approval"
   | "system";
 
@@ -27,6 +28,7 @@ export const WorkflowNodePresetGroupLabels: Record<WorkflowNodePresetGroup, stri
   business: "业务流转",
   construction: "施工节点",
   procedure: "工序节点",
+  finance: "财务节点",
   approval: "审批确认",
   system: "系统动作",
 };
@@ -89,14 +91,6 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
     businessKind: "quote",
   },
   {
-    key: "deposit",
-    label: "定金",
-    description: "客户缴纳定金后的业务节点。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "deposit",
-  },
-  {
     key: "signed",
     label: "签约",
     description: "客户主流程的签约节点，对应标记签约动作。",
@@ -119,6 +113,19 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
     group: "construction",
     nodeType: "confirmation",
     businessKind: "final_acceptance",
+  },
+  {
+    key: "payment_collection",
+    label: "收款节点",
+    description: "检查项目收款已入账后再放行后续流程。",
+    group: "finance",
+    nodeType: "confirmation",
+    businessKind: "payment_collection",
+    config: {
+      payment_type: "deposit",
+      min_amount: null,
+      block_message: null,
+    },
   },
   {
     key: "settlement",

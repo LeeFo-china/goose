@@ -73,6 +73,12 @@ export type WorkflowProcedureNodeConfig = WorkflowBaseNodeConfig & {
   customer_visible?: boolean;
 };
 
+export type WorkflowPaymentCollectionNodeConfig = WorkflowBaseNodeConfig & {
+  payment_type?: "deposit" | "stage_1" | "stage_2" | "stage_3" | "add_on";
+  min_amount?: number | null;
+  block_message?: string | null;
+};
+
 export type WorkflowNotificationNodeConfig = WorkflowBaseNodeConfig & {
   channels: Array<"mini_program" | "sms" | "todo">;
   recipient_rule: "owner" | "assignee" | "customer" | "role";
@@ -83,6 +89,7 @@ export type WorkflowNodeConfig =
   | WorkflowBaseNodeConfig
   | WorkflowApprovalNodeConfig
   | WorkflowProcedureNodeConfig
+  | WorkflowPaymentCollectionNodeConfig
   | WorkflowNotificationNodeConfig;
 
 export type WorkflowNode = {
