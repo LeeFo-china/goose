@@ -110,16 +110,21 @@ export function WorkflowCanvas({
 }) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const connectionDraftRef = useRef<ConnectionDraft | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  function updateConnectionDraft(draft: ConnectionDraft | null) {
+    connectionDraftRef.current = draft;
+    setConnectionDraft(draft);
+  }
 
   function handleConnectionStart(event: PointerEvent, node: WorkflowNode) {
     if (disabled) return;
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
     const from = getOutputPoint(node);
-    setConnectionDraft({
+    updateConnectionDraft({
       sourceNodeId: node.id,
       from,
       to: getCanvasPoint(event, canvasRef.current),
@@ -129,18 +134,26 @@ export function WorkflowCanvas({
   }
 
   function finishConnectionFromPointer(event: PointerEvent) {
-    if (!connectionDraft) return;
+    const draft = connectionDraftRef.current;
+    if (!draft) return;
     const target = document
       .elementFromPoint(event.clientX, event.clientY)
       ?.closest<HTMLElement>("[data-node-input]");
     const targetNodeId = target?.dataset.nodeId || null;
 
-    setConnectionDraft(null);
-    if (targetNodeId && targetNodeId !== connectionDraft.sourceNodeId) {
+    updateConnectionDraft(null);
+    if (targetNodeId && targetNodeId !== draft.sourceNodeId) {
       onFinishConnect(targetNodeId);
       return;
     }
     onCancelConnect();
+  }
+
+  function finishConnectionToNode(targetNodeId: string) {
+    const sourceNodeId = connectionDraftRef.current?.sourceNodeId || connectingNodeId;
+    if (!sourceNodeId || sourceNodeId === targetNodeId) return;
+    updateConnectionDraft(null);
+    onFinishConnect(targetNodeId);
   }
 
   return (
@@ -165,16 +178,17 @@ export function WorkflowCanvas({
         }));
       }}
       onPointerMove={(event) => {
-        if (!connectionDraft) return;
-        setConnectionDraft({
-          ...connectionDraft,
+        const draft = connectionDraftRef.current;
+        if (!draft) return;
+        updateConnectionDraft({
+          ...draft,
           to: getCanvasPoint(event, canvasRef.current),
         });
       }}
       onPointerUp={finishConnectionFromPointer}
       onPointerCancel={() => {
         dragRef.current = null;
-        setConnectionDraft(null);
+        updateConnectionDraft(null);
         onCancelConnect();
       }}
     >
@@ -255,6 +269,7 @@ export function WorkflowCanvas({
 
           return (
             <Button
+              data-edge-action="delete"
               key={`${edge.id}-delete`}
               type="button"
               size="icon"
@@ -275,7 +290,7 @@ export function WorkflowCanvas({
             <div
               key={node.id}
               className={[
-                "absolute flex flex-col justify-center rounded-md border bg-background px-4 text-left",
+                "absolute z-20 flex flex-col justify-center rounded-md border bg-background px-4 text-left",
                 "shadow-sm transition",
                 disabled ? "cursor-not-allowed opacity-70" : "cursor-move",
                 connecting
@@ -294,7 +309,7 @@ export function WorkflowCanvas({
                 if (disabled) return;
                 if (
                   event.target instanceof HTMLElement &&
-                  event.target.closest("[data-node-action]")
+                  event.target.closest("[data-node-port], [data-edge-action]")
                 ) {
                   return;
                 }
@@ -324,7 +339,6 @@ export function WorkflowCanvas({
               }}
             >
               <button
-                data-node-action="select"
                 type="button"
                 className="min-w-0 border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 disabled={disabled}
@@ -347,7 +361,7 @@ export function WorkflowCanvas({
               </button>
               {node.node_type !== "start" ? (
                 <button
-                  data-node-action="input"
+                  data-node-port="input"
                   data-node-input="true"
                   data-node-id={node.id}
                   type="button"
@@ -368,16 +382,18 @@ export function WorkflowCanvas({
                   }}
                   onPointerUp={(event) => {
                     event.stopPropagation();
-                    if (connectionDraft && connectionDraft.sourceNodeId !== node.id) {
-                      setConnectionDraft(null);
-                      onFinishConnect(node.id);
-                    }
+                    finishConnectionToNode(node.id);
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    finishConnectionToNode(node.id);
                   }}
                 />
               ) : null}
               {node.node_type !== "end" ? (
                 <button
                   data-node-action="output"
+                  data-node-port="output"
                   type="button"
                   aria-label={`${node.title} 输出端口`}
                   className={[
