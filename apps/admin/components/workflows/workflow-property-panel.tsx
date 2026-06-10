@@ -53,8 +53,8 @@ export function WorkflowPropertyPanel({
 }) {
   if (!node) {
     return (
-      <aside className="flex min-h-0 flex-col border-l bg-background">
-        <div className="border-b px-4 py-3">
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
+        <div className="shrink-0 border-b px-4 py-3">
           <h2 className="text-sm font-semibold">属性配置</h2>
         </div>
         <div className="flex flex-1 items-center justify-center p-6 text-center">
@@ -74,8 +74,8 @@ export function WorkflowPropertyPanel({
   const currentPreset = getWorkflowNodePreset(node.node_key);
 
   return (
-    <aside className="flex min-h-0 flex-col border-l bg-background">
-      <div className="border-b px-4 py-3">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
+      <div className="shrink-0 border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Settings2 className="size-4" />
           节点属性
@@ -92,7 +92,10 @@ export function WorkflowPropertyPanel({
           </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+      <div
+        data-workflow-property-scroll="true"
+        className="min-h-0 flex-1 space-y-4 overflow-auto p-4"
+      >
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-preset">平台节点</Label>
           <Select
@@ -166,7 +169,7 @@ export function WorkflowPropertyPanel({
       <Button
         type="button"
         variant="outline"
-        className="m-4 mt-0 justify-start text-destructive hover:text-destructive"
+        className="m-4 mt-0 shrink-0 justify-start text-destructive hover:text-destructive"
         disabled={disabled}
         onClick={() => onDeleteNode(node.id)}
       >
