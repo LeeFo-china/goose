@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEvent } from "react";
-import { Settings2 } from "lucide-react";
+import { Settings } from "lucide-react";
 import {
   HANDLE_HIT_SIZE,
   NODE_HEIGHT,
@@ -169,9 +169,9 @@ export function WorkflowCanvasNode({
       {selected ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute -bottom-2 -right-2 z-10 flex size-7 items-center justify-center rounded-full border border-primary/30 bg-background text-primary shadow-sm ring-4 ring-background"
+          className="pointer-events-none absolute bottom-2 right-2 z-10 flex size-6 items-center justify-center rounded-full border border-primary/25 bg-primary/8 text-primary shadow-sm"
         >
-          <Settings2 className="size-3.5" />
+          <Settings className="size-3.5" />
         </span>
       ) : null}
       {node.node_type !== "start" ? (
