@@ -12,7 +12,6 @@ import {
 import type { WorkflowNode } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -61,7 +60,7 @@ export function WorkflowPropertyPanel({
             </span>
             <div className="mt-3 text-sm font-medium">未选择节点</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              在画布中选择一个节点后，可以编辑平台节点、标题和说明。
+              在画布中选择一个节点后，可以编辑平台节点和说明。
             </p>
           </div>
         </div>
@@ -88,76 +87,68 @@ export function WorkflowPropertyPanel({
         </div>
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-preset">平台节点</Label>
-        <Select
-          disabled={disabled}
-          value={node.node_key}
-          onValueChange={(value) => {
-            const preset = getWorkflowNodePreset(value);
-            if (!preset) return;
-            onChangeNode(applyWorkflowNodePreset(node, preset));
-          }}
-        >
-          <SelectTrigger id="workflow-node-preset">
-            <SelectValue placeholder="选择平台节点" />
-          </SelectTrigger>
-          <SelectContent>
-            {!currentPreset ? (
-              <>
-                <SelectItem value={node.node_key}>
-                  未识别节点：{node.node_key}
-                </SelectItem>
-                <SelectSeparator />
-              </>
-            ) : null}
-            {nodePresetGroups.map((group, groupIndex) => (
-              <SelectGroup key={group}>
-                {groupIndex > 0 ? <SelectSeparator /> : null}
-                <SelectLabel>{WorkflowNodePresetGroupLabels[group]}</SelectLabel>
-                {WorkflowNodePresets.filter((preset) => preset.group === group).map((preset) => (
-                  <SelectItem
-                    key={preset.key}
-                    value={preset.key}
-                    disabled={usedNodeKeys.includes(preset.key)}
-                  >
-                    {preset.label}
+        <div className="grid gap-2">
+          <Label htmlFor="workflow-node-preset">平台节点</Label>
+          <Select
+            disabled={disabled}
+            value={node.node_key}
+            onValueChange={(value) => {
+              const preset = getWorkflowNodePreset(value);
+              if (!preset) return;
+              onChangeNode(applyWorkflowNodePreset(node, preset));
+            }}
+          >
+            <SelectTrigger id="workflow-node-preset">
+              <SelectValue placeholder="选择平台节点" />
+            </SelectTrigger>
+            <SelectContent>
+              {!currentPreset ? (
+                <>
+                  <SelectItem value={node.node_key}>
+                    未识别节点：{node.node_key}
                   </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          节点编码：<span className="font-medium text-foreground">{node.node_key}</span>
+                  <SelectSeparator />
+                </>
+              ) : null}
+              {nodePresetGroups.map((group, groupIndex) => (
+                <SelectGroup key={group}>
+                  {groupIndex > 0 ? <SelectSeparator /> : null}
+                  <SelectLabel>{WorkflowNodePresetGroupLabels[group]}</SelectLabel>
+                  {WorkflowNodePresets.filter((preset) => preset.group === group).map((preset) => (
+                    <SelectItem
+                      key={preset.key}
+                      value={preset.key}
+                      disabled={usedNodeKeys.includes(preset.key)}
+                    >
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            节点编码：<span className="font-medium text-foreground">{node.node_key}</span>
+          </div>
         </div>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-title">标题</Label>
-        <Input
-          id="workflow-node-title"
-          value={node.title}
-          disabled={disabled}
-          maxLength={100}
-          onChange={(event) => onChangeNode({ ...node, title: event.target.value })}
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="workflow-node-description">说明</Label>
-        <Textarea
-          id="workflow-node-description"
-          value={node.description || ""}
-          disabled={disabled}
-          maxLength={500}
-          onChange={(event) => onChangeNode({
-            ...node,
-            description: event.target.value || null,
-          })}
-        />
-      </div>
-      <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
-        审批人、工序要求、通知模板等结构化配置会在后续节点配置面板继续细化。
-      </div>
+        <div className="grid gap-2">
+          <Label htmlFor="workflow-node-description">说明</Label>
+          <Textarea
+            id="workflow-node-description"
+            value={node.description || ""}
+            disabled={disabled}
+            maxLength={500}
+            onChange={(event) =>
+              onChangeNode({
+                ...node,
+                description: event.target.value || null,
+              })
+            }
+          />
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
+          审批人、工序要求、通知模板等结构化配置会在后续节点配置面板继续细化。
+        </div>
       </div>
       <Button
         type="button"
