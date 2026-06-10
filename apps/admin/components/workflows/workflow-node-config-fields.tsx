@@ -7,6 +7,7 @@ import type {
   WorkflowNodeConfig,
   WorkflowNotificationNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { getWorkflowFinanceKind } from "@/components/workflows/workflow-finance-node-options";
 import { getWorkflowNodeCapability } from "@/components/workflows/workflow-node-capabilities";
 import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
 import { WorkflowPermissionMultiSelect } from "@/components/workflows/workflow-permission-multi-select";
@@ -70,6 +71,7 @@ export function WorkflowNodeConfigFields({
     });
   }
   const capability = getWorkflowNodeCapability(node);
+  const financeKind = getWorkflowFinanceKind(node);
 
   return (
     <div className="space-y-4">
@@ -87,14 +89,15 @@ export function WorkflowNodeConfigFields({
           onChangeConfig={updateConfig}
         />
       ) : null}
-      {capability === "payment_collection" ? (
+      {capability === "finance" && financeKind === "payment_collection" ? (
         <WorkflowPaymentCollectionConfigFields
           config={node.config}
           disabled={disabled}
           onChangeConfig={updateConfig}
         />
       ) : null}
-      {capability === "finance" || capability === "approval" ? (
+      {(capability === "finance" && financeKind === "settlement") ||
+      capability === "approval" ? (
         <ApprovalConfigFields
           config={node.config}
           disabled={disabled}

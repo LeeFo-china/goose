@@ -60,6 +60,10 @@ export type WorkflowConstructionStageNodeConfig = WorkflowBaseNodeConfig & {
   stage_type?: "construction_start" | "final_acceptance";
 };
 
+export type WorkflowFinanceNodeConfig = WorkflowBaseNodeConfig & {
+  finance_type?: "payment_collection" | "settlement";
+};
+
 export type WorkflowApprovalNodeConfig = WorkflowBaseNodeConfig & {
   assignee_rule?: "employee" | "department" | "role";
   assignee_id?: string | null;
@@ -112,6 +116,7 @@ export type WorkflowNotificationNodeConfig = WorkflowBaseNodeConfig & {
 export type WorkflowNodeConfig =
   | WorkflowBaseNodeConfig
   | WorkflowConstructionStageNodeConfig
+  | WorkflowFinanceNodeConfig
   | WorkflowApprovalNodeConfig
   | WorkflowProcedureNodeConfig
   | WorkflowPaymentCollectionNodeConfig

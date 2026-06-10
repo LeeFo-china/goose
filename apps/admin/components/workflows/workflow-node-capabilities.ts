@@ -1,10 +1,18 @@
 import {
   isProjectConstructionStageCode,
   PROJECT_LOG_STAGE_CONFIG,
-  PaymentTypeConfig,
   type WorkflowBusinessKind,
   type WorkflowNodeType,
 } from "@gooes/domain";
+import {
+  getWorkflowBusinessFlowOption,
+  type WorkflowBusinessFlowKind,
+} from "@/components/workflows/workflow-business-flow-options";
+import {
+  getWorkflowFinanceKindOption,
+  getWorkflowFinanceSpecificLabel,
+  type WorkflowFinanceKind,
+} from "@/components/workflows/workflow-finance-node-options";
 import type {
   WorkflowBaseNodeConfig,
   WorkflowNode,
@@ -15,23 +23,11 @@ export type WorkflowNodeCapability =
   | "business"
   | "construction"
   | "procedure"
-  | "payment_collection"
   | "finance"
   | "approval"
   | "notification"
   | "automation"
   | "subflow";
-
-export type WorkflowBusinessFlowKind = Extract<
-  WorkflowBusinessKind,
-  | "customer_lead"
-  | "phone_follow_up"
-  | "store_visit"
-  | "measurement"
-  | "design"
-  | "quote"
-  | "contract"
->;
 
 export type WorkflowConstructionStageKind = Extract<
   WorkflowBusinessKind,
@@ -56,7 +52,6 @@ export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
   { value: "business", label: "业务流转" },
   { value: "construction", label: "施工阶段" },
   { value: "procedure", label: "工序" },
-  { value: "payment_collection", label: "收款" },
   { value: "finance", label: "财务" },
   { value: "approval", label: "审批" },
   { value: "notification", label: "通知" },
@@ -65,56 +60,6 @@ export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
 ] as const satisfies ReadonlyArray<{
   value: WorkflowNodeCapability;
   label: string;
-}>;
-
-export const WORKFLOW_BUSINESS_FLOW_OPTIONS = [
-  {
-    value: "customer_lead",
-    label: "客户线索",
-    nodeKeyBase: "lead",
-    description: "客户进入业务流程后的线索节点。",
-  },
-  {
-    value: "phone_follow_up",
-    label: "电话跟进",
-    nodeKeyBase: "following",
-    description: "客户主流程的跟进节点，对应开始跟进动作。",
-  },
-  {
-    value: "store_visit",
-    label: "到店",
-    nodeKeyBase: "arrived",
-    description: "客户主流程的到店节点，对应标记到店动作。",
-  },
-  {
-    value: "measurement",
-    label: "量房",
-    nodeKeyBase: "measurement",
-    description: "到店后的量房或现场测量节点。",
-  },
-  {
-    value: "design",
-    label: "设计",
-    nodeKeyBase: "designing",
-    description: "客户主流程的设计节点，对应开始设计动作。",
-  },
-  {
-    value: "quote",
-    label: "报价",
-    nodeKeyBase: "quote",
-    description: "方案报价或预算确认节点。",
-  },
-  {
-    value: "contract",
-    label: "签约",
-    nodeKeyBase: "signed",
-    description: "客户主流程的签约节点，对应标记签约动作。",
-  },
-] as const satisfies ReadonlyArray<{
-  value: WorkflowBusinessFlowKind;
-  label: string;
-  nodeKeyBase: string;
-  description: string;
 }>;
 
 export const WORKFLOW_CONSTRUCTION_STAGE_OPTIONS = [
@@ -169,21 +114,6 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
       customer_visible: false,
     },
   },
-  payment_collection: {
-    label: PaymentTypeConfig.deposit.label,
-    description: "检查项目收款已入账后再放行后续流程。",
-    nodeType: "confirmation",
-    businessKind: "payment_collection",
-    nodeKeyBase: "payment_deposit",
-    config: {
-      required_permissions: [],
-      payment_type: "deposit",
-      requirement_mode: "any_confirmed",
-      required_percentage: null,
-      block_message: null,
-      finance_reviewer_employee_id: null,
-    },
-  },
   finance: {
     label: "结算",
     description: "项目结算或尾款确认节点。",
@@ -192,6 +122,7 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     nodeKeyBase: "settlement",
     config: {
       required_permissions: [],
+      finance_type: "settlement",
       assignee_rule: "role",
       approve_mode: "any",
       amount_threshold: null,
@@ -254,7 +185,7 @@ export function getWorkflowNodeCapability(node: WorkflowNode): WorkflowNodeCapab
     return "construction";
   }
   if (node.node_type === "procedure") return "procedure";
-  if (node.business_kind === "payment_collection") return "payment_collection";
+  if (node.business_kind === "payment_collection") return "finance";
   if (node.business_kind === "settlement") return "finance";
   if (node.business_kind === "expense_approval") return "approval";
   if (node.node_type === "approval") return "approval";
@@ -290,14 +221,6 @@ export function getWorkflowNodeDisplayLabels(
     capabilityLabel,
     specificLabel,
   };
-}
-
-export function getWorkflowBusinessFlowOption(
-  businessKind: WorkflowBusinessKind | null | undefined,
-) {
-  return WORKFLOW_BUSINESS_FLOW_OPTIONS.find((option) =>
-    option.value === businessKind
-) ?? null;
 }
 
 export function getWorkflowConstructionStageOption(
@@ -343,10 +266,8 @@ function getWorkflowNodeSpecificLabel(
       )?.label || node.title;
     case "procedure":
       return getProcedureSpecificLabel(node);
-    case "payment_collection":
-      return getPaymentSpecificLabel(node);
     case "finance":
-      return "结算";
+      return getWorkflowFinanceSpecificLabel(node);
     case "approval":
       return node.title || "审批";
     case "notification":
@@ -370,20 +291,6 @@ function getProcedureSpecificLabel(node: WorkflowNode) {
   return node.title === "工序节点" ? "未选择工序" : node.title;
 }
 
-function getPaymentSpecificLabel(node: WorkflowNode) {
-  const paymentType = "payment_type" in node.config
-    ? node.config.payment_type
-    : null;
-  if (
-    typeof paymentType === "string" &&
-    paymentType in PaymentTypeConfig
-  ) {
-    return PaymentTypeConfig[paymentType as keyof typeof PaymentTypeConfig].label;
-  }
-
-  return node.title === "收款节点" ? "未选择收款类型" : node.title;
-}
-
 export function applyWorkflowBusinessKind(input: {
   node: WorkflowNode;
   businessKind: WorkflowBusinessKind;
@@ -402,6 +309,47 @@ export function applyWorkflowBusinessKind(input: {
     title: option.label,
     description: option.description,
     config: mergeWithCommonConfig({ required_permissions: [] }, input.node.config),
+  };
+}
+
+export function applyWorkflowFinanceKind(input: {
+  node: WorkflowNode;
+  financeKind: WorkflowFinanceKind;
+  usedNodeKeys: string[];
+}): WorkflowNode {
+  const option = getWorkflowFinanceKindOption(input.financeKind);
+  if (!option) {
+    return input.node;
+  }
+
+  const config = input.financeKind === "payment_collection"
+    ? {
+      required_permissions: [],
+      finance_type: "payment_collection" as const,
+      payment_type: "deposit" as const,
+      requirement_mode: "any_confirmed" as const,
+      required_percentage: null,
+      block_message: null,
+      finance_reviewer_employee_id: null,
+    }
+    : {
+      required_permissions: [],
+      finance_type: "settlement" as const,
+      assignee_rule: "role" as const,
+      approve_mode: "any" as const,
+      amount_threshold: null,
+    };
+
+  return {
+    ...input.node,
+    node_key: buildUniqueWorkflowNodeKey(option.nodeKeyBase, input.usedNodeKeys),
+    node_type: input.financeKind === "payment_collection"
+      ? "confirmation"
+      : "approval",
+    business_kind: option.value,
+    title: option.label,
+    description: option.description,
+    config: mergeWithCommonConfig(config, input.node.config),
   };
 }
 

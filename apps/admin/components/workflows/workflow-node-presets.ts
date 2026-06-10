@@ -37,7 +37,7 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
   {
     key: "workflow_step",
     label: "流程节点",
-    description: "添加一个流程步骤，然后在属性里选择业务、工序、收款、审批等能力。",
+    description: "添加一个流程步骤，然后在属性里选择业务、工序、财务、审批等能力。",
     group: "common",
     nodeType: "business",
     businessKind: "customer_lead",

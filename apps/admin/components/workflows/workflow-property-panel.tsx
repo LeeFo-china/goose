@@ -3,15 +3,23 @@
 import { PanelRight, Settings2, Trash2 } from "lucide-react";
 import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
+  getWorkflowBusinessFlowOption,
+  WORKFLOW_BUSINESS_FLOW_OPTIONS,
+} from "@/components/workflows/workflow-business-flow-options";
+import {
+  getWorkflowFinanceKind,
+  WORKFLOW_FINANCE_KIND_OPTIONS,
+  type WorkflowFinanceKind,
+} from "@/components/workflows/workflow-finance-node-options";
+import {
   applyWorkflowBusinessKind,
   applyWorkflowConstructionStageKind,
+  applyWorkflowFinanceKind,
   applyWorkflowNodeCapability,
-  getWorkflowBusinessFlowOption,
   getWorkflowConstructionStageKind,
   getWorkflowNodeCapability,
   getWorkflowNodeDisplayLabels,
   isWorkflowControlNode,
-  WORKFLOW_BUSINESS_FLOW_OPTIONS,
   WORKFLOW_CONSTRUCTION_STAGE_OPTIONS,
   WORKFLOW_NODE_CAPABILITY_OPTIONS,
   type WorkflowConstructionStageKind,
@@ -88,6 +96,7 @@ export function WorkflowPropertyPanel({
   );
   const selectedConstructionStageKind =
     getWorkflowConstructionStageKind(selectedNode);
+  const selectedFinanceKind = getWorkflowFinanceKind(selectedNode);
   const rollbackTargetNodes = getRollbackTargetNodes({
     currentNode: selectedNode,
     edges,
@@ -239,6 +248,35 @@ export function WorkflowPropertyPanel({
               </SelectTrigger>
               <SelectContent>
                 {WORKFLOW_CONSTRUCTION_STAGE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {!isControlNode && selectedCapability === "finance" ? (
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-finance-kind">财务类型</Label>
+            <Select
+              disabled={disabled}
+              value={selectedFinanceKind}
+              onValueChange={(value) =>
+                onChangeNode(
+                  applyWorkflowFinanceKind({
+                    node: selectedNode,
+                    financeKind: value as WorkflowFinanceKind,
+                    usedNodeKeys,
+                  }),
+                )
+              }
+            >
+              <SelectTrigger id="workflow-node-finance-kind">
+                <SelectValue placeholder="选择财务类型" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_FINANCE_KIND_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
