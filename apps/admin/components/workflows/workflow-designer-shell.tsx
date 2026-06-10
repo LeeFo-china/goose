@@ -394,6 +394,7 @@ export function WorkflowDesignerShell({
                 onFinishConnect={connectToNode}
                 onArrangeNodes={arrangeNodes}
                 onMoveNode={moveNode}
+                onOpenNodeLibrary={showNodeLibrary}
                 onSelectNode={selectNode}
               />
             </div>

@@ -2,7 +2,7 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Layers3, X } from "lucide-react";
 import {
   MAX_ZOOM,
   MIN_ZOOM,
@@ -26,6 +26,7 @@ import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
+import { Button } from "@/components/ui/button";
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
@@ -43,6 +44,7 @@ export function WorkflowCanvas({
   onFinishConnect,
   onArrangeNodes,
   onMoveNode,
+  onOpenNodeLibrary,
   onSelectNode,
 }: {
   connectingNodeId: string | null;
@@ -57,6 +59,7 @@ export function WorkflowCanvas({
   onFinishConnect: (nodeId: string) => void;
   onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
+  onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -251,6 +254,25 @@ export function WorkflowCanvas({
         onZoomIn={() => applyZoom(zoom + ZOOM_STEP)}
         onZoomOut={() => applyZoom(zoom - ZOOM_STEP)}
       />
+      <div className="pointer-events-none sticky left-0 right-0 top-3 z-30 h-0 px-3">
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="pointer-events-auto h-9 bg-background/95 text-muted-foreground shadow-sm backdrop-blur"
+            disabled={disabled}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenNodeLibrary();
+            }}
+          >
+            <Layers3 data-icon="inline-start" />
+            节点库
+          </Button>
+        </div>
+      </div>
       <div
         className="relative"
         style={{
