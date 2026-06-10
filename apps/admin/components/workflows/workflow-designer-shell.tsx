@@ -25,7 +25,6 @@ import {
   validateGraph,
 } from "@/components/workflows/workflow-designer-graph-utils";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
-import { workflowStatusLabel } from "@/components/workflows/workflow-labels";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
 import {
@@ -312,32 +311,6 @@ export function WorkflowDesignerShell({
               </Button>
             </div>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-4">
-            <div className="rounded-md border bg-background/80 px-3 py-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Layers3 className="size-3.5" />
-                节点
-              </div>
-              <div className="mt-1 text-lg font-semibold">{graph.nodes.length}</div>
-            </div>
-            <div className="rounded-md border bg-background/80 px-3 py-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Network className="size-3.5" />
-                连线
-              </div>
-              <div className="mt-1 text-lg font-semibold">{graph.edges.length}</div>
-            </div>
-            <div className="rounded-md border bg-background/80 px-3 py-2">
-              <div className="text-xs text-muted-foreground">流程状态</div>
-              <div className="mt-1 text-sm font-medium">
-                {workflowStatusLabel(graph.definition.status)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-background/80 px-3 py-2">
-              <div className="text-xs text-muted-foreground">发布前置</div>
-              <div className="mt-1 truncate text-sm font-medium">{publishTitle}</div>
-            </div>
-          </div>
         </div>
 
         {customerMainWorkflow ? (
@@ -352,7 +325,7 @@ export function WorkflowDesignerShell({
           </div>
         ) : null}
 
-        <div className="flex min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-300px)] lg:min-h-[660px]">
+        <div className="flex min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-220px)] lg:min-h-[660px]">
           <div className="grid grid-cols-3 gap-2 border-b bg-background p-2 lg:hidden">
             {panelOptions.map((option) => {
               const Icon = option.icon;
