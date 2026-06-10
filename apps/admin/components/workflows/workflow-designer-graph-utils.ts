@@ -32,7 +32,8 @@ function defaultConfig(
   if (businessKind === "payment_collection") {
     return {
       payment_type: "deposit",
-      min_amount: null,
+      requirement_mode: "any_confirmed",
+      required_percentage: null,
       block_message: null,
       finance_reviewer_employee_id: null,
     };
@@ -187,13 +188,43 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
           nodeKey: node.node_key,
         });
       }
+      const requirementMode = "requirement_mode" in node.config
+        ? node.config.requirement_mode
+        : "any_confirmed";
+      if (
+        requirementMode !== "any_confirmed" &&
+        requirementMode !== "signed_amount_percentage"
+      ) {
+        issues.push({
+          code: "payment_collection_requirement_mode_invalid",
+          message: "收款节点必须选择有效的收款放行规则",
+          nodeKey: node.node_key,
+        });
+      }
+      const requiredPercentage = "required_percentage" in node.config
+        ? node.config.required_percentage
+        : null;
+      if (
+        requirementMode === "signed_amount_percentage" &&
+        (
+          typeof requiredPercentage !== "number" ||
+          requiredPercentage <= 0 ||
+          requiredPercentage > 100
+        )
+      ) {
+        issues.push({
+          code: "payment_collection_required_percentage_invalid",
+          message: "按签约金额比例校验时，比例必须大于 0 且不超过 100",
+          nodeKey: node.node_key,
+        });
+      }
       const minAmount = "min_amount" in node.config
         ? node.config.min_amount
         : null;
       if (typeof minAmount === "number" && minAmount < 0) {
         issues.push({
           code: "payment_collection_min_amount_invalid",
-          message: "收款节点最低金额不能为负数",
+          message: "历史固定收款金额不能为负数",
           nodeKey: node.node_key,
         });
       }

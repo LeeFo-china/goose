@@ -155,7 +155,8 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     config: {
       required_permissions: [],
       payment_type: "deposit",
-      min_amount: null,
+      requirement_mode: "any_confirmed",
+      required_percentage: null,
       block_message: null,
       finance_reviewer_employee_id: null,
     },

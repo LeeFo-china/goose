@@ -148,21 +148,25 @@ async function assertPaymentCollectionRequirements(input: {
   }
 
   const paymentType = getPaymentCollectionType(input.node.config.payment_type);
-  const minAmount = getPaymentCollectionMinAmount(input.node.config.min_amount);
+  const requirement = await getPaymentCollectionRequirement({
+    config: input.node.config,
+    projectId: input.projectId,
+  });
   const summary = await paymentRepository.summarizeConfirmedProjectPayments({
     projectId: input.projectId,
     type: paymentType,
   });
-  const amountSatisfied = minAmount === null ||
-    summary.totalAmount >= minAmount;
+  const amountSatisfied = requirement.requiredAmount === null ||
+    summary.totalAmount >= requirement.requiredAmount;
 
-  if (summary.count > 0 && amountSatisfied) {
+  if (!requirement.issue && summary.count > 0 && amountSatisfied) {
     return;
   }
 
-  const fallbackMessage = minAmount === null
+  const fallbackMessage = requirement.issue ||
+    (requirement.requiredAmount === null
     ? "请先确认收款后再推进流程"
-    : `已入账金额不足，当前已入账 ${summary.totalAmount} 元，要求至少 ${minAmount} 元`;
+    : `已入账金额不足，当前已入账 ${summary.totalAmount} 元，要求至少 ${requirement.requiredAmount} 元`);
   const message = typeof input.node.config.block_message === "string" &&
       input.node.config.block_message.trim()
     ? input.node.config.block_message.trim()
@@ -178,7 +182,11 @@ async function assertPaymentCollectionRequirements(input: {
       payment_type: paymentType,
       confirmed_payment_count: summary.count,
       confirmed_amount: summary.totalAmount,
-      min_amount: minAmount,
+      requirement_mode: requirement.mode,
+      required_percentage: requirement.requiredPercentage,
+      required_amount: requirement.requiredAmount,
+      signed_amount: requirement.signedAmount,
+      legacy_min_amount: requirement.legacyMinAmount,
     },
   );
 }
@@ -198,6 +206,102 @@ function getPaymentCollectionType(value: unknown) {
 
 function getPaymentCollectionMinAmount(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return null;
+}
+
+type PaymentCollectionRequirement = {
+  mode: "any_confirmed" | "signed_amount_percentage" | "legacy_fixed_amount";
+  requiredAmount: number | null;
+  requiredPercentage: number | null;
+  signedAmount: number | null;
+  legacyMinAmount: number | null;
+  issue: string | null;
+};
+
+async function getPaymentCollectionRequirement(input: {
+  config: JsonObject;
+  projectId: string;
+}): Promise<PaymentCollectionRequirement> {
+  const explicitMode = getPaymentCollectionRequirementMode(
+    input.config.requirement_mode,
+  );
+  const legacyMinAmount = getPaymentCollectionMinAmount(input.config.min_amount);
+
+  if (!explicitMode && legacyMinAmount !== null) {
+    return {
+      mode: "legacy_fixed_amount",
+      requiredAmount: legacyMinAmount,
+      requiredPercentage: null,
+      signedAmount: null,
+      legacyMinAmount,
+      issue: null,
+    };
+  }
+
+  const mode = explicitMode || "any_confirmed";
+  if (mode === "any_confirmed") {
+    return {
+      mode,
+      requiredAmount: null,
+      requiredPercentage: null,
+      signedAmount: null,
+      legacyMinAmount,
+      issue: null,
+    };
+  }
+
+  const requiredPercentage = getPaymentCollectionRequiredPercentage(
+    input.config.required_percentage,
+  );
+  if (requiredPercentage === null) {
+    return {
+      mode,
+      requiredAmount: null,
+      requiredPercentage: null,
+      signedAmount: null,
+      legacyMinAmount,
+      issue: "收款节点未配置有效的签约金额比例",
+    };
+  }
+
+  const signedAmount = await paymentRepository.findProjectSignedAmount(input.projectId);
+  if (signedAmount === null) {
+    return {
+      mode,
+      requiredAmount: null,
+      requiredPercentage,
+      signedAmount: null,
+      legacyMinAmount,
+      issue: "项目缺少签约金额，无法按比例校验收款要求",
+    };
+  }
+
+  return {
+    mode,
+    requiredAmount: Number((signedAmount * requiredPercentage / 100).toFixed(2)),
+    requiredPercentage,
+    signedAmount,
+    legacyMinAmount,
+    issue: null,
+  };
+}
+
+function getPaymentCollectionRequirementMode(value: unknown) {
+  if (value === "any_confirmed" || value === "signed_amount_percentage") {
+    return value;
+  }
+  return null;
+}
+
+function getPaymentCollectionRequiredPercentage(value: unknown) {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value <= 100
+  ) {
     return value;
   }
   return null;

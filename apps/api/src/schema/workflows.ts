@@ -159,6 +159,14 @@ const PaymentCollectionNodeConfigSchema = BaseNodeConfigSchema.extend({
   payment_type: z.enum(WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES, {
     message: "请选择有效的收款类型",
   }).default("deposit"),
+  requirement_mode: z.enum(["any_confirmed", "signed_amount_percentage"], {
+    message: "请选择有效的收款放行规则",
+  }).default("any_confirmed"),
+  required_percentage: numericField("签约金额比例必须为数字")
+    .positive("签约金额比例必须大于 0")
+    .max(100, "签约金额比例不能超过 100")
+    .nullable()
+    .optional(),
   min_amount: numericField("最低收款金额必须为数字")
     .nonnegative("最低收款金额不能为负数")
     .nullable()

@@ -59,6 +59,25 @@ class PaymentRepository {
     return data as { id: string; tenant_id: string | null } | null;
   }
 
+  async findProjectSignedAmount(projectId: string): Promise<number | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("signed_amount")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询项目签约金额失败", error);
+    }
+
+    const signedAmount = Number(
+      (data as { signed_amount: number | null } | null)?.signed_amount ?? 0,
+    );
+    return Number.isFinite(signedAmount) && signedAmount > 0
+      ? signedAmount
+      : null;
+  }
+
   async findById(id: string): Promise<PaymentRecord | null> {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("payments")

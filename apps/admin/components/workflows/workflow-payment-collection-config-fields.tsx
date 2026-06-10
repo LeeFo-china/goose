@@ -37,6 +37,14 @@ export const WORKFLOW_PAYMENT_COLLECTION_OPTIONS = [
   "add_on",
 ] as const;
 
+const WORKFLOW_PAYMENT_REQUIREMENT_OPTIONS = [
+  { value: "any_confirmed", label: "有已入账收款即可" },
+  { value: "signed_amount_percentage", label: "按签约金额比例" },
+] as const satisfies Array<{
+  value: NonNullable<WorkflowPaymentCollectionNodeConfig["requirement_mode"]>;
+  label: string;
+}>;
+
 export function getWorkflowPaymentCollectionLabel(
   paymentType: string | null | undefined,
 ) {
@@ -45,11 +53,11 @@ export function getWorkflowPaymentCollectionLabel(
     "";
 }
 
-function parseOptionalPaymentAmount(value: string) {
+function parseOptionalPercentage(value: string) {
   const normalized = value.trim();
   if (normalized === "") return null;
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 type WorkflowEmployeeListData = {
@@ -97,6 +105,7 @@ export function WorkflowPaymentCollectionConfigFields({
   onChangeConfig: (patch: Partial<WorkflowPaymentCollectionNodeConfig>) => void;
 }) {
   const paymentConfig = config as WorkflowPaymentCollectionNodeConfig;
+  const requirementMode = paymentConfig.requirement_mode || "any_confirmed";
 
   return (
     <section className="space-y-3">
@@ -130,21 +139,53 @@ export function WorkflowPaymentCollectionConfigFields({
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="workflow-node-payment-min-amount">最低已入账金额</Label>
-        <Input
-          id="workflow-node-payment-min-amount"
-          type="number"
-          min={0}
-          value={paymentConfig.min_amount ?? ""}
+        <Label htmlFor="workflow-node-payment-requirement-mode">放行规则</Label>
+        <Select
           disabled={disabled}
-          placeholder="为空时只要求存在已入账收款"
-          onChange={(event) => {
+          value={requirementMode}
+          onValueChange={(value) =>
             onChangeConfig({
-              min_amount: parseOptionalPaymentAmount(event.target.value),
-            });
-          }}
-        />
+              requirement_mode: value as WorkflowPaymentCollectionNodeConfig["requirement_mode"],
+              required_percentage: value === "any_confirmed"
+                ? null
+                : paymentConfig.required_percentage ?? null,
+            })
+          }
+        >
+          <SelectTrigger id="workflow-node-payment-requirement-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WORKFLOW_PAYMENT_REQUIREMENT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+      {requirementMode === "signed_amount_percentage" ? (
+        <div className="grid gap-2">
+          <Label htmlFor="workflow-node-payment-required-percentage">
+            签约金额比例
+          </Label>
+          <Input
+            id="workflow-node-payment-required-percentage"
+            type="number"
+            min={0.01}
+            max={100}
+            step={0.01}
+            value={paymentConfig.required_percentage ?? ""}
+            disabled={disabled}
+            placeholder="例如 30"
+            onChange={(event) => {
+              onChangeConfig({
+                required_percentage: parseOptionalPercentage(event.target.value),
+              });
+            }}
+          />
+        </div>
+      ) : null}
       <PaymentFinanceReviewerSelect
         disabled={disabled}
         value={paymentConfig.finance_reviewer_employee_id || null}

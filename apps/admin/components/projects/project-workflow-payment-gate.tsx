@@ -24,7 +24,9 @@ export type WorkflowPaymentGate = {
   title: string;
   paymentType: PaymentCollectionType;
   paymentLabel: string;
-  minAmount: number | null;
+  requirementMode: "any_confirmed" | "signed_amount_percentage";
+  requiredPercentage: number | null;
+  legacyMinAmount: number | null;
   blockMessage: string;
 };
 
@@ -47,7 +49,15 @@ export function getWorkflowPaymentGate(
   const title = typeof snapshot.title === "string" && snapshot.title.trim()
     ? snapshot.title.trim()
     : paymentLabel;
-  const minAmount = typeof config.min_amount === "number" &&
+  const requirementMode = parsePaymentRequirementMode(config.requirement_mode);
+  const requiredPercentage = typeof config.required_percentage === "number" &&
+      Number.isFinite(config.required_percentage) &&
+      config.required_percentage > 0 &&
+      config.required_percentage <= 100
+    ? config.required_percentage
+    : null;
+  const legacyMinAmount = !isPaymentRequirementMode(config.requirement_mode) &&
+      typeof config.min_amount === "number" &&
       Number.isFinite(config.min_amount) &&
       config.min_amount > 0
     ? config.min_amount
@@ -62,7 +72,9 @@ export function getWorkflowPaymentGate(
     title,
     paymentType,
     paymentLabel,
-    minAmount,
+    requirementMode,
+    requiredPercentage,
+    legacyMinAmount,
     blockMessage,
   };
 }
@@ -82,15 +94,20 @@ export function ProjectWorkflowPaymentGate({
   const [summary, setSummary] = useState<PaymentSummary | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const requiredAmount = getRequiredPaymentAmount(gate, project);
+  const missingSignedAmount = gate.requirementMode === "signed_amount_percentage" &&
+    requiredAmount === null;
 
   const satisfied = summary
-    ? summary.count > 0 && (gate.minAmount === null || summary.totalAmount >= gate.minAmount)
+    ? !missingSignedAmount &&
+      summary.count > 0 &&
+      (requiredAmount === null || summary.totalAmount >= requiredAmount)
     : false;
   const suggestedAmount = useMemo(() => {
-    if (!gate.minAmount) return "";
-    const remainingAmount = gate.minAmount - (summary?.totalAmount || 0);
+    if (!requiredAmount) return "";
+    const remainingAmount = requiredAmount - (summary?.totalAmount || 0);
     return remainingAmount > 0 ? String(remainingAmount) : "";
-  }, [gate.minAmount, summary?.totalAmount]);
+  }, [requiredAmount, summary?.totalAmount]);
 
   function loadSummary() {
     startTransition(async () => {
@@ -166,8 +183,11 @@ export function ProjectWorkflowPaymentGate({
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>已入账 ¥{formatMoney(summary?.totalAmount || 0)}</span>
-              {gate.minAmount ? (
-                <span>要求 ¥{formatMoney(gate.minAmount)}</span>
+              {requiredAmount ? (
+                <span>要求 ¥{formatMoney(requiredAmount)}</span>
+              ) : null}
+              {gate.requiredPercentage ? (
+                <span>签约金额 {gate.requiredPercentage}%</span>
               ) : null}
               {summary ? <span>{summary.count} 笔</span> : null}
             </div>
@@ -184,6 +204,11 @@ export function ProjectWorkflowPaymentGate({
       {error ? (
         <div className="mt-3">
           <StatusAlert>{error}</StatusAlert>
+        </div>
+      ) : null}
+      {missingSignedAmount ? (
+        <div className="mt-3">
+          <StatusAlert>项目缺少签约金额，无法按比例校验收款要求。</StatusAlert>
         </div>
       ) : null}
       {!satisfied ? (
@@ -204,7 +229,7 @@ export function ProjectWorkflowPaymentGate({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || pending}
+            disabled={disabled || pending || missingSignedAmount}
             onClick={confirmPayment}
           >
             {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
@@ -239,6 +264,36 @@ function parsePaymentCollectionType(value: unknown): PaymentCollectionType {
     return value;
   }
   return "deposit";
+}
+
+function parsePaymentRequirementMode(value: unknown) {
+  if (value === "signed_amount_percentage") return value;
+  return "any_confirmed";
+}
+
+function isPaymentRequirementMode(value: unknown) {
+  return value === "any_confirmed" || value === "signed_amount_percentage";
+}
+
+function getRequiredPaymentAmount(
+  gate: WorkflowPaymentGate,
+  project: ProjectRecord,
+) {
+  if (gate.legacyMinAmount) {
+    return gate.legacyMinAmount;
+  }
+  if (gate.requirementMode !== "signed_amount_percentage") {
+    return null;
+  }
+  const signedAmount = Number(project.signed_amount || 0);
+  if (
+    !Number.isFinite(signedAmount) ||
+    signedAmount <= 0 ||
+    !gate.requiredPercentage
+  ) {
+    return null;
+  }
+  return Number((signedAmount * gate.requiredPercentage / 100).toFixed(2));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

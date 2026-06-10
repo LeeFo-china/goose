@@ -75,6 +75,9 @@ export type WorkflowProcedureNodeConfig = WorkflowBaseNodeConfig & {
 
 export type WorkflowPaymentCollectionNodeConfig = WorkflowBaseNodeConfig & {
   payment_type?: "deposit" | "stage_1" | "stage_2" | "stage_3" | "add_on";
+  requirement_mode?: "any_confirmed" | "signed_amount_percentage";
+  required_percentage?: number | null;
+  /** Legacy published snapshots may still carry a fixed amount. New nodes use requirement_mode. */
   min_amount?: number | null;
   block_message?: string | null;
   finance_reviewer_employee_id?: string | null;
