@@ -397,8 +397,6 @@ export function WorkflowCanvas({
               onPointerMove={(event) => {
                 const drag = dragRef.current;
                 if (!drag || drag.nodeId !== node.id) return;
-                setFitMode(false);
-                setFitPan({ x: 0, y: 0 });
                 onMoveNode(node.id, clampPosition({
                   x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
                   y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
