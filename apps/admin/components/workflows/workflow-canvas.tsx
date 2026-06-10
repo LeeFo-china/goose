@@ -4,7 +4,6 @@ import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import {
-  HANDLE_HIT_SIZE,
   MAX_ZOOM,
   MIN_ZOOM,
   NODE_HEIGHT,
@@ -22,12 +21,11 @@ import {
   type CanvasSize,
 } from "@/components/workflows/workflow-canvas-geometry";
 import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
-import { getWorkflowNodeDisplayLabels } from "@/components/workflows/workflow-node-capabilities";
+import { WorkflowCanvasNode } from "@/components/workflows/workflow-canvas-node";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
-import { Badge } from "@/components/ui/badge";
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
@@ -346,27 +344,16 @@ export function WorkflowCanvas({
         {nodes.map((node) => {
           const selected = node.id === selectedNodeId;
           const connecting = node.id === connectingNodeId;
-          const displayLabels = getWorkflowNodeDisplayLabels(node);
           return (
-            <div
-              data-workflow-node="true"
+            <WorkflowCanvasNode
               key={node.id}
-              className={[
-                "absolute z-20 flex flex-col justify-center rounded-md border bg-background px-4 text-left",
-                "shadow-sm transition",
-                disabled ? "cursor-not-allowed opacity-70" : "cursor-move",
-                connecting
-                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                  : selected
-                    ? "border-primary ring-2 ring-primary/20"
-                    : "border-border hover:border-primary/60",
-              ].join(" ")}
-              style={{
-                left: node.position.x,
-                top: node.position.y,
-                width: NODE_WIDTH,
-                height: NODE_HEIGHT,
-              }}
+              connecting={connecting}
+              connectingNodeId={connectingNodeId}
+              disabled={disabled}
+              node={node}
+              selected={selected}
+              onConnectionStart={handleConnectionStart}
+              onFinishConnect={finishConnectionToNode}
               onPointerDown={(event) => {
                 if (disabled) return;
                 if (
@@ -400,81 +387,8 @@ export function WorkflowCanvas({
               onPointerCancel={() => {
                 dragRef.current = null;
               }}
-            >
-              <button
-                type="button"
-                className="min-w-0 border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                disabled={disabled}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectNode(node.id);
-                }}
-              >
-                <span className="block truncate text-sm font-medium">
-                  {displayLabels.specificLabel}
-                </span>
-                <span className="mt-1 flex min-w-0 items-center gap-1.5">
-                  <Badge variant="outline" className="shrink-0 bg-background text-[11px]">
-                    {displayLabels.capabilityLabel}
-                  </Badge>
-                </span>
-              </button>
-              {node.node_type !== "start" ? (
-                <button
-                  data-node-port="input"
-                  data-node-input="true"
-                  data-node-id={node.id}
-                  type="button"
-                  aria-label={`${displayLabels.specificLabel} 输入端口`}
-                  className={[
-                    "absolute top-1/2 rounded-full bg-transparent",
-                    "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    connectingNodeId && connectingNodeId !== node.id
-                      ? "after:border-primary ring-4 ring-primary/15"
-                      : "after:border-muted-foreground/50 hover:after:border-primary",
-                  ].join(" ")}
-                  disabled={disabled}
-                  style={{
-                    left: -HANDLE_HIT_SIZE / 2,
-                    width: HANDLE_HIT_SIZE,
-                    height: HANDLE_HIT_SIZE,
-                    transform: "translateY(-50%)",
-                  }}
-                  onPointerUp={(event) => {
-                    event.stopPropagation();
-                    finishConnectionToNode(node.id);
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    finishConnectionToNode(node.id);
-                  }}
-                />
-              ) : null}
-              {node.node_type !== "end" ? (
-                <button
-                  data-node-action="output"
-                  data-node-port="output"
-                  type="button"
-                  aria-label={`${displayLabels.specificLabel} 输出端口`}
-                  className={[
-                    "absolute top-1/2 rounded-full bg-transparent",
-                    "after:absolute after:left-1/2 after:top-1/2 after:size-3.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    connecting ? "after:border-primary ring-4 ring-primary/15" : "after:border-primary",
-                    disabled ? "cursor-not-allowed" : "cursor-crosshair",
-                  ].join(" ")}
-                  disabled={disabled}
-                  style={{
-                    right: -HANDLE_HIT_SIZE / 2,
-                    width: HANDLE_HIT_SIZE,
-                    height: HANDLE_HIT_SIZE,
-                    transform: "translateY(-50%)",
-                  }}
-                  onPointerDown={(event) => handleConnectionStart(event, node)}
-                />
-              ) : null}
-            </div>
+              onSelect={onSelectNode}
+            />
           );
         })}
         </div>
