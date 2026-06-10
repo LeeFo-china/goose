@@ -7,12 +7,15 @@ import {
 } from "@/components/workflows/workflow-node-labels";
 import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
-  applyWorkflowNodePreset,
-  getWorkflowNodePreset,
-  WorkflowNodePresetGroupLabels,
-  WorkflowNodePresets,
-  type WorkflowNodePresetGroup,
-} from "@/components/workflows/workflow-node-presets";
+  applyWorkflowBusinessKind,
+  applyWorkflowNodeCapability,
+  getWorkflowBusinessFlowOption,
+  getWorkflowNodeCapability,
+  isWorkflowControlNode,
+  WORKFLOW_BUSINESS_FLOW_OPTIONS,
+  WORKFLOW_NODE_CAPABILITY_OPTIONS,
+  type WorkflowNodeCapability,
+} from "@/components/workflows/workflow-node-capabilities";
 import {
   createWorkflowProcedureNodeKey,
   getWorkflowProcedureStageLabel,
@@ -26,24 +29,11 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const nodePresetGroups: WorkflowNodePresetGroup[] = [
-  "control",
-  "business",
-  "construction",
-  "procedure",
-  "finance",
-  "approval",
-  "system",
-];
 
 export function WorkflowPropertyPanel({
   disabled,
@@ -73,7 +63,7 @@ export function WorkflowPropertyPanel({
             </span>
             <div className="mt-3 text-sm font-medium">未选择节点</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              在画布中选择一个节点后，可以编辑平台节点和说明。
+              在画布中选择一个节点后，可以编辑节点能力和说明。
             </p>
           </div>
         </div>
@@ -81,12 +71,11 @@ export function WorkflowPropertyPanel({
     );
   }
   const selectedNode = node;
-  const selectedPresetKey = selectedNode.node_type === "procedure"
-    ? "procedure_template"
-    : selectedNode.business_kind === "payment_collection"
-      ? "payment_collection"
-    : selectedNode.node_key;
-  const currentPreset = getWorkflowNodePreset(selectedPresetKey);
+  const isControlNode = isWorkflowControlNode(selectedNode);
+  const selectedCapability = getWorkflowNodeCapability(selectedNode);
+  const selectedBusinessOption = getWorkflowBusinessFlowOption(
+    selectedNode.business_kind,
+  );
 
   function handleChangeConfig(config: WorkflowNodeConfig) {
     if (
@@ -150,52 +139,72 @@ export function WorkflowPropertyPanel({
         className="min-h-0 flex-1 space-y-4 overflow-auto p-4"
       >
         <div className="grid gap-2">
-          <Label htmlFor="workflow-node-preset">平台节点</Label>
-          <Select
-            disabled={disabled}
-            value={selectedPresetKey}
-            onValueChange={(value) => {
-              const preset = getWorkflowNodePreset(value);
-              if (!preset) return;
-              onChangeNode(applyWorkflowNodePreset(selectedNode, preset));
-            }}
-          >
-            <SelectTrigger id="workflow-node-preset">
-              <SelectValue placeholder="选择平台节点" />
-            </SelectTrigger>
-            <SelectContent>
-              {!currentPreset ? (
-                <>
-                  <SelectItem value={selectedNode.node_key}>
-                    未识别节点：{selectedNode.node_key}
+          <Label htmlFor="workflow-node-capability">
+            {isControlNode ? "控制节点" : "节点能力"}
+          </Label>
+          {isControlNode ? (
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              {getWorkflowNodeTypeLabel(selectedNode.node_type)}
+            </div>
+          ) : (
+            <Select
+              disabled={disabled}
+              value={selectedCapability}
+              onValueChange={(value) =>
+                onChangeNode(
+                  applyWorkflowNodeCapability({
+                    node: selectedNode,
+                    capability: value as WorkflowNodeCapability,
+                    usedNodeKeys,
+                  }),
+                )
+              }
+            >
+              <SelectTrigger id="workflow-node-capability">
+                <SelectValue placeholder="选择节点能力" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_NODE_CAPABILITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
-                  <SelectSeparator />
-                </>
-              ) : null}
-              {nodePresetGroups.map((group, groupIndex) => (
-                <SelectGroup key={group}>
-                  {groupIndex > 0 ? <SelectSeparator /> : null}
-                  <SelectLabel>{WorkflowNodePresetGroupLabels[group]}</SelectLabel>
-                  {WorkflowNodePresets.filter((preset) => preset.group === group).map((preset) => (
-                    <SelectItem
-                      key={preset.key}
-                      value={preset.key}
-                      disabled={
-                        preset.nodeType !== "procedure" &&
-                        usedNodeKeys.includes(preset.key)
-                      }
-                    >
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             节点编码：<span className="font-medium text-foreground">{selectedNode.node_key}</span>
           </div>
         </div>
+        {!isControlNode && selectedCapability === "business" ? (
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-business-kind">业务类型</Label>
+            <Select
+              disabled={disabled}
+              value={selectedBusinessOption?.value ?? "customer_lead"}
+              onValueChange={(value) =>
+                onChangeNode(
+                  applyWorkflowBusinessKind({
+                    node: selectedNode,
+                    businessKind: value as typeof WORKFLOW_BUSINESS_FLOW_OPTIONS[number]["value"],
+                    usedNodeKeys,
+                  }),
+                )
+              }
+            >
+              <SelectTrigger id="workflow-node-business-kind">
+                <SelectValue placeholder="选择业务类型" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_BUSINESS_FLOW_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-description">说明</Label>
           <Textarea

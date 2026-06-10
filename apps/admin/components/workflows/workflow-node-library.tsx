@@ -14,11 +14,7 @@ import { Badge } from "@/components/ui/badge";
 
 const nodePresetGroups: WorkflowNodePresetGroup[] = [
   "control",
-  "business",
-  "construction",
-  "procedure",
-  "finance",
-  "approval",
+  "common",
   "system",
 ];
 

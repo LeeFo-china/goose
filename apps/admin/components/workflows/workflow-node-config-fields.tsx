@@ -7,6 +7,7 @@ import type {
   WorkflowNodeConfig,
   WorkflowNotificationNodeConfig,
 } from "@/components/workflows/workflow-types";
+import { getWorkflowNodeCapability } from "@/components/workflows/workflow-node-capabilities";
 import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
 import { ProcedureConfigFields } from "@/components/workflows/workflow-procedure-config-fields";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,6 +65,7 @@ export function WorkflowNodeConfigFields({
       ...patch,
     });
   }
+  const capability = getWorkflowNodeCapability(node);
 
   return (
     <div className="space-y-5">
@@ -72,7 +74,7 @@ export function WorkflowNodeConfigFields({
         disabled={disabled}
         onChangeConfig={updateConfig}
       />
-      {node.node_type === "procedure" ? (
+      {capability === "procedure" ? (
         <ProcedureConfigFields
           config={node.config}
           disabled={disabled}
@@ -80,21 +82,21 @@ export function WorkflowNodeConfigFields({
           onChangeConfig={updateConfig}
         />
       ) : null}
-      {node.business_kind === "payment_collection" ? (
+      {capability === "payment_collection" ? (
         <WorkflowPaymentCollectionConfigFields
           config={node.config}
           disabled={disabled}
           onChangeConfig={updateConfig}
         />
       ) : null}
-      {node.node_type === "approval" ? (
+      {capability === "finance" || capability === "approval" ? (
         <ApprovalConfigFields
           config={node.config}
           disabled={disabled}
           onChangeConfig={updateConfig}
         />
       ) : null}
-      {node.node_type === "notification" ? (
+      {capability === "notification" ? (
         <NotificationConfigFields
           config={node.config}
           disabled={disabled}

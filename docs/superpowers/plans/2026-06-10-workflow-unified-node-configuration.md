@@ -49,6 +49,7 @@ import type { WorkflowNode, WorkflowNodeConfig } from "@/components/workflows/wo
 
 export type WorkflowNodeCapability =
   | "business"
+  | "construction"
   | "procedure"
   | "payment_collection"
   | "final_acceptance"
@@ -60,6 +61,7 @@ export type WorkflowNodeCapability =
 
 export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
   { value: "business", label: "业务流转" },
+  { value: "construction", label: "施工阶段" },
   { value: "procedure", label: "工序" },
   { value: "payment_collection", label: "收款" },
   { value: "final_acceptance", label: "竣工验收" },

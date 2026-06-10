@@ -6,11 +6,7 @@ import type { WorkflowNode, WorkflowNodeConfig } from "@/components/workflows/wo
 
 export type WorkflowNodePresetGroup =
   | "control"
-  | "business"
-  | "construction"
-  | "procedure"
-  | "finance"
-  | "approval"
+  | "common"
   | "system";
 
 export type WorkflowNodePreset = {
@@ -25,11 +21,7 @@ export type WorkflowNodePreset = {
 
 export const WorkflowNodePresetGroupLabels: Record<WorkflowNodePresetGroup, string> = {
   control: "流程控制",
-  business: "业务流转",
-  construction: "施工节点",
-  procedure: "工序节点",
-  finance: "财务节点",
-  approval: "审批确认",
+  common: "常用节点",
   system: "系统动作",
 };
 
@@ -43,120 +35,13 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
     businessKind: null,
   },
   {
-    key: "lead",
-    label: "客户线索",
-    description: "客户进入业务流程后的线索节点。",
-    group: "business",
+    key: "workflow_step",
+    label: "流程节点",
+    description: "添加一个流程步骤，然后在属性里选择业务、工序、收款、审批等能力。",
+    group: "common",
     nodeType: "business",
     businessKind: "customer_lead",
-  },
-  {
-    key: "following",
-    label: "电话跟进",
-    description: "客户主流程的跟进节点，对应开始跟进动作。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "phone_follow_up",
-  },
-  {
-    key: "arrived",
-    label: "到店",
-    description: "客户主流程的到店节点，对应标记到店动作。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "store_visit",
-  },
-  {
-    key: "measurement",
-    label: "量房",
-    description: "到店后的量房或现场测量节点。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "measurement",
-  },
-  {
-    key: "designing",
-    label: "设计",
-    description: "客户主流程的设计节点，对应开始设计动作。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "design",
-  },
-  {
-    key: "quote",
-    label: "报价",
-    description: "方案报价或预算确认节点。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "quote",
-  },
-  {
-    key: "signed",
-    label: "签约",
-    description: "客户主流程的签约节点，对应标记签约动作。",
-    group: "business",
-    nodeType: "business",
-    businessKind: "contract",
-  },
-  {
-    key: "construction_start",
-    label: "开工",
-    description: "项目进入施工的阶段节点。",
-    group: "construction",
-    nodeType: "construction_stage",
-    businessKind: "construction_start",
-  },
-  {
-    key: "final_acceptance",
-    label: "竣工验收",
-    description: "施工完成后的验收节点。",
-    group: "construction",
-    nodeType: "confirmation",
-    businessKind: "final_acceptance",
-  },
-  {
-    key: "payment_collection",
-    label: "收款节点",
-    description: "检查项目收款已入账后再放行后续流程。",
-    group: "finance",
-    nodeType: "confirmation",
-    businessKind: "payment_collection",
-    config: {
-      payment_type: "deposit",
-      min_amount: null,
-      block_message: null,
-    },
-  },
-  {
-    key: "settlement",
-    label: "结算",
-    description: "项目结算或尾款确认节点。",
-    group: "approval",
-    nodeType: "approval",
-    businessKind: "settlement",
-  },
-  {
-    key: "expense_approval",
-    label: "财务审批",
-    description: "费用、报销或付款审批节点。",
-    group: "approval",
-    nodeType: "approval",
-    businessKind: "expense_approval",
-  },
-  {
-    key: "procedure_template",
-    label: "工序节点",
-    description: "具体施工工序，选择拆改、水电、瓦工、木工、油工或安装。",
-    group: "procedure",
-    nodeType: "procedure",
-    businessKind: "procedure_template",
-    config: {
-      stage_key: "",
-      require_log: false,
-      min_image_count: 0,
-      trigger_acceptance: false,
-      customer_visible: false,
-    },
+    config: { required_permissions: [] },
   },
   {
     key: "notification",
@@ -205,13 +90,9 @@ export function applyWorkflowNodePreset(
   node: WorkflowNode,
   preset: WorkflowNodePreset,
 ): WorkflowNode {
-  const nextNodeKey = preset.nodeType === "procedure"
-    ? `procedure_${Date.now()}`
-    : preset.key;
-
   return {
     ...node,
-    node_key: nextNodeKey,
+    node_key: preset.key,
     node_type: preset.nodeType,
     business_kind: preset.businessKind,
     title: preset.label,

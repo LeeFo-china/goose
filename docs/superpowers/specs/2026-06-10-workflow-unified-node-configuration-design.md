@@ -33,6 +33,7 @@ The first implementation supports these capabilities:
 | Capability | Stored `node_type` | Stored `business_kind` | Specific type field |
 | --- | --- | --- | --- |
 | 业务流转 | `business` | selected business kind | `business_kind` |
+| 施工阶段 | `construction_stage` | `construction_start` | fixed |
 | 工序 | `procedure` | `procedure_template` | `config.stage_key` |
 | 收款 | `confirmation` | `payment_collection` | `config.payment_type` |
 | 竣工验收 | `confirmation` | `final_acceptance` | fixed |
@@ -72,6 +73,7 @@ Changing capability applies a preset safely:
 Specific type selectors live below the capability selector:
 
 - 业务流转: 客户线索、电话跟进、到店、量房、设计、报价、签约。
+- 施工阶段: 开工。
 - 工序: 拆改、水电、瓦工、木工、油工、安装。
 - 收款: 定金、中期款、尾款、增项款.
 - 审批: finance approval fields already shown.

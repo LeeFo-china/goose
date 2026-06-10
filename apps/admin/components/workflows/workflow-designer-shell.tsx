@@ -90,7 +90,7 @@ export function WorkflowDesignerShell({
     if (!graph) return;
     const preset = getWorkflowNodePreset(presetKey);
     if (!preset) {
-      toast.error("平台节点不存在");
+      toast.error("节点不存在");
       return;
     }
     if (

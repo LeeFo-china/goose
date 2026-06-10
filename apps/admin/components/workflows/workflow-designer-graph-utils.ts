@@ -65,8 +65,8 @@ export function createNodeFromPreset(input: {
   const preset = getWorkflowNodePreset(input.presetKey);
   const nodeType = preset?.nodeType || "business";
   const now = new Date().toISOString();
-  const nodeKey = nodeType === "procedure"
-    ? `procedure_${input.index}`
+  const nodeKey = preset?.key === "workflow_step"
+    ? `workflow_step_${input.index}`
     : preset?.key || `business_${input.index}`;
   const defaultPosition = {
     x: 120 + ((input.index - 1) % 4) * 260,
@@ -80,7 +80,7 @@ export function createNodeFromPreset(input: {
     node_key: nodeKey,
     node_type: nodeType,
     business_kind: preset?.businessKind || null,
-    title: preset?.label || "业务节点",
+    title: preset?.label || "流程节点",
     description: preset?.description || null,
     position: input.position || defaultPosition,
     config: preset?.config ||
