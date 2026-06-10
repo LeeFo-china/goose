@@ -284,7 +284,7 @@ export function WorkflowCanvas({
         >
         <div ref={canvasRef} data-workflow-canvas="true" className="absolute inset-0 origin-top-left" style={{ transform: canvasTransform }}>
         <svg
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-0 overflow-visible"
           width={canvasSize.width}
           height={canvasSize.height}
           aria-hidden="true"
