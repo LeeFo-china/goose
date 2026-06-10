@@ -1,4 +1,6 @@
 import {
+  isProjectConstructionStageCode,
+  PROJECT_LOG_STAGE_CONFIG,
   PaymentTypeConfig,
   type WorkflowBusinessKind,
   type WorkflowNodeType,
@@ -39,6 +41,12 @@ type CapabilityDefaults = {
   businessKind: WorkflowBusinessKind | null;
   nodeKeyBase: string;
   config: WorkflowNodeConfig;
+};
+
+export type WorkflowNodeDisplayLabels = {
+  capabilityLabel: string;
+  specificLabel: string;
+  summaryLabel: string;
 };
 
 export const WORKFLOW_NODE_CAPABILITY_OPTIONS = [
@@ -240,6 +248,38 @@ export function getWorkflowNodeCapability(node: WorkflowNode): WorkflowNodeCapab
   return "business";
 }
 
+export function getWorkflowNodeCapabilityLabel(
+  capability: WorkflowNodeCapability,
+) {
+  return WORKFLOW_NODE_CAPABILITY_OPTIONS.find((option) =>
+    option.value === capability
+  )?.label ?? capability;
+}
+
+export function getWorkflowNodeDisplayLabels(
+  node: WorkflowNode,
+): WorkflowNodeDisplayLabels {
+  if (isWorkflowControlNode(node)) {
+    return {
+      capabilityLabel: "流程控制",
+      specificLabel: node.title,
+      summaryLabel: `流程控制 · ${node.title}`,
+    };
+  }
+
+  const capability = getWorkflowNodeCapability(node);
+  const capabilityLabel = getWorkflowNodeCapabilityLabel(capability);
+  const specificLabel = getWorkflowNodeSpecificLabel(node, capability);
+
+  return {
+    capabilityLabel,
+    specificLabel,
+    summaryLabel: specificLabel && specificLabel !== capabilityLabel
+      ? `${capabilityLabel} · ${specificLabel}`
+      : capabilityLabel,
+  };
+}
+
 export function getWorkflowBusinessFlowOption(
   businessKind: WorkflowBusinessKind | null | undefined,
 ) {
@@ -267,6 +307,61 @@ export function applyWorkflowNodeCapability(input: {
     description: defaults.description,
     config: mergeWithCommonConfig(defaults.config, input.node.config),
   };
+}
+
+function getWorkflowNodeSpecificLabel(
+  node: WorkflowNode,
+  capability: WorkflowNodeCapability,
+) {
+  switch (capability) {
+    case "business":
+      return getWorkflowBusinessFlowOption(node.business_kind)?.label ||
+        node.title;
+    case "construction":
+      return "开工";
+    case "procedure":
+      return getProcedureSpecificLabel(node);
+    case "payment_collection":
+      return getPaymentSpecificLabel(node);
+    case "final_acceptance":
+      return "竣工验收";
+    case "finance":
+      return "结算";
+    case "approval":
+      return node.title || "审批";
+    case "notification":
+      return node.title || "通知";
+    case "automation":
+      return node.title || "自动动作";
+    case "subflow":
+      return node.title || "子流程";
+  }
+}
+
+function getProcedureSpecificLabel(node: WorkflowNode) {
+  const stageKey = "stage_key" in node.config ? node.config.stage_key : null;
+  if (
+    typeof stageKey === "string" &&
+    isProjectConstructionStageCode(stageKey)
+  ) {
+    return PROJECT_LOG_STAGE_CONFIG[stageKey].label;
+  }
+
+  return node.title === "工序节点" ? "未选择工序" : node.title;
+}
+
+function getPaymentSpecificLabel(node: WorkflowNode) {
+  const paymentType = "payment_type" in node.config
+    ? node.config.payment_type
+    : null;
+  if (
+    typeof paymentType === "string" &&
+    paymentType in PaymentTypeConfig
+  ) {
+    return PaymentTypeConfig[paymentType as keyof typeof PaymentTypeConfig].label;
+  }
+
+  return node.title === "收款节点" ? "未选择收款类型" : node.title;
 }
 
 export function applyWorkflowBusinessKind(input: {

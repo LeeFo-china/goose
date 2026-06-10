@@ -3,9 +3,9 @@
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { getWorkflowNodeDisplayLabels } from "@/components/workflows/workflow-node-capabilities";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
-import { getWorkflowNodeTypeLabel, shouldShowWorkflowNodeTypeBadge } from "@/components/workflows/workflow-node-labels";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
@@ -355,6 +355,7 @@ export function WorkflowCanvas({
         {nodes.map((node) => {
           const selected = node.id === selectedNodeId;
           const connecting = node.id === connectingNodeId;
+          const displayLabels = getWorkflowNodeDisplayLabels(node);
           return (
             <div
               data-workflow-node="true"
@@ -421,15 +422,16 @@ export function WorkflowCanvas({
                 <span className="block truncate text-sm font-medium">
                   {node.title}
                 </span>
-                <span className="mt-1 flex min-w-0 items-center gap-2">
-                  {shouldShowWorkflowNodeTypeBadge(node.title, node.node_type) ? (
-                    <Badge variant="outline" className="shrink-0">
-                      {getWorkflowNodeTypeLabel(node.node_type)}
-                    </Badge>
-                  ) : null}
+                <span className="mt-1 flex min-w-0 items-center gap-1.5">
+                  <Badge variant="outline" className="shrink-0 bg-background text-[11px]">
+                    {displayLabels.capabilityLabel}
+                  </Badge>
                   <span className="truncate text-xs text-muted-foreground">
-                    {node.node_key}
+                    {displayLabels.specificLabel}
                   </span>
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-muted-foreground/80">
+                  {node.node_key}
                 </span>
               </button>
               {node.node_type !== "start" ? (

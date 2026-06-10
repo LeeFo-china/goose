@@ -1,16 +1,13 @@
 "use client";
 
 import { PanelRight, Settings2, Trash2 } from "lucide-react";
-import {
-  getWorkflowNodeTypeLabel,
-  shouldShowWorkflowNodeTypeBadge,
-} from "@/components/workflows/workflow-node-labels";
 import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
   applyWorkflowBusinessKind,
   applyWorkflowNodeCapability,
   getWorkflowBusinessFlowOption,
   getWorkflowNodeCapability,
+  getWorkflowNodeDisplayLabels,
   isWorkflowControlNode,
   WORKFLOW_BUSINESS_FLOW_OPTIONS,
   WORKFLOW_NODE_CAPABILITY_OPTIONS,
@@ -73,6 +70,7 @@ export function WorkflowPropertyPanel({
   const selectedNode = node;
   const isControlNode = isWorkflowControlNode(selectedNode);
   const selectedCapability = getWorkflowNodeCapability(selectedNode);
+  const displayLabels = getWorkflowNodeDisplayLabels(selectedNode);
   const selectedBusinessOption = getWorkflowBusinessFlowOption(
     selectedNode.business_kind,
   );
@@ -125,11 +123,12 @@ export function WorkflowPropertyPanel({
         <div className="mt-3 rounded-md border bg-muted/25 p-3">
           <div className="truncate text-sm font-medium">{selectedNode.title}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {shouldShowWorkflowNodeTypeBadge(selectedNode.title, selectedNode.node_type) ? (
-              <Badge variant="outline" className="bg-background">
-                {getWorkflowNodeTypeLabel(selectedNode.node_type)}
-              </Badge>
-            ) : null}
+            <Badge variant="outline" className="bg-background">
+              {displayLabels.capabilityLabel}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {displayLabels.specificLabel}
+            </span>
             <span className="break-all text-xs text-muted-foreground">{selectedNode.node_key}</span>
           </div>
         </div>
@@ -144,7 +143,7 @@ export function WorkflowPropertyPanel({
           </Label>
           {isControlNode ? (
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-              {getWorkflowNodeTypeLabel(selectedNode.node_type)}
+              {displayLabels.specificLabel}
             </div>
           ) : (
             <Select

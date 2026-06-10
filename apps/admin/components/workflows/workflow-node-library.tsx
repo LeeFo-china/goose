@@ -86,7 +86,11 @@ export function WorkflowNodeLibrary({
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-sm font-medium">{preset.label}</span>
-                          {shouldShowWorkflowNodeTypeBadge(preset.label, preset.nodeType) ? (
+                          {preset.key === "workflow_step" ? (
+                            <Badge variant="outline" className="shrink-0">
+                              可配置
+                            </Badge>
+                          ) : shouldShowWorkflowNodeTypeBadge(preset.label, preset.nodeType) ? (
                             <Badge variant="outline" className="shrink-0">
                               {getWorkflowNodeTypeLabel(preset.nodeType)}
                             </Badge>
