@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type PointerEvent, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -202,14 +202,6 @@ export function WorkflowDesignerShell({
     if (mobilePanel === "properties") setMobilePanel("library");
   }
 
-  function handleCanvasPointerDownCapture(event: PointerEvent<HTMLDivElement>) {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (!target.closest("[data-workflow-canvas='true']")) return;
-    if (target.closest("button, [data-edge-action], [data-node-port]")) return;
-    showNodeLibrary();
-  }
-
   function handleSave() {
     if (!graph) return;
     startTransition(async () => {
@@ -379,7 +371,6 @@ export function WorkflowDesignerShell({
             </div>
             <div
               className={mobilePanel === "canvas" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}
-              onPointerDownCapture={handleCanvasPointerDownCapture}
             >
               <WorkflowCanvas
                 connectingNodeId={connectingNodeId}
