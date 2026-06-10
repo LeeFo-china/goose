@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { WorkflowNodeTypeConfig } from "@gooes/domain";
 import { Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
+import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
@@ -19,14 +20,7 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
 
-type DragState = {
-  nodeId: string;
-  originX: number;
-  originY: number;
-  pointerX: number;
-  pointerY: number;
-  zoom: number;
-};
+type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
 
 type CanvasPoint = { x: number; y: number };
 
@@ -107,10 +101,12 @@ export function WorkflowCanvas({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const panRef = useRef<WorkflowCanvasPanState | null>(null);
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
   function updateConnectionDraft(draft: ConnectionDraft | null) {
     connectionDraftRef.current = draft;
@@ -199,7 +195,8 @@ export function WorkflowCanvas({
     <div
       ref={scrollRef}
       data-workflow-canvas-scroll="true"
-      className="relative h-full min-h-0 overflow-auto bg-muted/30"
+      className="relative h-full min-h-0 cursor-grab overflow-auto bg-muted/30 active:cursor-grabbing"
+      onPointerDown={canvasPan.begin}
       onDragOver={(event) => {
         if (disabled) return;
         event.preventDefault();
@@ -218,6 +215,7 @@ export function WorkflowCanvas({
         }));
       }}
       onPointerMove={(event) => {
+        if (canvasPan.move(event)) return;
         const draft = connectionDraftRef.current;
         if (!draft) return;
         updateConnectionDraft({
@@ -225,11 +223,9 @@ export function WorkflowCanvas({
           to: getCanvasPoint(event, canvasRef.current, zoom),
         });
       }}
-      onPointerUp={finishConnectionFromPointer}
+      onPointerUp={(event) => { if (!canvasPan.end(event)) finishConnectionFromPointer(event); }}
       onPointerCancel={() => {
-        dragRef.current = null;
-        updateConnectionDraft(null);
-        onCancelConnect();
+        panRef.current = null; dragRef.current = null; updateConnectionDraft(null); onCancelConnect();
       }}
     >
       <div
@@ -363,6 +359,7 @@ export function WorkflowCanvas({
           const connecting = node.id === connectingNodeId;
           return (
             <div
+              data-workflow-node="true"
               key={node.id}
               className={[
                 "absolute z-20 flex flex-col justify-center rounded-md border bg-background px-4 text-left",
