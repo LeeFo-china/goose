@@ -6,15 +6,20 @@ export const NODE_WIDTH = 210;
 export const NODE_HEIGHT = 84;
 export const HANDLE_HIT_SIZE = 44;
 export const MIN_ZOOM = 0.5;
+export const MIN_FIT_ZOOM = 0.02;
 export const MAX_ZOOM = 1.8;
 export const ZOOM_STEP = 0.1;
-const LAYOUT_START_X = 120;
-const LAYOUT_START_Y = 180;
-const LAYOUT_COLUMN_GAP = 130;
-const LAYOUT_ROW_GAP = 90;
+const LAYOUT_SAFE_MARGIN = 24;
+const LAYOUT_TOOLBAR_HEIGHT = 56;
+const LAYOUT_COLUMN_GAP = 96;
+const LAYOUT_ROW_GAP = 72;
 
 export type CanvasPoint = { x: number; y: number };
 export type CanvasSize = { width: number; height: number };
+export type ArrangedWorkflowCanvas = {
+  nodes: WorkflowNode[];
+  zoom: number;
+};
 
 export function getExpandedCanvasSize(
   viewportSize: CanvasSize,
@@ -23,6 +28,16 @@ export function getExpandedCanvasSize(
   return {
     width: Math.max(CANVAS_WIDTH, viewportSize.width / zoom),
     height: Math.max(CANVAS_HEIGHT, viewportSize.height / zoom),
+  };
+}
+
+export function getFitCanvasSize(viewportSize: CanvasSize, zoom: number): CanvasSize {
+  if (viewportSize.width <= 0 || viewportSize.height <= 0) {
+    return { width: CANVAS_WIDTH, height: CANVAS_HEIGHT };
+  }
+  return {
+    width: viewportSize.width / zoom,
+    height: viewportSize.height / zoom,
   };
 }
 
@@ -77,7 +92,34 @@ export function clampZoom(value: number) {
 export function arrangeWorkflowCanvasNodes(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
-): WorkflowNode[] {
+  viewportSize: CanvasSize,
+): ArrangedWorkflowCanvas {
+  if (nodes.length === 0) return { nodes, zoom: 1 };
+  const orderedNodes = getWorkflowCanvasOrderedNodes(nodes, edges);
+  const layout = getBestFitLayout(orderedNodes.length, viewportSize);
+  const positionById = new Map<string, CanvasPoint>();
+  orderedNodes.forEach((node, index) => {
+    const column = index % layout.columns;
+    const row = Math.floor(index / layout.columns);
+    positionById.set(node.id, {
+      x: layout.offsetX + column * (NODE_WIDTH + LAYOUT_COLUMN_GAP),
+      y: layout.offsetY + row * (NODE_HEIGHT + LAYOUT_ROW_GAP),
+    });
+  });
+
+  return {
+    zoom: layout.zoom,
+    nodes: nodes.map((node) => ({
+      ...node,
+      position: positionById.get(node.id) || node.position,
+    })),
+  };
+}
+
+function getWorkflowCanvasOrderedNodes(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const incomingCount = new Map(nodes.map((node) => [node.id, 0]));
   const outgoing = new Map<string, string[]>();
@@ -125,28 +167,46 @@ export function arrangeWorkflowCanvasNodes(
     if (!visited.has(node.id)) depthById.set(node.id, fallbackDepth);
   });
 
-  const columns = new Map<number, WorkflowNode[]>();
-  orderedNodes.forEach((node) => {
-    const depth = depthById.get(node.id) || 0;
-    columns.set(depth, [...(columns.get(depth) || []), node]);
+  return orderedNodes.sort((left, right) => {
+    const depthOrder = (depthById.get(left.id) || 0) - (depthById.get(right.id) || 0);
+    return depthOrder || compareWorkflowNodes(left, right);
   });
+}
 
-  const positionById = new Map<string, CanvasPoint>();
-  [...columns.entries()]
-    .sort(([leftDepth], [rightDepth]) => leftDepth - rightDepth)
-    .forEach(([depth, columnNodes]) => {
-      columnNodes.sort(compareWorkflowNodes).forEach((node, index) => {
-        positionById.set(node.id, {
-          x: LAYOUT_START_X + depth * (NODE_WIDTH + LAYOUT_COLUMN_GAP),
-          y: LAYOUT_START_Y + index * (NODE_HEIGHT + LAYOUT_ROW_GAP),
-        });
-      });
-    });
+function getBestFitLayout(nodeCount: number, viewportSize: CanvasSize) {
+  const availableWidth = Math.max(320, viewportSize.width - LAYOUT_SAFE_MARGIN * 2);
+  const availableHeight = Math.max(
+    240,
+    viewportSize.height - LAYOUT_TOOLBAR_HEIGHT - LAYOUT_SAFE_MARGIN * 2,
+  );
+  const candidates = Array.from({ length: nodeCount }, (_, index) => {
+    const columns = index + 1;
+    const rows = Math.ceil(nodeCount / columns);
+    const width = columns * NODE_WIDTH + (columns - 1) * LAYOUT_COLUMN_GAP;
+    const height = rows * NODE_HEIGHT + (rows - 1) * LAYOUT_ROW_GAP;
+    const zoom = Math.max(
+      MIN_FIT_ZOOM,
+      Math.min(1, availableWidth / width, availableHeight / height),
+    );
+    return { columns, rows, width, height, zoom };
+  });
+  const best = candidates.sort((left, right) => {
+    if (right.zoom !== left.zoom) return right.zoom - left.zoom;
+    return Math.abs(left.columns - left.rows) - Math.abs(right.columns - right.rows);
+  })[0];
+  const visualWidth = best.width * best.zoom;
+  const visualHeight = best.height * best.zoom;
 
-  return nodes.map((node) => ({
-    ...node,
-    position: positionById.get(node.id) || node.position,
-  }));
+  return {
+    columns: best.columns,
+    zoom: best.zoom,
+    offsetX: Math.max(LAYOUT_SAFE_MARGIN, (viewportSize.width - visualWidth) / 2) /
+      best.zoom,
+    offsetY: (LAYOUT_TOOLBAR_HEIGHT + Math.max(
+      LAYOUT_SAFE_MARGIN,
+      (availableHeight - visualHeight) / 2,
+    )) / best.zoom,
+  };
 }
 
 function compareWorkflowNodes(left: WorkflowNode, right: WorkflowNode) {

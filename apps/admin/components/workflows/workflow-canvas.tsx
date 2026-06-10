@@ -2,7 +2,7 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { LayoutDashboard, Link2, MousePointer2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { X } from "lucide-react";
 import {
   HANDLE_HIT_SIZE,
   MAX_ZOOM,
@@ -15,18 +15,20 @@ import {
   createConnectionPath,
   getCanvasPoint,
   getExpandedCanvasSize,
+  getFitCanvasSize,
   getInputPoint,
   getOutputPoint,
+  arrangeWorkflowCanvasNodes,
   type CanvasPoint,
   type CanvasSize,
 } from "@/components/workflows/workflow-canvas-geometry";
+import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
 import { getWorkflowNodeDisplayLabels } from "@/components/workflows/workflow-node-capabilities";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
@@ -56,7 +58,7 @@ export function WorkflowCanvas({
   onDeleteEdge: (edgeId: string) => void;
   onDropNodePreset: (presetKey: string, position: WorkflowNode["position"]) => void;
   onFinishConnect: (nodeId: string) => void;
-  onArrangeNodes: () => void;
+  onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onSelectNode: (nodeId: string) => void;
 }) {
@@ -67,8 +69,11 @@ export function WorkflowCanvas({
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState(false);
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
+  const canvasSize = fitMode
+    ? getFitCanvasSize(viewportSize, zoom)
+    : getExpandedCanvasSize(viewportSize, zoom);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
@@ -96,6 +101,7 @@ export function WorkflowCanvas({
     const clampedZoom = clampZoom(nextZoom);
     if (!scrollElement) {
       setZoom(clampedZoom);
+      setFitMode(false);
       return;
     }
 
@@ -111,6 +117,7 @@ export function WorkflowCanvas({
       : scrollElement.clientHeight / 2;
 
     setZoom(clampedZoom);
+    setFitMode(false);
     requestAnimationFrame(() => {
       scrollElement.scrollLeft = Math.max(0, currentOrigin.x * clampedZoom - viewportX);
       scrollElement.scrollTop = Math.max(0, currentOrigin.y * clampedZoom - viewportY);
@@ -138,6 +145,21 @@ export function WorkflowCanvas({
     if (!sourceNodeId || sourceNodeId === targetNodeId) return;
     updateConnectionDraft(null);
     onFinishConnect(targetNodeId);
+  }
+
+  function arrangeNodesToViewport() {
+    const arranged = arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
+    setZoom(arranged.zoom);
+    setFitMode(true);
+    updateConnectionDraft(null);
+    onCancelConnect();
+    onArrangeNodes(arranged.nodes);
+    requestAnimationFrame(() => {
+      const scrollElement = scrollRef.current;
+      if (!scrollElement) return;
+      scrollElement.scrollLeft = 0;
+      scrollElement.scrollTop = 0;
+    });
   }
 
   useEffect(() => {
@@ -176,7 +198,10 @@ export function WorkflowCanvas({
     <div
       ref={scrollRef}
       data-workflow-canvas-scroll="true"
-      className="relative h-full min-h-0 cursor-grab overflow-auto bg-muted/30 active:cursor-grabbing"
+      className={[
+        "relative h-full min-h-0 cursor-grab bg-muted/30 active:cursor-grabbing",
+        fitMode ? "overflow-hidden" : "overflow-auto",
+      ].join(" ")}
       onPointerDown={canvasPan.begin}
       onDragOver={(event) => {
         if (disabled) return;
@@ -190,6 +215,7 @@ export function WorkflowCanvas({
         if (!presetKey || !getWorkflowNodePreset(presetKey)) return;
         event.preventDefault();
         const point = getCanvasPoint(event, canvasRef.current, zoom);
+        setFitMode(false);
         onDropNodePreset(presetKey, clampPosition({
           x: point.x - NODE_WIDTH / 2,
           y: point.y - NODE_HEIGHT / 2,
@@ -209,53 +235,17 @@ export function WorkflowCanvas({
         panRef.current = null; dragRef.current = null; updateConnectionDraft(null); onCancelConnect();
       }}
     >
-      <div className="sticky left-3 top-3 z-30 h-0 w-fit">
-        <div className="flex w-fit items-center gap-2 rounded-md border bg-background/95 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          <MousePointer2 className="size-3.5" />
-          <span>{nodes.length} 节点</span>
-          <span className="text-border">|</span>
-          <Link2 className="size-3.5" />
-          <span>{edges.length} 连线</span>
-          <span className="text-border">|</span>
-          <Button
-            aria-label="整理画布"
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-9 px-2 text-muted-foreground"
-            disabled={disabled || nodes.length === 0}
-            onClick={onArrangeNodes}
-          >
-            <LayoutDashboard data-icon="inline-start" />
-            整理画布
-          </Button>
-          <Button
-            aria-label="缩小画布"
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-9 text-muted-foreground"
-            disabled={disabled || zoom <= MIN_ZOOM}
-            onClick={() => applyZoom(zoom - ZOOM_STEP)}
-          >
-            <ZoomOut className="size-3.5" />
-          </Button>
-          <span data-workflow-canvas-zoom="true" className="w-10 text-center tabular-nums">
-            {Math.round(zoom * 100)}%
-          </span>
-          <Button
-            aria-label="放大画布"
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-9 text-muted-foreground"
-            disabled={disabled || zoom >= MAX_ZOOM}
-            onClick={() => applyZoom(zoom + ZOOM_STEP)}
-          >
-            <ZoomIn className="size-3.5" />
-          </Button>
-        </div>
-      </div>
+      <WorkflowCanvasToolbar
+        disabled={disabled}
+        edgeCount={edges.length}
+        maxZoom={MAX_ZOOM}
+        minZoom={MIN_ZOOM}
+        nodeCount={nodes.length}
+        zoom={zoom}
+        onArrange={arrangeNodesToViewport}
+        onZoomIn={() => applyZoom(zoom + ZOOM_STEP)}
+        onZoomOut={() => applyZoom(zoom - ZOOM_STEP)}
+      />
       <div
         className="relative"
         style={{
@@ -393,6 +383,7 @@ export function WorkflowCanvas({
               onPointerMove={(event) => {
                 const drag = dragRef.current;
                 if (!drag || drag.nodeId !== node.id) return;
+                setFitMode(false);
                 onMoveNode(node.id, clampPosition({
                   x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
                   y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
