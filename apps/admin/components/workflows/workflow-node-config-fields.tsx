@@ -10,6 +10,7 @@ import type {
 import { getWorkflowNodeCapability } from "@/components/workflows/workflow-node-capabilities";
 import { WorkflowPaymentCollectionConfigFields } from "@/components/workflows/workflow-payment-collection-config-fields";
 import { WorkflowPermissionMultiSelect } from "@/components/workflows/workflow-permission-multi-select";
+import { WorkflowNodeTargetSelect } from "@/components/workflows/workflow-node-target-select";
 import { ProcedureConfigFields } from "@/components/workflows/workflow-procedure-config-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -52,11 +53,13 @@ type NodeConfigChangeHandler = (config: WorkflowNodeConfig) => void;
 export function WorkflowNodeConfigFields({
   disabled,
   node,
+  rollbackTargetNodes,
   usedProcedureStageKeys,
   onChangeConfig,
 }: {
   disabled?: boolean;
   node: WorkflowNode;
+  rollbackTargetNodes: WorkflowNode[];
   usedProcedureStageKeys?: string[];
   onChangeConfig: NodeConfigChangeHandler;
 }) {
@@ -73,6 +76,7 @@ export function WorkflowNodeConfigFields({
       <CommonConfigFields
         config={node.config}
         disabled={disabled}
+        rollbackTargetNodes={rollbackTargetNodes}
         onChangeConfig={updateConfig}
       />
       {capability === "procedure" ? (
@@ -111,10 +115,12 @@ export function WorkflowNodeConfigFields({
 function CommonConfigFields({
   config,
   disabled,
+  rollbackTargetNodes,
   onChangeConfig,
 }: {
   config: WorkflowNodeConfig;
   disabled?: boolean;
+  rollbackTargetNodes: WorkflowNode[];
   onChangeConfig: (patch: Partial<WorkflowBaseNodeConfig>) => void;
 }) {
   return (
@@ -156,15 +162,15 @@ function CommonConfigFields({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="workflow-node-rollback">回退节点</Label>
-          <Input
-            id="workflow-node-rollback"
+          <Label>回退节点</Label>
+          <WorkflowNodeTargetSelect
             value={config.rollback_target_key || ""}
             disabled={disabled}
-            placeholder="节点编码"
-            onChange={(event) =>
+            nodes={rollbackTargetNodes}
+            placeholder="选择回退节点"
+            onChange={(value) =>
               onChangeConfig({
-                rollback_target_key: event.target.value.trim() || null,
+                rollback_target_key: value,
               })
             }
           />

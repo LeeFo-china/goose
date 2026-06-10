@@ -402,6 +402,7 @@ export function WorkflowDesignerShell({
                 <WorkflowPropertyPanel
                   disabled={pending}
                   node={selectedNode}
+                  nodes={graph.nodes}
                   usedNodeKeys={graph.nodes
                     .filter((node) => node.id !== selectedNode.id)
                     .map((node) => node.node_key)}

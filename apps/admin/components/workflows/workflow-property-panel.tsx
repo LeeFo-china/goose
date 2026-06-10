@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 export function WorkflowPropertyPanel({
   disabled,
   node,
+  nodes,
   usedNodeKeys,
   usedProcedureStageKeys,
   onDeleteNode,
@@ -42,6 +43,7 @@ export function WorkflowPropertyPanel({
 }: {
   disabled?: boolean;
   node: WorkflowNode | null;
+  nodes: WorkflowNode[];
   usedNodeKeys: string[];
   usedProcedureStageKeys?: string[];
   onDeleteNode: (nodeId: string) => void;
@@ -206,6 +208,7 @@ export function WorkflowPropertyPanel({
         <WorkflowNodeConfigFields
           disabled={disabled}
           node={selectedNode}
+          rollbackTargetNodes={nodes.filter((item) => item.id !== selectedNode.id)}
           usedProcedureStageKeys={usedProcedureStageKeys}
           onChangeConfig={handleChangeConfig}
         />
