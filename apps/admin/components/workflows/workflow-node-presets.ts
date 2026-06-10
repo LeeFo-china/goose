@@ -137,14 +137,6 @@ export const WorkflowNodePresets: WorkflowNodePreset[] = [
     businessKind: "expense_approval",
   },
   {
-    key: "stage_template",
-    label: "施工阶段模板",
-    description: "按阶段组织一组工序。",
-    group: "procedure",
-    nodeType: "construction_stage",
-    businessKind: "stage_template",
-  },
-  {
     key: "procedure_template",
     label: "工序节点",
     description: "具体施工工序，选择拆改、水电、瓦工、木工、油工或安装。",
