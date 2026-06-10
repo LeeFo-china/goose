@@ -24,7 +24,6 @@ import type {
   WorkflowNode,
   WorkflowNodeConfig,
 } from "@/components/workflows/workflow-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -132,17 +131,6 @@ export function WorkflowPropertyPanel({
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Settings2 className="size-4" />
           节点属性
-        </div>
-        <div className="mt-3 rounded-md border bg-muted/25 p-3">
-          <div className="truncate text-sm font-medium">
-            {displayLabels.specificLabel}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="bg-background">
-              {displayLabels.capabilityLabel}
-            </Badge>
-            <span className="break-all text-xs text-muted-foreground">{selectedNode.node_key}</span>
-          </div>
         </div>
       </div>
       <div
