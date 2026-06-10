@@ -6,6 +6,7 @@ export const NODE_WIDTH = 210;
 export const NODE_HEIGHT = 84;
 export const HANDLE_HIT_SIZE = 44;
 export const MIN_ZOOM = 0.5;
+export const ARRANGE_ZOOM = 0.6;
 export const MIN_FIT_ZOOM = 0.02;
 export const MAX_ZOOM = 1.8;
 export const ZOOM_STEP = 0.1;
@@ -97,7 +98,7 @@ export function arrangeWorkflowCanvasNodes(
 ): ArrangedWorkflowCanvas {
   if (nodes.length === 0) return { nodes, zoom: 1 };
   const orderedNodes = getWorkflowCanvasOrderedNodes(nodes, edges);
-  const layout = getBestFitLayout(orderedNodes.length, viewportSize);
+  const layout = getBestFitLayout(orderedNodes.length, viewportSize, ARRANGE_ZOOM);
   const positionById = new Map<string, CanvasPoint>();
   orderedNodes.forEach((node, index) => {
     const column = index % layout.columns;
@@ -109,7 +110,7 @@ export function arrangeWorkflowCanvasNodes(
   });
 
   return {
-    zoom: layout.zoom,
+    zoom: ARRANGE_ZOOM,
     nodes: nodes.map((node) => ({
       ...node,
       position: positionById.get(node.id) || node.position,
@@ -174,7 +175,11 @@ function getWorkflowCanvasOrderedNodes(
   });
 }
 
-function getBestFitLayout(nodeCount: number, viewportSize: CanvasSize) {
+function getBestFitLayout(
+  nodeCount: number,
+  viewportSize: CanvasSize,
+  arrangeZoom: number,
+) {
   const availableWidth = Math.max(320, viewportSize.width - LAYOUT_SAFE_MARGIN * 2);
   const availableHeight = Math.max(
     240,
@@ -195,18 +200,17 @@ function getBestFitLayout(nodeCount: number, viewportSize: CanvasSize) {
     if (right.zoom !== left.zoom) return right.zoom - left.zoom;
     return Math.abs(left.columns - left.rows) - Math.abs(right.columns - right.rows);
   })[0];
-  const visualWidth = best.width * best.zoom;
-  const visualHeight = best.height * best.zoom;
+  const visualWidth = best.width * arrangeZoom;
+  const visualHeight = best.height * arrangeZoom;
 
   return {
     columns: best.columns,
-    zoom: best.zoom,
     offsetX: Math.max(LAYOUT_SAFE_MARGIN, (viewportSize.width - visualWidth) / 2) /
-      best.zoom,
+      arrangeZoom,
     offsetY: (LAYOUT_TOOLBAR_HEIGHT + Math.max(
       LAYOUT_SAFE_MARGIN,
       (availableHeight - visualHeight) / 2,
-    )) / best.zoom,
+    )) / arrangeZoom,
   };
 }
 
