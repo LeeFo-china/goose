@@ -266,7 +266,7 @@ export function WorkflowCanvas({
               type="button"
               size="icon"
               variant="ghost"
-              className="size-10 text-muted-foreground"
+              className="size-11 text-muted-foreground"
               disabled={disabled || zoom <= MIN_ZOOM}
               onClick={() => applyZoom(zoom - ZOOM_STEP)}
             >
@@ -280,7 +280,7 @@ export function WorkflowCanvas({
               type="button"
               size="icon"
               variant="ghost"
-              className="size-10 text-muted-foreground"
+              className="size-11 text-muted-foreground"
               disabled={disabled || zoom >= MAX_ZOOM}
               onClick={() => applyZoom(zoom + ZOOM_STEP)}
             >
@@ -349,7 +349,7 @@ export function WorkflowCanvas({
               type="button"
               size="icon"
               variant="outline"
-              className="absolute z-10 size-10 bg-background"
+              className="absolute z-10 size-11 bg-background"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
               onClick={() => onDeleteEdge(edge.id)}
