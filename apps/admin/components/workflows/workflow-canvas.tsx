@@ -269,13 +269,11 @@ export function WorkflowCanvas({
         }}
       >
         <div
-          ref={canvasRef}
           data-workflow-canvas="true"
-          className="relative origin-top-left"
+          className="relative"
           style={{
             width: canvasSize.width,
             height: canvasSize.height,
-            transform: canvasTransform,
             backgroundImage: [
               "linear-gradient(hsl(var(--border) / 0.65) 1px, transparent 1px)",
               "linear-gradient(90deg, hsl(var(--border) / 0.65) 1px, transparent 1px)",
@@ -283,6 +281,7 @@ export function WorkflowCanvas({
             backgroundSize: "32px 32px",
           }}
         >
+        <div ref={canvasRef} data-workflow-canvas="true" className="absolute inset-0 origin-top-left" style={{ transform: canvasTransform }}>
         <svg
           className="pointer-events-none absolute inset-0"
           width={canvasSize.width}
@@ -491,6 +490,7 @@ export function WorkflowCanvas({
             </div>
           );
         })}
+        </div>
         </div>
       </div>
     </div>
