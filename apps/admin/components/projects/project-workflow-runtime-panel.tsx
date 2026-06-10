@@ -18,6 +18,10 @@ import {
   fetchWorkflowRuntimeInstances,
   startWorkflowRuntimeInstance,
 } from "@/components/workflows/workflow-requests";
+import {
+  getWorkflowPaymentGate,
+  ProjectWorkflowPaymentGate,
+} from "@/components/projects/project-workflow-payment-gate";
 import type {
   WorkflowDefinition,
   WorkflowRuntimeInstance,
@@ -76,6 +80,7 @@ export function ProjectWorkflowRuntimePanel({
       instance.status === "running" &&
       instance.current_node_key,
   );
+  const paymentGate = useMemo(() => getWorkflowPaymentGate(instance), [instance]);
 
   const actionLabel = useMemo(() => {
     if (!instance) return "启动项目流程";
@@ -252,6 +257,14 @@ export function ProjectWorkflowRuntimePanel({
                 </div>
               </div>
             </div>
+            {paymentGate ? (
+              <ProjectWorkflowPaymentGate
+                disabled={pending}
+                gate={paymentGate}
+                project={project}
+                onChanged={loadRuntime}
+              />
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               {!instance ? (
                 <Button type="button" size="sm" disabled={pending} onClick={startRuntime}>
