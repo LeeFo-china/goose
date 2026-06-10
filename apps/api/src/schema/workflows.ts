@@ -167,6 +167,7 @@ const PaymentCollectionNodeConfigSchema = BaseNodeConfigSchema.extend({
     .max(200, "阻塞提示不能超过 200 字")
     .nullable()
     .optional(),
+  finance_reviewer_employee_id: z.uuid("无效的财务审核人 ID").nullable().optional(),
 });
 
 const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({

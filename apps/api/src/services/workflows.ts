@@ -20,6 +20,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
+import { findPaymentCollectionIssues } from "@/services/workflow-payment-collection-node-validation";
 import { resolveWorkflowKey } from "@/services/workflow-key";
 import { findProcedureStageIssues } from "@/services/workflow-procedure-node-validation";
 
@@ -443,6 +444,11 @@ class WorkflowService {
       throw Errors.badRequest(procedureStageIssues.join("；"));
     }
 
+    const paymentCollectionIssues = findPaymentCollectionIssues(nodes);
+    if (paymentCollectionIssues.length > 0) {
+      throw Errors.badRequest(paymentCollectionIssues.join("；"));
+    }
+
     return {
       valid: true,
       issues: [] as string[],
@@ -483,6 +489,7 @@ class WorkflowService {
 
     return Array.from(invalidRefs);
   }
+
 }
 
 export const workflowService = new WorkflowService();

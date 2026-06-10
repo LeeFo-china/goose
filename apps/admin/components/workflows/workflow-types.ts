@@ -77,6 +77,23 @@ export type WorkflowPaymentCollectionNodeConfig = WorkflowBaseNodeConfig & {
   payment_type?: "deposit" | "stage_1" | "stage_2" | "stage_3" | "add_on";
   min_amount?: number | null;
   block_message?: string | null;
+  finance_reviewer_employee_id?: string | null;
+};
+
+export type WorkflowEmployeeOption = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  status: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
+  post_name?: string | null;
+  roles?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+  }>;
 };
 
 export type WorkflowNotificationNodeConfig = WorkflowBaseNodeConfig & {

@@ -34,6 +34,7 @@ function defaultConfig(
       payment_type: "deposit",
       min_amount: null,
       block_message: null,
+      finance_reviewer_employee_id: null,
     };
   }
   if (nodeType === "procedure") {
@@ -193,6 +194,16 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
         issues.push({
           code: "payment_collection_min_amount_invalid",
           message: "收款节点最低金额不能为负数",
+          nodeKey: node.node_key,
+        });
+      }
+      const financeReviewerId = "finance_reviewer_employee_id" in node.config
+        ? node.config.finance_reviewer_employee_id
+        : null;
+      if (!financeReviewerId) {
+        issues.push({
+          code: "payment_collection_finance_reviewer_required",
+          message: "收款节点必须选择财务审核人",
           nodeKey: node.node_key,
         });
       }

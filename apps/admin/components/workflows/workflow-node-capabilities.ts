@@ -157,6 +157,7 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
       payment_type: "deposit",
       min_amount: null,
       block_message: null,
+      finance_reviewer_employee_id: null,
     },
   },
   final_acceptance: {
