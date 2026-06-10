@@ -125,12 +125,6 @@ function CommonConfigFields({
 }) {
   return (
     <section className="space-y-3">
-      <div>
-        <div className="text-sm font-medium">通用规则</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          控制节点权限、超时和回退目标。
-        </p>
-      </div>
       <div className="grid gap-2">
         <Label>所需权限</Label>
         <WorkflowPermissionMultiSelect
