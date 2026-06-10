@@ -48,7 +48,7 @@ export function WorkflowNodeTargetSelect({
           const labels = getWorkflowNodeDisplayLabels(node);
           return (
             <SelectItem key={node.id} value={node.node_key}>
-              {labels.specificLabel} · {labels.capabilityLabel} · {node.node_key}
+              {labels.specificLabel} · {labels.capabilityLabel}
             </SelectItem>
           );
         })}

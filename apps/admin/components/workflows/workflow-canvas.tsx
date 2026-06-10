@@ -417,9 +417,6 @@ export function WorkflowCanvas({
                   <Badge variant="outline" className="shrink-0 bg-background text-[11px]">
                     {displayLabels.capabilityLabel}
                   </Badge>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {node.node_key}
-                  </span>
                 </span>
               </button>
               {node.node_type !== "start" ? (

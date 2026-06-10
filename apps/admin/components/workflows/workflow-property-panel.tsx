@@ -171,9 +171,6 @@ export function WorkflowPropertyPanel({
               </SelectContent>
             </Select>
           )}
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            节点编码：<span className="font-medium text-foreground">{selectedNode.node_key}</span>
-          </div>
         </div>
         {!isControlNode && selectedCapability === "business" ? (
           <div className="grid gap-2">
