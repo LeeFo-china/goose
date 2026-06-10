@@ -1,5 +1,6 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
+import { paymentRepository } from "@/repositories/payments";
 import {
   workflowRepository,
   type JsonObject,
@@ -41,16 +42,23 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     throw Errors.badRequest("流程发布版本图结构无效");
   }
 
-  if (
-    graph.definition.category !== "construction" ||
-    instance.subject_type !== "project"
-  ) {
+  if (instance.subject_type !== "project") {
     return;
   }
 
   const currentNode = graph.nodes.find((node) =>
     node.id === instance.current_node_id
   );
+
+  await assertPaymentCollectionRequirements({
+    node: currentNode,
+    projectId: instance.subject_id,
+  });
+
+  if (graph.definition.category !== "construction") {
+    return;
+  }
+
   assertProcedureNodeRequirements(currentNode, input.output);
 
   const nextNode = getNextWorkflowNode(graph, instance.current_node_id);
@@ -83,6 +91,70 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
       missing_required_stages: stages.missing_required_stages,
     },
   );
+}
+
+async function assertPaymentCollectionRequirements(input: {
+  node: WorkflowNodeRow | null | undefined;
+  projectId: string;
+}) {
+  if (input.node?.business_kind !== "payment_collection") {
+    return;
+  }
+
+  const paymentType = getPaymentCollectionType(input.node.config.payment_type);
+  const minAmount = getPaymentCollectionMinAmount(input.node.config.min_amount);
+  const summary = await paymentRepository.summarizeConfirmedProjectPayments({
+    projectId: input.projectId,
+    type: paymentType,
+  });
+  const amountSatisfied = minAmount === null ||
+    summary.totalAmount >= minAmount;
+
+  if (summary.count > 0 && amountSatisfied) {
+    return;
+  }
+
+  const fallbackMessage = minAmount === null
+    ? "请先确认收款后再推进流程"
+    : `已入账金额不足，当前已入账 ${summary.totalAmount} 元，要求至少 ${minAmount} 元`;
+  const message = typeof input.node.config.block_message === "string" &&
+      input.node.config.block_message.trim()
+    ? input.node.config.block_message.trim()
+    : fallbackMessage;
+
+  throw Errors.business(
+    409,
+    message,
+    ErrorCodes.WORKFLOW_PAYMENT_COLLECTION_BLOCKED,
+    {
+      node_key: input.node.node_key,
+      project_id: input.projectId,
+      payment_type: paymentType,
+      confirmed_payment_count: summary.count,
+      confirmed_amount: summary.totalAmount,
+      min_amount: minAmount,
+    },
+  );
+}
+
+function getPaymentCollectionType(value: unknown) {
+  if (
+    value === "deposit" ||
+    value === "stage_1" ||
+    value === "stage_2" ||
+    value === "stage_3" ||
+    value === "add_on"
+  ) {
+    return value;
+  }
+  return "deposit";
+}
+
+function getPaymentCollectionMinAmount(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return null;
 }
 
 function assertProcedureNodeRequirements(

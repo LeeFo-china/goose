@@ -20,6 +20,11 @@ export type PaymentRecord = {
   handler?: unknown;
 };
 
+export type ConfirmedPaymentSummary = {
+  count: number;
+  totalAmount: number;
+};
+
 class PaymentRepository {
   private paymentSelect = `
     *,
@@ -117,6 +122,28 @@ class PaymentRepository {
         total: count || 0,
         totalPages: count ? Math.ceil(count / pageSize) : 0,
       },
+    };
+  }
+
+  async summarizeConfirmedProjectPayments(input: {
+    projectId: string;
+    type: string;
+  }): Promise<ConfirmedPaymentSummary> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("payments")
+      .select("amount")
+      .eq("project_id", input.projectId)
+      .eq("type", input.type)
+      .eq("status", "confirmed");
+
+    if (error) {
+      throw Errors.dbError("查询项目已入账收款失败", error);
+    }
+
+    const rows = (data || []) as Array<{ amount: number | null }>;
+    return {
+      count: rows.length,
+      totalAmount: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
     };
   }
 
