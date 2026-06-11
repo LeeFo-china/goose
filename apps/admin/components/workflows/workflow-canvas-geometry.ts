@@ -41,10 +41,12 @@ export type ArrangedWorkflowCanvas = {
 export function getExpandedCanvasSize(
   viewportSize: CanvasSize,
   zoom: number,
+  contentNodes: PositionedWorkflowNode[] = [],
 ): CanvasSize {
+  const contentSize = getContentCanvasSize(contentNodes);
   return {
-    width: Math.max(CANVAS_WIDTH, viewportSize.width / zoom),
-    height: Math.max(CANVAS_HEIGHT, viewportSize.height / zoom),
+    width: Math.max(CANVAS_WIDTH, viewportSize.width / zoom, contentSize.width),
+    height: Math.max(CANVAS_HEIGHT, viewportSize.height / zoom, contentSize.height),
   };
 }
 
@@ -109,6 +111,20 @@ export function getCanvasPoint(
 
 export function clampZoom(value: number) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+}
+
+function getContentCanvasSize(nodes: PositionedWorkflowNode[]): CanvasSize {
+  if (nodes.length === 0) return { width: 0, height: 0 };
+  return nodes.reduce((size, node) => ({
+    width: Math.max(
+      size.width,
+      node.position.x + (node.canvasWidth ?? NODE_WIDTH) + LAYOUT_SAFE_MARGIN,
+    ),
+    height: Math.max(
+      size.height,
+      node.position.y + (node.canvasHeight ?? NODE_HEIGHT) + LAYOUT_SAFE_MARGIN,
+    ),
+  }), { width: 0, height: 0 });
 }
 
 export async function arrangeWorkflowCanvasNodes(

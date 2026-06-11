@@ -15,6 +15,7 @@ type WorkflowDefinition = {
 type WorkflowGraph = {
   nodes: Array<{
     node_key: string;
+    position: { x: number; y: number };
     config?: {
       branch_node_position?: { x: number; y: number } | null;
     };
@@ -248,6 +249,36 @@ async function seedBranchWorkflowGraph(page: Page, workflowId: string) {
   expect(response.ok(), await response.text()).toBe(true);
 }
 
+async function seedLinearWorkflowGraph(page: Page, workflowId: string) {
+  const workflowNodes = Array.from({ length: 12 }, (_, index) => {
+    const first = index === 0;
+    const last = index === 11;
+    return {
+      node_key: first ? "start" : last ? "end" : `step_${index}`,
+      node_type: first ? "start" : last ? "end" : "business",
+      business_kind: null,
+      title: first ? "开始" : last ? "结束" : `线性节点 ${index}`,
+      description: null,
+      position: { x: 80 + index * 240, y: 180 },
+      config: {},
+      sort_order: (index + 1) * 10,
+    };
+  });
+  const response = await page.request.put(`/api/backend/workflows/${workflowId}/graph`, {
+    data: {
+      nodes: workflowNodes,
+      edges: workflowNodes.slice(0, -1).map((node, index) => ({
+        source_node_key: node.node_key,
+        target_node_key: workflowNodes[index + 1].node_key,
+        label: null,
+        condition: { operator: "always" },
+        priority: (index + 1) * 10,
+      })),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
 async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
@@ -262,6 +293,18 @@ async function getNodeBoxes(nodes: Locator) {
       };
     })
   );
+}
+
+async function dragLocatorBy(page: Page, locator: Locator, deltaX: number, deltaY: number) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const centerX = box!.x + box!.width / 2;
+  const centerY = box!.y + box!.height / 2;
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + deltaX, centerY + deltaY);
+  await page.mouse.up();
 }
 
 async function getEntityBoxes(page: Page) {
@@ -369,6 +412,65 @@ test("整理画布后普通节点和判断节点不重叠", async ({ page }) => 
     );
     expect(paymentNode?.config?.branch_node_position?.x).toBeGreaterThan(0);
     expect(paymentNode?.config?.branch_node_position?.y).toBeGreaterThan(0);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("缩小后节点不能拖出画布左上边界", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await page.getByRole("button", { name: "缩小画布" }).click();
+    await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("90%");
+    await dragLocatorBy(
+      page,
+      page.locator("[data-workflow-node-key='start']"),
+      -900,
+      -900,
+    );
+
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByText("流程草稿已保存")).toBeVisible();
+
+    const graphResponse = await page.request.get(`/api/backend/workflows/${workflowId}/graph`);
+    expect(graphResponse.ok(), await graphResponse.text()).toBe(true);
+    const graphPayload = await graphResponse.json() as BackendPayload<WorkflowGraph>;
+    const startNode = graphPayload.data?.nodes.find((node) => node.node_key === "start");
+    expect(startNode?.position.x).toBeGreaterThanOrEqual(0);
+    expect(startNode?.position.y).toBeGreaterThanOrEqual(0);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("线性流程整理后画布可以滚动访问末端节点", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedLinearWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await page.getByRole("button", { name: "整理画布" }).click();
+    await expect(page.getByText("画布已整理")).toBeVisible();
+
+    const scrollState = await page.locator("[data-workflow-canvas-scroll='true']")
+      .evaluate((element) => ({
+        overflowX: window.getComputedStyle(element).overflowX,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+    expect(scrollState.overflowX).not.toBe("hidden");
+    expect(scrollState.scrollWidth).toBeGreaterThan(scrollState.clientWidth);
+
+    const endNode = page.locator("[data-workflow-node-key='end']");
+    await endNode.scrollIntoViewIfNeeded();
+    await expect(endNode).toBeInViewport();
   } finally {
     await archiveWorkflow(page, workflowId);
   }

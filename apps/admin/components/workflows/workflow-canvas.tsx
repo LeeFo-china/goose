@@ -92,15 +92,13 @@ export function WorkflowCanvas({
   const [connectionDraft, setConnectionDraft] = useState<WorkflowCanvasConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
-  const [fitMode, setFitMode] = useState(false);
   const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
-  const hasPanOffset = fitPan.x !== 0 || fitPan.y !== 0;
   const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
-  const minNodePosition = hasPanOffset ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
   const branchNodes = buildWorkflowCanvasBranchNodes(nodes, edges);
+  const canvasSize = getExpandedCanvasSize(viewportSize, zoom, [...nodes, ...branchNodes]);
+  const minNodePosition = { x: 0, y: 0 };
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasNodeById = new Map<string, Pick<WorkflowNode, "id" | "node_key" | "position"> & {
     canvasWidth?: number;
@@ -240,7 +238,6 @@ export function WorkflowCanvas({
   async function arrangeNodesToViewport() {
     const arranged = await arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
     setZoom(arranged.zoom);
-    setFitMode(true);
     setFitPan({ x: 0, y: 0 });
     updateConnectionDraft(null);
     onCancelConnect();
@@ -266,7 +263,7 @@ export function WorkflowCanvas({
 
     scrollElement.addEventListener("wheel", handleWheel, { passive: false });
     return () => scrollElement.removeEventListener("wheel", handleWheel);
-  }, [disabled, fitMode, fitPan.x, fitPan.y, viewportSize.height, viewportSize.width, zoom]);
+  }, [disabled, fitPan.x, fitPan.y, viewportSize.height, viewportSize.width, zoom]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -291,7 +288,7 @@ export function WorkflowCanvas({
       data-workflow-canvas-scroll="true"
       className={[
         "relative h-full min-h-0 cursor-grab bg-muted/30 active:cursor-grabbing",
-        fitMode ? "overflow-hidden" : "overflow-auto",
+        "overflow-auto",
       ].join(" ")}
       onPointerDown={canvasPan.begin}
       onDragOver={(event) => {
@@ -306,7 +303,6 @@ export function WorkflowCanvas({
         if (!presetKey || !getWorkflowNodePreset(presetKey)) return;
         event.preventDefault();
         const point = getCanvasPoint(event, canvasRef.current, zoom);
-        setFitMode(false);
         setFitPan({ x: 0, y: 0 });
         onDropNodePreset(presetKey, clampPosition({
           x: point.x - NODE_WIDTH / 2,
