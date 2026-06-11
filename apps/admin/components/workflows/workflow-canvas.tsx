@@ -72,6 +72,7 @@ export function WorkflowCanvas({
   const [fitMode, setFitMode] = useState(false);
   const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const canvasSize = getExpandedCanvasSize(viewportSize, zoom);
   const hasPanOffset = fitPan.x !== 0 || fitPan.y !== 0;
   const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
@@ -317,6 +318,7 @@ export function WorkflowCanvas({
             const source = nodeById.get(edge.source_node_id);
             const target = nodeById.get(edge.target_node_id);
             if (!source || !target) return null;
+            const hovered = hoveredEdgeId === edge.id;
 
             return (
               <path
@@ -324,6 +326,8 @@ export function WorkflowCanvas({
                 d={createConnectionPath(getOutputPoint(source), getInputPoint(target))}
                 fill="none"
                 markerEnd="url(#workflow-arrow)"
+                strokeDasharray={hovered ? "1 7" : undefined}
+                strokeLinecap={hovered ? "round" : undefined}
                 stroke="hsl(var(--muted-foreground))"
                 strokeWidth="2"
               />
@@ -357,7 +361,14 @@ export function WorkflowCanvas({
               className="absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-sm transition hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
-              onClick={() => onDeleteEdge(edge.id)}
+              onBlur={() => setHoveredEdgeId(null)}
+              onClick={() => {
+                setHoveredEdgeId(null);
+                onDeleteEdge(edge.id);
+              }}
+              onFocus={() => setHoveredEdgeId(edge.id)}
+              onPointerEnter={() => setHoveredEdgeId(edge.id)}
+              onPointerLeave={() => setHoveredEdgeId(null)}
             >
               <X className="size-4" />
             </button>
