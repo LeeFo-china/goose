@@ -48,8 +48,8 @@ export function useWorkflowValidationPlayback(graph: WorkflowDesignerGraph | nul
       return;
     }
 
-    const errorNodeId = findValidationIssueNodeId(graph, validation);
-    const steps = buildWorkflowValidationPlaybackSteps(graph, errorNodeId);
+    const errorNodeIds = findValidationIssueNodeIds(graph, validation);
+    const steps = buildWorkflowValidationPlaybackSteps(graph);
     if (steps.length === 0) {
       setPlayback({
         ...EMPTY_WORKFLOW_VALIDATION_PLAYBACK,
@@ -77,8 +77,8 @@ export function useWorkflowValidationPlayback(graph: WorkflowDesignerGraph | nul
       setPlayback({
         activeNodeIds: [],
         activeEdgeIds: [],
-        errorNodeIds: validation.valid || !errorNodeId ? [] : [errorNodeId],
-        successNodeIds: validation.valid ? Array.from(completedNodeIds) : [],
+        errorNodeIds: validation.valid ? [] : errorNodeIds,
+        successNodeIds: Array.from(completedNodeIds),
         status: validation.valid ? "success" : "error",
       });
     }, steps.length * PLAYBACK_STEP_MS);
@@ -95,7 +95,6 @@ export function useWorkflowValidationPlayback(graph: WorkflowDesignerGraph | nul
 
 function buildWorkflowValidationPlaybackSteps(
   graph: WorkflowDesignerGraph,
-  stopNodeId: string | null,
 ): WorkflowValidationPlaybackStep[] {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const outgoingEdges = new Map<string, typeof graph.edges>();
@@ -126,14 +125,12 @@ function buildWorkflowValidationPlaybackSteps(
       steps.push({ nodeIds: [node.id], edgeIds: [] });
       steppedNodeIds.add(node.id);
     }
-    if (node.id === stopNodeId) break;
 
     for (const edge of outgoingEdges.get(node.id) || []) {
       const target = nodeById.get(edge.target_node_id);
       if (!target) continue;
       steps.push({ nodeIds: [target.id], edgeIds: [edge.id] });
       steppedNodeIds.add(target.id);
-      if (target.id === stopNodeId) return steps;
       if (!queuedNodeIds.has(target.id) && !visitedNodeIds.has(target.id)) {
         queue.push(target);
         queuedNodeIds.add(target.id);
@@ -153,10 +150,14 @@ function compareWorkflowNodes(left: WorkflowNode, right: WorkflowNode) {
   return left.sort_order - right.sort_order || left.node_key.localeCompare(right.node_key);
 }
 
-function findValidationIssueNodeId(
+function findValidationIssueNodeIds(
   graph: WorkflowDesignerGraph,
   validation: WorkflowValidationResult,
 ) {
-  const issueNodeKey = validation.issues.find((issue) => issue.nodeKey)?.nodeKey;
-  return graph.nodes.find((node) => node.node_key === issueNodeKey)?.id || null;
+  const issueNodeKeys = new Set(validation.issues
+    .map((issue) => issue.nodeKey)
+    .filter((nodeKey): nodeKey is string => Boolean(nodeKey)));
+  return graph.nodes
+    .filter((node) => issueNodeKeys.has(node.node_key))
+    .map((node) => node.id);
 }

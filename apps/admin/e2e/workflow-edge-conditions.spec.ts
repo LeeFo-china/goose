@@ -179,6 +179,117 @@ async function seedPaymentBranchGraph(page: Page, workflowId: string) {
   expect(response.ok(), await response.text()).toBe(true);
 }
 
+async function seedPaymentBranchGraphWithoutReviewer(page: Page, workflowId: string) {
+  const response = await page.request.put(`/api/backend/workflows/${workflowId}/graph`, {
+    data: {
+      nodes: [
+        {
+          node_key: "start",
+          node_type: "start",
+          business_kind: null,
+          title: "开始",
+          description: null,
+          position: { x: 80, y: 180 },
+          config: {},
+          sort_order: 10,
+        },
+        {
+          node_key: "payment_stage_1",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          title: "收款",
+          description: null,
+          position: { x: 330, y: 180 },
+          config: {
+            payment_type: "stage_1",
+            requirement_mode: "any_confirmed",
+            finance_reviewer_employee_id: null,
+          },
+          sort_order: 20,
+        },
+        {
+          node_key: "tile_work",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          title: "瓦工",
+          description: null,
+          position: { x: 610, y: 120 },
+          config: {
+            stage_key: "tiling",
+            require_log: false,
+            min_image_count: 0,
+            trigger_acceptance: false,
+            customer_visible: false,
+          },
+          sort_order: 30,
+        },
+        {
+          node_key: "collection_followup",
+          node_type: "notification",
+          business_kind: null,
+          title: "催收",
+          description: null,
+          position: { x: 610, y: 260 },
+          config: {
+            channels: ["todo"],
+            recipient_rule: "owner",
+            template: "请跟进中期款催收",
+          },
+          sort_order: 40,
+        },
+        {
+          node_key: "end",
+          node_type: "end",
+          business_kind: null,
+          title: "结束",
+          description: null,
+          position: { x: 880, y: 180 },
+          config: {},
+          sort_order: 50,
+        },
+      ],
+      edges: [
+        {
+          source_node_key: "start",
+          target_node_key: "payment_stage_1",
+          label: null,
+          condition: { operator: "always" },
+          priority: 10,
+        },
+        {
+          source_node_key: "payment_stage_1",
+          target_node_key: "tile_work",
+          label: "收款成功",
+          condition: { operator: "eq", field: "payment_status", value: "success" },
+          priority: 20,
+        },
+        {
+          source_node_key: "payment_stage_1",
+          target_node_key: "collection_followup",
+          label: "收款失败",
+          condition: { operator: "eq", field: "payment_status", value: "failed" },
+          priority: 30,
+        },
+        {
+          source_node_key: "collection_followup",
+          target_node_key: "tile_work",
+          label: null,
+          condition: { operator: "always" },
+          priority: 40,
+        },
+        {
+          source_node_key: "tile_work",
+          target_node_key: "end",
+          label: null,
+          condition: { operator: "always" },
+          priority: 50,
+        },
+      ],
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
 async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
@@ -311,6 +422,32 @@ test("项目收款节点失败分支不应被未入账收款拦截", async ({ pa
     expect(failedPaymentResponse.ok(), await failedPaymentResponse.text()).toBe(true);
     const failedPaymentPayload = await failedPaymentResponse.json() as BackendPayload<WorkflowRuntimeResult>;
     expect(failedPaymentPayload.data!.instance.current_node_key).toBe("collection_followup");
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("本地校验遇到收款节点问题仍继续播放后续分支", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedPaymentBranchGraphWithoutReviewer(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await page.getByRole("button", { name: "本地校验" }).click();
+
+    await expect(page.locator("[data-workflow-validation-playback='error']")).toBeVisible({
+      timeout: 6000,
+    });
+    await expect(page.locator("[data-workflow-node-key='payment_stage_1']"))
+      .toHaveAttribute("data-workflow-validation-state", "error");
+    await expect(page.locator("[data-workflow-node-key='collection_followup']"))
+      .toHaveAttribute("data-workflow-validation-state", "success");
+    await expect(page.locator("[data-workflow-node-key='tile_work']"))
+      .toHaveAttribute("data-workflow-validation-state", "success");
+    await expect(page.locator("[data-workflow-node-key='end']"))
+      .toHaveAttribute("data-workflow-validation-state", "success");
   } finally {
     await archiveWorkflow(page, workflowId);
   }
