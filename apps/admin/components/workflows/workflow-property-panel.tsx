@@ -7,11 +7,17 @@ import {
   WORKFLOW_BUSINESS_FLOW_OPTIONS,
 } from "@/components/workflows/workflow-business-flow-options";
 import {
+  getWorkflowApprovalKind,
+  WORKFLOW_APPROVAL_KIND_OPTIONS,
+  type WorkflowApprovalKind,
+} from "@/components/workflows/workflow-approval-node-options";
+import {
   getWorkflowFinanceKind,
   WORKFLOW_FINANCE_KIND_OPTIONS,
   type WorkflowFinanceKind,
 } from "@/components/workflows/workflow-finance-node-options";
 import {
+  applyWorkflowApprovalKind,
   applyWorkflowBusinessKind,
   applyWorkflowConstructionStageKind,
   applyWorkflowFinanceKind,
@@ -97,6 +103,7 @@ export function WorkflowPropertyPanel({
   const selectedConstructionStageKind =
     getWorkflowConstructionStageKind(selectedNode);
   const selectedFinanceKind = getWorkflowFinanceKind(selectedNode);
+  const selectedApprovalKind = getWorkflowApprovalKind(selectedNode);
   const rollbackTargetNodes = getRollbackTargetNodes({
     currentNode: selectedNode,
     edges,
@@ -277,6 +284,35 @@ export function WorkflowPropertyPanel({
               </SelectTrigger>
               <SelectContent>
                 {WORKFLOW_FINANCE_KIND_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {!isControlNode && selectedCapability === "approval" ? (
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-approval-kind">审批类型</Label>
+            <Select
+              disabled={disabled}
+              value={selectedApprovalKind}
+              onValueChange={(value) =>
+                onChangeNode(
+                  applyWorkflowApprovalKind({
+                    node: selectedNode,
+                    approvalKind: value as WorkflowApprovalKind,
+                    usedNodeKeys,
+                  }),
+                )
+              }
+            >
+              <SelectTrigger id="workflow-node-approval-kind">
+                <SelectValue placeholder="选择审批类型" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKFLOW_APPROVAL_KIND_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

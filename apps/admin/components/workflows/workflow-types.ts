@@ -65,6 +65,7 @@ export type WorkflowFinanceNodeConfig = WorkflowBaseNodeConfig & {
 };
 
 export type WorkflowApprovalNodeConfig = WorkflowBaseNodeConfig & {
+  approval_type?: "expense_approval" | "workflow_approval";
   assignee_rule?: "employee" | "department" | "role";
   assignee_id?: string | null;
   amount_threshold?: number | null;

@@ -9,6 +9,11 @@ import {
   type WorkflowBusinessFlowKind,
 } from "@/components/workflows/workflow-business-flow-options";
 import {
+  getWorkflowApprovalKindOption,
+  getWorkflowApprovalSpecificLabel,
+  type WorkflowApprovalKind,
+} from "@/components/workflows/workflow-approval-node-options";
+import {
   getWorkflowFinanceKindOption,
   getWorkflowFinanceSpecificLabel,
   type WorkflowFinanceKind,
@@ -129,13 +134,14 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     },
   },
   approval: {
-    label: "财务审批",
+    label: "费用审批",
     description: "费用、报销或付款审批节点。",
     nodeType: "approval",
     businessKind: "expense_approval",
     nodeKeyBase: "expense_approval",
     config: {
       required_permissions: [],
+      approval_type: "expense_approval",
       assignee_rule: "role",
       approve_mode: "any",
       amount_threshold: null,
@@ -269,7 +275,7 @@ function getWorkflowNodeSpecificLabel(
     case "finance":
       return getWorkflowFinanceSpecificLabel(node);
     case "approval":
-      return node.title || "审批";
+      return getWorkflowApprovalSpecificLabel(node);
     case "notification":
       return node.title || "通知";
     case "automation":
@@ -350,6 +356,36 @@ export function applyWorkflowFinanceKind(input: {
     title: option.label,
     description: option.description,
     config: mergeWithCommonConfig(config, input.node.config),
+  };
+}
+
+export function applyWorkflowApprovalKind(input: {
+  node: WorkflowNode;
+  approvalKind: WorkflowApprovalKind;
+  usedNodeKeys: string[];
+}): WorkflowNode {
+  const option = getWorkflowApprovalKindOption(input.approvalKind);
+  if (!option) {
+    return input.node;
+  }
+
+  return {
+    ...input.node,
+    node_key: buildUniqueWorkflowNodeKey(option.nodeKeyBase, input.usedNodeKeys),
+    node_type: "approval",
+    business_kind: "expense_approval",
+    title: option.label,
+    description: option.description,
+    config: mergeWithCommonConfig(
+      {
+        required_permissions: [],
+        approval_type: option.value,
+        assignee_rule: "role",
+        approve_mode: "any",
+        amount_threshold: null,
+      },
+      input.node.config,
+    ),
   };
 }
 
