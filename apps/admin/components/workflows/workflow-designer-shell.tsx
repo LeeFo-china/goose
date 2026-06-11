@@ -26,10 +26,6 @@ import {
 } from "@/components/workflows/workflow-designer-graph-utils";
 import { createWorkflowConnectionEdge } from "@/components/workflows/workflow-connection-edge";
 import {
-  getWorkflowBranchLinkSourceNodeId,
-  isWorkflowBranchEdgeForNode,
-  isWorkflowBranchLinkEdgeId,
-  withWorkflowBranchNodePosition,
   type WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
@@ -134,17 +130,6 @@ export function WorkflowDesignerShell({
     setDirty(true);
   }
 
-  function moveBranchNode(sourceNodeId: string, position: WorkflowNode["position"]) {
-    if (!graph) return;
-    setGraph({
-      ...graph,
-      nodes: graph.nodes.map((node) => (
-        node.id === sourceNodeId ? withWorkflowBranchNodePosition(node, position) : node
-      )),
-    });
-    setDirty(true);
-  }
-
   function arrangeNodes(nodes: WorkflowNode[]) {
     if (!graph) return;
     setGraph({
@@ -190,20 +175,6 @@ export function WorkflowDesignerShell({
 
   function deleteEdge(edgeId: string) {
     if (!graph) return;
-    if (isWorkflowBranchLinkEdgeId(edgeId)) {
-      const sourceNodeId = getWorkflowBranchLinkSourceNodeId(edgeId);
-      const sourceNode = graph.nodes.find((node) => node.id === sourceNodeId);
-      if (!sourceNode) return;
-      setGraph({
-        ...graph,
-        nodes: graph.nodes.map((node) => (
-          node.id === sourceNode.id ? withWorkflowBranchNodePosition(node, null) : node
-        )),
-        edges: graph.edges.filter((edge) => !isWorkflowBranchEdgeForNode(sourceNode, edge)),
-      });
-      setDirty(true);
-      return;
-    }
     setGraph({
       ...graph,
       edges: graph.edges.filter((edge) => edge.id !== edgeId),
@@ -410,7 +381,6 @@ export function WorkflowDesignerShell({
                 onFinishConnect={connectToNode}
                 onArrangeNodes={arrangeNodes}
                 onMoveNode={moveNode}
-                onMoveBranchNode={moveBranchNode}
                 onOpenNodeLibrary={showNodeLibrary}
                 onSelectNode={selectNode}
                 validationPlayback={playback}

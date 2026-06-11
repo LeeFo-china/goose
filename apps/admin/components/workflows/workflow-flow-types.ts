@@ -1,16 +1,14 @@
 import type { Edge, Node } from "@xyflow/react";
 import type {
   WorkflowBranchOutcomeKey,
-  WorkflowBranchProjectionNode,
-  WorkflowDisplayEdge,
 } from "@/components/workflows/workflow-branch-projection";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 
 export const WORKFLOW_FLOW_NODE_WIDTH = 210;
 export const WORKFLOW_FLOW_NODE_HEIGHT = 84;
-export const WORKFLOW_FLOW_BRANCH_NODE_WIDTH = 104;
-export const WORKFLOW_FLOW_BRANCH_NODE_HEIGHT = 104;
+export const WORKFLOW_FLOW_DECISION_NODE_WIDTH = 132;
+export const WORKFLOW_FLOW_DECISION_NODE_HEIGHT = 132;
 export const WORKFLOW_FLOW_ARRANGE_ZOOM = 0.6;
 export const WORKFLOW_FLOW_MIN_ZOOM = 0.2;
 export const WORKFLOW_FLOW_MAX_ZOOM = 1.8;
@@ -25,14 +23,8 @@ export type WorkflowFlowNodeData = {
   validationState: WorkflowFlowValidationState;
 };
 
-export type WorkflowFlowBranchNodeData = {
-  branchNode: WorkflowBranchProjectionNode;
-  connecting: boolean;
-  disabled?: boolean;
-};
-
 export type WorkflowFlowEdgeData = {
-  edge: WorkflowDisplayEdge;
+  edge: WorkflowEdge;
   active: boolean;
   actionSourceKey: string;
   actionTargetKey: string;
@@ -42,9 +34,7 @@ export type WorkflowFlowEdgeData = {
   pathTargetKey: string;
 };
 
-export type WorkflowFlowNode =
-  | Node<WorkflowFlowNodeData, "workflowNode">
-  | Node<WorkflowFlowBranchNodeData, "workflowBranch">;
+export type WorkflowFlowNode = Node<WorkflowFlowNodeData, "workflowNode">;
 
 export type WorkflowFlowEdge = Edge<WorkflowFlowEdgeData, "workflowEdge">;
 

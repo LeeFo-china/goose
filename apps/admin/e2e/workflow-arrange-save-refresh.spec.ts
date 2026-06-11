@@ -308,18 +308,13 @@ async function dragLocatorBy(page: Page, locator: Locator, deltaX: number, delta
 }
 
 async function getEntityBoxes(page: Page) {
-  return page.locator("[data-workflow-node='true'], [data-workflow-branch-source-key]")
+  return page.locator("[data-workflow-node='true']")
     .evaluateAll((elements) =>
       elements.map((element) => {
         const rect = element.getBoundingClientRect();
         const nodeKey = element.getAttribute("data-workflow-node-key");
-        const branchSourceKey = element.getAttribute("data-workflow-branch-source-key");
         return {
-          label: nodeKey
-            ? `node:${nodeKey}`
-            : branchSourceKey
-              ? `branch:${branchSourceKey}`
-              : "entity",
+          label: nodeKey ? `node:${nodeKey}` : "entity",
           left: Math.round(rect.left),
           right: Math.round(rect.right),
           top: Math.round(rect.top),
@@ -388,7 +383,7 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
   }
 });
 
-test("整理画布后普通节点和判断节点不重叠", async ({ page }) => {
+test("整理画布后实体节点不重叠且收款节点本体是分流节点", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -399,15 +394,17 @@ test("整理画布后普通节点和判断节点不重叠", async ({ page }) => 
     await page.getByRole("button", { name: "整理画布" }).click();
     await expect(page.getByText("画布已整理")).toBeVisible();
     await expect(page.locator("[data-workflow-branch-source-key='payment_stage_1']"))
+      .toHaveCount(0);
+    await expect(page.locator("[data-workflow-decision-node='payment_stage_1']"))
       .toBeVisible();
 
     const boxes = await getEntityBoxes(page);
-    expect(boxes.length).toBeGreaterThanOrEqual(7);
+    expect(boxes.length).toBeGreaterThanOrEqual(6);
     const paymentBox = findEntityBox(boxes, "node:payment_stage_1");
-    const branchBox = findEntityBox(boxes, "branch:payment_stage_1");
     const successBox = findEntityBox(boxes, "node:tile_work");
     const failureBox = findEntityBox(boxes, "node:collection_followup");
-    expect(branchBox.left).toBeGreaterThan(paymentBox.right);
+    expect(successBox.left).toBeGreaterThan(paymentBox.right);
+    expect(failureBox.left).toBeGreaterThan(paymentBox.left);
     expect(successBox.top).toBeLessThan(failureBox.top - 48);
     for (let index = 0; index < boxes.length; index += 1) {
       for (let nextIndex = index + 1; nextIndex < boxes.length; nextIndex += 1) {
@@ -427,8 +424,9 @@ test("整理画布后普通节点和判断节点不重叠", async ({ page }) => 
     const paymentNode = graphPayload.data?.nodes.find((node) =>
       node.node_key === "payment_stage_1"
     );
-    expect(paymentNode?.config?.branch_node_position?.x).toBeGreaterThan(0);
-    expect(paymentNode?.config?.branch_node_position?.y).toBeGreaterThan(0);
+    expect(paymentNode?.position.x).toBeGreaterThan(0);
+    expect(paymentNode?.position.y).toBeGreaterThan(0);
+    expect(paymentNode?.config?.branch_node_position).toBeUndefined();
   } finally {
     await archiveWorkflow(page, workflowId);
   }

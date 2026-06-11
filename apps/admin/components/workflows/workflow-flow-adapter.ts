@@ -1,15 +1,12 @@
 import type { Connection } from "@xyflow/react";
 import {
-  buildWorkflowBranchProjectionNodes,
-  buildWorkflowDisplayEdges,
-  getWorkflowBranchLinkSourceNodeId,
-  getWorkflowBranchNodeId,
   getWorkflowBranchOutcomeByEdge,
+  getWorkflowBranchSourceKind,
   type WorkflowBranchOutcomeKey,
 } from "@/components/workflows/workflow-branch-projection";
 import {
-  WORKFLOW_FLOW_BRANCH_NODE_HEIGHT,
-  WORKFLOW_FLOW_BRANCH_NODE_WIDTH,
+  WORKFLOW_FLOW_DECISION_NODE_HEIGHT,
+  WORKFLOW_FLOW_DECISION_NODE_WIDTH,
   WORKFLOW_FLOW_NODE_HEIGHT,
   WORKFLOW_FLOW_NODE_WIDTH,
   type WorkflowFlowAdapterInput,
@@ -21,46 +18,30 @@ import {
 import type { WorkflowNode } from "@/components/workflows/workflow-types";
 
 export const WORKFLOW_FLOW_NODE_TYPE = "workflowNode";
-export const WORKFLOW_FLOW_BRANCH_NODE_TYPE = "workflowBranch";
 export const WORKFLOW_FLOW_EDGE_TYPE = "workflowEdge";
 export const WORKFLOW_FLOW_INPUT_HANDLE = "input";
 export const WORKFLOW_FLOW_OUTPUT_HANDLE = "output";
-export const WORKFLOW_FLOW_BRANCH_TARGET_HANDLE = "branch-input";
 
 export function toWorkflowFlowNodes(input: WorkflowFlowAdapterInput): WorkflowFlowNode[] {
-  const branchNodes = buildWorkflowBranchProjectionNodes(input.nodes, input.edges);
-  const ordinaryNodes: WorkflowFlowNode[] = input.nodes.map((node) => ({
-    id: node.id,
-    type: WORKFLOW_FLOW_NODE_TYPE,
-    position: node.position,
-    width: WORKFLOW_FLOW_NODE_WIDTH,
-    height: WORKFLOW_FLOW_NODE_HEIGHT,
-    draggable: input.disabled ? false : undefined,
-    selectable: input.disabled ? false : undefined,
-    data: {
-      node,
-      connecting: node.id === input.connectingNodeId,
-      disabled: input.disabled,
-      selected: node.id === input.selectedNodeId,
-      validationState: getWorkflowFlowValidationState(node.id, input),
-    },
-  }));
-  const branchFlowNodes: WorkflowFlowNode[] = branchNodes.map((branchNode) => ({
-    id: branchNode.id,
-    type: WORKFLOW_FLOW_BRANCH_NODE_TYPE,
-    position: branchNode.position,
-    width: WORKFLOW_FLOW_BRANCH_NODE_WIDTH,
-    height: WORKFLOW_FLOW_BRANCH_NODE_HEIGHT,
-    draggable: input.disabled ? false : undefined,
-    selectable: input.disabled ? false : undefined,
-    data: {
-      branchNode,
-      connecting: branchNode.sourceNodeId === input.connectingNodeId,
-      disabled: input.disabled,
-    },
-  }));
-
-  return [...ordinaryNodes, ...branchFlowNodes];
+  return input.nodes.map((node) => {
+    const isDecisionNode = Boolean(getWorkflowBranchSourceKind(node));
+    return {
+      id: node.id,
+      type: WORKFLOW_FLOW_NODE_TYPE,
+      position: node.position,
+      width: isDecisionNode ? WORKFLOW_FLOW_DECISION_NODE_WIDTH : WORKFLOW_FLOW_NODE_WIDTH,
+      height: isDecisionNode ? WORKFLOW_FLOW_DECISION_NODE_HEIGHT : WORKFLOW_FLOW_NODE_HEIGHT,
+      draggable: input.disabled ? false : undefined,
+      selectable: input.disabled ? false : undefined,
+      data: {
+        node,
+        connecting: node.id === input.connectingNodeId,
+        disabled: input.disabled,
+        selected: node.id === input.selectedNodeId,
+        validationState: getWorkflowFlowValidationState(node.id, input),
+      },
+    };
+  });
 }
 
 type WorkflowFlowEdgeAdapterInput = Pick<
@@ -69,42 +50,23 @@ type WorkflowFlowEdgeAdapterInput = Pick<
 >;
 
 export function toWorkflowFlowEdges(input: WorkflowFlowEdgeAdapterInput): WorkflowFlowEdge[] {
-  const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
-  const branchNodeById = new Map(
-    buildWorkflowBranchProjectionNodes(input.nodes, input.edges).map((node) => [node.id, node]),
-  );
-  const flowNodeKeyById = new Map<string, string>([
-    ...input.nodes.map((node) => [node.id, node.node_key] as const),
-    ...Array.from(branchNodeById.values()).map((node) => [node.id, node.node_key] as const),
-  ]);
-  return buildWorkflowDisplayEdges({
-    edges: input.edges,
-    branchNodes: Array.from(branchNodeById.values()),
-    nodeById,
-  }).map((edge) => {
-    const branchSource = edge.displaySourceNodeId
-      ? branchNodeById.get(edge.displaySourceNodeId)
-      : null;
-    const branchOutcome = branchSource ? getWorkflowBranchOutcomeByEdge(edge) : null;
-    const branchLinkSourceNodeId = getWorkflowBranchLinkSourceNodeId(edge.id);
-    const source = edge.displaySourceNodeId || edge.source_node_id;
-    const target = edge.displayTargetNodeId || edge.target_node_id;
-    const pathSourceKey = flowNodeKeyById.get(source) || source;
-    const pathTargetKey = flowNodeKeyById.get(target) || target;
+  const flowNodeKeyById = new Map(input.nodes.map((node) => [node.id, node.node_key]));
+  return input.edges.map((edge) => {
+    const branchOutcome = getWorkflowBranchOutcomeByEdge(edge);
+    const pathSourceKey = flowNodeKeyById.get(edge.source_node_id) || edge.source_node_id;
+    const pathTargetKey = flowNodeKeyById.get(edge.target_node_id) || edge.target_node_id;
     return {
       id: edge.id,
       type: WORKFLOW_FLOW_EDGE_TYPE,
-      source,
-      target,
+      source: edge.source_node_id,
+      target: edge.target_node_id,
       sourceHandle: branchOutcome || WORKFLOW_FLOW_OUTPUT_HANDLE,
-      targetHandle: branchLinkSourceNodeId
-        ? WORKFLOW_FLOW_BRANCH_TARGET_HANDLE
-        : WORKFLOW_FLOW_INPUT_HANDLE,
+      targetHandle: WORKFLOW_FLOW_INPUT_HANDLE,
       data: {
         edge,
         active: input.activeValidationEdgeIds.has(edge.id),
-        actionSourceKey: edge.dataSourceNodeKey || pathSourceKey,
-        actionTargetKey: edge.dataTargetNodeKey || pathTargetKey,
+        actionSourceKey: pathSourceKey,
+        actionTargetKey: pathTargetKey,
         disabled: input.disabled,
         onDeleteEdge: input.onDeleteEdge,
         pathSourceKey,
@@ -118,21 +80,14 @@ export function getWorkflowFlowConnectionSource(
   connection: Connection,
 ): WorkflowFlowConnectionSource | null {
   if (!connection.source) return null;
-  if (connection.source.startsWith("branch:")) {
-    return {
-      nodeId: connection.source.slice("branch:".length),
-      branchOutcome: parseWorkflowBranchOutcome(connection.sourceHandle),
-    };
-  }
-  return { nodeId: connection.source };
+  return {
+    nodeId: connection.source,
+    branchOutcome: parseWorkflowBranchOutcome(connection.sourceHandle),
+  };
 }
 
 export function getWorkflowFlowConnectionTarget(connection: Connection) {
   return connection.target || null;
-}
-
-export function getWorkflowFlowBranchNodeId(sourceNodeId: string) {
-  return getWorkflowBranchNodeId(sourceNodeId);
 }
 
 function getWorkflowFlowValidationState(

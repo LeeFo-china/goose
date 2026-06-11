@@ -259,7 +259,7 @@ test("目标节点在上方时连线不从出口反向下弯", async ({ page }) 
   }
 });
 
-test("收款节点拖线自动生成判断节点", async ({ page }) => {
+test("收款节点本体作为菱形分流节点创建成功条件连线", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -270,8 +270,13 @@ test("收款节点拖线自动生成判断节点", async ({ page }) => {
     await connectNodes(page, "payment_stage_1", "tile_work");
 
     await expect(page.locator("[data-workflow-branch-source-key='payment_stage_1']"))
+      .toHaveCount(0);
+    await expect(page.locator("[data-workflow-decision-node='payment_stage_1']"))
       .toBeVisible();
-    await expect(page.getByText("收款判断")).toBeVisible();
+    await expect(page.locator("[data-workflow-node-key='payment_stage_1'] [data-workflow-branch-output='payment_success']"))
+      .toHaveAttribute("data-workflow-branch-output-tone", "success");
+    await expect(page.locator("[data-workflow-node-key='payment_stage_1'] [data-workflow-branch-output='payment_failed']"))
+      .toHaveAttribute("data-workflow-branch-output-tone", "failure");
 
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
@@ -297,7 +302,7 @@ test("收款节点拖线自动生成判断节点", async ({ page }) => {
   }
 });
 
-test("收款判断节点可以拖动并通过来源连线删除", async ({ page }) => {
+test("收款节点分流出口固定在菱形右侧和下侧", async ({ page }) => {
   test.setTimeout(60_000);
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
@@ -308,21 +313,21 @@ test("收款判断节点可以拖动并通过来源连线删除", async ({ page 
 
     await connectNodes(page, "payment_stage_1", "tile_work");
 
-    const branchNode = page.locator("[data-workflow-branch-source-key='payment_stage_1']");
-    const successOutput = page.locator("[data-workflow-branch-output='payment_success']");
-    const failedOutput = page.locator("[data-workflow-branch-output='payment_failed']");
-    await expect(branchNode).toBeVisible();
+    const paymentNode = page.locator("[data-workflow-node-key='payment_stage_1']");
+    const successOutput = paymentNode.locator("[data-workflow-branch-output='payment_success']");
+    const failedOutput = paymentNode.locator("[data-workflow-branch-output='payment_failed']");
+    await expect(page.locator("[data-workflow-branch-source-key='payment_stage_1']"))
+      .toHaveCount(0);
+    await expect(paymentNode.locator("[data-workflow-decision-diamond='true']")).toBeVisible();
     await expect(successOutput).toHaveAttribute("data-workflow-branch-output-tone", "success");
     await expect(failedOutput).toHaveAttribute("data-workflow-branch-output-tone", "failure");
-    await expect(branchNode.getByText("成功", { exact: true })).toHaveCount(0);
-    await expect(branchNode.getByText("失败", { exact: true })).toHaveCount(0);
+    await expect(paymentNode.getByText("成功", { exact: true })).toHaveCount(0);
+    await expect(paymentNode.getByText("失败", { exact: true })).toHaveCount(0);
 
-    const branchBox = await branchNode.boundingBox();
-    const diamondBox = await branchNode.locator("[data-workflow-branch-diamond='true']")
+    const diamondBox = await paymentNode.locator("[data-workflow-decision-diamond='true']")
       .boundingBox();
     const successBox = await successOutput.boundingBox();
     const failedBox = await failedOutput.boundingBox();
-    expect(branchBox).not.toBeNull();
     expect(diamondBox).not.toBeNull();
     expect(successBox).not.toBeNull();
     expect(failedBox).not.toBeNull();
@@ -339,26 +344,16 @@ test("收款判断节点可以拖动并通过来源连线删除", async ({ page 
       failedBox!.y + failedBox!.height / 2 - (diamondBox!.y + diamondBox!.height),
     )).toBeLessThan(8);
 
-    await dragLocatorBy(page, branchNode, 86, 68);
-    await expect.poll(async () => (await branchNode.boundingBox())?.x || 0)
-      .toBeGreaterThan(branchBox!.x + 50);
-
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
 
     const savedGraphResponse = await page.request.get(`/api/backend/workflows/${workflowId}/graph`);
     expect(savedGraphResponse.ok(), await savedGraphResponse.text()).toBe(true);
     const savedGraphPayload = await savedGraphResponse.json() as BackendPayload<WorkflowGraph>;
-    const paymentNode = savedGraphPayload.data!.nodes.find((node) =>
+    const savedPaymentNode = savedGraphPayload.data!.nodes.find((node) =>
       node.node_key === "payment_stage_1"
     );
-    expect(paymentNode?.config?.branch_node_position?.x).toBeGreaterThan(430);
-    expect(paymentNode?.config?.branch_node_position?.y).toBeGreaterThan(220);
-
-    await page.locator(
-      "[data-edge-action='delete'][data-workflow-edge-source-key='payment_stage_1'][data-workflow-edge-target-key^='branch:']",
-    ).click();
-    await expect(branchNode).toHaveCount(0);
+    expect(savedPaymentNode?.config?.branch_node_position).toBeUndefined();
   } finally {
     await archiveWorkflow(page, workflowId);
   }
@@ -395,7 +390,7 @@ test("收款判断节点失败出口可以连接催收流程", async ({ page }) 
     await connectBranchOutcome(page, "payment_failed", "collection_followup");
 
     const failedPath = page.locator(
-      "path[data-workflow-edge-source-key^='branch:'][data-workflow-edge-target-key='collection_followup']",
+      "path[data-workflow-edge-source-key='payment_stage_1'][data-workflow-edge-target-key='collection_followup']",
     );
     const failedStart = parsePathStart(await failedPath.getAttribute("d"));
     expect(failedStart.x).toBeGreaterThan(0);

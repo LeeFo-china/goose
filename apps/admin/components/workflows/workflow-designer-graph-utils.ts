@@ -103,9 +103,15 @@ export function toNodeInput(node: WorkflowNode): WorkflowNodeInput {
     title: node.title,
     description: node.description,
     position: node.position,
-    config: node.config,
+    config: omitObsoleteWorkflowNodeConfig(node.config),
     sort_order: node.sort_order,
   };
+}
+
+function omitObsoleteWorkflowNodeConfig(config: WorkflowNodeConfig): WorkflowNodeConfig {
+  const nextConfig: Record<string, unknown> = { ...config };
+  delete nextConfig.branch_node_position;
+  return nextConfig as WorkflowNodeConfig;
 }
 
 export function toEdgeInput(

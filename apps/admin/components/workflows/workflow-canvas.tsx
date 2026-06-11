@@ -26,7 +26,6 @@ import {
   toWorkflowFlowEdges,
   toWorkflowFlowNodes,
 } from "@/components/workflows/workflow-flow-adapter";
-import { WorkflowFlowBranchNode } from "@/components/workflows/workflow-flow-branch-node";
 import { WorkflowFlowEdge } from "@/components/workflows/workflow-flow-edge";
 import { arrangeWorkflowFlowNodes } from "@/components/workflows/workflow-flow-layout";
 import { WorkflowFlowNode } from "@/components/workflows/workflow-flow-node";
@@ -44,7 +43,6 @@ import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow
 
 const nodeTypes = {
   workflowNode: WorkflowFlowNode,
-  workflowBranch: WorkflowFlowBranchNode,
 };
 
 const edgeTypes = {
@@ -77,7 +75,6 @@ export function WorkflowCanvas(props: {
   onFinishConnect: (source: WorkflowFlowConnectionSource, targetNodeId: string) => void;
   onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
-  onMoveBranchNode: (sourceNodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
@@ -101,7 +98,6 @@ function WorkflowCanvasInner({
   onDeleteEdge,
   onDropNodePreset,
   onFinishConnect,
-  onMoveBranchNode,
   onMoveNode,
   onOpenNodeLibrary,
   onSelectNode,
@@ -200,12 +196,8 @@ function WorkflowCanvasInner({
     _event,
     node,
   ) => {
-    if (node.type === "workflowBranch") {
-      onMoveBranchNode(node.data.branchNode.sourceNodeId, node.position);
-      return;
-    }
     onMoveNode(node.id, node.position);
-  }, [onMoveBranchNode, onMoveNode]);
+  }, [onMoveNode]);
 
   const handleConnect = useCallback((connection: Connection) => {
     const source = getWorkflowFlowConnectionSource(connection);

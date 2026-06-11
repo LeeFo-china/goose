@@ -74,24 +74,22 @@ export function WorkflowFlowEdge({
               {edge.label}
             </span>
           ) : null}
-          {edge?.readOnly ? null : (
-            <button
-              data-edge-action="delete"
-              data-workflow-edge-source-key={data?.actionSourceKey}
-              data-workflow-edge-target-key={data?.actionTargetKey}
-              aria-label="删除连线"
-              type="button"
-              className="group flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
-              disabled={data?.disabled}
-              onBlur={() => setIsDeleteActionHovered(false)}
-              onClick={() => data?.onDeleteEdge(edge?.id || id)}
-              onFocus={() => setIsDeleteActionHovered(true)}
-              onMouseEnter={() => setIsDeleteActionHovered(true)}
-              onMouseLeave={() => setIsDeleteActionHovered(false)}
-            >
-              <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />
-            </button>
-          )}
+          <button
+            data-edge-action="delete"
+            data-workflow-edge-source-key={data?.actionSourceKey}
+            data-workflow-edge-target-key={data?.actionTargetKey}
+            aria-label="删除连线"
+            type="button"
+            className="group flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
+            disabled={data?.disabled}
+            onBlur={() => setIsDeleteActionHovered(false)}
+            onClick={() => data?.onDeleteEdge(edge?.id || id)}
+            onFocus={() => setIsDeleteActionHovered(true)}
+            onMouseEnter={() => setIsDeleteActionHovered(true)}
+            onMouseLeave={() => setIsDeleteActionHovered(false)}
+          >
+            <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />
+          </button>
         </div>
       </EdgeLabelRenderer>
     </>

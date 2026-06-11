@@ -1,16 +1,13 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api";
 import {
-  getWorkflowBranchNodeId,
   getWorkflowBranchOutcomeByEdge,
-  isWorkflowBranchEdgeForNode,
-  withWorkflowBranchNodePosition,
-  WORKFLOW_BRANCH_NODE_HEIGHT,
-  WORKFLOW_BRANCH_NODE_WIDTH,
+  getWorkflowBranchSourceKind,
 } from "@/components/workflows/workflow-branch-projection";
-import { WORKFLOW_FLOW_BRANCH_TARGET_HANDLE } from "@/components/workflows/workflow-flow-adapter";
 import {
   WORKFLOW_FLOW_ARRANGE_ZOOM,
+  WORKFLOW_FLOW_DECISION_NODE_HEIGHT,
+  WORKFLOW_FLOW_DECISION_NODE_WIDTH,
   WORKFLOW_FLOW_NODE_HEIGHT,
   WORKFLOW_FLOW_NODE_WIDTH,
 } from "@/components/workflows/workflow-flow-types";
@@ -36,8 +33,6 @@ export async function arrangeWorkflowFlowNodes(
   viewportSize: WorkflowFlowViewportSize,
 ): Promise<ArrangedWorkflowFlow> {
   if (nodes.length === 0) return { nodes, zoom: 1 };
-  const branchSourceNodes = nodes.filter((node) => hasWorkflowBranchEdges(node, edges));
-  const branchSourceIds = new Set(branchSourceNodes.map((node) => node.id));
   const graph: ElkNode = {
     id: "workflow",
     layoutOptions: {
@@ -50,39 +45,30 @@ export async function arrangeWorkflowFlowNodes(
       "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
     },
     children: [
-      ...nodes.map((node) => ({
-        id: node.id,
-        width: WORKFLOW_FLOW_NODE_WIDTH,
-        height: WORKFLOW_FLOW_NODE_HEIGHT,
-      })),
-      ...branchSourceNodes.map((node) => ({
-        id: getWorkflowBranchNodeId(node.id),
-        width: WORKFLOW_BRANCH_NODE_WIDTH,
-        height: WORKFLOW_BRANCH_NODE_HEIGHT,
-        layoutOptions: {
-          "elk.portConstraints": "FIXED_POS",
-        },
-        ports: getWorkflowBranchLayoutPorts(getWorkflowBranchNodeId(node.id)),
-      })),
+      ...nodes.map((node) => {
+        const size = getWorkflowLayoutNodeSize(node);
+        const branchKind = getWorkflowBranchSourceKind(node);
+        return {
+          id: node.id,
+          width: size.width,
+          height: size.height,
+          ...(branchKind
+            ? {
+                layoutOptions: {
+                  "elk.portConstraints": "FIXED_POS",
+                },
+                ports: getWorkflowDecisionLayoutPorts(node),
+              }
+            : {}),
+        };
+      }),
     ],
     edges: [
-      ...branchSourceNodes.map((node) => ({
-        id: `arrange-branch-link:${node.id}`,
-        sources: [node.id],
-        targets: [getWorkflowBranchLayoutPortId(
-          getWorkflowBranchNodeId(node.id),
-          WORKFLOW_FLOW_BRANCH_TARGET_HANDLE,
-        )],
-      })),
       ...edges.map((edge) => {
         const sourceNode = nodes.find((node) => node.id === edge.source_node_id);
-        const branchOutcome = sourceNode &&
-            branchSourceIds.has(sourceNode.id) &&
-            isWorkflowBranchEdgeForNode(sourceNode, edge)
-          ? getWorkflowBranchOutcomeByEdge(edge)
-          : null;
-        const source = sourceNode && branchOutcome
-          ? getWorkflowBranchLayoutPortId(getWorkflowBranchNodeId(sourceNode.id), branchOutcome)
+        const branchOutcome = sourceNode ? getWorkflowBranchOutcomeByEdge(edge) : null;
+        const source = sourceNode && branchOutcome && getWorkflowBranchSourceKind(sourceNode)
+          ? getWorkflowDecisionLayoutPortId(sourceNode.id, branchOutcome)
           : edge.source_node_id;
         return {
           id: edge.id,
@@ -95,31 +81,20 @@ export async function arrangeWorkflowFlowNodes(
   const layouted = await elk.layout(graph);
   const layout = getElkLayoutFrame(layouted, viewportSize, WORKFLOW_FLOW_ARRANGE_ZOOM);
   const positionById = new Map<string, WorkflowNodePosition>();
-  const branchPositionBySourceId = new Map<string, WorkflowNodePosition>();
   (layouted.children || []).forEach((child) => {
     const point = {
       x: layout.offsetX + (child.x || 0),
       y: layout.offsetY + (child.y || 0),
     };
-    if (child.id.startsWith("branch:")) {
-      branchPositionBySourceId.set(child.id.slice("branch:".length), point);
-      return;
-    }
     positionById.set(child.id, point);
   });
 
   return {
     zoom: WORKFLOW_FLOW_ARRANGE_ZOOM,
-    nodes: nodes.map((node) => {
-      const nextNode = {
-        ...node,
-        position: positionById.get(node.id) || node.position,
-      };
-      const branchPosition = branchPositionBySourceId.get(node.id);
-      return branchPosition
-        ? withWorkflowBranchNodePosition(nextNode, branchPosition)
-        : nextNode;
-    }),
+    nodes: nodes.map((node) => ({
+      ...node,
+      position: positionById.get(node.id) || node.position,
+    })),
   };
 }
 
@@ -141,50 +116,59 @@ function getElkLayoutFrame(
   };
 }
 
-function hasWorkflowBranchEdges(node: WorkflowNode, edges: WorkflowEdge[]) {
-  return edges.some((edge) => isWorkflowBranchEdgeForNode(node, edge));
+function getWorkflowLayoutNodeSize(node: WorkflowNode) {
+  return getWorkflowBranchSourceKind(node)
+    ? {
+        width: WORKFLOW_FLOW_DECISION_NODE_WIDTH,
+        height: WORKFLOW_FLOW_DECISION_NODE_HEIGHT,
+      }
+    : {
+        width: WORKFLOW_FLOW_NODE_WIDTH,
+        height: WORKFLOW_FLOW_NODE_HEIGHT,
+      };
 }
 
-function getWorkflowBranchLayoutPorts(branchNodeId: string) {
+function getWorkflowDecisionLayoutPorts(node: WorkflowNode) {
+  const size = getWorkflowLayoutNodeSize(node);
   return [
     {
-      id: getWorkflowBranchLayoutPortId(branchNodeId, WORKFLOW_FLOW_BRANCH_TARGET_HANDLE),
+      id: getWorkflowDecisionLayoutPortId(node.id, "input"),
       x: 0,
-      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      y: size.height / 2,
       width: 1,
       height: 1,
     },
     {
-      id: getWorkflowBranchLayoutPortId(branchNodeId, "payment_success"),
-      x: WORKFLOW_BRANCH_NODE_WIDTH,
-      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      id: getWorkflowDecisionLayoutPortId(node.id, "payment_success"),
+      x: size.width,
+      y: size.height / 2,
       width: 1,
       height: 1,
     },
     {
-      id: getWorkflowBranchLayoutPortId(branchNodeId, "approval_approved"),
-      x: WORKFLOW_BRANCH_NODE_WIDTH,
-      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      id: getWorkflowDecisionLayoutPortId(node.id, "approval_approved"),
+      x: size.width,
+      y: size.height / 2,
       width: 1,
       height: 1,
     },
     {
-      id: getWorkflowBranchLayoutPortId(branchNodeId, "payment_failed"),
-      x: WORKFLOW_BRANCH_NODE_WIDTH / 2,
-      y: WORKFLOW_BRANCH_NODE_HEIGHT,
+      id: getWorkflowDecisionLayoutPortId(node.id, "payment_failed"),
+      x: size.width / 2,
+      y: size.height,
       width: 1,
       height: 1,
     },
     {
-      id: getWorkflowBranchLayoutPortId(branchNodeId, "approval_rejected"),
-      x: WORKFLOW_BRANCH_NODE_WIDTH / 2,
-      y: WORKFLOW_BRANCH_NODE_HEIGHT,
+      id: getWorkflowDecisionLayoutPortId(node.id, "approval_rejected"),
+      x: size.width / 2,
+      y: size.height,
       width: 1,
       height: 1,
     },
   ];
 }
 
-function getWorkflowBranchLayoutPortId(branchNodeId: string, handleId: string) {
-  return `${branchNodeId}:${handleId}`;
+function getWorkflowDecisionLayoutPortId(nodeId: string, handleId: string) {
+  return `${nodeId}:${handleId}`;
 }
