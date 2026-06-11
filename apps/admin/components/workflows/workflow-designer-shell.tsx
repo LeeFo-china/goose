@@ -387,6 +387,7 @@ export function WorkflowDesignerShell({
                 onMoveNode={moveNode}
                 onOpenNodeLibrary={showNodeLibrary}
                 onSelectNode={selectNode}
+                viewStorageKey={`workflow-canvas:${workflowId}:zoom`}
               />
             </div>
             <div className={mobilePanel === "properties" ? "h-full min-h-0 overflow-hidden" : "hidden h-full min-h-0 overflow-hidden lg:block"}>

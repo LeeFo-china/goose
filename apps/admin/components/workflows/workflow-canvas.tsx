@@ -46,6 +46,7 @@ export function WorkflowCanvas({
   onMoveNode,
   onOpenNodeLibrary,
   onSelectNode,
+  viewStorageKey,
 }: {
   connectingNodeId: string | null;
   disabled?: boolean;
@@ -61,6 +62,7 @@ export function WorkflowCanvas({
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
+  viewStorageKey?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -79,6 +81,18 @@ export function WorkflowCanvas({
   const minNodePosition = hasPanOffset ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
+
+  useEffect(() => {
+    if (!viewStorageKey) return;
+    const storedZoom = readStoredCanvasZoom(viewStorageKey);
+    if (storedZoom == null) return;
+    setZoom(storedZoom);
+  }, [viewStorageKey]);
+
+  useEffect(() => {
+    if (!viewStorageKey) return;
+    writeStoredCanvasZoom(viewStorageKey, zoom);
+  }, [viewStorageKey, zoom]);
 
   function updateConnectionDraft(draft: ConnectionDraft | null) {
     connectionDraftRef.current = draft;
@@ -429,4 +443,23 @@ export function WorkflowCanvas({
       </div>
     </div>
   );
+}
+
+function readStoredCanvasZoom(viewStorageKey: string) {
+  try {
+    const value = window.localStorage.getItem(viewStorageKey);
+    if (!value) return null;
+    const zoom = Number(value);
+    return Number.isFinite(zoom) ? clampZoom(zoom) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCanvasZoom(viewStorageKey: string, zoom: number) {
+  try {
+    window.localStorage.setItem(viewStorageKey, String(clampZoom(zoom)));
+  } catch {
+    // Ignore unavailable storage; canvas remains usable with in-memory zoom.
+  }
 }
