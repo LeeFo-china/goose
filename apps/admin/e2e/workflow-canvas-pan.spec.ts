@@ -19,6 +19,13 @@ type WorkflowGraph = {
   }>;
 };
 
+declare global {
+  interface Window {
+    __workflowEdgeMutationCount: number;
+    __workflowEdgeMutationObserver?: MutationObserver;
+  }
+}
+
 async function loginAsTenantAdmin(page: Page) {
   const loginResponse = await page.request.post("/api/auth/login", {
     data: {
@@ -184,6 +191,36 @@ test("官方画布控件支持缩放、锁定和全部显示", async ({ page }) 
       node.node_key === "start"
     )?.position;
     expect(startAfter).toEqual(startBefore);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("拖动单个节点时不刷新无关连线", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedWideWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+    const unaffectedEdge = page.locator(
+      "path[data-workflow-edge-source-key='step_8'][data-workflow-edge-target-key='step_9']",
+    );
+    await expect(unaffectedEdge).toHaveCount(1);
+    await unaffectedEdge.evaluate((element) => {
+      window.__workflowEdgeMutationCount = 0;
+      const observer = new MutationObserver(() => {
+        window.__workflowEdgeMutationCount += 1;
+      });
+      observer.observe(element, { attributes: true, attributeFilter: ["class", "d", "style"] });
+      window.__workflowEdgeMutationObserver = observer;
+    });
+
+    await dragLocatorBy(page, page.locator("[data-workflow-node-key='start']"), 160, 80);
+
+    const mutationCount = await page.evaluate(() => window.__workflowEdgeMutationCount);
+    await page.evaluate(() => window.__workflowEdgeMutationObserver?.disconnect());
+    expect(mutationCount).toBe(0);
   } finally {
     await archiveWorkflow(page, workflowId);
   }

@@ -109,6 +109,7 @@ function WorkflowCanvasInner({
   viewStorageKey,
 }: Parameters<typeof WorkflowCanvas>[0]) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onDeleteEdgeRef = useRef(onDeleteEdge);
   const reactFlow = useReactFlow<WorkflowFlowNodeType, WorkflowFlowEdgeType>();
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
@@ -128,6 +129,12 @@ function WorkflowCanvasInner({
     () => new Set(validationPlayback?.successNodeIds || []),
     [validationPlayback?.successNodeIds],
   );
+  useEffect(() => {
+    onDeleteEdgeRef.current = onDeleteEdge;
+  }, [onDeleteEdge]);
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    onDeleteEdgeRef.current(edgeId);
+  }, []);
   const flowNodes = useMemo(() => toWorkflowFlowNodes({
     activeValidationEdgeIds,
     activeValidationNodeIds,
@@ -136,7 +143,7 @@ function WorkflowCanvasInner({
     edges,
     errorValidationNodeIds,
     nodes,
-    onDeleteEdge,
+    onDeleteEdge: handleDeleteEdge,
     selectedNodeId,
     successValidationNodeIds,
   }), [
@@ -147,7 +154,7 @@ function WorkflowCanvasInner({
     edges,
     errorValidationNodeIds,
     nodes,
-    onDeleteEdge,
+    handleDeleteEdge,
     selectedNodeId,
     successValidationNodeIds,
   ]);
@@ -159,7 +166,7 @@ function WorkflowCanvasInner({
     edges,
     errorValidationNodeIds,
     nodes,
-    onDeleteEdge,
+    onDeleteEdge: handleDeleteEdge,
     selectedNodeId,
     successValidationNodeIds,
   }), [
@@ -170,7 +177,7 @@ function WorkflowCanvasInner({
     edges,
     errorValidationNodeIds,
     nodes,
-    onDeleteEdge,
+    handleDeleteEdge,
     selectedNodeId,
     successValidationNodeIds,
   ]);
