@@ -52,6 +52,8 @@ const originOptions = [
   ] as const),
 ] as const;
 
+const flatControlClassName = "bg-card shadow-none";
+
 function buildCustomersHref(input: {
   page?: number;
   status?: string;
@@ -129,7 +131,7 @@ export function CustomerFilters({
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[150px_150px_150px_160px_1fr_72px]" onSubmit={submit}>
+    <form className="grid gap-2 md:grid-cols-2 xl:grid-cols-[140px_140px_140px_150px_minmax(260px,1fr)_72px]" onSubmit={submit}>
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="source" value={selectedSource} />
       <input type="hidden" name="customer_origin" value={selectedOrigin} />
@@ -138,6 +140,7 @@ export function CustomerFilters({
         id="customer-status-filter"
         value={selectedStatus || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={statusOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -152,6 +155,7 @@ export function CustomerFilters({
         id="customer-source-filter"
         value={selectedSource || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={sourceOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -166,6 +170,7 @@ export function CustomerFilters({
         id="customer-origin-filter"
         value={selectedOrigin || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={originOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -180,6 +185,7 @@ export function CustomerFilters({
         id="customer-follow-filter"
         value={selectedFollow || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={[
           { value: "__all", label: "全部跟进" },
           { value: "due", label: "待跟进" },
@@ -191,7 +197,7 @@ export function CustomerFilters({
           applySelectFilters({ follow: nextFollow });
         }}
       />
-      <InputGroup>
+      <InputGroup className="h-9 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
         </InputGroupAddon>
@@ -215,7 +221,7 @@ export function CustomerFilters({
           </InputGroupAddon>
         ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline" disabled={pending}>
+      <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>

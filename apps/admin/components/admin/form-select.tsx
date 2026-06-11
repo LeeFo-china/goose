@@ -21,6 +21,7 @@ export function FormSelect({
   placeholder = "请选择",
   disabled,
   invalid,
+  triggerClassName,
   onChange,
 }: {
   id: string;
@@ -29,11 +30,12 @@ export function FormSelect({
   placeholder?: string;
   disabled?: boolean;
   invalid?: boolean;
+  triggerClassName?: string;
   onChange: (value: string) => void;
 }) {
   return (
     <Select value={value} disabled={disabled} onValueChange={onChange}>
-      <SelectTrigger id={id} aria-invalid={invalid}>
+      <SelectTrigger id={id} aria-invalid={invalid} className={triggerClassName}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

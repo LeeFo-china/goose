@@ -34,6 +34,9 @@ export function DataTable<TData, TValue>({
   data,
   emptyText = "暂无数据",
   minWidth,
+  containerClassName,
+  tableClassName,
+  headerClassName,
   rowClassName,
   onRowClick,
   tableMeta,
@@ -42,6 +45,9 @@ export function DataTable<TData, TValue>({
   data: TData[];
   emptyText?: string;
   minWidth?: string;
+  containerClassName?: string;
+  tableClassName?: string;
+  headerClassName?: string;
   rowClassName?: (row: TData) => string | undefined;
   onRowClick?: (row: TData) => void;
   tableMeta?: Record<string, unknown>;
@@ -54,9 +60,9 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="overflow-x-auto">
-      <Table className={cn("border-t", minWidth)}>
-        <TableHeader className="bg-muted/60">
+    <div className={cn("overflow-x-auto", containerClassName)}>
+      <Table className={cn("border-t", minWidth, tableClassName)}>
+        <TableHeader className={cn("bg-muted/60", headerClassName)}>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id} className="hover:bg-transparent">
               {headerGroup.headers.map((header) => (

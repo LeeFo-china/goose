@@ -152,17 +152,17 @@ function CustomerIdentityCell({
         type="button"
         className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="w-[5em] truncate font-medium">
+        <div className="w-[5em] truncate font-semibold">
           {name}
         </div>
-        <div className="w-[5em] truncate text-xs text-muted-foreground">
+        <div className="w-[5em] truncate text-xs tabular-nums text-muted-foreground">
           {id}
         </div>
       </TooltipTrigger>
       <TooltipContent align="start" className="max-w-[280px]">
         <div className="flex flex-col gap-1">
-          <div className="break-all font-medium">{name}</div>
-          <div className="break-all text-xs opacity-90">{id}</div>
+          <div className="break-all font-semibold">{name}</div>
+          <div className="break-all text-xs tabular-nums opacity-90">{id}</div>
         </div>
       </TooltipContent>
     </Tooltip>
@@ -189,7 +189,7 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "手机号",
     cell: ({ row }) => row.original.phone || row.original.phone_masked || "-",
     meta: {
-      cellClassName: "whitespace-nowrap",
+      cellClassName: "whitespace-nowrap tabular-nums",
     },
   },
   {
@@ -301,7 +301,7 @@ const columns: ColumnDef<CustomerRecord>[] = [
     header: "创建时间",
     cell: ({ row }) => formatDate(row.original.created_at),
     meta: {
-      cellClassName: "whitespace-nowrap text-muted-foreground",
+      cellClassName: "whitespace-nowrap tabular-nums text-muted-foreground",
     },
   },
   {
@@ -326,6 +326,8 @@ export function CustomersTable({
       data={customers}
       emptyText="没有符合条件的客户"
       minWidth="min-w-[1240px]"
+      tableClassName="border-t-0"
+      headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
     />
   );
 }
