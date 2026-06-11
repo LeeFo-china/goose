@@ -3,6 +3,7 @@
 import {
   Background,
   ConnectionMode,
+  ControlButton,
   Controls,
   MarkerType,
   ReactFlow,
@@ -16,7 +17,7 @@ import {
   type ReactFlowInstance,
   type Viewport,
 } from "@xyflow/react";
-import { Layers3 } from "lucide-react";
+import { Layers3, LayoutDashboard } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,6 @@ import {
   type WorkflowFlowEdge as WorkflowFlowEdgeType,
   type WorkflowFlowNode as WorkflowFlowNodeType,
 } from "@/components/workflows/workflow-flow-types";
-import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
@@ -273,13 +273,9 @@ function WorkflowCanvasInner({
         });
       }}
     >
-      <WorkflowCanvasToolbar
-        disabled={disabled}
-        edgeCount={edges.length}
-        nodeCount={nodes.length}
-        zoom={zoom}
-        onArrange={handleArrange}
-      />
+      <span data-workflow-canvas-zoom="true" className="sr-only">
+        {Math.round(zoom * 100)}%
+      </span>
       <div className="pointer-events-none absolute left-0 right-0 top-3 z-30 h-0 px-3">
         <div className="flex justify-end">
           <Button
@@ -340,7 +336,17 @@ function WorkflowCanvasInner({
           className="workflow-flow-controls"
           fitViewOptions={{ duration: 240, padding: 0.24 }}
           position="top-left"
-        />
+        >
+          <ControlButton
+            aria-label="整理画布"
+            title="整理画布"
+            disabled={disabled || nodes.length === 0}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={handleArrange}
+          >
+            <LayoutDashboard className="size-4" />
+          </ControlButton>
+        </Controls>
         <Background color="hsl(var(--border) / 0.65)" gap={32} />
       </ReactFlow>
     </div>

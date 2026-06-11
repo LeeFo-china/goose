@@ -84,7 +84,7 @@ body {
 
 .workflow-flow-controls.react-flow__controls {
   left: 12px;
-  top: 58px;
+  top: 12px;
   overflow: hidden;
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
@@ -101,6 +101,11 @@ body {
 .workflow-flow-controls .react-flow__controls-button:hover {
   background: hsl(var(--muted) / 0.68);
   color: hsl(var(--foreground));
+}
+
+.workflow-flow-controls .react-flow__controls-button svg {
+  max-height: 16px;
+  max-width: 16px;
 }
 
 .console-grid {
