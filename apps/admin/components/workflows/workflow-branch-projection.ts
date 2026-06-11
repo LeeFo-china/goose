@@ -4,6 +4,7 @@ import {
   type WorkflowEdgeConditionOption,
   type WorkflowEdgeConditionOptionKey,
 } from "@/components/workflows/workflow-edge-conditions";
+import type { CanvasPoint } from "@/components/workflows/workflow-canvas-geometry";
 import type {
   WorkflowEdge,
   WorkflowNode,
@@ -92,6 +93,27 @@ export function getWorkflowBranchOutcomeByEdge(
 ): WorkflowBranchOutcomeKey | null {
   const option = getWorkflowEdgeConditionOption(edge.condition);
   return option.value === "always" ? null : option.value;
+}
+
+export function getWorkflowBranchOutcomePoint(
+  branchNode: {
+    canvasHeight?: number;
+    canvasWidth?: number;
+    position: WorkflowNode["position"];
+  },
+  outcomeKey: WorkflowBranchOutcomeKey,
+): CanvasPoint {
+  const failure = outcomeKey === "payment_failed" || outcomeKey === "approval_rejected";
+  const width = branchNode.canvasWidth ?? WORKFLOW_BRANCH_NODE_WIDTH;
+  const height = branchNode.canvasHeight ?? WORKFLOW_BRANCH_NODE_HEIGHT;
+  return {
+    x: branchNode.position.x + (failure
+      ? width / 2
+      : width),
+    y: branchNode.position.y + (failure
+      ? height
+      : height / 2),
+  };
 }
 
 export function buildWorkflowCanvasBranchNodes(

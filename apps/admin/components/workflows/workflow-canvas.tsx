@@ -35,6 +35,7 @@ import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-pres
 import {
   buildWorkflowCanvasBranchNodes,
   buildWorkflowCanvasDisplayEdges,
+  getWorkflowBranchOutcomePoint,
   type WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
@@ -172,16 +173,11 @@ export function WorkflowCanvas({
   ) {
     const branchNode = branchNodes.find((node) => node.sourceNodeId === source.nodeId);
     if (!branchNode) return;
+    const outcome = source.branchOutcome || branchNode.outcomes[outcomeIndex]?.key;
+    if (!outcome) return;
     startConnection({
       event,
-      from: {
-        x: branchNode.position.x + (outcomeIndex === 0
-          ? branchNode.canvasWidth
-          : branchNode.canvasWidth / 2),
-        y: branchNode.position.y + (outcomeIndex === 0
-          ? branchNode.canvasHeight / 2
-          : branchNode.canvasHeight),
-      },
+      from: getWorkflowBranchOutcomePoint(branchNode, outcome),
       source,
     });
   }

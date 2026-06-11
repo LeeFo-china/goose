@@ -6,7 +6,11 @@ import {
   type CanvasSize,
   type CanvasPoint,
 } from "@/components/workflows/workflow-canvas-geometry";
-import type { WorkflowCanvasDisplayEdge } from "@/components/workflows/workflow-branch-projection";
+import {
+  getWorkflowBranchOutcomeByEdge,
+  getWorkflowBranchOutcomePoint,
+  type WorkflowCanvasDisplayEdge,
+} from "@/components/workflows/workflow-branch-projection";
 import type { WorkflowNode } from "@/components/workflows/workflow-types";
 
 type WorkflowCanvasEdgeNode = Pick<WorkflowNode, "id" | "node_key" | "position"> & {
@@ -68,7 +72,7 @@ export function WorkflowCanvasEdges({
           if (!source || !target) return null;
           const hovered = hoveredEdgeId === edge.id;
           const validationActive = activeValidationEdgeIds.has(edge.id);
-          const path = createConnectionPath(getOutputPoint(source), getInputPoint(target));
+          const path = createConnectionPath(getEdgeSourcePoint(edge, source), getInputPoint(target));
 
           return (
             <g key={edge.id}>
@@ -112,7 +116,7 @@ export function WorkflowCanvasEdges({
         const source = nodeById.get(edge.displaySourceNodeId || edge.source_node_id);
         const target = nodeById.get(edge.displayTargetNodeId || edge.target_node_id);
         if (!source || !target) return null;
-        const sourcePoint = getOutputPoint(source);
+        const sourcePoint = getEdgeSourcePoint(edge, source);
         const targetPoint = getInputPoint(target);
         const left = (sourcePoint.x + targetPoint.x) / 2;
         const top = (sourcePoint.y + targetPoint.y) / 2;
@@ -158,4 +162,14 @@ export function WorkflowCanvasEdges({
       })}
     </>
   );
+}
+
+function getEdgeSourcePoint(
+  edge: WorkflowCanvasDisplayEdge,
+  source: WorkflowCanvasEdgeNode,
+): CanvasPoint {
+  const outcome = edge.displaySourceNodeId
+    ? getWorkflowBranchOutcomeByEdge(edge)
+    : null;
+  return outcome ? getWorkflowBranchOutcomePoint(source, outcome) : getOutputPoint(source);
 }

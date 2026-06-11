@@ -178,6 +178,15 @@ async function dragLocatorBy(page: Page, locator: Locator, deltaX: number, delta
   await page.mouse.up();
 }
 
+function parsePathStart(path: string | null) {
+  const match = path?.match(/^M\s+([\d.]+)\s+([\d.]+)/);
+  expect(match).toBeTruthy();
+  return {
+    x: Number(match![1]),
+    y: Number(match![2]),
+  };
+}
+
 test("收款节点拖线自动生成判断节点", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
@@ -306,6 +315,13 @@ test("收款判断节点失败出口可以连接催收流程", async ({ page }) 
 
     await connectNodes(page, "payment_stage_1", "tile_work");
     await connectBranchOutcome(page, "payment_failed", "collection_followup");
+
+    const failedPath = page.locator(
+      "path[data-workflow-edge-source-key^='branch:'][data-workflow-edge-target-key='collection_followup']",
+    );
+    const failedStart = parsePathStart(await failedPath.getAttribute("d"));
+    expect(failedStart.x).toBeCloseTo(549, 0);
+    expect(failedStart.y).toBeCloseTo(264, 0);
 
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
