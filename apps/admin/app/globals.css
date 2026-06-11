@@ -74,7 +74,7 @@ body {
 }
 
 .workflow-flow-edge {
-  transition: stroke 120ms ease, stroke-width 120ms ease;
+  vector-effect: non-scaling-stroke;
 }
 
 .workflow-flow-edge:hover {

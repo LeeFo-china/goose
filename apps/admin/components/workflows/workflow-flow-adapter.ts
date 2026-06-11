@@ -75,7 +75,12 @@ export function toWorkflowFlowNodes(input: WorkflowFlowAdapterInput): WorkflowFl
   return [...ordinaryNodes, ...branchFlowNodes];
 }
 
-export function toWorkflowFlowEdges(input: WorkflowFlowAdapterInput): WorkflowFlowEdge[] {
+type WorkflowFlowEdgeAdapterInput = Pick<
+  WorkflowFlowAdapterInput,
+  "activeValidationEdgeIds" | "disabled" | "edges" | "nodes" | "onDeleteEdge"
+>;
+
+export function toWorkflowFlowEdges(input: WorkflowFlowEdgeAdapterInput): WorkflowFlowEdge[] {
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const branchNodeById = new Map(
     buildWorkflowBranchProjectionNodes(input.nodes, input.edges).map((node) => [node.id, node]),
@@ -119,6 +124,17 @@ export function toWorkflowFlowEdges(input: WorkflowFlowAdapterInput): WorkflowFl
       },
     };
   });
+}
+
+export function getWorkflowFlowEdgeNodeMetadataKey(nodes: WorkflowNode[]) {
+  return JSON.stringify(nodes.map((node) => ({
+    id: node.id,
+    tenantId: node.tenant_id,
+    definitionId: node.definition_id,
+    key: node.node_key,
+    businessKind: node.business_kind,
+    approvalType: "approval_type" in node.config ? node.config.approval_type : null,
+  })));
 }
 
 export function getWorkflowFlowConnectionSource(

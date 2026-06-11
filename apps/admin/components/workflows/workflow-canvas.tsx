@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getWorkflowFlowConnectionSource,
+  getWorkflowFlowEdgeNodeMetadataKey,
   getWorkflowFlowConnectionTarget,
   getWorkflowNodePositionChanges,
   toWorkflowFlowEdges,
@@ -135,6 +136,10 @@ function WorkflowCanvasInner({
   const handleDeleteEdge = useCallback((edgeId: string) => {
     onDeleteEdgeRef.current(edgeId);
   }, []);
+  const flowEdgeNodeMetadataKey = useMemo(
+    () => getWorkflowFlowEdgeNodeMetadataKey(nodes),
+    [nodes],
+  );
   const flowNodes = useMemo(() => toWorkflowFlowNodes({
     activeValidationEdgeIds,
     activeValidationNodeIds,
@@ -160,26 +165,16 @@ function WorkflowCanvasInner({
   ]);
   const flowEdges = useMemo(() => toWorkflowFlowEdges({
     activeValidationEdgeIds,
-    activeValidationNodeIds,
-    connectingNodeId,
     disabled,
     edges,
-    errorValidationNodeIds,
     nodes,
     onDeleteEdge: handleDeleteEdge,
-    selectedNodeId,
-    successValidationNodeIds,
   }), [
     activeValidationEdgeIds,
-    activeValidationNodeIds,
-    connectingNodeId,
     disabled,
     edges,
-    errorValidationNodeIds,
-    nodes,
+    flowEdgeNodeMetadataKey,
     handleDeleteEdge,
-    selectedNodeId,
-    successValidationNodeIds,
   ]);
 
   const handleInit = useCallback((instance: ReactFlowInstance<WorkflowFlowNodeType, WorkflowFlowEdgeType>) => {

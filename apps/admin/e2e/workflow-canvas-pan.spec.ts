@@ -22,7 +22,13 @@ type WorkflowGraph = {
 declare global {
   interface Window {
     __workflowEdgeMutationCount: number;
+    __workflowEdgeReplacementCount: number;
+    __workflowEdgeActionMutationCount: number;
+    __workflowEdgeActionReplacementCount: number;
     __workflowEdgeMutationObserver?: MutationObserver;
+    __workflowEdgeReplacementObserver?: MutationObserver;
+    __workflowEdgeActionMutationObserver?: MutationObserver;
+    __workflowEdgeActionReplacementObserver?: MutationObserver;
   }
 }
 
@@ -206,21 +212,74 @@ test("拖动单个节点时不刷新无关连线", async ({ page }) => {
     const unaffectedEdge = page.locator(
       "path[data-workflow-edge-source-key='step_8'][data-workflow-edge-target-key='step_9']",
     );
+    const unaffectedEdgeAction = page.locator(
+      "button[data-edge-action='delete'][data-workflow-edge-source-key='step_8']" +
+        "[data-workflow-edge-target-key='step_9']",
+    );
     await expect(unaffectedEdge).toHaveCount(1);
+    await expect(unaffectedEdgeAction).toHaveCount(1);
     await unaffectedEdge.evaluate((element) => {
       window.__workflowEdgeMutationCount = 0;
+      window.__workflowEdgeReplacementCount = 0;
       const observer = new MutationObserver(() => {
         window.__workflowEdgeMutationCount += 1;
       });
-      observer.observe(element, { attributes: true, attributeFilter: ["class", "d", "style"] });
+      observer.observe(element, {
+        attributes: true,
+        attributeFilter: ["class", "d", "style", "marker-end"],
+      });
       window.__workflowEdgeMutationObserver = observer;
+      const parent = element.parentElement;
+      if (!parent) return;
+      const replacementObserver = new MutationObserver((records) => {
+        records.forEach((record) => {
+          record.removedNodes.forEach((node) => {
+            if (node === element) window.__workflowEdgeReplacementCount += 1;
+          });
+        });
+      });
+      replacementObserver.observe(parent, { childList: true });
+      window.__workflowEdgeReplacementObserver = replacementObserver;
+    });
+    await unaffectedEdgeAction.evaluate((element) => {
+      window.__workflowEdgeActionMutationCount = 0;
+      window.__workflowEdgeActionReplacementCount = 0;
+      const observer = new MutationObserver(() => {
+        window.__workflowEdgeActionMutationCount += 1;
+      });
+      observer.observe(element, { attributes: true });
+      window.__workflowEdgeActionMutationObserver = observer;
+      const parent = element.parentElement;
+      if (!parent) return;
+      const replacementObserver = new MutationObserver((records) => {
+        records.forEach((record) => {
+          record.removedNodes.forEach((node) => {
+            if (node === element) window.__workflowEdgeActionReplacementCount += 1;
+          });
+        });
+      });
+      replacementObserver.observe(parent, { childList: true });
+      window.__workflowEdgeActionReplacementObserver = replacementObserver;
     });
 
     await dragLocatorBy(page, page.locator("[data-workflow-node-key='start']"), 160, 80);
 
     const mutationCount = await page.evaluate(() => window.__workflowEdgeMutationCount);
-    await page.evaluate(() => window.__workflowEdgeMutationObserver?.disconnect());
+    const replacementCount = await page.evaluate(() => window.__workflowEdgeReplacementCount);
+    const actionMutationCount = await page.evaluate(() => window.__workflowEdgeActionMutationCount);
+    const actionReplacementCount = await page.evaluate(() => (
+      window.__workflowEdgeActionReplacementCount
+    ));
+    await page.evaluate(() => {
+      window.__workflowEdgeMutationObserver?.disconnect();
+      window.__workflowEdgeReplacementObserver?.disconnect();
+      window.__workflowEdgeActionMutationObserver?.disconnect();
+      window.__workflowEdgeActionReplacementObserver?.disconnect();
+    });
     expect(mutationCount).toBe(0);
+    expect(replacementCount).toBe(0);
+    expect(actionMutationCount).toBe(0);
+    expect(actionReplacementCount).toBe(0);
   } finally {
     await archiveWorkflow(page, workflowId);
   }
