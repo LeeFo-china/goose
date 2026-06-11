@@ -12,6 +12,15 @@ type WorkflowDefinition = {
   id: string;
 };
 
+type WorkflowGraph = {
+  nodes: Array<{
+    node_key: string;
+    config?: {
+      branch_node_position?: { x: number; y: number } | null;
+    };
+  }>;
+};
+
 async function loginAsTenantAdmin(page: Page) {
   const loginResponse = await page.request.post("/api/auth/login", {
     data: {
@@ -111,6 +120,134 @@ async function seedWorkflowGraph(page: Page, workflowId: string) {
   expect(response.ok()).toBe(true);
 }
 
+async function seedBranchWorkflowGraph(page: Page, workflowId: string) {
+  const response = await page.request.put(`/api/backend/workflows/${workflowId}/graph`, {
+    data: {
+      nodes: [
+        {
+          node_key: "start",
+          node_type: "start",
+          business_kind: null,
+          title: "开始",
+          description: null,
+          position: { x: 80, y: 180 },
+          config: {},
+          sort_order: 10,
+        },
+        {
+          node_key: "payment_stage_1",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          title: "中期收款",
+          description: null,
+          position: { x: 250, y: 180 },
+          config: {
+            payment_type: "stage_1",
+            requirement_mode: "any_confirmed",
+            finance_reviewer_employee_id: "00000000-0000-0000-0000-000000000000",
+          },
+          sort_order: 20,
+        },
+        {
+          node_key: "tile_work",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          title: "瓦工",
+          description: null,
+          position: { x: 590, y: 180 },
+          config: {
+            stage_key: "tiling",
+            require_log: false,
+            min_image_count: 0,
+            trigger_acceptance: false,
+            customer_visible: false,
+          },
+          sort_order: 30,
+        },
+        {
+          node_key: "collection_followup",
+          node_type: "notification",
+          business_kind: null,
+          title: "催收",
+          description: null,
+          position: { x: 590, y: 320 },
+          config: {
+            channels: ["todo"],
+            recipient_rule: "owner",
+            template: "请跟进中期款催收",
+          },
+          sort_order: 40,
+        },
+        {
+          node_key: "finance_review",
+          node_type: "business",
+          business_kind: null,
+          title: "财务复核",
+          description: null,
+          position: { x: 860, y: 320 },
+          config: {},
+          sort_order: 50,
+        },
+        {
+          node_key: "end",
+          node_type: "end",
+          business_kind: null,
+          title: "结束",
+          description: null,
+          position: { x: 1120, y: 180 },
+          config: {},
+          sort_order: 60,
+        },
+      ],
+      edges: [
+        {
+          source_node_key: "start",
+          target_node_key: "payment_stage_1",
+          label: null,
+          condition: { operator: "always" },
+          priority: 10,
+        },
+        {
+          source_node_key: "payment_stage_1",
+          target_node_key: "tile_work",
+          label: "收款成功",
+          condition: { operator: "eq", field: "payment_status", value: "success" },
+          priority: 20,
+        },
+        {
+          source_node_key: "payment_stage_1",
+          target_node_key: "collection_followup",
+          label: "收款失败",
+          condition: { operator: "eq", field: "payment_status", value: "failed" },
+          priority: 30,
+        },
+        {
+          source_node_key: "tile_work",
+          target_node_key: "end",
+          label: null,
+          condition: { operator: "always" },
+          priority: 40,
+        },
+        {
+          source_node_key: "collection_followup",
+          target_node_key: "finance_review",
+          label: null,
+          condition: { operator: "always" },
+          priority: 50,
+        },
+        {
+          source_node_key: "finance_review",
+          target_node_key: "end",
+          label: null,
+          condition: { operator: "always" },
+          priority: 60,
+        },
+      ],
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
 async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
@@ -125,6 +262,34 @@ async function getNodeBoxes(nodes: Locator) {
       };
     })
   );
+}
+
+async function getEntityBoxes(page: Page) {
+  return page.locator("[data-workflow-node='true'], [data-workflow-branch-source-key]")
+    .evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          label: element.getAttribute("data-workflow-node-key") ||
+            element.getAttribute("data-workflow-branch-source-key") ||
+            "entity",
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+        };
+      })
+    );
+}
+
+function boxesOverlap(
+  left: Awaited<ReturnType<typeof getEntityBoxes>>[number],
+  right: Awaited<ReturnType<typeof getEntityBoxes>>[number],
+) {
+  return left.left < right.right &&
+    left.right > right.left &&
+    left.top < right.bottom &&
+    left.bottom > right.top;
 }
 
 test("整理后保存草稿再重新进入节点位置不漂移到右下角", async ({ page }) => {
@@ -164,6 +329,46 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
     const reopenedBoxes = await getNodeBoxes(nodes);
 
     expect(reopenedBoxes).toEqual(arrangedBoxes);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("整理画布后普通节点和判断节点不重叠", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedBranchWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await page.getByRole("button", { name: "整理画布" }).click();
+    await expect(page.getByText("画布已整理")).toBeVisible();
+    await expect(page.locator("[data-workflow-branch-source-key='payment_stage_1']"))
+      .toBeVisible();
+
+    const boxes = await getEntityBoxes(page);
+    expect(boxes.length).toBeGreaterThanOrEqual(7);
+    for (let index = 0; index < boxes.length; index += 1) {
+      for (let nextIndex = index + 1; nextIndex < boxes.length; nextIndex += 1) {
+        expect(
+          boxesOverlap(boxes[index], boxes[nextIndex]),
+          `${boxes[index].label} overlaps ${boxes[nextIndex].label}`,
+        ).toBe(false);
+      }
+    }
+
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByText("流程草稿已保存")).toBeVisible();
+
+    const graphResponse = await page.request.get(`/api/backend/workflows/${workflowId}/graph`);
+    expect(graphResponse.ok(), await graphResponse.text()).toBe(true);
+    const graphPayload = await graphResponse.json() as BackendPayload<WorkflowGraph>;
+    const paymentNode = graphPayload.data?.nodes.find((node) =>
+      node.node_key === "payment_stage_1"
+    );
+    expect(paymentNode?.config?.branch_node_position?.x).toBeGreaterThan(0);
+    expect(paymentNode?.config?.branch_node_position?.y).toBeGreaterThan(0);
   } finally {
     await archiveWorkflow(page, workflowId);
   }

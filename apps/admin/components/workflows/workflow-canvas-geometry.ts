@@ -1,9 +1,17 @@
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
+import {
+  isWorkflowBranchEdgeForNode,
+  withWorkflowBranchNodePosition,
+  WORKFLOW_BRANCH_NODE_HEIGHT,
+  WORKFLOW_BRANCH_NODE_WIDTH,
+} from "@/components/workflows/workflow-branch-projection";
 
 type PositionedWorkflowNode = Pick<WorkflowNode, "position"> & {
   canvasWidth?: number;
   canvasHeight?: number;
 };
+
+type LayoutRect = CanvasPoint & CanvasSize;
 
 export const CANVAS_WIDTH = 1800;
 export const CANVAS_HEIGHT = 1200;
@@ -19,6 +27,11 @@ const LAYOUT_SAFE_MARGIN = 24;
 const LAYOUT_TOOLBAR_HEIGHT = 56;
 const LAYOUT_COLUMN_GAP = 96;
 const LAYOUT_ROW_GAP = 72;
+const LAYOUT_BRANCH_GAP_X = 72;
+const LAYOUT_ENTITY_GAP = 28;
+const LAYOUT_ROW_STEP = NODE_HEIGHT + LAYOUT_ROW_GAP;
+const LAYOUT_COLUMN_STEP = NODE_WIDTH + WORKFLOW_BRANCH_NODE_WIDTH +
+  LAYOUT_BRANCH_GAP_X + LAYOUT_COLUMN_GAP;
 
 export type CanvasPoint = { x: number; y: number };
 export type CanvasSize = { width: number; height: number };
@@ -106,28 +119,73 @@ export function arrangeWorkflowCanvasNodes(
   viewportSize: CanvasSize,
 ): ArrangedWorkflowCanvas {
   if (nodes.length === 0) return { nodes, zoom: 1 };
-  const orderedNodes = getWorkflowCanvasOrderedNodes(nodes, edges);
-  const layout = getBestFitLayout(orderedNodes.length, viewportSize, ARRANGE_ZOOM);
+  const { orderedNodes, depthById } = getWorkflowCanvasLayout(nodes, edges);
+  const maxDepth = Math.max(...orderedNodes.map((node) => depthById.get(node.id) || 0));
+  const layout = getCollisionLayoutFrame(maxDepth, viewportSize, ARRANGE_ZOOM);
   const positionById = new Map<string, CanvasPoint>();
-  orderedNodes.forEach((node, index) => {
-    const column = index % layout.columns;
-    const row = Math.floor(index / layout.columns);
-    positionById.set(node.id, {
-      x: layout.offsetX + column * (NODE_WIDTH + LAYOUT_COLUMN_GAP),
-      y: layout.offsetY + row * (NODE_HEIGHT + LAYOUT_ROW_GAP),
-    });
+  const branchPositionBySourceId = new Map<string, CanvasPoint>();
+  const laneByDepth = new Map<number, number>();
+  const occupiedRects: LayoutRect[] = [];
+
+  orderedNodes.forEach((node) => {
+    const depth = depthById.get(node.id) || 0;
+    const lane = laneByDepth.get(depth) || 0;
+    laneByDepth.set(depth, lane + 1);
+    const nodeRect = placeWithoutCollision({
+      x: layout.offsetX + depth * LAYOUT_COLUMN_STEP,
+      y: layout.offsetY + lane * LAYOUT_ROW_STEP,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    }, occupiedRects);
+    occupiedRects.push(nodeRect);
+    positionById.set(node.id, { x: nodeRect.x, y: nodeRect.y });
+
+    if (!hasWorkflowBranchEdges(node, edges)) return;
+    const branchRect = placeWithoutCollision({
+      x: nodeRect.x + NODE_WIDTH + LAYOUT_BRANCH_GAP_X,
+      y: nodeRect.y,
+      width: WORKFLOW_BRANCH_NODE_WIDTH,
+      height: WORKFLOW_BRANCH_NODE_HEIGHT,
+    }, occupiedRects);
+    occupiedRects.push(branchRect);
+    branchPositionBySourceId.set(node.id, { x: branchRect.x, y: branchRect.y });
   });
 
   return {
     zoom: ARRANGE_ZOOM,
-    nodes: nodes.map((node) => ({
-      ...node,
-      position: positionById.get(node.id) || node.position,
-    })),
+    nodes: nodes.map((node) => {
+      const nextNode = {
+        ...node,
+        position: positionById.get(node.id) || node.position,
+      };
+      const branchPosition = branchPositionBySourceId.get(node.id);
+      return branchPosition
+        ? withWorkflowBranchNodePosition(nextNode, branchPosition)
+        : nextNode;
+    }),
   };
 }
 
-function getWorkflowCanvasOrderedNodes(
+function placeWithoutCollision(rect: LayoutRect, occupiedRects: LayoutRect[]) {
+  let nextRect = rect;
+  while (occupiedRects.some((occupied) => rectsOverlap(nextRect, occupied))) {
+    nextRect = { ...nextRect, y: nextRect.y + LAYOUT_ROW_STEP };
+  }
+  return nextRect;
+}
+
+function rectsOverlap(left: LayoutRect, right: LayoutRect) {
+  return left.x - LAYOUT_ENTITY_GAP < right.x + right.width &&
+    left.x + left.width + LAYOUT_ENTITY_GAP > right.x &&
+    left.y - LAYOUT_ENTITY_GAP < right.y + right.height &&
+    left.y + left.height + LAYOUT_ENTITY_GAP > right.y;
+}
+
+function hasWorkflowBranchEdges(node: WorkflowNode, edges: WorkflowEdge[]) {
+  return edges.some((edge) => isWorkflowBranchEdgeForNode(node, edge));
+}
+
+function getWorkflowCanvasLayout(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
 ) {
@@ -178,47 +236,29 @@ function getWorkflowCanvasOrderedNodes(
     if (!visited.has(node.id)) depthById.set(node.id, fallbackDepth);
   });
 
-  return orderedNodes.sort((left, right) => {
+  const nextOrderedNodes = orderedNodes.sort((left, right) => {
     const depthOrder = (depthById.get(left.id) || 0) - (depthById.get(right.id) || 0);
     return depthOrder || compareWorkflowNodes(left, right);
   });
+
+  return { orderedNodes: nextOrderedNodes, depthById };
 }
 
-function getBestFitLayout(
-  nodeCount: number,
+function getCollisionLayoutFrame(
+  maxDepth: number,
   viewportSize: CanvasSize,
   arrangeZoom: number,
 ) {
-  const availableWidth = Math.max(320, viewportSize.width - LAYOUT_SAFE_MARGIN * 2);
-  const availableHeight = Math.max(
-    240,
-    viewportSize.height - LAYOUT_TOOLBAR_HEIGHT - LAYOUT_SAFE_MARGIN * 2,
-  );
-  const candidates = Array.from({ length: nodeCount }, (_, index) => {
-    const columns = index + 1;
-    const rows = Math.ceil(nodeCount / columns);
-    const width = columns * NODE_WIDTH + (columns - 1) * LAYOUT_COLUMN_GAP;
-    const height = rows * NODE_HEIGHT + (rows - 1) * LAYOUT_ROW_GAP;
-    const zoom = Math.max(
-      MIN_FIT_ZOOM,
-      Math.min(1, availableWidth / width, availableHeight / height),
-    );
-    return { columns, rows, width, height, zoom };
-  });
-  const best = candidates.sort((left, right) => {
-    if (right.zoom !== left.zoom) return right.zoom - left.zoom;
-    return Math.abs(left.columns - left.rows) - Math.abs(right.columns - right.rows);
-  })[0];
-  const visualWidth = best.width * arrangeZoom;
-  const visualHeight = best.height * arrangeZoom;
+  const layoutWidth = maxDepth * LAYOUT_COLUMN_STEP + NODE_WIDTH;
+  const visualWidth = layoutWidth * arrangeZoom;
+  const availableHeight = Math.max(240, viewportSize.height - LAYOUT_TOOLBAR_HEIGHT);
 
   return {
-    columns: best.columns,
     offsetX: Math.max(LAYOUT_SAFE_MARGIN, (viewportSize.width - visualWidth) / 2) /
       arrangeZoom,
     offsetY: (LAYOUT_TOOLBAR_HEIGHT + Math.max(
       LAYOUT_SAFE_MARGIN,
-      (availableHeight - visualHeight) / 2,
+      availableHeight * 0.12,
     )) / arrangeZoom,
   };
 }
