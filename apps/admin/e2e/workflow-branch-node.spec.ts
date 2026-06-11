@@ -246,23 +246,26 @@ test("收款判断节点可以拖动并通过来源连线删除", async ({ page 
     await expect(branchNode.getByText("失败", { exact: true })).toHaveCount(0);
 
     const branchBox = await branchNode.boundingBox();
+    const diamondBox = await branchNode.locator("[data-workflow-branch-diamond='true']")
+      .boundingBox();
     const successBox = await successOutput.boundingBox();
     const failedBox = await failedOutput.boundingBox();
     expect(branchBox).not.toBeNull();
+    expect(diamondBox).not.toBeNull();
     expect(successBox).not.toBeNull();
     expect(failedBox).not.toBeNull();
     expect(Math.abs(
-      successBox!.x + successBox!.width / 2 - (branchBox!.x + branchBox!.width),
-    )).toBeLessThan(12);
+      successBox!.x + successBox!.width / 2 - (diamondBox!.x + diamondBox!.width),
+    )).toBeLessThan(8);
     expect(Math.abs(
-      successBox!.y + successBox!.height / 2 - (branchBox!.y + branchBox!.height / 2),
-    )).toBeLessThan(12);
+      successBox!.y + successBox!.height / 2 - (diamondBox!.y + diamondBox!.height / 2),
+    )).toBeLessThan(8);
     expect(Math.abs(
-      failedBox!.x + failedBox!.width / 2 - (branchBox!.x + branchBox!.width / 2),
-    )).toBeLessThan(12);
+      failedBox!.x + failedBox!.width / 2 - (diamondBox!.x + diamondBox!.width / 2),
+    )).toBeLessThan(8);
     expect(Math.abs(
-      failedBox!.y + failedBox!.height / 2 - (branchBox!.y + branchBox!.height),
-    )).toBeLessThan(12);
+      failedBox!.y + failedBox!.height / 2 - (diamondBox!.y + diamondBox!.height),
+    )).toBeLessThan(8);
 
     await dragLocatorBy(page, branchNode, 86, 68);
     await expect.poll(async () => (await branchNode.boundingBox())?.x || 0)

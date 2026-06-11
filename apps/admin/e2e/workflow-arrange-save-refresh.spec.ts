@@ -312,10 +312,14 @@ async function getEntityBoxes(page: Page) {
     .evaluateAll((elements) =>
       elements.map((element) => {
         const rect = element.getBoundingClientRect();
+        const nodeKey = element.getAttribute("data-workflow-node-key");
+        const branchSourceKey = element.getAttribute("data-workflow-branch-source-key");
         return {
-          label: element.getAttribute("data-workflow-node-key") ||
-            element.getAttribute("data-workflow-branch-source-key") ||
-            "entity",
+          label: nodeKey
+            ? `node:${nodeKey}`
+            : branchSourceKey
+              ? `branch:${branchSourceKey}`
+              : "entity",
           left: Math.round(rect.left),
           right: Math.round(rect.right),
           top: Math.round(rect.top),
@@ -333,6 +337,15 @@ function boxesOverlap(
     left.right > right.left &&
     left.top < right.bottom &&
     left.bottom > right.top;
+}
+
+function findEntityBox(
+  boxes: Awaited<ReturnType<typeof getEntityBoxes>>,
+  label: string,
+) {
+  const box = boxes.find((item) => item.label === label);
+  expect(box, `missing entity ${label}`).toBeTruthy();
+  return box!;
 }
 
 test("整理后保存草稿再重新进入节点位置不漂移到右下角", async ({ page }) => {
@@ -362,9 +375,7 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
 
     expect(reloadedBoxes).toEqual(arrangedBoxes);
 
-    await page.goto("/workflows", { waitUntil: "load" });
-    await expect(page).toHaveURL(/\/workflows$/);
-    await page.locator(`a[href="/workflows/${workflowId}"]`).first().click();
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
     await expect(page).toHaveURL(new RegExp(`/workflows/${workflowId}$`));
     await expect(page.locator("[data-workflow-canvas-view-ready='true']")).toBeVisible();
     await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("60%");
@@ -392,6 +403,12 @@ test("整理画布后普通节点和判断节点不重叠", async ({ page }) => 
 
     const boxes = await getEntityBoxes(page);
     expect(boxes.length).toBeGreaterThanOrEqual(7);
+    const paymentBox = findEntityBox(boxes, "node:payment_stage_1");
+    const branchBox = findEntityBox(boxes, "branch:payment_stage_1");
+    const successBox = findEntityBox(boxes, "node:tile_work");
+    const failureBox = findEntityBox(boxes, "node:collection_followup");
+    expect(branchBox.left).toBeGreaterThan(paymentBox.right);
+    expect(successBox.top).toBeLessThan(failureBox.top - 48);
     for (let index = 0; index < boxes.length; index += 1) {
       for (let nextIndex = index + 1; nextIndex < boxes.length; nextIndex += 1) {
         expect(

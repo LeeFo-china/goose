@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -16,15 +15,18 @@ export function WorkflowFlowEdge({
   markerEnd,
   sourceX,
   sourceY,
+  sourcePosition,
   targetX,
   targetY,
+  targetPosition,
 }: EdgeProps<WorkflowFlowEdge>) {
-  const [hovered, setHovered] = useState(false);
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
+    sourcePosition,
     targetX,
     targetY,
+    targetPosition,
   });
   const active = Boolean(data?.active);
   const edge = data?.edge;
@@ -39,17 +41,16 @@ export function WorkflowFlowEdge({
         data-workflow-edge-source-key={data?.pathSourceKey}
         data-workflow-edge-target-key={data?.pathTargetKey}
         data-workflow-edge-validation-state={active ? "active" : "idle"}
+        data-workflow-edge-active={active ? "true" : "false"}
         className={[
-          "fill-none",
+          "workflow-flow-edge fill-none",
           active ? "animate-pulse stroke-primary" : "stroke-muted-foreground",
-          active || hovered ? "workflow-flow-edge-dashed" : "",
+          active ? "workflow-flow-edge-dashed" : "",
         ].join(" ")}
         style={{
           strokeWidth: active ? 3 : 2,
-          strokeLinecap: active || hovered ? "round" : undefined,
+          strokeLinecap: active ? "round" : undefined,
         }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
       />
       <EdgeLabelRenderer>
         <div
@@ -74,8 +75,6 @@ export function WorkflowFlowEdge({
               type="button"
               className="group flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
               disabled={data?.disabled}
-              onMouseEnter={() => setHovered(true)}
-              onMouseLeave={() => setHovered(false)}
               onClick={() => data?.onDeleteEdge(edge?.id || id)}
             >
               <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />

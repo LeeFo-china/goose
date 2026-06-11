@@ -9,8 +9,8 @@ import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow
 
 export const WORKFLOW_FLOW_NODE_WIDTH = 210;
 export const WORKFLOW_FLOW_NODE_HEIGHT = 84;
-export const WORKFLOW_FLOW_BRANCH_NODE_WIDTH = 118;
-export const WORKFLOW_FLOW_BRANCH_NODE_HEIGHT = 84;
+export const WORKFLOW_FLOW_BRANCH_NODE_WIDTH = 104;
+export const WORKFLOW_FLOW_BRANCH_NODE_HEIGHT = 104;
 export const WORKFLOW_FLOW_ARRANGE_ZOOM = 0.6;
 export const WORKFLOW_FLOW_MIN_ZOOM = 0.5;
 export const WORKFLOW_FLOW_MAX_ZOOM = 1.8;

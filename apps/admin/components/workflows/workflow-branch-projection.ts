@@ -45,8 +45,8 @@ export type WorkflowDisplayEdge = WorkflowEdge & {
   readOnly?: boolean;
 };
 
-export const WORKFLOW_BRANCH_NODE_WIDTH = 118;
-export const WORKFLOW_BRANCH_NODE_HEIGHT = 84;
+export const WORKFLOW_BRANCH_NODE_WIDTH = 104;
+export const WORKFLOW_BRANCH_NODE_HEIGHT = 104;
 export const WORKFLOW_BRANCH_LINK_EDGE_PREFIX = "branch-link:";
 
 const BRANCH_NODE_OFFSET_X = 240;

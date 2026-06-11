@@ -73,6 +73,19 @@ body {
   stroke-dasharray: 7 9;
 }
 
+.workflow-flow-edge {
+  transition: stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.workflow-flow-edge:hover {
+  stroke-dasharray: 7 9;
+  stroke-linecap: round;
+}
+
+.workflow-flow-edge[data-workflow-edge-active="false"] {
+  animation: none;
+}
+
 .console-grid {
   background-image:
     radial-gradient(circle at 50% 18%, rgb(var(--workbench-glow) / var(--workbench-glow-alpha)), transparent 36%),

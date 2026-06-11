@@ -2,11 +2,13 @@ import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api";
 import {
   getWorkflowBranchNodeId,
+  getWorkflowBranchOutcomeByEdge,
   isWorkflowBranchEdgeForNode,
   withWorkflowBranchNodePosition,
   WORKFLOW_BRANCH_NODE_HEIGHT,
   WORKFLOW_BRANCH_NODE_WIDTH,
 } from "@/components/workflows/workflow-branch-projection";
+import { WORKFLOW_FLOW_BRANCH_TARGET_HANDLE } from "@/components/workflows/workflow-flow-adapter";
 import {
   WORKFLOW_FLOW_ARRANGE_ZOOM,
   WORKFLOW_FLOW_NODE_HEIGHT,
@@ -23,8 +25,8 @@ export type ArrangedWorkflowFlow = {
 
 const LAYOUT_SAFE_MARGIN = 24;
 const LAYOUT_TOOLBAR_HEIGHT = 56;
-const LAYOUT_COLUMN_GAP = 96;
-const LAYOUT_ROW_GAP = 72;
+const LAYOUT_COLUMN_GAP = 120;
+const LAYOUT_ROW_GAP = 88;
 const LAYOUT_ENTITY_GAP = 28;
 const elk = new ELK();
 
@@ -41,6 +43,7 @@ export async function arrangeWorkflowFlowNodes(
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": "RIGHT",
+      "elk.edgeRouting": "ORTHOGONAL",
       "elk.spacing.nodeNode": String(LAYOUT_ROW_GAP),
       "elk.spacing.edgeNode": String(LAYOUT_ENTITY_GAP),
       "elk.layered.spacing.nodeNodeBetweenLayers": String(LAYOUT_COLUMN_GAP),
@@ -56,20 +59,30 @@ export async function arrangeWorkflowFlowNodes(
         id: getWorkflowBranchNodeId(node.id),
         width: WORKFLOW_BRANCH_NODE_WIDTH,
         height: WORKFLOW_BRANCH_NODE_HEIGHT,
+        layoutOptions: {
+          "elk.portConstraints": "FIXED_POS",
+        },
+        ports: getWorkflowBranchLayoutPorts(getWorkflowBranchNodeId(node.id)),
       })),
     ],
     edges: [
       ...branchSourceNodes.map((node) => ({
         id: `arrange-branch-link:${node.id}`,
         sources: [node.id],
-        targets: [getWorkflowBranchNodeId(node.id)],
+        targets: [getWorkflowBranchLayoutPortId(
+          getWorkflowBranchNodeId(node.id),
+          WORKFLOW_FLOW_BRANCH_TARGET_HANDLE,
+        )],
       })),
       ...edges.map((edge) => {
         const sourceNode = nodes.find((node) => node.id === edge.source_node_id);
-        const source = sourceNode &&
+        const branchOutcome = sourceNode &&
             branchSourceIds.has(sourceNode.id) &&
             isWorkflowBranchEdgeForNode(sourceNode, edge)
-          ? getWorkflowBranchNodeId(sourceNode.id)
+          ? getWorkflowBranchOutcomeByEdge(edge)
+          : null;
+        const source = sourceNode && branchOutcome
+          ? getWorkflowBranchLayoutPortId(getWorkflowBranchNodeId(sourceNode.id), branchOutcome)
           : edge.source_node_id;
         return {
           id: edge.id,
@@ -130,4 +143,48 @@ function getElkLayoutFrame(
 
 function hasWorkflowBranchEdges(node: WorkflowNode, edges: WorkflowEdge[]) {
   return edges.some((edge) => isWorkflowBranchEdgeForNode(node, edge));
+}
+
+function getWorkflowBranchLayoutPorts(branchNodeId: string) {
+  return [
+    {
+      id: getWorkflowBranchLayoutPortId(branchNodeId, WORKFLOW_FLOW_BRANCH_TARGET_HANDLE),
+      x: 0,
+      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      width: 1,
+      height: 1,
+    },
+    {
+      id: getWorkflowBranchLayoutPortId(branchNodeId, "payment_success"),
+      x: WORKFLOW_BRANCH_NODE_WIDTH,
+      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      width: 1,
+      height: 1,
+    },
+    {
+      id: getWorkflowBranchLayoutPortId(branchNodeId, "approval_approved"),
+      x: WORKFLOW_BRANCH_NODE_WIDTH,
+      y: WORKFLOW_BRANCH_NODE_HEIGHT / 2,
+      width: 1,
+      height: 1,
+    },
+    {
+      id: getWorkflowBranchLayoutPortId(branchNodeId, "payment_failed"),
+      x: WORKFLOW_BRANCH_NODE_WIDTH / 2,
+      y: WORKFLOW_BRANCH_NODE_HEIGHT,
+      width: 1,
+      height: 1,
+    },
+    {
+      id: getWorkflowBranchLayoutPortId(branchNodeId, "approval_rejected"),
+      x: WORKFLOW_BRANCH_NODE_WIDTH / 2,
+      y: WORKFLOW_BRANCH_NODE_HEIGHT,
+      width: 1,
+      height: 1,
+    },
+  ];
+}
+
+function getWorkflowBranchLayoutPortId(branchNodeId: string, handleId: string) {
+  return `${branchNodeId}:${handleId}`;
 }
