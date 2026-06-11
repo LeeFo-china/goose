@@ -148,18 +148,7 @@ export function WorkflowCanvasBranchNode({
               nodeId: branchNode.sourceNodeId,
               branchOutcome: outcome.key,
             }, index)}
-          >
-            <span
-              className={[
-                "absolute whitespace-nowrap rounded-full border bg-background px-1.5 py-0.5 text-[11px] font-medium shadow-sm",
-                success
-                  ? "left-full top-1/2 ml-1 -translate-y-1/2 border-emerald-200 text-emerald-700"
-                  : "left-1/2 top-full mt-1 -translate-x-1/2 border-rose-200 text-rose-700",
-              ].join(" ")}
-            >
-              {outcome.label}
-            </span>
-          </button>
+          />
         );
       })}
     </div>

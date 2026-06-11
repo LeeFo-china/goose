@@ -241,6 +241,8 @@ test("收款判断节点可以拖动并通过来源连线删除", async ({ page 
     await expect(branchNode).toBeVisible();
     await expect(successOutput).toHaveAttribute("data-workflow-branch-output-tone", "success");
     await expect(failedOutput).toHaveAttribute("data-workflow-branch-output-tone", "failure");
+    await expect(branchNode.getByText("成功", { exact: true })).toHaveCount(0);
+    await expect(branchNode.getByText("失败", { exact: true })).toHaveCount(0);
 
     const branchBox = await branchNode.boundingBox();
     const successBox = await successOutput.boundingBox();
