@@ -1,5 +1,10 @@
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 
+type PositionedWorkflowNode = Pick<WorkflowNode, "position"> & {
+  canvasWidth?: number;
+  canvasHeight?: number;
+};
+
 export const CANVAS_WIDTH = 1800;
 export const CANVAS_HEIGHT = 1200;
 export const NODE_WIDTH = 210;
@@ -53,12 +58,15 @@ export function clampPosition(
   };
 }
 
-export function getInputPoint(node: WorkflowNode): CanvasPoint {
-  return { x: node.position.x, y: node.position.y + NODE_HEIGHT / 2 };
+export function getInputPoint(node: PositionedWorkflowNode): CanvasPoint {
+  return { x: node.position.x, y: node.position.y + (node.canvasHeight ?? NODE_HEIGHT) / 2 };
 }
 
-export function getOutputPoint(node: WorkflowNode): CanvasPoint {
-  return { x: node.position.x + NODE_WIDTH, y: node.position.y + NODE_HEIGHT / 2 };
+export function getOutputPoint(node: PositionedWorkflowNode): CanvasPoint {
+  return {
+    x: node.position.x + (node.canvasWidth ?? NODE_WIDTH),
+    y: node.position.y + (node.canvasHeight ?? NODE_HEIGHT) / 2,
+  };
 }
 
 export function createConnectionPath(source: CanvasPoint, target: CanvasPoint) {

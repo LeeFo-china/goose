@@ -6,7 +6,13 @@ import {
   type CanvasSize,
   type CanvasPoint,
 } from "@/components/workflows/workflow-canvas-geometry";
-import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
+import type { WorkflowCanvasDisplayEdge } from "@/components/workflows/workflow-branch-projection";
+import type { WorkflowNode } from "@/components/workflows/workflow-types";
+
+type WorkflowCanvasEdgeNode = Pick<WorkflowNode, "id" | "node_key" | "position"> & {
+  canvasWidth?: number;
+  canvasHeight?: number;
+};
 
 export type WorkflowCanvasConnectionDraft = {
   sourceNodeId: string;
@@ -30,9 +36,9 @@ export function WorkflowCanvasEdges({
   activeValidationEdgeIds: Set<string>;
   connectionDraft: WorkflowCanvasConnectionDraft | null;
   disabled?: boolean;
-  edges: WorkflowEdge[];
+  edges: WorkflowCanvasDisplayEdge[];
   hoveredEdgeId: string | null;
-  nodeById: Map<string, WorkflowNode>;
+  nodeById: Map<string, WorkflowCanvasEdgeNode>;
   selectedEdgeId: string | null;
   canvasSize: CanvasSize;
   onDeleteEdge: (edgeId: string) => void;
@@ -61,8 +67,8 @@ export function WorkflowCanvasEdges({
           </marker>
         </defs>
         {edges.map((edge) => {
-          const source = nodeById.get(edge.source_node_id);
-          const target = nodeById.get(edge.target_node_id);
+          const source = nodeById.get(edge.displaySourceNodeId || edge.source_node_id);
+          const target = nodeById.get(edge.displayTargetNodeId || edge.target_node_id);
           if (!source || !target) return null;
           const hovered = hoveredEdgeId === edge.id;
           const selected = selectedEdgeId === edge.id;
@@ -80,7 +86,9 @@ export function WorkflowCanvasEdges({
                 strokeWidth="18"
                 className="cursor-pointer"
                 pointerEvents="stroke"
-                onClick={() => onSelectEdge(edge.id)}
+                onClick={() => {
+                  if (!edge.readOnly) onSelectEdge(edge.id);
+                }}
               />
               <path
                 data-workflow-edge-validation-state={validationActive ? "active" : "idle"}
@@ -108,8 +116,9 @@ export function WorkflowCanvasEdges({
         ) : null}
       </svg>
       {edges.map((edge) => {
-        const source = nodeById.get(edge.source_node_id);
-        const target = nodeById.get(edge.target_node_id);
+        if (edge.readOnly) return null;
+        const source = nodeById.get(edge.displaySourceNodeId || edge.source_node_id);
+        const target = nodeById.get(edge.displayTargetNodeId || edge.target_node_id);
         if (!source || !target) return null;
         const sourcePoint = getOutputPoint(source);
         const targetPoint = getInputPoint(target);
@@ -126,8 +135,8 @@ export function WorkflowCanvasEdges({
             {edge.label ? (
               <button
                 data-edge-action="configure"
-                data-workflow-edge-source-key={source.node_key}
-                data-workflow-edge-target-key={target.node_key}
+                data-workflow-edge-source-key={edge.dataSourceNodeKey || source.node_key}
+                data-workflow-edge-target-key={edge.dataTargetNodeKey || target.node_key}
                 type="button"
                 className={[
                   "rounded-full border bg-background/95 px-2 py-0.5 text-[11px] font-medium shadow-sm backdrop-blur",
@@ -141,8 +150,8 @@ export function WorkflowCanvasEdges({
             ) : (
               <button
                 data-edge-action="configure"
-                data-workflow-edge-source-key={source.node_key}
-                data-workflow-edge-target-key={target.node_key}
+                data-workflow-edge-source-key={edge.dataSourceNodeKey || source.node_key}
+                data-workflow-edge-target-key={edge.dataTargetNodeKey || target.node_key}
                 aria-label="配置连线"
                 type="button"
                 className={[

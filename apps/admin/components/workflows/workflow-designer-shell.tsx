@@ -24,6 +24,8 @@ import {
   toNodeInput,
   validateGraph,
 } from "@/components/workflows/workflow-designer-graph-utils";
+import { createWorkflowConnectionEdge } from "@/components/workflows/workflow-connection-edge";
+import type { WorkflowConnectionSource } from "@/components/workflows/workflow-branch-projection";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowEdgePropertyPanel } from "@/components/workflows/workflow-edge-property-panel";
@@ -68,7 +70,7 @@ export function WorkflowDesignerShell({
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
+  const [connectingSource, setConnectingSource] = useState<WorkflowConnectionSource | null>(null);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
   const [mobilePanel, setMobilePanel] = useState<DesignerPanel>("canvas");
@@ -82,6 +84,7 @@ export function WorkflowDesignerShell({
     () => graph?.edges.find((edge) => edge.id === selectedEdgeId) || null,
     [graph?.edges, selectedEdgeId],
   );
+  const connectingNodeId = connectingSource?.nodeId || null;
 
   function updateNode(nextNode: WorkflowNode) {
     if (!graph) return;
@@ -155,37 +158,25 @@ export function WorkflowDesignerShell({
     });
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
-    if (connectingNodeId === nodeId) setConnectingNodeId(null);
+    if (connectingNodeId === nodeId) setConnectingSource(null);
     setDirty(true);
   }
 
   function connectToNode(targetNodeId: string) {
-    if (!graph || !connectingNodeId || connectingNodeId === targetNodeId) return;
-    const duplicate = graph.edges.some((edge) => (
-      edge.source_node_id === connectingNodeId &&
-      edge.target_node_id === targetNodeId
-    ));
-    if (duplicate) {
-      toast.error("这两个节点之间已经存在连线");
-      setConnectingNodeId(null);
+    if (!graph || !connectingSource || connectingNodeId === targetNodeId) return;
+    const result = createWorkflowConnectionEdge({
+      graph,
+      source: connectingSource,
+      targetNodeId,
+    });
+    if (!result.ok) {
+      toast.error(result.message);
+      setConnectingSource(null);
       return;
     }
 
-    const now = new Date().toISOString();
-    const nextEdge: WorkflowEdge = {
-      id: `local-edge-${Date.now()}`,
-      tenant_id: graph.definition.tenant_id,
-      definition_id: graph.definition.id,
-      source_node_id: connectingNodeId,
-      target_node_id: targetNodeId,
-      label: null,
-      condition: { operator: "always" },
-      priority: graph.edges.length + 1,
-      created_at: now,
-      updated_at: now,
-    };
-    setGraph({ ...graph, edges: [...graph.edges, nextEdge] });
-    setConnectingNodeId(null);
+    setGraph({ ...graph, edges: [...graph.edges, result.edge] });
+    setConnectingSource(null);
     setDirty(true);
   }
 
@@ -254,7 +245,7 @@ export function WorkflowDesignerShell({
         ));
         setSelectedNodeId(selectedNodeKey ? nextSelectedNode?.id || null : null);
         setSelectedEdgeId(null);
-        setConnectingNodeId(null);
+        setConnectingSource(null);
         setDirty(false);
         toast.success("流程草稿已保存");
       } catch (error) {
@@ -412,8 +403,8 @@ export function WorkflowDesignerShell({
                 edges={graph.edges}
                 selectedNodeId={selectedNodeId}
                 selectedEdgeId={selectedEdgeId}
-                onBeginConnect={setConnectingNodeId}
-                onCancelConnect={() => setConnectingNodeId(null)}
+                onBeginConnect={setConnectingSource}
+                onCancelConnect={() => setConnectingSource(null)}
                 onDeleteEdge={deleteEdge}
                 onDropNodePreset={addNode}
                 onFinishConnect={connectToNode}

@@ -27,10 +27,16 @@ import {
   writeStoredCanvasZoom,
 } from "@/components/workflows/workflow-canvas-view-state";
 import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
+import { WorkflowCanvasBranchNode } from "@/components/workflows/workflow-canvas-branch-node";
 import { WorkflowCanvasNode } from "@/components/workflows/workflow-canvas-node";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
+import {
+  buildWorkflowCanvasBranchNodes,
+  buildWorkflowCanvasDisplayEdges,
+  type WorkflowConnectionSource,
+} from "@/components/workflows/workflow-branch-projection";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Button } from "@/components/ui/button";
@@ -66,7 +72,7 @@ export function WorkflowCanvas({
   edges: WorkflowEdge[];
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
-  onBeginConnect: (nodeId: string) => void;
+  onBeginConnect: (source: WorkflowConnectionSource) => void;
   onCancelConnect: () => void;
   onDeleteEdge: (edgeId: string) => void;
   onDropNodePreset: (presetKey: string, position: WorkflowNode["position"]) => void;
@@ -95,7 +101,20 @@ export function WorkflowCanvas({
   const hasPanOffset = fitPan.x !== 0 || fitPan.y !== 0;
   const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
   const minNodePosition = hasPanOffset ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
+  const branchNodes = buildWorkflowCanvasBranchNodes(nodes, edges);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const canvasNodeById = new Map<string, Pick<WorkflowNode, "id" | "node_key" | "position"> & {
+    canvasWidth?: number;
+    canvasHeight?: number;
+  }>([
+    ...nodes.map((node) => [node.id, node] as const),
+    ...branchNodes.map((node) => [node.id, node] as const),
+  ]);
+  const displayEdges = buildWorkflowCanvasDisplayEdges({
+    edges,
+    branchNodes,
+    nodeById,
+  });
   const activeValidationNodeIds = new Set(validationPlayback?.activeNodeIds || []);
   const activeValidationEdgeIds = new Set(validationPlayback?.activeEdgeIds || []);
   const errorValidationNodeIds = new Set(validationPlayback?.errorNodeIds || []);
@@ -123,18 +142,46 @@ export function WorkflowCanvas({
     setConnectionDraft(draft);
   }
 
-  function handleConnectionStart(event: PointerEvent, node: WorkflowNode) {
+  function startConnection(input: {
+    event: PointerEvent;
+    from: CanvasPoint;
+    source: WorkflowConnectionSource;
+  }) {
     if (disabled) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const from = getOutputPoint(node);
+    input.event.preventDefault();
+    input.event.stopPropagation();
     updateConnectionDraft({
-      sourceNodeId: node.id,
-      from,
-      to: getCanvasPoint(event, canvasRef.current, zoom),
+      sourceNodeId: input.source.nodeId,
+      from: input.from,
+      to: getCanvasPoint(input.event, canvasRef.current, zoom),
     });
-    onSelectNode(node.id);
-    onBeginConnect(node.id);
+    onSelectNode(input.source.nodeId);
+    onBeginConnect(input.source);
+  }
+
+  function handleConnectionStart(event: PointerEvent, node: WorkflowNode) {
+    startConnection({
+      event,
+      from: getOutputPoint(node),
+      source: { nodeId: node.id },
+    });
+  }
+
+  function handleBranchConnectionStart(
+    event: PointerEvent,
+    source: WorkflowConnectionSource,
+    outcomeIndex: number,
+  ) {
+    const branchNode = branchNodes.find((node) => node.sourceNodeId === source.nodeId);
+    if (!branchNode) return;
+    startConnection({
+      event,
+      from: {
+        x: branchNode.position.x + branchNode.canvasWidth,
+        y: branchNode.position.y + (outcomeIndex === 0 ? 22 : branchNode.canvasHeight - 22),
+      },
+      source,
+    });
   }
 
   function applyZoom(nextZoom: number, origin?: CanvasPoint) {
@@ -348,9 +395,9 @@ export function WorkflowCanvas({
           canvasSize={canvasSize}
           connectionDraft={connectionDraft}
           disabled={disabled}
-          edges={edges}
+          edges={displayEdges}
           hoveredEdgeId={hoveredEdgeId}
-          nodeById={nodeById}
+          nodeById={canvasNodeById}
           selectedEdgeId={selectedEdgeId}
           onDeleteEdge={onDeleteEdge}
           onHoverEdge={setHoveredEdgeId}
@@ -414,6 +461,15 @@ export function WorkflowCanvas({
             />
           );
         })}
+        {branchNodes.map((branchNode) => (
+          <WorkflowCanvasBranchNode
+            key={branchNode.id}
+            branchNode={branchNode}
+            connecting={branchNode.sourceNodeId === connectingNodeId}
+            disabled={disabled}
+            onConnectionStart={handleBranchConnectionStart}
+          />
+        ))}
         </div>
         </div>
       </div>
