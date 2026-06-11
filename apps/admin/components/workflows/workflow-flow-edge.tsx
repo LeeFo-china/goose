@@ -4,6 +4,7 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  Position,
   type EdgeProps,
 } from "@xyflow/react";
 import { X } from "lucide-react";
@@ -19,14 +20,18 @@ export function WorkflowFlowEdge({
   targetX,
   targetY,
   targetPosition,
+  sourceHandleId,
+  targetHandleId,
 }: EdgeProps<WorkflowFlowEdge>) {
+  const resolvedSourcePosition = sourcePosition || getWorkflowEdgeSourcePosition(sourceHandleId);
+  const resolvedTargetPosition = targetPosition || getWorkflowEdgeTargetPosition(targetHandleId);
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
-    sourcePosition,
+    sourcePosition: resolvedSourcePosition,
     targetX,
     targetY,
-    targetPosition,
+    targetPosition: resolvedTargetPosition,
   });
   const active = Boolean(data?.active);
   const edge = data?.edge;
@@ -84,4 +89,15 @@ export function WorkflowFlowEdge({
       </EdgeLabelRenderer>
     </>
   );
+}
+
+function getWorkflowEdgeSourcePosition(sourceHandleId?: string | null) {
+  if (sourceHandleId?.endsWith("_failed") || sourceHandleId?.endsWith("_rejected")) {
+    return Position.Bottom;
+  }
+  return Position.Right;
+}
+
+function getWorkflowEdgeTargetPosition(_targetHandleId?: string | null) {
+  return Position.Left;
 }

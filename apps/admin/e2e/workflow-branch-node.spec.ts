@@ -187,6 +187,78 @@ function parsePathStart(path: string | null) {
   };
 }
 
+function parseCubicPath(path: string | null) {
+  const match = path?.match(
+    /^M\s*([-\d.]+)[,\s]+([-\d.]+)\s*C\s*([-\d.]+)[,\s]+([-\d.]+)\s+([-\d.]+)[,\s]+([-\d.]+)\s+([-\d.]+)[,\s]+([-\d.]+)/,
+  );
+  expect(match).toBeTruthy();
+  return {
+    sourceY: Number(match![2]),
+    firstControlY: Number(match![4]),
+    targetY: Number(match![8]),
+  };
+}
+
+async function seedUpwardTargetGraph(page: Page, workflowId: string) {
+  const response = await page.request.put(`/api/backend/workflows/${workflowId}/graph`, {
+    data: {
+      nodes: [
+        {
+          node_key: "start",
+          node_type: "start",
+          business_kind: null,
+          title: "开始",
+          description: null,
+          position: { x: 120, y: 360 },
+          config: {},
+          sort_order: 10,
+        },
+        {
+          node_key: "construction_start",
+          node_type: "business",
+          business_kind: "design",
+          title: "开工",
+          description: null,
+          position: { x: 560, y: 120 },
+          config: {},
+          sort_order: 20,
+        },
+      ],
+      edges: [
+        {
+          source_node_key: "start",
+          target_node_key: "construction_start",
+          label: null,
+          condition: { operator: "always" },
+          priority: 10,
+        },
+      ],
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
+test("目标节点在上方时连线不从出口反向下弯", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedUpwardTargetGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    const edgePath = page.locator(
+      "path[data-workflow-edge-source-key='start'][data-workflow-edge-target-key='construction_start']",
+    );
+    await expect(edgePath).toBeVisible();
+    const cubicPath = parseCubicPath(await edgePath.getAttribute("d"));
+
+    expect(cubicPath.targetY).toBeLessThan(cubicPath.sourceY);
+    expect(cubicPath.firstControlY).toBeLessThanOrEqual(cubicPath.sourceY + 1);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
 test("收款节点拖线自动生成判断节点", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
