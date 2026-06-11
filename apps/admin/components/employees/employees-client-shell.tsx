@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { BadgeCheck, Loader2, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { Loader2, UsersRound } from "lucide-react";
 import type { EmployeeStatus } from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
@@ -18,6 +18,7 @@ import type {
   EmployeeDepartmentOption,
   EmployeePostOption,
 } from "@/components/employees/employee-mutations";
+import { CreateEmployeeButton } from "@/components/employees/employee-mutations";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -32,14 +33,6 @@ type StatusOption = {
   label: string;
   value: "" | EmployeeStatus;
 };
-
-function hasLoginBinding(employee: EmployeeRecord) {
-  if (employee.login_bindings) {
-    return employee.login_bindings.status !== "none";
-  }
-
-  return Boolean(employee.user_id);
-}
 
 export function EmployeesClientShell({
   employees,
@@ -75,57 +68,22 @@ export function EmployeesClientShell({
       router.refresh();
     });
   }
-  const activeCount = employees.filter((employee) => employee.status === "active").length;
-  const pendingCount = employees.filter((employee) => employee.status === "pending").length;
-  const loginEnabledCount = employees.filter(hasLoginBinding).length;
 
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <UsersRound />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选员工</div>
-              <div className="text-xl font-semibold">{pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <BadgeCheck />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页在职</div>
-              <div className="text-xl font-semibold">{activeCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <UserRound />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页待入职</div>
-              <div className="text-xl font-semibold">{pendingCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-              <ShieldCheck />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页已开通登录</div>
-              <div className="text-xl font-semibold">{loginEnabledCount}</div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+            <UsersRound data-icon="inline-start" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-normal">员工管理</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              管理员工档案、登录绑定、部门岗位和角色权限。当前筛选共 {pagination.total} 条记录。
+            </p>
+          </div>
+        </div>
+        <CreateEmployeeButton departments={departments} posts={posts} />
       </div>
 
       {error ? (

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   CircleSlash2,
   Globe2,
@@ -18,6 +20,7 @@ import {
   type EmployeeDepartmentOption,
   type EmployeePostOption,
 } from "@/components/employees/employee-mutations";
+import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 
 export type EmployeeRecord = {
@@ -184,7 +187,7 @@ export function EmployeesTable({
   posts: EmployeePostOption[];
   onEmployeeChanged?: () => void;
 }) {
-  const departmentMap = new Map(
+  const departmentMap = useMemo(() => new Map(
     departments
       .map((department) =>
         department.tenant_department_id
@@ -192,129 +195,155 @@ export function EmployeesTable({
           : null
       )
       .filter((item): item is readonly [string, EmployeeDepartmentOption] => Boolean(item)),
-  );
-  const postMap = new Map(posts.map((post) => [post.id, post]));
+  ), [departments]);
+  const postMap = useMemo(() => new Map(posts.map((post) => [post.id, post])), [posts]);
+  const columns = useMemo<ColumnDef<EmployeeRecord>[]>(() => [
+    {
+      id: "employee",
+      header: "员工",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
+            {row.original.avatar ? (
+              <img
+                src={row.original.avatar}
+                alt={`${row.original.name || "员工"}头像`}
+                className="size-full object-cover"
+              />
+            ) : (
+              <UserRound className="size-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {row.original.name || "未命名员工"}
+            </div>
+            <div className="max-w-[160px] truncate text-xs text-muted-foreground">
+              {row.original.id}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "phone",
+      header: "手机号",
+      cell: ({ row }) => maskPhone(row.original.phone),
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => {
+        const meta = statusMeta[row.original.status || ""] || {
+          label: row.original.status || "未知",
+          variant: "outline" as const,
+        };
+        return (
+          <Badge variant={meta.variant} className="whitespace-nowrap">
+            {meta.label}
+          </Badge>
+        );
+      },
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "login",
+      header: "登录绑定",
+      cell: ({ row }) => {
+        const loginMeta = getLoginBindingMeta(row.original);
+        const LoginIcon = loginMeta.icon;
+        return (
+          <div className="flex min-w-[132px] flex-col gap-1">
+            <Badge variant={loginMeta.variant} className="w-fit gap-1">
+              <LoginIcon className="size-3" />
+              {loginMeta.label}
+            </Badge>
+            <div className="text-xs text-muted-foreground">
+              {loginMeta.description}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "roles",
+      header: "角色",
+      cell: ({ row }) => <EmployeeRolesCell roles={row.original.roles} />,
+    },
+    {
+      id: "department",
+      header: "部门",
+      cell: ({ row }) => {
+        const department = row.original.tenant_department_id
+          ? departmentMap.get(row.original.tenant_department_id)
+          : null;
+        const departmentName = row.original.department_name || department?.name || "";
+        const departmentCode = row.original.department_code || department?.code || "";
+        return departmentName || departmentCode ? (
+          <div className="whitespace-nowrap">
+            <div className="font-medium text-foreground">{departmentName || "-"}</div>
+            <div className="text-xs text-muted-foreground">{departmentCode || "-"}</div>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        );
+      },
+    },
+    {
+      id: "post",
+      header: "职位",
+      cell: ({ row }) => {
+        const post = row.original.post_id ? postMap.get(row.original.post_id) : null;
+        return post ? (
+          <div className="whitespace-nowrap">
+            <div className="font-medium text-foreground">{post.name}</div>
+            <div className="text-xs text-muted-foreground">{post.code}</div>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      header: "创建时间",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {formatDate(row.original.created_at)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">操作</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <EmployeeRowActions
+            employee={row.original}
+            departments={departments}
+            posts={posts}
+            onChanged={onEmployeeChanged}
+          />
+        </div>
+      ),
+      meta: {
+        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-muted lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+      },
+    },
+  ], [departmentMap, departments, onEmployeeChanged, postMap, posts]);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1180px] border-t text-sm">
-        <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-          <tr>
-            <th className="px-5 py-3">员工</th>
-            <th className="px-5 py-3">手机号</th>
-            <th className="px-5 py-3">状态</th>
-            <th className="px-5 py-3">登录绑定</th>
-            <th className="px-5 py-3">角色</th>
-            <th className="px-5 py-3">部门</th>
-            <th className="px-5 py-3">职位</th>
-            <th className="px-5 py-3">创建时间</th>
-            <th className="px-5 py-3 text-right">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.length > 0 ? (
-            employees.map((employee) => {
-              const meta = statusMeta[employee.status || ""] || {
-                label: employee.status || "未知",
-                variant: "outline" as const,
-              };
-              const department = employee.tenant_department_id
-                ? departmentMap.get(employee.tenant_department_id)
-                : null;
-              const departmentName = employee.department_name || department?.name || "";
-              const departmentCode = employee.department_code || department?.code || "";
-              const post = employee.post_id ? postMap.get(employee.post_id) : null;
-              const loginMeta = getLoginBindingMeta(employee);
-              const LoginIcon = loginMeta.icon;
-
-              return (
-                <tr key={employee.id} className="border-t transition-colors hover:bg-muted/40">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
-                        {employee.avatar ? (
-                          <img
-                            src={employee.avatar}
-                            alt={`${employee.name || "员工"}头像`}
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          <UserRound className="size-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">
-                          {employee.name || "未命名员工"}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {employee.id}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">{maskPhone(employee.phone)}</td>
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <Badge variant={meta.variant} className="whitespace-nowrap">
-                      {meta.label}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex min-w-[116px] flex-col gap-1">
-                      <Badge variant={loginMeta.variant} className="w-fit gap-1">
-                        <LoginIcon className="size-3" />
-                        {loginMeta.label}
-                      </Badge>
-                      <div className="text-xs text-muted-foreground">
-                        {loginMeta.description}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <EmployeeRolesCell roles={employee.roles} />
-                  </td>
-                  <td className="px-5 py-4 whitespace-nowrap text-muted-foreground">
-                    {departmentName || departmentCode ? (
-                      <div>
-                        <div className="whitespace-nowrap font-medium text-foreground">{departmentName || "-"}</div>
-                        <div className="whitespace-nowrap text-xs text-muted-foreground">{departmentCode || "-"}</div>
-                      </div>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground">
-                    {post ? (
-                      <div>
-                        <div className="font-medium text-foreground">{post.name}</div>
-                        <div className="text-xs text-muted-foreground">{post.code}</div>
-                      </div>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground">
-                    {formatDate(employee.created_at)}
-                  </td>
-                  <td className="relative px-5 py-4">
-                    <EmployeeRowActions
-                      employee={employee}
-                      departments={departments}
-                      posts={posts}
-                      onChanged={onEmployeeChanged}
-                    />
-                  </td>
-                </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={9}>
-                没有符合条件的员工
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={employees}
+      emptyText="没有符合条件的员工"
+      minWidth="min-w-[1180px]"
+    />
   );
 }

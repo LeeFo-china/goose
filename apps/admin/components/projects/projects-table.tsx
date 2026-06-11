@@ -1,5 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -124,72 +127,102 @@ export function ProjectsTable({
   projects: ProjectRecord[];
   onProjectChanged: (project?: ProjectRecord) => void;
 }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1280px] table-fixed border-t text-sm">
-        <colgroup>
-          <col className="w-[170px]" />
-          <col className="w-[260px]" />
-          <col className="w-[110px]" />
-          <col className="w-[140px]" />
-          <col className="w-[130px]" />
-          <col className="w-[150px]" />
-          <col className="w-[120px]" />
-          <col className="w-[300px]" />
-        </colgroup>
-        <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
-          <tr>
-            <th className="whitespace-nowrap px-4 py-3">项目</th>
-            <th className="whitespace-nowrap px-4 py-3">房产</th>
-            <th className="whitespace-nowrap px-4 py-3">状态</th>
-            <th className="whitespace-nowrap px-4 py-3">预算</th>
-            <th className="whitespace-nowrap px-4 py-3">设计师</th>
-            <th className="whitespace-nowrap px-4 py-3">工程负责人</th>
-            <th className="whitespace-nowrap px-4 py-3">开工日期</th>
-            <th className="sticky right-0 whitespace-nowrap bg-muted px-4 py-3 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
-              操作
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.length > 0 ? (
-            projects.map((project) => {
-              const meta = projectStatusMeta(project);
+  const columns = useMemo<ColumnDef<ProjectRecord>[]>(() => [
+    {
+      id: "project",
+      header: "项目",
+      cell: ({ row }) => (
+        <ProjectIdentityCell
+          id={row.original.id}
+          name={row.original.name || "未命名项目"}
+          customer={customerName(row.original.customer)}
+        />
+      ),
+      meta: {
+        cellClassName: "w-[190px]",
+      },
+    },
+    {
+      id: "property",
+      header: "房产",
+      cell: ({ row }) => (
+        <div className="max-w-[260px] truncate text-muted-foreground">
+          {propertyLabel(row.original.property)}
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => {
+        const meta = projectStatusMeta(row.original);
+        return (
+          <Badge className="whitespace-nowrap" variant={meta.variant}>
+            {meta.label}
+          </Badge>
+        );
+      },
+      meta: {
+        cellClassName: "whitespace-nowrap",
+      },
+    },
+    {
+      id: "budget",
+      header: "预算",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap font-medium">
+          ¥{formatMoney(row.original.budget)}
+        </span>
+      ),
+    },
+    {
+      id: "designer",
+      header: "设计师",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {personName(row.original.designer)}
+        </span>
+      ),
+    },
+    {
+      id: "supervisor",
+      header: "工程负责人",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {personName(row.original.supervisor)}
+        </span>
+      ),
+    },
+    {
+      id: "startDate",
+      header: "开工日期",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {formatDate(row.original.start_date)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">操作</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <ProjectRowActions project={row.original} onChanged={onProjectChanged} />
+        </div>
+      ),
+      meta: {
+        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-muted lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+      },
+    },
+  ], [onProjectChanged]);
 
-              return (
-                <tr key={project.id} className="group border-t transition-colors hover:bg-muted/40">
-                  <td className="px-4 py-4">
-                    <ProjectIdentityCell
-                      id={project.id}
-                      name={project.name || "未命名项目"}
-                      customer={customerName(project.customer)}
-                    />
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground">
-                    <div className="truncate">{propertyLabel(project.property)}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <Badge className="whitespace-nowrap" variant={meta.variant}>{meta.label}</Badge>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 font-medium">¥{formatMoney(project.budget)}</td>
-                  <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.designer)}</td>
-                  <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{personName(project.supervisor)}</td>
-                  <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">{formatDate(project.start_date)}</td>
-                  <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted">
-                    <ProjectRowActions project={project} onChanged={onProjectChanged} />
-                  </td>
-                </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td className="px-5 py-12 text-center text-muted-foreground" colSpan={8}>
-                没有符合条件的项目
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+  return (
+    <DataTable
+      columns={columns}
+      data={projects}
+      emptyText="没有符合条件的项目"
+      minWidth="min-w-[1180px]"
+    />
   );
 }

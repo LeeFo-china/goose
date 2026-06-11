@@ -3,9 +3,6 @@ import {
   EmployeeStatusConfig,
   type EmployeeStatus,
 } from "@gooes/domain";
-import {
-  CreateEmployeeButton,
-} from "@/components/employees/employee-mutations";
 import { EmployeesClientShell } from "@/components/employees/employees-client-shell";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { getAdminToken } from "@/lib/auth";
@@ -192,19 +189,6 @@ export default async function EmployeesPage({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">员工管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            员工档案、登录绑定、状态和权限入口。当前共 {pagination.total} 条记录。
-          </p>
-        </div>
-        <CreateEmployeeButton
-          departments={departmentPostConfig.departments}
-          posts={departmentPostConfig.post_options}
-        />
-      </div>
-
       <EmployeesClientShell
         employees={list}
         pagination={pagination}
