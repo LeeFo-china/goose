@@ -114,6 +114,14 @@ supabase gen types typescript --project-id X > apps/api/src/types/database.ts  #
   修复完成后必须提供验证方式：自动化测试、复现步骤、接口 smoke、日志证据或
   其他能证明根因已消除的检查。
 
+- **禁止猜测第三方库 API 和类型名。**
+  使用或修改第三方库代码前，必须先核对本项目已安装版本的真实导出、类型定义和示例用法。
+  优先检查 `node_modules` 类型文件、包内文档、现有项目用法或官方文档，禁止按通用命名习惯猜测
+  类型名、事件名、配置项或导入路径。涉及第三方库类型错误时，必须先用 `rg`、`tsc`、
+  package exports 或 IDE 类型定义定位真实 API，再修改代码。启动 E2E、浏览器 smoke、
+  dev server 等耗时验证前，必须先通过最小静态检查；禁止在类型、导入或第三方 API
+  尚未确认时直接启动长耗时验证。
+
 错误响应必须经过 `error-factory.ts` 包装，严禁直接 `throw new Error()`。
  - controller
       - 只处理 HTTP
