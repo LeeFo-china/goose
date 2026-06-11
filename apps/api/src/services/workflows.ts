@@ -21,6 +21,7 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { findPaymentCollectionIssues } from "@/services/workflow-payment-collection-node-validation";
+import { findWorkflowBranchEdgeIssues } from "@/services/workflow-branch-validation";
 import { resolveWorkflowKey } from "@/services/workflow-key";
 import { findProcedureStageIssues } from "@/services/workflow-procedure-node-validation";
 
@@ -351,6 +352,8 @@ class WorkflowService {
         throw Errors.badRequest("流程发布版本图结构无效");
       case "invalid_output":
         throw Errors.badRequest("节点输出必须是对象");
+      case "no_matching_edge":
+        throw Errors.badRequest("当前节点没有匹配的分支条件");
     }
   }
 
@@ -421,6 +424,11 @@ class WorkflowService {
       );
     }
 
+    const branchEdgeIssues = findWorkflowBranchEdgeIssues(nodes, edges);
+    if (branchEdgeIssues.length > 0) {
+      throw Errors.badRequest(branchEdgeIssues.join("；"));
+    }
+
     const deadEndNodes = nodes.filter((node) =>
       node.node_type !== "end" && !sourceNodeIds.has(node.id)
     );
@@ -457,10 +465,7 @@ class WorkflowService {
   }
 
   private buildSnapshot(input: {
-    definition: WorkflowDefinitionRow;
-    nodes: WorkflowNodeRow[];
-    edges: WorkflowEdgeRow[];
-    publishedAt: string;
+    definition: WorkflowDefinitionRow; nodes: WorkflowNodeRow[]; edges: WorkflowEdgeRow[]; publishedAt: string;
   }): JsonObject {
     return {
       definition_id: input.definition.id,
@@ -472,10 +477,7 @@ class WorkflowService {
     };
   }
 
-  private findInvalidConfigReferences(
-    nodes: WorkflowNodeRow[],
-    nodeKeys: Set<string>,
-  ) {
+  private findInvalidConfigReferences(nodes: WorkflowNodeRow[], nodeKeys: Set<string>) {
     const invalidRefs = new Set<string>();
 
     for (const node of nodes) {

@@ -4,6 +4,7 @@ import {
   getWorkflowProcedureStageLabel,
   isWorkflowProcedureStageKey,
 } from "@/components/workflows/workflow-procedure-stages";
+import { getWorkflowEdgeConditionSignature } from "@/components/workflows/workflow-edge-conditions";
 import type {
   WorkflowDefinitionDetail,
   WorkflowEdge,
@@ -133,6 +134,7 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
   const allNodeKeys = new Set(graph.nodes.map((node) => node.node_key));
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source_node_id));
+  const outgoingEdgesBySourceId = new Map<string, WorkflowEdge[]>();
 
   graph.nodes.forEach((node) => {
     if (!node.node_key.trim()) {
@@ -268,6 +270,10 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
     issues.push({ code: "end_required", message: "发布前需要一个结束节点" });
   }
   graph.edges.forEach((edge) => {
+    outgoingEdgesBySourceId.set(edge.source_node_id, [
+      ...(outgoingEdgesBySourceId.get(edge.source_node_id) || []),
+      edge,
+    ]);
     if (!nodeIds.has(edge.source_node_id)) {
       issues.push({ code: "edge_source_missing", message: "连线来源节点不存在" });
     }
@@ -276,6 +282,39 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
     }
     if (edge.source_node_id === edge.target_node_id) {
       issues.push({ code: "edge_self_loop", message: "连线不能指向自身" });
+    }
+  });
+  outgoingEdgesBySourceId.forEach((sourceEdges, sourceNodeId) => {
+    if (sourceEdges.length <= 1) return;
+    const sourceNode = graph.nodes.find((node) => node.id === sourceNodeId);
+    const alwaysEdges = sourceEdges.filter((edge) => edge.condition.operator === "always");
+    if (alwaysEdges.length === sourceEdges.length) {
+      issues.push({
+        code: "edge_branch_condition_required",
+        message: "多条出边必须配置分支条件",
+        nodeKey: sourceNode?.node_key,
+      });
+    }
+    if (alwaysEdges.length > 1) {
+      issues.push({
+        code: "edge_branch_default_duplicate",
+        message: "同一节点最多只能有一条默认分支",
+        nodeKey: sourceNode?.node_key,
+      });
+    }
+    const signatures = new Set<string>();
+    for (const edge of sourceEdges) {
+      if (edge.condition.operator === "always") continue;
+      const signature = getWorkflowEdgeConditionSignature(edge.condition);
+      if (signatures.has(signature)) {
+        issues.push({
+          code: "edge_branch_condition_duplicate",
+          message: "同一节点不能配置重复分支条件",
+          nodeKey: sourceNode?.node_key,
+        });
+        break;
+      }
+      signatures.add(signature);
     }
   });
   graph.nodes.forEach((node) => {

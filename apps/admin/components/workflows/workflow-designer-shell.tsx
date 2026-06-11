@@ -26,6 +26,7 @@ import {
 } from "@/components/workflows/workflow-designer-graph-utils";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
+import { WorkflowEdgePropertyPanel } from "@/components/workflows/workflow-edge-property-panel";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
 import {
   publishWorkflowDefinition,
@@ -66,6 +67,7 @@ export function WorkflowDesignerShell({
     initialDetail ? detailToGraph(initialDetail) : null,
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
@@ -75,6 +77,10 @@ export function WorkflowDesignerShell({
   const selectedNode = useMemo(
     () => graph?.nodes.find((node) => node.id === selectedNodeId) || null,
     [graph?.nodes, selectedNodeId],
+  );
+  const selectedEdge = useMemo(
+    () => graph?.edges.find((edge) => edge.id === selectedEdgeId) || null,
+    [graph?.edges, selectedEdgeId],
   );
 
   function updateNode(nextNode: WorkflowNode) {
@@ -111,6 +117,7 @@ export function WorkflowDesignerShell({
     });
     setGraph({ ...graph, nodes: [...graph.nodes, nextNode] });
     setSelectedNodeId(nextNode.id);
+    setSelectedEdgeId(null);
     setMobilePanel("properties");
     setDirty(true);
   }
@@ -147,6 +154,7 @@ export function WorkflowDesignerShell({
       )),
     });
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
     if (connectingNodeId === nodeId) setConnectingNodeId(null);
     setDirty(true);
   }
@@ -181,12 +189,24 @@ export function WorkflowDesignerShell({
     setDirty(true);
   }
 
+  function updateEdge(nextEdge: WorkflowEdge) {
+    if (!graph) return;
+    setGraph({
+      ...graph,
+      edges: graph.edges.map((edge) => (
+        edge.id === nextEdge.id ? nextEdge : edge
+      )),
+    });
+    setDirty(true);
+  }
+
   function deleteEdge(edgeId: string) {
     if (!graph) return;
     setGraph({
       ...graph,
       edges: graph.edges.filter((edge) => edge.id !== edgeId),
     });
+    if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
     setDirty(true);
   }
 
@@ -199,10 +219,18 @@ export function WorkflowDesignerShell({
 
   function selectNode(nodeId: string) {
     setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+  }
+
+  function selectEdge(edgeId: string) {
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+    setMobilePanel("properties");
   }
 
   function showNodeLibrary() {
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
     if (mobilePanel === "properties") setMobilePanel("library");
   }
 
@@ -225,6 +253,7 @@ export function WorkflowDesignerShell({
           node.node_key === selectedNodeKey
         ));
         setSelectedNodeId(selectedNodeKey ? nextSelectedNode?.id || null : null);
+        setSelectedEdgeId(null);
         setConnectingNodeId(null);
         setDirty(false);
         toast.success("流程草稿已保存");
@@ -382,6 +411,7 @@ export function WorkflowDesignerShell({
                 nodes={graph.nodes}
                 edges={graph.edges}
                 selectedNodeId={selectedNodeId}
+                selectedEdgeId={selectedEdgeId}
                 onBeginConnect={setConnectingNodeId}
                 onCancelConnect={() => setConnectingNodeId(null)}
                 onDeleteEdge={deleteEdge}
@@ -391,6 +421,7 @@ export function WorkflowDesignerShell({
                 onMoveNode={moveNode}
                 onOpenNodeLibrary={showNodeLibrary}
                 onSelectNode={selectNode}
+                onSelectEdge={selectEdge}
                 validationPlayback={playback}
                 viewStorageKey={`workflow-canvas:${workflowId}:zoom`}
               />
@@ -419,6 +450,14 @@ export function WorkflowDesignerShell({
                     })}
                   onDeleteNode={deleteNode}
                   onChangeNode={updateNode}
+                />
+              ) : selectedEdge ? (
+                <WorkflowEdgePropertyPanel
+                  disabled={pending}
+                  edge={selectedEdge}
+                  nodes={graph.nodes}
+                  onChangeEdge={updateEdge}
+                  onDeleteEdge={deleteEdge}
                 />
               ) : (
                 <WorkflowNodeLibrary

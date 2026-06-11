@@ -339,6 +339,7 @@ export type WorkflowRuntimeCompleteNodeResult =
         | "node_not_current"
         | "node_run_not_found"
         | "graph_invalid"
-        | "invalid_output";
+        | "invalid_output"
+        | "no_matching_edge";
       currentNodeKey?: string | null;
     };

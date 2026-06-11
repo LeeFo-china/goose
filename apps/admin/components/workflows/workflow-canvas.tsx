@@ -2,7 +2,7 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Layers3, X } from "lucide-react";
+import { Layers3 } from "lucide-react";
 import {
   MAX_ZOOM,
   MIN_ZOOM,
@@ -11,15 +11,17 @@ import {
   ZOOM_STEP,
   clampPosition,
   clampZoom,
-  createConnectionPath,
   getCanvasPoint,
   getExpandedCanvasSize,
-  getInputPoint,
   getOutputPoint,
   arrangeWorkflowCanvasNodes,
   type CanvasPoint,
   type CanvasSize,
 } from "@/components/workflows/workflow-canvas-geometry";
+import {
+  WorkflowCanvasEdges,
+  type WorkflowCanvasConnectionDraft,
+} from "@/components/workflows/workflow-canvas-edges";
 import {
   readStoredCanvasZoom,
   writeStoredCanvasZoom,
@@ -34,7 +36,6 @@ import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow
 import { Button } from "@/components/ui/button";
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
-type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
 const useCanvasLayoutEffect = typeof window === "undefined"
   ? useEffect
   : useLayoutEffect;
@@ -45,6 +46,7 @@ export function WorkflowCanvas({
   nodes,
   edges,
   selectedNodeId,
+  selectedEdgeId,
   onBeginConnect,
   onCancelConnect,
   onDeleteEdge,
@@ -54,6 +56,7 @@ export function WorkflowCanvas({
   onMoveNode,
   onOpenNodeLibrary,
   onSelectNode,
+  onSelectEdge,
   validationPlayback,
   viewStorageKey,
 }: {
@@ -62,6 +65,7 @@ export function WorkflowCanvas({
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
   onBeginConnect: (nodeId: string) => void;
   onCancelConnect: () => void;
   onDeleteEdge: (edgeId: string) => void;
@@ -71,6 +75,7 @@ export function WorkflowCanvas({
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
+  onSelectEdge: (edgeId: string) => void;
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
   viewStorageKey?: string;
 }) {
@@ -78,8 +83,8 @@ export function WorkflowCanvas({
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const panRef = useRef<WorkflowCanvasPanState | null>(null);
-  const connectionDraftRef = useRef<ConnectionDraft | null>(null);
-  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const connectionDraftRef = useRef<WorkflowCanvasConnectionDraft | null>(null);
+  const [connectionDraft, setConnectionDraft] = useState<WorkflowCanvasConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
   const [fitMode, setFitMode] = useState(false);
@@ -113,7 +118,7 @@ export function WorkflowCanvas({
     writeStoredCanvasZoom(viewStorageKey, zoom);
   }, [canvasViewReady, viewStorageKey, zoom]);
 
-  function updateConnectionDraft(draft: ConnectionDraft | null) {
+  function updateConnectionDraft(draft: WorkflowCanvasConnectionDraft | null) {
     connectionDraftRef.current = draft;
     setConnectionDraft(draft);
   }
@@ -338,88 +343,19 @@ export function WorkflowCanvas({
           ].join(" ")}
           style={{ transform: canvasTransform }}
         >
-        <svg
-          className="pointer-events-none absolute inset-0 overflow-visible"
-          width={canvasSize.width}
-          height={canvasSize.height}
-          aria-hidden="true"
-        >
-          <defs>
-            <marker
-              id="workflow-arrow"
-              markerHeight="10"
-              markerUnits="strokeWidth"
-              markerWidth="10"
-              orient="auto"
-              refX="9"
-              refY="3"
-            >
-              <path d="M0,0 L0,6 L9,3 z" fill="hsl(var(--muted-foreground))" />
-            </marker>
-          </defs>
-          {edges.map((edge) => {
-            const source = nodeById.get(edge.source_node_id);
-            const target = nodeById.get(edge.target_node_id);
-            if (!source || !target) return null;
-            const hovered = hoveredEdgeId === edge.id;
-            const validationActive = activeValidationEdgeIds.has(edge.id);
-
-            return (
-              <path
-                key={edge.id}
-                data-workflow-edge-validation-state={validationActive ? "active" : "idle"}
-                d={createConnectionPath(getOutputPoint(source), getInputPoint(target))}
-                fill="none"
-                markerEnd="url(#workflow-arrow)"
-                strokeDasharray={validationActive ? "7 9" : hovered ? "1 7" : undefined}
-                strokeLinecap={validationActive || hovered ? "round" : undefined}
-                stroke={validationActive ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))"}
-                strokeWidth={validationActive ? "3" : "2"}
-                className={validationActive ? "animate-pulse" : undefined}
-              />
-            );
-          })}
-          {connectionDraft ? (
-            <path
-              d={createConnectionPath(connectionDraft.from, connectionDraft.to)}
-              fill="none"
-              stroke="hsl(var(--primary))"
-              strokeDasharray="6 6"
-              strokeWidth="2"
-            />
-          ) : null}
-        </svg>
-        {edges.map((edge) => {
-          const source = nodeById.get(edge.source_node_id);
-          const target = nodeById.get(edge.target_node_id);
-          if (!source || !target) return null;
-          const sourcePoint = getOutputPoint(source);
-          const targetPoint = getInputPoint(target);
-          const left = (sourcePoint.x + targetPoint.x) / 2;
-          const top = (sourcePoint.y + targetPoint.y) / 2;
-
-          return (
-            <button
-              data-edge-action="delete"
-              aria-label="删除连线"
-              key={`${edge.id}-delete`}
-              type="button"
-              className="group absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
-              disabled={disabled}
-              style={{ left, top, transform: "translate(-50%, -50%)" }}
-              onBlur={() => setHoveredEdgeId(null)}
-              onClick={() => {
-                setHoveredEdgeId(null);
-                onDeleteEdge(edge.id);
-              }}
-              onFocus={() => setHoveredEdgeId(edge.id)}
-              onPointerEnter={() => setHoveredEdgeId(edge.id)}
-              onPointerLeave={() => setHoveredEdgeId(null)}
-            >
-              <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />
-            </button>
-          );
-        })}
+        <WorkflowCanvasEdges
+          activeValidationEdgeIds={activeValidationEdgeIds}
+          canvasSize={canvasSize}
+          connectionDraft={connectionDraft}
+          disabled={disabled}
+          edges={edges}
+          hoveredEdgeId={hoveredEdgeId}
+          nodeById={nodeById}
+          selectedEdgeId={selectedEdgeId}
+          onDeleteEdge={onDeleteEdge}
+          onHoverEdge={setHoveredEdgeId}
+          onSelectEdge={onSelectEdge}
+        />
         {nodes.map((node) => {
           const selected = node.id === selectedNodeId;
           const connecting = node.id === connectingNodeId;
