@@ -8,6 +8,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { X } from "lucide-react";
+import { useState } from "react";
 import type { WorkflowFlowEdge as WorkflowFlowEdgeType } from "@/components/workflows/workflow-flow-types";
 
 export function WorkflowFlowEdge({
@@ -23,6 +24,7 @@ export function WorkflowFlowEdge({
   sourceHandleId,
   targetHandleId,
 }: EdgeProps<WorkflowFlowEdgeType>) {
+  const [isDeleteActionHovered, setIsDeleteActionHovered] = useState(false);
   const resolvedSourcePosition = sourcePosition || getWorkflowEdgeSourcePosition(sourceHandleId);
   const resolvedTargetPosition = targetPosition || getWorkflowEdgeTargetPosition(targetHandleId);
   const [path, labelX, labelY] = getBezierPath({
@@ -35,6 +37,7 @@ export function WorkflowFlowEdge({
   });
   const active = Boolean(data?.active);
   const edge = data?.edge;
+  const shouldUseDashedStroke = active || isDeleteActionHovered;
 
   return (
     <>
@@ -50,11 +53,11 @@ export function WorkflowFlowEdge({
         className={[
           "workflow-flow-edge fill-none",
           active ? "animate-pulse stroke-primary" : "stroke-muted-foreground",
-          active ? "workflow-flow-edge-dashed" : "",
+          shouldUseDashedStroke ? "workflow-flow-edge-dashed" : "",
         ].join(" ")}
         style={{
           strokeWidth: active ? 3 : 2,
-          strokeLinecap: active ? "round" : undefined,
+          strokeLinecap: shouldUseDashedStroke ? "round" : undefined,
         }}
       />
       <EdgeLabelRenderer>
@@ -80,7 +83,11 @@ export function WorkflowFlowEdge({
               type="button"
               className="group flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
               disabled={data?.disabled}
+              onBlur={() => setIsDeleteActionHovered(false)}
               onClick={() => data?.onDeleteEdge(edge?.id || id)}
+              onFocus={() => setIsDeleteActionHovered(true)}
+              onMouseEnter={() => setIsDeleteActionHovered(true)}
+              onMouseLeave={() => setIsDeleteActionHovered(false)}
             >
               <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />
             </button>

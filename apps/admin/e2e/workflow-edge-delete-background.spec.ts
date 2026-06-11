@@ -23,17 +23,30 @@ async function openFirstWorkflow(page: Page) {
   await page.goto(workflowHref!, { waitUntil: "load" });
 }
 
+function cssAttributeValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 test("连线删除按钮选中时保持实底背景", async ({ page }) => {
   await loginAsTenantAdmin(page);
   await openFirstWorkflow(page);
 
   const deleteEdgeButton = page.getByRole("button", { name: "删除连线" }).first();
   await expect(deleteEdgeButton).toBeVisible();
+  const sourceKey = await deleteEdgeButton.getAttribute("data-workflow-edge-source-key");
+  const targetKey = await deleteEdgeButton.getAttribute("data-workflow-edge-target-key");
+  expect(sourceKey).toBeTruthy();
+  expect(targetKey).toBeTruthy();
+  const edgePath = page.locator(
+    `.workflow-flow-edge[data-workflow-edge-source-key="${cssAttributeValue(sourceKey!)}"][data-workflow-edge-target-key="${cssAttributeValue(targetKey!)}"]`,
+  );
   const baseBackground = await deleteEdgeButton.evaluate((element) =>
     getComputedStyle(element).backgroundColor
   );
+  await expect(edgePath).not.toHaveClass(/workflow-flow-edge-dashed/);
 
   await deleteEdgeButton.hover();
+  await expect(edgePath).toHaveClass(/workflow-flow-edge-dashed/);
   const hoverBackground = await deleteEdgeButton.evaluate((element) =>
     getComputedStyle(element).backgroundColor
   );
