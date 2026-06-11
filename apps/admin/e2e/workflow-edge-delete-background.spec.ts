@@ -23,16 +23,28 @@ async function openFirstWorkflow(page: Page) {
   await page.goto(workflowHref!, { waitUntil: "load" });
 }
 
-test("连线删除按钮聚焦时保持实底背景", async ({ page }) => {
+test("连线删除按钮选中时保持实底背景", async ({ page }) => {
   await loginAsTenantAdmin(page);
   await openFirstWorkflow(page);
 
   const deleteEdgeButton = page.getByRole("button", { name: "删除连线" }).first();
   await expect(deleteEdgeButton).toBeVisible();
+  const baseBackground = await deleteEdgeButton.evaluate((element) =>
+    getComputedStyle(element).backgroundColor
+  );
+
+  await deleteEdgeButton.hover();
+  const hoverBackground = await deleteEdgeButton.evaluate((element) =>
+    getComputedStyle(element).backgroundColor
+  );
   await deleteEdgeButton.focus();
 
   await expect(deleteEdgeButton).not.toHaveClass(/bg-background\/95/);
+  await expect(deleteEdgeButton).not.toHaveClass(/hover:bg-destructive\/10/);
   await expect(deleteEdgeButton).toHaveClass(/(^| )bg-background( |$)/);
+  await expect(deleteEdgeButton).toHaveClass(/hover:bg-background/);
+  await expect(deleteEdgeButton).toHaveClass(/focus:bg-background/);
   await expect(deleteEdgeButton).toHaveClass(/focus-visible:bg-background/);
   await expect(deleteEdgeButton).toHaveClass(/active:bg-background/);
+  expect(hoverBackground).toBe(baseBackground);
 });

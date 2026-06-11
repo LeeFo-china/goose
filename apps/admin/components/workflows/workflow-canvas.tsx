@@ -358,7 +358,7 @@ export function WorkflowCanvas({
               aria-label="删除连线"
               key={`${edge.id}-delete`}
               type="button"
-              className="absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40"
+              className="absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition hover:border-destructive/40 hover:bg-background hover:text-destructive focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
               onBlur={() => setHoveredEdgeId(null)}
