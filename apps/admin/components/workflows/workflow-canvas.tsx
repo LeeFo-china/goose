@@ -20,11 +20,16 @@ import {
   type CanvasPoint,
   type CanvasSize,
 } from "@/components/workflows/workflow-canvas-geometry";
+import {
+  readStoredCanvasZoom,
+  writeStoredCanvasZoom,
+} from "@/components/workflows/workflow-canvas-view-state";
 import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
 import { WorkflowCanvasNode } from "@/components/workflows/workflow-canvas-node";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
+import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import { Button } from "@/components/ui/button";
 
@@ -49,6 +54,7 @@ export function WorkflowCanvas({
   onMoveNode,
   onOpenNodeLibrary,
   onSelectNode,
+  validationPlayback,
   viewStorageKey,
 }: {
   connectingNodeId: string | null;
@@ -65,6 +71,7 @@ export function WorkflowCanvas({
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
+  validationPlayback?: WorkflowValidationPlaybackSnapshot;
   viewStorageKey?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -84,6 +91,10 @@ export function WorkflowCanvas({
   const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
   const minNodePosition = hasPanOffset ? { x: Math.min(0, -fitPan.x / zoom), y: Math.min(0, -fitPan.y / zoom) } : undefined;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const activeValidationNodeIds = new Set(validationPlayback?.activeNodeIds || []);
+  const activeValidationEdgeIds = new Set(validationPlayback?.activeEdgeIds || []);
+  const errorValidationNodeIds = new Set(validationPlayback?.errorNodeIds || []);
+  const successValidationNodeIds = new Set(validationPlayback?.successNodeIds || []);
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
   useCanvasLayoutEffect(() => {
@@ -320,6 +331,7 @@ export function WorkflowCanvas({
           ref={canvasRef}
           data-workflow-canvas="true"
           data-workflow-canvas-view-ready={canvasViewReady ? "true" : "false"}
+          data-workflow-validation-playback={validationPlayback?.status || "idle"}
           className={[
             "absolute inset-0 origin-top-left",
             canvasViewReady ? "opacity-100" : "opacity-0",
@@ -350,17 +362,20 @@ export function WorkflowCanvas({
             const target = nodeById.get(edge.target_node_id);
             if (!source || !target) return null;
             const hovered = hoveredEdgeId === edge.id;
+            const validationActive = activeValidationEdgeIds.has(edge.id);
 
             return (
               <path
                 key={edge.id}
+                data-workflow-edge-validation-state={validationActive ? "active" : "idle"}
                 d={createConnectionPath(getOutputPoint(source), getInputPoint(target))}
                 fill="none"
                 markerEnd="url(#workflow-arrow)"
-                strokeDasharray={hovered ? "1 7" : undefined}
-                strokeLinecap={hovered ? "round" : undefined}
-                stroke="hsl(var(--muted-foreground))"
-                strokeWidth="2"
+                strokeDasharray={validationActive ? "7 9" : hovered ? "1 7" : undefined}
+                strokeLinecap={validationActive || hovered ? "round" : undefined}
+                stroke={validationActive ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))"}
+                strokeWidth={validationActive ? "3" : "2"}
+                className={validationActive ? "animate-pulse" : undefined}
               />
             );
           })}
@@ -408,6 +423,13 @@ export function WorkflowCanvas({
         {nodes.map((node) => {
           const selected = node.id === selectedNodeId;
           const connecting = node.id === connectingNodeId;
+          const validationState = activeValidationNodeIds.has(node.id)
+            ? "active"
+            : errorValidationNodeIds.has(node.id)
+              ? "error"
+              : successValidationNodeIds.has(node.id)
+                ? "success"
+                : "idle";
           return (
             <WorkflowCanvasNode
               key={node.id}
@@ -416,6 +438,7 @@ export function WorkflowCanvas({
               disabled={disabled}
               node={node}
               selected={selected}
+              validationState={validationState}
               onConnectionStart={handleConnectionStart}
               onFinishConnect={finishConnectionToNode}
               onPointerDown={(event) => {
@@ -460,23 +483,4 @@ export function WorkflowCanvas({
       </div>
     </div>
   );
-}
-
-function readStoredCanvasZoom(viewStorageKey: string) {
-  try {
-    const value = window.localStorage.getItem(viewStorageKey);
-    if (!value) return null;
-    const zoom = Number(value);
-    return Number.isFinite(zoom) ? clampZoom(zoom) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredCanvasZoom(viewStorageKey: string, zoom: number) {
-  try {
-    window.localStorage.setItem(viewStorageKey, String(clampZoom(zoom)));
-  } catch {
-    // Ignore unavailable storage; canvas remains usable with in-memory zoom.
-  }
 }

@@ -20,6 +20,8 @@ type WorkflowNodeVisualStyle = {
   dot: string;
 };
 
+type WorkflowNodeValidationState = "idle" | "active" | "success" | "error";
+
 const WORKFLOW_NODE_VISUAL_STYLES: Record<WorkflowNodeCapability, WorkflowNodeVisualStyle> = {
   business: {
     accent: "bg-sky-500",
@@ -69,6 +71,7 @@ export function WorkflowCanvasNode({
   disabled,
   node,
   selected,
+  validationState = "idle",
   onConnectionStart,
   onFinishConnect,
   onPointerCancel,
@@ -82,6 +85,7 @@ export function WorkflowCanvasNode({
   disabled?: boolean;
   node: WorkflowNode;
   selected: boolean;
+  validationState?: WorkflowNodeValidationState;
   onConnectionStart: (
     event: PointerEvent<HTMLButtonElement>,
     node: WorkflowNode,
@@ -96,21 +100,34 @@ export function WorkflowCanvasNode({
   const capability = getWorkflowNodeCapability(node);
   const displayLabels = getWorkflowNodeDisplayLabels(node);
   const visualStyle = WORKFLOW_NODE_VISUAL_STYLES[capability];
+  const validationActive = validationState === "active";
+  const validationError = validationState === "error";
+  const validationSuccess = validationState === "success";
+  const validationChromeClass = validationActive
+    ? "border-primary bg-primary/5 ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.20)]"
+    : validationError
+      ? "border-destructive/55 bg-destructive/5 ring-4 ring-destructive/15"
+      : validationSuccess
+        ? "border-success/45 bg-success/5 ring-2 ring-success/15"
+        : null;
 
   return (
     <div
       data-workflow-node="true"
+      data-workflow-node-key={node.node_key}
+      data-workflow-validation-state={validationState}
       className={[
         "group absolute overflow-visible rounded-lg border bg-background text-left",
         "transform-gpu shadow-[0_8px_20px_hsl(var(--foreground)/0.06)]",
         "transition-[transform,box-shadow,border-color,background-color] duration-150",
-        selected ? "z-30 scale-[1.08]" : "z-20 scale-100",
+        validationActive ? "z-40 scale-[1.08]" : selected ? "z-30 scale-[1.08]" : "z-20 scale-100",
         disabled ? "cursor-not-allowed opacity-70" : "cursor-move",
-        connecting
-          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-          : selected
-            ? "border-primary bg-background ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.18)]"
-            : "border-border hover:border-primary/45 hover:shadow-md",
+        validationChromeClass ||
+          (connecting
+            ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+            : selected
+              ? "border-primary bg-background ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.18)]"
+              : "border-border hover:border-primary/45 hover:shadow-md"),
       ].join(" ")}
       style={{
         left: node.position.x,
@@ -127,8 +144,8 @@ export function WorkflowCanvasNode({
         aria-hidden="true"
         className={[
           "absolute inset-y-2 left-2 w-1 rounded-full transition-opacity",
-          visualStyle.accent,
-          selected || connecting ? "opacity-100" : "opacity-70",
+          validationError ? "bg-destructive" : visualStyle.accent,
+          selected || connecting || validationActive || validationSuccess || validationError ? "opacity-100" : "opacity-70",
         ].join(" ")}
       />
       <button

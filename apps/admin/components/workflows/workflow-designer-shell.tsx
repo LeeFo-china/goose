@@ -33,6 +33,7 @@ import {
 } from "@/components/workflows/workflow-requests";
 import { WorkflowRuntimePanel } from "@/components/workflows/workflow-runtime-panel";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
+import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
 import type {
   WorkflowDefinitionDetail,
   WorkflowEdge,
@@ -70,6 +71,7 @@ export function WorkflowDesignerShell({
   const [validation, setValidation] = useState<WorkflowValidationResult | null>(null);
   const [mobilePanel, setMobilePanel] = useState<DesignerPanel>("canvas");
   const [pending, startTransition] = useTransition();
+  const { playback, playValidationPlayback } = useWorkflowValidationPlayback(graph);
   const selectedNode = useMemo(
     () => graph?.nodes.find((node) => node.id === selectedNodeId) || null,
     [graph?.nodes, selectedNodeId],
@@ -190,7 +192,9 @@ export function WorkflowDesignerShell({
 
   function handleValidate() {
     if (!graph) return;
-    setValidation(validateGraph(graph));
+    const nextValidation = validateGraph(graph);
+    setValidation(nextValidation);
+    playValidationPlayback(nextValidation);
   }
 
   function selectNode(nodeId: string) {
@@ -387,6 +391,7 @@ export function WorkflowDesignerShell({
                 onMoveNode={moveNode}
                 onOpenNodeLibrary={showNodeLibrary}
                 onSelectNode={selectNode}
+                validationPlayback={playback}
                 viewStorageKey={`workflow-canvas:${workflowId}:zoom`}
               />
             </div>
