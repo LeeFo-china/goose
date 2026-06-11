@@ -201,6 +201,25 @@ test("收款节点拖线自动生成判断节点", async ({ page }) => {
   }
 });
 
+test("连线不再提供属性配置入口", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedPaymentGraphWithoutPaymentEdge(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await connectNodes(page, "payment_stage_1", "tile_work");
+
+    await expect(page.locator("[data-edge-action='configure']")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "连线属性" })).toHaveCount(0);
+    await expect(page.getByText("收款成功")).toBeVisible();
+    await expect(page.getByRole("button", { name: "删除连线" }).first()).toBeVisible();
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
 test("收款判断节点失败出口可以连接催收流程", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);

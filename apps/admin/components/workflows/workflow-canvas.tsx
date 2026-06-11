@@ -52,7 +52,6 @@ export function WorkflowCanvas({
   nodes,
   edges,
   selectedNodeId,
-  selectedEdgeId,
   onBeginConnect,
   onCancelConnect,
   onDeleteEdge,
@@ -62,7 +61,6 @@ export function WorkflowCanvas({
   onMoveNode,
   onOpenNodeLibrary,
   onSelectNode,
-  onSelectEdge,
   validationPlayback,
   viewStorageKey,
 }: {
@@ -71,7 +69,6 @@ export function WorkflowCanvas({
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   selectedNodeId: string | null;
-  selectedEdgeId: string | null;
   onBeginConnect: (source: WorkflowConnectionSource) => void;
   onCancelConnect: () => void;
   onDeleteEdge: (edgeId: string) => void;
@@ -81,7 +78,6 @@ export function WorkflowCanvas({
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
-  onSelectEdge: (edgeId: string) => void;
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
   viewStorageKey?: string;
 }) {
@@ -398,10 +394,8 @@ export function WorkflowCanvas({
           edges={displayEdges}
           hoveredEdgeId={hoveredEdgeId}
           nodeById={canvasNodeById}
-          selectedEdgeId={selectedEdgeId}
           onDeleteEdge={onDeleteEdge}
           onHoverEdge={setHoveredEdgeId}
-          onSelectEdge={onSelectEdge}
         />
         {nodes.map((node) => {
           const selected = node.id === selectedNodeId;

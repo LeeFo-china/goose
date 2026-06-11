@@ -148,15 +148,15 @@ async function seedPaymentBranchGraph(page: Page, workflowId: string) {
         {
           source_node_key: "payment_stage_1",
           target_node_key: "tile_work",
-          label: null,
-          condition: { operator: "always" },
+          label: "收款成功",
+          condition: { operator: "eq", field: "payment_status", value: "success" },
           priority: 20,
         },
         {
           source_node_key: "payment_stage_1",
           target_node_key: "collection_followup",
-          label: null,
-          condition: { operator: "always" },
+          label: "收款失败",
+          condition: { operator: "eq", field: "payment_status", value: "failed" },
           priority: 30,
         },
         {
@@ -294,18 +294,7 @@ async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
 
-async function selectEdgeCondition(page: Page, sourceKey: string, targetKey: string, label: string) {
-  const edge = page.locator(
-    `[data-edge-action='configure'][data-workflow-edge-source-key='${sourceKey}'][data-workflow-edge-target-key='${targetKey}']`,
-  );
-  await expect(edge).toBeAttached({ timeout: 5000 });
-  await edge.click({ force: true });
-  await expect(page.getByRole("heading", { name: "连线属性" })).toBeVisible();
-  await page.getByLabel("分支条件").click();
-  await page.getByRole("option", { name: label }).click();
-}
-
-test("收款节点出线可以配置成功和失败分支条件", async ({ page }) => {
+test("收款节点成功和失败分支条件可以保存并运行", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -313,8 +302,6 @@ test("收款节点出线可以配置成功和失败分支条件", async ({ page 
     await seedPaymentBranchGraph(page, workflowId);
     await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
 
-    await selectEdgeCondition(page, "payment_stage_1", "tile_work", "收款成功");
-    await selectEdgeCondition(page, "payment_stage_1", "collection_followup", "收款失败");
     await page.getByRole("button", { name: "本地校验" }).click();
     await expect(page.locator("[data-workflow-validation-playback='success']")).toBeVisible({
       timeout: 5000,
@@ -390,8 +377,6 @@ test("项目收款节点失败分支不应被未入账收款拦截", async ({ pa
     await seedPaymentBranchGraph(page, workflowId);
     await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
 
-    await selectEdgeCondition(page, "payment_stage_1", "tile_work", "收款成功");
-    await selectEdgeCondition(page, "payment_stage_1", "collection_followup", "收款失败");
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
 
