@@ -109,7 +109,7 @@ export function WorkflowCanvasNode({
         connecting
           ? "border-primary bg-primary/5 ring-2 ring-primary/20"
           : selected
-            ? "border-primary bg-primary/[0.03] ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.18)]"
+            ? "border-primary bg-background ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.18)]"
             : "border-border hover:border-primary/45 hover:shadow-md",
       ].join(" ")}
       style={{
