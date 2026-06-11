@@ -1,4 +1,4 @@
-import type { Connection, NodeChange, NodePositionChange } from "@xyflow/react";
+import type { Connection } from "@xyflow/react";
 import {
   buildWorkflowBranchProjectionNodes,
   buildWorkflowDisplayEdges,
@@ -26,18 +26,6 @@ export const WORKFLOW_FLOW_EDGE_TYPE = "workflowEdge";
 export const WORKFLOW_FLOW_INPUT_HANDLE = "input";
 export const WORKFLOW_FLOW_OUTPUT_HANDLE = "output";
 export const WORKFLOW_FLOW_BRANCH_TARGET_HANDLE = "branch-input";
-
-export type WorkflowFlowPositionChange =
-  | {
-    kind: "node";
-    nodeId: string;
-    position: { x: number; y: number };
-  }
-  | {
-    kind: "branch";
-    sourceNodeId: string;
-    position: { x: number; y: number };
-  };
 
 export function toWorkflowFlowNodes(input: WorkflowFlowAdapterInput): WorkflowFlowNode[] {
   const branchNodes = buildWorkflowBranchProjectionNodes(input.nodes, input.edges);
@@ -126,17 +114,6 @@ export function toWorkflowFlowEdges(input: WorkflowFlowEdgeAdapterInput): Workfl
   });
 }
 
-export function getWorkflowFlowEdgeNodeMetadataKey(nodes: WorkflowNode[]) {
-  return JSON.stringify(nodes.map((node) => ({
-    id: node.id,
-    tenantId: node.tenant_id,
-    definitionId: node.definition_id,
-    key: node.node_key,
-    businessKind: node.business_kind,
-    approvalType: "approval_type" in node.config ? node.config.approval_type : null,
-  })));
-}
-
 export function getWorkflowFlowConnectionSource(
   connection: Connection,
 ): WorkflowFlowConnectionSource | null {
@@ -152,29 +129,6 @@ export function getWorkflowFlowConnectionSource(
 
 export function getWorkflowFlowConnectionTarget(connection: Connection) {
   return connection.target || null;
-}
-
-export function getWorkflowNodePositionChanges(
-  changes: NodeChange<WorkflowFlowNode>[],
-  nodes: WorkflowNode[],
-): WorkflowFlowPositionChange[] {
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  return changes.flatMap<WorkflowFlowPositionChange>((change) => {
-    if (!isNodePositionChange(change) || !change.position) return [];
-    if (change.id.startsWith("branch:")) {
-      return [{
-        kind: "branch" as const,
-        sourceNodeId: change.id.slice("branch:".length),
-        position: change.position,
-      }];
-    }
-    if (!nodeIds.has(change.id)) return [];
-    return [{
-      kind: "node" as const,
-      nodeId: change.id,
-      position: change.position,
-    }];
-  });
 }
 
 export function getWorkflowFlowBranchNodeId(sourceNodeId: string) {
@@ -206,10 +160,4 @@ function parseWorkflowBranchOutcome(
     return handleId;
   }
   return undefined;
-}
-
-function isNodePositionChange(
-  change: NodeChange<WorkflowFlowNode>,
-): change is NodePositionChange {
-  return change.type === "position";
 }

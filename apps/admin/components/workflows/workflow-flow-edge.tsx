@@ -8,10 +8,9 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { X } from "lucide-react";
-import { memo } from "react";
 import type { WorkflowFlowEdge as WorkflowFlowEdgeType } from "@/components/workflows/workflow-flow-types";
 
-function WorkflowFlowEdgeBase({
+export function WorkflowFlowEdge({
   data,
   id,
   markerEnd,
@@ -90,35 +89,6 @@ function WorkflowFlowEdgeBase({
       </EdgeLabelRenderer>
     </>
   );
-}
-
-export const WorkflowFlowEdge = memo(WorkflowFlowEdgeBase, areWorkflowFlowEdgePropsEqual);
-WorkflowFlowEdge.displayName = "WorkflowFlowEdge";
-
-function areWorkflowFlowEdgePropsEqual(
-  previous: EdgeProps<WorkflowFlowEdgeType>,
-  next: EdgeProps<WorkflowFlowEdgeType>,
-) {
-  return previous.id === next.id &&
-    previous.markerEnd === next.markerEnd &&
-    previous.sourceX === next.sourceX &&
-    previous.sourceY === next.sourceY &&
-    previous.targetX === next.targetX &&
-    previous.targetY === next.targetY &&
-    previous.sourcePosition === next.sourcePosition &&
-    previous.targetPosition === next.targetPosition &&
-    previous.sourceHandleId === next.sourceHandleId &&
-    previous.targetHandleId === next.targetHandleId &&
-    previous.data?.active === next.data?.active &&
-    previous.data?.disabled === next.data?.disabled &&
-    previous.data?.actionSourceKey === next.data?.actionSourceKey &&
-    previous.data?.actionTargetKey === next.data?.actionTargetKey &&
-    previous.data?.pathSourceKey === next.data?.pathSourceKey &&
-    previous.data?.pathTargetKey === next.data?.pathTargetKey &&
-    previous.data?.onDeleteEdge === next.data?.onDeleteEdge &&
-    previous.data?.edge.id === next.data?.edge.id &&
-    previous.data?.edge.label === next.data?.edge.label &&
-    previous.data?.edge.readOnly === next.data?.edge.readOnly;
 }
 
 function getWorkflowEdgeSourcePosition(sourceHandleId?: string | null) {

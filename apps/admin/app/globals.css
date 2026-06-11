@@ -73,10 +73,6 @@ body {
   stroke-dasharray: 7 9;
 }
 
-.workflow-flow-edge {
-  vector-effect: non-scaling-stroke;
-}
-
 .workflow-flow-edge:hover {
   stroke-dasharray: 7 9;
   stroke-linecap: round;

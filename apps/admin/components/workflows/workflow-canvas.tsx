@@ -7,9 +7,11 @@ import {
   MarkerType,
   ReactFlow,
   ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
   type Connection,
-  type NodeChange,
+  type OnNodeDrag,
   type OnConnectStartParams,
   type ReactFlowInstance,
   type Viewport,
@@ -19,9 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getWorkflowFlowConnectionSource,
-  getWorkflowFlowEdgeNodeMetadataKey,
   getWorkflowFlowConnectionTarget,
-  getWorkflowNodePositionChanges,
   toWorkflowFlowEdges,
   toWorkflowFlowNodes,
 } from "@/components/workflows/workflow-flow-adapter";
@@ -112,6 +112,8 @@ function WorkflowCanvasInner({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const onDeleteEdgeRef = useRef(onDeleteEdge);
   const reactFlow = useReactFlow<WorkflowFlowNodeType, WorkflowFlowEdgeType>();
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<WorkflowFlowNodeType>([]);
+  const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<WorkflowFlowEdgeType>([]);
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
   const activeValidationNodeIds = useMemo(
@@ -136,45 +138,49 @@ function WorkflowCanvasInner({
   const handleDeleteEdge = useCallback((edgeId: string) => {
     onDeleteEdgeRef.current(edgeId);
   }, []);
-  const flowEdgeNodeMetadataKey = useMemo(
-    () => getWorkflowFlowEdgeNodeMetadataKey(nodes),
-    [nodes],
-  );
-  const flowNodes = useMemo(() => toWorkflowFlowNodes({
+
+  useEffect(() => {
+    setFlowNodes(toWorkflowFlowNodes({
+      activeValidationEdgeIds,
+      activeValidationNodeIds,
+      connectingNodeId,
+      disabled,
+      edges,
+      errorValidationNodeIds,
+      nodes,
+      onDeleteEdge: handleDeleteEdge,
+      selectedNodeId,
+      successValidationNodeIds,
+    }));
+  }, [
     activeValidationEdgeIds,
     activeValidationNodeIds,
     connectingNodeId,
     disabled,
     edges,
     errorValidationNodeIds,
-    nodes,
-    onDeleteEdge: handleDeleteEdge,
-    selectedNodeId,
-    successValidationNodeIds,
-  }), [
-    activeValidationEdgeIds,
-    activeValidationNodeIds,
-    connectingNodeId,
-    disabled,
-    edges,
-    errorValidationNodeIds,
-    nodes,
     handleDeleteEdge,
+    nodes,
     selectedNodeId,
+    setFlowNodes,
     successValidationNodeIds,
   ]);
-  const flowEdges = useMemo(() => toWorkflowFlowEdges({
+
+  useEffect(() => {
+    setFlowEdges(toWorkflowFlowEdges({
+      activeValidationEdgeIds,
+      disabled,
+      edges,
+      nodes,
+      onDeleteEdge: handleDeleteEdge,
+    }));
+  }, [
     activeValidationEdgeIds,
     disabled,
     edges,
-    nodes,
-    onDeleteEdge: handleDeleteEdge,
-  }), [
-    activeValidationEdgeIds,
-    disabled,
-    edges,
-    flowEdgeNodeMetadataKey,
     handleDeleteEdge,
+    nodes,
+    setFlowEdges,
   ]);
 
   const handleInit = useCallback((instance: ReactFlowInstance<WorkflowFlowNodeType, WorkflowFlowEdgeType>) => {
@@ -190,15 +196,16 @@ function WorkflowCanvasInner({
     writeStoredCanvasZoom(viewStorageKey, zoom);
   }, [canvasViewReady, viewStorageKey, zoom]);
 
-  const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNodeType>[]) => {
-    getWorkflowNodePositionChanges(changes, nodes).forEach((change) => {
-      if (change.kind === "branch") {
-        onMoveBranchNode(change.sourceNodeId, change.position);
-        return;
-      }
-      onMoveNode(change.nodeId, change.position);
-    });
-  }, [nodes, onMoveBranchNode, onMoveNode]);
+  const handleNodeDragStop = useCallback<OnNodeDrag<WorkflowFlowNodeType>>((
+    _event,
+    node,
+  ) => {
+    if (node.type === "workflowBranch") {
+      onMoveBranchNode(node.data.branchNode.sourceNodeId, node.position);
+      return;
+    }
+    onMoveNode(node.id, node.position);
+  }, [onMoveBranchNode, onMoveNode]);
 
   const handleConnect = useCallback((connection: Connection) => {
     const source = getWorkflowFlowConnectionSource(connection);
@@ -323,7 +330,9 @@ function WorkflowCanvasInner({
         onNodeClick={(_event, node) => {
           if (node.type === "workflowNode") onSelectNode(node.id);
         }}
-        onNodesChange={handleNodesChange}
+        onNodeDragStop={handleNodeDragStop}
+        onEdgesChange={onFlowEdgesChange}
+        onNodesChange={onFlowNodesChange}
         onPaneClick={onCancelConnect}
       >
         <Controls
