@@ -443,7 +443,9 @@ test("缩小后节点不能拖出画布左上边界", async ({ page }) => {
     await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
 
     await page.getByRole("button", { name: "缩小画布" }).click();
-    await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("90%");
+    await expect.poll(async () =>
+      Number((await page.locator("[data-workflow-canvas-zoom='true']").textContent())?.replace("%", ""))
+    ).toBeLessThan(100);
     await dragLocatorBy(
       page,
       page.locator("[data-workflow-node-key='start']"),

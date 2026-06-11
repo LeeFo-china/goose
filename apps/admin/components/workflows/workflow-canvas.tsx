@@ -3,6 +3,7 @@
 import {
   Background,
   ConnectionMode,
+  Controls,
   MarkerType,
   ReactFlow,
   ReactFlowProvider,
@@ -31,7 +32,6 @@ import {
   WORKFLOW_FLOW_ARRANGE_ZOOM,
   WORKFLOW_FLOW_MAX_ZOOM,
   WORKFLOW_FLOW_MIN_ZOOM,
-  WORKFLOW_FLOW_ZOOM_STEP,
   type WorkflowFlowConnectionSource,
   type WorkflowFlowEdge as WorkflowFlowEdgeType,
   type WorkflowFlowNode as WorkflowFlowNodeType,
@@ -54,6 +54,14 @@ const nodeExtent: [[number, number], [number, number]] = [
   [0, 0],
   [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
 ];
+
+const workflowFlowAriaLabels = {
+  "controls.ariaLabel": "画布操作",
+  "controls.zoomIn.ariaLabel": "放大画布",
+  "controls.zoomOut.ariaLabel": "缩小画布",
+  "controls.fitView.ariaLabel": "全部显示",
+  "controls.interactive.ariaLabel": "锁定画布",
+};
 
 export function WorkflowCanvas(props: {
   connectingNodeId: string | null;
@@ -228,13 +236,6 @@ function WorkflowCanvasInner({
     });
   }, [edges, nodes, onArrangeNodes, onCancelConnect, reactFlow]);
 
-  const applyZoom = useCallback((nextZoom: number) => {
-    const viewport = reactFlow.getViewport();
-    const clampedZoom = clampWorkflowFlowZoom(nextZoom);
-    reactFlow.setViewport({ ...viewport, zoom: clampedZoom });
-    setZoom(clampedZoom);
-  }, [reactFlow]);
-
   return (
     <div
       ref={containerRef}
@@ -266,13 +267,9 @@ function WorkflowCanvasInner({
       <WorkflowCanvasToolbar
         disabled={disabled}
         edgeCount={edges.length}
-        maxZoom={WORKFLOW_FLOW_MAX_ZOOM}
-        minZoom={WORKFLOW_FLOW_MIN_ZOOM}
         nodeCount={nodes.length}
         zoom={zoom}
         onArrange={handleArrange}
-        onZoomIn={() => applyZoom(zoom + WORKFLOW_FLOW_ZOOM_STEP)}
-        onZoomOut={() => applyZoom(zoom - WORKFLOW_FLOW_ZOOM_STEP)}
       />
       <div className="pointer-events-none absolute left-0 right-0 top-3 z-30 h-0 px-3">
         <div className="flex justify-end">
@@ -295,6 +292,7 @@ function WorkflowCanvasInner({
       </div>
       <ReactFlow
         colorMode="light"
+        ariaLabelConfig={workflowFlowAriaLabels}
         connectionMode={ConnectionMode.Loose}
         defaultEdgeOptions={{
           markerEnd: { type: MarkerType.ArrowClosed },
@@ -307,9 +305,10 @@ function WorkflowCanvasInner({
         minZoom={WORKFLOW_FLOW_MIN_ZOOM}
         nodeExtent={nodeExtent}
         nodes={flowNodes}
-        nodesDraggable={!disabled}
-        nodesConnectable={!disabled}
+        nodesDraggable={disabled ? false : undefined}
+        nodesConnectable={disabled ? false : undefined}
         nodeTypes={nodeTypes}
+        elementsSelectable={disabled ? false : undefined}
         panOnDrag
         panOnScroll
         proOptions={{ hideAttribution: true }}
@@ -325,6 +324,12 @@ function WorkflowCanvasInner({
         onNodesChange={handleNodesChange}
         onPaneClick={onCancelConnect}
       >
+        <Controls
+          aria-label="画布操作"
+          className="workflow-flow-controls"
+          fitViewOptions={{ duration: 240, padding: 0.24 }}
+          position="top-left"
+        />
         <Background color="hsl(var(--border) / 0.65)" gap={32} />
       </ReactFlow>
     </div>

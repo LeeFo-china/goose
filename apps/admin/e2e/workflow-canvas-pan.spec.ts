@@ -12,6 +12,13 @@ type WorkflowDefinition = {
   id: string;
 };
 
+type WorkflowGraph = {
+  nodes: Array<{
+    node_key: string;
+    position: { x: number; y: number };
+  }>;
+};
+
 async function loginAsTenantAdmin(page: Page) {
   const loginResponse = await page.request.post("/api/auth/login", {
     data: {
@@ -72,6 +79,32 @@ async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
 
+async function getWorkflowGraph(page: Page, workflowId: string) {
+  const response = await page.request.get(`/api/backend/workflows/${workflowId}/graph`);
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json() as BackendPayload<WorkflowGraph>;
+  expect(payload.data).toBeTruthy();
+  return payload.data!;
+}
+
+async function dragLocatorBy(page: Page, locator: ReturnType<Page["locator"]>, deltaX: number, deltaY: number) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const centerX = box!.x + box!.width / 2;
+  const centerY = box!.y + box!.height / 2;
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + deltaX, centerY + deltaY, { steps: 8 });
+  await page.mouse.up();
+}
+
+function parseZoomText(text: string | null) {
+  const zoom = Number(text?.replace("%", ""));
+  expect(Number.isFinite(zoom)).toBe(true);
+  return zoom;
+}
+
 test("React Flow 画布可以拖拽平移", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
@@ -110,6 +143,47 @@ test("React Flow 画布可以拖拽平移", async ({ page }) => {
       window.getComputedStyle(element).transform,
     );
     expect(afterTransform).not.toBe(beforeTransform);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("官方画布控件支持缩放、锁定和全部显示", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedWideWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+    await expect(page.getByRole("button", { name: "放大画布" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "缩小画布" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "全部显示" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "锁定画布" })).toBeVisible();
+
+    const zoomIndicator = page.locator("[data-workflow-canvas-zoom='true']");
+    const initialZoom = parseZoomText(await zoomIndicator.textContent());
+    await page.getByRole("button", { name: "缩小画布" }).click();
+    await expect.poll(async () => parseZoomText(await zoomIndicator.textContent()))
+      .toBeLessThan(initialZoom);
+    await page.getByRole("button", { name: "放大画布" }).click();
+    await expect.poll(async () => parseZoomText(await zoomIndicator.textContent()))
+      .toBeGreaterThan(initialZoom - 1);
+
+    await page.getByRole("button", { name: "全部显示" }).click();
+    await expect(page.locator("[data-workflow-node-key='end']")).toBeInViewport();
+
+    const startBefore = (await getWorkflowGraph(page, workflowId)).nodes.find((node) =>
+      node.node_key === "start"
+    )?.position;
+    expect(startBefore).toBeTruthy();
+    await page.getByRole("button", { name: "锁定画布" }).click();
+    await dragLocatorBy(page, page.locator("[data-workflow-node-key='start']"), 180, 80);
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByText("流程草稿已保存")).toBeVisible();
+    const startAfter = (await getWorkflowGraph(page, workflowId)).nodes.find((node) =>
+      node.node_key === "start"
+    )?.position;
+    expect(startAfter).toEqual(startBefore);
   } finally {
     await archiveWorkflow(page, workflowId);
   }

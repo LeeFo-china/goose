@@ -47,8 +47,8 @@ export function toWorkflowFlowNodes(input: WorkflowFlowAdapterInput): WorkflowFl
     position: node.position,
     width: WORKFLOW_FLOW_NODE_WIDTH,
     height: WORKFLOW_FLOW_NODE_HEIGHT,
-    draggable: !input.disabled,
-    selectable: !input.disabled,
+    draggable: input.disabled ? false : undefined,
+    selectable: input.disabled ? false : undefined,
     data: {
       node,
       connecting: node.id === input.connectingNodeId,
@@ -63,8 +63,8 @@ export function toWorkflowFlowNodes(input: WorkflowFlowAdapterInput): WorkflowFl
     position: branchNode.position,
     width: WORKFLOW_FLOW_BRANCH_NODE_WIDTH,
     height: WORKFLOW_FLOW_BRANCH_NODE_HEIGHT,
-    draggable: !input.disabled,
-    selectable: !input.disabled,
+    draggable: input.disabled ? false : undefined,
+    selectable: input.disabled ? false : undefined,
     data: {
       branchNode,
       connecting: branchNode.sourceNodeId === input.connectingNodeId,

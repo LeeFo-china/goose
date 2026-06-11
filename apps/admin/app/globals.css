@@ -86,6 +86,27 @@ body {
   animation: none;
 }
 
+.workflow-flow-controls.react-flow__controls {
+  left: 12px;
+  top: 58px;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--background) / 0.96);
+  box-shadow: 0 8px 20px hsl(var(--foreground) / 0.08);
+}
+
+.workflow-flow-controls .react-flow__controls-button {
+  border-bottom-color: hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.workflow-flow-controls .react-flow__controls-button:hover {
+  background: hsl(var(--muted) / 0.68);
+  color: hsl(var(--foreground));
+}
+
 .console-grid {
   background-image:
     radial-gradient(circle at 50% 18%, rgb(var(--workbench-glow) / var(--workbench-glow-alpha)), transparent 36%),

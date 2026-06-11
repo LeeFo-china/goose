@@ -12,9 +12,8 @@ export const WORKFLOW_FLOW_NODE_HEIGHT = 84;
 export const WORKFLOW_FLOW_BRANCH_NODE_WIDTH = 104;
 export const WORKFLOW_FLOW_BRANCH_NODE_HEIGHT = 104;
 export const WORKFLOW_FLOW_ARRANGE_ZOOM = 0.6;
-export const WORKFLOW_FLOW_MIN_ZOOM = 0.5;
+export const WORKFLOW_FLOW_MIN_ZOOM = 0.2;
 export const WORKFLOW_FLOW_MAX_ZOOM = 1.8;
-export const WORKFLOW_FLOW_ZOOM_STEP = 0.1;
 
 export type WorkflowFlowValidationState = "idle" | "active" | "success" | "error";
 
