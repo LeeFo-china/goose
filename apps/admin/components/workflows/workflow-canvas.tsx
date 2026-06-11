@@ -237,8 +237,8 @@ export function WorkflowCanvas({
     onFinishConnect(targetNodeId);
   }
 
-  function arrangeNodesToViewport() {
-    const arranged = arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
+  async function arrangeNodesToViewport() {
+    const arranged = await arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
     setZoom(arranged.zoom);
     setFitMode(true);
     setFitPan({ x: 0, y: 0 });

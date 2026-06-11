@@ -1,5 +1,8 @@
+import ELK from "elkjs/lib/elk.bundled.js";
+import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
 import {
+  getWorkflowBranchNodeId,
   isWorkflowBranchEdgeForNode,
   withWorkflowBranchNodePosition,
   WORKFLOW_BRANCH_NODE_HEIGHT,
@@ -10,8 +13,6 @@ type PositionedWorkflowNode = Pick<WorkflowNode, "position"> & {
   canvasWidth?: number;
   canvasHeight?: number;
 };
-
-type LayoutRect = CanvasPoint & CanvasSize;
 
 export const CANVAS_WIDTH = 1800;
 export const CANVAS_HEIGHT = 1200;
@@ -27,11 +28,8 @@ const LAYOUT_SAFE_MARGIN = 24;
 const LAYOUT_TOOLBAR_HEIGHT = 56;
 const LAYOUT_COLUMN_GAP = 96;
 const LAYOUT_ROW_GAP = 72;
-const LAYOUT_BRANCH_GAP_X = 72;
 const LAYOUT_ENTITY_GAP = 28;
-const LAYOUT_ROW_STEP = NODE_HEIGHT + LAYOUT_ROW_GAP;
-const LAYOUT_COLUMN_STEP = NODE_WIDTH + WORKFLOW_BRANCH_NODE_WIDTH +
-  LAYOUT_BRANCH_GAP_X + LAYOUT_COLUMN_GAP;
+const elk = new ELK();
 
 export type CanvasPoint = { x: number; y: number };
 export type CanvasSize = { width: number; height: number };
@@ -113,42 +111,71 @@ export function clampZoom(value: number) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
 }
 
-export function arrangeWorkflowCanvasNodes(
+export async function arrangeWorkflowCanvasNodes(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   viewportSize: CanvasSize,
-): ArrangedWorkflowCanvas {
+): Promise<ArrangedWorkflowCanvas> {
   if (nodes.length === 0) return { nodes, zoom: 1 };
-  const { orderedNodes, depthById } = getWorkflowCanvasLayout(nodes, edges);
-  const maxDepth = Math.max(...orderedNodes.map((node) => depthById.get(node.id) || 0));
-  const layout = getCollisionLayoutFrame(maxDepth, viewportSize, ARRANGE_ZOOM);
+  const branchSourceNodes = nodes.filter((node) => hasWorkflowBranchEdges(node, edges));
+  const branchSourceIds = new Set(branchSourceNodes.map((node) => node.id));
+  const graph: ElkNode = {
+    id: "workflow",
+    layoutOptions: {
+      "elk.algorithm": "layered",
+      "elk.direction": "RIGHT",
+      "elk.spacing.nodeNode": String(LAYOUT_ROW_GAP),
+      "elk.spacing.edgeNode": String(LAYOUT_ENTITY_GAP),
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(LAYOUT_COLUMN_GAP),
+      "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    },
+    children: [
+      ...nodes.map((node) => ({
+        id: node.id,
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+      })),
+      ...branchSourceNodes.map((node) => ({
+        id: getWorkflowBranchNodeId(node.id),
+        width: WORKFLOW_BRANCH_NODE_WIDTH,
+        height: WORKFLOW_BRANCH_NODE_HEIGHT,
+      })),
+    ],
+    edges: [
+      ...branchSourceNodes.map((node) => ({
+        id: `arrange-branch-link:${node.id}`,
+        sources: [node.id],
+        targets: [getWorkflowBranchNodeId(node.id)],
+      })),
+      ...edges.map((edge) => {
+        const sourceNode = nodes.find((node) => node.id === edge.source_node_id);
+        const source = sourceNode &&
+            branchSourceIds.has(sourceNode.id) &&
+            isWorkflowBranchEdgeForNode(sourceNode, edge)
+          ? getWorkflowBranchNodeId(sourceNode.id)
+          : edge.source_node_id;
+        return {
+          id: edge.id,
+          sources: [source],
+          targets: [edge.target_node_id],
+        };
+      }),
+    ] satisfies ElkExtendedEdge[],
+  };
+  const layouted = await elk.layout(graph);
+  const layout = getElkLayoutFrame(layouted, viewportSize, ARRANGE_ZOOM);
   const positionById = new Map<string, CanvasPoint>();
   const branchPositionBySourceId = new Map<string, CanvasPoint>();
-  const laneByDepth = new Map<number, number>();
-  const occupiedRects: LayoutRect[] = [];
-
-  orderedNodes.forEach((node) => {
-    const depth = depthById.get(node.id) || 0;
-    const lane = laneByDepth.get(depth) || 0;
-    laneByDepth.set(depth, lane + 1);
-    const nodeRect = placeWithoutCollision({
-      x: layout.offsetX + depth * LAYOUT_COLUMN_STEP,
-      y: layout.offsetY + lane * LAYOUT_ROW_STEP,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    }, occupiedRects);
-    occupiedRects.push(nodeRect);
-    positionById.set(node.id, { x: nodeRect.x, y: nodeRect.y });
-
-    if (!hasWorkflowBranchEdges(node, edges)) return;
-    const branchRect = placeWithoutCollision({
-      x: nodeRect.x + NODE_WIDTH + LAYOUT_BRANCH_GAP_X,
-      y: nodeRect.y,
-      width: WORKFLOW_BRANCH_NODE_WIDTH,
-      height: WORKFLOW_BRANCH_NODE_HEIGHT,
-    }, occupiedRects);
-    occupiedRects.push(branchRect);
-    branchPositionBySourceId.set(node.id, { x: branchRect.x, y: branchRect.y });
+  (layouted.children || []).forEach((child) => {
+    const point = {
+      x: layout.offsetX + (child.x || 0),
+      y: layout.offsetY + (child.y || 0),
+    };
+    if (child.id.startsWith("branch:")) {
+      branchPositionBySourceId.set(child.id.slice("branch:".length), point);
+      return;
+    }
+    positionById.set(child.id, point);
   });
 
   return {
@@ -166,113 +193,24 @@ export function arrangeWorkflowCanvasNodes(
   };
 }
 
-function placeWithoutCollision(rect: LayoutRect, occupiedRects: LayoutRect[]) {
-  let nextRect = rect;
-  while (occupiedRects.some((occupied) => rectsOverlap(nextRect, occupied))) {
-    nextRect = { ...nextRect, y: nextRect.y + LAYOUT_ROW_STEP };
-  }
-  return nextRect;
-}
-
-function rectsOverlap(left: LayoutRect, right: LayoutRect) {
-  return left.x - LAYOUT_ENTITY_GAP < right.x + right.width &&
-    left.x + left.width + LAYOUT_ENTITY_GAP > right.x &&
-    left.y - LAYOUT_ENTITY_GAP < right.y + right.height &&
-    left.y + left.height + LAYOUT_ENTITY_GAP > right.y;
-}
-
-function hasWorkflowBranchEdges(node: WorkflowNode, edges: WorkflowEdge[]) {
-  return edges.some((edge) => isWorkflowBranchEdgeForNode(node, edge));
-}
-
-function getWorkflowCanvasLayout(
-  nodes: WorkflowNode[],
-  edges: WorkflowEdge[],
-) {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const incomingCount = new Map(nodes.map((node) => [node.id, 0]));
-  const outgoing = new Map<string, string[]>();
-  edges.forEach((edge) => {
-    if (!nodeById.has(edge.source_node_id) || !nodeById.has(edge.target_node_id)) {
-      return;
-    }
-    incomingCount.set(
-      edge.target_node_id,
-      (incomingCount.get(edge.target_node_id) || 0) + 1,
-    );
-    outgoing.set(edge.source_node_id, [
-      ...(outgoing.get(edge.source_node_id) || []),
-      edge.target_node_id,
-    ]);
-  });
-
-  const orderedNodes = [...nodes].sort(compareWorkflowNodes);
-  const depthById = new Map(orderedNodes.map((node) => [node.id, 0]));
-  const queue = orderedNodes.filter((node) => incomingCount.get(node.id) === 0);
-  const visited = new Set<string>();
-
-  while (queue.length > 0) {
-    const node = queue.shift();
-    if (!node) continue;
-    visited.add(node.id);
-    const sourceDepth = depthById.get(node.id) || 0;
-    (outgoing.get(node.id) || []).forEach((targetNodeId) => {
-      depthById.set(
-        targetNodeId,
-        Math.max(depthById.get(targetNodeId) || 0, sourceDepth + 1),
-      );
-      const nextIncomingCount = (incomingCount.get(targetNodeId) || 0) - 1;
-      incomingCount.set(targetNodeId, nextIncomingCount);
-      if (nextIncomingCount === 0) {
-        const targetNode = nodeById.get(targetNodeId);
-        if (targetNode) queue.push(targetNode);
-        queue.sort(compareWorkflowNodes);
-      }
-    });
-  }
-
-  const fallbackDepth = Math.max(...depthById.values()) + 1;
-  orderedNodes.forEach((node) => {
-    if (!visited.has(node.id)) depthById.set(node.id, fallbackDepth);
-  });
-
-  const nextOrderedNodes = orderedNodes.sort((left, right) => {
-    const depthOrder = (depthById.get(left.id) || 0) - (depthById.get(right.id) || 0);
-    return depthOrder || compareWorkflowNodes(left, right);
-  });
-
-  return { orderedNodes: nextOrderedNodes, depthById };
-}
-
-function getCollisionLayoutFrame(
-  maxDepth: number,
+function getElkLayoutFrame(
+  graph: ElkNode,
   viewportSize: CanvasSize,
   arrangeZoom: number,
 ) {
-  const layoutWidth = maxDepth * LAYOUT_COLUMN_STEP + NODE_WIDTH;
-  const visualWidth = layoutWidth * arrangeZoom;
+  const visualWidth = (graph.width || 0) * arrangeZoom;
+  const visualHeight = (graph.height || 0) * arrangeZoom;
   const availableHeight = Math.max(240, viewportSize.height - LAYOUT_TOOLBAR_HEIGHT);
-
   return {
     offsetX: Math.max(LAYOUT_SAFE_MARGIN, (viewportSize.width - visualWidth) / 2) /
       arrangeZoom,
     offsetY: (LAYOUT_TOOLBAR_HEIGHT + Math.max(
       LAYOUT_SAFE_MARGIN,
-      availableHeight * 0.12,
+      (availableHeight - visualHeight) / 2,
     )) / arrangeZoom,
   };
 }
 
-function compareWorkflowNodes(left: WorkflowNode, right: WorkflowNode) {
-  const typeOrder = getWorkflowNodeTypeOrder(left) - getWorkflowNodeTypeOrder(right);
-  if (typeOrder !== 0) return typeOrder;
-  const sortOrder = left.sort_order - right.sort_order;
-  if (sortOrder !== 0) return sortOrder;
-  return left.node_key.localeCompare(right.node_key);
-}
-
-function getWorkflowNodeTypeOrder(node: WorkflowNode) {
-  if (node.node_type === "start") return 0;
-  if (node.node_type === "end") return 2;
-  return 1;
+function hasWorkflowBranchEdges(node: WorkflowNode, edges: WorkflowEdge[]) {
+  return edges.some((edge) => isWorkflowBranchEdgeForNode(node, edge));
 }
