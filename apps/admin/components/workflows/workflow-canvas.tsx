@@ -69,6 +69,7 @@ export function WorkflowCanvas({
   const dragRef = useRef<DragState | null>(null);
   const panRef = useRef<WorkflowCanvasPanState | null>(null);
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
+  const skipStoredZoomWriteRef = useRef(Boolean(viewStorageKey));
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState(false);
@@ -84,6 +85,7 @@ export function WorkflowCanvas({
 
   useEffect(() => {
     if (!viewStorageKey) return;
+    skipStoredZoomWriteRef.current = true;
     const storedZoom = readStoredCanvasZoom(viewStorageKey);
     if (storedZoom == null) return;
     setZoom(storedZoom);
@@ -91,6 +93,10 @@ export function WorkflowCanvas({
 
   useEffect(() => {
     if (!viewStorageKey) return;
+    if (skipStoredZoomWriteRef.current) {
+      skipStoredZoomWriteRef.current = false;
+      return;
+    }
     writeStoredCanvasZoom(viewStorageKey, zoom);
   }, [viewStorageKey, zoom]);
 

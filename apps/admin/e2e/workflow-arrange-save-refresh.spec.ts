@@ -127,7 +127,7 @@ async function getNodeBoxes(nodes: Locator) {
   );
 }
 
-test("整理后保存草稿再刷新节点位置不漂移到右下角", async ({ page }) => {
+test("整理后保存草稿再重新进入节点位置不漂移到右下角", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -152,6 +152,16 @@ test("整理后保存草稿再刷新节点位置不漂移到右下角", async ({
     const reloadedBoxes = await getNodeBoxes(nodes);
 
     expect(reloadedBoxes).toEqual(arrangedBoxes);
+
+    await page.getByRole("link", { name: "返回流程列表" }).click();
+    await expect(page).toHaveURL(/\/workflows$/);
+    await page.locator(`a[href="/workflows/${workflowId}"]`).first().click();
+    await expect(page).toHaveURL(new RegExp(`/workflows/${workflowId}$`));
+    await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("60%");
+    await expect(nodes.first()).toBeVisible();
+    const reopenedBoxes = await getNodeBoxes(nodes);
+
+    expect(reopenedBoxes).toEqual(arrangedBoxes);
   } finally {
     await archiveWorkflow(page, workflowId);
   }
