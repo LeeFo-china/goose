@@ -101,6 +101,26 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
       ].join(" ")}
       style={{ width: WORKFLOW_FLOW_NODE_WIDTH, height: WORKFLOW_FLOW_NODE_HEIGHT }}
     >
+      {validationActive ? (
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-[3px] z-10 overflow-visible"
+          viewBox={`0 0 ${WORKFLOW_FLOW_NODE_WIDTH} ${WORKFLOW_FLOW_NODE_HEIGHT}`}
+        >
+          <rect
+            data-workflow-active-border="true"
+            x="1.5"
+            y="1.5"
+            width={WORKFLOW_FLOW_NODE_WIDTH - 3}
+            height={WORKFLOW_FLOW_NODE_HEIGHT - 3}
+            rx="8"
+            ry="8"
+            className="workflow-node-active-border-path fill-none stroke-primary"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      ) : null}
       <Handle
         id="input"
         type="target"

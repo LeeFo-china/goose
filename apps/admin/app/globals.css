@@ -82,6 +82,24 @@ body {
   animation: none;
 }
 
+.workflow-node-active-border-path {
+  animation: workflow-node-active-border-dash 1.4s linear infinite;
+  filter: drop-shadow(0 0 6px hsl(var(--primary) / 0.22));
+  stroke-dasharray: 10 8;
+}
+
+@keyframes workflow-node-active-border-dash {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-node-active-border-path {
+    animation: none;
+  }
+}
+
 .workflow-flow-controls.react-flow__controls {
   left: 12px;
   top: 12px;
