@@ -23,16 +23,16 @@ async function loginAsTenantAdmin(page: Page) {
 }
 
 async function createTemporaryWorkflow(page: Page) {
-  const timestamp = Date.now();
+  const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const response = await page.request.post("/api/backend/workflows", {
     data: {
-      workflow_key: `e2e_arrange_${timestamp}`,
-      name: `e2e-arrange-${timestamp}`,
+      workflow_key: `e2e_arrange_${suffix}`,
+      name: `e2e-arrange-${suffix}`,
       description: "E2E arrange persistence fixture",
       category: "sales",
     },
   });
-  expect(response.ok()).toBe(true);
+  expect(response.ok(), await response.text()).toBe(true);
   const payload = await response.json() as BackendPayload<WorkflowDefinition>;
   expect(payload.data?.id).toBeTruthy();
   return payload.data!.id;
@@ -147,6 +147,7 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
 
     await page.reload({ waitUntil: "load" });
+    await expect(page.locator("[data-workflow-canvas-view-ready='true']")).toBeVisible();
     await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("60%");
     await expect(nodes.first()).toBeVisible();
     const reloadedBoxes = await getNodeBoxes(nodes);
@@ -157,6 +158,7 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
     await expect(page).toHaveURL(/\/workflows$/);
     await page.locator(`a[href="/workflows/${workflowId}"]`).first().click();
     await expect(page).toHaveURL(new RegExp(`/workflows/${workflowId}$`));
+    await expect(page.locator("[data-workflow-canvas-view-ready='true']")).toBeVisible();
     await expect(page.locator("[data-workflow-canvas-zoom='true']")).toHaveText("60%");
     await expect(nodes.first()).toBeVisible();
     const reopenedBoxes = await getNodeBoxes(nodes);

@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Layers3, X } from "lucide-react";
 import {
   MAX_ZOOM,
@@ -30,6 +30,9 @@ import { Button } from "@/components/ui/button";
 
 type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
 type ConnectionDraft = { sourceNodeId: string; from: CanvasPoint; to: CanvasPoint };
+const useCanvasLayoutEffect = typeof window === "undefined"
+  ? useEffect
+  : useLayoutEffect;
 
 export function WorkflowCanvas({
   connectingNodeId,
@@ -69,9 +72,9 @@ export function WorkflowCanvas({
   const dragRef = useRef<DragState | null>(null);
   const panRef = useRef<WorkflowCanvasPanState | null>(null);
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
-  const skipStoredZoomWriteRef = useRef(Boolean(viewStorageKey));
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
   const [fitMode, setFitMode] = useState(false);
   const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
@@ -83,22 +86,21 @@ export function WorkflowCanvas({
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
 
-  useEffect(() => {
-    if (!viewStorageKey) return;
-    skipStoredZoomWriteRef.current = true;
+  useCanvasLayoutEffect(() => {
+    if (!viewStorageKey) {
+      setCanvasViewReady(true);
+      return;
+    }
+    setCanvasViewReady(false);
     const storedZoom = readStoredCanvasZoom(viewStorageKey);
-    if (storedZoom == null) return;
-    setZoom(storedZoom);
+    setZoom(storedZoom ?? 1);
+    setCanvasViewReady(true);
   }, [viewStorageKey]);
 
   useEffect(() => {
-    if (!viewStorageKey) return;
-    if (skipStoredZoomWriteRef.current) {
-      skipStoredZoomWriteRef.current = false;
-      return;
-    }
+    if (!viewStorageKey || !canvasViewReady) return;
     writeStoredCanvasZoom(viewStorageKey, zoom);
-  }, [viewStorageKey, zoom]);
+  }, [canvasViewReady, viewStorageKey, zoom]);
 
   function updateConnectionDraft(draft: ConnectionDraft | null) {
     connectionDraftRef.current = draft;
@@ -314,7 +316,16 @@ export function WorkflowCanvas({
             backgroundSize: "32px 32px",
           }}
         >
-        <div ref={canvasRef} data-workflow-canvas="true" className="absolute inset-0 origin-top-left" style={{ transform: canvasTransform }}>
+        <div
+          ref={canvasRef}
+          data-workflow-canvas="true"
+          data-workflow-canvas-view-ready={canvasViewReady ? "true" : "false"}
+          className={[
+            "absolute inset-0 origin-top-left",
+            canvasViewReady ? "opacity-100" : "opacity-0",
+          ].join(" ")}
+          style={{ transform: canvasTransform }}
+        >
         <svg
           className="pointer-events-none absolute inset-0 overflow-visible"
           width={canvasSize.width}
