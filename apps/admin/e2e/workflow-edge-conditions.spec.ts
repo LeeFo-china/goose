@@ -38,6 +38,10 @@ type WorkflowRuntimeResult = {
   } | null;
 };
 
+function createRuntimeSubjectId() {
+  return `00000000-0000-4000-8000-${Math.random().toString().slice(2, 14).padEnd(12, "0")}`;
+}
+
 async function loginAsTenantAdmin(page: Page) {
   const loginResponse = await page.request.post("/api/auth/login", {
     data: {
@@ -200,6 +204,10 @@ test("收款节点出线可以配置成功和失败分支条件", async ({ page 
 
     await selectEdgeCondition(page, "payment_stage_1", "tile_work", "收款成功");
     await selectEdgeCondition(page, "payment_stage_1", "collection_followup", "收款失败");
+    await page.getByRole("button", { name: "本地校验" }).click();
+    await expect(page.locator("[data-workflow-validation-playback='success']")).toBeVisible({
+      timeout: 5000,
+    });
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("流程草稿已保存")).toBeVisible();
 
@@ -258,6 +266,51 @@ test("收款节点出线可以配置成功和失败分支条件", async ({ page 
     const failedPaymentPayload = await failedPaymentResponse.json() as BackendPayload<WorkflowRuntimeResult>;
     expect(failedPaymentPayload.data!.instance.current_node_key).toBe("collection_followup");
     expect(failedPaymentPayload.data!.nextNode?.node_key).toBe("collection_followup");
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("项目收款节点失败分支不应被未入账收款拦截", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedPaymentBranchGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await selectEdgeCondition(page, "payment_stage_1", "tile_work", "收款成功");
+    await selectEdgeCondition(page, "payment_stage_1", "collection_followup", "收款失败");
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByText("流程草稿已保存")).toBeVisible();
+
+    const publishResponse = await page.request.post(`/api/backend/workflows/${workflowId}/publish`);
+    expect(publishResponse.ok(), await publishResponse.text()).toBe(true);
+
+    const startResponse = await page.request.post(`/api/backend/workflows/${workflowId}/runtime/instances`, {
+      data: {
+        subject_type: "project",
+        subject_id: createRuntimeSubjectId(),
+        context: {},
+      },
+    });
+    expect(startResponse.ok(), await startResponse.text()).toBe(true);
+    const startPayload = await startResponse.json() as BackendPayload<WorkflowRuntimeResult>;
+    const instanceId = startPayload.data!.instance.id;
+
+    const failedPaymentResponse = await page.request.post(
+      `/api/backend/workflows/${workflowId}/runtime/instances/${instanceId}/complete-node`,
+      {
+        data: {
+          node_key: "payment_stage_1",
+          action: "complete",
+          output: { payment_status: "failed" },
+        },
+      },
+    );
+    expect(failedPaymentResponse.ok(), await failedPaymentResponse.text()).toBe(true);
+    const failedPaymentPayload = await failedPaymentResponse.json() as BackendPayload<WorkflowRuntimeResult>;
+    expect(failedPaymentPayload.data!.instance.current_node_key).toBe("collection_followup");
   } finally {
     await archiveWorkflow(page, workflowId);
   }

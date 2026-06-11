@@ -54,10 +54,16 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     node.id === instance.current_node_id
   );
 
-  await assertPaymentCollectionRequirements({
-    node: currentNode,
-    projectId: instance.subject_id,
-  });
+  if (!isPaymentFailureBranchSelected({
+    graph,
+    currentNodeId: instance.current_node_id,
+    output: input.output,
+  })) {
+    await assertPaymentCollectionRequirements({
+      node: currentNode,
+      projectId: instance.subject_id,
+    });
+  }
 
   if (graph.definition.category !== "construction") {
     return;
@@ -137,6 +143,23 @@ function isMissingRuntimeProcedureStage(
     return true;
   }
   return !completedStageCodes.has(stageCode);
+}
+
+function isPaymentFailureBranchSelected(input: {
+  graph: WorkflowGraphResult;
+  currentNodeId: string;
+  output: JsonObject;
+}) {
+  if (input.output.payment_status !== "failed") {
+    return false;
+  }
+
+  return input.graph.edges.some((edge) =>
+    edge.source_node_id === input.currentNodeId &&
+    edge.condition.operator === "eq" &&
+    edge.condition.field === "payment_status" &&
+    edge.condition.value === "failed"
+  );
 }
 
 async function assertPaymentCollectionRequirements(input: {
