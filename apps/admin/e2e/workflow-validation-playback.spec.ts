@@ -125,12 +125,17 @@ test("本地校验按执行顺序播放节点和连线", async ({ page }) => {
     const startNode = page.locator("[data-workflow-node-key='start']");
     const endNode = page.locator("[data-workflow-node-key='end']");
 
+    await expect(startNode).toHaveCSS("border-top-left-radius", "9999px");
+    await expect(endNode).toHaveCSS("border-top-left-radius", "9999px");
+
     await page.getByRole("button", { name: "本地校验" }).click();
 
     await expect(startNode).toHaveAttribute("data-workflow-validation-state", "active");
     const activeBorder = startNode.locator("[data-workflow-active-border='true']");
     await expect(activeBorder).toBeVisible();
     await expect(activeBorder).toHaveClass(/workflow-node-active-border-path/);
+    const activeBorderRadius = Number(await activeBorder.getAttribute("rx"));
+    expect(activeBorderRadius).toBeGreaterThan(20);
     await expect(page.locator("[data-workflow-edge-validation-state='active']").first())
       .toHaveAttribute("data-workflow-edge-validation-state", "active");
     await expect(endNode).toHaveAttribute("data-workflow-validation-state", "success", {

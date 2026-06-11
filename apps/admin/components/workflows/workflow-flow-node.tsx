@@ -73,6 +73,8 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
   const validationError = data.validationState === "error";
   const validationSuccess = data.validationState === "success";
   const selected = data.selected;
+  const isTerminalControlNode = node.node_type === "start" || node.node_type === "end";
+  const activeBorderRadius = isTerminalControlNode ? (WORKFLOW_FLOW_NODE_HEIGHT - 3) / 2 : 8;
   const validationChromeClass = validationActive
     ? "border-primary bg-primary/5 ring-4 ring-primary/20 shadow-[0_18px_42px_hsl(var(--primary)/0.20)]"
     : validationError
@@ -87,7 +89,8 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
       data-workflow-node-key={node.node_key}
       data-workflow-validation-state={data.validationState}
       className={[
-        "group relative overflow-visible rounded-lg border bg-background text-left",
+        "group relative overflow-visible border bg-background text-left",
+        isTerminalControlNode ? "rounded-full" : "rounded-lg",
         "shadow-[0_8px_20px_hsl(var(--foreground)/0.06)]",
         "transition-[transform,box-shadow,border-color,background-color] duration-150",
         validationActive ? "scale-[1.08]" : selected ? "scale-[1.08]" : "scale-100",
@@ -113,8 +116,8 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
             y="1.5"
             width={WORKFLOW_FLOW_NODE_WIDTH - 3}
             height={WORKFLOW_FLOW_NODE_HEIGHT - 3}
-            rx="8"
-            ry="8"
+            rx={activeBorderRadius}
+            ry={activeBorderRadius}
             className="workflow-node-active-border-path fill-none stroke-primary"
             strokeWidth="2"
             vectorEffect="non-scaling-stroke"
@@ -131,18 +134,28 @@ export function WorkflowFlowNode({ data }: WorkflowFlowNodeProps) {
         className="!size-2.5 !border !border-border !bg-background"
         isConnectable={!data.disabled}
       />
-      <span
-        aria-hidden="true"
+      {isTerminalControlNode ? null : (
+        <span
+          aria-hidden="true"
+          className={[
+            "absolute inset-y-2 left-2 w-1 rounded-full transition-opacity",
+            validationError ? "bg-destructive" : visualStyle.accent,
+            selected || data.connecting || validationActive || validationSuccess || validationError ? "opacity-100" : "opacity-70",
+          ].join(" ")}
+        />
+      )}
+      <div
         className={[
-          "absolute inset-y-2 left-2 w-1 rounded-full transition-opacity",
-          validationError ? "bg-destructive" : visualStyle.accent,
-          selected || data.connecting || validationActive || validationSuccess || validationError ? "opacity-100" : "opacity-70",
+          "flex h-full min-w-0 flex-col",
+          isTerminalControlNode
+            ? "items-center justify-center gap-2 px-8 py-0 text-center"
+            : "justify-between py-3 pl-5 pr-3 text-left",
         ].join(" ")}
-      />
-      <div className="flex h-full min-w-0 flex-col justify-between py-3 pl-5 pr-3 text-left">
+      >
         <span
           className={[
             "inline-flex h-5 max-w-full items-center gap-1.5 self-start rounded-full border px-2 text-[11px] font-medium leading-none",
+            isTerminalControlNode ? "self-center" : "",
             visualStyle.badge,
           ].join(" ")}
         >
