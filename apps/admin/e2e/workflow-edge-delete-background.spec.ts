@@ -46,5 +46,14 @@ test("连线删除按钮选中时保持实底背景", async ({ page }) => {
   await expect(deleteEdgeButton).toHaveClass(/focus:bg-background/);
   await expect(deleteEdgeButton).toHaveClass(/focus-visible:bg-background/);
   await expect(deleteEdgeButton).toHaveClass(/active:bg-background/);
+  await expect(deleteEdgeButton).toHaveClass(/hover:scale-\[1\.08\]/);
+  await expect(deleteEdgeButton).toHaveClass(/hover:shadow-md/);
+  await expect(deleteEdgeButton).toHaveClass(/motion-reduce:transform-none/);
+  await expect(deleteEdgeButton.locator("svg")).toHaveClass(
+    /group-hover:rotate-90/,
+  );
+  await expect(deleteEdgeButton.locator("svg")).toHaveClass(
+    /motion-reduce:transform-none/,
+  );
   expect(hoverBackground).toBe(baseBackground);
 });

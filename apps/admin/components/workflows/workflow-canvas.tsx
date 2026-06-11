@@ -358,7 +358,7 @@ export function WorkflowCanvas({
               aria-label="删除连线"
               key={`${edge.id}-delete`}
               type="button"
-              className="absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition hover:border-destructive/40 hover:bg-background hover:text-destructive focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40"
+              className="group absolute z-10 flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
               disabled={disabled}
               style={{ left, top, transform: "translate(-50%, -50%)" }}
               onBlur={() => setHoveredEdgeId(null)}
@@ -370,7 +370,7 @@ export function WorkflowCanvas({
               onPointerEnter={() => setHoveredEdgeId(edge.id)}
               onPointerLeave={() => setHoveredEdgeId(null)}
             >
-              <X className="size-4" />
+              <X className="size-4 transition-transform duration-150 ease-out group-hover:rotate-90 motion-reduce:transform-none motion-reduce:transition-none" />
             </button>
           );
         })}
