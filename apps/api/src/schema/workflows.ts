@@ -120,6 +120,7 @@ const BaseNodeConfigSchema = z.strictObject({
     .nullable()
     .optional(),
   rollback_target_key: textField("回退目标节点格式无效").max(100, "回退目标节点编码过长").nullable().optional(),
+  branch_node_position: WorkflowNodePositionSchema.nullable().optional(),
 }, { error: "节点配置包含不支持的字段" });
 
 const WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES = [

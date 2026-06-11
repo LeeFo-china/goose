@@ -136,6 +136,8 @@ export function WorkflowCanvasEdges({
             )}
             <button
               data-edge-action="delete"
+              data-workflow-edge-source-key={edge.dataSourceNodeKey || source.node_key}
+              data-workflow-edge-target-key={edge.dataTargetNodeKey || target.node_key}
               aria-label="删除连线"
               type="button"
               className="group flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground shadow-sm transition duration-150 ease-out hover:scale-[1.08] hover:border-destructive/40 hover:bg-background hover:text-destructive hover:shadow-md focus:bg-background focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-background disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"

@@ -54,6 +54,7 @@ export type WorkflowBaseNodeConfig = {
   required_permissions?: string[];
   timeout_hours?: number | null;
   rollback_target_key?: string | null;
+  branch_node_position?: WorkflowNodePosition | null;
 };
 
 export type WorkflowConstructionStageNodeConfig = WorkflowBaseNodeConfig & {

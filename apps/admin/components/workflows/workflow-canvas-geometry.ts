@@ -51,10 +51,11 @@ export function clampPosition(
   position: CanvasPoint,
   canvasSize: CanvasSize,
   minPosition: CanvasPoint = { x: 0, y: 0 },
+  nodeSize: CanvasSize = { width: NODE_WIDTH, height: NODE_HEIGHT },
 ): CanvasPoint {
   return {
-    x: Math.max(minPosition.x, Math.min(canvasSize.width - NODE_WIDTH, position.x)),
-    y: Math.max(minPosition.y, Math.min(canvasSize.height - NODE_HEIGHT, position.y)),
+    x: Math.max(minPosition.x, Math.min(canvasSize.width - nodeSize.width, position.x)),
+    y: Math.max(minPosition.y, Math.min(canvasSize.height - nodeSize.height, position.y)),
   };
 }
 

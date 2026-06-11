@@ -59,6 +59,7 @@ export function WorkflowCanvas({
   onFinishConnect,
   onArrangeNodes,
   onMoveNode,
+  onMoveBranchNode,
   onOpenNodeLibrary,
   onSelectNode,
   validationPlayback,
@@ -76,6 +77,7 @@ export function WorkflowCanvas({
   onFinishConnect: (nodeId: string) => void;
   onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
+  onMoveBranchNode: (sourceNodeId: string, position: WorkflowNode["position"]) => void;
   onOpenNodeLibrary: () => void;
   onSelectNode: (nodeId: string) => void;
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
@@ -173,8 +175,12 @@ export function WorkflowCanvas({
     startConnection({
       event,
       from: {
-        x: branchNode.position.x + branchNode.canvasWidth,
-        y: branchNode.position.y + (outcomeIndex === 0 ? 22 : branchNode.canvasHeight - 22),
+        x: branchNode.position.x + (outcomeIndex === 0
+          ? branchNode.canvasWidth
+          : branchNode.canvasWidth / 2),
+        y: branchNode.position.y + (outcomeIndex === 0
+          ? branchNode.canvasHeight / 2
+          : branchNode.canvasHeight),
       },
       source,
     });
@@ -459,9 +465,13 @@ export function WorkflowCanvas({
           <WorkflowCanvasBranchNode
             key={branchNode.id}
             branchNode={branchNode}
+            canvasSize={canvasSize}
             connecting={branchNode.sourceNodeId === connectingNodeId}
             disabled={disabled}
+            minNodePosition={minNodePosition}
+            zoom={zoom}
             onConnectionStart={handleBranchConnectionStart}
+            onMove={onMoveBranchNode}
           />
         ))}
         </div>

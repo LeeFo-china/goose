@@ -1,35 +1,91 @@
 "use client";
 
 import type { PointerEvent } from "react";
+import { useRef } from "react";
 import { GitBranch } from "lucide-react";
 import {
+  clampPosition,
   HANDLE_HIT_SIZE,
+  type CanvasPoint,
+  type CanvasSize,
 } from "@/components/workflows/workflow-canvas-geometry";
 import type {
   WorkflowCanvasBranchNode,
   WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
+import type { WorkflowNode } from "@/components/workflows/workflow-types";
+
+type BranchDragState = {
+  originX: number;
+  originY: number;
+  pointerX: number;
+  pointerY: number;
+  zoom: number;
+};
 
 export function WorkflowCanvasBranchNode({
   branchNode,
+  canvasSize,
   connecting,
   disabled,
+  minNodePosition,
+  zoom,
   onConnectionStart,
+  onMove,
 }: {
   branchNode: WorkflowCanvasBranchNode;
+  canvasSize: CanvasSize;
   connecting?: boolean;
   disabled?: boolean;
+  minNodePosition?: CanvasPoint;
+  zoom: number;
   onConnectionStart: (
     event: PointerEvent<HTMLButtonElement>,
     source: WorkflowConnectionSource,
     outcomeIndex: number,
   ) => void;
+  onMove: (sourceNodeId: string, position: WorkflowNode["position"]) => void;
 }) {
+  const dragRef = useRef<BranchDragState | null>(null);
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (disabled) return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("[data-workflow-branch-output]")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      originX: branchNode.position.x,
+      originY: branchNode.position.y,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      zoom,
+    };
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    onMove(branchNode.sourceNodeId, clampPosition({
+      x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
+      y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
+    }, canvasSize, minNodePosition, {
+      width: branchNode.canvasWidth,
+      height: branchNode.canvasHeight,
+    }));
+  }
+
   return (
     <div
       data-workflow-branch-source-key={branchNode.sourceNodeKey}
       className={[
         "absolute z-20 flex items-center justify-center",
+        disabled ? "cursor-not-allowed" : "cursor-move",
         disabled ? "opacity-70" : null,
       ].filter(Boolean).join(" ")}
       style={{
@@ -37,6 +93,14 @@ export function WorkflowCanvasBranchNode({
         top: branchNode.position.y,
         width: branchNode.canvasWidth,
         height: branchNode.canvasHeight,
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={() => {
+        dragRef.current = null;
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
       }}
     >
       <div
@@ -52,34 +116,52 @@ export function WorkflowCanvasBranchNode({
           </div>
         </div>
       </div>
-      {branchNode.outcomes.map((outcome, index) => (
-        <button
-          key={outcome.key}
-          data-workflow-branch-output={outcome.key}
-          type="button"
-          aria-label={`${branchNode.title}${outcome.label}出口`}
-          className={[
-            "absolute right-0 rounded-full bg-transparent",
-            "after:absolute after:left-1/2 after:top-1/2 after:size-2.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:border-primary after:bg-background after:shadow-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            disabled ? "cursor-not-allowed" : "cursor-crosshair",
-          ].join(" ")}
-          disabled={disabled}
-          style={{
-            top: index === 0 ? 0 : branchNode.canvasHeight - HANDLE_HIT_SIZE,
-            width: HANDLE_HIT_SIZE,
-            height: HANDLE_HIT_SIZE,
-          }}
-          onPointerDown={(event) => onConnectionStart(event, {
-            nodeId: branchNode.sourceNodeId,
-            branchOutcome: outcome.key,
-          }, index)}
-        >
-          <span className="absolute left-full top-1/2 ml-1 -translate-y-1/2 whitespace-nowrap rounded-full border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm">
-            {outcome.label}
-          </span>
-        </button>
-      ))}
+      {branchNode.outcomes.map((outcome, index) => {
+        const tone = index === 0 ? "success" : "failure";
+        const success = tone === "success";
+        return (
+          <button
+            key={outcome.key}
+            data-workflow-branch-output={outcome.key}
+            data-workflow-branch-output-tone={tone}
+            type="button"
+            aria-label={`${branchNode.title}${outcome.label}出口`}
+            className={[
+              "absolute rounded-full bg-transparent",
+              "after:absolute after:left-1/2 after:top-1/2 after:size-2.5 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:border-2 after:bg-background after:shadow-sm",
+              success ? "after:border-emerald-500 after:bg-emerald-50" : "after:border-rose-500 after:bg-rose-50",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              disabled ? "cursor-not-allowed" : "cursor-crosshair",
+            ].join(" ")}
+            disabled={disabled}
+            style={{
+              left: success
+                ? branchNode.canvasWidth - HANDLE_HIT_SIZE / 2
+                : branchNode.canvasWidth / 2 - HANDLE_HIT_SIZE / 2,
+              top: success
+                ? branchNode.canvasHeight / 2 - HANDLE_HIT_SIZE / 2
+                : branchNode.canvasHeight - HANDLE_HIT_SIZE / 2,
+              width: HANDLE_HIT_SIZE,
+              height: HANDLE_HIT_SIZE,
+            }}
+            onPointerDown={(event) => onConnectionStart(event, {
+              nodeId: branchNode.sourceNodeId,
+              branchOutcome: outcome.key,
+            }, index)}
+          >
+            <span
+              className={[
+                "absolute whitespace-nowrap rounded-full border bg-background px-1.5 py-0.5 text-[11px] font-medium shadow-sm",
+                success
+                  ? "left-full top-1/2 ml-1 -translate-y-1/2 border-emerald-200 text-emerald-700"
+                  : "left-1/2 top-full mt-1 -translate-x-1/2 border-rose-200 text-rose-700",
+              ].join(" ")}
+            >
+              {outcome.label}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

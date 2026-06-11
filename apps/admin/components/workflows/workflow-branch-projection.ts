@@ -46,6 +46,7 @@ export type WorkflowCanvasDisplayEdge = WorkflowEdge & {
 
 export const WORKFLOW_BRANCH_NODE_WIDTH = 118;
 export const WORKFLOW_BRANCH_NODE_HEIGHT = 84;
+export const WORKFLOW_BRANCH_LINK_EDGE_PREFIX = "branch-link:";
 
 const BRANCH_NODE_OFFSET_X = 240;
 
@@ -124,7 +125,7 @@ export function buildWorkflowCanvasBranchNodes(
       sourceNodeKey: node.node_key,
       kind,
       title: kind === "payment" ? "收款判断" : "审批判断",
-      position: {
+      position: getWorkflowBranchNodePosition(node) || {
         x: node.position.x + BRANCH_NODE_OFFSET_X,
         y: node.position.y,
       },
@@ -146,7 +147,7 @@ export function buildWorkflowCanvasDisplayEdges(input: {
     const sourceNode = input.nodeById.get(branchNode.sourceNodeId);
     const now = new Date().toISOString();
     return {
-      id: `branch-link:${branchNode.sourceNodeId}`,
+      id: getWorkflowBranchLinkEdgeId(branchNode.sourceNodeId),
       tenant_id: sourceNode?.tenant_id || "",
       definition_id: sourceNode?.definition_id || "",
       source_node_id: branchNode.sourceNodeId,
@@ -158,7 +159,6 @@ export function buildWorkflowCanvasDisplayEdges(input: {
       updated_at: now,
       dataSourceNodeKey: branchNode.sourceNodeKey,
       dataTargetNodeKey: branchNode.id,
-      readOnly: true,
     };
   });
 
@@ -181,6 +181,49 @@ export function buildWorkflowCanvasDisplayEdges(input: {
 
 export function getWorkflowBranchNodeId(sourceNodeId: string) {
   return `branch:${sourceNodeId}`;
+}
+
+export function getWorkflowBranchLinkEdgeId(sourceNodeId: string) {
+  return `${WORKFLOW_BRANCH_LINK_EDGE_PREFIX}${sourceNodeId}`;
+}
+
+export function isWorkflowBranchLinkEdgeId(edgeId: string) {
+  return edgeId.startsWith(WORKFLOW_BRANCH_LINK_EDGE_PREFIX);
+}
+
+export function getWorkflowBranchLinkSourceNodeId(edgeId: string) {
+  return isWorkflowBranchLinkEdgeId(edgeId)
+    ? edgeId.slice(WORKFLOW_BRANCH_LINK_EDGE_PREFIX.length)
+    : null;
+}
+
+export function getWorkflowBranchNodePosition(node: WorkflowNode) {
+  const position = node.config.branch_node_position;
+  return position &&
+      Number.isFinite(position.x) &&
+      Number.isFinite(position.y)
+    ? position
+    : null;
+}
+
+export function withWorkflowBranchNodePosition(
+  node: WorkflowNode,
+  position: WorkflowNode["position"] | null,
+): WorkflowNode {
+  return {
+    ...node,
+    config: {
+      ...node.config,
+      branch_node_position: position,
+    },
+  };
+}
+
+export function isWorkflowBranchEdgeForNode(node: WorkflowNode, edge: WorkflowEdge) {
+  if (edge.source_node_id !== node.id) return false;
+  const kind = getWorkflowBranchSourceKind(node);
+  const outcome = getWorkflowBranchOutcomeByEdge(edge);
+  return Boolean(kind && outcome && isWorkflowBranchOutcomeForKind(kind, outcome));
 }
 
 function getWorkflowBranchOutcomes(kind: WorkflowBranchKind): WorkflowBranchOutcome[] {

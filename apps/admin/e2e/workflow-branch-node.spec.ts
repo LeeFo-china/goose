@@ -25,6 +25,9 @@ type WorkflowGraph = {
   nodes: Array<{
     id: string;
     node_key: string;
+    config?: {
+      branch_node_position?: { x: number; y: number } | null;
+    };
   }>;
 };
 
@@ -163,6 +166,18 @@ async function connectLocatorToNode(
   await page.mouse.up();
 }
 
+async function dragLocatorBy(page: Page, locator: Locator, deltaX: number, deltaY: number) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const centerX = box!.x + box!.width / 2;
+  const centerY = box!.y + box!.height / 2;
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + deltaX, centerY + deltaY);
+  await page.mouse.up();
+}
+
 test("收款节点拖线自动生成判断节点", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
@@ -196,6 +211,67 @@ test("收款节点拖线自动生成判断节点", async ({ page }) => {
       field: "payment_status",
       value: "success",
     });
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("收款判断节点可以拖动并通过来源连线删除", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedPaymentGraphWithoutPaymentEdge(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    await connectNodes(page, "payment_stage_1", "tile_work");
+
+    const branchNode = page.locator("[data-workflow-branch-source-key='payment_stage_1']");
+    const successOutput = page.locator("[data-workflow-branch-output='payment_success']");
+    const failedOutput = page.locator("[data-workflow-branch-output='payment_failed']");
+    await expect(branchNode).toBeVisible();
+    await expect(successOutput).toHaveAttribute("data-workflow-branch-output-tone", "success");
+    await expect(failedOutput).toHaveAttribute("data-workflow-branch-output-tone", "failure");
+
+    const branchBox = await branchNode.boundingBox();
+    const successBox = await successOutput.boundingBox();
+    const failedBox = await failedOutput.boundingBox();
+    expect(branchBox).not.toBeNull();
+    expect(successBox).not.toBeNull();
+    expect(failedBox).not.toBeNull();
+    expect(Math.abs(
+      successBox!.x + successBox!.width / 2 - (branchBox!.x + branchBox!.width),
+    )).toBeLessThan(12);
+    expect(Math.abs(
+      successBox!.y + successBox!.height / 2 - (branchBox!.y + branchBox!.height / 2),
+    )).toBeLessThan(12);
+    expect(Math.abs(
+      failedBox!.x + failedBox!.width / 2 - (branchBox!.x + branchBox!.width / 2),
+    )).toBeLessThan(12);
+    expect(Math.abs(
+      failedBox!.y + failedBox!.height / 2 - (branchBox!.y + branchBox!.height),
+    )).toBeLessThan(12);
+
+    await dragLocatorBy(page, branchNode, 86, 68);
+    await expect.poll(async () => (await branchNode.boundingBox())?.x || 0)
+      .toBeGreaterThan(branchBox!.x + 50);
+
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByText("流程草稿已保存")).toBeVisible();
+
+    const savedGraphResponse = await page.request.get(`/api/backend/workflows/${workflowId}/graph`);
+    expect(savedGraphResponse.ok(), await savedGraphResponse.text()).toBe(true);
+    const savedGraphPayload = await savedGraphResponse.json() as BackendPayload<WorkflowGraph>;
+    const paymentNode = savedGraphPayload.data!.nodes.find((node) =>
+      node.node_key === "payment_stage_1"
+    );
+    expect(paymentNode?.config?.branch_node_position?.x).toBeGreaterThan(430);
+    expect(paymentNode?.config?.branch_node_position?.y).toBeGreaterThan(220);
+
+    await page.locator(
+      "[data-edge-action='delete'][data-workflow-edge-source-key='payment_stage_1'][data-workflow-edge-target-key^='branch:']",
+    ).click();
+    await expect(branchNode).toHaveCount(0);
   } finally {
     await archiveWorkflow(page, workflowId);
   }
