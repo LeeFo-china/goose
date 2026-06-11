@@ -172,6 +172,97 @@ Depth is mostly conveyed through borders, tonal layering, sticky headers, and sm
 - **Border:** warm low-contrast border is the default grouping tool.
 - **Internal Padding:** 20px for cards and dialog sections; 12px for compact nested operational rows.
 
+### List Pages
+
+List pages are the default pattern for customers, projects, employees, expenses,
+permissions, and other repeated-record management screens. The customer list page
+is the reference implementation.
+
+#### Page Header
+- Use a compact left-aligned title block, not a marketing-style hero.
+- Pair the title with a 40-44px icon tile only when it improves recognition.
+  The tile uses a border, `bg-card`, muted icon color, and 8px radius.
+- Title size should stay around 20px (`text-xl`) with 600 weight.
+- Description copy should be one operational sentence and may include the current
+  filtered total, for example `当前筛选共 N 条记录`.
+- Primary creation action sits on the right on desktop and wraps below on small
+  screens. Use the normal primary button vocabulary.
+
+#### Typography
+- Keep the global admin font stack: `Avenir Next`, `PingFang SC`,
+  `Microsoft YaHei`, `sans-serif`. Do not introduce a separate display font for
+  list pages.
+- Page titles use 20px (`text-xl`), 600 weight, normal tracking, and balanced
+  wrapping when needed.
+- Page descriptions use 14px (`text-sm`), muted foreground, and one compact
+  operational sentence.
+- Toolbar controls use 14px labels and placeholders. Avoid all-caps labels and
+  decorative tracked text.
+- Table headers use 12px, medium weight, muted foreground, and no uppercase
+  tracking. They should guide scanning without competing with row content.
+- Table body text uses 14px. Primary identity values such as customer names may
+  use semibold weight; ordinary row values stay regular.
+- Secondary metadata such as record IDs, timestamps, summaries, and helper text
+  uses 12px and muted foreground.
+- Use `tabular-nums` for IDs, phone numbers, dates, pagination numbers, totals,
+  prices, counts, and other aligned numeric values.
+- Avoid monospace for general table content. Reserve monospace only for technical
+  identifiers that must visually read as code.
+
+#### List Surface
+- Use one top-level `Card` as the record workspace. Do not place cards inside it.
+- Prefer a flat surface: border plus white `bg-card`; avoid decorative shadows.
+- The card should fill the available page height when the list is the primary
+  task. Use a vertical flex layout with `min-h-0` so the table region can scroll.
+- Keep the card header, table area, and footer visually separated by borders and
+  tonal layering rather than stacked shadows.
+- The list footer stays fixed at the bottom of the card. Pagination controls and
+  record counts should not move when the table has few rows.
+
+#### Filter Toolbar
+- Filters live in the card header as a compact toolbar.
+- Use select/search/button controls with the same height, radius, and border
+  language. The customer page uses 36px controls for dense scanning.
+- On wide screens, arrange filters in one row with a flexible search field.
+  On smaller screens, allow the controls to wrap into two columns or a single
+  column without shrinking text.
+- Keep controls flat: `bg-card`, no extra shadows, and visible focus rings.
+- Search labels and placeholders should name the searchable fields directly.
+
+#### Data Table
+- The table is the main content area and should occupy remaining card height.
+- Use horizontal overflow for wide datasets instead of compressing columns until
+  text becomes unreadable.
+- A sticky table header is preferred inside fixed-height list cards.
+- Table headers stay quiet: 12px, medium weight, muted foreground, no uppercase
+  tracking.
+- Row text uses the product body scale. The primary identity cell may use
+  semibold weight; secondary IDs, timestamps, and metadata use muted text.
+- Use `tabular-nums` for phone numbers, IDs, dates, pagination numbers, and
+  numeric totals so columns and footer counts feel stable.
+- Status, source, and workflow state should use semantic `Badge` variants, not
+  arbitrary colors.
+- Row actions stay compact on the right. Use an action menu when there are
+  multiple operations.
+
+#### Pagination Footer
+- Footer content uses `border-t`, `bg-card`, and compact vertical padding.
+- Left side shows page position and record counts. Right side holds previous and
+  next controls.
+- The page badge belongs in the footer, not the table header. It may show
+  `第 page / totalPages 页`.
+- Record-count copy should be direct, for example `当前显示 N 条，共 M 条`.
+- Disabled pagination buttons must remain visible but subdued.
+
+#### Loading, Empty, And Error States
+- Route errors appear above the list card with the standard status alert.
+- List refreshes may use a translucent in-card overlay, but the existing table
+  structure should remain visible underneath.
+- Empty tables should preserve the same card, toolbar, table header, and footer
+  structure so the page does not jump.
+- Loading states should communicate state near the list or footer. Avoid moving
+  loading badges between header and footer.
+
 ### Inputs / Fields
 - **Style:** 40px height, 6px radius, warm border, page-background fill, 14px text.
 - **Focus:** no outline reset without replacement; use 2px ring with ring token.
