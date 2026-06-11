@@ -29,7 +29,7 @@ test("审批节点可以选择费用审批或流程审批", async ({ page }) => 
 
   const node = page.locator("[data-workflow-node='true']").nth(1);
   await expect(node).toBeVisible();
-  await node.getByRole("button").first().click();
+  await node.click();
 
   await page.getByLabel("节点能力").click();
   await page.getByRole("option", { name: "审批" }).click();

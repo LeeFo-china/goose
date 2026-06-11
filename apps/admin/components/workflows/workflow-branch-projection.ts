@@ -4,10 +4,10 @@ import {
   type WorkflowEdgeConditionOption,
   type WorkflowEdgeConditionOptionKey,
 } from "@/components/workflows/workflow-edge-conditions";
-import type { CanvasPoint } from "@/components/workflows/workflow-canvas-geometry";
 import type {
   WorkflowEdge,
   WorkflowNode,
+  WorkflowNodePosition,
 } from "@/components/workflows/workflow-types";
 
 export type WorkflowBranchKind = "payment" | "approval";
@@ -18,7 +18,7 @@ export type WorkflowConnectionSource = {
   branchOutcome?: WorkflowBranchOutcomeKey;
 };
 
-export type WorkflowCanvasBranchNode = {
+export type WorkflowBranchProjectionNode = {
   id: string;
   node_key: string;
   canvasWidth: number;
@@ -37,7 +37,7 @@ export type WorkflowBranchOutcome = {
   option: WorkflowEdgeConditionOption;
 };
 
-export type WorkflowCanvasDisplayEdge = WorkflowEdge & {
+export type WorkflowDisplayEdge = WorkflowEdge & {
   displaySourceNodeId?: string;
   displayTargetNodeId?: string;
   dataSourceNodeKey?: string;
@@ -102,7 +102,7 @@ export function getWorkflowBranchOutcomePoint(
     position: WorkflowNode["position"];
   },
   outcomeKey: WorkflowBranchOutcomeKey,
-): CanvasPoint {
+): WorkflowNodePosition {
   const failure = outcomeKey === "payment_failed" || outcomeKey === "approval_rejected";
   const width = branchNode.canvasWidth ?? WORKFLOW_BRANCH_NODE_WIDTH;
   const height = branchNode.canvasHeight ?? WORKFLOW_BRANCH_NODE_HEIGHT;
@@ -116,10 +116,10 @@ export function getWorkflowBranchOutcomePoint(
   };
 }
 
-export function buildWorkflowCanvasBranchNodes(
+export function buildWorkflowBranchProjectionNodes(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
-): WorkflowCanvasBranchNode[] {
+): WorkflowBranchProjectionNode[] {
   const edgeBySourceId = new Map<string, WorkflowEdge[]>();
   edges.forEach((edge) => {
     edgeBySourceId.set(edge.source_node_id, [
@@ -156,11 +156,11 @@ export function buildWorkflowCanvasBranchNodes(
   });
 }
 
-export function buildWorkflowCanvasDisplayEdges(input: {
+export function buildWorkflowDisplayEdges(input: {
   edges: WorkflowEdge[];
-  branchNodes: WorkflowCanvasBranchNode[];
+  branchNodes: WorkflowBranchProjectionNode[];
   nodeById: Map<string, WorkflowNode>;
-}): WorkflowCanvasDisplayEdge[] {
+}): WorkflowDisplayEdge[] {
   const branchNodeBySourceId = new Map(input.branchNodes.map((node) => [
     node.sourceNodeId,
     node,

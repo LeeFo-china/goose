@@ -170,11 +170,11 @@ export function WorkflowDesignerShell({
     setDirty(true);
   }
 
-  function connectToNode(targetNodeId: string) {
-    if (!graph || !connectingSource || connectingNodeId === targetNodeId) return;
+  function connectToNode(source: WorkflowConnectionSource, targetNodeId: string) {
+    if (!graph || source.nodeId === targetNodeId) return;
     const result = createWorkflowConnectionEdge({
       graph,
-      source: connectingSource,
+      source,
       targetNodeId,
     });
     if (!result.ok) {

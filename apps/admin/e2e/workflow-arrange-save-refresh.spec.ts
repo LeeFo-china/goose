@@ -362,7 +362,7 @@ test("整理后保存草稿再重新进入节点位置不漂移到右下角", as
 
     expect(reloadedBoxes).toEqual(arrangedBoxes);
 
-    await page.getByRole("link", { name: "返回流程列表" }).click();
+    await page.goto("/workflows", { waitUntil: "load" });
     await expect(page).toHaveURL(/\/workflows$/);
     await page.locator(`a[href="/workflows/${workflowId}"]`).first().click();
     await expect(page).toHaveURL(new RegExp(`/workflows/${workflowId}$`));
@@ -448,7 +448,7 @@ test("缩小后节点不能拖出画布左上边界", async ({ page }) => {
   }
 });
 
-test("线性流程整理后画布可以滚动访问末端节点", async ({ page }) => {
+test("线性流程整理后可以平移访问末端节点", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -459,17 +459,16 @@ test("线性流程整理后画布可以滚动访问末端节点", async ({ page 
     await page.getByRole("button", { name: "整理画布" }).click();
     await expect(page.getByText("画布已整理")).toBeVisible();
 
-    const scrollState = await page.locator("[data-workflow-canvas-scroll='true']")
-      .evaluate((element) => ({
-        overflowX: window.getComputedStyle(element).overflowX,
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-      }));
-    expect(scrollState.overflowX).not.toBe("hidden");
-    expect(scrollState.scrollWidth).toBeGreaterThan(scrollState.clientWidth);
-
+    const pane = page.locator("[data-workflow-canvas='true'] .react-flow__pane");
     const endNode = page.locator("[data-workflow-node-key='end']");
-    await endNode.scrollIntoViewIfNeeded();
+    const paneBox = await pane.boundingBox();
+    expect(paneBox).not.toBeNull();
+    for (let index = 0; index < 5; index += 1) {
+      await page.mouse.move(paneBox!.x + paneBox!.width * 0.75, paneBox!.y + paneBox!.height * 0.45);
+      await page.mouse.down();
+      await page.mouse.move(paneBox!.x + paneBox!.width * 0.15, paneBox!.y + paneBox!.height * 0.45, { steps: 10 });
+      await page.mouse.up();
+    }
     await expect(endNode).toBeInViewport();
   } finally {
     await archiveWorkflow(page, workflowId);

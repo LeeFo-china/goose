@@ -72,7 +72,7 @@ async function archiveWorkflow(page: Page, workflowId: string) {
   await page.request.post(`/api/backend/workflows/${workflowId}/archive`);
 }
 
-test("横向滚动条出现后可以拖拽画布平移", async ({ page }) => {
+test("React Flow 画布可以拖拽平移", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
 
@@ -82,17 +82,13 @@ test("横向滚动条出现后可以拖拽画布平移", async ({ page }) => {
     await page.getByRole("button", { name: "整理画布" }).click();
     await expect(page.getByText("画布已整理")).toBeVisible();
 
-    const scrollArea = page.locator("[data-workflow-canvas-scroll='true']");
-    await expect.poll(async () => scrollArea.evaluate((element) =>
-      element.scrollWidth > element.clientWidth,
-    )).toBe(true);
-    const before = await scrollArea.evaluate((element) => ({
-      left: element.scrollLeft,
-      canScrollX: element.scrollWidth > element.clientWidth,
-    }));
-    expect(before.canScrollX).toBe(true);
+    const pane = page.locator("[data-workflow-canvas='true'] .react-flow__pane");
+    const viewport = page.locator("[data-workflow-canvas='true'] .react-flow__viewport");
+    const beforeTransform = await viewport.evaluate((element) =>
+      window.getComputedStyle(element).transform,
+    );
 
-    const box = await scrollArea.boundingBox();
+    const box = await pane.boundingBox();
     expect(box).not.toBeNull();
     const startX = box!.x + box!.width * 0.55;
     const startY = box!.y + box!.height * 0.32;
@@ -110,10 +106,10 @@ test("横向滚动条出现后可以拖拽画布平移", async ({ page }) => {
     await page.mouse.move(startX - 220, startY, { steps: 8 });
     await page.mouse.up();
 
-    const after = await scrollArea.evaluate((element) => ({
-      left: element.scrollLeft,
-    }));
-    expect(after.left).toBeGreaterThan(before.left + 40);
+    const afterTransform = await viewport.evaluate((element) =>
+      window.getComputedStyle(element).transform,
+    );
+    expect(afterTransform).not.toBe(beforeTransform);
   } finally {
     await archiveWorkflow(page, workflowId);
   }

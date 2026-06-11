@@ -29,7 +29,7 @@ test("选中节点保持实底背景", async ({ page }) => {
 
   const node = page.locator("[data-workflow-node='true']").nth(1);
   await expect(node).toBeVisible();
-  await node.getByRole("button").first().click();
+  await node.click();
 
   await expect(node).toHaveClass(/scale-\[1\.08\]/);
   await expect(node).not.toHaveClass(/bg-primary\/\[0\.03\]/);

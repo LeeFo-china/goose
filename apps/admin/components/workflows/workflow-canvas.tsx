@@ -1,81 +1,71 @@
 "use client";
 
-import type { PointerEvent } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Background,
+  ConnectionMode,
+  MarkerType,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Connection,
+  type NodeChange,
+  type OnConnectStartParams,
+  type ReactFlowInstance,
+  type Viewport,
+} from "@xyflow/react";
 import { Layers3 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
-  MAX_ZOOM,
-  MIN_ZOOM,
-  NODE_HEIGHT,
-  NODE_WIDTH,
-  ZOOM_STEP,
-  clampPosition,
-  clampZoom,
-  getCanvasPoint,
-  getExpandedCanvasSize,
-  getOutputPoint,
-  arrangeWorkflowCanvasNodes,
-  type CanvasPoint,
-  type CanvasSize,
-} from "@/components/workflows/workflow-canvas-geometry";
+  getWorkflowFlowConnectionSource,
+  getWorkflowFlowConnectionTarget,
+  getWorkflowNodePositionChanges,
+  toWorkflowFlowEdges,
+  toWorkflowFlowNodes,
+} from "@/components/workflows/workflow-flow-adapter";
+import { WorkflowFlowBranchNode } from "@/components/workflows/workflow-flow-branch-node";
+import { WorkflowFlowEdge } from "@/components/workflows/workflow-flow-edge";
+import { arrangeWorkflowFlowNodes } from "@/components/workflows/workflow-flow-layout";
+import { WorkflowFlowNode } from "@/components/workflows/workflow-flow-node";
 import {
-  WorkflowCanvasEdges,
-  type WorkflowCanvasConnectionDraft,
-} from "@/components/workflows/workflow-canvas-edges";
-import {
-  readStoredCanvasZoom,
-  writeStoredCanvasZoom,
-} from "@/components/workflows/workflow-canvas-view-state";
+  WORKFLOW_FLOW_ARRANGE_ZOOM,
+  WORKFLOW_FLOW_MAX_ZOOM,
+  WORKFLOW_FLOW_MIN_ZOOM,
+  WORKFLOW_FLOW_ZOOM_STEP,
+  type WorkflowFlowConnectionSource,
+  type WorkflowFlowEdge as WorkflowFlowEdgeType,
+  type WorkflowFlowNode as WorkflowFlowNodeType,
+} from "@/components/workflows/workflow-flow-types";
 import { WorkflowCanvasToolbar } from "@/components/workflows/workflow-canvas-toolbar";
-import { WorkflowCanvasBranchNode } from "@/components/workflows/workflow-canvas-branch-node";
-import { WorkflowCanvasNode } from "@/components/workflows/workflow-canvas-node";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
-import { createWorkflowCanvasPan, type WorkflowCanvasPanState } from "@/components/workflows/workflow-canvas-pan";
-import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
-import {
-  buildWorkflowCanvasBranchNodes,
-  buildWorkflowCanvasDisplayEdges,
-  getWorkflowBranchOutcomePoint,
-  type WorkflowConnectionSource,
-} from "@/components/workflows/workflow-branch-projection";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
-import { Button } from "@/components/ui/button";
 
-type DragState = { nodeId: string; originX: number; originY: number; pointerX: number; pointerY: number; zoom: number };
-const useCanvasLayoutEffect = typeof window === "undefined"
-  ? useEffect
-  : useLayoutEffect;
+const nodeTypes = {
+  workflowNode: WorkflowFlowNode,
+  workflowBranch: WorkflowFlowBranchNode,
+};
 
-export function WorkflowCanvas({
-  connectingNodeId,
-  disabled,
-  nodes,
-  edges,
-  selectedNodeId,
-  onBeginConnect,
-  onCancelConnect,
-  onDeleteEdge,
-  onDropNodePreset,
-  onFinishConnect,
-  onArrangeNodes,
-  onMoveNode,
-  onMoveBranchNode,
-  onOpenNodeLibrary,
-  onSelectNode,
-  validationPlayback,
-  viewStorageKey,
-}: {
+const edgeTypes = {
+  workflowEdge: WorkflowFlowEdge,
+};
+
+const nodeExtent: [[number, number], [number, number]] = [
+  [0, 0],
+  [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+];
+
+export function WorkflowCanvas(props: {
   connectingNodeId: string | null;
   disabled?: boolean;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   selectedNodeId: string | null;
-  onBeginConnect: (source: WorkflowConnectionSource) => void;
+  onBeginConnect: (source: WorkflowFlowConnectionSource) => void;
   onCancelConnect: () => void;
   onDeleteEdge: (edgeId: string) => void;
   onDropNodePreset: (presetKey: string, position: WorkflowNode["position"]) => void;
-  onFinishConnect: (nodeId: string) => void;
+  onFinishConnect: (source: WorkflowFlowConnectionSource, targetNodeId: string) => void;
   onArrangeNodes: (nodes: WorkflowNode[]) => void;
   onMoveNode: (nodeId: string, position: WorkflowNode["position"]) => void;
   onMoveBranchNode: (sourceNodeId: string, position: WorkflowNode["position"]) => void;
@@ -84,48 +74,104 @@ export function WorkflowCanvas({
   validationPlayback?: WorkflowValidationPlaybackSnapshot;
   viewStorageKey?: string;
 }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const panRef = useRef<WorkflowCanvasPanState | null>(null);
-  const connectionDraftRef = useRef<WorkflowCanvasConnectionDraft | null>(null);
-  const [connectionDraft, setConnectionDraft] = useState<WorkflowCanvasConnectionDraft | null>(null);
+  return (
+    <ReactFlowProvider>
+      <WorkflowCanvasInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function WorkflowCanvasInner({
+  connectingNodeId,
+  disabled,
+  edges,
+  nodes,
+  onArrangeNodes,
+  onBeginConnect,
+  onCancelConnect,
+  onDeleteEdge,
+  onDropNodePreset,
+  onFinishConnect,
+  onMoveBranchNode,
+  onMoveNode,
+  onOpenNodeLibrary,
+  onSelectNode,
+  selectedNodeId,
+  validationPlayback,
+  viewStorageKey,
+}: Parameters<typeof WorkflowCanvas>[0]) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const reactFlow = useReactFlow<WorkflowFlowNodeType, WorkflowFlowEdgeType>();
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
-  const [fitPan, setFitPan] = useState<CanvasPoint>({ x: 0, y: 0 });
-  const [viewportSize, setViewportSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const canvasTransform = `translate(${fitPan.x}px, ${fitPan.y}px) scale(${zoom})`;
-  const branchNodes = buildWorkflowCanvasBranchNodes(nodes, edges);
-  const canvasSize = getExpandedCanvasSize(viewportSize, zoom, [...nodes, ...branchNodes]);
-  const minNodePosition = { x: 0, y: 0 };
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const canvasNodeById = new Map<string, Pick<WorkflowNode, "id" | "node_key" | "position"> & {
-    canvasWidth?: number;
-    canvasHeight?: number;
-  }>([
-    ...nodes.map((node) => [node.id, node] as const),
-    ...branchNodes.map((node) => [node.id, node] as const),
-  ]);
-  const displayEdges = buildWorkflowCanvasDisplayEdges({
+  const activeValidationNodeIds = useMemo(
+    () => new Set(validationPlayback?.activeNodeIds || []),
+    [validationPlayback?.activeNodeIds],
+  );
+  const activeValidationEdgeIds = useMemo(
+    () => new Set(validationPlayback?.activeEdgeIds || []),
+    [validationPlayback?.activeEdgeIds],
+  );
+  const errorValidationNodeIds = useMemo(
+    () => new Set(validationPlayback?.errorNodeIds || []),
+    [validationPlayback?.errorNodeIds],
+  );
+  const successValidationNodeIds = useMemo(
+    () => new Set(validationPlayback?.successNodeIds || []),
+    [validationPlayback?.successNodeIds],
+  );
+  const flowNodes = useMemo(() => toWorkflowFlowNodes({
+    activeValidationEdgeIds,
+    activeValidationNodeIds,
+    connectingNodeId,
+    disabled,
     edges,
-    branchNodes,
-    nodeById,
-  });
-  const activeValidationNodeIds = new Set(validationPlayback?.activeNodeIds || []);
-  const activeValidationEdgeIds = new Set(validationPlayback?.activeEdgeIds || []);
-  const errorValidationNodeIds = new Set(validationPlayback?.errorNodeIds || []);
-  const successValidationNodeIds = new Set(validationPlayback?.successNodeIds || []);
-  const canvasPan = createWorkflowCanvasPan(panRef, scrollRef, disabled);
+    errorValidationNodeIds,
+    nodes,
+    onDeleteEdge,
+    selectedNodeId,
+    successValidationNodeIds,
+  }), [
+    activeValidationEdgeIds,
+    activeValidationNodeIds,
+    connectingNodeId,
+    disabled,
+    edges,
+    errorValidationNodeIds,
+    nodes,
+    onDeleteEdge,
+    selectedNodeId,
+    successValidationNodeIds,
+  ]);
+  const flowEdges = useMemo(() => toWorkflowFlowEdges({
+    activeValidationEdgeIds,
+    activeValidationNodeIds,
+    connectingNodeId,
+    disabled,
+    edges,
+    errorValidationNodeIds,
+    nodes,
+    onDeleteEdge,
+    selectedNodeId,
+    successValidationNodeIds,
+  }), [
+    activeValidationEdgeIds,
+    activeValidationNodeIds,
+    connectingNodeId,
+    disabled,
+    edges,
+    errorValidationNodeIds,
+    nodes,
+    onDeleteEdge,
+    selectedNodeId,
+    successValidationNodeIds,
+  ]);
 
-  useCanvasLayoutEffect(() => {
-    if (!viewStorageKey) {
-      setCanvasViewReady(true);
-      return;
-    }
-    setCanvasViewReady(false);
-    const storedZoom = readStoredCanvasZoom(viewStorageKey);
-    setZoom(storedZoom ?? 1);
+  const handleInit = useCallback((instance: ReactFlowInstance<WorkflowFlowNodeType, WorkflowFlowEdgeType>) => {
+    const storedZoom = viewStorageKey ? readStoredCanvasZoom(viewStorageKey) : null;
+    const nextZoom = storedZoom ?? 1;
+    instance.setViewport({ x: 0, y: 0, zoom: nextZoom });
+    setZoom(nextZoom);
     setCanvasViewReady(true);
   }, [viewStorageKey]);
 
@@ -134,163 +180,68 @@ export function WorkflowCanvas({
     writeStoredCanvasZoom(viewStorageKey, zoom);
   }, [canvasViewReady, viewStorageKey, zoom]);
 
-  function updateConnectionDraft(draft: WorkflowCanvasConnectionDraft | null) {
-    connectionDraftRef.current = draft;
-    setConnectionDraft(draft);
-  }
-
-  function startConnection(input: {
-    event: PointerEvent;
-    from: CanvasPoint;
-    source: WorkflowConnectionSource;
-  }) {
-    if (disabled) return;
-    input.event.preventDefault();
-    input.event.stopPropagation();
-    updateConnectionDraft({
-      sourceNodeId: input.source.nodeId,
-      from: input.from,
-      to: getCanvasPoint(input.event, canvasRef.current, zoom),
+  const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNodeType>[]) => {
+    getWorkflowNodePositionChanges(changes, nodes).forEach((change) => {
+      if (change.kind === "branch") {
+        onMoveBranchNode(change.sourceNodeId, change.position);
+        return;
+      }
+      onMoveNode(change.nodeId, change.position);
     });
-    onSelectNode(input.source.nodeId);
-    onBeginConnect(input.source);
-  }
+  }, [nodes, onMoveBranchNode, onMoveNode]);
 
-  function handleConnectionStart(event: PointerEvent, node: WorkflowNode) {
-    startConnection({
-      event,
-      from: getOutputPoint(node),
-      source: { nodeId: node.id },
-    });
-  }
-
-  function handleBranchConnectionStart(
-    event: PointerEvent,
-    source: WorkflowConnectionSource,
-    outcomeIndex: number,
-  ) {
-    const branchNode = branchNodes.find((node) => node.sourceNodeId === source.nodeId);
-    if (!branchNode) return;
-    const outcome = source.branchOutcome || branchNode.outcomes[outcomeIndex]?.key;
-    if (!outcome) return;
-    startConnection({
-      event,
-      from: getWorkflowBranchOutcomePoint(branchNode, outcome),
-      source,
-    });
-  }
-
-  function applyZoom(nextZoom: number, origin?: CanvasPoint) {
-    const scrollElement = scrollRef.current;
-    const clampedZoom = clampZoom(nextZoom);
-    if (!scrollElement) {
-      setZoom(clampedZoom);
+  const handleConnect = useCallback((connection: Connection) => {
+    const source = getWorkflowFlowConnectionSource(connection);
+    const targetNodeId = getWorkflowFlowConnectionTarget(connection);
+    if (!source || !targetNodeId) {
+      onCancelConnect();
       return;
     }
-
-    const viewportX = origin ? origin.x * zoom + fitPan.x - scrollElement.scrollLeft : scrollElement.clientWidth / 2;
-    const viewportY = origin ? origin.y * zoom + fitPan.y - scrollElement.scrollTop : scrollElement.clientHeight / 2;
-    const currentOrigin = origin || {
-      x: (scrollElement.scrollLeft + viewportX - fitPan.x) / zoom,
-      y: (scrollElement.scrollTop + viewportY - fitPan.y) / zoom,
-    };
-    const nextFitPan = { ...fitPan };
-    let nextScrollLeft = currentOrigin.x * clampedZoom + nextFitPan.x - viewportX;
-    let nextScrollTop = currentOrigin.y * clampedZoom + nextFitPan.y - viewportY;
-    if (nextScrollLeft < 0) { nextFitPan.x -= nextScrollLeft; nextScrollLeft = 0; }
-    if (nextScrollTop < 0) { nextFitPan.y -= nextScrollTop; nextScrollTop = 0; }
-    const normalizedX = Math.min(Math.max(0, nextFitPan.x), Math.max(0, nextScrollLeft));
-    const normalizedY = Math.min(Math.max(0, nextFitPan.y), Math.max(0, nextScrollTop));
-    nextFitPan.x -= normalizedX; nextScrollLeft -= normalizedX;
-    nextFitPan.y -= normalizedY; nextScrollTop -= normalizedY;
-
-    setZoom(clampedZoom);
-    setFitPan(nextFitPan);
-    requestAnimationFrame(() => {
-      scrollElement.scrollLeft = nextScrollLeft;
-      scrollElement.scrollTop = nextScrollTop;
-    });
-  }
-
-  function finishConnectionFromPointer(event: PointerEvent) {
-    const draft = connectionDraftRef.current;
-    if (!draft) return;
-    const target = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>("[data-node-input]");
-    const targetNodeId = target?.dataset.nodeId || null;
-
-    updateConnectionDraft(null);
-    if (targetNodeId && targetNodeId !== draft.sourceNodeId) {
-      onFinishConnect(targetNodeId);
-      return;
-    }
+    onFinishConnect(source, targetNodeId);
     onCancelConnect();
-  }
+  }, [onCancelConnect, onFinishConnect]);
 
-  function finishConnectionToNode(targetNodeId: string) {
-    const sourceNodeId = connectionDraftRef.current?.sourceNodeId || connectingNodeId;
-    if (!sourceNodeId || sourceNodeId === targetNodeId) return;
-    updateConnectionDraft(null);
-    onFinishConnect(targetNodeId);
-  }
+  const handleConnectStart = useCallback((
+    _event: MouseEvent | TouchEvent,
+    params: OnConnectStartParams,
+  ) => {
+    const source = getWorkflowFlowConnectionSource({
+      source: params.nodeId || "",
+      sourceHandle: params.handleId,
+      target: "",
+      targetHandle: "",
+    });
+    if (source) onBeginConnect(source);
+  }, [onBeginConnect]);
 
-  async function arrangeNodesToViewport() {
-    const arranged = await arrangeWorkflowCanvasNodes(nodes, edges, viewportSize);
-    setZoom(arranged.zoom);
-    setFitPan({ x: 0, y: 0 });
-    updateConnectionDraft(null);
+  const handleArrange = useCallback(async () => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const arranged = await arrangeWorkflowFlowNodes(nodes, edges, {
+      width: rect?.width || 0,
+      height: rect?.height || 0,
+    });
     onCancelConnect();
     onArrangeNodes(arranged.nodes);
     requestAnimationFrame(() => {
-      const scrollElement = scrollRef.current;
-      if (!scrollElement) return;
-      scrollElement.scrollLeft = 0;
-      scrollElement.scrollTop = 0;
+      reactFlow.setViewport({ x: 0, y: 0, zoom: WORKFLOW_FLOW_ARRANGE_ZOOM });
+      setZoom(WORKFLOW_FLOW_ARRANGE_ZOOM);
     });
-  }
+  }, [edges, nodes, onArrangeNodes, onCancelConnect, reactFlow]);
 
-  useEffect(() => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
-
-    function handleWheel(event: WheelEvent) {
-      if (disabled) return;
-      event.preventDefault();
-      const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      applyZoom(zoom + delta, getCanvasPoint(event, canvasRef.current, zoom));
-    }
-
-    scrollElement.addEventListener("wheel", handleWheel, { passive: false });
-    return () => scrollElement.removeEventListener("wheel", handleWheel);
-  }, [disabled, fitPan.x, fitPan.y, viewportSize.height, viewportSize.width, zoom]);
-
-  useEffect(() => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
-    const updateViewportSize = () => {
-      const width = scrollElement.clientWidth;
-      const height = scrollElement.clientHeight;
-      setViewportSize((current) =>
-        current.width === width && current.height === height
-          ? current
-          : { width, height });
-    };
-    updateViewportSize();
-    const observer = new ResizeObserver(updateViewportSize);
-    observer.observe(scrollElement);
-    return () => observer.disconnect();
-  }, []);
+  const applyZoom = useCallback((nextZoom: number) => {
+    const viewport = reactFlow.getViewport();
+    const clampedZoom = clampWorkflowFlowZoom(nextZoom);
+    reactFlow.setViewport({ ...viewport, zoom: clampedZoom });
+    setZoom(clampedZoom);
+  }, [reactFlow]);
 
   return (
     <div
-      ref={scrollRef}
-      data-workflow-canvas-scroll="true"
-      className={[
-        "relative h-full min-h-0 cursor-grab bg-muted/30 active:cursor-grabbing",
-        "overflow-auto",
-      ].join(" ")}
-      onPointerDown={canvasPan.begin}
+      ref={containerRef}
+      data-workflow-canvas="true"
+      data-workflow-canvas-view-ready={canvasViewReady ? "true" : "false"}
+      data-workflow-validation-playback={validationPlayback?.status || "idle"}
+      className="relative h-full min-h-0 bg-muted/30"
       onDragOver={(event) => {
         if (disabled) return;
         event.preventDefault();
@@ -300,41 +251,30 @@ export function WorkflowCanvas({
         if (disabled) return;
         const presetKey = event.dataTransfer.getData(WORKFLOW_NODE_PRESET_DRAG_TYPE) ||
           event.dataTransfer.getData("text/plain");
-        if (!presetKey || !getWorkflowNodePreset(presetKey)) return;
+        if (!presetKey) return;
         event.preventDefault();
-        const point = getCanvasPoint(event, canvasRef.current, zoom);
-        setFitPan({ x: 0, y: 0 });
-        onDropNodePreset(presetKey, clampPosition({
-          x: point.x - NODE_WIDTH / 2,
-          y: point.y - NODE_HEIGHT / 2,
-        }, canvasSize));
-      }}
-      onPointerMove={(event) => {
-        if (canvasPan.move(event)) return;
-        const draft = connectionDraftRef.current;
-        if (!draft) return;
-        updateConnectionDraft({
-          ...draft,
-          to: getCanvasPoint(event, canvasRef.current, zoom),
+        const position = reactFlow.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
         });
-      }}
-      onPointerUp={(event) => { if (!canvasPan.end(event)) finishConnectionFromPointer(event); }}
-      onPointerCancel={() => {
-        panRef.current = null; dragRef.current = null; updateConnectionDraft(null); onCancelConnect();
+        onDropNodePreset(presetKey, {
+          x: Math.max(0, position.x),
+          y: Math.max(0, position.y),
+        });
       }}
     >
       <WorkflowCanvasToolbar
         disabled={disabled}
         edgeCount={edges.length}
-        maxZoom={MAX_ZOOM}
-        minZoom={MIN_ZOOM}
+        maxZoom={WORKFLOW_FLOW_MAX_ZOOM}
+        minZoom={WORKFLOW_FLOW_MIN_ZOOM}
         nodeCount={nodes.length}
         zoom={zoom}
-        onArrange={arrangeNodesToViewport}
-        onZoomIn={() => applyZoom(zoom + ZOOM_STEP)}
-        onZoomOut={() => applyZoom(zoom - ZOOM_STEP)}
+        onArrange={handleArrange}
+        onZoomIn={() => applyZoom(zoom + WORKFLOW_FLOW_ZOOM_STEP)}
+        onZoomOut={() => applyZoom(zoom - WORKFLOW_FLOW_ZOOM_STEP)}
       />
-      <div className="pointer-events-none sticky left-0 right-0 top-3 z-30 h-0 px-3">
+      <div className="pointer-events-none absolute left-0 right-0 top-3 z-30 h-0 px-3">
         <div className="flex justify-end">
           <Button
             type="button"
@@ -353,122 +293,57 @@ export function WorkflowCanvas({
           </Button>
         </div>
       </div>
-      <div
-        className="relative"
-        style={{
-          width: canvasSize.width * zoom + Math.max(0, fitPan.x),
-          height: canvasSize.height * zoom + Math.max(0, fitPan.y),
+      <ReactFlow
+        colorMode="light"
+        connectionMode={ConnectionMode.Loose}
+        defaultEdgeOptions={{
+          markerEnd: { type: MarkerType.ArrowClosed },
+          type: "workflowEdge",
         }}
+        edges={flowEdges}
+        edgeTypes={edgeTypes}
+        fitView={false}
+        maxZoom={WORKFLOW_FLOW_MAX_ZOOM}
+        minZoom={WORKFLOW_FLOW_MIN_ZOOM}
+        nodeExtent={nodeExtent}
+        nodes={flowNodes}
+        nodesDraggable={!disabled}
+        nodesConnectable={!disabled}
+        nodeTypes={nodeTypes}
+        panOnDrag
+        panOnScroll
+        proOptions={{ hideAttribution: true }}
+        selectNodesOnDrag={false}
+        onConnect={handleConnect}
+        onConnectEnd={onCancelConnect}
+        onConnectStart={handleConnectStart}
+        onInit={handleInit}
+        onMove={(_event, viewport: Viewport) => setZoom(viewport.zoom)}
+        onNodeClick={(_event, node) => {
+          if (node.type === "workflowNode") onSelectNode(node.id);
+        }}
+        onNodesChange={handleNodesChange}
+        onPaneClick={onCancelConnect}
       >
-        <div
-          data-workflow-canvas="true"
-          className="relative"
-          style={{
-            width: canvasSize.width,
-            height: canvasSize.height,
-            backgroundImage: [
-              "linear-gradient(hsl(var(--border) / 0.65) 1px, transparent 1px)",
-              "linear-gradient(90deg, hsl(var(--border) / 0.65) 1px, transparent 1px)",
-            ].join(", "),
-            backgroundSize: "32px 32px",
-          }}
-        >
-        <div
-          ref={canvasRef}
-          data-workflow-canvas="true"
-          data-workflow-canvas-view-ready={canvasViewReady ? "true" : "false"}
-          data-workflow-validation-playback={validationPlayback?.status || "idle"}
-          className={[
-            "absolute inset-0 origin-top-left",
-            canvasViewReady ? "opacity-100" : "opacity-0",
-          ].join(" ")}
-          style={{ transform: canvasTransform }}
-        >
-        <WorkflowCanvasEdges
-          activeValidationEdgeIds={activeValidationEdgeIds}
-          canvasSize={canvasSize}
-          connectionDraft={connectionDraft}
-          disabled={disabled}
-          edges={displayEdges}
-          hoveredEdgeId={hoveredEdgeId}
-          nodeById={canvasNodeById}
-          onDeleteEdge={onDeleteEdge}
-          onHoverEdge={setHoveredEdgeId}
-        />
-        {nodes.map((node) => {
-          const selected = node.id === selectedNodeId;
-          const connecting = node.id === connectingNodeId;
-          const validationState = activeValidationNodeIds.has(node.id)
-            ? "active"
-            : errorValidationNodeIds.has(node.id)
-              ? "error"
-              : successValidationNodeIds.has(node.id)
-                ? "success"
-                : "idle";
-          return (
-            <WorkflowCanvasNode
-              key={node.id}
-              connecting={connecting}
-              connectingNodeId={connectingNodeId}
-              disabled={disabled}
-              node={node}
-              selected={selected}
-              validationState={validationState}
-              onConnectionStart={handleConnectionStart}
-              onFinishConnect={finishConnectionToNode}
-              onPointerDown={(event) => {
-                if (disabled) return;
-                if (
-                  event.target instanceof HTMLElement &&
-                  event.target.closest("[data-node-port], [data-edge-action]")
-                ) {
-                  return;
-                }
-                event.currentTarget.setPointerCapture(event.pointerId);
-                dragRef.current = {
-                  nodeId: node.id,
-                  originX: node.position.x,
-                  originY: node.position.y,
-                  pointerX: event.clientX,
-                  pointerY: event.clientY,
-                  zoom,
-                };
-                onSelectNode(node.id);
-              }}
-              onPointerMove={(event) => {
-                const drag = dragRef.current;
-                if (!drag || drag.nodeId !== node.id) return;
-                onMoveNode(node.id, clampPosition({
-                  x: drag.originX + (event.clientX - drag.pointerX) / drag.zoom,
-                  y: drag.originY + (event.clientY - drag.pointerY) / drag.zoom,
-                }, canvasSize, minNodePosition));
-              }}
-              onPointerUp={() => {
-                dragRef.current = null;
-              }}
-              onPointerCancel={() => {
-                dragRef.current = null;
-              }}
-              onSelect={onSelectNode}
-            />
-          );
-        })}
-        {branchNodes.map((branchNode) => (
-          <WorkflowCanvasBranchNode
-            key={branchNode.id}
-            branchNode={branchNode}
-            canvasSize={canvasSize}
-            connecting={branchNode.sourceNodeId === connectingNodeId}
-            disabled={disabled}
-            minNodePosition={minNodePosition}
-            zoom={zoom}
-            onConnectionStart={handleBranchConnectionStart}
-            onMove={onMoveBranchNode}
-          />
-        ))}
-        </div>
-        </div>
-      </div>
+        <Background color="hsl(var(--border) / 0.65)" gap={32} />
+      </ReactFlow>
     </div>
   );
+}
+
+function clampWorkflowFlowZoom(value: number) {
+  return Math.max(WORKFLOW_FLOW_MIN_ZOOM, Math.min(WORKFLOW_FLOW_MAX_ZOOM, value));
+}
+
+function readStoredCanvasZoom(storageKey: string) {
+  if (typeof window === "undefined") return null;
+  const rawValue = window.localStorage.getItem(storageKey);
+  if (!rawValue) return null;
+  const zoom = Number(rawValue);
+  return Number.isFinite(zoom) ? clampWorkflowFlowZoom(zoom) : null;
+}
+
+function writeStoredCanvasZoom(storageKey: string, zoom: number) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(storageKey, String(clampWorkflowFlowZoom(zoom)));
 }
