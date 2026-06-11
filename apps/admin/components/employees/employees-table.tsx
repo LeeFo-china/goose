@@ -215,10 +215,10 @@ export function EmployeesTable({
             )}
           </div>
           <div className="min-w-0">
-            <div className="truncate font-medium">
+            <div className="truncate font-semibold">
               {row.original.name || "未命名员工"}
             </div>
-            <div className="max-w-[160px] truncate text-xs text-muted-foreground">
+            <div className="max-w-[160px] truncate text-xs tabular-nums text-muted-foreground">
               {row.original.id}
             </div>
           </div>
@@ -230,7 +230,7 @@ export function EmployeesTable({
       header: "手机号",
       cell: ({ row }) => maskPhone(row.original.phone),
       meta: {
-        cellClassName: "whitespace-nowrap",
+        cellClassName: "whitespace-nowrap tabular-nums",
       },
     },
     {
@@ -313,7 +313,7 @@ export function EmployeesTable({
       id: "createdAt",
       header: "创建时间",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap text-muted-foreground">
+        <span className="whitespace-nowrap tabular-nums text-muted-foreground">
           {formatDate(row.original.created_at)}
         </span>
       ),
@@ -332,7 +332,7 @@ export function EmployeesTable({
         </div>
       ),
       meta: {
-        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-muted lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
         cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
@@ -344,6 +344,8 @@ export function EmployeesTable({
       data={employees}
       emptyText="没有符合条件的员工"
       minWidth="min-w-[1180px]"
+      tableClassName="border-t-0"
+      headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
     />
   );
 }

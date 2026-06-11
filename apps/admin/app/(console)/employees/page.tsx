@@ -3,7 +3,9 @@ import {
   EmployeeStatusConfig,
   type EmployeeStatus,
 } from "@gooes/domain";
+import { UsersRound } from "lucide-react";
 import { EmployeesClientShell } from "@/components/employees/employees-client-shell";
+import { CreateEmployeeButton } from "@/components/employees/employee-mutations";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -188,7 +190,25 @@ export default async function EmployeesPage({
   const { list, pagination, error } = employeeData;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <UsersRound aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">员工管理</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              员工档案、登录绑定、部门岗位和角色权限。当前筛选共 {pagination.total} 条记录。
+            </p>
+          </div>
+        </div>
+        <CreateEmployeeButton
+          departments={departmentPostConfig.departments}
+          posts={departmentPostConfig.post_options}
+        />
+      </div>
+
       <EmployeesClientShell
         employees={list}
         pagination={pagination}

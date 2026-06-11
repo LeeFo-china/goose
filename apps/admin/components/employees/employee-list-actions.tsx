@@ -2,11 +2,12 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import type { EmployeeStatus } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
 
@@ -51,7 +52,7 @@ export function EmployeesStatusFilters({
   onNavigate: Navigate;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-1 rounded-md border bg-card p-1">
       {options.map((item) => {
         const active = currentStatus === item.value;
         return (
@@ -65,7 +66,7 @@ export function EmployeesStatusFilters({
               status: item.value,
               keyword,
             }))}
-            className="h-9"
+            className="h-8 border-transparent px-3 shadow-none"
           >
             {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
             {item.label}
@@ -103,7 +104,7 @@ export function EmployeeSearchForm({
 
   return (
     <form className="flex w-full gap-2 xl:w-[360px]" onSubmit={submit}>
-      <InputGroup className="flex-1">
+      <InputGroup className="h-9 flex-1 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
         </InputGroupAddon>
@@ -114,8 +115,20 @@ export function EmployeeSearchForm({
           disabled={pending}
           onChange={(event) => setSelectedKeyword(event.target.value)}
         />
+        {selectedKeyword ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="清除搜索内容"
+              size="icon-xs"
+              disabled={pending}
+              onClick={() => setSelectedKeyword("")}
+            >
+              <X aria-hidden="true" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline" disabled={pending}>
+      <Button type="submit" variant="outline" disabled={pending} className="bg-card">
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
