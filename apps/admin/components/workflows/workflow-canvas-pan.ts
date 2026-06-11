@@ -9,7 +9,7 @@ export type WorkflowCanvasPanState = {
 };
 
 function isCanvasPanTarget(target: EventTarget) {
-  if (!(target instanceof HTMLElement)) return false;
+  if (!(target instanceof Element)) return false;
   if (!target.closest("[data-workflow-canvas='true']")) return false;
   return !target.closest(
     "button, [data-workflow-node], [data-edge-action], [data-node-port]",
