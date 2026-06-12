@@ -11,11 +11,9 @@ import {
   type CustomerSelfServiceUserProfileRow,
 } from "@/repositories/customer-self-service";
 import type { AuthMeProfileUpdateInput } from "@/schema/user-profile";
+import { attachProjectWorkflowState, attachProjectWorkflowStates } from "@/services/customer-self-service-workflow-state";
 import { projectMemberService } from "@/services/project-members";
-
-const CUSTOMER_SELF_SERVICE_CACHE_TTL_MS = 10_000;
-const MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE = 4_000;
-
+const CUSTOMER_SELF_SERVICE_CACHE_TTL_MS = 10_000; const MAX_CUSTOMER_SELF_SERVICE_CACHE_SIZE = 4_000;
 class CustomerSelfServiceService {
   private customerProfilesByIdsCache = new Map<string, {
     expiresAt: number;
@@ -289,12 +287,12 @@ class CustomerSelfServiceService {
     }
 
     const request = customerSelfServiceRepository.listOwnedProjects(input)
-      .then(async (result) => ({
-        ...result,
-        list: input.includeDesigner === false
+      .then(async (result) => {
+        const list = input.includeDesigner === false
           ? result.list
-          : await this.attachDesigner(result.list),
-      }))
+          : await this.attachDesigner(result.list);
+        return { ...result, list: await attachProjectWorkflowStates(list, input.tenantId) };
+      })
       .then((result) => {
         this.setCachedValue(this.ownedProjectsCache, cacheKey, result);
         for (const project of result.list) {
@@ -337,6 +335,7 @@ class CustomerSelfServiceService {
 
     const request = customerSelfServiceRepository.findOwnedProject(input)
       .then((result) => this.attachDesignerToProject(result))
+      .then((result) => attachProjectWorkflowState(result, input.tenantId))
       .then((result) => {
         this.setCachedValue(this.ownedProjectCache, cacheKey, result);
         return result;

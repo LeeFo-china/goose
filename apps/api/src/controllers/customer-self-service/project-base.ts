@@ -219,7 +219,6 @@ export abstract class CustomerSelfServiceProjectBaseController
       name: null,
       avatar: null,
     });
-
     return {
       id: row.id,
       name: row.name,
@@ -230,6 +229,7 @@ export abstract class CustomerSelfServiceProjectBaseController
       property_id: typeof row.property_id === "string" ? row.property_id : typeof property.id === "string" ? property.id : null,
       start_date: row.start_date,
       style_tags: this.normalizeStringArray(row.style_tags),
+      workflow_state: row.workflow_state ? { instance_status: row.workflow_state.instance_status, current_node_key: row.workflow_state.current_node_key, current_node_title: row.workflow_state.current_node_title, current_business_kind: row.workflow_state.current_business_kind, pending_task_count: row.workflow_state.pending_task_count, updated_at: row.workflow_state.updated_at } : null,
       designer: designer.id
         ? {
           id: designer.id as string,

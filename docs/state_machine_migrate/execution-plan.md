@@ -698,7 +698,7 @@
 
 ### Steps
 
-- [ ] **Step 5.1: Task center reads workflow tasks**
+- [x] **Step 5.1: Task center reads workflow tasks**
 
   Replace expense approval chain task construction with `workflow_tasks` query scoped by:
 
@@ -708,13 +708,29 @@
 
   The list must be paginated and must not return all tasks.
 
-- [ ] **Step 5.2: Customer self-service includes workflow_state**
+  Progress:
+  Expense approval/payment todos now read pending `workflow_tasks` through
+  `workflowTaskRepository.listAccessibleTasks()` with tenant, employee, role,
+  permission and `pageSize=100` boundaries. Expense detail display fields are
+  loaded by subject id batch after workflow task filtering.
+
+- [x] **Step 5.2: Customer self-service includes workflow_state**
 
   Add `workflow_state` to mini-program bootstrap/detail payloads that currently expose project/customer status.
+
+  Progress:
+  Customer self-service project list/detail payloads now attach
+  `workflow_subject_states` by project id and serialize `workflow_state`.
 
 - [ ] **Step 5.3: Admin panels read workflow_state**
 
   Change customer/project status panels to render workflow actions first and old status actions only as fallback.
+
+  Pending:
+  Admin panels still use old status action endpoints for mutations. This should
+  remain fallback until staging confirms workflow task completion can cover the
+  full customer/project action UX, including project acceptance guards and
+  construction manager selection.
 
 - [ ] **Step 5.4: Verification**
 

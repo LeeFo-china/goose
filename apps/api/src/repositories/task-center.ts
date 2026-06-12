@@ -261,6 +261,47 @@ class TaskCenterRepository {
     return (data || []) as unknown as ExpenseRequestTodoSource[];
   }
 
+  async listExpenseRequestsByIds(input: {
+    tenantId: string;
+    expenseRequestIds: string[];
+  }) {
+    if (input.expenseRequestIds.length === 0) {
+      return [] as ExpenseRequestTodoSource[];
+    }
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("expense_requests")
+      .select(`
+        id,
+        request_no,
+        title,
+        status,
+        current_step,
+        employee_id,
+        assignee_id,
+        created_at,
+        updated_at,
+        rejected_at,
+        rejected_reason,
+        employee:employees!expense_requests_employee_id_fkey(
+          id,
+          name
+        ),
+        project:projects(
+          id,
+          name
+        )
+      `)
+      .eq("tenant_id", input.tenantId)
+      .in("id", Array.from(new Set(input.expenseRequestIds)).slice(0, 100));
+
+    if (error) {
+      throw Errors.dbError("查询费用申请待处理详情失败", error);
+    }
+
+    return (data || []) as unknown as ExpenseRequestTodoSource[];
+  }
+
   async listProjectAcceptanceTodos(tenantId?: string | null) {
     let query = SupabaseDB.getAdminClient()
       .from("project_acceptances")

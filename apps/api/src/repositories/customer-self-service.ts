@@ -1,6 +1,6 @@
 import { Errors } from "@/errors/error-factory";
+import type { WorkflowSubjectStateRow } from "@/repositories/workflow-subject-states";
 import { SupabaseDB } from "@/utils/supabase";
-
 export type CustomerSelfServiceCustomerContextRow = {
   id: string;
   name: string | null;
@@ -78,6 +78,7 @@ export type CustomerSelfServiceProjectListItem = {
     adcode?: string | null;
     location_status?: string | null;
   }[] | null;
+  workflow_state?: WorkflowSubjectStateRow | null;
 };
 
 export type CustomerSelfServiceProjectLogRow = {

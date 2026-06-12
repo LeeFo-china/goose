@@ -210,3 +210,4 @@ Content-Type: application/json
 | 2026-06-12 | Phase 3/Project runtime sync | 后端新增 `construction_main` 模板，并在旧项目状态变更后同步 workflow runtime 与 subject projection；旧项目写路径仍保留兼容 | 项目详情可继续优先读取 `workflow_state`，但发布前仍需保留旧状态按钮 fallback |
 | 2026-06-12 | Phase 2/Task visibility | `workflow_tasks` 新增权限投影字段，后端按员工、角色或权限过滤 `/workflow-tasks` 和 `workflow_state.actions` | 小程序可以把 `/workflow-tasks` 作为待办来源，但仍需等待目标环境执行 migration |
 | 2026-06-12 | Phase 3/Expense runtime sync | 后端新增 `expense_approval` 模板、取消 workflow 实例 RPC，并在旧费用审批写路径后同步 workflow runtime | 费用详情可读取 `workflow_state`，待办入口继续保留旧审批列表 fallback 直到 staging smoke |
+| 2026-06-12 | Phase 5/Read path partial | 后端任务中心的费用审批/打款待办已改为读取 `workflow_tasks`，客户小程序项目列表和详情已补充 `workflow_state` 投影 | 小程序项目页可以优先展示 `workflow_state.current_node_title`；费用待办可逐步切换到 workflow task |
