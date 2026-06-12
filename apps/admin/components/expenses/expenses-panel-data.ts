@@ -106,7 +106,7 @@ export function summarizeExpensePage(expenses: ExpenseRecord[]) {
   return {
     pendingCount: expenses.filter((item) => item.status === "pending").length,
     paymentCount: expenses.filter((item) =>
-      item.status === "approved" && item.current_step === "payment"
+      item.workflow_state?.current_node_key === "payment"
     ).length,
     totalAmount: expenses.reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
   };

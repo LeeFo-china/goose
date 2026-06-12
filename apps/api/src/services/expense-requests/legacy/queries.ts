@@ -1,3 +1,4 @@
+import { attachExpenseWorkflowStates } from "@/services/expense-request-workflow-state";
 import {
   Errors,
   expenseRequestRepository,
@@ -87,9 +88,10 @@ export async function listExpenseRequests(this: any,
     );
 
     if (!processPermission) {
+      const list = result.list.map((item) => this.serializeExpenseRequest(item));
       return {
         ...result,
-        list: result.list.map((item) => this.serializeExpenseRequest(item)),
+        list: await attachExpenseWorkflowStates(list, tenantId),
       };
     }
 
@@ -105,7 +107,10 @@ export async function listExpenseRequests(this: any,
     const list = rows.slice(from, from + params.pageSize);
 
     return {
-      list: list.map((item) => this.serializeExpenseRequest(item)),
+      list: await attachExpenseWorkflowStates(
+        list.map((item) => this.serializeExpenseRequest(item)),
+        tenantId,
+      ),
       pagination: {
         page: params.page,
         pageSize: params.pageSize,

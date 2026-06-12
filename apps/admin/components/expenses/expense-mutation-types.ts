@@ -63,6 +63,37 @@ export type SettlementRecord = {
   paid_operator?: Person | Person[] | null;
 };
 
+export type ExpenseWorkflowAction = {
+  key: string;
+  label: string;
+  business_domain: string | null;
+  business_action: string | null;
+  requires_reason: boolean;
+  task_id?: string;
+  node_key?: string;
+  node_type?: string;
+  disabled?: boolean;
+  output_fields?: Array<{
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+  }>;
+};
+
+export type ExpenseWorkflowState = {
+  subject_type?: string;
+  subject_id?: string;
+  instance_id?: string | null;
+  instance_status?: string | null;
+  current_node_key?: string | null;
+  current_node_title?: string | null;
+  current_business_kind?: string | null;
+  pending_task_count?: number;
+  updated_at?: string | null;
+  actions?: ExpenseWorkflowAction[];
+};
+
 export type ExpenseRecord = {
   id: string;
   request_no: string | null;
@@ -89,6 +120,7 @@ export type ExpenseRecord = {
   approvals?: ApprovalRecord[];
   settlement?: SettlementRecord | SettlementRecord[] | null;
   approval_chain?: ApprovalChainRecord[];
+  workflow_state?: ExpenseWorkflowState | null;
 };
 
 export type DirectUploadInitResult = {

@@ -3,10 +3,8 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   EXPENSE_MODE_VALUES,
-  EXPENSE_REQUEST_STEP_VALUES,
   EXPENSE_STATUS_VALUES,
   ExpenseModeConfig,
-  ExpenseRequestStepConfig,
   ExpenseStatusConfig,
 } from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
@@ -51,13 +49,6 @@ const modeMeta: Record<string, string> = Object.fromEntries(
   EXPENSE_MODE_VALUES.map((value) => [
     value,
     ExpenseModeConfig[value].label,
-  ]),
-);
-
-const stepMeta: Record<string, string> = Object.fromEntries(
-  EXPENSE_REQUEST_STEP_VALUES.map((value) => [
-    value,
-    ExpenseRequestStepConfig[value].label,
   ]),
 );
 
@@ -198,9 +189,12 @@ export function ExpensesTable({
       },
     },
     {
-      accessorKey: "current_step",
+      id: "workflow_state",
       header: "当前节点",
-      cell: ({ row }) => stepMeta[row.original.current_step] || row.original.current_step || "-",
+      cell: ({ row }) =>
+        row.original.workflow_state?.current_node_title ||
+        row.original.workflow_state?.current_node_key ||
+        "未接入流程",
       meta: {
         cellClassName: "whitespace-nowrap text-muted-foreground",
       },

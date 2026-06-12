@@ -36,6 +36,17 @@ timeline/actions:
 | blocker files | `30` |
 | customer/project admin component blockers | `0` |
 
+2026-06-12 after attaching expense request list workflow state and switching
+admin expense list node display to workflow projection:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `128` |
+| blocker files | `29` |
+| expense admin blocker references | `11` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -88,6 +99,8 @@ because the system is still in the compatibility window:
 - old status endpoints and admin fallbacks still exist;
 - customer/project admin panels no longer require old status action/timeline
   endpoints for normal operation;
+- expense request list responses now attach `workflow_state`, and the admin
+  expense list current-node display/payment count read the workflow projection;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

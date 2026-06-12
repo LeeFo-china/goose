@@ -769,6 +769,11 @@
   `workflow:cleanup-readiness` now reports zero blockers under
   `apps/admin/components/customers` and `apps/admin/components/projects`.
 
+  2026-06-12 progress: `/expense-requests` list responses now batch attach
+  `workflow_subject_states` as `workflow_state` for each expense request.
+  The admin expense table current-node column and page payment count read the
+  workflow projection instead of legacy `current_step`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
