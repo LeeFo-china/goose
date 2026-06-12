@@ -931,6 +931,16 @@
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
 - [x] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
 
+  2026-06-12 target pre-cleanup status: Supabase project
+  `fclnkyatvfvmzgzdqlba` is aligned through `20260612124500`; `supabase db push
+  --dry-run` would push only the destructive cleanup pair
+  `20260612133000_drop_schedule_project_construction_transition.sql` and
+  `20260612143000_drop_legacy_state_machine_objects.sql`. Target
+  `workflow:runtime-consistency-check` passes with `total_issues: 0`.
+  Read-only inventory confirms the legacy objects still exist and are therefore
+  ready for the final destructive migration after the remaining human/smoke
+  gates are satisfied.
+
 ### Steps
 
 - [x] **Step 6.1: Create cleanup migration**

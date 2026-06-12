@@ -34,6 +34,37 @@ Result:
 dropped in this migration. Current application code still uses those columns as
 business status fields; workflow runtime now owns actionable node state.
 
+## Target Pre-Cleanup Inventory
+
+2026-06-12 read-only verification against Supabase project
+`fclnkyatvfvmzgzdqlba`:
+
+| check | result |
+| --- | --- |
+| `supabase migration list` | aligned through `20260612124500`; pending only `20260612133000` and `20260612143000` |
+| `supabase db push --dry-run` | would push only the two destructive cleanup migrations |
+| `workflow:runtime-consistency-check` | `ok: true`, `total_issues: 0` |
+| `workflow:cleanup-readiness` | `ready: true`, `blockers: 0` |
+
+Legacy objects still present before destructive cleanup:
+
+| object | current state |
+| --- | ---: |
+| `customer_status_transition_logs` | exists, `27` rows |
+| `project_status_transition_logs` | exists, `42` rows |
+| `expense_request_approval_chains` | exists, `6` rows |
+| `schedule_project_construction_transition(...)` | exists |
+| `expense_requests.current_step` | exists |
+| `expense_requests.current_step_role` | exists |
+| legacy transition / approval-chain / `current_step` indexes | exist |
+
+Workflow replacement state in the same target:
+
+| object | current state |
+| --- | ---: |
+| `workflow_subject_states` | `21` rows |
+| pending `workflow_tasks` | `39` rows |
+
 ## Rollback
 
 Restore the database from the latest pre-cleanup backup. If object definitions
@@ -48,11 +79,12 @@ Target destructive apply was not executed in this workspace. Remote migration
 status now succeeds through `20260612124500`; the remaining pending migrations
 are the destructive cleanup pair. Before applying to production:
 
-1. Confirm Local/Remote migration alignment with `supabase migration list`.
-2. Confirm mini-program minimum supported version no longer reads legacy fields.
-3. Apply to staging first.
-4. Regenerate `apps/api/src/types/database.ts` from the target project.
-5. Run:
+1. Confirm mini-program minimum supported version no longer reads legacy fields.
+2. Attach authenticated admin and mini-program smoke evidence.
+3. Confirm backup and restore window for the target environment.
+4. Apply the destructive migration pair to staging first.
+5. Regenerate `apps/api/src/types/database.ts` from the target project.
+6. Run:
 
 ```sql
 SELECT to_regclass('public.customer_status_transition_logs') AS customer_logs,
