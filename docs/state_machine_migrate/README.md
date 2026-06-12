@@ -47,6 +47,10 @@
   `docs/state_machine_migrate/audit/manual-gates.json` 证据文件时会因
   小程序、admin smoke、备份窗口仍未确认而失败。证据文件模板见
   `docs/state_machine_migrate/audit/manual-gates.example.json`。
+- 已新增破坏性清理后 verifier：
+  `cd apps/api && bun run workflow:destructive-cleanup-verify`。该命令只读
+  检查旧表、旧 RPC、旧列、旧索引、旧 policy 是否已经不存在，并再次运行
+  workflow runtime 一致性检查；它应只在 destructive migration apply 后通过。
 
 仍未在本工作区完成的外部门禁：
 
@@ -55,6 +59,9 @@
   `20260612143000_drop_legacy_state_machine_objects.sql` 未上远端。
 - 破坏性清理后还需再次重新生成 `apps/api/src/types/database.ts`，届时旧表、
   旧 RPC、旧列应从类型中消失。
+- destructive migration apply 后必须运行
+  `workflow:destructive-cleanup-verify`，确认旧状态机数据库对象全部消失且
+  workflow runtime 仍一致。
 - 小程序最低版本和 staging/admin/mini-program smoke 仍需外部验收确认。
 
 注意：`customers.status`、`projects.status`、`expense_requests.status`

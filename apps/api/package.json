@@ -25,6 +25,7 @@
     "workflow:runtime-consistency-check": "bun src/scripts/workflow-runtime-consistency-check.ts",
     "workflow:subject-states-rebuild": "bun src/scripts/workflow-subject-states-rebuild.ts",
     "workflow:destructive-cleanup-preflight": "bun src/scripts/workflow-destructive-cleanup-preflight.ts",
+    "workflow:destructive-cleanup-verify": "bun src/scripts/workflow-destructive-cleanup-verify.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",

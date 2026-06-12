@@ -46,6 +46,7 @@ business status fields; workflow runtime now owns actionable node state.
 | `workflow:runtime-consistency-check` | `ok: true`, `total_issues: 0` |
 | `workflow:cleanup-readiness` | `ready: true`, `blockers: 0` |
 | `workflow:destructive-cleanup-preflight` without manual evidence | automated checks pass; fails only `manual_gates` |
+| `workflow:destructive-cleanup-verify` before destructive apply | expected failure: legacy tables/RPC/columns/indexes still present; runtime consistency still passes |
 
 Legacy objects still present before destructive cleanup:
 
@@ -95,10 +96,12 @@ bun run workflow:destructive-cleanup-preflight \
 6. Regenerate `apps/api/src/types/database.ts` from the target project.
 7. Run:
 
-```sql
-SELECT to_regclass('public.customer_status_transition_logs') AS customer_logs,
-       to_regclass('public.project_status_transition_logs') AS project_logs,
-       to_regclass('public.expense_request_approval_chains') AS expense_chains;
+```bash
+cd apps/api
+bun run workflow:destructive-cleanup-verify
 ```
 
-Expected: all three values are `NULL`.
+Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
+`legacy_expense_columns_absent`, `legacy_indexes_absent`,
+`legacy_policies_absent`, and `workflow_runtime_consistency` are all
+`ok: true`.

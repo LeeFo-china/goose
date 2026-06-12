@@ -1034,6 +1034,10 @@
   bun run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
+  supabase db push
+  cd apps/api
+  bun run workflow:destructive-cleanup-verify
+  cd ../..
   supabase migration list
   bun --cwd apps/api run workflow:cleanup-readiness
   bun run api:typecheck
@@ -1042,15 +1046,19 @@
   git diff --check
   ```
 
-  SQL verification after applying to staging:
+  `workflow:destructive-cleanup-verify` is the required post-apply database
+  verification. It checks that these legacy objects are absent:
 
-  ```sql
-  SELECT to_regclass('public.customer_status_transition_logs') AS customer_logs,
-         to_regclass('public.project_status_transition_logs') AS project_logs,
-         to_regclass('public.expense_request_approval_chains') AS expense_chains;
-  ```
+  - `customer_status_transition_logs`,
+    `project_status_transition_logs`,
+    `expense_request_approval_chains`;
+  - `schedule_project_construction_transition(...)`;
+  - `expense_requests.current_step/current_step_role`;
+  - legacy transition-log / approval-chain / `current_step` indexes;
+  - legacy `expense_requests` policy `Approvers view pending`.
 
-  Expected: all three columns are `NULL`.
+  Expected: every legacy absence check is `ok: true`, and
+  `workflow_runtime_consistency` reports `total_issues=0`.
 
 ### Phase 6 Acceptance
 
