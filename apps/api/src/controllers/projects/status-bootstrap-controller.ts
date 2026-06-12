@@ -2,14 +2,11 @@ import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
 import {
   EmployeeProjectDetailBootstrapQuerySchema,
-  ProjectStatusTransitionListQuerySchema,
-  ProjectStatusTransitionSchema,
 } from "@/schema/projects";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { employeeProjectDetailBootstrapService } from "@/services/employee-project-detail-bootstrap";
 import { projectSer } from "@/services/projects";
-import { workflowSubjectsService } from "@/services/workflow-subjects";
-import { Delete, Get, Post } from "@/utils/decorators/route";
+import { Delete, Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { ProjectBaseController } from "./shared";
 
@@ -24,45 +21,6 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
       authContext,
       projectId: idVerify.data.id,
     });
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/projects/:id/status-transition")
-  async transitionProjectStatus(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const result = ProjectStatusTransitionSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
-
-    const data = await projectSer.transitionProjectStatusForTenant({
-      authContext,
-      projectId: idVerify.data.id,
-      payload: result.data,
-    });
-    const workflowState = await workflowSubjectsService.getState(authContext, {
-      subjectType: "project",
-      subjectId: idVerify.data.id,
-    });
-
-    return ResponseHandler.success({
-      ...data,
-      ...workflowState,
-    });
-  }
-
-  @Get("/projects/:id/status-actions")
-  async listProjectStatusActions(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const data = await projectSer.listProjectStatusActionsForTenant({
-      authContext,
-      projectId: idVerify.data.id,
-    });
-
     return ResponseHandler.success(data);
   }
 
@@ -175,25 +133,6 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
     return ResponseHandler.success(payload);
   }
 
-  @Get("/projects/:id/status-transitions")
-  async listProjectStatusTransitions(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const queryResult = ProjectStatusTransitionListQuerySchema.safeParse(
-      request.query,
-    );
-    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-
-    const data = await projectSer.listProjectStatusTransitionsForTenant({
-      authContext,
-      projectId: idVerify.data.id,
-      query: queryResult.data,
-    });
-
-    return ResponseHandler.success(data);
-  }
 }
 
 export default new ProjectStatusBootstrapController();

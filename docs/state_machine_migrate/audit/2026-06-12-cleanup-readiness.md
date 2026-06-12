@@ -99,6 +99,16 @@ display:
 | blocker files | `20` |
 | `current_step` list filter references | `0` |
 
+2026-06-12 after removing old customer/project status endpoints:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `90` |
+| blocker files | `18` |
+| customer/project status endpoint controller references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -164,6 +174,9 @@ because the system is still in the compatibility window:
   have been removed; task-center and clients should use workflow task surfaces;
 - `/expense-requests` list/stats no longer accept or apply legacy
   `current_step` filters; workflow task endpoints own actionable node filters;
+- old customer/project `status-actions`, `status-transition`, and
+  `status-transitions` controller routes have been removed; customer detail
+  activity no longer embeds old status action/timeline payloads;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

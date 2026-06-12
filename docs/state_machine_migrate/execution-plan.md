@@ -799,6 +799,12 @@
   exposes or applies legacy `current_step` filters. Clients that need node-level
   actionable work should use `/workflow-tasks` with `subject_type` filters.
 
+  2026-06-12 progress: old customer/project `status-actions`,
+  `status-transition`, and `status-transitions` controller routes have been
+  removed. Clients must use `/workflow-subjects/:subjectType/:subjectId/state`,
+  `/workflow-subjects/:subjectType/:subjectId/timeline`, and
+  `/workflow-tasks/:id/complete`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

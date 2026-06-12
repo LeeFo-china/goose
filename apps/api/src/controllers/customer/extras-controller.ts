@@ -3,8 +3,6 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import {
   BatchAssignCustomerOwnerSchema,
-  CustomerStatusTransitionListQuerySchema,
-  CustomerStatusTransitionSchema,
   type FollowUpInsert,
 } from "@/schema/customer";
 import {
@@ -21,8 +19,6 @@ import {
   type CustomerPhoneAction,
 } from "@/services/customer-phone-privacy";
 import { customerSourceService } from "@/services/customer-sources";
-import { customerStatusService } from "@/services/customer-status";
-import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import {
@@ -48,72 +44,6 @@ class CustomerExtrasController extends CustomerBaseController {
         await customerPhonePrivacyService.createPrivacyContext(authContext),
       ),
     );
-  }
-
-  @Post("/customers/:id/status-transition")
-  async transitionCustomerStatus(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const result = CustomerStatusTransitionSchema.safeParse(request.body);
-    if (!result.success) throw Errors.fromZod(result.error);
-
-    const customer = await customerCoreService.transitionCustomerStatus({
-      authContext,
-      customerId: idVerify.data.id,
-      payload: result.data,
-    });
-
-    const detail = await this.buildCustomerDetailResponse(customer, {
-      phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
-        authContext,
-      ),
-      tenantId: authContext.tenantId,
-    });
-    const workflowState = await workflowSubjectsService.getState(authContext, {
-      subjectType: "customer",
-      subjectId: idVerify.data.id,
-    });
-
-    return ResponseHandler.success({
-      ...detail,
-      ...workflowState,
-    });
-  }
-
-  @Get("/customers/:id/status-actions")
-  async listCustomerStatusActions(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const data = await customerCoreService.listCustomerStatusActions({
-      authContext,
-      customerId: idVerify.data.id,
-    });
-
-    return ResponseHandler.success(data);
-  }
-
-  @Get("/customers/:id/status-transitions")
-  async listCustomerStatusTransitions(request: FastifyRequest) {
-    const authContext = await this.getRequiredTenantContext(request);
-    const idVerify = this.idParamSchema.safeParse(request.params);
-    if (!idVerify.success) throw Errors.fromZod(idVerify.error);
-
-    const queryResult = CustomerStatusTransitionListQuerySchema.safeParse(
-      request.query,
-    );
-    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
-
-    const data = await customerCoreService.listCustomerStatusTransitions({
-      authContext,
-      customerId: idVerify.data.id,
-      query: queryResult.data,
-    });
-
-    return ResponseHandler.success(data);
   }
 
   @Post("/customers/assign-owner/batch")
@@ -167,7 +97,7 @@ class CustomerExtrasController extends CustomerBaseController {
       return ResponseHandler.success(detail);
     }
 
-    const [followUps, sources, statusActions, statusTransitions] = await Promise.all([
+    const [followUps, sources] = await Promise.all([
       customerFollowUpService.listAccessibleCustomerFollowUps({
         authContext,
         customer: {
@@ -186,17 +116,6 @@ class CustomerExtrasController extends CustomerBaseController {
           pageSize: 20,
         },
       }),
-      Promise.resolve(
-        customerStatusService.listCustomerStatusActionsForCustomer(customer),
-      ),
-      customerStatusService.listCustomerStatusTransitionsForCustomer({
-        tenantId: authContext.tenantId,
-        customerId: customer.id,
-        query: {
-          page: 1,
-          pageSize: 20,
-        },
-      }),
     ]);
 
     return ResponseHandler.success({
@@ -204,8 +123,6 @@ class CustomerExtrasController extends CustomerBaseController {
       detail_activity: {
         follow_ups: followUps,
         sources,
-        status_actions: statusActions,
-        status_transitions: statusTransitions,
       },
     });
   }
