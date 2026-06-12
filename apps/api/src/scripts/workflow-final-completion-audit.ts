@@ -9,6 +9,7 @@ import {
   loadManualGateEvidence as loadManualGateEvidenceFile,
   parseSupabaseDryRunMigrations,
 } from "./workflow-destructive-cleanup-preflight";
+import { loadMigrationHistoryReport } from "./workflow-migration-history";
 import {
   runWorkflowDestructiveCleanupVerify,
   type WorkflowDestructiveCleanupVerifyReport,
@@ -199,6 +200,20 @@ export function summarizeDestructiveCleanupVerifyReport(
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
+  const databaseUrl = resolveFinalAuditDatabaseUrl();
+  if (databaseUrl) {
+    try {
+      return (await loadMigrationHistoryReport(databaseUrl))
+        .pendingMigrationFiles;
+    } catch (error) {
+      return [
+        `database migration history check failed: ${
+          formatCommandFailure(error)
+        }`,
+      ];
+    }
+  }
+
   try {
     const { stdout, stderr } = await execFileAsync(
       "supabase",
@@ -229,24 +244,13 @@ async function checkSupabaseMigrationListAlignment(): Promise<
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "supabase",
-      ["migration", "list", "--db-url", databaseUrl],
-      {
-        cwd: findRepoRoot(),
-        env: process.env,
-        timeout: 60_000,
-        maxBuffer: 1024 * 1024,
-      },
-    );
-
-    return summarizeMigrationListAlignment(
-      parseSupabaseMigrationListRows(`${stdout}\n${stderr}`),
-    );
+    return (await loadMigrationHistoryReport(databaseUrl)).alignment;
   } catch (error) {
     return {
       ok: false,
-      detail: `supabase migration list failed: ${formatCommandFailure(error)}`,
+      detail: `database migration history check failed: ${
+        formatCommandFailure(error)
+      }`,
     };
   }
 }

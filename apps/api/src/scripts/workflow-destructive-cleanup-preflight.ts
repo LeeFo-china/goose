@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { formatCommandFailure } from "./workflow-command-failure";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
+import { loadMigrationHistoryReport } from "./workflow-migration-history";
 import { runWorkflowRuntimeConsistencyCheck } from "./workflow-runtime-consistency-check";
 
 type ManualGate =
@@ -280,6 +281,19 @@ export async function loadManualGateEvidence(
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
+  const url = databaseUrl();
+  if (url) {
+    try {
+      return (await loadMigrationHistoryReport(url)).pendingMigrationFiles;
+    } catch (error) {
+      return [
+        `database migration history check failed: ${
+          formatCommandFailure(error)
+        }`,
+      ];
+    }
+  }
+
   try {
     const { stdout, stderr } = await execFileAsync(
       "supabase",
