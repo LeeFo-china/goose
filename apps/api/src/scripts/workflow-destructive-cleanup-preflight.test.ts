@@ -309,4 +309,55 @@ describe("loadManualGateEvidence", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test("reports manual gate validation details for invalid evidence files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-manual-gates-"));
+    const path = join(dir, "manual-gates.json");
+    try {
+      await writeFile(
+        path,
+        JSON.stringify({
+          phase_acceptance: {
+            phase4_backfill_confirmed: true,
+          },
+          mini_program: {
+            confirmed: true,
+            confirmed_by: "Orange QA",
+            confirmed_at: "after release",
+            minimum_version: "already upgraded",
+            evidence: "confirmed in chat",
+          },
+        }),
+        "utf8",
+      );
+
+      expect(await loadManualGateEvidence(path)).toEqual({
+        ok: false,
+        detail: `evidence_file=${path}; ${
+          [
+            "missing=phase_acceptance.phase4_reconciliation_evidence",
+            "missing=phase_acceptance.phase5_api_smoke_confirmed",
+            "missing=phase_acceptance.phase5_api_smoke_evidence",
+            "missing=api_contract.workflow_state_actions_confirmed",
+            "missing=api_contract.workflow_task_complete_confirmed",
+            "missing=api_contract.legacy_fields_not_required_confirmed",
+            "missing=api_contract.evidence",
+            "missing=admin_smoke.confirmed",
+            "missing=admin_smoke.smoke_at",
+            "missing=admin_smoke.actor",
+            "missing=admin_smoke.evidence",
+            "missing=backup_window.confirmed",
+            "missing=backup_window.backup_id",
+            "missing=backup_window.restore_window",
+            "missing=backup_window.evidence",
+            "invalid=mini_program.evidence: evidence must be an http(s) URL or docs/state_machine_migrate/ path",
+            "invalid=mini_program.confirmed_at: must be a parseable date-time",
+            "invalid=mini_program.minimum_version: must be a version string",
+          ].join(", ")
+        }`,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
