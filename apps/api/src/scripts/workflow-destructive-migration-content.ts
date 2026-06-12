@@ -69,14 +69,19 @@ export function collectDestructiveMigrationContentIssues(
 
   for (const [fileName, content] of Object.entries(files)) {
     if (!content) continue;
+    const normalizedContent = normalizeSqlSnippet(content);
     for (const snippet of FORBIDDEN_DESTRUCTIVE_MIGRATION_CONTENT) {
-      if (content.includes(snippet)) {
+      if (normalizedContent.includes(normalizeSqlSnippet(snippet))) {
         issues.push(`${fileName}: forbidden ${snippet}`);
       }
     }
   }
 
   return issues;
+}
+
+function normalizeSqlSnippet(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 export async function checkDestructiveMigrationContent(
