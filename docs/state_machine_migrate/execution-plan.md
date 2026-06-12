@@ -834,6 +834,7 @@
 - [ ] `supabase migration list` shows Local/Remote aligned before cleanup.
 - [ ] Orange team confirms mini-program no longer depends on old `status_actions/current_step` controls.
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
+- [ ] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
 
 ### Steps
 
@@ -889,6 +890,7 @@
 
   ```bash
   supabase migration list
+  bun --cwd apps/api run workflow:cleanup-readiness
   bun run api:typecheck
   bun run api:build
   pnpm --dir apps/admin check
@@ -969,6 +971,7 @@
 
   ```bash
   rg -n "customer_status_transition_logs|project_status_transition_logs|expense_request_approval_chains|schedule_project_construction_transition|current_step|current_step_role|status-machine-consistency-check" apps packages supabase --glob '!**/.next/**'
+  bun --cwd apps/api run workflow:cleanup-readiness
   bun run api:typecheck
   bun run api:build
   pnpm --dir apps/admin check
