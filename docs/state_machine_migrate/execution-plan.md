@@ -921,7 +921,7 @@
   bun run api:build
   pnpm --dir apps/admin check
   cd apps/api
-  bun run workflow:final-completion-audit \
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
   git diff --check
@@ -1013,7 +1013,7 @@
 
   ```bash
   cd apps/api
-  bun run workflow:destructive-cleanup-preflight
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight
   ```
 
   Without a manual gate evidence file, the command must fail if any external
@@ -1026,7 +1026,7 @@
   `docs/state_machine_migrate/audit/manual-gates.example.json`:
 
   ```bash
-  bun run workflow:destructive-cleanup-preflight \
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
@@ -1114,13 +1114,13 @@
 
   ```bash
   cd apps/api
-  bun run workflow:destructive-cleanup-preflight \
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
   supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
-  bun run workflow:destructive-cleanup-verify
-  bun run workflow:final-completion-audit \
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
   bun --cwd apps/api run workflow:cleanup-readiness
@@ -1274,7 +1274,7 @@ The final technical gate is repeatable with:
 
 ```bash
 cd apps/api
-bun run workflow:final-completion-audit \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
@@ -1287,7 +1287,7 @@ For an operator-friendly summary of remaining blockers, run:
 
 ```bash
 cd apps/api
-bun run workflow:migration-status \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 

@@ -43,17 +43,17 @@
 - 破坏性清理 migration 已准备：
   `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`。
 - 已新增破坏性清理 preflight：
-  `cd apps/api && bun run workflow:destructive-cleanup-preflight`。当前自动
-  技术检查通过；没有
+  `cd apps/api && bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight`。
+  当前自动技术检查通过；没有
   `docs/state_machine_migrate/audit/manual-gates.json` 证据文件时会因
   小程序、admin smoke、备份窗口仍未确认而失败。证据文件模板见
   `docs/state_machine_migrate/audit/manual-gates.example.json`。其中小程序
   确认必须包含确认人、确认时间和最低可用版本，admin smoke 必须包含执行人
   和执行时间。
 - 已新增破坏性清理后 verifier：
-  `cd apps/api && bun run workflow:destructive-cleanup-verify`。该命令只读
-  检查旧表、旧 RPC、旧列、旧索引、旧 policy 是否已经不存在，并再次运行
-  workflow runtime 一致性检查；它应只在 destructive migration apply 后通过。
+  `cd apps/api && bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify`。
+  该命令只读检查旧表、旧 RPC、旧列、旧索引、旧 policy 是否已经不存在，
+  并再次运行 workflow runtime 一致性检查；它应只在 destructive migration apply 后通过。
 - 最终执行步骤和证据记录模板见
   `docs/state_machine_migrate/final-cleanup-runbook.md`。
 
