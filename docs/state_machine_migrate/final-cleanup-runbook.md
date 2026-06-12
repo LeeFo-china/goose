@@ -104,7 +104,7 @@ Record:
 | target environment/project | |
 | command output location | |
 
-## Post-Apply Verification
+## Post-Apply Technical Verification
 
 Run:
 
@@ -115,8 +115,6 @@ cd ../..
 supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/types/database.ts
 cd apps/api
 bun run workflow:manual-gates-check \
-  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 cd ../..
 bun run api:check
@@ -130,14 +128,12 @@ Expected after apply:
   `legacy_expense_columns_absent`, `legacy_indexes_absent`, and
   `legacy_policies_absent` are `ok: true`.
 - `workflow_runtime_consistency` reports `total_issues=0`.
-- `workflow:final-completion-audit` reports `no_pending_migrations` and
-  `migration_list_aligned` as `ok: true` using the direct migration history
-  check.
-- `workflow:final-completion-audit` reports `destructive_migration_content`
-  as `ok: true`, so the committed cleanup migrations still match the approved
-  destructive object list.
 - Generated database types no longer expose dropped legacy objects.
-- `workflow:final-completion-audit` is `ok: true`.
+- API and admin checks pass before the final commit.
+
+Do not expect `workflow:final-completion-audit` to be `ok: true` before the
+final commit. The audit intentionally checks that the latest commit documents
+the breaking workflow database cleanup.
 
 ## Final Commit
 
@@ -150,6 +146,31 @@ git commit -m "refactor(workflow)!: 删除旧状态机数据库对象"
 
 If the commit subject differs, include a `BREAKING CHANGE:` footer that
 mentions the workflow/old state-machine database cleanup.
+
+## Final Audit
+
+Run after the final cleanup commit:
+
+```bash
+cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+cd ../..
+```
+
+Expected:
+
+- `workflow:final-completion-audit` reports `no_pending_migrations` and
+  `migration_list_aligned` as `ok: true` using the direct migration history
+  check.
+- `workflow:final-completion-audit` reports `destructive_migration_content`
+  as `ok: true`, so the committed cleanup migrations still match the approved
+  destructive object list.
+- `workflow:final-completion-audit` reports `final_breaking_commit_documented`
+  as `ok: true`.
+- `workflow:final-completion-audit` is `ok: true`.
 
 ## Rollback
 

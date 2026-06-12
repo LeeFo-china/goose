@@ -1144,10 +1144,6 @@
   supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
-  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
-    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-  cd ../..
-  cd apps/api
   bun run workflow:cleanup-readiness
   cd ../..
   bun run api:typecheck
@@ -1172,6 +1168,8 @@
 
   Expected: every legacy absence check is `ok: true`, and
   `workflow_runtime_consistency` reports `total_issues=0`.
+  `workflow:final-completion-audit` is intentionally run after the final
+  breaking cleanup commit, because it verifies the latest commit message.
 
 ### Phase 6 Acceptance
 
@@ -1184,6 +1182,14 @@
   ```bash
   git add supabase/migrations apps/api/src/types/database.ts docs/state_machine_migrate/audit
   git commit -m "refactor(workflow)!: 删除旧状态机数据库对象"
+  ```
+
+  After this commit, run:
+
+  ```bash
+  cd apps/api
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
 ## Phase 7: Legacy Code Removal

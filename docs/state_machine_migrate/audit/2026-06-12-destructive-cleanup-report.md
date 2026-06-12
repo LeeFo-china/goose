@@ -116,7 +116,15 @@ Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 `legacy_policies_absent`, and `workflow_runtime_consistency` are all
 `ok: true`.
 
-10. Run the final completion audit:
+10. Commit the regenerated database types, cleanup report updates, and
+    destructive cleanup migration with a breaking cleanup subject:
+
+```bash
+git add supabase/migrations apps/api/src/types/database.ts docs/state_machine_migrate
+git commit -m "refactor(workflow)!: 删除旧状态机数据库对象"
+```
+
+11. Run the final completion audit:
 
 ```bash
 cd apps/api
