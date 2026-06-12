@@ -1128,6 +1128,8 @@
 
   ```bash
   cd apps/api
+  bun run workflow:manual-gates-check \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
@@ -1148,6 +1150,9 @@
 
   `workflow:destructive-cleanup-verify` is the required post-apply database
   verification. It checks that these legacy objects are absent:
+
+  `workflow:manual-gates-check` is the required pre-apply evidence-file gate.
+  It must report `ok: true` before `supabase db push` is allowed.
 
   - `customer_status_transition_logs`,
     `project_status_transition_logs`,
