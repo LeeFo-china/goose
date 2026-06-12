@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectStatusActionDialog } from "@/components/projects/project-status-action-dialog";
 import { useProjectStatusPanel } from "@/components/projects/project-status-panel-state";
+import { WorkflowSubjectStatePanel } from "@/components/workflows/workflow-subject-state-panel";
 import type { ProjectRecord } from "@/components/projects/project-mutation-types";
 import {
   customerName,
@@ -91,6 +92,7 @@ export function ProjectStatusPanel({
         {!panel.error && panel.startAcceptanceBlockedReason ? (
           <StatusAlert>{panel.startAcceptanceBlockedReason}</StatusAlert>
         ) : null}
+        <WorkflowSubjectStatePanel subjectType="project" subjectId={project.id} />
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">

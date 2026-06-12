@@ -727,10 +727,17 @@
   Change customer/project status panels to render workflow actions first and old status actions only as fallback.
 
   Pending:
-  Admin panels still use old status action endpoints for mutations. This should
-  remain fallback until staging confirms workflow task completion can cover the
-  full customer/project action UX, including project acceptance guards and
-  construction manager selection.
+  Admin customer/project status panels now read
+  `/workflow-subjects/:subjectType/:subjectId/state` and display workflow
+  projection next to the legacy status controls.
+
+  Old status action endpoints still remain the mutation path. This is
+  intentional until workflow task completion can safely cover the full
+  customer/project action UX, including project status field writes, customer
+  status coupling, signed amount input, project acceptance guards, and
+  construction manager selection. Switching buttons to generic workflow
+  `complete` before that would move runtime nodes without updating the
+  business read models.
 
 - [ ] **Step 5.4: Verification**
 

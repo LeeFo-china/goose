@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BadgeVariant, CustomerRecord, CustomerStatusActionsResponse, CustomerStatusActionItem, CustomerStatusTransitionRecord } from "@/components/customers/customer-mutation-types";
 import { customerActionLabel, customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
 import { DesignProjectBeforeStatusDialog } from "@/components/customers/design-project-before-status-dialog";
+import { WorkflowSubjectStatePanel } from "@/components/workflows/workflow-subject-state-panel";
 
 type CustomerWorkflowRuntimeMetadata = {
   status: string;
@@ -279,6 +280,9 @@ export function CustomerStatusPanel({
           <StatusAlert>{error}</StatusAlert>
         </div>
       ) : null}
+      <div className="mt-4">
+        <WorkflowSubjectStatePanel subjectType="customer" subjectId={customer.id} />
+      </div>
       <div className="mt-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
