@@ -49,7 +49,8 @@
   小程序、admin smoke、备份窗口仍未确认而失败。证据文件模板见
   `docs/state_machine_migrate/audit/manual-gates.example.json`。其中小程序
   确认必须包含确认人、确认时间和最低可用版本，admin smoke 必须包含执行人
-  和执行时间。
+  和执行时间；各 evidence 字段必须是 `http(s)` URL 或
+  `docs/state_machine_migrate/` 下已存在文件路径，不能只填写自由文本说明。
 - 已新增破坏性清理后 verifier：
   `cd apps/api && bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify`。
   该命令只读检查旧表、旧 RPC、旧列、旧索引、旧 policy 是否已经不存在，
@@ -536,6 +537,10 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
 `SUPABASE_DB_DIRECT_URL` 或 `SUPABASE_DB_URL`，不要在文档或提交信息中输出
 数据库连接串。最终清理脚本不会回退到 linked Supabase project；缺少显式
 目标库 URL 时必须先补齐环境变量再继续。
+
+`manual-gates.json` 里的 evidence 字段必须可追溯：使用 `http(s)` URL，
+或使用 `docs/state_machine_migrate/` 下已存在的文件路径。自由文本说明会被
+`workflow:destructive-cleanup-preflight` 判定为无效证据。
 
 对 workflow task 高频查询执行 `EXPLAIN ANALYZE`，至少覆盖：
 

@@ -312,7 +312,7 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 | `workflow_state_actions_confirmed` | 页面按钮优先来自 `workflow_state.actions`，并按 `output_fields` 渲染表单 |
 | `workflow_task_complete_confirmed` | 客户、项目、费用审批的推进动作可通过 `POST /workflow-tasks/:taskId/complete` 完成 |
 | `legacy_fields_not_required_confirmed` | 线上最低可用版本不再依赖 `status_actions`、`current_step`、`approval_chain` 或旧状态流转接口生成可操作按钮 |
-| `evidence` | 联调记录、发布说明、测试报告或任务链接 |
+| `evidence` | 联调记录、发布说明、测试报告或任务链接；必须填写 `http(s)` URL 或 `docs/state_machine_migrate/` 下已存在文件路径 |
 
 同时必须填写 `mini_program.confirmed_by`、`mini_program.confirmed_at`
 和 `mini_program.minimum_version`，用于追溯破坏性清理前的小程序发布
