@@ -66,6 +66,9 @@ Expected before apply:
 - Pending migrations are exactly:
   - `20260612133000_drop_schedule_project_construction_transition.sql`
   - `20260612143000_drop_legacy_state_machine_objects.sql`
+- `destructive_migration_content` is `ok: true`, proving the pending
+  migration files still contain the expected old RPC, table, index, policy,
+  constraint, and column drop targets.
 - Migration history is aligned through `20260612124500`; the two entries above
   are the only local migrations missing from the target history before apply.
 - `workflow_runtime_consistency` reports `total_issues=0`.

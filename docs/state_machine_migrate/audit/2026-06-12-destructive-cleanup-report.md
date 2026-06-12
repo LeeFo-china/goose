@@ -45,7 +45,7 @@ business status fields; workflow runtime now owns actionable node state.
 | `supabase db push --dry-run` | would push only the two destructive cleanup migrations |
 | `workflow:runtime-consistency-check` | `ok: true`, `total_issues: 0` |
 | `workflow:cleanup-readiness` | `ready: true`, `blockers: 0` |
-| `workflow:destructive-cleanup-preflight` without manual evidence | automated checks pass; fails only `manual_gates` |
+| `workflow:destructive-cleanup-preflight` without manual evidence | automated checks pass, including `destructive_migration_content`; fails only `manual_gates` |
 | `workflow:destructive-cleanup-verify` before destructive apply | expected failure: legacy tables/RPC/columns/indexes still present; runtime consistency still passes |
 
 Legacy objects still present before destructive cleanup:

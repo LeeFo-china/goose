@@ -1025,7 +1025,8 @@
 
   Without a manual gate evidence file, the command must fail if any external
   gate is missing. Current target run passes the automated checks
-  (`pending_migrations_are_destructive_pair`, `cleanup_readiness`,
+  (`pending_migrations_are_destructive_pair`,
+  `destructive_migration_content`, `cleanup_readiness`,
   `workflow_runtime_consistency`, and `legacy_objects_still_targeted`) and
   fails only `manual_gates`.
 

@@ -5,6 +5,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatCommandFailure } from "./workflow-command-failure";
 import {
+  collectDestructiveMigrationContentIssues,
+} from "./workflow-destructive-migration-content";
+import {
   arePendingMigrationsExpected,
   collectManualGateEvidenceReferenceIssues,
   loadManualGateEvidence,
@@ -70,6 +73,51 @@ describe("arePendingMigrationsExpected", () => {
     expect(arePendingMigrationsExpected([
       "20260612143000_drop_legacy_state_machine_objects.sql",
     ])).toBe(false);
+  });
+});
+
+describe("collectDestructiveMigrationContentIssues", () => {
+  test("accepts the current destructive migration files", async () => {
+    const repoRoot = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "..",
+      "..",
+    );
+
+    expect(collectDestructiveMigrationContentIssues({
+      "20260612133000_drop_schedule_project_construction_transition.sql":
+        await readFile(
+          join(
+            repoRoot,
+            "supabase/migrations/20260612133000_drop_schedule_project_construction_transition.sql",
+          ),
+          "utf8",
+        ),
+      "20260612143000_drop_legacy_state_machine_objects.sql": await readFile(
+        join(
+          repoRoot,
+          "supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql",
+        ),
+        "utf8",
+      ),
+    })).toEqual([]);
+  });
+
+  test("reports missing destructive drop targets", () => {
+    const issues = collectDestructiveMigrationContentIssues({
+      "20260612133000_drop_schedule_project_construction_transition.sql": "",
+      "20260612143000_drop_legacy_state_machine_objects.sql":
+        "DROP TABLE IF EXISTS public.customer_status_transition_logs;",
+    });
+
+    expect(issues).toContain(
+      "20260612133000_drop_schedule_project_construction_transition.sql: missing migration file",
+    );
+    expect(issues).toContain(
+      "20260612143000_drop_legacy_state_machine_objects.sql: missing DROP FUNCTION IF EXISTS public.schedule_project_construction_transition",
+    );
   });
 });
 

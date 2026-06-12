@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { formatCommandFailure } from "./workflow-command-failure";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
+import {
+  checkDestructiveMigrationContent,
+  EXPECTED_DESTRUCTIVE_MIGRATIONS,
+} from "./workflow-destructive-migration-content";
 import { loadMigrationHistoryReport } from "./workflow-migration-history";
 import { runWorkflowRuntimeConsistencyCheck } from "./workflow-runtime-consistency-check";
 
@@ -68,10 +72,6 @@ type PreflightReport = {
 
 type EnvLike = Record<string, string | undefined>;
 
-const EXPECTED_DESTRUCTIVE_MIGRATIONS = [
-  "20260612133000_drop_schedule_project_construction_transition.sql",
-  "20260612143000_drop_legacy_state_machine_objects.sql",
-] as const;
 const LEGACY_SCHEDULE_RPC_SIGNATURE =
   "schedule_project_construction_transition(uuid,uuid,text,text,text,uuid,uuid,uuid,text,jsonb)";
 
@@ -320,6 +320,7 @@ async function buildPreflightReport(
     ok: arePendingMigrationsExpected(pendingMigrations),
     detail: pendingMigrations.join(", ") || "none",
   });
+  checks.push(await checkDestructiveMigrationContent(findRepoRoot()));
 
   const cleanupReadiness = await runCleanupReadinessScan();
   checks.push({
