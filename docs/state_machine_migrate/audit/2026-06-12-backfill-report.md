@@ -30,10 +30,13 @@ keys, not the older draft mapping in the original execution plan.
 - Customer `invalid` maps to `invalid`, but the current template has no invalid
   node, so the script reports `mapped_node_missing`.
 - Project statuses map directly to current `construction_main` node keys.
-- Expense `draft/draft` is skipped because the current approval runtime starts
-  after submit.
-- Expense `cancelled/cancelled` maps to `cancelled`, but the current template
-  has no cancelled node, so the script reports `mapped_node_missing`.
+- Expense pending node is derived from `expense_request_approvals`: pending
+  rows with a manager approval in the latest round backfill to
+  `finance_review`; other pending rows backfill to `manager_review`.
+- Expense `draft` is skipped because the current approval runtime starts after
+  submit.
+- Expense `cancelled` maps to `cancelled`, but the current template has no
+  cancelled node, so the script reports `mapped_node_missing`.
 
 ## Verification Completed
 

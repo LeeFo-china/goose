@@ -916,7 +916,7 @@
 **Goal:** 在兼容期和小程序验收通过后删除旧状态机数据库对象。
 
 **Files:**
-- Create: `supabase/migrations/YYYYMMDDHHMMSS_drop_legacy_state_machine.sql`
+- Create: `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`
 - Modify: `apps/api/src/types/database.ts`
 - Modify: `docs/state_machine_migrate/audit/YYYY-MM-DD-cleanup-report.md`
 
@@ -969,6 +969,16 @@
   ALTER TABLE public.expense_requests DROP COLUMN IF EXISTS status;
   ```
 
+  2026-06-12 progress: created
+  `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`.
+  It explicitly drops legacy transition-log/approval-chain indexes, the
+  construction scheduling RPC, `customer_status_transition_logs`,
+  `project_status_transition_logs`, `expense_request_approval_chains`, and
+  `expense_requests.current_step/current_step_role`. It intentionally does not
+  drop `customers.status`, `projects.status`, or `expense_requests.status`
+  because current API code still treats those columns as business status
+  fields while workflow runtime owns the actionable node state.
+
 - [ ] **Step 6.2: Regenerate database types**
 
   Run:
@@ -976,6 +986,11 @@
   ```bash
   supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/types/database.ts
   ```
+
+  2026-06-12 status: pending target-environment migration apply. Do not
+  regenerate remote database types until `20260612143000_drop_legacy_state_machine_objects.sql`
+  has been applied to the Supabase project; otherwise generated types will
+  continue to expose the old objects.
 
 - [ ] **Step 6.3: Verification**
 
