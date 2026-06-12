@@ -127,6 +127,7 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-comp
 ```
 
 Expected: `no_pending_migrations`, `migration_list_aligned`,
-`cleanup_readiness`, `destructive_cleanup_verify`,
+`cleanup_readiness`, `destructive_migration_content`,
+`destructive_cleanup_verify`,
 `generated_database_types_clean`, `manual_gate_evidence`, and
 `final_breaking_commit_documented` are all `ok: true`.

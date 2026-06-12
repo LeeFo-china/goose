@@ -12,6 +12,7 @@ import {
   runWorkflowDestructiveCleanupVerify,
   type WorkflowDestructiveCleanupVerifyReport,
 } from "./workflow-destructive-cleanup-verify";
+import { checkDestructiveMigrationContent } from "./workflow-destructive-migration-content";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 
 export type FinalAuditInput = {
@@ -22,6 +23,8 @@ export type FinalAuditInput = {
   migrationListDetail: string;
   cleanupReady: boolean;
   cleanupBlockerCount: number;
+  destructiveMigrationContentOk: boolean;
+  destructiveMigrationContentDetail: string;
   destructiveCleanupOk: boolean;
   destructiveCleanupDetail: string;
   generatedTypesClean: boolean;
@@ -103,6 +106,11 @@ export function buildFinalAuditReport(
       name: "cleanup_readiness",
       ok: input.cleanupReady,
       detail: `blockers=${input.cleanupBlockerCount}`,
+    },
+    {
+      name: "destructive_migration_content",
+      ok: input.destructiveMigrationContentOk,
+      detail: input.destructiveMigrationContentDetail,
     },
     {
       name: "destructive_cleanup_verify",
@@ -256,6 +264,7 @@ export async function buildFinalCompletionAuditReport(
     pendingMigrations,
     migrationList,
     cleanupReadiness,
+    destructiveMigrationContent,
     manualGateEvidence,
     generatedTypes,
     finalCommit,
@@ -264,6 +273,7 @@ export async function buildFinalCompletionAuditReport(
       loadPendingMigrationFiles(),
       checkMigrationHistoryAlignment(),
       runCleanupReadinessScan(),
+      checkDestructiveMigrationContent(findRepoRoot()),
       loadManualGateEvidence(evidenceFile),
       checkGeneratedDatabaseTypes(),
       checkFinalBreakingCommit(),
@@ -283,6 +293,8 @@ export async function buildFinalCompletionAuditReport(
     migrationListDetail: migrationList.detail,
     cleanupReady: cleanupReadiness.ready,
     cleanupBlockerCount: cleanupReadiness.blockers.length,
+    destructiveMigrationContentOk: destructiveMigrationContent.ok,
+    destructiveMigrationContentDetail: destructiveMigrationContent.detail,
     destructiveCleanupOk: destructiveCleanup?.ok ?? false,
     destructiveCleanupDetail:
       summarizeDestructiveCleanupVerifyReport(destructiveCleanup),

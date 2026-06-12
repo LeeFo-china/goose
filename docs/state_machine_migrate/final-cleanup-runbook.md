@@ -124,6 +124,9 @@ Expected after apply:
 - `workflow:final-completion-audit` reports `no_pending_migrations` and
   `migration_list_aligned` as `ok: true` using the direct migration history
   check.
+- `workflow:final-completion-audit` reports `destructive_migration_content`
+  as `ok: true`, so the committed cleanup migrations still match the approved
+  destructive object list.
 - Generated database types no longer expose dropped legacy objects.
 - `workflow:final-completion-audit` is `ok: true`.
 

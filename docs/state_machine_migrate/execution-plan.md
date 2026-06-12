@@ -1322,10 +1322,11 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
 ```
 
 Expected after destructive apply: no pending migrations, cleanup readiness
-passes, local and remote migration history are aligned by direct
-`supabase_migrations.schema_migrations` comparison, legacy database objects are
-absent, generated database types no longer expose dropped objects, workflow
-runtime is consistent, manual gate evidence is complete, and the latest commit
-documents the breaking workflow database cleanup. Remote connection failures
-are reported as failed audit checks and must be resolved before treating the
-final audit as evidence.
+passes, destructive migration content matches the approved cleanup target list,
+local and remote migration history are aligned by direct
+`supabase_migrations.schema_migrations` comparison, legacy database objects
+are absent, generated database types no longer expose dropped objects,
+workflow runtime is consistent, manual gate evidence is complete, and the
+latest commit documents the breaking workflow database cleanup. Remote
+connection failures are reported as failed audit checks and must be resolved
+before treating the final audit as evidence.

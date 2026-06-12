@@ -36,6 +36,10 @@ const CHECK_GUIDANCE: Record<string, { phase: string; next_action: string }> = {
     phase: "Phase 7",
     next_action: "Remove remaining production references to the old state machine.",
   },
+  destructive_migration_content: {
+    phase: "Phase 6",
+    next_action: "Keep the destructive cleanup migration pair limited to approved old state-machine object drops.",
+  },
   destructive_cleanup_verify: {
     phase: "Phase 6",
     next_action: "Run workflow:destructive-cleanup-verify after destructive apply.",

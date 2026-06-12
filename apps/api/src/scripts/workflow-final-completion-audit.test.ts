@@ -46,6 +46,8 @@ describe("buildFinalAuditReport", () => {
       migrationListDetail: "aligned=2",
       cleanupReady: true,
       cleanupBlockerCount: 0,
+      destructiveMigrationContentOk: true,
+      destructiveMigrationContentDetail: "expected destructive drop targets present",
       destructiveCleanupOk: true,
       destructiveCleanupDetail:
         "legacy objects absent and workflow runtime consistent",
@@ -68,6 +70,11 @@ describe("buildFinalAuditReport", () => {
         { name: "no_pending_migrations", ok: true, detail: "none" },
         { name: "migration_list_aligned", ok: true, detail: "aligned=2" },
         { name: "cleanup_readiness", ok: true, detail: "blockers=0" },
+        {
+          name: "destructive_migration_content",
+          ok: true,
+          detail: "expected destructive drop targets present",
+        },
         {
           name: "destructive_cleanup_verify",
           ok: true,
@@ -103,6 +110,9 @@ describe("buildFinalAuditReport", () => {
       migrationListDetail: "mismatches=20260612143000->missing",
       cleanupReady: false,
       cleanupBlockerCount: 2,
+      destructiveMigrationContentOk: false,
+      destructiveMigrationContentDetail:
+        "20260612143000_drop_legacy_state_machine_objects.sql: forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
       destructiveCleanupOk: false,
       destructiveCleanupDetail:
         "legacy_tables_absent: present=customer_status_transition_logs",
@@ -133,6 +143,12 @@ describe("buildFinalAuditReport", () => {
           detail: "mismatches=20260612143000->missing",
         },
         { name: "cleanup_readiness", ok: false, detail: "blockers=2" },
+        {
+          name: "destructive_migration_content",
+          ok: false,
+          detail:
+            "20260612143000_drop_legacy_state_machine_objects.sql: forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
+        },
         {
           name: "destructive_cleanup_verify",
           ok: false,

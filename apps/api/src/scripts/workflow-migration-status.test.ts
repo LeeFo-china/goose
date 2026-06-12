@@ -18,6 +18,11 @@ describe("buildWorkflowMigrationStatusReport", () => {
           detail: "blockers=0",
         },
         {
+          name: "destructive_migration_content",
+          ok: false,
+          detail: "forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
+        },
+        {
           name: "manual_gate_evidence",
           ok: false,
           detail: "missing=mini_program.confirmed",
@@ -44,6 +49,14 @@ describe("buildWorkflowMigrationStatusReport", () => {
           detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
           next_action:
             "Configure SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL for the explicit destructive cleanup target.",
+        },
+        {
+          phase: "Phase 6",
+          check: "destructive_migration_content",
+          detail:
+            "forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
+          next_action:
+            "Keep the destructive cleanup migration pair limited to approved old state-machine object drops.",
         },
         {
           phase: "Phase 4/5/External Gates",
