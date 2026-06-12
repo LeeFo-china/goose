@@ -1144,6 +1144,9 @@
   supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
+    --technical-only \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
     --technical-only \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
@@ -1173,6 +1176,8 @@
   `workflow_runtime_consistency` reports `total_issues=0`.
   `workflow:final-completion-audit --technical-only` must report all
   technical and manual gates as `ok: true` before the final cleanup commit.
+  `workflow:migration-status --technical-only` must report an empty
+  `blockers` list at the same point.
   The full `workflow:final-completion-audit` is intentionally run after the
   final breaking cleanup commit, because it verifies the latest commit
   message.

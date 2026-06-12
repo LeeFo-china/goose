@@ -82,4 +82,37 @@ describe("buildWorkflowMigrationStatusReport", () => {
       ],
     });
   });
+
+  test("summarizes technical-only audit without final commit blocker", () => {
+    expect(buildWorkflowMigrationStatusReport({
+      ok: true,
+      generated_at: "2026-06-12T00:00:00.000Z",
+      checks: [
+        {
+          name: "database_url_configured",
+          ok: true,
+          detail: "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured",
+        },
+        {
+          name: "no_pending_migrations",
+          ok: true,
+          detail: "none",
+        },
+        {
+          name: "manual_gate_evidence",
+          ok: true,
+          detail: "evidence_file=manual-gates.json",
+        },
+      ],
+    })).toEqual({
+      ok: true,
+      generated_at: "2026-06-12T00:00:00.000Z",
+      completed_checks: [
+        "database_url_configured",
+        "no_pending_migrations",
+        "manual_gate_evidence",
+      ],
+      blockers: [],
+    });
+  });
 });

@@ -87,8 +87,10 @@ function toStatusItem(check: FinalAuditCheck): WorkflowMigrationStatusItem {
 }
 
 async function main() {
+  const args = parseFinalAuditArgs(process.argv.slice(2));
   const audit = await buildFinalCompletionAuditReport(
-    parseFinalAuditArgs(process.argv.slice(2)).evidenceFile,
+    args.evidenceFile,
+    { includeFinalCommitCheck: !args.technicalOnly },
   );
   console.log(JSON.stringify(buildWorkflowMigrationStatusReport(audit), null, 2));
   if (!audit.ok) process.exit(1);

@@ -116,6 +116,9 @@ supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/t
 cd apps/api
 bun run workflow:manual-gates-check \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
+  --technical-only \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --technical-only \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
@@ -135,6 +138,7 @@ Expected after apply:
 - `workflow:final-completion-audit --technical-only` reports all technical
   and manual checks as `ok: true`, while intentionally omitting the latest
   commit-message check.
+- `workflow:migration-status --technical-only` has an empty `blockers` list.
 - API and admin checks pass before the final commit.
 
 Do not expect `workflow:final-completion-audit` without `--technical-only` to
