@@ -50,7 +50,7 @@ describe("buildWorkflowMigrationStatusReport", () => {
           check: "manual_gate_evidence",
           detail: "missing=mini_program.confirmed",
           next_action:
-            "Complete manual-gates.json with backfill, smoke, mini-program, admin, and backup evidence.",
+            "Complete manual-gates.json, then run workflow:manual-gates-check before destructive preflight.",
         },
         {
           phase: "Phase 6",

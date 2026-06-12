@@ -46,7 +46,7 @@ const CHECK_GUIDANCE: Record<string, { phase: string; next_action: string }> = {
   },
   manual_gate_evidence: {
     phase: "Phase 4/5/External Gates",
-    next_action: "Complete manual-gates.json with backfill, smoke, mini-program, admin, and backup evidence.",
+    next_action: "Complete manual-gates.json, then run workflow:manual-gates-check before destructive preflight.",
   },
   final_breaking_commit_documented: {
     phase: "Final Audit",
