@@ -26,7 +26,7 @@ const CHECK_GUIDANCE: Record<string, { phase: string; next_action: string }> = {
   },
   migration_list_aligned: {
     phase: "Phase 6",
-    next_action: "Run and verify supabase migration list after target migration apply.",
+    next_action: "Use workflow:migration-status or workflow:final-completion-audit to verify local and remote migration history alignment after target apply.",
   },
   cleanup_readiness: {
     phase: "Phase 7",

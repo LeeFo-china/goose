@@ -28,16 +28,19 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-cd ../..
-supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
 
 Expected before apply:
 
 - `workflow:destructive-cleanup-preflight` is `ok: true`.
+- The scripts read `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` and compare
+  local migration files with `supabase_migrations.schema_migrations`; do not
+  print or paste the database URL into reports.
 - Pending migrations are exactly:
   - `20260612133000_drop_schedule_project_construction_transition.sql`
   - `20260612143000_drop_legacy_state_machine_objects.sql`
+- Migration history is aligned through `20260612124500`; the two entries above
+  are the only local migrations missing from the target history before apply.
 - `workflow_runtime_consistency` reports `total_issues=0`.
 - `legacy_objects_still_targeted` is `ok: true`, proving the migration still
   targets existing legacy objects.
@@ -84,6 +87,9 @@ Expected after apply:
   `legacy_expense_columns_absent`, `legacy_indexes_absent`, and
   `legacy_policies_absent` are `ok: true`.
 - `workflow_runtime_consistency` reports `total_issues=0`.
+- `workflow:final-completion-audit` reports `no_pending_migrations` and
+  `migration_list_aligned` as `ok: true` using the direct migration history
+  check.
 - Generated database types no longer expose dropped legacy objects.
 - `workflow:final-completion-audit` is `ok: true`.
 

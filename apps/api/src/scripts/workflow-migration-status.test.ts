@@ -22,6 +22,11 @@ describe("buildWorkflowMigrationStatusReport", () => {
           ok: false,
           detail: "legacy generated type patterns=current_step:",
         },
+        {
+          name: "migration_list_aligned",
+          ok: false,
+          detail: "mismatches=20260612143000->missing",
+        },
       ],
     })).toEqual({
       ok: false,
@@ -41,6 +46,13 @@ describe("buildWorkflowMigrationStatusReport", () => {
           detail: "legacy generated type patterns=current_step:",
           next_action:
             "Regenerate apps/api/src/types/database.ts after destructive apply.",
+        },
+        {
+          phase: "Phase 6",
+          check: "migration_list_aligned",
+          detail: "mismatches=20260612143000->missing",
+          next_action:
+            "Use workflow:migration-status or workflow:final-completion-audit to verify local and remote migration history alignment after target apply.",
         },
       ],
     });

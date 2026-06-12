@@ -30,8 +30,9 @@
   `expense_request_approvals` 审计记录推导。
 - 本地 `workflow:cleanup-readiness` 已达到 `ready: true`、`0` 个 blocker。
 - 目标 Supabase project `fclnkyatvfvmzgzdqlba` 已应用到
-  `20260612124500_add_cancel_workflow_instance_rpc.sql`；`supabase migration list`
-  可正常连接并确认状态。
+  `20260612124500_add_cancel_workflow_instance_rpc.sql`；迁移状态现在通过
+  `workflow:migration-status` / `workflow:final-completion-audit` 直连
+  `supabase_migrations.schema_migrations` 与本地 migration 文件比较确认。
 - 目标库已补齐 `workflow_subject_states` projection：先 dry-run 发现
   `1` 条 customer、`20` 条 project projection 缺失，随后
   `workflow:subject-states-rebuild --apply` upsert `21` 条，远端
@@ -526,10 +527,14 @@ pnpm --dir apps/admin check
 ### 数据库验证
 
 ```bash
-supabase migration list
+cd apps/api
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
-必须确认 Local/Remote migration 对齐。
+必须确认 local/remote migration history 对齐。该脚本会读取
+`SUPABASE_DB_DIRECT_URL` 或 `SUPABASE_DB_URL`，不要在文档或提交信息中输出
+数据库连接串。
 
 对 workflow task 高频查询执行 `EXPLAIN ANALYZE`，至少覆盖：
 

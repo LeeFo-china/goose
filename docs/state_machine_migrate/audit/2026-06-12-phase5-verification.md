@@ -80,7 +80,7 @@ These checks are still required before Phase 5 can be fully accepted:
 | Mini-program task/detail smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms `/workflow-tasks`, `/customer/bootstrap`, and customer self-service project detail include workflow data and remain paginated |
 | Task center smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms task center todos stay paginated |
 | Orange handoff | mini-program team confirms the updated `workflow_state.actions` / `output_fields` contract is implemented or scheduled before Phase 6 |
-| Remote migration status | `supabase migration list` succeeds and only the intentional destructive cleanup migrations remain pending before final cleanup |
+| Remote migration status | `workflow:migration-status` or `workflow:final-completion-audit` can read migration history directly and reports only the intentional destructive cleanup migrations as pending before final cleanup |
 
 ## Current Blockers
 

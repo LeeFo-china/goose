@@ -297,8 +297,9 @@
   - `bun run api:typecheck`: passed.
   - `bun run api:build`: passed.
   - `git diff --check`: passed.
-  - `supabase migration list`: passed through `20260612124500`; destructive
-    cleanup migrations `20260612133000` and `20260612143000` remain pending.
+  - Direct migration history check: passed through `20260612124500`;
+    destructive cleanup migrations `20260612133000` and `20260612143000`
+    remain pending.
 
 ### Phase 1 Acceptance
 
@@ -991,14 +992,16 @@
 
 - [ ] Phase 0-5 acceptance all checked.
 - [ ] Production backup completed and restore window recorded.
-- [ ] `supabase migration list` shows Local/Remote aligned before cleanup.
+- [ ] `workflow:migration-status` or `workflow:final-completion-audit` shows
+  local and remote migration history aligned through the last non-destructive
+  migration before cleanup.
 - [ ] Orange team confirms mini-program no longer depends on old `status_actions/current_step` controls.
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
 - [x] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
 
   2026-06-12 target pre-cleanup status: Supabase project
-  `fclnkyatvfvmzgzdqlba` is aligned through `20260612124500`; `supabase db push
-  --dry-run` would push only the destructive cleanup pair
+  `fclnkyatvfvmzgzdqlba` is aligned through `20260612124500`; the direct
+  migration history check reports only the destructive cleanup pair as pending:
   `20260612133000_drop_schedule_project_construction_transition.sql` and
   `20260612143000_drop_legacy_state_machine_objects.sql`. Target
   `workflow:runtime-consistency-check` passes with `total_issues: 0`.
@@ -1110,11 +1113,12 @@
   bun run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
-  supabase db push
+  supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
   bun run workflow:destructive-cleanup-verify
+  bun run workflow:final-completion-audit \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
-  supabase migration list
   bun --cwd apps/api run workflow:cleanup-readiness
   bun run api:typecheck
   bun run api:build
@@ -1255,7 +1259,7 @@
 Only mark the migration complete when all checks below pass:
 
 - [x] `rg` finds no old state machine references in production code.
-- [ ] `supabase migration list` is aligned for target environment.
+- [ ] Direct migration history check is aligned for target environment.
 - [ ] Staging DB no longer has old tables, old RPC, or old indexes.
 - [ ] Customer, project, expense, task center, admin and mini-program smoke tests pass.
 - [ ] Mini-program team confirms new `workflow_state` integration is released or old paths are no longer used.
@@ -1284,9 +1288,10 @@ bun run workflow:migration-status \
 ```
 
 Expected after destructive apply: no pending migrations, cleanup readiness
-passes, local and remote migration history are aligned, legacy database
-objects are absent, generated database types no longer expose dropped objects,
-workflow runtime is consistent, manual gate evidence is complete, and the
-latest commit documents the breaking workflow database cleanup. Supabase CLI
-or remote connection failures are reported as failed audit checks and must be
-resolved before treating the final audit as evidence.
+passes, local and remote migration history are aligned by direct
+`supabase_migrations.schema_migrations` comparison, legacy database objects are
+absent, generated database types no longer expose dropped objects, workflow
+runtime is consistent, manual gate evidence is complete, and the latest commit
+documents the breaking workflow database cleanup. Remote connection failures
+are reported as failed audit checks and must be resolved before treating the
+final audit as evidence.
