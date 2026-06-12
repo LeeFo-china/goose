@@ -82,9 +82,10 @@ status now succeeds through `20260612124500`; the remaining pending migrations
 are the destructive cleanup pair. Before applying to production:
 
 1. Confirm mini-program minimum supported version no longer reads legacy fields.
-2. Attach authenticated admin and mini-program smoke evidence.
-3. Confirm backup and restore window for the target environment.
-4. Run:
+2. Attach Phase 4 staging backfill/apply/reconciliation evidence.
+3. Attach Phase 5 authenticated admin and mini-program smoke evidence.
+4. Confirm backup and restore window for the target environment.
+5. Run:
 
 ```bash
 cd apps/api
@@ -92,9 +93,9 @@ bun run workflow:destructive-cleanup-preflight \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
-5. Apply the destructive migration pair to staging first.
-6. Regenerate `apps/api/src/types/database.ts` from the target project.
-7. Run:
+6. Apply the destructive migration pair to staging first.
+7. Regenerate `apps/api/src/types/database.ts` from the target project.
+8. Run:
 
 ```bash
 cd apps/api
@@ -106,7 +107,7 @@ Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 `legacy_policies_absent`, and `workflow_runtime_consistency` are all
 `ok: true`.
 
-8. Run the final completion audit:
+9. Run the final completion audit:
 
 ```bash
 cd apps/api

@@ -78,6 +78,14 @@ describe("parsePreflightArgs", () => {
 describe("validateManualGateEvidence", () => {
   test("accepts complete manual gate evidence", () => {
     expect(validateManualGateEvidence({
+      phase_acceptance: {
+        phase4_backfill_confirmed: true,
+        phase4_reconciliation_evidence:
+          "docs/state_machine_migrate/audit/staging-backfill.md",
+        phase5_api_smoke_confirmed: true,
+        phase5_api_smoke_evidence:
+          "docs/state_machine_migrate/audit/phase5-smoke.md",
+      },
       mini_program: {
         confirmed: true,
         minimum_version: "2.8.0",
@@ -98,12 +106,16 @@ describe("validateManualGateEvidence", () => {
 
   test("reports missing manual gate evidence fields", () => {
     expect(validateManualGateEvidence({
+      phase_acceptance: { phase4_backfill_confirmed: true },
       mini_program: { confirmed: true },
       admin_smoke: { confirmed: false },
       backup_window: { confirmed: true, backup_id: "backup-1" },
     })).toEqual({
       ok: false,
       missing: [
+        "phase_acceptance.phase4_reconciliation_evidence",
+        "phase_acceptance.phase5_api_smoke_confirmed",
+        "phase_acceptance.phase5_api_smoke_evidence",
         "mini_program.minimum_version",
         "mini_program.evidence",
         "admin_smoke.confirmed",

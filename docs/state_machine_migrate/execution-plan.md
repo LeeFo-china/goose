@@ -1027,6 +1027,10 @@
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
+  The evidence file must include Phase 4 backfill/reconciliation evidence,
+  Phase 5 authenticated API smoke evidence, mini-program rollout confirmation,
+  admin smoke evidence, and backup/restore-window evidence.
+
 ### Steps
 
 - [x] **Step 6.1: Create cleanup migration**

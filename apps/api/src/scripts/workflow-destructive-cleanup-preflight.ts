@@ -17,6 +17,12 @@ type PreflightOptions = {
 };
 
 type ManualGateEvidence = {
+  phase_acceptance?: {
+    phase4_backfill_confirmed?: unknown;
+    phase4_reconciliation_evidence?: unknown;
+    phase5_api_smoke_confirmed?: unknown;
+    phase5_api_smoke_evidence?: unknown;
+  };
   mini_program?: {
     confirmed?: unknown;
     confirmed_by?: unknown;
@@ -138,6 +144,19 @@ export function validateManualGateEvidence(
   evidence: ManualGateEvidence,
 ): { ok: boolean; missing: string[] } {
   const missing: string[] = [];
+  if (evidence.phase_acceptance?.phase4_backfill_confirmed !== true) {
+    missing.push("phase_acceptance.phase4_backfill_confirmed");
+  }
+  if (!isNonEmptyString(evidence.phase_acceptance?.phase4_reconciliation_evidence)) {
+    missing.push("phase_acceptance.phase4_reconciliation_evidence");
+  }
+  if (evidence.phase_acceptance?.phase5_api_smoke_confirmed !== true) {
+    missing.push("phase_acceptance.phase5_api_smoke_confirmed");
+  }
+  if (!isNonEmptyString(evidence.phase_acceptance?.phase5_api_smoke_evidence)) {
+    missing.push("phase_acceptance.phase5_api_smoke_evidence");
+  }
+
   if (evidence.mini_program?.confirmed !== true) {
     missing.push("mini_program.confirmed");
   }

@@ -1,4 +1,10 @@
 {
+  "phase_acceptance": {
+    "phase4_backfill_confirmed": false,
+    "phase4_reconciliation_evidence": "",
+    "phase5_api_smoke_confirmed": false,
+    "phase5_api_smoke_evidence": ""
+  },
   "mini_program": {
     "confirmed": false,
     "confirmed_by": "",
