@@ -1,6 +1,5 @@
 import {
   ClipboardList,
-  Gift,
   Megaphone,
   MonitorSmartphone,
   PauseCircle,
@@ -23,7 +22,7 @@ import {
   type MarketingTabValue,
 } from "@/components/marketing/marketing-tabs-nav";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildTabHref, getCampaigns, getH5Leads, getH5Pages, getProjects, isCurrentPublishedH5Page, normalizeTab, statusLabel, type MarketingPageSearchParams } from "@/app/(console)/marketing/marketing-page-data";
@@ -59,9 +58,6 @@ export default async function MarketingPage({
   const leadCreatedTo = params.lead_created_to?.trim() || "";
   const activeCount = list.filter((item) => item.status === "active").length;
   const pausedCount = list.filter((item) => item.status === "paused").length;
-  const rewardCount = list.filter((item) => item.campaign_type === "appointment_reward").length;
-  const shareAssistCount = list.filter((item) => item.campaign_type === "share_assist").length;
-  const publishedH5Count = h5Pages.list.filter((item) => item.status === "published").length;
   const activePublishedH5Count = h5Pages.list.filter((item) => isCurrentPublishedH5Page(item)).length;
   const draftH5Count = h5Pages.list.filter((item) => item.status === "draft").length;
   const offlineH5Count = h5Pages.list.filter((item) => item.status === "offline").length;
@@ -73,15 +69,30 @@ export default async function MarketingPage({
     h5: buildTabHref("h5", params),
     leads: buildTabHref("leads", params),
   };
+  const HeaderIcon = activeTab === "h5"
+    ? MonitorSmartphone
+    : activeTab === "leads"
+      ? Users
+      : Megaphone;
+  const headerDescription = activeTab === "h5"
+    ? `H5 活动页、展示排序和发布状态。当前共 ${h5Pages.pagination.total} 个页面。`
+    : activeTab === "leads"
+      ? `H5 表单线索、跟进状态和客户匹配。当前筛选共 ${h5Leads.pagination.total} 条记录。`
+      : `活动规则、参与范围和奖励状态。当前筛选共 ${pagination.total} 条记录。`;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">营销活动</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            活动规则与 H5 页面分区管理，当前 tab 聚焦一类营销工作流。
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <HeaderIcon aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">营销活动</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {headerDescription}
+            </p>
+          </div>
         </div>
         {activeTab === "campaigns" ? (
           <CreateMarketingCampaignButton projects={projects} />
@@ -93,222 +104,123 @@ export default async function MarketingPage({
         ) : null}
       </div>
 
-      {activeTab === "campaigns" ? (
-        <div className="grid gap-3 md:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <Megaphone className="size-5" />
+      <Tabs value={activeTab} className="flex min-h-0 flex-1 flex-col">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+          <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <MarketingTabsNav
+                activeTab={activeTab}
+                hrefs={tabHrefs}
+                counts={{
+                  campaigns: pagination.total,
+                  h5: h5Pages.pagination.total,
+                  leads: h5Leads.pagination.total,
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {activeTab === "campaigns" ? (
+                  <>
+                    <Badge variant="success" className="tabular-nums">
+                      <PlayCircle data-icon="inline-start" />
+                      {statusLabel.active} {activeCount}
+                    </Badge>
+                    <Badge variant="warning" className="tabular-nums">
+                      <PauseCircle data-icon="inline-start" />
+                      {statusLabel.paused} {pausedCount}
+                    </Badge>
+                  </>
+                ) : activeTab === "h5" ? (
+                  <>
+                    <Badge variant="success" className="tabular-nums">
+                      <PlayCircle data-icon="inline-start" />
+                      生效中 {activePublishedH5Count}
+                    </Badge>
+                    <Badge variant="outline" className="tabular-nums">
+                      <ClipboardList data-icon="inline-start" />
+                      草稿 {draftH5Count}
+                    </Badge>
+                    <Badge variant="warning" className="tabular-nums">
+                      <PauseCircle data-icon="inline-start" />
+                      下线 {offlineH5Count}
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="default" className="tabular-nums">
+                      <ClipboardList data-icon="inline-start" />
+                      新线索 {newLeadCount}
+                    </Badge>
+                    <Badge variant="success" className="tabular-nums">
+                      <PlayCircle data-icon="inline-start" />
+                      已转化 {convertedLeadCount}
+                    </Badge>
+                    <Badge variant="secondary" className="tabular-nums">
+                      <PauseCircle data-icon="inline-start" />
+                      已作废 {invalidLeadCount}
+                    </Badge>
+                  </>
+                )}
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground">筛选活动</div>
-                <div className="text-xl font-semibold">{pagination.total}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <PlayCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">{statusLabel.active}</div>
-                <div className="text-xl font-semibold">{activeCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                <PauseCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">{statusLabel.paused}</div>
-                <div className="text-xl font-semibold">{pausedCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                <Gift className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">分享 / 预约</div>
-                <div className="text-xl font-semibold">{shareAssistCount} / {rewardCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : activeTab === "h5" ? (
-        <div className="grid gap-3 md:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <MonitorSmartphone className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">H5 页面</div>
-                <div className="text-xl font-semibold">{h5Pages.pagination.total}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <PlayCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">当前已发布</div>
-                <div className="text-xl font-semibold">{publishedH5Count}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                <ClipboardList className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">草稿页面</div>
-                <div className="text-xl font-semibold">{draftH5Count}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                <PauseCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">已下线</div>
-                <div className="text-xl font-semibold">{offlineH5Count}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <Users className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">筛选线索</div>
-                <div className="text-xl font-semibold">{h5Leads.pagination.total}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <ClipboardList className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">新线索</div>
-                <div className="text-xl font-semibold">{newLeadCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                <PlayCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">已转化</div>
-                <div className="text-xl font-semibold">{convertedLeadCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-                <PauseCircle className="size-5" />
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">已作废</div>
-                <div className="text-xl font-semibold">{invalidLeadCount}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <Tabs value={activeTab}>
-        <Card>
-          <CardHeader className="pb-3">
-            <MarketingTabsNav
-              activeTab={activeTab}
-              hrefs={tabHrefs}
-              counts={{
-                campaigns: pagination.total,
-                h5: h5Pages.pagination.total,
-                leads: h5Leads.pagination.total,
-              }}
-            />
-          </CardHeader>
-          <CardContent className="p-0">
-            <TabsContent value="campaigns" className="m-0">
-              {error ? (
-                <div className="border-t px-4 pt-4">
-                  <StatusAlert>{error}</StatusAlert>
-                </div>
-              ) : null}
-              <div className="flex flex-col gap-3 border-t px-4 py-4">
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                  <div>
-                    <CardTitle>活动列表</CardTitle>
-                    <CardDescription>
-                      筛选条件作用于下方活动表格，当前共 {pagination.total} 条记录。
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline">
-                    第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-                  </Badge>
-                </div>
+            </div>
+            {activeTab === "campaigns" ? (
+              <div className="pb-3">
                 <MarketingFilters
                   campaignType={campaignType}
                   status={status}
                   keyword={keyword}
                 />
               </div>
-              <div className="flex flex-col gap-4">
-                <MarketingCampaignsTable campaigns={list} projects={projects} />
-                <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    每页 {pagination.pageSize} 条，共 {pagination.total} 条
-                  </div>
-                  <MarketingPagination
-                    pagination={pagination}
-                    campaignType={campaignType}
-                    status={status}
-                    keyword={keyword}
-                  />
+            ) : null}
+          </CardHeader>
+          <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
+            <TabsContent value="campaigns" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
+              {error ? (
+                <div className="shrink-0 px-4 pt-4">
+                  <StatusAlert>{error}</StatusAlert>
                 </div>
+              ) : null}
+              <div className="min-h-0 flex-1 overflow-auto">
+                <MarketingCampaignsTable campaigns={list} projects={projects} />
+              </div>
+              <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant="outline">
+                    第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+                  </Badge>
+                  <span className="tabular-nums">
+                    当前显示 {list.length} 条，共 {pagination.total} 条
+                  </span>
+                </div>
+                <MarketingPagination
+                  pagination={pagination}
+                  campaignType={campaignType}
+                  status={status}
+                  keyword={keyword}
+                />
               </div>
             </TabsContent>
 
-            <TabsContent value="h5" className="m-0">
-              <div className="flex flex-col gap-3 border-t px-4 py-4">
-                <div>
-                  <CardTitle>H5 活动页</CardTitle>
-                  <CardDescription>
-                    用于小程序 web-view 加载的活动页，发布后访问 https://h5.goodcms.cn/p/页面路径。
-                  </CardDescription>
-                </div>
-              </div>
+            <TabsContent value="h5" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
               {h5Pages.error ? (
-                <div className="px-4 pb-4">
+                <div className="shrink-0 px-4 pt-4">
                   <StatusAlert>{h5Pages.error}</StatusAlert>
                 </div>
               ) : (
-                <H5MarketingPagesTable pages={h5Pages.list} tenantSlug={tenantSlug} />
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <H5MarketingPagesTable pages={h5Pages.list} tenantSlug={tenantSlug} />
+                </div>
               )}
+              <div className="shrink-0 flex flex-col gap-2 border-t bg-card px-4 py-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+                <span className="tabular-nums">
+                  当前显示 {h5Pages.list.length} 个页面，共 {h5Pages.pagination.total} 个
+                </span>
+                <span>
+                  发布后访问 H5 页面路径，展示顺序以生效中的页面为准
+                </span>
+              </div>
             </TabsContent>
 
-            <TabsContent value="leads" className="m-0">
+            <TabsContent value="leads" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
               <H5LeadsPanel
                 initialData={h5Leads}
                 initialFilters={{
