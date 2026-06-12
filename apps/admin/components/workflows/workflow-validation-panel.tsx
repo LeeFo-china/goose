@@ -12,7 +12,7 @@ export function WorkflowValidationPanel({
   const valid = validation?.valid ?? null;
 
   return (
-    <div className="grid gap-3 border-t bg-background px-4 py-3 md:grid-cols-[240px_1fr]">
+    <div className="grid shrink-0 gap-3 border-t bg-background px-4 py-3 md:grid-cols-[240px_1fr]">
       <div className="flex items-start gap-3">
         <span className="flex size-9 items-center justify-center rounded-md border bg-muted/30">
           {valid === true ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { WorkflowCreateDialog } from "@/components/workflows/workflow-create-dialog";
 import {
@@ -17,11 +17,14 @@ import { Button } from "@/components/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 
 type Navigate = (href: string) => void;
+
+const flatControlClassName = "bg-card shadow-none";
 
 function buildWorkflowsHref(input: {
   page?: number;
@@ -86,7 +89,7 @@ export function WorkflowFilters({
   return (
     <form
       onSubmit={submit}
-      className="grid gap-3 lg:grid-cols-[150px_160px_minmax(220px,1fr)_72px_auto]"
+      className="grid gap-2 md:grid-cols-2 xl:grid-cols-[150px_160px_minmax(260px,1fr)_72px_auto]"
     >
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="category" value={selectedCategory} />
@@ -97,6 +100,7 @@ export function WorkflowFilters({
         id="workflow-status-filter"
         value={selectedStatus || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={workflowStatusOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -114,6 +118,7 @@ export function WorkflowFilters({
         id="workflow-category-filter"
         value={selectedCategory || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={workflowCategoryOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -124,7 +129,7 @@ export function WorkflowFilters({
           applySelectFilters({ category: nextCategory });
         }}
       />
-      <InputGroup>
+      <InputGroup className="h-9 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
         </InputGroupAddon>
@@ -136,12 +141,24 @@ export function WorkflowFilters({
           disabled={pending}
           onChange={(event) => setSelectedKeyword(event.target.value)}
         />
+        {selectedKeyword ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="清除搜索内容"
+              size="icon-xs"
+              disabled={pending}
+              onClick={() => setSelectedKeyword("")}
+            >
+              <X aria-hidden="true" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline" disabled={pending}>
+      <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 xl:justify-end">
         <WorkflowTemplateActions disabled={pending} onCreated={onCreated} />
         <WorkflowCreateDialog disabled={pending} onCreated={onCreated} />
       </div>

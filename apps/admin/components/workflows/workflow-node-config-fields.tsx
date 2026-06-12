@@ -128,17 +128,20 @@ function CommonConfigFields({
 }) {
   return (
     <section className="space-y-3">
-      <WorkflowPermissionMultiSelect
-        value={Array.isArray(config.required_permissions)
-          ? config.required_permissions
-          : []}
-        disabled={disabled}
-        onChange={(value) =>
-          onChangeConfig({
-            required_permissions: value,
-          })
-        }
-      />
+      <div className="grid gap-2">
+        <Label>所需权限</Label>
+        <WorkflowPermissionMultiSelect
+          value={Array.isArray(config.required_permissions)
+            ? config.required_permissions
+            : []}
+          disabled={disabled}
+          onChange={(value) =>
+            onChangeConfig({
+              required_permissions: value,
+            })
+          }
+        />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-timeout">超时小时</Label>

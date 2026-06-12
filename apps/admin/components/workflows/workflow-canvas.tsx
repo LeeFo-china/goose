@@ -7,6 +7,7 @@ import {
   ControlButton,
   Controls,
   MarkerType,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -38,6 +39,7 @@ import {
   type WorkflowFlowEdge as WorkflowFlowEdgeType,
   type WorkflowFlowNode as WorkflowFlowNodeType,
 } from "@/components/workflows/workflow-flow-types";
+import { getWorkflowNodeTypeLabel } from "@/components/workflows/workflow-node-labels";
 import { WORKFLOW_NODE_PRESET_DRAG_TYPE } from "@/components/workflows/workflow-node-library";
 import type { WorkflowValidationPlaybackSnapshot } from "@/components/workflows/workflow-validation-playback";
 import type { WorkflowEdge, WorkflowNode } from "@/components/workflows/workflow-types";
@@ -108,6 +110,10 @@ function WorkflowCanvasInner({
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<WorkflowFlowEdgeType>([]);
   const [zoom, setZoom] = useState(1);
   const [canvasViewReady, setCanvasViewReady] = useState(!viewStorageKey);
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) || null,
+    [nodes, selectedNodeId],
+  );
   const activeValidationNodeIds = useMemo(
     () => new Set(validationPlayback?.activeNodeIds || []),
     [validationPlayback?.activeNodeIds],
@@ -334,6 +340,29 @@ function WorkflowCanvasInner({
             <LayoutDashboard className="size-4" />
           </ControlButton>
         </Controls>
+        <Panel
+          position="bottom-left"
+          className="pointer-events-none mb-3 ml-3 max-w-[260px] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
+        >
+          {selectedNode ? (
+            <div className="min-w-0 space-y-1">
+              <div className="truncate font-medium text-foreground">
+                {selectedNode.title}
+              </div>
+              <div className="truncate text-muted-foreground">
+                {getWorkflowNodeTypeLabel(selectedNode.node_type)}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 text-muted-foreground">
+              <span className="tabular-nums">节点 {nodes.length}</span>
+              <span className="tabular-nums">连线 {edges.length}</span>
+              {connectingNodeId ? (
+                <span className="text-primary">正在连接</span>
+              ) : null}
+            </div>
+          )}
+        </Panel>
         <Background
           color="hsl(var(--foreground) / 0.24)"
           gap={32}

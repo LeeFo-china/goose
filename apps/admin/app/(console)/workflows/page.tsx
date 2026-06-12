@@ -1,3 +1,4 @@
+import { GitBranch } from "lucide-react";
 import { WorkflowListShell } from "@/components/workflows/workflow-list-shell";
 import type { WorkflowDefinitionListData } from "@/components/workflows/workflow-types";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -85,13 +86,18 @@ export default async function WorkflowsPage({
   const { list, pagination, error } = await getWorkflows(params);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100dvh-6.5rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">流程编排</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            管理业务流转、施工工序、审批和验收流程，发布后小程序按租户流程执行。
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <GitBranch aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">流程编排</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              业务流转、施工工序、审批和验收流程。当前筛选共 {pagination.total} 条记录。
+            </p>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { PanelRight, Settings2, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { WorkflowNodeConfigFields } from "@/components/workflows/workflow-node-config-fields";
 import {
   getWorkflowBusinessFlowOption,
@@ -75,7 +76,7 @@ export function WorkflowPropertyPanel({
 }) {
   if (!node) {
     return (
-      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-card">
         <div className="shrink-0 border-b px-4 py-3">
           <h2 className="text-sm font-semibold">属性配置</h2>
         </div>
@@ -149,193 +150,199 @@ export function WorkflowPropertyPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-background">
-      <div className="shrink-0 border-b px-4 py-3">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l bg-card">
+      <div className="shrink-0 border-b bg-card px-4 py-3">
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 text-sm font-semibold">
               <Settings2 className="size-3.5" />
               节点属性
             </div>
-            <div className="mt-1 truncate text-sm font-semibold">
+            <div className="truncate text-xs text-muted-foreground">
               {displayLabels.specificLabel}
             </div>
           </div>
-          <Badge variant="outline" className="shrink-0 bg-background">
+          <Badge variant="secondary" className="shrink-0">
             {displayLabels.capabilityLabel}
           </Badge>
         </div>
       </div>
       <div
         data-workflow-property-scroll="true"
-        className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-3"
+        className="min-h-0 flex-1 overflow-auto"
       >
-        <div className="grid gap-2">
-          <Label htmlFor="workflow-node-capability">
-            {isControlNode ? "控制节点" : "节点能力"}
-          </Label>
-          {isControlNode ? (
-            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-              {displayLabels.specificLabel}
+        <PropertyPanelSection title="节点类型">
+          <div className="grid gap-2">
+            <Label htmlFor="workflow-node-capability">
+              {isControlNode ? "控制节点" : "节点能力"}
+            </Label>
+            {isControlNode ? (
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-sm">
+                {displayLabels.specificLabel}
+              </div>
+            ) : (
+              <Select
+                disabled={disabled}
+                value={selectedCapability}
+                onValueChange={(value) =>
+                  onChangeNode(
+                    applyWorkflowNodeCapability({
+                      node: selectedNode,
+                      capability: value as WorkflowNodeCapability,
+                      usedNodeKeys,
+                    }),
+                  )
+                }
+              >
+                <SelectTrigger id="workflow-node-capability">
+                  <SelectValue placeholder="选择节点能力" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_NODE_CAPABILITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {!isControlNode && selectedCapability === "business" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-business-kind">业务类型</Label>
+              <Select
+                disabled={disabled}
+                value={selectedBusinessOption?.value ?? "customer_lead"}
+                onValueChange={(value) =>
+                  onChangeNode(
+                    applyWorkflowBusinessKind({
+                      node: selectedNode,
+                      businessKind: value as typeof WORKFLOW_BUSINESS_FLOW_OPTIONS[number]["value"],
+                      usedNodeKeys,
+                    }),
+                  )
+                }
+              >
+                <SelectTrigger id="workflow-node-business-kind">
+                  <SelectValue placeholder="选择业务类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_BUSINESS_FLOW_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          ) : (
-            <Select
-              disabled={disabled}
-              value={selectedCapability}
-              onValueChange={(value) =>
-                onChangeNode(
-                  applyWorkflowNodeCapability({
-                    node: selectedNode,
-                    capability: value as WorkflowNodeCapability,
-                    usedNodeKeys,
-                  }),
-                )
-              }
-            >
-              <SelectTrigger id="workflow-node-capability">
-                <SelectValue placeholder="选择节点能力" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKFLOW_NODE_CAPABILITY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-        {!isControlNode && selectedCapability === "business" ? (
-          <div className="grid gap-2">
-            <Label htmlFor="workflow-node-business-kind">业务类型</Label>
-            <Select
-              disabled={disabled}
-              value={selectedBusinessOption?.value ?? "customer_lead"}
-              onValueChange={(value) =>
-                onChangeNode(
-                  applyWorkflowBusinessKind({
-                    node: selectedNode,
-                    businessKind: value as typeof WORKFLOW_BUSINESS_FLOW_OPTIONS[number]["value"],
-                    usedNodeKeys,
-                  }),
-                )
-              }
-            >
-              <SelectTrigger id="workflow-node-business-kind">
-                <SelectValue placeholder="选择业务类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKFLOW_BUSINESS_FLOW_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        {!isControlNode && selectedCapability === "construction" ? (
-          <div className="grid gap-2">
-            <Label htmlFor="workflow-node-construction-stage">阶段类型</Label>
-            <Select
-              disabled={disabled}
-              value={selectedConstructionStageKind}
-              onValueChange={(value) =>
-                onChangeNode(
-                  applyWorkflowConstructionStageKind({
-                    node: selectedNode,
-                    stageKind: value as WorkflowConstructionStageKind,
-                    usedNodeKeys,
-                  }),
-                )
-              }
-            >
-              <SelectTrigger id="workflow-node-construction-stage">
-                <SelectValue placeholder="选择阶段类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKFLOW_CONSTRUCTION_STAGE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        {!isControlNode && selectedCapability === "finance" ? (
-          <div className="grid gap-2">
-            <Label htmlFor="workflow-node-finance-kind">财务类型</Label>
-            <Select
-              disabled={disabled}
-              value={selectedFinanceKind}
-              onValueChange={(value) =>
-                onChangeNode(
-                  applyWorkflowFinanceKind({
-                    node: selectedNode,
-                    financeKind: value as WorkflowFinanceKind,
-                    usedNodeKeys,
-                  }),
-                )
-              }
-            >
-              <SelectTrigger id="workflow-node-finance-kind">
-                <SelectValue placeholder="选择财务类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKFLOW_FINANCE_KIND_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        {!isControlNode && selectedCapability === "approval" ? (
-          <div className="grid gap-2">
-            <Label htmlFor="workflow-node-approval-kind">审批类型</Label>
-            <Select
-              disabled={disabled}
-              value={selectedApprovalKind}
-              onValueChange={(value) =>
-                onChangeNode(
-                  applyWorkflowApprovalKind({
-                    node: selectedNode,
-                    approvalKind: value as WorkflowApprovalKind,
-                    usedNodeKeys,
-                  }),
-                )
-              }
-            >
-              <SelectTrigger id="workflow-node-approval-kind">
-                <SelectValue placeholder="选择审批类型" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKFLOW_APPROVAL_KIND_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        <WorkflowNodeConfigFields
-          disabled={disabled}
-          node={selectedNode}
-          rollbackTargetNodes={rollbackTargetNodes}
-          usedProcedureStageKeys={usedProcedureStageKeys}
-          onChangeConfig={handleChangeConfig}
-        />
-        <div className="grid gap-2">
+          ) : null}
+          {!isControlNode && selectedCapability === "construction" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-construction-stage">阶段类型</Label>
+              <Select
+                disabled={disabled}
+                value={selectedConstructionStageKind}
+                onValueChange={(value) =>
+                  onChangeNode(
+                    applyWorkflowConstructionStageKind({
+                      node: selectedNode,
+                      stageKind: value as WorkflowConstructionStageKind,
+                      usedNodeKeys,
+                    }),
+                  )
+                }
+              >
+                <SelectTrigger id="workflow-node-construction-stage">
+                  <SelectValue placeholder="选择阶段类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_CONSTRUCTION_STAGE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          {!isControlNode && selectedCapability === "finance" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-finance-kind">财务类型</Label>
+              <Select
+                disabled={disabled}
+                value={selectedFinanceKind}
+                onValueChange={(value) =>
+                  onChangeNode(
+                    applyWorkflowFinanceKind({
+                      node: selectedNode,
+                      financeKind: value as WorkflowFinanceKind,
+                      usedNodeKeys,
+                    }),
+                  )
+                }
+              >
+                <SelectTrigger id="workflow-node-finance-kind">
+                  <SelectValue placeholder="选择财务类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_FINANCE_KIND_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          {!isControlNode && selectedCapability === "approval" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-node-approval-kind">审批类型</Label>
+              <Select
+                disabled={disabled}
+                value={selectedApprovalKind}
+                onValueChange={(value) =>
+                  onChangeNode(
+                    applyWorkflowApprovalKind({
+                      node: selectedNode,
+                      approvalKind: value as WorkflowApprovalKind,
+                      usedNodeKeys,
+                    }),
+                  )
+                }
+              >
+                <SelectTrigger id="workflow-node-approval-kind">
+                  <SelectValue placeholder="选择审批类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_APPROVAL_KIND_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+        </PropertyPanelSection>
+
+        <PropertyPanelSection title="执行规则">
+          <WorkflowNodeConfigFields
+            disabled={disabled}
+            node={selectedNode}
+            rollbackTargetNodes={rollbackTargetNodes}
+            usedProcedureStageKeys={usedProcedureStageKeys}
+            onChangeConfig={handleChangeConfig}
+          />
+        </PropertyPanelSection>
+
+        <PropertyPanelSection title="说明">
           <Textarea
             id="workflow-node-description"
             aria-label="节点说明"
             value={selectedNode.description || ""}
             disabled={disabled}
             maxLength={500}
-            placeholder="节点说明"
+            placeholder="补充节点用途、执行口径或交接说明"
             onChange={(event) =>
               onChangeNode({
                 ...selectedNode,
@@ -343,19 +350,36 @@ export function WorkflowPropertyPanel({
               })
             }
           />
-        </div>
+        </PropertyPanelSection>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="m-4 mt-0 shrink-0 justify-start text-destructive hover:text-destructive"
-        disabled={disabled}
-        onClick={() => onDeleteNode(selectedNode.id)}
-      >
-        <Trash2 data-icon="inline-start" />
-        删除节点
-      </Button>
+      <div className="shrink-0 border-t bg-card p-3">
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-start text-destructive hover:text-destructive"
+          disabled={disabled}
+          onClick={() => onDeleteNode(selectedNode.id)}
+        >
+          <Trash2 data-icon="inline-start" />
+          删除节点
+        </Button>
+      </div>
     </aside>
+  );
+}
+
+function PropertyPanelSection({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="space-y-3 border-b px-4 py-3 last:border-b-0">
+      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Activity, Loader2, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,7 +57,13 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
+export function WorkflowRuntimePanel({
+  workflowId,
+  className,
+}: {
+  workflowId: string;
+  className?: string;
+}) {
   const [data, setData] = useState<WorkflowRuntimeInstanceListData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -86,8 +93,11 @@ export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
   const instances = data?.list ?? [];
 
   return (
-    <section className="overflow-hidden rounded-md border bg-background shadow-sm">
-      <div className="flex flex-col gap-3 border-b bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+    <section className={cn(
+      "flex min-h-0 flex-col overflow-hidden rounded-md border bg-background shadow-sm",
+      className,
+    )}>
+      <div className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex size-9 items-center justify-center rounded-md border bg-background">
             <Activity className="size-4" />
@@ -116,12 +126,12 @@ export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
       </div>
 
       {error ? (
-        <div className="p-4">
+        <div className="shrink-0 p-4">
           <StatusAlert>{error}</StatusAlert>
         </div>
       ) : null}
 
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -174,7 +184,7 @@ export function WorkflowRuntimePanel({ workflowId }: { workflowId: string }) {
         </Table>
       </div>
 
-      <div className="border-t bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
+      <div className="shrink-0 border-t bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
         共 {data?.pagination.total ?? 0} 条，仅展示最近 5 条。
       </div>
     </section>

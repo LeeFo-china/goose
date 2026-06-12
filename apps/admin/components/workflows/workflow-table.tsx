@@ -30,7 +30,7 @@ function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
         type="button"
         className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="w-[15em] truncate font-medium">
+        <div className="w-[15em] truncate font-semibold">
           {workflow.name}
         </div>
         <div className="w-[15em] truncate text-xs text-muted-foreground">
@@ -44,14 +44,14 @@ function WorkflowIdentityCell({ workflow }: { workflow: WorkflowDefinition }) {
       </TooltipTrigger>
       <TooltipContent align="start" className="max-w-[320px]">
         <div className="flex flex-col gap-1">
-          <div className="break-all font-medium">{workflow.name}</div>
+          <div className="break-all font-semibold">{workflow.name}</div>
           <div className="break-all text-xs opacity-90">编码：{workflow.workflow_key}</div>
           {customerMain ? (
             <div className="text-xs opacity-90">
               自动接入客户开始跟进、到店、设计、签约状态动作
             </div>
           ) : null}
-          <div className="break-all text-xs opacity-90">流程 ID：{workflow.id}</div>
+          <div className="break-all text-xs tabular-nums opacity-90">流程 ID：{workflow.id}</div>
         </div>
       </TooltipContent>
     </Tooltip>
@@ -85,7 +85,7 @@ export function WorkflowTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1120px] table-fixed border-t text-sm">
+      <table className="w-full min-w-[1120px] table-fixed text-sm">
         <colgroup>
           <col className="w-[270px]" />
           <col className="w-[120px]" />
@@ -95,7 +95,7 @@ export function WorkflowTable({
           <col className="w-[240px]" />
           <col className="w-[120px]" />
         </colgroup>
-        <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
+        <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
           <tr>
             <th className="whitespace-nowrap px-4 py-3">流程</th>
             <th className="whitespace-nowrap px-4 py-3">分类</th>
@@ -103,7 +103,7 @@ export function WorkflowTable({
             <th className="whitespace-nowrap px-4 py-3">当前版本</th>
             <th className="whitespace-nowrap px-4 py-3">更新时间</th>
             <th className="whitespace-nowrap px-4 py-3">说明</th>
-            <th className="sticky right-0 whitespace-nowrap bg-muted px-4 py-3 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
+            <th className="sticky right-0 whitespace-nowrap bg-card px-4 py-3 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
               操作
             </th>
           </tr>
@@ -132,13 +132,13 @@ export function WorkflowTable({
                 <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
                   {workflow.active_version_id ? "已绑定" : "未发布"}
                 </td>
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 tabular-nums text-muted-foreground">
                   {formatWorkflowDate(workflow.updated_at)}
                 </td>
                 <td className="px-4 py-4">
                   <WorkflowDescription value={workflow.description} />
                 </td>
-                <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted">
+                <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-4 text-right shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)] transition-colors group-hover:bg-muted/40">
                   <Button asChild variant="outline" size="sm">
                     <Link href={`/workflows/${workflow.id}`}>
                       打开

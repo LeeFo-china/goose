@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
+  Activity,
   CheckCircle2,
   CircleAlert,
   GitBranch,
@@ -35,7 +36,6 @@ import {
   publishWorkflowDefinition,
   saveWorkflowGraph,
 } from "@/components/workflows/workflow-requests";
-import { WorkflowRuntimePanel } from "@/components/workflows/workflow-runtime-panel";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
 import type {
@@ -257,7 +257,7 @@ export function WorkflowDesignerShell({
 
   if (!graph) {
     return (
-      <Card>
+      <Card className="h-full overflow-hidden shadow-none">
         <CardContent className="p-8">
           <StatusAlert>{initialError || "流程不存在"}</StatusAlert>
         </CardContent>
@@ -279,70 +279,111 @@ export function WorkflowDesignerShell({
   const ReadinessIcon = readiness.icon;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="overflow-hidden rounded-md border bg-background shadow-sm">
-        <div className="border-b bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.38))] p-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0">
-              <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 text-muted-foreground">
-                <Link href="/workflows">
-                  <ArrowLeft data-icon="inline-start" />
-                  返回流程列表
-                </Link>
-              </Button>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-normal">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-background shadow-sm">
+        <header className="shrink-0 border-b bg-card">
+          <div className="flex flex-col gap-2 px-3 py-2.5 md:px-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Button asChild variant="ghost" size="sm" className="-ml-2 h-7 shrink-0 px-2 text-muted-foreground">
+                  <Link href="/workflows">
+                    <ArrowLeft data-icon="inline-start" />
+                    <span className="hidden sm:inline">流程列表</span>
+                    <span className="sm:hidden">返回</span>
+                  </Link>
+                </Button>
+                <h1 className="min-w-0 truncate text-base font-semibold tracking-normal md:text-lg">
                   {graph.definition.name}
                 </h1>
-                <Badge variant={dirty ? "warning" : "secondary"}>
-                  {dirty ? "草稿未保存" : "草稿已同步"}
+                <Badge variant={dirty ? "warning" : "outline"} className="shrink-0">
+                  {dirty ? "草稿未保存" : "已同步"}
                 </Badge>
-                <Badge variant={readiness.badge}>
+                <Badge variant={readiness.badge} className="shrink-0">
                   <ReadinessIcon className="mr-1 size-3" />
                   {readiness.label}
                 </Badge>
               </div>
-              <p className="mt-1 max-w-[760px] break-all text-sm text-muted-foreground">
-                {graph.definition.workflow_key}
-                {customerMainWorkflow
-                  ? " · 已接入客户状态流转，关键节点会驱动客户详情页推进。"
-                  : " · 编排租户自己的业务、施工、工序和审批流程。"}
-              </p>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span className="min-w-0 max-w-[52vw] truncate tabular-nums sm:max-w-none">
+                  {graph.definition.workflow_key}
+                </span>
+                <span className="tabular-nums">节点 {graph.nodes.length}</span>
+                <span className="tabular-nums">连线 {graph.edges.length}</span>
+                <span className="hidden min-w-0 md:inline">
+                  {customerMainWorkflow
+                    ? "关键节点同步客户状态"
+                    : "租户业务、施工、工序和审批流程编排"}
+                </span>
+              </div>
             </div>
+
             <div className="flex flex-wrap gap-2 xl:justify-end">
-              <Button type="button" variant="outline" disabled={pending} onClick={handleValidate}>
+              <Button asChild variant="outline" size="sm" className="h-8 bg-card px-2 sm:px-3">
+                <Link href={`/workflows/${workflowId}/runtime`} aria-label="运行实例">
+                  <Activity data-icon="inline-start" />
+                  <span className="hidden sm:inline">运行实例</span>
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 bg-card px-2 sm:px-3"
+                aria-label="本地校验"
+                disabled={pending}
+                onClick={handleValidate}
+              >
                 <ShieldCheck data-icon="inline-start" />
-                本地校验
+                <span className="hidden sm:inline">本地校验</span>
               </Button>
-              <Button type="button" variant="outline" disabled={pending} onClick={handleSave}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 bg-card px-2 sm:px-3"
+                aria-label="保存草稿"
+                disabled={pending}
+                onClick={handleSave}
+              >
                 <Save data-icon="inline-start" />
-                保存草稿
+                <span className="hidden sm:inline">保存草稿</span>
               </Button>
-              <Button type="button" disabled={publishDisabled} title={publishTitle} onClick={handlePublish}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 px-2 sm:px-3"
+                aria-label="发布"
+                disabled={publishDisabled}
+                title={publishTitle}
+                onClick={handlePublish}
+              >
                 {pending ? (
                   <Loader2 className="animate-spin" data-icon="inline-start" />
                 ) : (
                   <GitBranch data-icon="inline-start" />
                 )}
-                发布
+                <span className="hidden sm:inline">发布</span>
               </Button>
             </div>
           </div>
-        </div>
+        </header>
 
         {customerMainWorkflow ? (
-          <div className="border-b bg-accent/18 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <Badge variant="secondary">客户主流程</Badge>
-              <span className="font-medium">关键节点已接入客户状态</span>
+          <div className="shrink-0 border-b bg-secondary/45 px-3 py-2 md:px-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="secondary" className="bg-card">客户主流程</Badge>
+              <span className="font-medium text-secondary-foreground">
+                状态自动推进
+              </span>
               <span className="text-muted-foreground">
-                following、arrived、designing、signed 会驱动客户详情页流程推进。
+                跟进、到店、设计、签约节点会同步到客户详情。
               </span>
             </div>
           </div>
         ) : null}
 
-        <div className="flex min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-220px)] lg:min-h-[660px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="grid grid-cols-3 gap-2 border-b bg-background p-2 lg:hidden">
             {panelOptions.map((option) => {
               const Icon = option.icon;
@@ -424,7 +465,6 @@ export function WorkflowDesignerShell({
           <WorkflowValidationPanel validation={validation} />
         </div>
       </div>
-      <WorkflowRuntimePanel workflowId={workflowId} />
     </div>
   );
 }
