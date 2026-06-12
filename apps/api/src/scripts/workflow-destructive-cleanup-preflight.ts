@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 import { formatCommandFailure } from "./workflow-command-failure";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 import { loadMigrationHistoryReport } from "./workflow-migration-history";
@@ -70,7 +68,6 @@ type PreflightReport = {
 
 type EnvLike = Record<string, string | undefined>;
 
-const execFileAsync = promisify(execFile);
 const EXPECTED_DESTRUCTIVE_MIGRATIONS = [
   "20260612133000_drop_schedule_project_construction_transition.sql",
   "20260612143000_drop_legacy_state_machine_objects.sql",
@@ -94,14 +91,6 @@ export function parsePreflightArgs(argv: string[]): PreflightOptions {
   return { evidenceFile };
 }
 
-export function parseSupabaseDryRunMigrations(output: string): string[] {
-  return output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .map((line) => line.match(/^[•-]\s+(.+\.sql)$/)?.[1] ?? null)
-    .filter((migration): migration is string => Boolean(migration));
-}
-
 export function arePendingMigrationsExpected(
   migrations: readonly string[],
 ): boolean {
@@ -109,16 +98,6 @@ export function arePendingMigrationsExpected(
     EXPECTED_DESTRUCTIVE_MIGRATIONS.every((migration, index) =>
       migrations[index] === migration
     );
-}
-
-export function buildSupabaseDryRunArgs(
-  env: EnvLike = process.env,
-): string[] {
-  const url = databaseUrl(env);
-  if (url) {
-    return ["db", "push", "--dry-run", "--db-url", url];
-  }
-  return ["db", "push", "--dry-run"];
 }
 
 export function validateManualGateEvidence(
@@ -253,35 +232,18 @@ export async function loadManualGateEvidence(
   };
 }
 
-async function runSupabaseDryRun(): Promise<string[]> {
+async function loadPendingMigrationFiles(): Promise<string[]> {
   const url = databaseUrl();
-  if (url) {
-    try {
-      return (await loadMigrationHistoryReport(url)).pendingMigrationFiles;
-    } catch (error) {
-      return [
-        `database migration history check failed: ${
-          formatCommandFailure(error)
-        }`,
-      ];
-    }
+  if (!url) {
+    return ["missing SUPABASE_DB_URL or SUPABASE_DB_DIRECT_URL"];
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "supabase",
-      buildSupabaseDryRunArgs(),
-      {
-        cwd: findRepoRoot(),
-        env: process.env,
-        timeout: 60_000,
-        maxBuffer: 1024 * 1024,
-      },
-    );
-
-    return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+    return (await loadMigrationHistoryReport(url)).pendingMigrationFiles;
   } catch (error) {
-    return [`supabase db push --dry-run failed: ${formatCommandFailure(error)}`];
+    return [
+      `database migration history check failed: ${formatCommandFailure(error)}`,
+    ];
   }
 }
 
@@ -335,7 +297,7 @@ async function buildPreflightReport(
   options: PreflightOptions,
 ): Promise<PreflightReport> {
   const checks: PreflightCheck[] = [];
-  const pendingMigrations = await runSupabaseDryRun();
+  const pendingMigrations = await loadPendingMigrationFiles();
   checks.push({
     name: "pending_migrations_are_destructive_pair",
     ok: arePendingMigrationsExpected(pendingMigrations),

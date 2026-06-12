@@ -5,46 +5,11 @@ import { join } from "node:path";
 import { formatCommandFailure } from "./workflow-command-failure";
 import {
   arePendingMigrationsExpected,
-  buildSupabaseDryRunArgs,
   collectManualGateEvidenceReferenceIssues,
   loadManualGateEvidence,
   parsePreflightArgs,
-  parseSupabaseDryRunMigrations,
   validateManualGateEvidence,
 } from "./workflow-destructive-cleanup-preflight";
-
-describe("parseSupabaseDryRunMigrations", () => {
-  test("extracts pending migration filenames from Supabase dry-run output", () => {
-    expect(parseSupabaseDryRunMigrations([
-      "Would push these migrations:",
-      " • 20260612133000_drop_schedule_project_construction_transition.sql",
-      " • 20260612143000_drop_legacy_state_machine_objects.sql",
-      "Finished supabase db push.",
-    ].join("\n"))).toEqual([
-      "20260612133000_drop_schedule_project_construction_transition.sql",
-      "20260612143000_drop_legacy_state_machine_objects.sql",
-    ]);
-  });
-});
-
-describe("buildSupabaseDryRunArgs", () => {
-  test("uses an explicit database url when available", () => {
-    expect(buildSupabaseDryRunArgs({
-      SUPABASE_DB_DIRECT_URL: "postgres://direct",
-      SUPABASE_DB_URL: "postgres://pooled",
-    })).toEqual([
-      "db",
-      "push",
-      "--dry-run",
-      "--db-url",
-      "postgres://direct",
-    ]);
-  });
-
-  test("falls back to linked project dry-run when no database url exists", () => {
-    expect(buildSupabaseDryRunArgs({})).toEqual(["db", "push", "--dry-run"]);
-  });
-});
 
 describe("formatCommandFailure", () => {
   test("uses stderr before stdout or error message", () => {

@@ -5,9 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { formatCommandFailure } from "./workflow-command-failure";
 import {
-  buildSupabaseDryRunArgs,
   loadManualGateEvidence as loadManualGateEvidenceFile,
-  parseSupabaseDryRunMigrations,
 } from "./workflow-destructive-cleanup-preflight";
 import { loadMigrationHistoryReport } from "./workflow-migration-history";
 import {
@@ -158,36 +156,19 @@ export function summarizeDestructiveCleanupVerifyReport(
     .join("; ");
 }
 
-async function runSupabaseDryRun(): Promise<string[]> {
+async function loadPendingMigrationFiles(): Promise<string[]> {
   const databaseUrl = resolveFinalAuditDatabaseUrl();
-  if (databaseUrl) {
-    try {
-      return (await loadMigrationHistoryReport(databaseUrl))
-        .pendingMigrationFiles;
-    } catch (error) {
-      return [
-        `database migration history check failed: ${
-          formatCommandFailure(error)
-        }`,
-      ];
-    }
+  if (!databaseUrl) {
+    return ["missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL"];
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "supabase",
-      buildSupabaseDryRunArgs(),
-      {
-        cwd: findRepoRoot(),
-        env: process.env,
-        timeout: 60_000,
-        maxBuffer: 1024 * 1024,
-      },
-    );
-
-    return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+    return (await loadMigrationHistoryReport(databaseUrl))
+      .pendingMigrationFiles;
   } catch (error) {
-    return [`supabase db push --dry-run failed: ${formatCommandFailure(error)}`];
+    return [
+      `database migration history check failed: ${formatCommandFailure(error)}`,
+    ];
   }
 }
 
@@ -273,7 +254,7 @@ export async function buildFinalCompletionAuditReport(
     finalCommit,
   ] =
     await Promise.all([
-      runSupabaseDryRun(),
+      loadPendingMigrationFiles(),
       checkSupabaseMigrationListAlignment(),
       runCleanupReadinessScan(),
       loadManualGateEvidence(evidenceFile),
