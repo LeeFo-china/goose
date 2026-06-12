@@ -182,11 +182,6 @@ export const ExpenseRequestListQuerySchema = PaginationQuerySchema.extend({
   created_to: optionalQueryValue(z.iso.datetime("无效的结束时间")),
 });
 
-export const ExpenseRequestTodoQuerySchema = PaginationQuerySchema.extend({
-  keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
-  status: optionalQueryValue(ExpenseStatusSchema),
-});
-
 export const ExpenseRequestProjectCandidateQuerySchema = PaginationQuerySchema.extend({
   employee_id: optionalQueryValue(z.uuid("无效的员工 ID")),
   keyword: optionalQueryValue(z.string().trim().max(100, "关键词过长")),
@@ -218,7 +213,6 @@ export type RejectExpenseRequestInput = z.infer<typeof RejectExpenseRequestSchem
 export type CancelExpenseRequestInput = z.infer<typeof CancelExpenseRequestSchema>;
 export type PayExpenseRequestInput = z.infer<typeof PayExpenseRequestSchema>;
 export type ExpenseRequestListQueryType = z.infer<typeof ExpenseRequestListQuerySchema>;
-export type ExpenseRequestTodoQueryType = z.infer<typeof ExpenseRequestTodoQuerySchema>;
 export type ExpenseRequestProjectCandidateQueryType = z.infer<
   typeof ExpenseRequestProjectCandidateQuerySchema
 >;

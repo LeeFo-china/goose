@@ -57,7 +57,6 @@ import {
   getExpenseRequestById,
   listExpenseRequests,
   getStatsSummary,
-  listTodoExpenseRequests,
 } from './legacy/queries';
 
 class ExpenseRequestService {
@@ -105,7 +104,6 @@ class ExpenseRequestService {
   getExpenseRequestById = getExpenseRequestById;
   listExpenseRequests = listExpenseRequests;
   getStatsSummary = getStatsSummary;
-  listTodoExpenseRequests = listTodoExpenseRequests;
 }
 
 export const expenseRequestService = new ExpenseRequestService();

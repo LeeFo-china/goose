@@ -32,7 +32,6 @@ import {
   type ExpenseApprovalTemplateQueryType,
   type ExpenseRequestListQueryType,
   type ExpenseRequestProjectCandidateQueryType,
-  type ExpenseRequestTodoQueryType,
   type ExpenseRequestItemInput,
   type PayExpenseRequestInput,
   type RejectExpenseRequestInput,
@@ -174,88 +173,5 @@ export async function getStatsSummary(this: any,
       rejected_count: statusCounts.rejected || 0,
       draft_count: statusCounts.draft || 0,
       cancelled_count: statusCounts.cancelled || 0,
-    };
-  }
-
-export async function listTodoExpenseRequests(this: any, 
-    authContext: AuthContext,
-    params: ExpenseRequestTodoQueryType,
-  ) {
-    const tenantId = this.requireTenantId(authContext);
-    const todoDefinitions = [
-      {
-        status: "pending",
-        current_step: "manager_review",
-        permissionCode: "expense_request.approve_manager" as const,
-      },
-      {
-        status: "pending",
-        current_step: "finance_review",
-        permissionCode: "expense_request.approve_finance" as const,
-      },
-      {
-        status: "approved",
-        current_step: "payment",
-        permissionCode: "expense_request.pay" as const,
-      },
-    ];
-    const rowsById = new Map<string, Awaited<ReturnType<typeof expenseRequestRepository.list>>["list"][number]>();
-
-    for (const definition of todoDefinitions) {
-      if (params.status && params.status !== definition.status) {
-        continue;
-      }
-
-      const visibility = await this.getVisibilityForPermission(
-        authContext,
-        definition.permissionCode,
-      );
-      if (visibility.type === "none") {
-        continue;
-      }
-
-      const result = await expenseRequestRepository.list(
-        {
-          page: 1,
-          pageSize: 10000,
-          keyword: params.keyword,
-          status: definition.status as ExpenseRequestListQueryType["status"],
-          current_step:
-            definition.current_step as ExpenseRequestListQueryType["current_step"],
-        },
-        visibility,
-        tenantId,
-      );
-
-      for (const item of result.list) {
-        const currentNode = this.getCurrentApprovalNode(item);
-        if (
-          currentNode &&
-          definition.status === "pending" &&
-          currentNode.assignee_id !== authContext.employeeId
-        ) {
-          continue;
-        }
-
-        rowsById.set(item.id, item);
-      }
-    }
-
-    const rows = Array.from(rowsById.values()).sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeB - timeA;
-    });
-    const from = (params.page - 1) * params.pageSize;
-    const list = rows.slice(from, from + params.pageSize);
-
-    return {
-      list,
-      pagination: {
-        page: params.page,
-        pageSize: params.pageSize,
-        total: rows.length,
-        totalPages: rows.length ? Math.ceil(rows.length / params.pageSize) : 0,
-      },
     };
   }

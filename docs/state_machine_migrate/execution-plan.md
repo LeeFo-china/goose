@@ -791,6 +791,10 @@
   plus expense summary lookup by id; the old repository projection that
   queried `current_step` for expense todos has been removed.
 
+  2026-06-12 progress: the old `/expense-requests/todo` API, its query schema,
+  and its service method have been removed. The cleanup readiness scanner now
+  treats this endpoint pattern as a blocker so it cannot silently reappear.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

@@ -57,6 +57,22 @@ describe("scanCleanupReferences", () => {
       },
     ]);
   });
+
+  test("finds the legacy expense todo endpoint", () => {
+    expect(scanCleanupReferences([
+      {
+        path: "apps/api/src/controllers/expense-requests/index.ts",
+        content: '@Get("/expense-requests/todo")',
+      },
+    ])).toEqual([
+      {
+        path: "apps/api/src/controllers/expense-requests/index.ts",
+        line: 1,
+        pattern: "expense-requests/todo",
+        text: '@Get("/expense-requests/todo")',
+      },
+    ]);
+  });
 });
 
 describe("buildCleanupReadinessReport", () => {

@@ -34,6 +34,7 @@ const LEGACY_PATTERNS = [
   "status-actions",
   "status-transition",
   "status-transitions",
+  "expense-requests/todo",
   "current_step",
   "current_step_role",
   "approval_chain",

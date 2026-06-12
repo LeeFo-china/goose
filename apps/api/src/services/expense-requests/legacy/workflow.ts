@@ -32,7 +32,6 @@ import {
   type ExpenseApprovalTemplateQueryType,
   type ExpenseRequestListQueryType,
   type ExpenseRequestProjectCandidateQueryType,
-  type ExpenseRequestTodoQueryType,
   type ExpenseRequestItemInput,
   type PayExpenseRequestInput,
   type RejectExpenseRequestInput,
