@@ -91,9 +91,16 @@ are the destructive cleanup pair. Before applying to production:
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun run workflow:destructive-cleanup-preflight \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
+
+Expected: `workflow:manual-gates-check` validates the evidence file without a
+database connection, then `workflow:destructive-cleanup-preflight` validates the
+explicit target database, pending destructive migration pair, runtime
+consistency, and legacy-object inventory.
 
 7. Apply the destructive migration pair to staging first.
 8. Regenerate `apps/api/src/types/database.ts` from the target project.
