@@ -7,7 +7,25 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 type WorkflowSubjectType = "customer" | "project" | "expense_request" | "procedure";
 
-type WorkflowSubjectState = {
+export type WorkflowSubjectAction = {
+  key: string;
+  label: string;
+  task_id: string;
+  node_key: string;
+  node_type: string;
+  business_domain: "customer_status" | "project_status" | "expense_request" | null;
+  business_action: string | null;
+  requires_reason: boolean;
+  disabled: boolean;
+  output_fields: Array<{
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+  }>;
+};
+
+export type WorkflowSubjectState = {
   subject_type: WorkflowSubjectType;
   subject_id: string;
   instance_id: string | null;
@@ -16,13 +34,7 @@ type WorkflowSubjectState = {
   current_node_title: string | null;
   current_business_kind: string | null;
   pending_task_count: number;
-  actions: Array<{
-    key: string;
-    label: string;
-    task_id: string;
-    requires_reason: boolean;
-    disabled: boolean;
-  }>;
+  actions: WorkflowSubjectAction[];
 };
 
 function statusLabel(status: string | null) {
@@ -36,9 +48,11 @@ function statusLabel(status: string | null) {
 }
 
 export function WorkflowSubjectStatePanel({
+  onStateChange,
   subjectId,
   subjectType,
 }: {
+  onStateChange?: (state: WorkflowSubjectState | null) => void;
   subjectId: string;
   subjectType: WorkflowSubjectType;
 }) {
@@ -53,10 +67,15 @@ export function WorkflowSubjectStatePanel({
       { cache: "no-store", fallbackMessage: "流程状态加载失败" },
     )
       .then((data) => {
-        if (!cancelled) setState(data.workflow_state ?? null);
+        if (cancelled) return;
+        const nextState = data.workflow_state ?? null;
+        setState(nextState);
+        onStateChange?.(nextState);
       })
       .catch(() => {
-        if (!cancelled) setState(null);
+        if (cancelled) return;
+        setState(null);
+        onStateChange?.(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -65,7 +84,7 @@ export function WorkflowSubjectStatePanel({
     return () => {
       cancelled = true;
     };
-  }, [subjectId, subjectType]);
+  }, [onStateChange, subjectId, subjectType]);
 
   return (
     <section className="rounded-md border bg-muted/20 p-3">

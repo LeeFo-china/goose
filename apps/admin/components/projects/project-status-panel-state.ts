@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import {
+  isProjectStatus,
+  isProjectStatusAction,
+  resolveProjectStatusTransition,
+} from "@gooes/domain";
 import type {
   EmployeeOption,
   ProjectConstructionStagesResponse,
@@ -17,7 +22,16 @@ import {
   isProjectStatusActionVisible,
   requestProject,
 } from "@/components/projects/project-mutation-utils";
+import type {
+  WorkflowSubjectAction,
+  WorkflowSubjectState,
+} from "@/components/workflows/workflow-subject-state-panel";
 import { requestBackendJson } from "@/lib/backend-client";
+
+type ProjectPanelActionItem = ProjectStatusActionItem & {
+  workflow_action_key?: string;
+  workflow_task_id?: string;
+};
 
 export function useProjectStatusPanel(
   project: ProjectRecord,
@@ -33,7 +47,8 @@ export function useProjectStatusPanel(
   const [transitionsLoaded, setTransitionsLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
+  const [selectedAction, setSelectedAction] = useState<ProjectPanelActionItem | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowSubjectState | null>(null);
   const [reason, setReason] = useState("");
   const [signedAmount, setSignedAmount] = useState("");
   const [constructionStartDate, setConstructionStartDate] = useState("");
@@ -179,7 +194,7 @@ export function useProjectStatusPanel(
     resetActionDialog();
   }
 
-  function openActionDialog(action: ProjectStatusActionItem) {
+  function openActionDialog(action: ProjectPanelActionItem) {
     setError("");
     if (
       action.action === "sign_contract" &&
@@ -240,25 +255,40 @@ export function useProjectStatusPanel(
     setError("");
     startTransition(async () => {
       try {
-        await requestProject({
-          path: `/projects/${project.id}/status-transition`,
-          method: "POST",
-          payload: {
-            action: selectedAction.action,
-            reason: normalizedReason || undefined,
-            signed_amount: selectedAction.action === "sign_contract"
-              ? normalizedSignedAmount
+        const output = {
+          signed_amount: selectedAction.action === "sign_contract"
+            ? normalizedSignedAmount
+            : undefined,
+          start_date: selectedAction.action === "schedule_construction"
+            ? constructionStartDate
+            : undefined,
+          construction_manager_employee_id:
+            selectedAction.action === "schedule_construction"
+              ? constructionManagerEmployeeId
               : undefined,
-            start_date: selectedAction.action === "schedule_construction"
-              ? constructionStartDate
-              : undefined,
-            construction_manager_employee_id:
-              selectedAction.action === "schedule_construction"
-                ? constructionManagerEmployeeId
-                : undefined,
-            metadata: { source: "admin" },
-          },
-        });
+        };
+        if (selectedAction.workflow_task_id) {
+          await requestProject({
+            path: `/workflow-tasks/${selectedAction.workflow_task_id}/complete`,
+            method: "POST",
+            payload: {
+              action: selectedAction.workflow_action_key || "complete",
+              reason: normalizedReason || null,
+              output,
+            },
+          });
+        } else {
+          await requestProject({
+            path: `/projects/${project.id}/status-transition`,
+            method: "POST",
+            payload: {
+              action: selectedAction.action,
+              reason: normalizedReason || undefined,
+              ...output,
+              metadata: { source: "admin" },
+            },
+          });
+        }
         resetActionDialog();
         await onChanged();
       } catch (err) {
@@ -267,7 +297,16 @@ export function useProjectStatusPanel(
     });
   }
 
-  const actions = actionsData?.actions || [];
+  const workflowActions = (workflowState?.actions || [])
+    .map((action) =>
+      mapProjectWorkflowAction(
+        action,
+        currentStatus,
+        actionsData?.paused_from_status ?? null,
+      )
+    )
+    .filter((action): action is ProjectPanelActionItem => Boolean(action));
+  const actions = workflowActions.length > 0 ? workflowActions : actionsData?.actions || [];
   const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
     !isProjectStatusActionVisible(actions, item.action)
   );
@@ -303,6 +342,7 @@ export function useProjectStatusPanel(
     setConstructionManagerEmployeeId,
     setConstructionManagerKeyword,
     setConstructionStartDate,
+    setWorkflowState,
     setReason,
     setSignedAmount,
     signedAmount,
@@ -311,5 +351,37 @@ export function useProjectStatusPanel(
     transitions,
     transitionsLoaded,
     transitionsLoading,
+  };
+}
+
+function mapProjectWorkflowAction(
+  action: WorkflowSubjectAction,
+  currentStatus: string | null | undefined,
+  pausedFromStatus: string | null,
+): ProjectPanelActionItem | null {
+  if (
+    action.business_domain !== "project_status" ||
+    !action.business_action ||
+    !isProjectStatusAction(action.business_action) ||
+    !isProjectStatus(currentStatus)
+  ) {
+    return null;
+  }
+
+  const transition = resolveProjectStatusTransition({
+    action: action.business_action,
+    fromStatus: currentStatus,
+    pausedFromStatus: isProjectStatus(pausedFromStatus) ? pausedFromStatus : null,
+  });
+  if (!transition) return null;
+
+  return {
+    action: action.business_action,
+    label: action.label,
+    from_status: transition.fromStatus,
+    to_status: transition.toStatus,
+    requires_reason: action.requires_reason,
+    workflow_action_key: action.key,
+    workflow_task_id: action.task_id,
   };
 }

@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { ArrowRight, History, Loader2 } from "lucide-react";
+import {
+  isCustomerStatus,
+  isCustomerStatusAction,
+  resolveCustomerStatusTransition,
+} from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +16,16 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BadgeVariant, CustomerRecord, CustomerStatusActionsResponse, CustomerStatusActionItem, CustomerStatusTransitionRecord } from "@/components/customers/customer-mutation-types";
 import { customerActionLabel, customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
 import { DesignProjectBeforeStatusDialog } from "@/components/customers/design-project-before-status-dialog";
-import { WorkflowSubjectStatePanel } from "@/components/workflows/workflow-subject-state-panel";
+import {
+  WorkflowSubjectStatePanel,
+  type WorkflowSubjectAction,
+  type WorkflowSubjectState,
+} from "@/components/workflows/workflow-subject-state-panel";
+
+type CustomerPanelActionItem = CustomerStatusActionItem & {
+  workflow_action_key?: string;
+  workflow_task_id?: string;
+};
 
 type CustomerWorkflowRuntimeMetadata = {
   status: string;
@@ -101,7 +115,8 @@ export function CustomerStatusPanel({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [selectedAction, setSelectedAction] = useState<CustomerStatusActionItem | null>(null);
-  const [designAction, setDesignAction] = useState<CustomerStatusActionItem | null>(null);
+  const [designAction, setDesignAction] = useState<CustomerPanelActionItem | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowSubjectState | null>(null);
   const [reason, setReason] = useState("");
 
   useEffect(() => {
@@ -143,10 +158,23 @@ export function CustomerStatusPanel({
     setReason("");
   }
 
-  async function executeStatusAction(action: CustomerStatusActionItem, inputReason?: string) {
+  async function executeStatusAction(action: CustomerPanelActionItem, inputReason?: string) {
     const normalizedReason = (inputReason ?? "").trim();
     if (action.requires_reason && !normalizedReason) {
       setError("该状态动作必须填写原因");
+      return;
+    }
+
+    if (action.workflow_task_id) {
+      await requestCustomer({
+        path: `/workflow-tasks/${action.workflow_task_id}/complete`,
+        method: "POST",
+        payload: {
+          action: action.workflow_action_key || "complete",
+          reason: normalizedReason || null,
+          output: {},
+        },
+      });
       return;
     }
 
@@ -182,7 +210,10 @@ export function CustomerStatusPanel({
   }
 
   const currentStatus = actionsData?.current_status || customer.status;
-  const actions = actionsData?.actions || [];
+  const workflowActions = (workflowState?.actions || [])
+    .map((action) => mapCustomerWorkflowAction(action, currentStatus))
+    .filter((action): action is CustomerPanelActionItem => Boolean(action));
+  const actions = workflowActions.length > 0 ? workflowActions : actionsData?.actions || [];
   const primaryProperty = getPrimaryCustomerProperty(customer);
   const propertyName = formatPropertySummary(primaryProperty) ||
     [customer.community, customer.building_info].filter(Boolean).join(" ");
@@ -281,7 +312,11 @@ export function CustomerStatusPanel({
         </div>
       ) : null}
       <div className="mt-4">
-        <WorkflowSubjectStatePanel subjectType="customer" subjectId={customer.id} />
+        <WorkflowSubjectStatePanel
+          subjectType="customer"
+          subjectId={customer.id}
+          onStateChange={setWorkflowState}
+        />
       </div>
       <div className="mt-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -379,4 +414,34 @@ export function CustomerStatusPanel({
       />
     </section>
   );
+}
+
+function mapCustomerWorkflowAction(
+  action: WorkflowSubjectAction,
+  currentStatus: string | null | undefined,
+): CustomerPanelActionItem | null {
+  if (
+    action.business_domain !== "customer_status" ||
+    !action.business_action ||
+    !isCustomerStatusAction(action.business_action) ||
+    !isCustomerStatus(currentStatus)
+  ) {
+    return null;
+  }
+
+  const transition = resolveCustomerStatusTransition({
+    action: action.business_action,
+    fromStatus: currentStatus,
+  });
+  if (!transition) return null;
+
+  return {
+    action: action.business_action,
+    label: action.label,
+    from_status: transition.fromStatus,
+    to_status: transition.toStatus,
+    requires_reason: action.requires_reason,
+    workflow_action_key: action.key,
+    workflow_task_id: action.task_id,
+  };
 }

@@ -748,20 +748,19 @@
   Customer self-service project list/detail payloads now attach
   `workflow_subject_states` by project id and serialize `workflow_state`.
 
-- [ ] **Step 5.3: Admin panels read workflow_state**
+- [x] **Step 5.3: Admin panels read workflow_state**
 
   Change customer/project status panels to render workflow actions first and old status actions only as fallback.
 
-  Pending:
   Admin customer/project status panels now read
   `/workflow-subjects/:subjectType/:subjectId/state` and display workflow
   projection next to the legacy status controls.
 
-  Old status action endpoints still remain the mutation path. This is
-  intentional until the admin panels render workflow action forms from
-  `output_fields` and call `/workflow-tasks/:id/complete`. The backend now
-  exposes enough action metadata for that UI switch, including signed amount,
-  construction manager and expense payment fields.
+  Admin customer/project status panels now render workflow actions first and
+  old status actions only as fallback. Customer/project workflow actions call
+  `/workflow-tasks/:id/complete`; project signing and construction scheduling
+  reuse the existing status action dialog so `signed_amount`, `start_date`,
+  and `construction_manager_employee_id` are still collected before submit.
 
 - [ ] **Step 5.4: Verification**
 

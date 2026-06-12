@@ -92,7 +92,11 @@ export function ProjectStatusPanel({
         {!panel.error && panel.startAcceptanceBlockedReason ? (
           <StatusAlert>{panel.startAcceptanceBlockedReason}</StatusAlert>
         ) : null}
-        <WorkflowSubjectStatePanel subjectType="project" subjectId={project.id} />
+        <WorkflowSubjectStatePanel
+          subjectType="project"
+          subjectId={project.id}
+          onStateChange={panel.setWorkflowState}
+        />
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
