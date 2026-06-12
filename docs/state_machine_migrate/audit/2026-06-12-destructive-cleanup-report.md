@@ -105,3 +105,14 @@ Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 `legacy_expense_columns_absent`, `legacy_indexes_absent`,
 `legacy_policies_absent`, and `workflow_runtime_consistency` are all
 `ok: true`.
+
+8. Run the final completion audit:
+
+```bash
+cd apps/api
+bun run workflow:final-completion-audit \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+```
+
+Expected: `no_pending_migrations`, `cleanup_readiness`,
+`destructive_cleanup_verify`, and `manual_gate_evidence` are all `ok: true`.

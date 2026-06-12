@@ -885,6 +885,10 @@
   bun run api:typecheck
   bun run api:build
   pnpm --dir apps/admin check
+  cd apps/api
+  bun run workflow:final-completion-audit \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+  cd ../..
   git diff --check
   ```
 
@@ -1212,3 +1216,15 @@ Only mark the migration complete when all checks below pass:
 - [ ] Mini-program team confirms new `workflow_state` integration is released or old paths are no longer used.
 - [ ] Rollback plan and production backup evidence are attached to the cleanup report.
 - [ ] Final commit message documents the breaking DB cleanup.
+
+The final technical gate is repeatable with:
+
+```bash
+cd apps/api
+bun run workflow:final-completion-audit \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+```
+
+Expected after destructive apply: no pending migrations, cleanup readiness
+passes, legacy database objects are absent, workflow runtime is consistent, and
+manual gate evidence is complete.
