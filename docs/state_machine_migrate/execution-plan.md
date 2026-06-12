@@ -178,7 +178,7 @@
 
 ### Steps
 
-- [ ] **Step 1.1: Write migration for read model**
+- [x] **Step 1.1: Write migration for read model**
 
   Create a migration with this table and indexes:
 
@@ -225,7 +225,13 @@
 
   Expected: `apps/api/src/types/database.ts` includes `workflow_subject_states`.
 
-- [ ] **Step 1.3: Add repository**
+  2026-06-12 status: remote generation succeeded but did not include
+  `workflow_subject_states` because the new local migration has not been
+  applied to the target project. Local generation failed because Docker daemon
+  is unavailable. Do not check this step until the migration is applied and
+  `apps/api/src/types/database.ts` contains `workflow_subject_states`.
+
+- [x] **Step 1.3: Add repository**
 
   Create `apps/api/src/repositories/workflow-subject-states.ts` with methods:
 
@@ -248,7 +254,7 @@
 
   Implementation must use Supabase `.from("workflow_subject_states").upsert(...)` with `onConflict: "tenant_id,subject_type,subject_id"`.
 
-- [ ] **Step 1.4: Add service**
+- [x] **Step 1.4: Add service**
 
   Create `apps/api/src/services/workflow-subject-state.ts` with:
 
@@ -258,7 +264,7 @@
 
   `syncFromRuntimeInstance` must count pending tasks from `workflow_tasks` for the instance and write `workflow_subject_states`.
 
-- [ ] **Step 1.5: Verification**
+- [x] **Step 1.5: Verification**
 
   Run:
 
@@ -269,6 +275,13 @@
   ```
 
   Expected: all commands exit 0.
+
+  2026-06-12 verification:
+
+  - `bun run api:typecheck`: passed.
+  - `bun run api:build`: passed.
+  - `git diff --check`: passed.
+  - `supabase migration list`: failed because `SUPABASE_DB_PASSWORD` is not configured for the remote database.
 
 ### Phase 1 Acceptance
 
