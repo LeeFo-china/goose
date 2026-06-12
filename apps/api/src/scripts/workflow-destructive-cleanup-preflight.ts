@@ -102,6 +102,7 @@ export function arePendingMigrationsExpected(
 
 export function validateManualGateEvidence(
   evidence: ManualGateEvidence,
+  referenceTime = new Date(),
 ): { ok: boolean; missing: string[]; invalid: string[] } {
   const missing: string[] = [];
   const invalid = collectManualGateEvidenceReferenceIssues(evidence);
@@ -141,6 +142,8 @@ export function validateManualGateEvidence(
     missing.push("mini_program.confirmed_at");
   } else if (!isParseableDateTime(evidence.mini_program.confirmed_at)) {
     invalid.push("mini_program.confirmed_at: must be a parseable date-time");
+  } else if (isFutureDateTime(evidence.mini_program.confirmed_at, referenceTime)) {
+    invalid.push("mini_program.confirmed_at: must not be in the future");
   }
   if (!isNonEmptyString(evidence.mini_program?.minimum_version)) {
     missing.push("mini_program.minimum_version");
@@ -156,6 +159,8 @@ export function validateManualGateEvidence(
     missing.push("admin_smoke.smoke_at");
   } else if (!isParseableDateTime(evidence.admin_smoke.smoke_at)) {
     invalid.push("admin_smoke.smoke_at: must be a parseable date-time");
+  } else if (isFutureDateTime(evidence.admin_smoke.smoke_at, referenceTime)) {
+    invalid.push("admin_smoke.smoke_at: must not be in the future");
   }
   if (!isNonEmptyString(evidence.admin_smoke?.actor)) {
     missing.push("admin_smoke.actor");
@@ -378,6 +383,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isParseableDateTime(value: string): boolean {
   return Number.isFinite(Date.parse(value));
+}
+
+function isFutureDateTime(value: string, referenceTime: Date): boolean {
+  return Date.parse(value) > referenceTime.getTime();
 }
 
 function manualGateEvidenceReferences(

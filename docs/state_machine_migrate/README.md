@@ -49,7 +49,7 @@
   小程序、admin smoke、备份窗口仍未确认而失败。证据文件模板见
   `docs/state_machine_migrate/audit/manual-gates.example.json`。其中小程序
   确认必须包含确认人、可解析的确认时间和最低可用版本，admin smoke 必须包含执行人
-  和可解析的执行时间；各 evidence 字段必须是 `http(s)` URL 或
+  和可解析的执行时间；确认时间和执行时间都不能晚于当前时间。各 evidence 字段必须是 `http(s)` URL 或
   `docs/state_machine_migrate/` 下已存在文件路径，不能只填写自由文本说明。
 - 已新增破坏性清理后 verifier：
   `cd apps/api && bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify`。

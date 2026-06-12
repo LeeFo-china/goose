@@ -1046,11 +1046,11 @@
   upgrade evidence, mini-program rollout confirmation, admin smoke evidence,
   and backup/restore-window evidence. Mini-program confirmation must include
   `confirmed_by`, parseable `confirmed_at`, and `minimum_version`; admin smoke
-  must include `actor` and parseable `smoke_at`. Each evidence value must be
-  either an `http(s)` URL or a `docs/state_machine_migrate/` path; local doc
-  paths must reference existing files. A missing, malformed, or free-form
-  evidence value is reported as a failed manual gate and must be fixed before
-  destructive apply.
+  must include `actor` and parseable `smoke_at`. These timestamps must not be
+  in the future. Each evidence value must be either an `http(s)` URL or a
+  `docs/state_machine_migrate/` path; local doc paths must reference existing
+  files. A missing, malformed, future-dated, or free-form evidence value is
+  reported as a failed manual gate and must be fixed before destructive apply.
 
 ### Steps
 

@@ -19,7 +19,8 @@ field with real evidence:
 | `backup_window` | backup id, restore window, and backup/restore evidence |
 
 `mini_program.confirmed_at` and `admin_smoke.smoke_at` must be parseable
-date-time strings, preferably ISO 8601 values with timezone offsets.
+date-time strings, preferably ISO 8601 values with timezone offsets. They must
+record completed checks and cannot be future timestamps.
 
 Evidence values must be traceable: use either an `http(s)` URL or a
 `docs/state_machine_migrate/` path. Local doc paths must reference existing

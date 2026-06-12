@@ -183,6 +183,25 @@ describe("validateManualGateEvidence", () => {
     ]);
   });
 
+  test("rejects future confirmation timestamps", () => {
+    const result = validateManualGateEvidence(
+      {
+        mini_program: {
+          confirmed_at: "2026-06-13T10:00:00+08:00",
+        },
+        admin_smoke: {
+          smoke_at: "2026-06-13T11:00:00+08:00",
+        },
+      },
+      new Date("2026-06-12T12:00:00+08:00"),
+    );
+
+    expect(result.invalid).toEqual([
+      "mini_program.confirmed_at: must not be in the future",
+      "admin_smoke.smoke_at: must not be in the future",
+    ]);
+  });
+
   test("reports missing local evidence file references", () => {
     expect(collectManualGateEvidenceReferenceIssues({
       phase_acceptance: {
