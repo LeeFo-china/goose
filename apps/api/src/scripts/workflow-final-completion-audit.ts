@@ -22,6 +22,8 @@ export type FinalAuditInput = {
   generatedTypesDetail: string;
   manualGateEvidenceOk: boolean;
   manualGateEvidenceDetail: string;
+  finalCommitDocumented: boolean;
+  finalCommitDetail: string;
 };
 
 export type FinalAuditCheck = {
@@ -109,6 +111,11 @@ export function buildFinalAuditReport(
       ok: input.manualGateEvidenceOk,
       detail: input.manualGateEvidenceDetail,
     },
+    {
+      name: "final_breaking_commit_documented",
+      ok: input.finalCommitDocumented,
+      detail: input.finalCommitDetail,
+    },
   ];
 
   return {
@@ -162,6 +169,16 @@ export function summarizeMigrationListAlignment(
       `${row.local ?? "missing"}->${row.remote ?? "missing"}`
     ).join(", ")}`,
   };
+}
+
+export function isBreakingCleanupCommitMessage(message: string): boolean {
+  const subject = message.split(/\r?\n/)[0]?.trim() ?? "";
+  const hasBreakingMarker = /^[a-z]+(?:\([^)]+\))?!:/.test(subject) ||
+    /\bBREAKING CHANGE:/.test(message);
+  const hasWorkflowScope = /workflow|流程|状态机/.test(message);
+  const hasCleanupTarget =
+    /旧状态机数据库|旧状态机|删表|删列|删除旧|drop|cleanup/i.test(message);
+  return hasBreakingMarker && hasWorkflowScope && hasCleanupTarget;
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
@@ -242,6 +259,29 @@ async function checkGeneratedDatabaseTypes(): Promise<
   };
 }
 
+async function checkFinalBreakingCommit(): Promise<
+  { ok: boolean; detail: string }
+> {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["log", "-1", "--pretty=%B"],
+    {
+      cwd: findRepoRoot(),
+      env: process.env,
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  const subject = stdout.split(/\r?\n/)[0]?.trim() || "unknown";
+  const ok = isBreakingCleanupCommitMessage(stdout);
+  return {
+    ok,
+    detail: ok
+      ? `latest_commit=${subject}`
+      : `latest commit does not document breaking workflow DB cleanup: ${subject}`,
+  };
+}
+
 async function buildReport(evidenceFile: string | null): Promise<FinalAuditReport> {
   const [
     pendingMigrations,
@@ -249,6 +289,7 @@ async function buildReport(evidenceFile: string | null): Promise<FinalAuditRepor
     cleanupReadiness,
     manualGateEvidence,
     generatedTypes,
+    finalCommit,
   ] =
     await Promise.all([
       runSupabaseDryRun(),
@@ -256,6 +297,7 @@ async function buildReport(evidenceFile: string | null): Promise<FinalAuditRepor
       runCleanupReadinessScan(),
       loadManualGateEvidence(evidenceFile),
       checkGeneratedDatabaseTypes(),
+      checkFinalBreakingCommit(),
     ]);
 
   const databaseUrl = resolveFinalAuditDatabaseUrl();
@@ -276,6 +318,8 @@ async function buildReport(evidenceFile: string | null): Promise<FinalAuditRepor
     manualGateEvidenceDetail: databaseUrl
       ? manualGateEvidence.detail
       : `${manualGateEvidence.detail}; missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL`,
+    finalCommitDocumented: finalCommit.ok,
+    finalCommitDetail: finalCommit.detail,
   });
 }
 

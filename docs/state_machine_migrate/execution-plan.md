@@ -1269,4 +1269,5 @@ bun run workflow:final-completion-audit \
 Expected after destructive apply: no pending migrations, cleanup readiness
 passes, local and remote migration history are aligned, legacy database
 objects are absent, generated database types no longer expose dropped objects,
-workflow runtime is consistent, and manual gate evidence is complete.
+workflow runtime is consistent, manual gate evidence is complete, and the
+latest commit documents the breaking workflow database cleanup.

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildFinalAuditReport,
   findLegacyGeneratedTypePatterns,
+  isBreakingCleanupCommitMessage,
   parseFinalAuditArgs,
   parseSupabaseMigrationListRows,
   resolveFinalAuditDatabaseUrl,
@@ -49,6 +50,9 @@ describe("buildFinalAuditReport", () => {
       generatedTypesDetail: "legacy generated types absent",
       manualGateEvidenceOk: true,
       manualGateEvidenceDetail: "evidence_file=manual-gates.json",
+      finalCommitDocumented: true,
+      finalCommitDetail:
+        "latest_commit=refactor(workflow)!: 删除旧状态机数据库对象",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
       ok: true,
       generated_at: "2026-06-12T00:00:00.000Z",
@@ -71,6 +75,11 @@ describe("buildFinalAuditReport", () => {
           ok: true,
           detail: "evidence_file=manual-gates.json",
         },
+        {
+          name: "final_breaking_commit_documented",
+          ok: true,
+          detail: "latest_commit=refactor(workflow)!: 删除旧状态机数据库对象",
+        },
       ],
     });
   });
@@ -89,6 +98,9 @@ describe("buildFinalAuditReport", () => {
       generatedTypesDetail: "legacy generated type patterns=current_step:",
       manualGateEvidenceOk: false,
       manualGateEvidenceDetail: "missing --evidence-file",
+      finalCommitDocumented: false,
+      finalCommitDetail:
+        "latest commit does not document breaking workflow DB cleanup: feat(workflow): 普通提交",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
       ok: false,
       generated_at: "2026-06-12T00:00:00.000Z",
@@ -119,8 +131,36 @@ describe("buildFinalAuditReport", () => {
           ok: false,
           detail: "missing --evidence-file",
         },
+        {
+          name: "final_breaking_commit_documented",
+          ok: false,
+          detail:
+            "latest commit does not document breaking workflow DB cleanup: feat(workflow): 普通提交",
+        },
       ],
     });
+  });
+});
+
+describe("isBreakingCleanupCommitMessage", () => {
+  test("accepts breaking workflow database cleanup commit", () => {
+    expect(isBreakingCleanupCommitMessage(
+      "refactor(workflow)!: 删除旧状态机数据库对象",
+    )).toBe(true);
+  });
+
+  test("accepts BREAKING CHANGE footer with cleanup context", () => {
+    expect(isBreakingCleanupCommitMessage([
+      "refactor(workflow): 清理旧状态机数据库对象",
+      "",
+      "BREAKING CHANGE: 删除旧状态机数据库对象，旧表和旧列不再可用。",
+    ].join("\n"))).toBe(true);
+  });
+
+  test("rejects non-breaking workflow commits", () => {
+    expect(isBreakingCleanupCommitMessage(
+      "feat(workflow): 校验人工证据本地路径",
+    )).toBe(false);
   });
 });
 
