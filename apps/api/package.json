@@ -27,6 +27,7 @@
     "workflow:destructive-cleanup-preflight": "bun src/scripts/workflow-destructive-cleanup-preflight.ts",
     "workflow:destructive-cleanup-verify": "bun src/scripts/workflow-destructive-cleanup-verify.ts",
     "workflow:final-completion-audit": "bun src/scripts/workflow-final-completion-audit.ts",
+    "workflow:migration-status": "bun src/scripts/workflow-migration-status.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",

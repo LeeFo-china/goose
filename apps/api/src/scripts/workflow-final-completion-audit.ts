@@ -282,7 +282,9 @@ async function checkFinalBreakingCommit(): Promise<
   };
 }
 
-async function buildReport(evidenceFile: string | null): Promise<FinalAuditReport> {
+export async function buildFinalCompletionAuditReport(
+  evidenceFile: string | null,
+): Promise<FinalAuditReport> {
   const [
     pendingMigrations,
     migrationList,
@@ -334,7 +336,7 @@ function findRepoRoot(start = process.cwd()): string {
 }
 
 async function main() {
-  const report = await buildReport(
+  const report = await buildFinalCompletionAuditReport(
     parseFinalAuditArgs(process.argv.slice(2)).evidenceFile,
   );
   console.log(JSON.stringify(report, null, 2));

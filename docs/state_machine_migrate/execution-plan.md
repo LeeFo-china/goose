@@ -1266,6 +1266,14 @@ bun run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
+For an operator-friendly summary of remaining blockers, run:
+
+```bash
+cd apps/api
+bun run workflow:migration-status \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+```
+
 Expected after destructive apply: no pending migrations, cleanup readiness
 passes, local and remote migration history are aligned, legacy database
 objects are absent, generated database types no longer expose dropped objects,
