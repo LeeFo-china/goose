@@ -434,7 +434,7 @@
 
 ### Steps
 
-- [ ] **Step 3.1: Customer adapter**
+- [x] **Step 3.1: Customer adapter**
 
   Replace direct customer status transition writes with:
 
@@ -471,7 +471,14 @@
   This step is not complete until the old customer write path no longer uses
   the domain status transition config as the source of truth.
 
-- [ ] **Step 3.2: Project adapter**
+  2026-06-12 closure: the compatibility endpoint window is closed for
+  customer status actions. Old customer `status-actions`,
+  `status-transition`, and `status-transitions` routes were removed in
+  `a6ca2df refactor(workflow): 移除客户项目旧状态接口`. Normal customer
+  status actions now use workflow subject state/timeline and
+  `/workflow-tasks/:id/complete`.
+
+- [x] **Step 3.2: Project adapter**
 
   Replace project status transition writes with workflow runtime. The `schedule_construction` branch must still update project business facts:
 
@@ -494,7 +501,14 @@
   compatibility source of truth until existing project data is backfilled and
   staging smoke confirms runtime-only writes.
 
-- [ ] **Step 3.3: Expense adapter**
+  2026-06-12 closure: the compatibility endpoint window is closed for project
+  status actions. Old project `status-actions`, `status-transition`, and
+  `status-transitions` routes were removed in
+  `a6ca2df refactor(workflow): 移除客户项目旧状态接口`. Project construction
+  scheduling no longer calls `schedule_project_construction_transition`; the
+  API updates project business facts and syncs workflow runtime/subject state.
+
+- [x] **Step 3.3: Expense adapter**
 
   Route:
 
@@ -521,6 +535,14 @@
   `20260612124500`; destructive cleanup migrations remain intentionally
   unapplied.
 
+  2026-06-12 closure: expense direct business endpoints
+  (`submit/approve/reject/cancel/pay`) remain as compatibility business
+  commands, but they no longer read or write
+  `expense_request_approval_chains`, `current_step`, or
+  `current_step_role`. Actionable approval/payment work is owned by
+  `workflow_tasks`, and the old `/expense-requests/todo` endpoint was removed
+  in `13ff56c refactor(workflow): 移除费用旧待办接口`.
+
 - [ ] **Step 3.4: Verification**
 
   Run:
@@ -542,18 +564,30 @@
 
   Expected: old endpoints return 2xx and include `workflow_state` or `workflow_runtime`.
 
+  2026-06-12 update: this old-endpoint smoke is obsolete for customer/project
+  status routes because those routes were intentionally removed before final
+  destructive cleanup. The remaining required smoke is the Phase 5
+  authenticated workflow smoke against `/workflow-subjects`, `/workflow-tasks`,
+  task center, admin action panels, and mini-program bootstrap/detail.
+
 ### Phase 3 Acceptance
 
-- [ ] Old customer/project/expense endpoints still work.
-- [ ] Old endpoints no longer depend on domain transition config as source of truth.
-- [ ] Workflow runtime is the primary write path.
-- [ ] Staging smoke confirms old response shape remains compatible.
-- [ ] Commit:
+- [x] Old customer/project status endpoints are removed; normal status actions use workflow subject/task APIs.
+- [x] Remaining expense business endpoints no longer depend on old approval chain or current-step state as source of truth.
+- [x] Workflow runtime is the primary actionable state path.
+- [ ] Staging smoke confirms the workflow-first replacement surface covers the old status/action flows.
+- [x] Commit:
 
   ```bash
   git add apps/api/src/services apps/api/src/controllers
   git commit -m "feat(workflow): 将旧状态接口接入流程运行时"
   ```
+
+  Compatibility adapter work was delivered in
+  `fa6bdcb feat(workflow): 在旧状态接口补充流程状态投影` and then superseded by
+  route removal / workflow-first read path commits. Staging smoke remains
+  tracked under Phase 5 because the final API surface is workflow-first rather
+  than old status endpoint compatibility.
 
 ## Phase 4: Backfill Historical Runtime Data
 
