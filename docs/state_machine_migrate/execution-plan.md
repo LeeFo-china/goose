@@ -1046,7 +1046,7 @@
 
 ### Steps
 
-- [ ] **Step 7.1: Remove customer/project domain transition configs**
+- [x] **Step 7.1: Remove customer/project domain transition configs**
 
   Delete old transition resolver exports only after no imports remain:
 
@@ -1066,15 +1066,15 @@
   helpers; it only keeps the status/action value unions that are still used as
   workflow business action identifiers.
 
-- [ ] **Step 7.2: Remove old transition repositories**
+- [x] **Step 7.2: Remove old transition repositories**
 
   Delete customer/project transition repository files and remove route/service references.
 
-- [ ] **Step 7.3: Remove expense approval chain legacy code**
+- [x] **Step 7.3: Remove expense approval chain legacy code**
 
   Delete code that directly writes `expense_request_approval_chains`, `current_step`, or approval chain status.
 
-- [ ] **Step 7.4: Replace consistency checker**
+- [x] **Step 7.4: Replace consistency checker**
 
   Create `apps/api/src/scripts/workflow-runtime-consistency-check.ts` that checks:
 
