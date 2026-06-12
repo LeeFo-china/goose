@@ -26,6 +26,15 @@ export function AdminShell({
 }) {
   const [preferences, setPreferences] = useState(defaultPreferences);
   const isPlatformMode = isPlatformOnlySession(session);
+  const headerTenantLabel = isPlatformMode
+    ? "平台管理"
+    : session.tenant?.name || "未绑定租户";
+  const headerRoleLabel = isPlatformMode
+    ? "平台管理模式"
+    : session.employee.post_name || "未分配岗位";
+  const headerDepartmentLabel = isPlatformMode
+    ? "平台账号"
+    : session.employee.department_name || "未分配部门";
   const sidebarIdentityTitle = `${isPlatformMode ? "平台超管" : session.tenant?.name || "未绑定租户"} · ${session.employee.name || "未命名员工"}`;
   const sidebarIdentityMeta = isPlatformMode
     ? `平台账号 · ${session.user_id || "-"}`
@@ -77,35 +86,48 @@ export function AdminShell({
         </div>
       </aside>
       <div className={cn("transition-[padding] duration-200", preferences.sidebarCollapsed ? "lg:pl-20" : "lg:pl-64")}>
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-black/10 bg-white px-4 shadow-[0_8px_24px_rgba(17,17,17,0.06)] md:px-6">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">
-              {session.employee.name || "未命名员工"}
+        <header className="sticky top-0 z-40 border-b border-black/10 bg-card shadow-[0_6px_18px_rgba(17,17,17,0.05)]">
+          <div className="flex min-h-16 items-center justify-between gap-3 px-3 md:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background lg:hidden">
+                <img src="/logo.png" alt="鹅班长" className="size-7 object-contain" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="truncate text-sm font-semibold text-foreground">
+                    {headerTenantLabel}
+                  </div>
+                  <Badge
+                    variant={isPlatformMode ? "success" : "outline"}
+                    className="hidden shrink-0 md:inline-flex"
+                  >
+                    {isPlatformMode ? "平台超管" : `权限 ${session.permissions.length}`}
+                  </Badge>
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className="truncate">
+                    {session.employee.name || "未命名员工"}
+                  </span>
+                  <span className="hidden h-3 w-px shrink-0 bg-border sm:inline" aria-hidden="true" />
+                  <span className="hidden min-w-0 truncate sm:inline">
+                    {headerDepartmentLabel}
+                  </span>
+                  <span className="hidden h-3 w-px shrink-0 bg-border md:inline" aria-hidden="true" />
+                  <span className="hidden min-w-0 truncate md:inline">
+                    {headerRoleLabel}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="truncate text-xs text-[var(--goose-brown)]">
-              {isPlatformMode
-                ? "平台超管 · 平台管理模式"
-                : `${session.employee.department_name || "未分配部门"} · ${session.employee.post_name || "未分配岗位"}`}
+
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <AdminPreferencesMenu
+                preferences={preferences}
+                onChange={setPreferences}
+              />
+              <NotificationMenu />
+              <LogoutButton />
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <AdminPreferencesMenu
-              preferences={preferences}
-              onChange={setPreferences}
-            />
-            <NotificationMenu />
-            {isPlatformMode ? (
-              <>
-                <Badge variant="outline">平台账号</Badge>
-                <Badge variant="success">平台超管</Badge>
-              </>
-            ) : (
-              <>
-                <Badge variant="outline">{session.tenant?.name || "未绑定租户"}</Badge>
-                <Badge variant="success">权限 {session.permissions.length}</Badge>
-              </>
-            )}
-            <LogoutButton />
           </div>
         </header>
         <main className={cn(
