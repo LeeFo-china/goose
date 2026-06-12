@@ -226,3 +226,37 @@ describe("workflow runtime backfill current step cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("domain state action config cleanup", () => {
+  test("api workflow adapters no longer import legacy domain transition configs", () => {
+    const sourcePaths = [
+      "src/services/customer-status.ts",
+      "src/services/project-status.ts",
+      "src/services/workflow-task-action-metadata.ts",
+    ];
+    const legacySymbols = [
+      "CustomerStatusActionConfig",
+      "ProjectStatusActionConfig",
+      "resolveCustomerStatusTransition",
+      "resolveProjectStatusTransition",
+      "listCustomerStatusActions",
+      "listProjectStatusActions",
+      "inferCustomerStatusAction",
+      "inferProjectStatusAction",
+    ];
+    const references = sourcePaths.flatMap((sourcePath) => {
+      const content = readFileSync(sourcePath, "utf8");
+      const domainImports = Array.from(
+        content.matchAll(/import\s+\{[\s\S]*?\}\s+from\s+["@']@gooes\/domain["@'];/g),
+      ).map((match) => match[0]).join("\n");
+      return legacySymbols
+        .filter((symbol) => domainImports.includes(symbol))
+        .map((symbol) => ({
+          path: `apps/api/${sourcePath}`,
+          symbol,
+        }));
+    });
+
+    expect(references).toEqual([]);
+  });
+});

@@ -1,7 +1,9 @@
 import {
-  CustomerStatusActionConfig,
+  CustomerWorkflowActionConfig,
+  ProjectWorkflowActionConfig,
+} from "@/services/workflow-business-actions";
+import {
   ExpenseApprovalActionConfig,
-  ProjectStatusActionConfig,
   type CustomerStatusAction,
   type ExpenseApprovalAction,
   type ProjectStatus,
@@ -127,7 +129,7 @@ function buildCustomerActions(nodeKey: string): WorkflowTaskActionMetadata[] {
   }
 
   return unique(actions).map((action) => {
-    const config = CustomerStatusActionConfig[action];
+    const config = CustomerWorkflowActionConfig[action];
     return {
       key: action === linearAction ? "complete" : action,
       label: config.label,
@@ -147,14 +149,14 @@ function buildProjectActions(nodeKey: string): WorkflowTaskActionMetadata[] {
   const currentStatus = PROJECT_NODE_STATUS_BY_NODE[nodeKey];
   if (currentStatus) {
     for (const action of PROJECT_EXPLICIT_ACTIONS) {
-      if (ProjectStatusActionConfig[action].from.includes(currentStatus)) {
+      if (ProjectWorkflowActionConfig[action].from.includes(currentStatus)) {
         actions.push(action);
       }
     }
   }
 
   return unique(actions).map((action) => {
-    const config = ProjectStatusActionConfig[action];
+    const config = ProjectWorkflowActionConfig[action];
     return {
       key: action === linearAction ? "complete" : action,
       label: config.label,

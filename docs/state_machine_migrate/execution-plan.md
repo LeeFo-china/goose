@@ -1056,6 +1056,13 @@
 
   Expected before deletion: no production imports except files being removed in this phase.
 
+  2026-06-12 progress: API workflow adapters no longer import
+  `CustomerStatusActionConfig`, `ProjectStatusActionConfig`, or the old domain
+  transition resolver/list/infer helpers. Customer/project business action
+  metadata now uses `apps/api/src/services/workflow-business-actions.ts`.
+  Admin/domain imports are still pending before the shared domain exports can
+  be deleted.
+
 - [ ] **Step 7.2: Remove old transition repositories**
 
   Delete customer/project transition repository files and remove route/service references.

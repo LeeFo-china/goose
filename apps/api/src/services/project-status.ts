@@ -19,14 +19,15 @@ import { projectWorkflowRuntimeService } from "@/services/project-workflow-runti
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
-  inferProjectStatusAction,
+  inferProjectWorkflowAction,
+  listProjectWorkflowActions,
+  ProjectWorkflowActionConfig,
+  resolveProjectWorkflowActionTransition,
+} from "@/services/workflow-business-actions";
+import {
   isProjectStatus,
-  listProjectStatusActions,
-  ProjectStatusActionConfig,
-  resolveProjectStatusTransition,
   type CustomerStatus,
   type ProjectStatus,
-  type ProjectStatusAction,
 } from "@gooes/domain";
 
 const PROJECT_START_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -122,7 +123,7 @@ class ProjectStatusService {
     const pausedFromStatus = input.payload.action === "resume_project"
       ? await this.getPausedFromStatus(input.projectId, tenantId)
       : null;
-    const transition = resolveProjectStatusTransition({
+    const transition = resolveProjectWorkflowActionTransition({
       action: input.payload.action,
       fromStatus,
       pausedFromStatus,
@@ -136,7 +137,7 @@ class ProjectStatusService {
     }
 
     const reason = input.payload.reason?.trim() || null;
-    if (ProjectStatusActionConfig[input.payload.action].requiresReason && !reason) {
+    if (ProjectWorkflowActionConfig[input.payload.action].requiresReason && !reason) {
       throw Errors.badRequest("该状态动作必须填写原因");
     }
 
@@ -311,7 +312,7 @@ class ProjectStatusService {
     return {
       current_status: fromStatus,
       paused_from_status: pausedFromStatus,
-      actions: listProjectStatusActions({
+      actions: listProjectWorkflowActions({
         fromStatus,
         pausedFromStatus,
       }),
@@ -335,7 +336,7 @@ class ProjectStatusService {
       return null;
     }
 
-    const action = inferProjectStatusAction({
+    const action = inferProjectWorkflowAction({
       fromStatus,
       toStatus: input.nextStatus,
     });
