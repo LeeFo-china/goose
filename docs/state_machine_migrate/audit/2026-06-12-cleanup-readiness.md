@@ -230,8 +230,10 @@ The first blocker files from the initial local scan were:
 
 ## Interpretation
 
-Phase 6 destructive cleanup is not ready. The remaining blockers are expected
-because the system is still in the compatibility window:
+Phase 6 destructive cleanup is locally code-ready: the cleanup readiness gate
+now reports `ready: true` with zero blocker references. Shared-environment
+destructive apply is still gated because the system remains in the final
+compatibility window:
 
 - old status endpoints and admin fallbacks still exist;
 - customer/project admin panels no longer require old status action/timeline
@@ -277,6 +279,6 @@ The local cleanup readiness gate now passes. Phase 6 still requires the
 destructive database cleanup migration and the external mini-program rollout
 gate before applying drops to a shared environment.
 
-Before creating the destructive cleanup migration, this command must report
-`ready: true` or all remaining references must be explicitly reclassified as
-allowed historical references.
+Before applying the destructive cleanup migration to a shared environment, this
+command must still report `ready: true`; any new legacy references must be
+removed or explicitly reclassified as allowed historical references.
