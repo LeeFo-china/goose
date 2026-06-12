@@ -1028,8 +1028,9 @@
   ```
 
   The evidence file must include Phase 4 backfill/reconciliation evidence,
-  Phase 5 authenticated API smoke evidence, mini-program rollout confirmation,
-  admin smoke evidence, and backup/restore-window evidence.
+  Phase 5 authenticated API smoke evidence, mini-program workflow API contract
+  upgrade evidence, mini-program rollout confirmation, admin smoke evidence,
+  and backup/restore-window evidence.
 
 ### Steps
 

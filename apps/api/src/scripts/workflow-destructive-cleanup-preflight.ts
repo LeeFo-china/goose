@@ -23,6 +23,12 @@ type ManualGateEvidence = {
     phase5_api_smoke_confirmed?: unknown;
     phase5_api_smoke_evidence?: unknown;
   };
+  api_contract?: {
+    workflow_state_actions_confirmed?: unknown;
+    workflow_task_complete_confirmed?: unknown;
+    legacy_fields_not_required_confirmed?: unknown;
+    evidence?: unknown;
+  };
   mini_program?: {
     confirmed?: unknown;
     confirmed_by?: unknown;
@@ -155,6 +161,19 @@ export function validateManualGateEvidence(
   }
   if (!isNonEmptyString(evidence.phase_acceptance?.phase5_api_smoke_evidence)) {
     missing.push("phase_acceptance.phase5_api_smoke_evidence");
+  }
+
+  if (evidence.api_contract?.workflow_state_actions_confirmed !== true) {
+    missing.push("api_contract.workflow_state_actions_confirmed");
+  }
+  if (evidence.api_contract?.workflow_task_complete_confirmed !== true) {
+    missing.push("api_contract.workflow_task_complete_confirmed");
+  }
+  if (evidence.api_contract?.legacy_fields_not_required_confirmed !== true) {
+    missing.push("api_contract.legacy_fields_not_required_confirmed");
+  }
+  if (!isNonEmptyString(evidence.api_contract?.evidence)) {
+    missing.push("api_contract.evidence");
   }
 
   if (evidence.mini_program?.confirmed !== true) {

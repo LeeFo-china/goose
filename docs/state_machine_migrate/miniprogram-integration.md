@@ -303,6 +303,17 @@ Content-Type: application/json
 5. 首页待办分页加载。
 6. 老版本 fallback：没有 `workflow_state` 时仍能用旧字段只读展示。
 
+Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验收证据
+填入 `docs/state_machine_migrate/audit/manual-gates.json` 的
+`api_contract` 段：
+
+| 字段 | 验收要求 |
+| --- | --- |
+| `workflow_state_actions_confirmed` | 页面按钮优先来自 `workflow_state.actions`，并按 `output_fields` 渲染表单 |
+| `workflow_task_complete_confirmed` | 客户、项目、费用审批的推进动作可通过 `POST /workflow-tasks/:taskId/complete` 完成 |
+| `legacy_fields_not_required_confirmed` | 线上最低可用版本不再依赖 `status_actions`、`current_step`、`approval_chain` 或旧状态流转接口生成可操作按钮 |
+| `evidence` | 联调记录、发布说明、测试报告或任务链接 |
+
 ## 需要后端同步的变更
 
 后端每完成一个阶段，需要在这里补充：

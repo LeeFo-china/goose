@@ -86,6 +86,13 @@ describe("validateManualGateEvidence", () => {
         phase5_api_smoke_evidence:
           "docs/state_machine_migrate/audit/phase5-smoke.md",
       },
+      api_contract: {
+        workflow_state_actions_confirmed: true,
+        workflow_task_complete_confirmed: true,
+        legacy_fields_not_required_confirmed: true,
+        evidence:
+          "docs/state_machine_migrate/miniprogram-integration.md#验收清单",
+      },
       mini_program: {
         confirmed: true,
         minimum_version: "2.8.0",
@@ -116,6 +123,10 @@ describe("validateManualGateEvidence", () => {
         "phase_acceptance.phase4_reconciliation_evidence",
         "phase_acceptance.phase5_api_smoke_confirmed",
         "phase_acceptance.phase5_api_smoke_evidence",
+        "api_contract.workflow_state_actions_confirmed",
+        "api_contract.workflow_task_complete_confirmed",
+        "api_contract.legacy_fields_not_required_confirmed",
+        "api_contract.evidence",
         "mini_program.minimum_version",
         "mini_program.evidence",
         "admin_smoke.confirmed",

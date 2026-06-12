@@ -5,6 +5,12 @@
     "phase5_api_smoke_confirmed": false,
     "phase5_api_smoke_evidence": ""
   },
+  "api_contract": {
+    "workflow_state_actions_confirmed": false,
+    "workflow_task_complete_confirmed": false,
+    "legacy_fields_not_required_confirmed": false,
+    "evidence": ""
+  },
   "mini_program": {
     "confirmed": false,
     "confirmed_by": "",
