@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import {
@@ -63,26 +64,36 @@ export default async function RolesPage() {
   const { list, pagination, error } = await getRoles();
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">角色管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            创建角色、维护角色状态，并给角色分配权限点。当前共 {pagination.total} 条记录。
-          </p>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <ShieldCheck aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">角色管理</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              创建角色、维护角色状态，并给角色分配权限点。当前共 {pagination.total} 个角色。
+            </p>
+          </div>
         </div>
         <CreateRoleButton />
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-row items-center justify-between gap-3 border-b bg-muted/20 p-3">
           <CardTitle>角色列表</CardTitle>
           <Badge variant="outline">共 {pagination.total} 条</Badge>
         </CardHeader>
-        <CardContent className="p-0">
-          <RolesTable roles={list} />
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <RolesTable roles={list} />
+          </div>
+          <div className="shrink-0 border-t bg-card px-4 py-3 text-sm text-muted-foreground">
+            当前显示 {list.length} 条，共 {pagination.total} 条
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -5,12 +5,13 @@ import {
   PROJECT_STATUS_VALUES,
   ProjectStatusConfig,
 } from "@gooes/domain";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
 
@@ -36,6 +37,8 @@ const ownershipOptions = [
   ["self", "只看自己"],
   ["all", "全部可见"],
 ] as const;
+
+const flatControlClassName = "bg-card shadow-none";
 
 function buildProjectsHref(input: {
   page?: number;
@@ -98,7 +101,7 @@ export function ProjectFilters({
   return (
     <form
       onSubmit={submit}
-      className="grid gap-3 lg:grid-cols-[150px_150px_minmax(240px,1fr)_72px]"
+      className="grid gap-2 md:grid-cols-2 xl:grid-cols-[150px_150px_minmax(260px,1fr)_72px]"
     >
       <input type="hidden" name="status" value={selectedStatus} />
       <input type="hidden" name="ownership" value={selectedOwnership} />
@@ -106,6 +109,7 @@ export function ProjectFilters({
         id="project-status-filter"
         value={selectedStatus || "__all"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={statusOptions.map(([value, label]) => ({
           value: value || "__all",
           label,
@@ -120,6 +124,7 @@ export function ProjectFilters({
         id="project-ownership-filter"
         value={selectedOwnership || "__default"}
         disabled={pending}
+        triggerClassName={flatControlClassName}
         options={ownershipOptions.map(([value, label]) => ({
           value: value || "__default",
           label,
@@ -130,7 +135,7 @@ export function ProjectFilters({
           applySelectFilters({ ownership: nextOwnership });
         }}
       />
-      <InputGroup>
+      <InputGroup className="h-9 bg-card">
         <InputGroupAddon>
           <Search aria-hidden="true" />
         </InputGroupAddon>
@@ -141,8 +146,20 @@ export function ProjectFilters({
           disabled={pending}
           onChange={(event) => setSelectedKeyword(event.target.value)}
         />
+        {selectedKeyword ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label="清除搜索内容"
+              size="icon-xs"
+              disabled={pending}
+              onClick={() => setSelectedKeyword("")}
+            >
+              <X aria-hidden="true" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
-      <Button type="submit" variant="outline" disabled={pending}>
+      <Button type="submit" variant="outline" disabled={pending} className="w-full bg-card">
         {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
         搜索
       </Button>

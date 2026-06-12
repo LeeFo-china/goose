@@ -1,7 +1,7 @@
-import { Search, UserRound } from "lucide-react";
+import { Plus, Search, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -12,43 +12,31 @@ function SkeletonBlock({ className }: { className: string }) {
 
 export function EmployeeListSkeleton() {
   return (
-    <div className="flex flex-col gap-5" aria-busy="true" aria-live="polite">
+    <div
+      className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5"
+      aria-busy="true"
+      aria-live="polite"
+    >
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">员工管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            正在加载员工档案、登录绑定和状态信息。
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <UsersRound aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">员工管理</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              正在加载员工档案、登录绑定、部门岗位和角色权限。
+            </p>
+          </div>
         </div>
         <Button disabled>
-          <UserRound data-icon="inline-start" />
+          <Plus />
           新增员工
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Card key={index}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <SkeletonBlock className="size-10" />
-              <div className="flex flex-col gap-2">
-                <SkeletonBlock className="h-4 w-24" />
-                <SkeletonBlock className="h-6 w-12" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>员工列表</CardTitle>
-              <CardDescription>正在加载员工列表和当前筛选条件。</CardDescription>
-            </div>
-            <Badge variant="outline">加载中</Badge>
-          </div>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">
               {["全部", "在职", "待入职", "已封禁", "已离职"].map((item, index) => (
@@ -74,18 +62,22 @@ export function EmployeeListSkeleton() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] border-t text-sm">
-              <thead className="bg-muted/60 text-left text-xs font-medium text-muted-foreground">
+        <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full min-w-[1180px] text-sm">
+              <thead className="sticky top-0 z-10 bg-card text-left text-xs font-medium text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]">
                 <tr>
                   <th className="px-5 py-3">员工</th>
                   <th className="px-5 py-3">手机号</th>
                   <th className="px-5 py-3">状态</th>
                   <th className="px-5 py-3">登录绑定</th>
+                  <th className="px-5 py-3">角色</th>
                   <th className="px-5 py-3">部门</th>
+                  <th className="px-5 py-3">职位</th>
                   <th className="px-5 py-3">创建时间</th>
-                  <th className="px-5 py-3 text-right">操作</th>
+                  <th className="px-5 py-3 text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -110,15 +102,29 @@ export function EmployeeListSkeleton() {
                       <SkeletonBlock className="h-6 w-16" />
                     </td>
                     <td className="px-5 py-4">
-                      <SkeletonBlock className="h-4 w-16" />
+                      <div className="flex max-w-[220px] flex-wrap gap-1.5">
+                        <SkeletonBlock className="h-6 w-20" />
+                        <SkeletonBlock className="h-6 w-16" />
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-2">
+                        <SkeletonBlock className="h-4 w-20" />
+                        <SkeletonBlock className="h-3 w-14" />
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-2">
+                        <SkeletonBlock className="h-4 w-16" />
+                        <SkeletonBlock className="h-3 w-12" />
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <SkeletonBlock className="h-4 w-20" />
                     </td>
-                    <td className="px-5 py-4">
-                      <div className="flex justify-end gap-2">
-                        <SkeletonBlock className="h-8 w-16" />
-                        <SkeletonBlock className="h-8 w-16" />
+                    <td className="px-5 py-4 text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]">
+                      <div className="flex justify-end">
+                        <SkeletonBlock className="h-8 w-20" />
                       </div>
                     </td>
                   </tr>
@@ -126,8 +132,13 @@ export function EmployeeListSkeleton() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-            <SkeletonBlock className="h-4 w-32" />
+          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="tabular-nums">
+                第 1 / 1 页
+              </Badge>
+              <SkeletonBlock className="h-4 w-32" />
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" disabled>上一页</Button>
               <Button variant="outline" disabled>下一页</Button>

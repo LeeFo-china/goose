@@ -1,3 +1,4 @@
+import { KeyRound } from "lucide-react";
 import {
   type PermissionRecord,
 } from "@/components/permissions/permission-mutations";
@@ -91,13 +92,18 @@ export default async function PermissionsPage({
   const { list, pagination, error } = await getPermissions(params);
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">权限点管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            权限编码、模块、资源和动作维护。当前共 {pagination.total} 条记录。
-          </p>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <KeyRound aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">权限点管理</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              权限编码、模块、资源和动作维护。当前筛选共 {pagination.total} 个权限点。
+            </p>
+          </div>
         </div>
       </div>
 

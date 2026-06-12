@@ -89,7 +89,7 @@ export default async function ProjectsPage({
   const { list, pagination, error } = await getProjects(params);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
       <ProjectsClientShell
         projects={list}
         pagination={pagination}

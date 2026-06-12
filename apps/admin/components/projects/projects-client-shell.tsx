@@ -14,7 +14,7 @@ import {
 } from "@/components/projects/project-mutations";
 import { ProjectsTable } from "@/components/projects/projects-table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 type Pagination = {
   page: number;
@@ -78,16 +78,16 @@ export function ProjectsClientShell({
   }
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div className="flex items-start gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
-            <FolderKanban data-icon="inline-start" />
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <FolderKanban aria-hidden="true" className="size-4" />
           </span>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-normal">项目管理</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">项目管理</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              管理项目预算、施工状态、负责人和客户房产信息。当前筛选共 {pagination.total} 条记录。
+              项目预算、施工状态、负责人和客户房产信息。当前筛选共 {pagination.total} 条记录。
             </p>
           </div>
         </div>
@@ -98,26 +98,8 @@ export function ProjectsClientShell({
         <StatusAlert>{error}</StatusAlert>
       ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>项目列表</CardTitle>
-              <CardDescription>
-                按状态、可见范围和关键词筛选项目，操作列固定在表格右侧。
-              </CardDescription>
-            </div>
-            {pending ? (
-              <Badge variant="secondary">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                正在更新
-              </Badge>
-            ) : (
-              <Badge variant="outline">
-                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
-              </Badge>
-            )}
-          </div>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <ProjectFilters
             status={status}
             ownership={ownership}
@@ -126,8 +108,10 @@ export function ProjectsClientShell({
             onNavigate={navigate}
           />
         </CardHeader>
-        <CardContent className="relative flex flex-col gap-4 p-0">
-          <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
+        <CardContent className="relative flex min-h-0 flex-1 flex-col bg-card p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <ProjectsTable projects={visibleProjects} onProjectChanged={refreshProjects} />
+          </div>
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -136,19 +120,21 @@ export function ProjectsClientShell({
               </div>
             </div>
           ) : null}
-          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>每页 {pagination.pageSize} 条，共 {pagination.total} 条</span>
               {pending ? (
                 <Badge variant="secondary">
                   <Loader2 className="animate-spin" data-icon="inline-start" />
                   正在更新
                 </Badge>
               ) : (
-                <Badge variant="outline">
+                <Badge variant="outline" className="tabular-nums">
                   第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
                 </Badge>
               )}
+              <span className="tabular-nums">
+                当前显示 {visibleProjects.length} 条，共 {pagination.total} 条
+              </span>
             </div>
             <ProjectsPagination
               pagination={pagination}
@@ -161,6 +147,6 @@ export function ProjectsClientShell({
           </div>
         </CardContent>
       </Card>
-    </>
+    </div>
   );
 }

@@ -2,7 +2,6 @@ import { SlidersHorizontal } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import type { SystemSetting } from "@/components/settings/settings-types";
-import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -89,59 +88,28 @@ export default async function SettingsPage() {
     });
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">
-          {isPlatformMode ? "平台系统配置" : "租户系统配置"}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {isPlatformMode
-            ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
-            : "租户端可维护短信通道、客服入口等租户配置。继承平台配置时不展示平台密钥、签名和模板信息。"}
-        </p>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <SlidersHorizontal className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">
-                {isPlatformMode ? "平台配置项" : "可配置项"}
-              </div>
-              <div className="text-xl font-semibold">{list.length}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">
-              {isPlatformMode ? "数据库覆盖" : "租户覆盖"}
-            </div>
-            <div className="text-xl font-semibold">
-              {isPlatformMode ? databaseCount : tenantOverrideCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">
-              {isPlatformMode ? "环境变量回退" : "继承平台"}
-            </div>
-            <div className="text-xl font-semibold">
-              {isPlatformMode ? envCount : tenantInheritedCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">未配置</div>
-            <div className="text-xl font-semibold">{emptyCount}</div>
-            <div className="mt-1 text-xs text-muted-foreground">敏感项 {secretCount}</div>
-          </CardContent>
-        </Card>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex min-w-0 items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+          <SlidersHorizontal aria-hidden="true" className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-normal">
+            {isPlatformMode ? "平台系统配置" : "租户系统配置"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isPlatformMode
+              ? "平台级能力由平台统一维护，包含短信网关、监控接入、AI、微信、短视频识别和通知配置。密钥类配置加密存储并保留环境变量回退。"
+              : "租户端可维护短信通道、客服入口等租户配置。继承平台配置时不展示平台密钥、签名和模板信息。"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span>配置项 {list.length}</span>
+            <span>{isPlatformMode ? `数据库覆盖 ${databaseCount}` : `租户覆盖 ${tenantOverrideCount}`}</span>
+            <span>{isPlatformMode ? `环境变量回退 ${envCount}` : `继承平台 ${tenantInheritedCount}`}</span>
+            <span>未配置 {emptyCount}</span>
+            <span>敏感项 {secretCount}</span>
+          </div>
+        </div>
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}

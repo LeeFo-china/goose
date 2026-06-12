@@ -94,6 +94,9 @@ export function ExpenseListHeader({
   filters,
   keywordDraft,
   pagination,
+  totalAmount,
+  pendingCount,
+  paymentCount,
   loading,
   onFilterChange,
   onKeywordDraftChange,
@@ -102,6 +105,9 @@ export function ExpenseListHeader({
   filters: ExpenseFiltersState;
   keywordDraft: string;
   pagination: Pagination;
+  totalAmount: number;
+  pendingCount: number;
+  paymentCount: number;
   loading: boolean;
   onFilterChange: (patch: Partial<ExpenseFiltersState>) => void;
   onKeywordDraftChange: (value: string) => void;
@@ -110,13 +116,20 @@ export function ExpenseListHeader({
   return (
     <ListCardHeader
       title="费用申请列表"
-      description={`筛选条件作用于下方费用申请表格，当前共 ${pagination.total} 条记录。`}
-      action={
-        <Badge variant="outline">
-          {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
-          第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
+      description={(
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
+          <span>本页金额 ¥{formatMoney(totalAmount)}</span>
+          <span>审批中 {pendingCount}</span>
+          <span>待打款 {paymentCount}</span>
+        </span>
+      )}
+      action={loading ? (
+        <Badge variant="secondary">
+          <Loader2 className="animate-spin" data-icon="inline-start" />
+          正在更新
         </Badge>
-      }
+      ) : null}
+      className="shrink-0 border-b bg-muted/20 p-3"
       filters={
         <div className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_150px_150px_auto]">
           <FormSelect
@@ -179,10 +192,12 @@ export function ExpenseListHeader({
 
 export function ExpensePagination({
   pagination,
+  visibleCount,
   loading,
   onPageChange,
 }: {
   pagination: Pagination;
+  visibleCount: number;
   loading: boolean;
   onPageChange: (updater: (page: number) => number) => void;
 }) {
@@ -190,9 +205,12 @@ export function ExpensePagination({
   const canGoNext = pagination.totalPages > 0 && pagination.page < pagination.totalPages && !loading;
 
   return (
-    <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-      <div className="text-sm text-muted-foreground">
-        每页 {pagination.pageSize} 条，共 {pagination.total} 条
+    <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>当前显示 {visibleCount} 条，共 {pagination.total} 条</span>
+        <Badge variant="outline" className="tabular-nums">
+          第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
+        </Badge>
       </div>
       <div className="flex gap-2">
         <Button

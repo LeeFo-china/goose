@@ -58,13 +58,13 @@ export function CustomerServiceClientShell({
   }
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {error ? (
         <StatusAlert>{error}</StatusAlert>
       ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
           <CustomerServiceFilters
             status={status}
             category={category}
@@ -73,11 +73,13 @@ export function CustomerServiceClientShell({
             onNavigate={navigate}
           />
         </CardHeader>
-        <CardContent className="relative flex flex-col gap-4 p-0">
-          <CustomerServiceTable
-            tickets={tickets}
-            onOpenDetail={setDetailTicketId}
-          />
+        <CardContent className="relative flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <CustomerServiceTable
+              tickets={tickets}
+              onOpenDetail={setDetailTicketId}
+            />
+          </div>
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -86,9 +88,9 @@ export function CustomerServiceClientShell({
               </div>
             </div>
           ) : null}
-          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>每页 {pagination.pageSize} 条，共 {pagination.total} 条</span>
+              <span>当前显示 {tickets.length} 条，共 {pagination.total} 条</span>
               {pending ? (
                 <Badge variant="secondary">
                   <Loader2 className="animate-spin" data-icon="inline-start" />
@@ -120,6 +122,6 @@ export function CustomerServiceClientShell({
         }}
         onChanged={refreshList}
       />
-    </>
+    </div>
   );
 }

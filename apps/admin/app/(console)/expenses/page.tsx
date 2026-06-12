@@ -1,3 +1,4 @@
+import { CircleDollarSign } from "lucide-react";
 import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -119,13 +120,18 @@ export default async function ExpensesPage({
   const currentEmployeeId = session?.employee?.id || null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">费用审批</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            费用申请、审批链和打款处理，筛选变化后列表会自动更新。
-          </p>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <CircleDollarSign aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">费用审批</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              费用申请、审批链和打款处理。当前筛选共 {pagination.total} 条申请。
+            </p>
+          </div>
         </div>
       </div>
 

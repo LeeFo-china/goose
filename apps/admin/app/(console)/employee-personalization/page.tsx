@@ -1,3 +1,4 @@
+import { Sparkles } from "lucide-react";
 import { EmployeePersonalizationClient } from "@/components/employee-personalization/employee-personalization-client";
 import type { EmployeePersonalizationListData } from "@/components/employee-personalization/employee-personalization-types";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -46,13 +47,18 @@ export default async function EmployeePersonalizationPage() {
   const { data, error } = await getRules();
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal">员工个性化</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            配置员工登录后按部门、岗位和角色命中的首页内容。
-          </p>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <Sparkles aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">员工个性化</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              配置员工登录后按部门、岗位和角色命中的首页内容。当前共 {data.pagination.total} 条规则。
+            </p>
+          </div>
         </div>
       </div>
 

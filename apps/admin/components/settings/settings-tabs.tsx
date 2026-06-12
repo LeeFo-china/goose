@@ -12,8 +12,7 @@ import {
 } from "@/components/settings/settings-actions";
 import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -121,19 +120,19 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="rounded-md border bg-background">
+        <div className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle>短信通道</CardTitle>
-            <CardDescription>
+            <div className="text-sm font-medium">短信通道</div>
+            <p className="mt-1 text-xs text-muted-foreground">
               先选择短信发送通道。继承平台时租户不需要维护任何短信参数。
-            </CardDescription>
+            </p>
           </div>
           <Badge variant={mode === "platform" ? "secondary" : missingCount > 0 ? "warning" : "success"}>
             {mode === "platform" ? "继承平台" : missingCount > 0 ? `未配置 ${missingCount}` : "配置完整"}
           </Badge>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        </div>
+        <div className="flex flex-col gap-3 p-4">
           <div className="grid gap-3 md:grid-cols-[minmax(240px,360px)_1fr] md:items-center">
             <Select value={mode} onValueChange={changeMode} disabled={pending || !modeSetting}>
               <SelectTrigger id="tenant-sms-channel-mode">
@@ -151,42 +150,42 @@ function TenantSmsSettingsPanel({ settings }: { settings: SystemSetting[] }) {
           </div>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           {saved ? <StatusAlert tone="success">短信通道模式已保存</StatusAlert> : null}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {mode === "platform" ? (
-        <Card>
-          <CardHeader className="flex flex-row items-start gap-3">
+        <div className="rounded-md border bg-background p-4">
+          <div className="flex flex-row items-start gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
               <MessageSquareText />
             </div>
             <div>
-              <CardTitle>当前使用平台统一短信通道</CardTitle>
-              <CardDescription>
+              <div className="text-sm font-medium">当前使用平台统一短信通道</div>
+              <p className="mt-1 text-xs text-muted-foreground">
                 短信服务商、签名、模板和密钥由平台统一维护，本租户不展示也不覆盖平台参数。
-              </CardDescription>
+              </p>
             </div>
-          </CardHeader>
-        </Card>
+          </div>
+        </div>
       ) : (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <div className="rounded-md border bg-background">
+          <div className="flex flex-row items-center justify-between gap-3 border-b px-4 py-3">
             <div>
-              <CardTitle>{mode === "tenant_aliyun" ? "阿里云短信参数" : "腾讯云短信参数"}</CardTitle>
-              <CardDescription>
+              <div className="text-sm font-medium">{mode === "tenant_aliyun" ? "阿里云短信参数" : "腾讯云短信参数"}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
                 自有短信通道必须完整配置。缺少关键参数时，后端会拒绝发送短信。
-              </CardDescription>
+              </p>
             </div>
             <Badge variant={missingCount > 0 ? "warning" : "success"}>
               {missingCount > 0 ? `未配置 ${missingCount}` : "配置完整"}
             </Badge>
-          </CardHeader>
-          <CardContent className="p-0">
+          </div>
+          <div>
             {configSettings.map((setting) => (
               <SettingEditor key={setting.key} setting={setting} />
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -213,7 +212,7 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
 
   if (!activeGroup) {
     return (
-      <Card>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardContent className="p-5 text-sm text-muted-foreground">
           暂无配置项
         </CardContent>
@@ -222,65 +221,78 @@ export function SettingsTabs({ groups, isPlatformMode = false }: SettingsTabsPro
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2 overflow-x-auto rounded-md border bg-card p-2">
-        {tabItems.map((group) => {
-          const active = group.code === activeGroup.code;
-          return (
-            <Button
-              key={group.code}
-              type="button"
-              variant={active ? "default" : "ghost"}
-              className={cn(
-                "h-9 shrink-0 gap-2 px-3",
-                active ? "shadow-sm" : "text-muted-foreground",
-              )}
-              onClick={() => switchGroup(group.code)}
-              disabled={pending}
-              aria-pressed={active}
-            >
-              {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-              <span>{group.label}</span>
-              <Badge variant={active ? "secondary" : "outline"}>{group.settings.length}</Badge>
-              {group.emptyCount > 0 ? (
-                <span className="inline-flex items-center gap-1 text-xs">
-                  <AlertCircle className="size-3" />
-                  {group.emptyCount}
-                </span>
-              ) : null}
-            </Button>
-          );
-        })}
-      </div>
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+      <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex overflow-x-auto">
+            {tabItems.map((group) => {
+              const active = group.code === activeGroup.code;
+              return (
+                <button
+                  key={group.code}
+                  type="button"
+                  className={cn(
+                    "inline-flex h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-60",
+                    group.code !== tabItems[0]?.code && "ml-5",
+                    active && "border-primary text-foreground",
+                  )}
+                  onClick={() => switchGroup(group.code)}
+                  disabled={pending}
+                  aria-pressed={active}
+                >
+                  {pending && active ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+                  <span>{group.label}</span>
+                  <Badge variant={active ? "secondary" : "outline"}>{group.settings.length}</Badge>
+                  {group.emptyCount > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs">
+                      <AlertCircle className="size-3" />
+                      {group.emptyCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
+            <span>{activeGroup.settings.length} 项配置</span>
+            <span>{activeGroup.secretCount} 项敏感配置</span>
+            <span>{activeGroup.emptyCount} 项未配置</span>
+          </div>
+        </div>
+      </CardHeader>
 
-      {!isPlatformMode && activeGroup.code === "sms" ? (
-        <TenantSmsSettingsPanel settings={activeGroup.settings} />
-      ) : (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <div>
-              <CardTitle>{activeGroup.label}</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，{activeGroup.emptyCount} 项未配置。
-              </p>
+      <CardContent className="min-h-0 flex-1 overflow-auto p-0">
+        {!isPlatformMode && activeGroup.code === "sms" ? (
+          <div className="flex flex-col gap-3 p-4">
+            <TenantSmsSettingsPanel settings={activeGroup.settings} />
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-row items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
+              <div>
+                <CardTitle className="text-base">{activeGroup.label}</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {activeGroup.settings.length} 项配置，{activeGroup.secretCount} 项敏感配置，{activeGroup.emptyCount} 项未配置。
+                </p>
+              </div>
+              <Badge variant={activeGroup.emptyCount > 0 ? "warning" : "success"}>
+                {activeGroup.emptyCount > 0 ? `未配置 ${activeGroup.emptyCount}` : "配置完整"}
+              </Badge>
             </div>
-            <Badge variant={activeGroup.emptyCount > 0 ? "warning" : "success"}>
-              {activeGroup.emptyCount > 0 ? `未配置 ${activeGroup.emptyCount}` : "配置完整"}
-            </Badge>
-          </CardHeader>
-          <CardContent className="p-0">
-            {activeGroup.code === "social_video" ? (
-              <SocialVideoTranscriptionTester />
-            ) : null}
-            {activeGroup.code === "tencent_lbs" ? (
-              <TencentLbsConfigTester />
-            ) : null}
-            {activeGroup.settings.map((setting) => (
-              <SettingEditor key={setting.key} setting={setting} />
-            ))}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+            <div>
+              {activeGroup.code === "social_video" ? (
+                <SocialVideoTranscriptionTester />
+              ) : null}
+              {activeGroup.code === "tencent_lbs" ? (
+                <TencentLbsConfigTester />
+              ) : null}
+              {activeGroup.settings.map((setting) => (
+                <SettingEditor key={setting.key} setting={setting} />
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

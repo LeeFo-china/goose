@@ -102,7 +102,7 @@ function ProjectIdentityCell({
         type="button"
         className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="w-[10em] truncate font-medium">
+        <div className="w-[10em] truncate font-semibold">
           {name}
         </div>
         <div className="w-[10em] truncate text-xs text-muted-foreground">
@@ -111,9 +111,9 @@ function ProjectIdentityCell({
       </TooltipTrigger>
       <TooltipContent align="start" className="max-w-[280px]">
         <div className="flex flex-col gap-1">
-          <div className="break-all font-medium">{name}</div>
+          <div className="break-all font-semibold">{name}</div>
           <div className="break-all text-xs opacity-90">客户：{customer}</div>
-          <div className="break-all text-xs opacity-90">项目 ID：{id}</div>
+          <div className="break-all text-xs tabular-nums opacity-90">项目 ID：{id}</div>
         </div>
       </TooltipContent>
     </Tooltip>
@@ -170,7 +170,7 @@ export function ProjectsTable({
       id: "budget",
       header: "预算",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap font-medium">
+        <span className="whitespace-nowrap font-medium tabular-nums">
           ¥{formatMoney(row.original.budget)}
         </span>
       ),
@@ -197,7 +197,7 @@ export function ProjectsTable({
       id: "startDate",
       header: "开工日期",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap text-muted-foreground">
+        <span className="whitespace-nowrap tabular-nums text-muted-foreground">
           {formatDate(row.original.start_date)}
         </span>
       ),
@@ -211,7 +211,7 @@ export function ProjectsTable({
         </div>
       ),
       meta: {
-        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-muted lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+        headerClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
         cellClassName: "text-right lg:sticky lg:right-0 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
@@ -223,6 +223,8 @@ export function ProjectsTable({
       data={projects}
       emptyText="没有符合条件的项目"
       minWidth="min-w-[1180px]"
+      tableClassName="border-t-0"
+      headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
     />
   );
 }

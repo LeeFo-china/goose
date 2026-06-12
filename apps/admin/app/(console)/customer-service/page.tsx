@@ -1,3 +1,4 @@
+import { Headset } from "lucide-react";
 import { CustomerServiceClientShell } from "@/components/customer-service/customer-service-client-shell";
 import type { CustomerServiceTicketListData } from "@/components/customer-service/customer-service-types";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
@@ -79,7 +80,21 @@ export default async function CustomerServicePage({
   const { list, pagination, error } = await getCustomerServiceTickets(params);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <Headset aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">客服问题</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              处理客户提交的问题、图片和负责人流转。当前筛选共 {pagination.total} 条工单。
+            </p>
+          </div>
+        </div>
+      </div>
+
       <CustomerServiceClientShell
         tickets={list}
         pagination={pagination}

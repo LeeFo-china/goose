@@ -17,7 +17,6 @@ import {
 import {
   ExpenseListHeader,
   ExpensePagination,
-  ExpenseSummaryCards,
 } from "@/components/expenses/expenses-panel-sections";
 
 export function ExpensesPanel({
@@ -101,19 +100,15 @@ export function ExpensesPanel({
   const summary = summarizeExpensePage(expenses);
 
   return (
-    <div className="flex flex-col gap-5">
-      <ExpenseSummaryCards
-        total={pagination.total}
-        totalAmount={summary.totalAmount}
-        pendingCount={summary.pendingCount}
-        paymentCount={summary.paymentCount}
-      />
-
-      <Card className="overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <ExpenseListHeader
           filters={filters}
           keywordDraft={keywordDraft}
           pagination={pagination}
+          totalAmount={summary.totalAmount}
+          pendingCount={summary.pendingCount}
+          paymentCount={summary.paymentCount}
           loading={loading}
           onFilterChange={updateFilter}
           onKeywordDraftChange={setKeywordDraft}
@@ -123,7 +118,7 @@ export function ExpensesPanel({
             setPage(1);
           }}
         />
-        <CardContent className="relative flex flex-col gap-4 p-0">
+        <CardContent className="relative flex min-h-0 flex-1 flex-col p-0">
           {loading ? (
             <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-[1px]">
               <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -133,10 +128,11 @@ export function ExpensesPanel({
             </div>
           ) : null}
           {error ? (
-            <div className="p-4">
+            <div className="shrink-0 p-4">
               <StatusAlert>{error}</StatusAlert>
             </div>
-          ) : (
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-auto">
             <ExpensesTable
               expenses={expenses}
               currentEmployeeId={currentEmployeeId}
@@ -144,9 +140,10 @@ export function ExpensesPanel({
                 void loadExpenses({ silent: true });
               }}
             />
-          )}
+          </div>
           <ExpensePagination
             pagination={pagination}
+            visibleCount={expenses.length}
             loading={loading}
             onPageChange={setPage}
           />

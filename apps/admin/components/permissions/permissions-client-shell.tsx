@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { KeyRound, Layers3, Loader2, Power, ShieldCheck } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   PermissionFilters,
@@ -11,7 +11,7 @@ import {
 import { type PermissionRecord } from "@/components/permissions/permission-mutations";
 import { PermissionsTable } from "@/components/permissions/permissions-table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 type Pagination = {
   page: number;
@@ -46,72 +46,14 @@ export function PermissionsClientShell({
       router.refresh();
     });
   }
-  const activeCount = permissions.filter((permission) => permission.status === "active").length;
-  const inactiveCount = permissions.filter((permission) => permission.status === "inactive").length;
-  const moduleCount = new Set(permissions.map((permission) => permission.module).filter(Boolean)).size;
-
   return (
-    <>
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <KeyRound />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">当前筛选权限</div>
-              <div className="text-xl font-semibold">{pagination.total}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <ShieldCheck />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页启用</div>
-              <div className="text-xl font-semibold">{activeCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Power />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页停用</div>
-              <div className="text-xl font-semibold">{inactiveCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-warning text-warning-foreground">
-              <Layers3 />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">本页模块</div>
-              <div className="text-xl font-semibold">{moduleCount}</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      {error ? (
-        <StatusAlert>{error}</StatusAlert>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-col gap-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <CardTitle>权限点列表</CardTitle>
-              <CardDescription>
-                筛选条件作用于下方权限点表格，当前共 {pagination.total} 条记录。
-              </CardDescription>
-            </div>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>权限点列表</span>
             {pending ? (
               <Badge variant="secondary">
                 <Loader2 className="animate-spin" data-icon="inline-start" />
@@ -131,11 +73,13 @@ export function PermissionsClientShell({
             onNavigate={navigate}
           />
         </CardHeader>
-        <CardContent className="relative flex flex-col gap-4 p-0">
-          <PermissionsTable
-            permissions={permissions}
-            canManageDefinitions={canManageDefinitions}
-          />
+        <CardContent className="relative flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <PermissionsTable
+              permissions={permissions}
+              canManageDefinitions={canManageDefinitions}
+            />
+          </div>
           {pending ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -144,9 +88,12 @@ export function PermissionsClientShell({
               </div>
             </div>
           ) : null}
-          <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-muted-foreground">
-              每页 {pagination.pageSize} 条，共 {pagination.total} 条
+          <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>当前显示 {permissions.length} 条，共 {pagination.total} 条</span>
+              <Badge variant="outline" className="tabular-nums">
+                第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+              </Badge>
             </div>
             <PermissionsPagination
               pagination={pagination}
@@ -159,6 +106,6 @@ export function PermissionsClientShell({
           </div>
         </CardContent>
       </Card>
-    </>
+    </div>
   );
 }
