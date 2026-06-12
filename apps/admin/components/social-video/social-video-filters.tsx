@@ -59,14 +59,16 @@ export function SocialVideoFilters({
   }
 
   return (
-    <FieldGroup className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto_auto] md:items-end">
+    <FieldGroup className="grid gap-2 md:grid-cols-[140px_140px_140px_auto_auto] md:items-end">
       <Field>
-        <FieldLabel htmlFor="social-video-target-platform">目标平台</FieldLabel>
+        <FieldLabel htmlFor="social-video-target-platform" className="sr-only">
+          目标平台
+        </FieldLabel>
         <Select
           value={draft.targetPlatform}
           onValueChange={(value) => setDraft((current) => ({ ...current, targetPlatform: value }))}
         >
-          <SelectTrigger id="social-video-target-platform">
+          <SelectTrigger id="social-video-target-platform" className="bg-card shadow-none">
             <SelectValue placeholder="全部平台" />
           </SelectTrigger>
           <SelectContent>
@@ -82,12 +84,14 @@ export function SocialVideoFilters({
         </Select>
       </Field>
       <Field>
-        <FieldLabel htmlFor="social-video-style">脚本风格</FieldLabel>
+        <FieldLabel htmlFor="social-video-style" className="sr-only">
+          脚本风格
+        </FieldLabel>
         <Select
           value={draft.style}
           onValueChange={(value) => setDraft((current) => ({ ...current, style: value }))}
         >
-          <SelectTrigger id="social-video-style">
+          <SelectTrigger id="social-video-style" className="bg-card shadow-none">
             <SelectValue placeholder="全部风格" />
           </SelectTrigger>
           <SelectContent>
@@ -103,12 +107,14 @@ export function SocialVideoFilters({
         </Select>
       </Field>
       <Field>
-        <FieldLabel htmlFor="social-video-status">状态</FieldLabel>
+        <FieldLabel htmlFor="social-video-status" className="sr-only">
+          状态
+        </FieldLabel>
         <Select
           value={draft.status}
           onValueChange={(value) => setDraft((current) => ({ ...current, status: value }))}
         >
-          <SelectTrigger id="social-video-status">
+          <SelectTrigger id="social-video-status" className="bg-card shadow-none">
             <SelectValue placeholder="全部状态" />
           </SelectTrigger>
           <SelectContent>

@@ -40,11 +40,11 @@ export function SocialVideoPagination({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="text-sm text-muted-foreground">
         第 {page} / {totalPages} 页，共 {total} 条
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 md:justify-end">
         <Button
           type="button"
           variant="outline"

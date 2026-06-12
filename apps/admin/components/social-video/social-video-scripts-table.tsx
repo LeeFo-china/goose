@@ -82,7 +82,7 @@ function formatScriptForCopy(item: SocialVideoScriptItem) {
 export function SocialVideoScriptsTable({ items }: { items: SocialVideoScriptItem[] }) {
   if (!items.length) {
     return (
-      <Empty className="border">
+      <Empty className="min-h-[360px] rounded-none border-0">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <FileVideo2 />
@@ -97,8 +97,8 @@ export function SocialVideoScriptsTable({ items }: { items: SocialVideoScriptIte
   }
 
   return (
-    <div className="rounded-lg border bg-card">
-      <Table>
+    <div className="overflow-x-auto">
+      <Table className="min-w-[980px] border-t">
         <TableHeader>
           <TableRow>
             <TableHead className="min-w-[240px]">脚本</TableHead>
