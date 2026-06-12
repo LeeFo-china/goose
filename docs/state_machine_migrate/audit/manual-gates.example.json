@@ -1,0 +1,21 @@
+{
+  "mini_program": {
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": "",
+    "minimum_version": "",
+    "evidence": ""
+  },
+  "admin_smoke": {
+    "confirmed": false,
+    "smoke_at": "",
+    "actor": "",
+    "evidence": ""
+  },
+  "backup_window": {
+    "confirmed": false,
+    "backup_id": "",
+    "restore_window": "",
+    "evidence": ""
+  }
+}

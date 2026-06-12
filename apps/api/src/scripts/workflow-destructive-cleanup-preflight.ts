@@ -1,11 +1,10 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
-import {
-  resolveWorkflowRuntimeConsistencyDatabaseUrl,
-  runWorkflowRuntimeConsistencyCheck,
-} from "./workflow-runtime-consistency-check";
+import { runWorkflowRuntimeConsistencyCheck } from "./workflow-runtime-consistency-check";
 
 type ManualGate =
   | "mini_program_confirmed"
@@ -14,6 +13,29 @@ type ManualGate =
 
 type PreflightOptions = {
   manualGates: Set<ManualGate>;
+  evidenceFile: string | null;
+};
+
+type ManualGateEvidence = {
+  mini_program?: {
+    confirmed?: unknown;
+    confirmed_by?: unknown;
+    confirmed_at?: unknown;
+    minimum_version?: unknown;
+    evidence?: unknown;
+  };
+  admin_smoke?: {
+    confirmed?: unknown;
+    smoke_at?: unknown;
+    actor?: unknown;
+    evidence?: unknown;
+  };
+  backup_window?: {
+    confirmed?: unknown;
+    backup_id?: unknown;
+    restore_window?: unknown;
+    evidence?: unknown;
+  };
 };
 
 type PreflightCheck = {
@@ -48,7 +70,9 @@ const EXPECTED_DESTRUCTIVE_MIGRATIONS = [
 
 export function parsePreflightArgs(argv: string[]): PreflightOptions {
   const manualGates = new Set<ManualGate>();
-  for (const arg of argv) {
+  let evidenceFile: string | null = null;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (arg === "--confirm-mini-program") {
       manualGates.add("mini_program_confirmed");
       continue;
@@ -61,11 +85,16 @@ export function parsePreflightArgs(argv: string[]): PreflightOptions {
       manualGates.add("backup_window_confirmed");
       continue;
     }
+    if (arg === "--evidence-file") {
+      evidenceFile = argv[index + 1] || null;
+      index += 1;
+      continue;
+    }
     if (arg === "--") continue;
     throw new Error(`未知参数: ${arg}`);
   }
 
-  return { manualGates };
+  return { manualGates, evidenceFile };
 }
 
 export function parseSupabaseDryRunMigrations(output: string): string[] {
@@ -93,8 +122,60 @@ export function hasAllManualGates(options: PreflightOptions): boolean {
   );
 }
 
+export function validateManualGateEvidence(
+  evidence: ManualGateEvidence,
+): { ok: boolean; missing: string[] } {
+  const missing: string[] = [];
+  if (evidence.mini_program?.confirmed !== true) {
+    missing.push("mini_program.confirmed");
+  }
+  if (!isNonEmptyString(evidence.mini_program?.minimum_version)) {
+    missing.push("mini_program.minimum_version");
+  }
+  if (!isNonEmptyString(evidence.mini_program?.evidence)) {
+    missing.push("mini_program.evidence");
+  }
+
+  if (evidence.admin_smoke?.confirmed !== true) {
+    missing.push("admin_smoke.confirmed");
+  }
+  if (!isNonEmptyString(evidence.admin_smoke?.evidence)) {
+    missing.push("admin_smoke.evidence");
+  }
+
+  if (evidence.backup_window?.confirmed !== true) {
+    missing.push("backup_window.confirmed");
+  }
+  if (!isNonEmptyString(evidence.backup_window?.backup_id)) {
+    missing.push("backup_window.backup_id");
+  }
+  if (!isNonEmptyString(evidence.backup_window?.restore_window)) {
+    missing.push("backup_window.restore_window");
+  }
+  if (!isNonEmptyString(evidence.backup_window?.evidence)) {
+    missing.push("backup_window.evidence");
+  }
+
+  return { ok: missing.length === 0, missing };
+}
+
 function databaseUrl(env: EnvLike = process.env): string | null {
-  return env.SUPABASE_DB_URL || env.SUPABASE_DB_DIRECT_URL || null;
+  return env.SUPABASE_DB_DIRECT_URL || env.SUPABASE_DB_URL || null;
+}
+
+async function loadManualGateEvidence(
+  evidenceFile: string,
+): Promise<{ ok: boolean; detail: string }> {
+  const path = resolve(findRepoRoot(), evidenceFile);
+  const raw = await readFile(path, "utf8");
+  const parsed = JSON.parse(raw) as ManualGateEvidence;
+  const validation = validateManualGateEvidence(parsed);
+  return {
+    ok: validation.ok,
+    detail: validation.ok
+      ? `evidence_file=${evidenceFile}`
+      : `evidence_file=${evidenceFile}; missing=${validation.missing.join(", ")}`,
+  };
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
@@ -174,7 +255,7 @@ async function buildPreflightReport(
     detail: `blockers=${cleanupReadiness.blockers.length}`,
   });
 
-  const url = resolveWorkflowRuntimeConsistencyDatabaseUrl() ?? databaseUrl();
+  const url = databaseUrl();
   if (!url) {
     checks.push({
       name: "database_url",
@@ -204,15 +285,21 @@ async function buildPreflightReport(
     });
   }
 
-  checks.push({
-    name: "manual_gates",
-    ok: hasAllManualGates(options),
-    detail: [
-      `mini_program_confirmed=${options.manualGates.has("mini_program_confirmed")}`,
-      `admin_smoke_attached=${options.manualGates.has("admin_smoke_attached")}`,
-      `backup_window_confirmed=${options.manualGates.has("backup_window_confirmed")}`,
-    ].join(", "),
-  });
+  if (options.evidenceFile) {
+    checks.push({
+      name: "manual_gates",
+      ...await loadManualGateEvidence(options.evidenceFile),
+    });
+  } else {
+    checks.push({
+      name: "manual_gates",
+      ok: false,
+      detail: [
+        "missing --evidence-file",
+        `legacy_flags_confirmed=${hasAllManualGates(options)}`,
+      ].join("; "),
+    });
+  }
 
   return {
     ok: checks.every((check) => check.ok),
@@ -220,6 +307,10 @@ async function buildPreflightReport(
     pending_migrations: pendingMigrations,
     checks,
   };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function findRepoRoot(start = process.cwd()): string {

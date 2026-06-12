@@ -43,8 +43,10 @@
   `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`。
 - 已新增破坏性清理 preflight：
   `cd apps/api && bun run workflow:destructive-cleanup-preflight`。当前自动
-  技术检查通过；不带人工确认 flag 时会因小程序、admin smoke、备份窗口
-  仍未确认而失败。
+  技术检查通过；没有
+  `docs/state_machine_migrate/audit/manual-gates.json` 证据文件时会因
+  小程序、admin smoke、备份窗口仍未确认而失败。证据文件模板见
+  `docs/state_machine_migrate/audit/manual-gates.example.json`。
 
 仍未在本工作区完成的外部门禁：
 

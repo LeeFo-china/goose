@@ -4,6 +4,7 @@ import {
   hasAllManualGates,
   parsePreflightArgs,
   parseSupabaseDryRunMigrations,
+  validateManualGateEvidence,
 } from "./workflow-destructive-cleanup-preflight";
 
 describe("parseSupabaseDryRunMigrations", () => {
@@ -39,12 +40,57 @@ describe("parsePreflightArgs", () => {
       "--confirm-mini-program",
       "--confirm-admin-smoke",
       "--confirm-backup-window",
+      "--evidence-file",
+      "docs/state_machine_migrate/audit/manual-gates.json",
     ]);
 
     expect(hasAllManualGates(options)).toBe(true);
+    expect(options.evidenceFile).toBe(
+      "docs/state_machine_migrate/audit/manual-gates.json",
+    );
   });
 
   test("rejects unknown flags", () => {
     expect(() => parsePreflightArgs(["--force"])).toThrow("未知参数: --force");
+  });
+});
+
+describe("validateManualGateEvidence", () => {
+  test("accepts complete manual gate evidence", () => {
+    expect(validateManualGateEvidence({
+      mini_program: {
+        confirmed: true,
+        minimum_version: "2.8.0",
+        evidence: "Orange release note URL",
+      },
+      admin_smoke: {
+        confirmed: true,
+        evidence: "docs/state_machine_migrate/audit/admin-smoke.md",
+      },
+      backup_window: {
+        confirmed: true,
+        backup_id: "backup-20260612",
+        restore_window: "2026-06-12 22:00-23:00 Asia/Shanghai",
+        evidence: "Supabase PITR checkpoint",
+      },
+    })).toEqual({ ok: true, missing: [] });
+  });
+
+  test("reports missing manual gate evidence fields", () => {
+    expect(validateManualGateEvidence({
+      mini_program: { confirmed: true },
+      admin_smoke: { confirmed: false },
+      backup_window: { confirmed: true, backup_id: "backup-1" },
+    })).toEqual({
+      ok: false,
+      missing: [
+        "mini_program.minimum_version",
+        "mini_program.evidence",
+        "admin_smoke.confirmed",
+        "admin_smoke.evidence",
+        "backup_window.restore_window",
+        "backup_window.evidence",
+      ],
+    });
   });
 });

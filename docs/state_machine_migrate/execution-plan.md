@@ -948,19 +948,18 @@
   bun run workflow:destructive-cleanup-preflight
   ```
 
-  Without manual confirmation flags, the command must fail if any external gate
-  is missing. Current target run passes the automated checks
+  Without a manual gate evidence file, the command must fail if any external
+  gate is missing. Current target run passes the automated checks
   (`pending_migrations_are_destructive_pair`, `cleanup_readiness`,
   `workflow_runtime_consistency`, and `legacy_objects_still_targeted`) and
   fails only `manual_gates`.
 
-  Final destructive apply requires all three confirmations:
+  Final destructive apply requires a completed evidence file based on
+  `docs/state_machine_migrate/audit/manual-gates.example.json`:
 
   ```bash
   bun run workflow:destructive-cleanup-preflight \
-    --confirm-mini-program \
-    --confirm-admin-smoke \
-    --confirm-backup-window
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
 ### Steps
@@ -1033,9 +1032,7 @@
   ```bash
   cd apps/api
   bun run workflow:destructive-cleanup-preflight \
-    --confirm-mini-program \
-    --confirm-admin-smoke \
-    --confirm-backup-window
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
   supabase migration list
   bun --cwd apps/api run workflow:cleanup-readiness
