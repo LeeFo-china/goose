@@ -714,6 +714,12 @@
   permission and `pageSize=100` boundaries. Expense detail display fields are
   loaded by subject id batch after workflow task filtering.
 
+  API upgrade:
+  `/workflow-tasks/:id/complete` now bridges `expense_request` workflow tasks
+  back into the existing expense business service for `approve`, `reject`, and
+  `pay`, so mini-program task completion updates both workflow runtime and
+  expense request status/current step during the compatibility window.
+
 - [x] **Step 5.2: Customer self-service includes workflow_state**
 
   Add `workflow_state` to mini-program bootstrap/detail payloads that currently expose project/customer status.

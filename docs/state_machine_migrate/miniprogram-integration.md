@@ -211,3 +211,4 @@ Content-Type: application/json
 | 2026-06-12 | Phase 2/Task visibility | `workflow_tasks` 新增权限投影字段，后端按员工、角色或权限过滤 `/workflow-tasks` 和 `workflow_state.actions` | 小程序可以把 `/workflow-tasks` 作为待办来源，但仍需等待目标环境执行 migration |
 | 2026-06-12 | Phase 3/Expense runtime sync | 后端新增 `expense_approval` 模板、取消 workflow 实例 RPC，并在旧费用审批写路径后同步 workflow runtime | 费用详情可读取 `workflow_state`，待办入口继续保留旧审批列表 fallback 直到 staging smoke |
 | 2026-06-12 | Phase 5/Read path partial | 后端任务中心的费用审批/打款待办已改为读取 `workflow_tasks`，客户小程序项目列表和详情已补充 `workflow_state` 投影 | 小程序项目页可以优先展示 `workflow_state.current_node_title`；费用待办可逐步切换到 workflow task |
+| 2026-06-12 | Phase 5/Expense task complete bridge | `/workflow-tasks/:id/complete` 对 `expense_request` 的 `manager_review`、`finance_review`、`payment` 节点会调用费用业务服务，保持 `expense_requests.status/current_step` 和 workflow runtime 同步 | 费用审批/驳回/打款可以优先走 workflow task complete；打款仍需传 `payee_name`、`method`、`paid_amount`、`evidence_images` 等支付字段 |
