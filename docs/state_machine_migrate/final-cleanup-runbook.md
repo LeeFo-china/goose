@@ -28,6 +28,14 @@ record completed checks and cannot be future timestamps.
 Evidence values must be traceable: use either an `http(s)` URL or a
 `docs/state_machine_migrate/` path. Local doc paths must reference existing
 files; free-form notes are rejected by `workflow:destructive-cleanup-preflight`.
+The evidence file can be validated without a database connection:
+
+```bash
+cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+cd ../..
+```
 
 ## Pre-Apply Commands
 
@@ -35,6 +43,8 @@ Run from repo root:
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
@@ -44,6 +54,7 @@ cd ../..
 
 Expected before apply:
 
+- `workflow:manual-gates-check` is `ok: true`.
 - `workflow:destructive-cleanup-preflight` is `ok: true`.
 - The scripts read `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` and compare
   local migration files with `supabase_migrations.schema_migrations`; do not

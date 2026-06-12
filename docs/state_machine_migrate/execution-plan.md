@@ -1033,13 +1033,19 @@
   `docs/state_machine_migrate/audit/manual-gates.example.json`:
 
   ```bash
+  cd apps/api
+  bun run workflow:manual-gates-check \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+  cd ../..
   ```
 
-  `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` must be present for this
-  preflight. The script no longer falls back to a linked Supabase project; a
-  destructive cleanup target must be explicit before any gate can pass.
+  `workflow:manual-gates-check` validates only the evidence file and does not
+  require a database connection. `SUPABASE_DB_DIRECT_URL` or
+  `SUPABASE_DB_URL` must be present for the destructive cleanup preflight. The
+  preflight no longer falls back to a linked Supabase project; a destructive
+  cleanup target must be explicit before any gate can pass.
 
   The evidence file must include Phase 4 backfill/reconciliation evidence,
   Phase 5 authenticated API smoke evidence, mini-program workflow API contract
