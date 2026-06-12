@@ -28,7 +28,6 @@ export type ExpenseRequestRecord = {
   title: string | null;
   total_amount: number;
   status: string;
-  current_step: string;
   submitted_at: string | null;
   approved_at: string | null;
   rejected_at: string | null;
@@ -55,7 +54,6 @@ export type ExpenseRequestMutationPayload = {
   request_no?: string;
   total_amount?: number;
   status?: string;
-  current_step?: string;
   submitted_at?: string | null;
   approved_at?: string | null;
   rejected_at?: string | null;

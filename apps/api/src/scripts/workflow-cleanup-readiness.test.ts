@@ -187,3 +187,23 @@ describe("expense approval chain table cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("expense current step runtime cleanup", () => {
+  test("expense request runtime no longer reads or writes legacy current_step", () => {
+    const sourcePaths = [
+      "src/repositories/expense-requests/legacy/shared.ts",
+      "src/services/expense-workflow-runtime.ts",
+      "src/services/expense-requests/legacy/drafts.ts",
+      "src/services/expense-requests/legacy/workflow.ts",
+      "src/services/expense-requests/legacy/payment.ts",
+    ];
+    const references = scanCleanupReferences(sourcePaths.map((sourcePath) => ({
+      path: `apps/api/${sourcePath}`,
+      content: readFileSync(sourcePath, "utf8"),
+    }))).filter((reference) =>
+      reference.pattern === "current_step"
+    );
+
+    expect(references).toEqual([]);
+  });
+});

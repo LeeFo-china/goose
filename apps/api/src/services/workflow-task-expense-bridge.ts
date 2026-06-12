@@ -114,6 +114,7 @@ class WorkflowTaskExpenseBridge {
     const expenseRequest = await this.executeOperation(
       input.authContext,
       expenseRequestId,
+      input.task.node_key,
       operation,
     );
     const workflowState = await workflowSubjectsService.getState(input.authContext, {
@@ -135,6 +136,7 @@ class WorkflowTaskExpenseBridge {
   private async executeOperation(
     authContext: AuthContext,
     expenseRequestId: string,
+    workflowNodeKey: string,
     operation: ExpenseWorkflowTaskOperation,
   ) {
     if (operation.kind === "approve") {
@@ -144,6 +146,7 @@ class WorkflowTaskExpenseBridge {
         authContext,
         expenseRequestId,
         parsed.data,
+        { workflowNodeKey },
       );
     }
 
@@ -154,6 +157,7 @@ class WorkflowTaskExpenseBridge {
         authContext,
         expenseRequestId,
         parsed.data,
+        { workflowNodeKey },
       );
     }
 
@@ -163,6 +167,7 @@ class WorkflowTaskExpenseBridge {
       authContext,
       expenseRequestId,
       parsed.data,
+      { workflowNodeKey },
     );
   }
 }

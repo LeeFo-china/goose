@@ -1,5 +1,9 @@
 import { expenseWorkflowRuntimeService } from "@/services/expense-workflow-runtime";
 import {
+  resolveExpenseWorkflowNodeKey,
+  type ExpenseWorkflowOperationOptions,
+} from "./workflow-node";
+import {
   Errors,
   expenseRequestRepository,
   accessPolicyService,
@@ -51,6 +55,7 @@ export async function payExpenseRequest(this: any,
     authContext: AuthContext,
     id: string,
     input: PayExpenseRequestInput,
+    options?: ExpenseWorkflowOperationOptions,
   ) {
     const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
@@ -74,7 +79,12 @@ export async function payExpenseRequest(this: any,
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    if (existing.status !== "approved" || existing.current_step !== "payment") {
+    const nodeKey = await resolveExpenseWorkflowNodeKey({
+      tenantId,
+      expenseRequestId: id,
+      options,
+    });
+    if (existing.status !== "approved" || nodeKey !== "payment") {
       throw Errors.business(
         400,
         "只有待打款的费用申请才能登记支付",
@@ -117,7 +127,6 @@ export async function payExpenseRequest(this: any,
 
     await expenseRequestRepository.update(id, {
       status: "paid",
-      current_step: "done",
       completed_at: paidAt,
       assignee_id: null,
     }, undefined, tenantId);

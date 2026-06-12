@@ -840,6 +840,14 @@
   `workflow:cleanup-readiness` reports zero blocking production references to
   `expense_request_approval_chains`.
 
+  2026-06-12 progress: expense request runtime no longer reads or writes
+  legacy `current_step`. Workflow task completion passes the task `node_key`
+  into the expense business service; direct legacy approve/reject/pay endpoints
+  resolve the current node from `workflow_subject_states`. Submit, approve,
+  reject, cancel, pay, and expense workflow runtime sync no longer mutate or
+  inspect the old column. Cleanup readiness now leaves only the historical
+  `workflow-runtime-backfill` script references to `current_step`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

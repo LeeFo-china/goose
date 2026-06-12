@@ -1,5 +1,10 @@
 import { expenseWorkflowRuntimeService } from "@/services/expense-workflow-runtime";
 import {
+  resolveExpenseApprovalNodeKey,
+  resolveExpenseWorkflowNodeKey,
+  type ExpenseWorkflowOperationOptions,
+} from "./workflow-node";
+import {
   Errors,
   expenseRequestRepository,
   accessPolicyService,
@@ -51,6 +56,7 @@ export async function approveExpenseRequest(this: any,
     authContext: AuthContext,
     id: string,
     input: ApproveExpenseRequestInput,
+    options?: ExpenseWorkflowOperationOptions,
   ) {
     const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
@@ -94,26 +100,25 @@ export async function approveExpenseRequest(this: any,
       );
     }
 
-    if (!["manager_review", "finance_review"].includes(existing.current_step)) {
-      throw Errors.business(
-        400,
-        "当前审批节点不允许通过",
-        "EXPENSE_REQUEST_INVALID_TRANSITION",
-      );
-    }
+    const nodeKey = await resolveExpenseApprovalNodeKey({
+      tenantId,
+      expenseRequestId: id,
+      options,
+      invalidMessage: "当前审批节点不允许通过",
+    });
 
     if (await this.hasApprovalAction({
       tenantId,
       expenseRequestId: id,
       approvalRound,
-      step: existing.current_step,
+      step: nodeKey,
       action: "approve",
       approverId,
     })) {
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    const previousApproveStep = existing.current_step === "finance_review"
+    const previousApproveStep = nodeKey === "finance_review"
       ? "manager_review"
       : null;
     if (
@@ -129,7 +134,7 @@ export async function approveExpenseRequest(this: any,
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    if (existing.current_step === "manager_review") {
+    if (nodeKey === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
         existing,
@@ -158,17 +163,13 @@ export async function approveExpenseRequest(this: any,
     await this.assertEmployeeExists(approverId, tenantId, "审批人不存在");
 
     const now = new Date().toISOString();
-    const nextStatus = existing.current_step === "finance_review"
+    const nextStatus = nodeKey === "finance_review"
       ? "approved"
       : "pending";
-    const nextStep = existing.current_step === "finance_review"
-      ? "payment"
-      : "finance_review";
 
     const updated = await expenseRequestRepository.update(id, {
       status: nextStatus,
-      current_step: nextStep,
-      approved_at: existing.current_step === "finance_review" ? now : null,
+      approved_at: nodeKey === "finance_review" ? now : null,
       assignee_id: null,
     }, undefined, tenantId);
 
@@ -176,7 +177,7 @@ export async function approveExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       approvalRound,
-      step: existing.current_step,
+      step: nodeKey,
       action: "approve",
       approverId,
       comment: input.comment ?? null,
@@ -188,7 +189,7 @@ export async function approveExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       expenseRequest: latest,
-      nodeKey: existing.current_step as "manager_review" | "finance_review",
+      nodeKey,
       action: "approve",
       actorEmployeeId: approverId,
       decision: "approved",
@@ -202,6 +203,7 @@ export async function rejectExpenseRequest(this: any,
     authContext: AuthContext,
     id: string,
     input: RejectExpenseRequestInput,
+    options?: ExpenseWorkflowOperationOptions,
   ) {
     const tenantId = this.requireTenantId(authContext);
     const existing = await expenseRequestRepository.findById(id, tenantId);
@@ -247,19 +249,25 @@ export async function rejectExpenseRequest(this: any,
     if (!rejectedReason) {
       throw Errors.badRequest("驳回原因不能为空");
     }
+    const nodeKey = await resolveExpenseApprovalNodeKey({
+      tenantId,
+      expenseRequestId: id,
+      options,
+      invalidMessage: "当前审批节点不允许驳回",
+    });
 
     if (await this.hasApprovalAction({
       tenantId,
       expenseRequestId: id,
       approvalRound,
-      step: existing.current_step,
+      step: nodeKey,
       action: "reject",
       approverId,
     })) {
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    if (existing.current_step === "manager_review") {
+    if (nodeKey === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
         existing,
@@ -271,7 +279,7 @@ export async function rejectExpenseRequest(this: any,
         approverId,
         "expense_request.approve_manager",
       );
-    } else if (existing.current_step === "finance_review") {
+    } else {
       await this.assertCanOperateExpenseRequest(
         authContext,
         existing,
@@ -283,12 +291,6 @@ export async function rejectExpenseRequest(this: any,
         approverId,
         "expense_request.approve_finance",
       );
-    } else {
-      throw Errors.business(
-        400,
-        "当前审批节点不允许驳回",
-        "EXPENSE_REQUEST_INVALID_TRANSITION",
-      );
     }
 
     await this.assertEmployeeExists(approverId, tenantId, "审批人不存在");
@@ -296,7 +298,6 @@ export async function rejectExpenseRequest(this: any,
     const now = new Date().toISOString();
     const updated = await expenseRequestRepository.update(id, {
       status: "rejected",
-      current_step: "draft",
       rejected_at: now,
       rejected_reason: rejectedReason,
       assignee_id: existing.employee_id,
@@ -306,7 +307,7 @@ export async function rejectExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       approvalRound,
-      step: existing.current_step,
+      step: nodeKey,
       action: "reject",
       approverId,
       comment: input.comment ?? rejectedReason,
@@ -318,7 +319,7 @@ export async function rejectExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       expenseRequest: latest,
-      nodeKey: existing.current_step as "manager_review" | "finance_review",
+      nodeKey,
       action: "reject",
       actorEmployeeId: approverId,
       decision: "rejected",
@@ -363,9 +364,12 @@ export async function cancelExpenseRequest(this: any,
 
     const now = new Date().toISOString();
     const approvalRound = this.getApprovalRound(existing);
+    const nodeKey = await resolveExpenseWorkflowNodeKey({
+      tenantId,
+      expenseRequestId: id,
+    });
     const updated = await expenseRequestRepository.update(id, {
       status: "cancelled",
-      current_step: "cancelled",
       cancelled_at: now,
       assignee_id: null,
     }, undefined, tenantId);
@@ -374,7 +378,7 @@ export async function cancelExpenseRequest(this: any,
       tenantId,
       expenseRequestId: id,
       approvalRound,
-      step: existing.current_step,
+      step: nodeKey ?? "cancel",
       action: "cancel",
       approverId: input.operator_id,
       comment: input.comment ?? null,

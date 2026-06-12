@@ -160,6 +160,17 @@ display:
 | blocker files | `8` |
 | `expense_request_approval_chains` blocker references | `0` |
 
+2026-06-12 after removing expense runtime `current_step` dependencies:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `13` |
+| blocker files | `3` |
+| `current_step` runtime blocker references | `0` |
+| remaining `current_step` blockers | `workflow-runtime-backfill` scripts only |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -242,9 +253,12 @@ because the system is still in the compatibility window:
 - expense request runtime no longer reads or writes
   `expense_request_approval_chains`; workflow tasks own actionable approver
   routing, while `expense_request_approvals` remains as the audit log;
+- expense request runtime no longer reads or writes legacy `current_step`;
+  workflow task bridge passes task node context, and direct legacy endpoints
+  resolve the current node from `workflow_subject_states`;
 - generated database types still reflect the not-yet-dropped DB objects;
-- backfill scripts still read legacy fields until historical data migration is
-  applied and accepted.
+- backfill scripts still read legacy `current_step` until historical data
+  migration is applied and accepted.
 
 Before creating the destructive cleanup migration, this command must report
 `ready: true` or all remaining references must be explicitly reclassified as

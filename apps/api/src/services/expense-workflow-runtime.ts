@@ -86,7 +86,8 @@ class ExpenseWorkflowRuntimeService {
       await this.assignPendingTask({
         tenantId: input.tenantId,
         instanceId: existing.id,
-        expenseRequest: input.expenseRequest,
+        nodeKey: existing.current_node_key,
+        assigneeEmployeeId: input.expenseRequest?.assignee_id ?? null,
       });
       await this.syncSubjectState(input, definition.id, existing.id);
       return {
@@ -123,7 +124,8 @@ class ExpenseWorkflowRuntimeService {
     await this.assignPendingTask({
       tenantId: input.tenantId,
       instanceId: result.instance.id,
-      expenseRequest: input.expenseRequest,
+      nodeKey: result.instance.current_node_key,
+      assigneeEmployeeId: input.expenseRequest?.assignee_id ?? null,
     });
     await this.syncSubjectState(input, definition.id, result.instance.id);
 
@@ -258,7 +260,8 @@ class ExpenseWorkflowRuntimeService {
     await this.assignPendingTask({
       tenantId: input.tenantId,
       instanceId: result.instance.id,
-      expenseRequest: input.expenseRequest,
+      nodeKey: result.instance.current_node_key,
+      assigneeEmployeeId: input.expenseRequest?.assignee_id ?? null,
     });
     await this.syncSubjectState(input, definition.id, result.instance.id);
 
@@ -330,16 +333,16 @@ class ExpenseWorkflowRuntimeService {
   private async assignPendingTask(input: {
     tenantId: string;
     instanceId: string;
-    expenseRequest: ExpenseRequestRecord | null;
+    nodeKey: string | null;
+    assigneeEmployeeId?: string | null;
   }) {
-    const nodeKey = input.expenseRequest?.current_step;
-    if (!nodeKey) return;
+    if (!input.nodeKey) return;
 
     await workflowTaskRepository.assignPendingTask({
       tenantId: input.tenantId,
       instanceId: input.instanceId,
-      nodeKey,
-      assigneeEmployeeId: input.expenseRequest?.assignee_id ?? null,
+      nodeKey: input.nodeKey,
+      assigneeEmployeeId: input.assigneeEmployeeId ?? null,
     });
   }
 
@@ -367,7 +370,6 @@ class ExpenseWorkflowRuntimeService {
       employee_id: input.expenseRequest?.employee_id ?? null,
       project_id: input.expenseRequest?.project_id ?? null,
       status: input.expenseRequest?.status ?? null,
-      current_step: input.expenseRequest?.current_step ?? null,
       total_amount: input.expenseRequest?.total_amount ?? null,
       operator_employee_id: input.authContext.employeeId ?? null,
       operator_auth_user_id: input.authContext.authUserId ?? null,
