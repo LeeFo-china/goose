@@ -540,12 +540,13 @@
 
 **Files:**
 - Create: `apps/api/src/scripts/backfill-workflow-runtime-from-state-machine.ts`
+- Create: `apps/api/src/scripts/workflow-runtime-backfill/*`
 - Create: `docs/state_machine_migrate/audit/YYYY-MM-DD-backfill-report.md`
 - Modify: `docs/state_machine_migrate/execution-plan.md`
 
 ### Steps
 
-- [ ] **Step 4.1: Create idempotent backfill script**
+- [x] **Step 4.1: Create idempotent backfill script**
 
   Script must support:
 
@@ -561,35 +562,50 @@
   - Apply creates missing `workflow_instance_nodes`, `workflow_tasks`, `workflow_transition_logs`.
   - Re-running apply produces zero duplicate running instances for the same subject.
 
-- [ ] **Step 4.2: Backfill customers**
+  Implementation note:
+  `apps/api/src/scripts/backfill-workflow-runtime-from-state-machine.ts`
+  delegates mapping, data access, report writing, and runner orchestration to
+  `apps/api/src/scripts/workflow-runtime-backfill/`. Existing instances are
+  detected before insert; any existing instance for the same tenant,
+  definition, subject type, and subject id is skipped, so completed/canceled
+  historical rows are also idempotent.
+
+- [x] **Step 4.2: Backfill customers**
 
   Map old customer `status` to workflow node key:
 
   | old status | workflow node key |
   | --- | --- |
-  | `new` | `customer_lead` |
+  | `potential` | `following` |
   | `following` | `following` |
   | `arrived` | `arrived` |
   | `designing` | `designing` |
   | `signed` | `signed` |
+  | `dormant` | skipped: current template has no dormant node |
   | `invalid` | `invalid` |
 
-- [ ] **Step 4.3: Backfill projects**
+  Note: the current `customer_main` template does not contain `invalid`; those
+  rows are reported as `mapped_node_missing` until the template is extended or
+  the business accepts skipping invalid customers.
+
+- [x] **Step 4.3: Backfill projects**
 
   Map project status to workflow node key:
 
   | old status | workflow node key |
   | --- | --- |
-  | `draft` | `project_created` |
-  | `signed` | `contract` |
-  | `started` | `construction_start` |
+  | `designing` | `designing` |
+  | `proposal_confirmed` | `proposal_confirmed` |
+  | `signed` | `signed` |
+  | `design_finalized` | `design_finalized` |
+  | `pending_start` | `pending_start` |
+  | `started` | `started` |
   | `constructing` | `constructing` |
   | `on_hold` | `on_hold` |
-  | `acceptance` | `final_acceptance` |
-  | `completed` | `settlement` |
+  | `acceptance` | `acceptance` |
   | `invalid` | `invalid` |
 
-- [ ] **Step 4.4: Backfill expense requests**
+- [x] **Step 4.4: Backfill expense requests**
 
   Map expense fields:
 
@@ -602,6 +618,11 @@
   | `paid/done` | `done` | none |
   | `rejected/draft` | `rejected` | none |
   | `cancelled/cancelled` | `cancelled` | none |
+
+  Note: the current `expense_approval` template does not contain `draft` or
+  `cancelled`; `draft/draft` is skipped as not started, and
+  `cancelled/cancelled` is reported as `mapped_node_missing` unless the active
+  template is extended before staging apply.
 
 - [ ] **Step 4.5: Verification**
 
@@ -634,6 +655,20 @@
   ```
 
   Expected: no rows or all `missing_count = 0` for target tenant after apply.
+
+  Local implementation verification completed:
+
+  ```bash
+  cd apps/api
+  bun test src/scripts/workflow-runtime-backfill/plan.test.ts
+  bun run typecheck
+  bun run check:file-size
+  ```
+
+  Staging dry-run/apply is still pending because the available environment does
+  not include a confirmed staging `TENANT_ID`, and earlier remote migration
+  checks failed with `SUPABASE_DB_PASSWORD` authentication errors for project
+  `fclnkyatvfvmzgzdqlba`.
 
 ### Phase 4 Acceptance
 
