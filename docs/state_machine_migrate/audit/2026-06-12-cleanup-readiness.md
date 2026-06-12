@@ -9,7 +9,9 @@ does not remove code.
 ## Command
 
 ```bash
-bun --cwd apps/api run workflow:cleanup-readiness
+cd apps/api
+bun run workflow:cleanup-readiness
+cd ../..
 ```
 
 Expected before destructive cleanup: exit code `0` and `"ready": true`.

@@ -921,8 +921,7 @@
   bun run api:build
   pnpm --dir apps/admin check
   cd apps/api
-  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
-    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+  bun run workflow:cleanup-readiness
   cd ../..
   git diff --check
   ```
@@ -930,12 +929,14 @@
   API smoke:
 
   ```bash
+  cd apps/api
   GOOES_API_BASE_URL="$GOOES_API_BASE_URL" \
   PHASE5_SMOKE_EMPLOYEE_TOKEN="$TOKEN" \
   PHASE5_SMOKE_CUSTOMER_TOKEN="$CUSTOMER_TOKEN" \
   PHASE5_SMOKE_CUSTOMER_PROJECT_ID="$CUSTOMER_PROJECT_ID" \
   PHASE5_SMOKE_PROJECT_ID="$PROJECT_ID" \
-  bun --cwd apps/api run workflow:phase5-smoke
+  bun run workflow:phase5-smoke
+  cd ../..
   ```
 
   Expected: `/workflow-tasks`, `/task-center/todos`, `/customer/bootstrap`,
@@ -951,12 +952,18 @@
   - `pnpm --dir apps/admin check`: passed.
   - `git diff --check`: passed.
   - Playwright login-page smoke against existing `http://127.0.0.1:3010`: passed.
-  - Added `bun --cwd apps/api run workflow:phase5-smoke` to make staging/API
+  - Added `cd apps/api && bun run workflow:phase5-smoke` to make staging/API
     smoke repeatable once tokens and ids are available.
 
   Runtime API smoke remains pending because this workspace does not have
   staging tenant ids or authenticated admin/mini-program tokens. See
   `docs/state_machine_migrate/audit/2026-06-12-phase5-verification.md`.
+
+  `workflow:final-completion-audit` intentionally remains out of Phase 5
+  verification. It is a Phase 6/final gate and must fail before destructive
+  cleanup apply because pending destructive migrations, legacy database
+  objects, generated legacy types, and the final breaking cleanup commit are
+  not complete yet.
 
 ### Phase 5 Acceptance
 
@@ -997,7 +1004,7 @@
   migration before cleanup.
 - [ ] Orange team confirms mini-program no longer depends on old `status_actions/current_step` controls.
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
-- [x] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
+- [x] `cd apps/api && bun run workflow:cleanup-readiness` exits 0.
 
   2026-06-12 target pre-cleanup status: Supabase project
   `fclnkyatvfvmzgzdqlba` is aligned through `20260612124500`; the direct
@@ -1123,7 +1130,9 @@
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
-  bun --cwd apps/api run workflow:cleanup-readiness
+  cd apps/api
+  bun run workflow:cleanup-readiness
+  cd ../..
   bun run api:typecheck
   bun run api:build
   pnpm --dir apps/admin check
@@ -1225,7 +1234,9 @@
 
   ```bash
   rg -n "customer_status_transition_logs|project_status_transition_logs|expense_request_approval_chains|schedule_project_construction_transition|current_step|current_step_role|status-machine-consistency-check" apps packages supabase --glob '!**/.next/**'
-  bun --cwd apps/api run workflow:cleanup-readiness
+  cd apps/api
+  bun run workflow:cleanup-readiness
+  cd ../..
   bun run api:typecheck
   bun run api:build
   pnpm --dir apps/admin check

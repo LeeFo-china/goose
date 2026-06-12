@@ -44,12 +44,14 @@ Run this once staging tenant ids and authenticated employee/customer tokens are
 available:
 
 ```bash
+cd apps/api
 GOOES_API_BASE_URL="$GOOES_API_BASE_URL" \
 PHASE5_SMOKE_EMPLOYEE_TOKEN="$TOKEN" \
 PHASE5_SMOKE_CUSTOMER_TOKEN="$CUSTOMER_TOKEN" \
 PHASE5_SMOKE_CUSTOMER_PROJECT_ID="$CUSTOMER_PROJECT_ID" \
 PHASE5_SMOKE_PROJECT_ID="$PROJECT_ID" \
-bun --cwd apps/api run workflow:phase5-smoke
+bun run workflow:phase5-smoke
+cd ../..
 ```
 
 Required variables:
@@ -77,10 +79,10 @@ These checks are still required before Phase 5 can be fully accepted:
 | gate | required evidence |
 | --- | --- |
 | Customer/project admin action smoke | authenticated admin user opens customer/project detail, sees workflow actions, submits at least one customer action and one project action through `/workflow-tasks/:id/complete` |
-| Mini-program task/detail smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms `/workflow-tasks`, `/customer/bootstrap`, and customer self-service project detail include workflow data and remain paginated |
-| Task center smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms task center todos stay paginated |
+| Mini-program task/detail smoke | `cd apps/api && bun run workflow:phase5-smoke` confirms `/workflow-tasks`, `/customer/bootstrap`, and customer self-service project detail include workflow data and remain paginated |
+| Task center smoke | `cd apps/api && bun run workflow:phase5-smoke` confirms task center todos stay paginated |
 | Orange handoff | mini-program team confirms the updated `workflow_state.actions` / `output_fields` contract is implemented or scheduled before Phase 6 |
-| Remote migration status | `workflow:migration-status` or `workflow:final-completion-audit` can read migration history directly and reports only the intentional destructive cleanup migrations as pending before final cleanup |
+| Remote migration status | `workflow:migration-status` can read migration history directly and reports only the intentional destructive cleanup migrations as pending before final cleanup; `workflow:final-completion-audit` is reserved for Phase 6/final verification after destructive apply |
 
 ## Current Blockers
 
