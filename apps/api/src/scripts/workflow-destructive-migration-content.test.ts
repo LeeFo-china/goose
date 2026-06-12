@@ -79,6 +79,23 @@ describe("collectDestructiveMigrationContentIssues", () => {
     );
   });
 
+  test("does not treat commented required drops as present", () => {
+    const issues = collectDestructiveMigrationContentIssues({
+      [scheduleMigrationFile]:
+        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
+      [migrationFile]: [
+        ...requiredLegacyCleanupDrops.filter((snippet) =>
+          snippet !== "DROP TABLE IF EXISTS public.project_status_transition_logs"
+        ),
+        "-- DROP TABLE IF EXISTS public.project_status_transition_logs",
+      ].join(";\n"),
+    });
+
+    expect(issues).toContain(
+      `${migrationFile}: missing DROP TABLE IF EXISTS public.project_status_transition_logs`,
+    );
+  });
+
   test("rejects destructive drops for retained business status columns", () => {
     const issues = collectDestructiveMigrationContentIssues({
       [scheduleMigrationFile]:
@@ -91,6 +108,21 @@ describe("collectDestructiveMigrationContentIssues", () => {
 
     expect(issues).toContain(
       `${migrationFile}: forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status`,
+    );
+  });
+
+  test("ignores forbidden drops inside SQL comments", () => {
+    const issues = collectDestructiveMigrationContentIssues({
+      [scheduleMigrationFile]:
+        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
+      [migrationFile]: [
+        ...requiredLegacyCleanupDrops,
+        "/* ALTER TABLE public.expense_requests DROP COLUMN IF EXISTS status */",
+      ].join(";\n"),
+    });
+
+    expect(issues).not.toContain(
+      `${migrationFile}: forbidden ALTER TABLE public.expense_requests DROP COLUMN IF EXISTS status`,
     );
   });
 

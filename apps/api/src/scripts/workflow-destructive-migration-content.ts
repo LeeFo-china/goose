@@ -81,7 +81,13 @@ export function collectDestructiveMigrationContentIssues(
 }
 
 function normalizeSqlSnippet(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLowerCase();
+  return stripSqlComments(value).replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function stripSqlComments(value: string): string {
+  return value
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--.*$/gm, " ");
 }
 
 function hasSqlSnippet(content: string, snippet: string): boolean {
