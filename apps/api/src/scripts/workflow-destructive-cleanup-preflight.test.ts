@@ -202,6 +202,18 @@ describe("validateManualGateEvidence", () => {
     ]);
   });
 
+  test("rejects non-version mini-program minimum version", () => {
+    const result = validateManualGateEvidence({
+      mini_program: {
+        minimum_version: "already upgraded",
+      },
+    });
+
+    expect(result.invalid).toEqual([
+      "mini_program.minimum_version: must be a version string",
+    ]);
+  });
+
   test("reports missing local evidence file references", () => {
     expect(collectManualGateEvidenceReferenceIssues({
       phase_acceptance: {

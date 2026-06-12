@@ -22,6 +22,9 @@ field with real evidence:
 date-time strings, preferably ISO 8601 values with timezone offsets. They must
 record completed checks and cannot be future timestamps.
 
+`mini_program.minimum_version` must be a numeric version string such as
+`2.8.0`, not a free-form rollout note.
+
 Evidence values must be traceable: use either an `http(s)` URL or a
 `docs/state_machine_migrate/` path. Local doc paths must reference existing
 files; free-form notes are rejected by `workflow:destructive-cleanup-preflight`.

@@ -316,7 +316,8 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 
 同时必须填写 `mini_program.confirmed_by`、可解析的
 `mini_program.confirmed_at` 和 `mini_program.minimum_version`，用于追溯破坏性清理前的小程序发布
-确认人、确认时间和最低可用版本。`confirmed_at` 必须记录已经完成的确认时间，不能填写未来计划时间。
+确认人、确认时间和最低可用版本。`confirmed_at` 必须记录已经完成的确认时间，不能填写未来计划时间；
+`minimum_version` 必须填写数字版本号，例如 `2.8.0`，不能填写自由文本说明。
 
 ## 需要后端同步的变更
 

@@ -147,6 +147,8 @@ export function validateManualGateEvidence(
   }
   if (!isNonEmptyString(evidence.mini_program?.minimum_version)) {
     missing.push("mini_program.minimum_version");
+  } else if (!isVersionString(evidence.mini_program.minimum_version)) {
+    invalid.push("mini_program.minimum_version: must be a version string");
   }
   if (!isNonEmptyString(evidence.mini_program?.evidence)) {
     missing.push("mini_program.evidence");
@@ -387,6 +389,10 @@ function isParseableDateTime(value: string): boolean {
 
 function isFutureDateTime(value: string, referenceTime: Date): boolean {
   return Date.parse(value) > referenceTime.getTime();
+}
+
+function isVersionString(value: string): boolean {
+  return /^\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(value.trim());
 }
 
 function manualGateEvidenceReferences(
