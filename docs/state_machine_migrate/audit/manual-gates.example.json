@@ -1,4 +1,11 @@
 {
+  "_instructions": {
+    "usage": "Copy this file to docs/state_machine_migrate/audit/manual-gates.json and replace every false/empty value with real evidence before destructive cleanup.",
+    "check_command": "cd apps/api && bun run workflow:manual-gates-check --evidence-file docs/state_machine_migrate/audit/manual-gates.json",
+    "evidence_format": "Evidence values must be http(s) URLs or existing docs/state_machine_migrate/ paths.",
+    "time_format": "confirmed_at and smoke_at must be parseable date-time strings, preferably ISO 8601 with timezone, and must not be in the future.",
+    "version_format": "minimum_version must be a numeric version string such as 2.8.0."
+  },
   "phase_acceptance": {
     "phase4_backfill_confirmed": false,
     "phase4_reconciliation_evidence": "",
