@@ -93,7 +93,7 @@ are the destructive cleanup pair. Before applying to production:
 cd apps/api
 bun run workflow:manual-gates-check \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun run workflow:destructive-cleanup-preflight \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
@@ -108,7 +108,7 @@ consistency, and legacy-object inventory.
 
 ```bash
 cd apps/api
-bun run workflow:destructive-cleanup-verify
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
 ```
 
 Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
@@ -122,7 +122,7 @@ Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 cd apps/api
 bun run workflow:manual-gates-check \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun run workflow:final-completion-audit \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
