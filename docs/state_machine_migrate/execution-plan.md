@@ -1029,6 +1029,8 @@
   `destructive_migration_content`, `cleanup_readiness`,
   `workflow_runtime_consistency`, and `legacy_objects_still_targeted`) and
   fails only `manual_gates`.
+  `destructive_migration_content` also rejects accidental drops of retained
+  business `status` columns.
 
   Final destructive apply requires a completed evidence file based on
   `docs/state_machine_migrate/audit/manual-gates.example.json`:

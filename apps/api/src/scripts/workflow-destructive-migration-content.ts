@@ -39,6 +39,12 @@ const EXPECTED_DESTRUCTIVE_MIGRATION_CONTENT = {
   ],
 } satisfies Record<string, readonly string[]>;
 
+const FORBIDDEN_DESTRUCTIVE_MIGRATION_CONTENT = [
+  "ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
+  "ALTER TABLE public.projects DROP COLUMN IF EXISTS status",
+  "ALTER TABLE public.expense_requests DROP COLUMN IF EXISTS status",
+] as const;
+
 export function collectDestructiveMigrationContentIssues(
   files: Record<string, string | null | undefined>,
 ): string[] {
@@ -57,6 +63,15 @@ export function collectDestructiveMigrationContentIssues(
     for (const snippet of requiredSnippets) {
       if (!content.includes(snippet)) {
         issues.push(`${fileName}: missing ${snippet}`);
+      }
+    }
+  }
+
+  for (const [fileName, content] of Object.entries(files)) {
+    if (!content) continue;
+    for (const snippet of FORBIDDEN_DESTRUCTIVE_MIGRATION_CONTENT) {
+      if (content.includes(snippet)) {
+        issues.push(`${fileName}: forbidden ${snippet}`);
       }
     }
   }
