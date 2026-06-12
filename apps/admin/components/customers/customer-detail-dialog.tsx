@@ -117,8 +117,6 @@ export function CustomerDetailDialog({
           </div>
           <CustomerStatusPanel
             customer={customer}
-            initialActionsData={customer.detail_activity?.status_actions}
-            initialTransitions={customer.detail_activity?.status_transitions?.rows}
             onChanged={refreshCustomer}
           />
           {customer.latest_source || getSourceBadges(customer).length > 0 ? (

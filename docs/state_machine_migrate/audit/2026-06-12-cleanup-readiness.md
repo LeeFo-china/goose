@@ -16,7 +16,7 @@ Expected before destructive cleanup: exit code `0` and `"ready": true`.
 
 ## Result
 
-2026-06-12 local result:
+2026-06-12 initial local result:
 
 | check | result |
 | --- | --- |
@@ -24,6 +24,17 @@ Expected before destructive cleanup: exit code `0` and `"ready": true`.
 | ready | `false` |
 | blocker references | `139` |
 | blocker files | `32` |
+
+2026-06-12 after switching admin customer/project panels to workflow
+timeline/actions:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `131` |
+| blocker files | `30` |
+| customer/project admin component blockers | `0` |
 
 ## Pattern Counts
 
@@ -75,6 +86,8 @@ Phase 6 destructive cleanup is not ready. The remaining blockers are expected
 because the system is still in the compatibility window:
 
 - old status endpoints and admin fallbacks still exist;
+- customer/project admin panels no longer require old status action/timeline
+  endpoints for normal operation;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

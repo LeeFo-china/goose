@@ -41,6 +41,7 @@ export type ProjectRecord = {
   status_label?: string | null;
   display_status?: string | null;
   display_status_label?: string | null;
+  paused_from_status?: string | null;
   current_stage?: string | null;
   current_stage_label?: string | null;
   stage_code?: string | null;

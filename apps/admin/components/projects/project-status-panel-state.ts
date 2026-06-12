@@ -11,8 +11,6 @@ import type {
   ProjectConstructionStagesResponse,
   ProjectRecord,
   ProjectStatusActionItem,
-  ProjectStatusActionsResponse,
-  ProjectStatusTransitionRecord,
 } from "@/components/projects/project-mutation-types";
 import {
   blockedProjectActions,
@@ -25,6 +23,8 @@ import {
 import type {
   WorkflowSubjectAction,
   WorkflowSubjectState,
+  WorkflowSubjectTimelineItem,
+  WorkflowSubjectTimelineResponse,
 } from "@/components/workflows/workflow-subject-state-panel";
 import { requestBackendJson } from "@/lib/backend-client";
 
@@ -37,11 +37,9 @@ export function useProjectStatusPanel(
   project: ProjectRecord,
   onChanged: () => Promise<void>,
 ) {
-  const [actionsData, setActionsData] = useState<ProjectStatusActionsResponse | null>(null);
   const [constructionStages, setConstructionStages] =
     useState<ProjectConstructionStagesResponse | null>(null);
-  const [transitions, setTransitions] = useState<ProjectStatusTransitionRecord[]>([]);
-  const [actionsLoading, setActionsLoading] = useState(false);
+  const [transitions, setTransitions] = useState<WorkflowSubjectTimelineItem[]>([]);
   const [constructionStagesLoading, setConstructionStagesLoading] = useState(false);
   const [transitionsLoading, setTransitionsLoading] = useState(false);
   const [transitionsLoaded, setTransitionsLoaded] = useState(false);
@@ -56,29 +54,6 @@ export function useProjectStatusPanel(
   const [constructionManagerCandidates, setConstructionManagerCandidates] = useState<EmployeeOption[]>([]);
   const [constructionManagerEmployeeId, setConstructionManagerEmployeeId] = useState("");
   const [constructionManagerLoading, setConstructionManagerLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setActionsLoading(true);
-    setError("");
-    setTransitions([]);
-    setTransitionsLoaded(false);
-    requestProject({ path: `/projects/${project.id}/status-actions` })
-      .then((actions) => {
-        if (cancelled) return;
-        setActionsData(actions as ProjectStatusActionsResponse);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "状态动作加载失败");
-      })
-      .finally(() => {
-        if (!cancelled) setActionsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, project.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,14 +79,17 @@ export function useProjectStatusPanel(
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setTransitionsLoading(true);
-      requestProject({ path: `/projects/${project.id}/status-transitions?page=1&pageSize=3` })
+      requestBackendJson<WorkflowSubjectTimelineResponse>(
+        `/workflow-subjects/project/${project.id}/timeline?page=1&pageSize=3`,
+        { cache: "no-store", fallbackMessage: "流程时间线加载失败" },
+      )
         .then((timeline) => {
           if (cancelled) return;
-          setTransitions((timeline?.rows || []) as ProjectStatusTransitionRecord[]);
+          setTransitions(timeline.list || []);
           setTransitionsLoaded(true);
         })
         .catch((err) => {
-          if (!cancelled) setError(err instanceof Error ? err.message : "状态时间线加载失败");
+          if (!cancelled) setError(err instanceof Error ? err.message : "流程时间线加载失败");
         })
         .finally(() => {
           if (!cancelled) setTransitionsLoading(false);
@@ -124,7 +102,7 @@ export function useProjectStatusPanel(
     };
   }, [project.id, project.status]);
 
-  const currentStatus = actionsData?.current_status || project.status;
+  const currentStatus = project.status;
   const missingConstructionStages = constructionStages?.missing_required_stages || [];
   const missingConstructionStageLabels = missingConstructionStages
     .map((stage) => stage.stage_label)
@@ -278,16 +256,7 @@ export function useProjectStatusPanel(
             },
           });
         } else {
-          await requestProject({
-            path: `/projects/${project.id}/status-transition`,
-            method: "POST",
-            payload: {
-              action: selectedAction.action,
-              reason: normalizedReason || undefined,
-              ...output,
-              metadata: { source: "admin" },
-            },
-          });
+          throw new Error("缺少可执行的 workflow 待办");
         }
         resetActionDialog();
         await onChanged();
@@ -302,11 +271,11 @@ export function useProjectStatusPanel(
       mapProjectWorkflowAction(
         action,
         currentStatus,
-        actionsData?.paused_from_status ?? null,
+        typeof project.paused_from_status === "string" ? project.paused_from_status : null,
       )
     )
     .filter((action): action is ProjectPanelActionItem => Boolean(action));
-  const actions = workflowActions.length > 0 ? workflowActions : actionsData?.actions || [];
+  const actions = workflowActions;
   const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
     !isProjectStatusActionVisible(actions, item.action)
   );
@@ -321,8 +290,7 @@ export function useProjectStatusPanel(
   return {
     actions,
     actionViews,
-    actionsData,
-    actionsLoading,
+    actionsLoading: false,
     amountSummary,
     closeActionDialog,
     constructionManagerCandidates,
@@ -373,13 +341,13 @@ function mapProjectWorkflowAction(
     fromStatus: currentStatus,
     pausedFromStatus: isProjectStatus(pausedFromStatus) ? pausedFromStatus : null,
   });
-  if (!transition) return null;
+  if (!transition && action.business_action !== "resume_project") return null;
 
   return {
     action: action.business_action,
     label: action.label,
-    from_status: transition.fromStatus,
-    to_status: transition.toStatus,
+    from_status: transition?.fromStatus ?? currentStatus,
+    to_status: transition?.toStatus ?? "恢复后状态",
     requires_reason: action.requires_reason,
     workflow_action_key: action.key,
     workflow_task_id: action.task_id,

@@ -17,9 +17,6 @@ import {
   personName,
   projectDisplayStatusBadgeVariant,
   projectDisplayStatusLabel,
-  projectActionLabel,
-  projectStatusBadgeVariant,
-  projectStatusLabel,
   propertyLabel,
 } from "@/components/projects/project-mutation-utils";
 
@@ -67,11 +64,6 @@ export function ProjectStatusPanel({
             <Badge variant={projectDisplayStatusBadgeVariant(project)}>
               {projectDisplayStatusLabel(project)}
             </Badge>
-            {panel.actionsData?.paused_from_status ? (
-              <Badge variant="outline">
-                暂停前：{projectStatusLabel(panel.actionsData.paused_from_status)}
-              </Badge>
-            ) : null}
             {panel.actionsLoading ? (
               <Badge variant="secondary">
                 <Loader2 className="animate-spin" data-icon="inline-start" />
@@ -121,17 +113,14 @@ export function ProjectStatusPanel({
               {panel.latestTransitions.map((item) => (
                 <div key={item.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium">{projectActionLabel(item.action)}</span>
-                    <Badge variant={projectStatusBadgeVariant(item.from_status)}>
-                      {projectStatusLabel(item.from_status)}
+                    <span className="font-medium">{item.action || "complete"}</span>
+                    <Badge variant="outline">
+                      {item.source_node_key || "开始"}
                     </Badge>
                     <ArrowRight className="size-4 text-muted-foreground" />
-                    <Badge variant={projectStatusBadgeVariant(item.to_status)}>
-                      {projectStatusLabel(item.to_status)}
+                    <Badge variant="outline">
+                      {item.target_node_key || "结束"}
                     </Badge>
-                    {item.reason ? (
-                      <span className="truncate text-muted-foreground">{item.reason}</span>
-                    ) : null}
                   </div>
                   <time
                     dateTime={item.created_at}

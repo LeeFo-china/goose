@@ -13,13 +13,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
-import type { BadgeVariant, CustomerRecord, CustomerStatusActionsResponse, CustomerStatusActionItem, CustomerStatusTransitionRecord } from "@/components/customers/customer-mutation-types";
-import { customerActionLabel, customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
+import type { CustomerRecord, CustomerStatusActionItem } from "@/components/customers/customer-mutation-types";
+import { customerStatusBadgeVariant, customerStatusLabel, formatDateTime, formatPropertySummary, getPrimaryCustomerProperty, requestCustomer } from "@/components/customers/customer-mutation-shared";
 import { DesignProjectBeforeStatusDialog } from "@/components/customers/design-project-before-status-dialog";
 import {
   WorkflowSubjectStatePanel,
   type WorkflowSubjectAction,
   type WorkflowSubjectState,
+  type WorkflowSubjectTimelineItem,
+  type WorkflowSubjectTimelineResponse,
 } from "@/components/workflows/workflow-subject-state-panel";
 
 type CustomerPanelActionItem = CustomerStatusActionItem & {
@@ -27,121 +29,55 @@ type CustomerPanelActionItem = CustomerStatusActionItem & {
   workflow_task_id?: string;
 };
 
-type CustomerWorkflowRuntimeMetadata = {
-  status: string;
-  workflow_key?: string;
-  instance_id?: string;
-  node_key?: string;
-  current_node_key?: string | null;
-  next_node_key?: string | null;
-  reason?: string;
-  error_message?: string;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function getWorkflowRuntimeMetadata(
-  transition: CustomerStatusTransitionRecord,
-): CustomerWorkflowRuntimeMetadata | null {
-  const runtime = transition.metadata?.workflow_runtime;
-  if (!isRecord(runtime)) return null;
-
-  const status = optionalString(runtime.status);
-  if (!status) return null;
-
-  return {
-    status,
-    workflow_key: optionalString(runtime.workflow_key),
-    instance_id: optionalString(runtime.instance_id),
-    node_key: optionalString(runtime.node_key),
-    current_node_key: optionalString(runtime.current_node_key) ?? null,
-    next_node_key: optionalString(runtime.next_node_key) ?? null,
-    reason: optionalString(runtime.reason),
-    error_message: optionalString(runtime.error_message),
-  };
-}
-
-function getLatestWorkflowRuntimeMetadata(
-  transitions: CustomerStatusTransitionRecord[],
-): CustomerWorkflowRuntimeMetadata | null {
-  for (const transition of transitions) {
-    const runtime = getWorkflowRuntimeMetadata(transition);
-    if (runtime) return runtime;
-  }
-  return null;
-}
-
-function workflowRuntimeStatusLabel(status: string) {
+function workflowInstanceStatusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
-    started: "已启动",
-    advanced: "已推进",
-    skipped: "未接入",
-    failed: "同步失败",
+    running: "运行中",
+    completed: "已完成",
+    canceled: "已取消",
+    failed: "异常",
   };
-  return labels[status] || status;
+  return status ? labels[status] || status : "未启动";
 }
 
-function workflowRuntimeStatusVariant(status: string): BadgeVariant {
-  if (status === "started" || status === "advanced") return "success";
-  if (status === "failed") return "danger";
-  if (status === "skipped") return "warning";
-  return "outline";
+function getWorkflowLogReason(item: WorkflowSubjectTimelineItem) {
+  return optionalString(item.context?.reason) ||
+    optionalString(item.context?.comment) ||
+    optionalString(item.context?.rejected_reason);
 }
 
 export function CustomerStatusPanel({
   customer,
-  initialActionsData,
-  initialTransitions,
   onChanged,
 }: {
   customer: CustomerRecord;
-  initialActionsData?: CustomerStatusActionsResponse | null;
-  initialTransitions?: CustomerStatusTransitionRecord[];
   onChanged: () => Promise<void>;
 }) {
-  const [actionsData, setActionsData] = useState<CustomerStatusActionsResponse | null>(
-    initialActionsData ?? null,
-  );
-  const [transitions, setTransitions] = useState<CustomerStatusTransitionRecord[]>(
-    initialTransitions ?? [],
-  );
+  const [transitions, setTransitions] = useState<WorkflowSubjectTimelineItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const [selectedAction, setSelectedAction] = useState<CustomerStatusActionItem | null>(null);
+  const [selectedAction, setSelectedAction] = useState<CustomerPanelActionItem | null>(null);
   const [designAction, setDesignAction] = useState<CustomerPanelActionItem | null>(null);
   const [workflowState, setWorkflowState] = useState<WorkflowSubjectState | null>(null);
   const [reason, setReason] = useState("");
 
   useEffect(() => {
-    if (initialActionsData || initialTransitions) {
-      setActionsData(initialActionsData ?? null);
-      setTransitions(initialTransitions ?? []);
-      setLoading(false);
-      setError("");
-      return;
-    }
-
     let cancelled = false;
     setLoading(true);
     setError("");
-    Promise.all([
-      requestCustomer({ path: `/customers/${customer.id}/status-actions` }),
-      requestCustomer({ path: `/customers/${customer.id}/status-transitions?page=1&pageSize=20` }),
-    ])
-      .then(([actions, timeline]) => {
+    requestCustomer<WorkflowSubjectTimelineResponse>({
+      path: `/workflow-subjects/customer/${customer.id}/timeline?page=1&pageSize=20`,
+    })
+      .then((timeline) => {
         if (cancelled) return;
-        setActionsData(actions as CustomerStatusActionsResponse);
-        setTransitions((timeline?.rows || []) as CustomerStatusTransitionRecord[]);
+        setTransitions(timeline.list || []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "状态信息加载失败");
+        if (!cancelled) setError(err instanceof Error ? err.message : "流程时间线加载失败");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -150,7 +86,7 @@ export function CustomerStatusPanel({
     return () => {
       cancelled = true;
     };
-  }, [customer.id, customer.status, initialActionsData, initialTransitions]);
+  }, [customer.id]);
 
   function closeActionDialog() {
     if (pending) return;
@@ -178,20 +114,7 @@ export function CustomerStatusPanel({
       return;
     }
 
-    await requestCustomer({
-      path: `/customers/${customer.id}/status-transition`,
-      method: "POST",
-      payload: {
-        action: action.action,
-        reason: normalizedReason || undefined,
-        metadata: {
-          source: "admin",
-          ...(action.action === "start_design"
-            ? { project_created_before_start_design: true }
-            : {}),
-        },
-      },
-    });
+    throw new Error("缺少可执行的 workflow 待办");
   }
 
   function submitAction() {
@@ -209,18 +132,16 @@ export function CustomerStatusPanel({
     });
   }
 
-  const currentStatus = actionsData?.current_status || customer.status;
+  const currentStatus = customer.status;
   const workflowActions = (workflowState?.actions || [])
     .map((action) => mapCustomerWorkflowAction(action, currentStatus))
     .filter((action): action is CustomerPanelActionItem => Boolean(action));
-  const actions = workflowActions.length > 0 ? workflowActions : actionsData?.actions || [];
+  const actions = workflowActions;
   const primaryProperty = getPrimaryCustomerProperty(customer);
   const propertyName = formatPropertySummary(primaryProperty) ||
     [customer.community, customer.building_info].filter(Boolean).join(" ");
-  const workflowRuntime = getLatestWorkflowRuntimeMetadata(transitions);
-  const workflowNodeKey = workflowRuntime?.current_node_key ||
-    workflowRuntime?.next_node_key ||
-    workflowRuntime?.node_key ||
+  const workflowNodeLabel = workflowState?.current_node_title ||
+    workflowState?.current_node_key ||
     null;
 
   return (
@@ -271,38 +192,32 @@ export function CustomerStatusPanel({
             <Badge variant="secondary">客户主流程</Badge>
             <span className="text-sm font-medium">已接入客户状态流转</span>
           </div>
-          {workflowRuntime ? (
-            <Badge variant={workflowRuntimeStatusVariant(workflowRuntime.status)}>
-              {workflowRuntimeStatusLabel(workflowRuntime.status)}
+          {workflowState ? (
+            <Badge variant={workflowState.instance_status === "failed" ? "danger" : "outline"}>
+              {workflowInstanceStatusLabel(workflowState.instance_status)}
             </Badge>
           ) : (
-            <Badge variant="outline">等待首次动作</Badge>
+            <Badge variant="outline">未启动</Badge>
           )}
         </div>
-        {workflowRuntime ? (
+        {workflowState ? (
           <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
             <div>
-              <span className="text-foreground">流程编码：</span>
-              {workflowRuntime.workflow_key || "customer_main"}
+              <span className="text-foreground">对象：</span>
+              {workflowState.subject_type}
             </div>
             <div>
               <span className="text-foreground">当前节点：</span>
-              {workflowNodeKey || "-"}
+              {workflowNodeLabel || "-"}
             </div>
             <div>
               <span className="text-foreground">实例：</span>
-              {workflowRuntime.instance_id ? workflowRuntime.instance_id.slice(0, 8) : "-"}
+              {workflowState.instance_id ? workflowState.instance_id.slice(0, 8) : "-"}
             </div>
-            {workflowRuntime.reason || workflowRuntime.error_message ? (
-              <div className="sm:col-span-3">
-                <span className="text-foreground">说明：</span>
-                {workflowRuntime.error_message || workflowRuntime.reason}
-              </div>
-            ) : null}
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            执行“开始跟进”会自动启动 customer_main，后续到店、设计、签约动作会推进对应节点。
+            暂无流程运行时投影，等待 workflow subject state 同步。
           </p>
         )}
       </div>
@@ -333,21 +248,23 @@ export function CustomerStatusPanel({
                 <span className="absolute -left-[27px] top-4 flex size-4 rounded-full border-2 border-background bg-primary" />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    <Badge variant={customerStatusBadgeVariant(item.from_status)}>
-                      {customerStatusLabel(item.from_status)}
+                    <Badge variant="outline">
+                      {item.source_node_key || "开始"}
                     </Badge>
                     <ArrowRight />
-                    <Badge variant={customerStatusBadgeVariant(item.to_status)}>
-                      {customerStatusLabel(item.to_status)}
+                    <Badge variant="outline">
+                      {item.target_node_key || "结束"}
                     </Badge>
-                    <span>{customerActionLabel(item.action)}</span>
+                    <span>{item.action || "complete"}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {formatDateTime(item.created_at)}
                   </span>
                 </div>
-                {item.reason ? (
-                  <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
+                {getWorkflowLogReason(item) ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {getWorkflowLogReason(item)}
+                  </p>
                 ) : null}
               </div>
             ))}

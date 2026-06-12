@@ -37,6 +37,26 @@ export type WorkflowSubjectState = {
   actions: WorkflowSubjectAction[];
 };
 
+export type WorkflowSubjectTimelineItem = {
+  id: string;
+  source_node_key: string | null;
+  target_node_key: string | null;
+  action: string;
+  context: Record<string, unknown>;
+  actor_employee_id: string | null;
+  created_at: string;
+};
+
+export type WorkflowSubjectTimelineResponse = {
+  list: WorkflowSubjectTimelineItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 function statusLabel(status: string | null) {
   const labels: Record<string, string> = {
     running: "运行中",

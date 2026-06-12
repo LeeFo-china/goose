@@ -159,30 +159,11 @@ export type CustomerStatusActionItem = {
   requires_reason?: boolean;
 };
 
-export type CustomerStatusActionsResponse = {
-  current_status: string;
-  actions: CustomerStatusActionItem[];
-};
-
-export type CustomerStatusTransitionRecord = {
-  id: string;
-  from_status: string | null;
-  to_status: string;
-  action: string;
-  reason: string | null;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-};
-
 export type CustomerDetailActivity = {
   follow_ups?: {
     list?: CustomerFollowUpRecord[];
   };
   sources?: {
     list?: CustomerSourceRecord[];
-  };
-  status_actions?: CustomerStatusActionsResponse;
-  status_transitions?: {
-    rows?: CustomerStatusTransitionRecord[];
   };
 };

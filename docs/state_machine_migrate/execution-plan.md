@@ -762,6 +762,13 @@
   reuse the existing status action dialog so `signed_amount`, `start_date`,
   and `construction_manager_employee_id` are still collected before submit.
 
+  2026-06-12 progress: admin customer/project status panels now also read
+  workflow timeline through `/workflow-subjects/:subjectType/:subjectId/timeline`
+  and no longer call old `status-actions`, `status-transition`, or
+  `status-transitions` endpoints in the normal customer/project detail flow.
+  `workflow:cleanup-readiness` now reports zero blockers under
+  `apps/admin/components/customers` and `apps/admin/components/projects`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
