@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DetailDialog } from "@/components/expenses/expense-detail-dialog";
 import { PayDialog } from "@/components/expenses/expense-pay-dialog";
-import type { ApprovalChainRecord, ApprovalRecord, ExpenseItem, ExpenseRecord } from "@/components/expenses/expense-mutation-types";
+import type { ApprovalChainRecord, ApprovalRecord, ExpenseItem, ExpenseRecord, ExpenseWorkflowAction } from "@/components/expenses/expense-mutation-types";
 import { requestExpense } from "@/components/expenses/expense-mutation-shared";
 
 export type { ApprovalChainRecord, ApprovalRecord, ExpenseItem, ExpenseRecord } from "@/components/expenses/expense-mutation-types";
@@ -26,15 +26,56 @@ export function ExpenseRowActions({
   const [detail, setDetail] = useState<ExpenseRecord | null>(null);
   const [payExpense, setPayExpense] = useState<ExpenseRecord | null>(null);
   const [approvalDialog, setApprovalDialog] = useState<"approve" | "reject" | "cancel" | null>(null);
-  const canApprove = expense.status === "pending" &&
-    ["manager_review", "finance_review"].includes(expense.current_step);
+  const currentWorkflowNodeKey = expense.workflow_state?.current_node_key || null;
+  const canApprove = Boolean(expense.workflow_state?.pending_task_count) &&
+    ["manager_review", "finance_review"].includes(currentWorkflowNodeKey || "");
   const canCancel = ["draft", "pending", "rejected"].includes(expense.status) &&
     Boolean(currentEmployeeId);
-  const canPay = expense.status === "approved" &&
-    expense.current_step === "payment" &&
+  const canPay = currentWorkflowNodeKey === "payment" &&
+    Boolean(expense.workflow_state?.pending_task_count) &&
     Boolean(currentEmployeeId);
 
-  function runAction(input: {
+  function normalizeWorkflowTaskResult(data: unknown): ExpenseRecord {
+    const payload = data && typeof data === "object" && !Array.isArray(data)
+      ? data as { expense_request?: ExpenseRecord; workflow_state?: ExpenseRecord["workflow_state"] }
+      : null;
+    if (payload?.expense_request) {
+      return {
+        ...payload.expense_request,
+        workflow_state: payload.workflow_state ?? payload.expense_request.workflow_state,
+      };
+    }
+
+    return data as ExpenseRecord;
+  }
+
+  function findWorkflowAction(
+    record: ExpenseRecord,
+    businessAction: "approve" | "reject" | "pay",
+  ): ExpenseWorkflowAction | null {
+    return record.workflow_state?.actions?.find((action) =>
+      action.business_action === businessAction || action.key === businessAction
+    ) ?? null;
+  }
+
+  async function loadWorkflowAction(
+    businessAction: "approve" | "reject" | "pay",
+  ) {
+    const existing = findWorkflowAction(expense, businessAction);
+    if (existing?.task_id) return existing;
+
+    const latest = await requestExpense<ExpenseRecord>({
+      path: `/expense-requests/${expense.id}`,
+    });
+    const action = findWorkflowAction(latest, businessAction);
+    if (!action?.task_id) {
+      throw new Error("缺少可执行的 workflow 待办");
+    }
+
+    return action;
+  }
+
+  function runLegacyAction(input: {
     label: string;
     path: string;
     payload: unknown;
@@ -54,23 +95,52 @@ export function ExpenseRowActions({
     });
   }
 
+  function runWorkflowAction(input: {
+    label: string;
+    businessAction: "approve" | "reject" | "pay";
+    reason?: string | null;
+    output: Record<string, unknown>;
+  }) {
+    setError("");
+    startTransition(async () => {
+      try {
+        const action = await loadWorkflowAction(input.businessAction);
+        const data = await requestExpense({
+          path: `/workflow-tasks/${action.task_id}/complete`,
+          method: "POST",
+          payload: {
+            action: action.key,
+            reason: input.reason ?? null,
+            output: input.output,
+          },
+        });
+        onExpenseUpdated?.(normalizeWorkflowTaskResult(data));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `${input.label}失败`);
+      }
+    });
+  }
+
   function approve(comment: string) {
     setApprovalDialog(null);
-    runAction({
+    runWorkflowAction({
       label: "审批通过",
-      path: `/expense-requests/${expense.id}/approve`,
-      payload: { comment: comment.trim() || null },
+      businessAction: "approve",
+      output: { comment: comment.trim() || null },
     });
   }
 
   function reject(reason: string) {
     setApprovalDialog(null);
-    runAction({
+    const normalizedReason = reason.trim();
+    runWorkflowAction({
       label: "审批驳回",
-      path: `/expense-requests/${expense.id}/reject`,
-      payload: {
-        rejected_reason: reason.trim(),
-        comment: reason.trim(),
+      businessAction: "reject",
+      reason: normalizedReason,
+      output: {
+        rejected_reason: normalizedReason,
+        reason: normalizedReason,
+        comment: normalizedReason,
       },
     });
   }
@@ -78,7 +148,7 @@ export function ExpenseRowActions({
   function cancel(comment: string) {
     if (!currentEmployeeId) return;
     setApprovalDialog(null);
-    runAction({
+    runLegacyAction({
       label: "撤回",
       path: `/expense-requests/${expense.id}/cancel`,
       payload: {

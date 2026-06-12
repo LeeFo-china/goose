@@ -24,6 +24,20 @@ import {
   uploadEvidenceImages,
 } from "@/components/expenses/expense-mutation-shared";
 
+function normalizeWorkflowTaskResult(data: unknown): ExpenseRecord {
+  const payload = data && typeof data === "object" && !Array.isArray(data)
+    ? data as { expense_request?: ExpenseRecord; workflow_state?: ExpenseRecord["workflow_state"] }
+    : null;
+  if (payload?.expense_request) {
+    return {
+      ...payload.expense_request,
+      workflow_state: payload.workflow_state ?? payload.expense_request.workflow_state,
+    };
+  }
+
+  return data as ExpenseRecord;
+}
+
 export function PayDialog({
   expense,
   currentEmployeeId,
@@ -81,12 +95,21 @@ export function PayDialog({
     setError("");
     startTransition(async () => {
       try {
+        const workflowAction = expense.workflow_state?.actions?.find((action) =>
+          action.business_action === "pay" || action.key === "pay"
+        );
+        if (!workflowAction?.task_id) {
+          throw new Error("缺少可执行的 workflow 待办");
+        }
         const data = await requestExpense({
-          path: `/expense-requests/${expense.id}/pay`,
+          path: `/workflow-tasks/${workflowAction.task_id}/complete`,
           method: "POST",
-          payload,
+          payload: {
+            action: workflowAction.key,
+            output: payload,
+          },
         });
-        onDone(data as ExpenseRecord);
+        onDone(normalizeWorkflowTaskResult(data));
       } catch (err) {
         setError(err instanceof Error ? err.message : "登记打款失败");
       }

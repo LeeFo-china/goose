@@ -47,6 +47,17 @@ admin expense list node display to workflow projection:
 | blocker files | `29` |
 | expense admin blocker references | `11` |
 
+2026-06-12 after switching admin expense approve/reject/pay actions to
+`/workflow-tasks/:id/complete`:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `126` |
+| blocker files | `28` |
+| expense admin blocker references | `9` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -101,6 +112,8 @@ because the system is still in the compatibility window:
   endpoints for normal operation;
 - expense request list responses now attach `workflow_state`, and the admin
   expense list current-node display/payment count read the workflow projection;
+- admin expense approve/reject/pay actions now complete workflow tasks instead
+  of directly calling the old expense action endpoints;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

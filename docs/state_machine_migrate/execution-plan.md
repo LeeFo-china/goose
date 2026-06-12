@@ -774,6 +774,12 @@
   The admin expense table current-node column and page payment count read the
   workflow projection instead of legacy `current_step`.
 
+  2026-06-12 progress: admin expense approve/reject/pay actions now resolve
+  the latest `workflow_state.actions` and submit `/workflow-tasks/:id/complete`
+  instead of directly calling old expense action endpoints. Cancel/withdraw
+  remains on the existing expense API until workflow action metadata supports
+  cancellation.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
