@@ -7,7 +7,6 @@ import {
   arePendingMigrationsExpected,
   buildSupabaseDryRunArgs,
   collectManualGateEvidenceReferenceIssues,
-  hasAllManualGates,
   loadManualGateEvidence,
   parsePreflightArgs,
   parseSupabaseDryRunMigrations,
@@ -109,19 +108,20 @@ describe("arePendingMigrationsExpected", () => {
 });
 
 describe("parsePreflightArgs", () => {
-  test("parses manual confirmation flags", () => {
+  test("parses manual gate evidence file path", () => {
     const options = parsePreflightArgs([
-      "--confirm-mini-program",
-      "--confirm-admin-smoke",
-      "--confirm-backup-window",
       "--evidence-file",
       "docs/state_machine_migrate/audit/manual-gates.json",
     ]);
 
-    expect(hasAllManualGates(options)).toBe(true);
-    expect(options.evidenceFile).toBe(
-      "docs/state_machine_migrate/audit/manual-gates.json",
-    );
+    expect(options).toEqual({
+      evidenceFile: "docs/state_machine_migrate/audit/manual-gates.json",
+    });
+  });
+
+  test("rejects legacy manual confirmation flags", () => {
+    expect(() => parsePreflightArgs(["--confirm-mini-program"]))
+      .toThrow("未知参数: --confirm-mini-program");
   });
 
   test("rejects unknown flags", () => {

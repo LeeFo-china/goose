@@ -8,13 +8,7 @@ import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 import { loadMigrationHistoryReport } from "./workflow-migration-history";
 import { runWorkflowRuntimeConsistencyCheck } from "./workflow-runtime-consistency-check";
 
-type ManualGate =
-  | "mini_program_confirmed"
-  | "admin_smoke_attached"
-  | "backup_window_confirmed";
-
 type PreflightOptions = {
-  manualGates: Set<ManualGate>;
   evidenceFile: string | null;
 };
 
@@ -85,22 +79,9 @@ const LEGACY_SCHEDULE_RPC_SIGNATURE =
   "schedule_project_construction_transition(uuid,uuid,text,text,text,uuid,uuid,uuid,text,jsonb)";
 
 export function parsePreflightArgs(argv: string[]): PreflightOptions {
-  const manualGates = new Set<ManualGate>();
   let evidenceFile: string | null = null;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--confirm-mini-program") {
-      manualGates.add("mini_program_confirmed");
-      continue;
-    }
-    if (arg === "--confirm-admin-smoke") {
-      manualGates.add("admin_smoke_attached");
-      continue;
-    }
-    if (arg === "--confirm-backup-window") {
-      manualGates.add("backup_window_confirmed");
-      continue;
-    }
     if (arg === "--evidence-file") {
       evidenceFile = argv[index + 1] || null;
       index += 1;
@@ -110,7 +91,7 @@ export function parsePreflightArgs(argv: string[]): PreflightOptions {
     throw new Error(`未知参数: ${arg}`);
   }
 
-  return { manualGates, evidenceFile };
+  return { evidenceFile };
 }
 
 export function parseSupabaseDryRunMigrations(output: string): string[] {
@@ -128,14 +109,6 @@ export function arePendingMigrationsExpected(
     EXPECTED_DESTRUCTIVE_MIGRATIONS.every((migration, index) =>
       migrations[index] === migration
     );
-}
-
-export function hasAllManualGates(options: PreflightOptions): boolean {
-  return (
-    options.manualGates.has("mini_program_confirmed") &&
-    options.manualGates.has("admin_smoke_attached") &&
-    options.manualGates.has("backup_window_confirmed")
-  );
 }
 
 export function buildSupabaseDryRunArgs(
@@ -415,10 +388,7 @@ async function buildPreflightReport(
     checks.push({
       name: "manual_gates",
       ok: false,
-      detail: [
-        "missing --evidence-file",
-        `legacy_flags_confirmed=${hasAllManualGates(options)}`,
-      ].join("; "),
+      detail: "missing --evidence-file",
     });
   }
 
