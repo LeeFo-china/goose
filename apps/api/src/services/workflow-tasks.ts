@@ -11,6 +11,7 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { buildWorkflowTaskActions } from "@/services/workflow-task-action-metadata";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
@@ -20,7 +21,7 @@ import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 class WorkflowTaskService {
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
     const tenantId = this.assertTenantId(authContext);
-    return workflowTaskRepository.listAccessibleTasks({
+    const tasks = await workflowTaskRepository.listAccessibleTasks({
       tenantId,
       employeeId: authContext.employeeId,
       roleCodes: authContext.roleCodes,
@@ -31,6 +32,26 @@ class WorkflowTaskService {
       subjectType: query.subject_type,
       subjectId: query.subject_id?.trim() || undefined,
     });
+
+    return {
+      ...tasks,
+      list: tasks.list.map((task) => ({
+        ...task,
+        actions: task.instance
+          ? buildWorkflowTaskActions({
+            subjectType: task.instance.subject_type,
+            nodeKey: task.node_key,
+            taskTitle: task.title,
+          }).map((action) => ({
+            ...action,
+            task_id: task.id,
+            node_key: task.node_key,
+            node_type: task.node_type,
+            disabled: false,
+          }))
+          : [],
+      })),
+    };
   }
 
   async completeTask(

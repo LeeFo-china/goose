@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { CustomerStatusTransitionSchema } from "@/schema/customer";
 import type { AuthContext } from "@/services/authorization";
 import { customerCoreService } from "@/services/customer-core";
+import { resolveCustomerWorkflowTaskBusinessAction } from "@/services/workflow-task-action-metadata";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import type { CustomerStatusAction } from "@gooes/domain";
 
@@ -34,17 +35,6 @@ type CustomerWorkflowTaskBridgeInput = {
   output: Record<string, unknown>;
 };
 
-const LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStatusAction>> = {
-  following: "mark_arrived",
-  arrived: "start_design",
-};
-
-const EXPLICIT_ACTIONS = new Set<CustomerStatusAction>(["mark_invalid"]);
-
-function isCustomerStatusAction(value: string): value is CustomerStatusAction {
-  return EXPLICIT_ACTIONS.has(value as CustomerStatusAction);
-}
-
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -52,9 +42,10 @@ function optionalString(value: unknown) {
 export function resolveCustomerWorkflowTaskOperation(
   input: ResolveCustomerWorkflowTaskOperationInput,
 ): CustomerWorkflowTaskOperation | null {
-  const action = isCustomerStatusAction(input.action)
-    ? input.action
-    : LINEAR_ACTION_BY_NODE[input.nodeKey];
+  const action = resolveCustomerWorkflowTaskBusinessAction({
+    nodeKey: input.nodeKey,
+    action: input.action,
+  });
   if (!action) return null;
 
   return {

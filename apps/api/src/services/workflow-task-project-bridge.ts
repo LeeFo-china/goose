@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { ProjectStatusTransitionSchema } from "@/schema/projects";
 import type { AuthContext } from "@/services/authorization";
 import { projectSer } from "@/services/projects";
+import { resolveProjectWorkflowTaskBusinessAction } from "@/services/workflow-task-action-metadata";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import type { ProjectStatusAction } from "@gooes/domain";
 
@@ -37,27 +38,6 @@ type ProjectWorkflowTaskBridgeInput = {
   output: Record<string, unknown>;
 };
 
-const LINEAR_ACTION_BY_NODE: Record<string, ProjectStatusAction> = {
-  designing: "confirm_proposal",
-  proposal_confirmed: "sign_contract",
-  signed: "finalize_design",
-  design_finalized: "schedule_construction",
-  pending_start: "start_project",
-  started: "start_construction",
-  constructing: "start_acceptance",
-  on_hold: "resume_project",
-};
-
-const EXPLICIT_ACTIONS = new Set<ProjectStatusAction>([
-  "pause_project",
-  "mark_invalid",
-  "resume_project",
-]);
-
-function isProjectStatusAction(value: string): value is ProjectStatusAction {
-  return EXPLICIT_ACTIONS.has(value as ProjectStatusAction);
-}
-
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -65,9 +45,10 @@ function optionalString(value: unknown) {
 export function resolveProjectWorkflowTaskOperation(
   input: ResolveProjectWorkflowTaskOperationInput,
 ): ProjectWorkflowTaskOperation | null {
-  const action = isProjectStatusAction(input.action)
-    ? input.action
-    : LINEAR_ACTION_BY_NODE[input.nodeKey];
+  const action = resolveProjectWorkflowTaskBusinessAction({
+    nodeKey: input.nodeKey,
+    action: input.action,
+  });
   if (!action) return null;
 
   return {

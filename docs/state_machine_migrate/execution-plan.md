@@ -733,6 +733,13 @@
   contract signing because the legacy customer `mark_signed` action is
   intentionally internal-only.
 
+  `workflow_state.actions` and `/workflow-tasks` list rows now include
+  workflow action metadata (`business_domain`, `business_action`, `node_key`,
+  `node_type`, `output_fields`). Project signing and construction scheduling
+  expose required output fields, and expense approval nodes expose both
+  approve/reject actions, so mini-program clients can render workflow-first
+  buttons without reverse-mapping task titles.
+
 - [x] **Step 5.2: Customer self-service includes workflow_state**
 
   Add `workflow_state` to mini-program bootstrap/detail payloads that currently expose project/customer status.
@@ -751,12 +758,10 @@
   projection next to the legacy status controls.
 
   Old status action endpoints still remain the mutation path. This is
-  intentional until workflow task completion can safely cover the full
-  customer/project action UX, including project status field writes, customer
-  status coupling, signed amount input, project acceptance guards, and
-  construction manager selection. Switching buttons to generic workflow
-  `complete` before that would move runtime nodes without updating the
-  business read models.
+  intentional until the admin panels render workflow action forms from
+  `output_fields` and call `/workflow-tasks/:id/complete`. The backend now
+  exposes enough action metadata for that UI switch, including signed amount,
+  construction manager and expense payment fields.
 
 - [ ] **Step 5.4: Verification**
 

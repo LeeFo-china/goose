@@ -37,10 +37,22 @@
     "actions": [
       {
         "key": "complete",
-        "label": "完成",
+        "label": "项目签约",
         "task_id": "uuid",
+        "node_key": "proposal_confirmed",
+        "node_type": "task",
+        "business_domain": "project_status",
+        "business_action": "sign_contract",
         "requires_reason": false,
-        "disabled": false
+        "disabled": false,
+        "output_fields": [
+          {
+            "name": "signed_amount",
+            "label": "签约金额",
+            "type": "number",
+            "required": true
+          }
+        ]
       }
     ]
   }
@@ -60,6 +72,33 @@
 | `current_business_kind` | 当前节点业务类型 |
 | `pending_task_count` | 当前对象待处理任务数量 |
 | `actions` | 当前用户可执行动作 |
+
+`actions` 字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `key` | 提交给 `POST /workflow-tasks/:taskId/complete` 的 `action` 值 |
+| `label` | 按钮文案 |
+| `task_id` | 待办 ID |
+| `node_key` | 当前 workflow 节点编码 |
+| `node_type` | 当前 workflow 节点类型 |
+| `business_domain` | 兼容业务域：`customer_status`、`project_status`、`expense_request`，通用流程为 `null` |
+| `business_action` | 对应旧业务动作，例如 `sign_contract`、`approve`、`pay`，通用流程为 `null` |
+| `requires_reason` | 是否必须填写顶层 `reason` |
+| `output_fields` | 需要放入 `output` 的字段描述 |
+| `disabled` | 是否禁用 |
+
+`output_fields.type` 当前可能值：
+
+| 类型 | 端上控件建议 |
+| --- | --- |
+| `string` | 单行/多行文本 |
+| `number` | 数字输入 |
+| `date` | 日期选择 |
+| `datetime` | 日期时间选择 |
+| `employee` | 员工选择 |
+| `image_list` | 图片上传数组 |
+| `settlement_method` | 结算方式选择 |
 
 ## 新接口
 
@@ -90,8 +129,26 @@ Authorization: Bearer <token>
           "key": "complete",
           "label": "完成排期",
           "task_id": "uuid",
+          "node_key": "design_finalized",
+          "node_type": "task",
+          "business_domain": "project_status",
+          "business_action": "schedule_construction",
           "requires_reason": false,
-          "disabled": false
+          "disabled": false,
+          "output_fields": [
+            {
+              "name": "start_date",
+              "label": "开工日期",
+              "type": "date",
+              "required": true
+            },
+            {
+              "name": "construction_manager_employee_id",
+              "label": "工程负责人",
+              "type": "employee",
+              "required": true
+            }
+          ]
         }
       ]
     }
@@ -140,6 +197,31 @@ Content-Type: application/json
   "output": {
     "decision": "approved",
     "comment": "同意"
+  }
+}
+```
+
+项目签约示例：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "signed_amount": 300000
+  }
+}
+```
+
+项目排期开工示例：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "start_date": "2026-06-30",
+    "construction_manager_employee_id": "uuid"
   }
 }
 ```
@@ -214,3 +296,4 @@ Content-Type: application/json
 | 2026-06-12 | Phase 5/Expense task complete bridge | `/workflow-tasks/:id/complete` 对 `expense_request` 的 `manager_review`、`finance_review`、`payment` 节点会调用费用业务服务，保持 `expense_requests.status/current_step` 和 workflow runtime 同步 | 费用审批/驳回/打款可以优先走 workflow task complete；打款仍需传 `payee_name`、`method`、`paid_amount`、`evidence_images` 等支付字段 |
 | 2026-06-12 | Phase 5/Project task complete bridge | `/workflow-tasks/:id/complete` 对 `project` 的施工主流程节点会调用项目状态服务，保持项目业务字段和 workflow runtime 同步 | 项目签约仍需传 `signed_amount`，排期开工仍需传 `start_date` 和 `construction_manager_employee_id` |
 | 2026-06-12 | Phase 5/Customer task complete bridge | `/workflow-tasks/:id/complete` 对 `customer` 的跟进、到店、作废节点会调用客户状态服务，保持客户业务状态和 workflow runtime 同步 | 客户签约仍通过项目签约联动，不直接开放客户 `mark_signed` |
+| 2026-06-12 | Phase 5/Action metadata | `workflow_state.actions` 和 `/workflow-tasks` 列表开始返回 `business_domain`、`business_action`、`node_key`、`node_type`、`output_fields`；审批节点会同时返回通过/驳回两个动作 | 端上可以按 `output_fields` 渲染表单，并把 `key` 作为 task complete 的 `action` |

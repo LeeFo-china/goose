@@ -7,6 +7,10 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  buildWorkflowTaskActions,
+  type WorkflowTaskActionMetadata,
+} from "@/services/workflow-task-action-metadata";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 
 class WorkflowSubjectsService {
@@ -42,13 +46,19 @@ class WorkflowSubjectsService {
     return {
       workflow_state: this.serializeState(
         state,
-        tasks.list.map((task) => ({
-          key: "complete",
-          label: task.title,
-          task_id: task.id,
-          requires_reason: false,
-          disabled: false,
-        })),
+        tasks.list.flatMap((task) =>
+          buildWorkflowTaskActions({
+            subjectType: params.subjectType,
+            nodeKey: task.node_key,
+            taskTitle: task.title,
+          }).map((action) => ({
+            ...action,
+            task_id: task.id,
+            node_key: task.node_key,
+            node_type: task.node_type,
+            disabled: false,
+          }))
+        ),
       ),
     };
   }
@@ -87,11 +97,10 @@ class WorkflowSubjectsService {
 
   private serializeState(
     state: WorkflowSubjectStateRow | null,
-    actions: Array<{
-      key: string;
-      label: string;
+    actions: Array<WorkflowTaskActionMetadata & {
       task_id: string;
-      requires_reason: boolean;
+      node_key: string;
+      node_type: string;
       disabled: boolean;
     }>,
   ) {
