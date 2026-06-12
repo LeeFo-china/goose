@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { StatusAlert } from "@/components/admin/status-alert";
 import {
   DepartmentFilters,
   DepartmentPageSizeSelect,
@@ -25,7 +24,6 @@ export function DepartmentsClientShell({
   code,
   keyword,
   enabledDepartmentCodes,
-  error,
   onDepartmentDisabled,
   onDepartmentsEnabled,
   onDepartmentPostRuleConfigChange,
@@ -36,7 +34,6 @@ export function DepartmentsClientShell({
   code: string;
   keyword: string;
   enabledDepartmentCodes: string[];
-  error: string | null;
   onDepartmentDisabled?: (code: string) => void;
   onDepartmentsEnabled?: (codes: string[]) => void;
   onDepartmentPostRuleConfigChange?: (config: DepartmentPostRuleConfig) => void;
@@ -85,14 +82,8 @@ export function DepartmentsClientShell({
   }
 
   return (
-    <div className="flex flex-col">
-      {error ? (
-        <div className="border-t px-4 pt-4">
-          <StatusAlert>{error}</StatusAlert>
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-3 border-t px-4 py-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 px-4 py-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <DepartmentFilters
             code={code}
@@ -113,24 +104,26 @@ export function DepartmentsClientShell({
           />
         </div>
       </div>
-      <div className="relative flex flex-col gap-4">
-        <DepartmentsTable
-          departments={departments}
-          departmentPostRuleConfig={ruleConfig}
-          onDepartmentPostsSaved={(config) => {
-            setRuleConfig(config);
-            onDepartmentPostRuleConfigChange?.(config);
-          }}
-          onDepartmentDisabled={(disabledCode) => {
-            setLocallyDisabledCodes((current) =>
-              current.includes(disabledCode) ? current : [...current, disabledCode]
-            );
-            setLocallyEnabledCodes((current) =>
-              current.filter((item) => item !== disabledCode)
-            );
-            onDepartmentDisabled?.(disabledCode);
-          }}
-        />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <DepartmentsTable
+            departments={departments}
+            departmentPostRuleConfig={ruleConfig}
+            onDepartmentPostsSaved={(config) => {
+              setRuleConfig(config);
+              onDepartmentPostRuleConfigChange?.(config);
+            }}
+            onDepartmentDisabled={(disabledCode) => {
+              setLocallyDisabledCodes((current) =>
+                current.includes(disabledCode) ? current : [...current, disabledCode]
+              );
+              setLocallyEnabledCodes((current) =>
+                current.filter((item) => item !== disabledCode)
+              );
+              onDepartmentDisabled?.(disabledCode);
+            }}
+          />
+        </div>
         {pending ? (
           <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-background/65 pt-8 backdrop-blur-[1px]">
             <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -139,7 +132,7 @@ export function DepartmentsClientShell({
             </div>
           </div>
         ) : null}
-        <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+        <div className="shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>每页</span>
             <DepartmentPageSizeSelect
@@ -150,8 +143,11 @@ export function DepartmentsClientShell({
               onNavigate={navigate}
             />
             <span>
-              共 {pagination.total} 条，第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+              当前显示 {departments.length} 条，共 {pagination.total} 条
             </span>
+            <Badge variant="outline" className="tabular-nums">
+              第 {pagination.page} / {Math.max(pagination.totalPages, 1)} 页
+            </Badge>
             {pending ? (
               <Badge variant="secondary">
                 <Loader2 className="animate-spin" data-icon="inline-start" />

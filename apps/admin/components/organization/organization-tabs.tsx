@@ -9,7 +9,6 @@ import type {
   DepartmentPostRuleConfig,
   Pagination,
 } from "@/components/organization/organization-types";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +66,7 @@ export function OrganizationTabs({
   }
 
   function switchTab(tab: OrganizationTab) {
+    if (tab === activeTab) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
     startTransition(() => {
@@ -76,38 +76,44 @@ export function OrganizationTabs({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex gap-2 overflow-x-auto">
-          {tabs.map((tab) => {
-            const active = tab.value === activeTab;
-            const Icon = tab.icon;
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+      <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex overflow-x-auto">
+            {tabs.map((tab) => {
+              const active = tab.value === activeTab;
+              const Icon = tab.icon;
 
-            return (
-              <Button
-                key={tab.value}
-                type="button"
-                variant={active ? "default" : "ghost"}
-                className={cn(
-                  "h-9 shrink-0 gap-2 px-3",
-                  active ? "" : "text-muted-foreground",
-                )}
-                disabled={pending}
-                aria-pressed={active}
-                onClick={() => switchTab(tab.value)}
-              >
-                {pending && active ? (
-                  <Loader2 className="animate-spin" data-icon="inline-start" />
-                ) : (
-                  <Icon data-icon="inline-start" />
-                )}
-                {tab.label}
-              </Button>
-            );
-          })}
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  className={cn(
+                    "inline-flex h-11 shrink-0 items-center gap-2 border-b-2 border-transparent px-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-60",
+                    tab.value !== tabs[0]?.value && "ml-5",
+                    active && "border-primary text-foreground",
+                  )}
+                  disabled={pending}
+                  aria-pressed={active}
+                  onClick={() => switchTab(tab.value)}
+                >
+                  {pending && active ? (
+                    <Loader2 className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Icon data-icon="inline-start" />
+                  )}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2 pb-3 text-xs text-muted-foreground md:pb-0">
+            <span className="tabular-nums">部门 {departments.pagination.total}</span>
+            <span className="tabular-nums">已启用 {enabledDepartmentCodes.length}</span>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         {activeTab === "departments" ? (
           <DepartmentsClientShell
             departments={departments.list}
@@ -116,7 +122,6 @@ export function OrganizationTabs({
             code={departmentCode}
             keyword={departmentKeyword}
             enabledDepartmentCodes={enabledDepartmentCodes}
-            error={departments.error}
             onDepartmentPostRuleConfigChange={updateDepartmentPostConfig}
           />
         ) : null}

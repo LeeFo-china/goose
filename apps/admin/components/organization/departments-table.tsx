@@ -110,22 +110,9 @@ export function DepartmentsTable({
     setOpenCode((current) => (current === code ? null : code));
   }
 
-  if (departments.length === 0) {
-    return (
-      <div className="border-t px-4 py-8">
-        <Empty className="border-0 p-4">
-          <EmptyHeader>
-            <EmptyTitle>暂无数据</EmptyTitle>
-            <EmptyDescription>没有符合条件的部门</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
-    );
-  }
-
   return (
-    <div className="border-t">
-      <div className="hidden grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] items-center gap-3 bg-muted/60 px-4 py-2 text-sm font-medium text-muted-foreground lg:grid">
+    <div>
+      <div className="sticky top-0 z-10 hidden grid-cols-[minmax(280px,1fr)_120px_120px_140px_190px] items-center gap-3 border-b bg-muted/60 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid">
         <div>部门</div>
         <div>状态</div>
         <div>关联岗位</div>
@@ -133,7 +120,7 @@ export function DepartmentsTable({
         <div className="text-right">操作</div>
       </div>
       <div className="divide-y">
-        {departments.map((department) => {
+        {departments.length > 0 ? departments.map((department) => {
           const code = department.code || department.id;
           const label = department.template_name || getDepartmentLabel(department.code);
           const posts = getDepartmentPosts(department, departmentPostRuleConfig, postMap);
@@ -234,7 +221,16 @@ export function DepartmentsTable({
               </CollapsibleContent>
             </Collapsible>
           );
-        })}
+        }) : (
+          <div className="px-4 py-8">
+            <Empty className="border-0 p-4">
+              <EmptyHeader>
+                <EmptyTitle>暂无数据</EmptyTitle>
+                <EmptyDescription>没有符合条件的部门</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </div>
+        )}
       </div>
     </div>
   );

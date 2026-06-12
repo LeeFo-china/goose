@@ -1,3 +1,5 @@
+import { Building2 } from "lucide-react";
+import { StatusAlert } from "@/components/admin/status-alert";
 import { OrganizationTabs } from "@/components/organization/organization-tabs";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import type {
@@ -156,9 +158,35 @@ export default async function OrganizationPage({
     }),
     getDepartmentPostRuleConfig({ token }),
   ]);
+  const routeErrors = [
+    departments.error,
+    departmentPostRuleConfig.error,
+  ].filter((message): message is string => Boolean(message));
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <Building2 aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">组织架构</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              管理部门启停、岗位配置和组织规则。当前筛选共 {departments.pagination.total} 个部门。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {routeErrors.length > 0 ? (
+        <div className="shrink-0 space-y-2">
+          {routeErrors.map((message, index) => (
+            <StatusAlert key={`${index}-${message}`}>{message}</StatusAlert>
+          ))}
+        </div>
+      ) : null}
+
       <OrganizationTabs
         activeTab={activeTab}
         departments={departments}
