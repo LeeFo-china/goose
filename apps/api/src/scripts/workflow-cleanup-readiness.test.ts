@@ -150,3 +150,19 @@ describe("project status transition log cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("project construction scheduling cleanup", () => {
+  test("project repository no longer calls legacy schedule construction RPC", () => {
+    const sourcePath = "src/repositories/projects/legacy/mutations.ts";
+    const references = scanCleanupReferences([
+      {
+        path: `apps/api/${sourcePath}`,
+        content: readFileSync(sourcePath, "utf8"),
+      },
+    ]).filter((reference) =>
+      reference.pattern === "schedule_project_construction_transition"
+    );
+
+    expect(references).toEqual([]);
+  });
+});

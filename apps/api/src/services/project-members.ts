@@ -382,6 +382,41 @@ class ProjectMemberService {
     return this.assertEmployeeCanServeRoleCandidate(input);
   }
 
+  async setPrimaryRoleMember(input: {
+    projectId: string;
+    employeeId: string;
+    roleCode: ProjectMemberRoleCode;
+    tenantId: string;
+    invalidError?: ProjectRoleValidationErrorInput;
+  }) {
+    await this.assertEmployeeCanServeRole(input);
+    const roleName = this.getResolvedRoleName(input.roleCode, null);
+    const sortOrder = this.getResolvedSortOrder(input.roleCode, null);
+    await projectMemberRepository.setRoleMembersNonPrimary(
+      input.projectId,
+      input.roleCode,
+    );
+    const existing = await projectMemberRepository.findActiveByProjectEmployeeRole(
+      input.projectId,
+      input.employeeId,
+      input.roleCode,
+    );
+    const row = existing
+      ? await projectMemberRepository.update(input.projectId, existing.id, {
+        role_name: roleName,
+        is_primary: true,
+        sort_order: sortOrder,
+      })
+      : await projectMemberRepository.create({
+        project_id: input.projectId,
+        employee_id: input.employeeId,
+        role_code: input.roleCode,
+        role_name: roleName,
+        is_primary: true,
+        sort_order: sortOrder,
+      });
+    return this.serializeMember(row);
+  }
   async updateProjectMember(
     projectId: string,
     memberId: string,
@@ -407,7 +442,6 @@ class ProjectMemberService {
     if (nextRoleCode === "customer_owner") {
       throw Errors.badRequest("跟进员工来自客户归属关系，不能直接修改");
     }
-
     if (input.is_primary) {
       await projectMemberRepository.setRoleMembersNonPrimary(
         projectId,

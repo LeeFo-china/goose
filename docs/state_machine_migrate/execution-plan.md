@@ -822,6 +822,15 @@
   status from the latest workflow transition log context for the project
   instance.
 
+  2026-06-12 progress: project construction scheduling no longer calls the
+  legacy `schedule_project_construction_transition` RPC. The API now updates
+  project status/start date through the project repository, assigns the primary
+  construction manager through `ProjectMemberService`, then syncs workflow
+  runtime/subject state. Migration
+  `20260612133000_drop_schedule_project_construction_transition.sql` drops the
+  old RPC; rollback is to restore the latest function definition from
+  `20260531192000_cast_schedule_construction_start_date.sql`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

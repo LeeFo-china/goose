@@ -145,6 +145,7 @@ class ProjectStatusService {
     const nextSignedAmount = input.payload.signed_amount ??
       patch.signed_amount ??
       existing.signed_amount;
+    let constructionManagerEmployeeId: string | null = null;
     if (input.payload.action === "sign_contract") {
       if (nextSignedAmount == null || Number(nextSignedAmount) <= 0) {
         throw Errors.badRequest("项目签约时必须提供有效的 signed_amount");
@@ -157,8 +158,8 @@ class ProjectStatusService {
     }
     if (input.payload.action === "schedule_construction") {
       const nextStartDate = input.payload.start_date;
-      const constructionManagerEmployeeId =
-        input.payload.construction_manager_employee_id?.trim();
+      constructionManagerEmployeeId = input.payload
+        .construction_manager_employee_id?.trim() ?? null;
       if (typeof nextStartDate !== "string" || !nextStartDate.trim()) {
         throw Errors.badRequest("项目排期开工前必须先确定开工日期");
       }
@@ -191,28 +192,33 @@ class ProjectStatusService {
       });
     }
 
-    const metadata = {
-      ...input.payload.metadata,
-      ...(input.payload.action === "pause_project"
-        ? { paused_from_status: fromStatus }
-        : {}),
-      ...(input.payload.action === "resume_project"
-        ? { paused_from_status: transition.toStatus }
-        : {}),
-    };
-
     if (input.payload.action === "schedule_construction") {
-      const project = await projectRepository.scheduleConstructionTransition({
-        projectId: input.projectId,
+      const project = await projectRepository.updateIfStatus({
+        id: input.projectId,
         tenantId,
         expectedStatus: fromStatus,
-        toStatus: transition.toStatus,
-        startDate: String(patch.start_date),
-        constructionManagerEmployeeId: String(input.payload.construction_manager_employee_id).trim(),
-        operatorEmployeeId: input.authContext.employeeId ?? null,
-        operatorAuthUserId: input.authContext.authUserId,
-        reason,
-        metadata,
+        payload: {
+          ...patch,
+          status: transition.toStatus,
+        },
+      });
+      if (!project) {
+        throw Errors.business(
+          409,
+          "项目状态已变化，请刷新后重试",
+          ErrorCodes.PROJECT_STATUS_CONFLICT,
+        );
+      }
+
+      await projectMemberService.setPrimaryRoleMember({
+        projectId: input.projectId,
+        employeeId: String(constructionManagerEmployeeId),
+        roleCode: "construction_manager",
+        tenantId,
+        invalidError: {
+          message: "所选员工不能作为工程负责人",
+          code: ErrorCodes.INVALID_CONSTRUCTION_MANAGER,
+        },
       });
       await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
         authContext: input.authContext,
@@ -224,7 +230,7 @@ class ProjectStatusService {
         reason,
         extraContext: {
           start_date: String(patch.start_date),
-          construction_manager_employee_id: String(input.payload.construction_manager_employee_id).trim(),
+          construction_manager_employee_id: constructionManagerEmployeeId,
         },
       });
       return project;

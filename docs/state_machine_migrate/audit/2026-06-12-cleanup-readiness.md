@@ -140,6 +140,16 @@ display:
 | blocker files | `13` |
 | project status transition log blocker references | `0` |
 
+2026-06-12 after removing project construction scheduling RPC usage:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `69` |
+| blocker files | `12` |
+| `schedule_project_construction_transition` blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -216,6 +226,9 @@ because the system is still in the compatibility window:
 - project status changes no longer write/read `project_status_transition_logs`;
   `resume_project` uses workflow transition log context to find the paused
   source status;
+- project construction scheduling no longer calls
+  `schedule_project_construction_transition`; the RPC is covered by a drop
+  migration with rollback notes;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

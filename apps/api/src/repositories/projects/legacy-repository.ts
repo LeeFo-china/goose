@@ -24,7 +24,7 @@ import {
   listCreateEmployees,
   listCreateProperties,
 } from "./legacy/create-options";
-import { update, updateIfStatus, scheduleConstructionTransition } from "./legacy/mutations";
+import { update, updateIfStatus } from "./legacy/mutations";
 import type { ProjectCoreListFilters } from "./legacy/shared";
 
 export {
@@ -115,7 +115,6 @@ class ProjectRepository {
   listCreateEmployees = listCreateEmployees;
   update = update;
   updateIfStatus = updateIfStatus;
-  scheduleConstructionTransition = scheduleConstructionTransition;
 }
 
 export const projectRepository = new ProjectRepository();
