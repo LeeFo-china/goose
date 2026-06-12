@@ -21,7 +21,6 @@ import {
   normalizeScope,
   resolveAvatarRelation,
   resolveEvidenceImagesRelation,
-  resolveApprovalChainRelations,
   dedupeApprovalRecords,
   type AuthContext,
   type ApproveExpenseRequestInput,
@@ -38,8 +37,6 @@ import {
   type SubmitExpenseRequestInput,
   type UpdateExpenseRequestInput,
   type ExpenseApprovalCandidateEmployee,
-  type ExpenseApprovalChainPayload,
-  type ExpenseApprovalChainRecord,
   type ExpenseProjectCandidateRow,
   type ExpenseRequestRecord,
   type ExpenseRequestVisibilityFilter,
@@ -193,39 +190,15 @@ export async function submitExpenseRequest(this: any,
     const approvalRound = existing.status === "rejected"
       ? this.getApprovalRound(existing) + 1
       : this.getApprovalRound(existing);
-    const requestedApprovalChain = this.getApprovalChain(existing).length > 0
-      ? this.getApprovalChain(existing).map((item: ExpenseApprovalChainRecord) => ({
-        step: item.step as ApprovalChainStep,
-        assignee_id: item.assignee_id,
-      }))
-      : undefined;
-
-    if (!requestedApprovalChain || requestedApprovalChain.length === 0) {
-      throw Errors.badRequest("请先选择审批流程");
-    }
-    const approvalChainPayload = await this.buildApprovalChainPayload(
-      id,
-      existing.employee_id,
-      requestedApprovalChain,
-      "current",
-      tenantId,
-    );
-
     const updated = await expenseRequestRepository.update(id, {
       total_amount: totalAmount,
       status: "pending",
       current_step: "manager_review",
       submitted_at: now,
       rejected_reason: null,
-      assignee_id: approvalChainPayload[0]?.assignee_id ?? null,
+      assignee_id: null,
       ...buildLegacyFields(existing.title, items, totalAmount),
     }, undefined, tenantId);
-
-    await expenseRequestRepository.replaceApprovalChain(
-      id,
-      approvalChainPayload,
-      tenantId,
-    );
 
     await this.appendApprovalOnce({
       tenantId,

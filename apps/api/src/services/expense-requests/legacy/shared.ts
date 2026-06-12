@@ -17,8 +17,6 @@ import type {
 } from "@/schema/expense-requests";
 import type {
   ExpenseApprovalCandidateEmployee,
-  ExpenseApprovalChainPayload,
-  ExpenseApprovalChainRecord,
   ExpenseProjectCandidateRow,
   ExpenseRequestRecord,
 } from "@/repositories/expense-requests";
@@ -243,24 +241,6 @@ export function resolveEvidenceImagesRelation(value: unknown): unknown {
   };
 }
 
-export function resolveApprovalChainRelations(value: unknown): unknown {
-  if (!Array.isArray(value)) {
-    return value;
-  }
-
-  return value.map((item) => {
-    if (!item || typeof item !== "object") {
-      return item;
-    }
-
-    const row = item as Record<string, unknown>;
-    return {
-      ...row,
-      assignee: resolveAvatarRelation(row.assignee),
-    };
-  });
-}
-
 export function dedupeApprovalRecords(value: unknown): unknown {
   if (!Array.isArray(value)) {
     return value;
@@ -318,8 +298,6 @@ export type {
   SubmitExpenseRequestInput,
   UpdateExpenseRequestInput,
   ExpenseApprovalCandidateEmployee,
-  ExpenseApprovalChainPayload,
-  ExpenseApprovalChainRecord,
   ExpenseProjectCandidateRow,
   ExpenseRequestRecord,
   AuthContext,

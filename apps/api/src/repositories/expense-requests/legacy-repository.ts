@@ -8,9 +8,6 @@ import { create, update, replaceItems } from "./legacy/mutations";
 import {
   appendApproval,
   findApprovalByBusinessKey,
-  replaceApprovalChain,
-  listApprovalChain,
-  updateApprovalChainNode,
   findEmployeeForApproval,
   listEmployeesForApprovalCandidates,
   listEmployeePermissionContexts,
@@ -20,8 +17,6 @@ import { list, listStatsRows } from "./legacy/lists";
 
 export type {
   ExpenseApprovalCandidateEmployee,
-  ExpenseApprovalChainPayload,
-  ExpenseApprovalChainRecord,
   ExpenseProjectCandidateRow,
   ExpenseRequestMutationPayload,
   ExpenseRequestRecord,
@@ -39,31 +34,6 @@ class ExpenseRequestRepository {
       paid_amount,
       paid_at,
       paid_by
-    ),
-    approval_chain:expense_request_approval_chains(
-      id,
-      step,
-      step_name,
-      sort_order,
-      assignee_id,
-      assignee_name_snapshot,
-      required_permission,
-      status,
-      acted_by,
-      acted_at,
-      comment,
-      created_at,
-      updated_at,
-      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
-        id,
-        name,
-        phone,
-        avatar,
-        status,
-        tenant_department_id,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
-        post:posts!employees_post_id_fkey(name)
-      )
     )
   `;
 
@@ -120,31 +90,6 @@ class ExpenseRequestRepository {
         phone,
         status
       )
-    ),
-    approval_chain:expense_request_approval_chains(
-      id,
-      step,
-      step_name,
-      sort_order,
-      assignee_id,
-      assignee_name_snapshot,
-      required_permission,
-      status,
-      acted_by,
-      acted_at,
-      comment,
-      created_at,
-      updated_at,
-      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
-        id,
-        name,
-        phone,
-        avatar,
-        status,
-        tenant_department_id,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
-        post:posts!employees_post_id_fkey(name)
-      )
     )
   `;
   findById = findById;
@@ -156,9 +101,6 @@ class ExpenseRequestRepository {
   replaceItems = replaceItems;
   appendApproval = appendApproval;
   findApprovalByBusinessKey = findApprovalByBusinessKey;
-  replaceApprovalChain = replaceApprovalChain;
-  listApprovalChain = listApprovalChain;
-  updateApprovalChainNode = updateApprovalChainNode;
   findEmployeeForApproval = findEmployeeForApproval;
   listEmployeesForApprovalCandidates = listEmployeesForApprovalCandidates;
   listEmployeePermissionContexts = listEmployeePermissionContexts;

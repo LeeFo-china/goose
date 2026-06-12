@@ -21,7 +21,6 @@ import {
   normalizeScope,
   resolveAvatarRelation,
   resolveEvidenceImagesRelation,
-  resolveApprovalChainRelations,
   dedupeApprovalRecords,
   type AuthContext,
   type ApproveExpenseRequestInput,
@@ -38,8 +37,6 @@ import {
   type SubmitExpenseRequestInput,
   type UpdateExpenseRequestInput,
   type ExpenseApprovalCandidateEmployee,
-  type ExpenseApprovalChainPayload,
-  type ExpenseApprovalChainRecord,
   type ExpenseProjectCandidateRow,
   type ExpenseRequestRecord,
   type ExpenseRequestVisibilityFilter,
@@ -132,33 +129,6 @@ export async function approveExpenseRequest(this: any,
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    const currentNode = this.getCurrentApprovalNode(existing);
-    if (currentNode) {
-      if (currentNode.status !== "current") {
-        throw Errors.business(
-          409,
-          "当前审批节点已处理，请刷新后查看",
-          "EXPENSE_REQUEST_ALREADY_PROCESSED",
-        );
-      }
-
-      if (currentNode.assignee_id !== approverId) {
-        throw Errors.business(
-          403,
-          "当前用户无该节点操作权限",
-          "EXPENSE_REQUEST_PERMISSION_DENIED",
-        );
-      }
-
-      if (currentNode.step !== existing.current_step) {
-        throw Errors.business(
-          409,
-          "当前审批状态已变化，请刷新后查看",
-          "EXPENSE_REQUEST_STATE_CHANGED",
-        );
-      }
-    }
-
     if (existing.current_step === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
@@ -194,30 +164,13 @@ export async function approveExpenseRequest(this: any,
     const nextStep = existing.current_step === "finance_review"
       ? "payment"
       : "finance_review";
-    const chain = this.getApprovalChain(existing);
-    const nextNode = chain.find((item: ExpenseApprovalChainRecord) => item.step === nextStep);
 
     const updated = await expenseRequestRepository.update(id, {
       status: nextStatus,
       current_step: nextStep,
       approved_at: existing.current_step === "finance_review" ? now : null,
-      assignee_id: nextNode?.assignee_id ?? null,
+      assignee_id: null,
     }, undefined, tenantId);
-
-    if (currentNode) {
-      await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
-        status: "approved",
-        acted_by: approverId,
-        acted_at: now,
-        comment: input.comment ?? null,
-      }, tenantId);
-    }
-
-    if (nextNode && existing.current_step === "manager_review") {
-      await expenseRequestRepository.updateApprovalChainNode(nextNode.id, {
-        status: "current",
-      }, tenantId);
-    }
 
     await this.appendApprovalOnce({
       tenantId,
@@ -306,33 +259,6 @@ export async function rejectExpenseRequest(this: any,
       return this.getLatestExpenseRequest(id, tenantId);
     }
 
-    const currentNode = this.getCurrentApprovalNode(existing);
-    if (currentNode) {
-      if (currentNode.status !== "current") {
-        throw Errors.business(
-          409,
-          "当前审批节点已处理，请刷新后查看",
-          "EXPENSE_REQUEST_ALREADY_PROCESSED",
-        );
-      }
-
-      if (currentNode.assignee_id !== approverId) {
-        throw Errors.business(
-          403,
-          "当前用户无该节点操作权限",
-          "EXPENSE_REQUEST_PERMISSION_DENIED",
-        );
-      }
-
-      if (currentNode.step !== existing.current_step) {
-        throw Errors.business(
-          409,
-          "当前审批状态已变化，请刷新后查看",
-          "EXPENSE_REQUEST_STATE_CHANGED",
-        );
-      }
-    }
-
     if (existing.current_step === "manager_review") {
       await this.assertCanOperateExpenseRequest(
         authContext,
@@ -375,23 +301,6 @@ export async function rejectExpenseRequest(this: any,
       rejected_reason: rejectedReason,
       assignee_id: existing.employee_id,
     }, undefined, tenantId);
-
-    if (currentNode) {
-      await expenseRequestRepository.updateApprovalChainNode(currentNode.id, {
-        status: "rejected",
-        acted_by: approverId,
-        acted_at: now,
-        comment: input.comment ?? rejectedReason,
-      }, tenantId);
-
-      for (const node of this.getApprovalChain(existing)) {
-        if (node.id !== currentNode.id && node.status === "pending") {
-          await expenseRequestRepository.updateApprovalChainNode(node.id, {
-            status: "cancelled",
-          }, tenantId);
-        }
-      }
-    }
 
     await this.appendApprovalOnce({
       tenantId,
@@ -460,17 +369,6 @@ export async function cancelExpenseRequest(this: any,
       cancelled_at: now,
       assignee_id: null,
     }, undefined, tenantId);
-
-    for (const node of this.getApprovalChain(existing)) {
-      if (!["approved", "rejected", "cancelled"].includes(node.status)) {
-        await expenseRequestRepository.updateApprovalChainNode(node.id, {
-          status: "cancelled",
-          acted_by: input.operator_id,
-          acted_at: now,
-          comment: input.comment ?? null,
-        }, tenantId);
-      }
-    }
 
     await this.appendApprovalOnce({
       tenantId,

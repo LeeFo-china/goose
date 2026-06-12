@@ -20,14 +20,12 @@ import {
   normalizeScope,
   resolveAvatarRelation,
   resolveEvidenceImagesRelation,
-  resolveApprovalChainRelations,
   dedupeApprovalRecords,
   type AuthContext,
   type ApproveExpenseRequestInput,
   type CancelExpenseRequestInput,
   type CreateExpenseRequestInput,
   type ExpenseApprovalCandidateQueryType,
-  type ExpenseApprovalChainItemInput,
   type ExpenseApprovalTemplateQueryType,
   type ExpenseRequestListQueryType,
   type ExpenseRequestProjectCandidateQueryType,
@@ -37,8 +35,6 @@ import {
   type SubmitExpenseRequestInput,
   type UpdateExpenseRequestInput,
   type ExpenseApprovalCandidateEmployee,
-  type ExpenseApprovalChainPayload,
-  type ExpenseApprovalChainRecord,
   type ExpenseProjectCandidateRow,
   type ExpenseRequestRecord,
   type ExpenseRequestVisibilityFilter,
@@ -116,87 +112,6 @@ export async function assertCandidateForStep(this: any, input: {
       config,
       scope,
     };
-  }
-
-export function normalizeApprovalChainInput(this: any, 
-    input: ExpenseApprovalChainItemInput[] | undefined,
-  ) {
-    if (!input || input.length === 0) {
-      return [] as ExpenseApprovalChainItemInput[];
-    }
-
-    const seen = new Set<string>();
-    for (const item of input) {
-      if (seen.has(item.step)) {
-        throw Errors.badRequest("审批流程节点不能重复");
-      }
-      seen.add(item.step);
-    }
-
-    return approvalChainStepConfigs.map((config) => {
-      const matched = input.find((item) => item.step === config.step);
-      if (!matched) {
-        throw Errors.badRequest(
-          config.step === "manager_review" ? "请选择经理审批人" : "请选择财务审批人",
-        );
-      }
-
-      return matched;
-    });
-  }
-
-export async function buildApprovalChainPayload(this: any, 
-    expenseRequestId: string,
-    applicantId: string,
-    input: ExpenseApprovalChainItemInput[],
-    firstStatus: "pending" | "current",
-    tenantId?: string | null,
-  ): Promise<ExpenseApprovalChainPayload[]> {
-    const normalized = this.normalizeApprovalChainInput(input);
-    const payload: ExpenseApprovalChainPayload[] = [];
-
-    for (const item of normalized) {
-      const { candidate, config } = await this.assertCandidateForStep({
-        candidateId: item.assignee_id,
-        applicantId,
-        step: item.step,
-        tenantId,
-      });
-
-      payload.push({
-        tenant_id: tenantId ?? null,
-        expense_request_id: expenseRequestId,
-        step: config.step,
-        step_name: config.step_name,
-        sort_order: config.sort_order,
-        assignee_id: candidate.id,
-        assignee_name_snapshot: candidate.name ?? null,
-        required_permission: config.required_permission,
-        status: config.sort_order === 1 ? firstStatus : "pending",
-      });
-    }
-
-    return payload;
-  }
-
-export function getApprovalChain(this: any, record: { approval_chain?: unknown }) {
-    const rows = Array.isArray(record.approval_chain)
-      ? record.approval_chain
-      : [];
-
-    return [...(rows as ExpenseApprovalChainRecord[])].sort(
-      (a, b) => a.sort_order - b.sort_order,
-    );
-  }
-
-export function getCurrentApprovalNode(this: any, record: {
-    approval_chain?: unknown;
-    current_step: string;
-  }) {
-    const chain = this.getApprovalChain(record);
-    return chain.find((item: ExpenseApprovalChainRecord) => item.status === "current") ??
-      chain.find((item: ExpenseApprovalChainRecord) => item.step === record.current_step && item.status !== "approved") ??
-      null;
   }
 
 export function getApprovalRound(this: any, record: { approvals?: unknown }) {

@@ -1,8 +1,6 @@
 import { Errors, SupabaseDB } from "./shared";
 import type {
   ExpenseApprovalCandidateEmployee,
-  ExpenseApprovalChainPayload,
-  ExpenseApprovalChainRecord,
   ExpenseRequestApprovalPayload,
 } from "./shared";
 
@@ -62,113 +60,6 @@ export async function findApprovalByBusinessKey(this: any,
   }
 
   return Boolean(data?.id);
-}
-
-export async function replaceApprovalChain(this: any, 
-  expenseRequestId: string,
-  items: ExpenseApprovalChainPayload[],
-  tenantId?: string | null,
-) {
-  let deleteQuery = SupabaseDB.getAdminClient()
-    .from("expense_request_approval_chains")
-    .delete()
-    .eq("expense_request_id", expenseRequestId);
-
-  if (tenantId) {
-    deleteQuery = deleteQuery.eq("tenant_id", tenantId);
-  }
-
-  const { error: deleteError } = await deleteQuery.select("id");
-
-  if (deleteError) {
-    throw Errors.dbError("清理费用审批链失败", deleteError);
-  }
-
-  if (items.length === 0) {
-    return;
-  }
-
-  const { error } = await SupabaseDB.getAdminClient()
-    .from("expense_request_approval_chains")
-    .insert(items)
-    .select("id");
-
-  if (error) {
-    throw Errors.dbError("保存费用审批链失败", error);
-  }
-}
-
-export async function listApprovalChain(this: any, expenseRequestId: string, tenantId?: string | null) {
-  let query = SupabaseDB.getAdminClient()
-    .from("expense_request_approval_chains")
-    .select(`
-      id,
-      expense_request_id,
-      step,
-      step_name,
-      sort_order,
-      assignee_id,
-      assignee_name_snapshot,
-      required_permission,
-      status,
-      acted_by,
-      acted_at,
-      comment,
-      created_at,
-      updated_at,
-      assignee:employees!expense_request_approval_chains_assignee_id_fkey(
-        id,
-        name,
-        phone,
-        avatar,
-        status,
-        tenant_department_id,
-        tenant_department:tenant_departments!employees_tenant_department_id_fkey(id, alias_name, code),
-        post:posts!employees_post_id_fkey(name)
-      )
-    `)
-    .eq("expense_request_id", expenseRequestId);
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query.order("sort_order", { ascending: true });
-
-  if (error) {
-    throw Errors.dbError("查询费用审批链失败", error);
-  }
-
-  return ((data || []) as unknown) as ExpenseApprovalChainRecord[];
-}
-
-export async function updateApprovalChainNode(this: any, 
-  id: string,
-  payload: {
-    status: string;
-    acted_by?: string | null;
-    acted_at?: string | null;
-    comment?: string | null;
-  },
-  tenantId?: string | null,
-) {
-  let query = SupabaseDB.getAdminClient()
-    .from("expense_request_approval_chains")
-    .update({
-      ...payload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { error } = await query.select("id");
-
-  if (error) {
-    throw Errors.dbError("更新费用审批链失败", error);
-  }
 }
 
 export async function findEmployeeForApproval(this: any, id: string, tenantId?: string | null) {

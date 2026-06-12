@@ -166,3 +166,24 @@ describe("project construction scheduling cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("expense approval chain table cleanup", () => {
+  test("expense request runtime no longer depends on legacy approval-chain table", () => {
+    const sourcePaths = [
+      "src/repositories/expense-requests/legacy-repository.ts",
+      "src/repositories/expense-requests/legacy/approvals.ts",
+      "src/services/expense-requests/legacy/drafts.ts",
+      "src/services/expense-requests/legacy/workflow.ts",
+      "src/services/expense-requests/legacy/base.ts",
+      "src/services/expense-requests/legacy-service.ts",
+    ];
+    const references = scanCleanupReferences(sourcePaths.map((sourcePath) => ({
+      path: `apps/api/${sourcePath}`,
+      content: readFileSync(sourcePath, "utf8"),
+    }))).filter((reference) =>
+      reference.pattern === "expense_request_approval_chains"
+    );
+
+    expect(references).toEqual([]);
+  });
+});

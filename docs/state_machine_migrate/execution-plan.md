@@ -831,6 +831,15 @@
   old RPC; rollback is to restore the latest function definition from
   `20260531192000_cast_schedule_construction_start_date.sql`.
 
+  2026-06-12 progress: expense request runtime no longer reads or writes
+  `expense_request_approval_chains`. Repository selects no longer project the
+  old chain table, submit/approve/reject/cancel no longer mutate chain rows,
+  and `/expense-requests` list no longer uses the old approval-chain assignee
+  branch. Workflow tasks now own actionable approver routing during the
+  compatibility window; `expense_request_approvals` remains as the audit log.
+  `workflow:cleanup-readiness` reports zero blocking production references to
+  `expense_request_approval_chains`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

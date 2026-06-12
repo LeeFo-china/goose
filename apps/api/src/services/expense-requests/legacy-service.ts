@@ -22,10 +22,6 @@ import {
   getStepConfig,
   getApplicantEmployee,
   assertCandidateForStep,
-  normalizeApprovalChainInput,
-  buildApprovalChainPayload,
-  getApprovalChain,
-  getCurrentApprovalNode,
   getApprovalRound,
   hasRecentApprovalAction,
   hasApprovalAction,
@@ -79,10 +75,6 @@ class ExpenseRequestService {
   private getStepConfig = getStepConfig;
   private getApplicantEmployee = getApplicantEmployee;
   private assertCandidateForStep = assertCandidateForStep;
-  private normalizeApprovalChainInput = normalizeApprovalChainInput;
-  private buildApprovalChainPayload = buildApprovalChainPayload;
-  private getApprovalChain = getApprovalChain;
-  private getCurrentApprovalNode = getCurrentApprovalNode;
   private getApprovalRound = getApprovalRound;
   private hasRecentApprovalAction = hasRecentApprovalAction;
   private hasApprovalAction = hasApprovalAction;

@@ -44,7 +44,6 @@ export type ExpenseRequestRecord = {
   items?: unknown;
   approvals?: unknown;
   settlement?: unknown;
-  approval_chain?: unknown;
 };
 
 export type ExpenseRequestMutationPayload = {
@@ -92,36 +91,6 @@ export type ExpenseRequestSettlementPayload = {
   paid_by: string;
   evidence_images: string[];
   remark?: string | null;
-};
-
-export type ExpenseApprovalChainPayload = {
-  tenant_id?: string | null;
-  expense_request_id: string;
-  step: string;
-  step_name: string;
-  sort_order: number;
-  assignee_id: string;
-  assignee_name_snapshot?: string | null;
-  required_permission: string;
-  status: string;
-};
-
-export type ExpenseApprovalChainRecord = {
-  id: string;
-  expense_request_id: string;
-  step: string;
-  step_name: string;
-  sort_order: number;
-  assignee_id: string;
-  assignee_name_snapshot: string | null;
-  required_permission: string;
-  status: string;
-  acted_by: string | null;
-  acted_at: string | null;
-  comment: string | null;
-  created_at: string;
-  updated_at: string | null;
-  assignee?: unknown;
 };
 
 export type ExpenseApprovalCandidateEmployee = {

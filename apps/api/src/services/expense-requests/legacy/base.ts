@@ -20,7 +20,6 @@ import {
   normalizeScope,
   resolveAvatarRelation,
   resolveEvidenceImagesRelation,
-  resolveApprovalChainRelations,
   dedupeApprovalRecords,
   type AuthContext,
   type ApproveExpenseRequestInput,
@@ -37,8 +36,6 @@ import {
   type SubmitExpenseRequestInput,
   type UpdateExpenseRequestInput,
   type ExpenseApprovalCandidateEmployee,
-  type ExpenseApprovalChainPayload,
-  type ExpenseApprovalChainRecord,
   type ExpenseProjectCandidateRow,
   type ExpenseRequestRecord,
   type ExpenseRequestVisibilityFilter,
@@ -79,10 +76,6 @@ export function serializeExpenseRequest<T extends ExpenseRequestRecord | null>(t
     if ("assignee" in row) {
       serialized.assignee = resolveAvatarRelation(row.assignee);
     }
-    if ("approval_chain" in row) {
-      serialized.approval_chain = resolveApprovalChainRelations(row.approval_chain);
-    }
-
     return serialized as T;
   }
 

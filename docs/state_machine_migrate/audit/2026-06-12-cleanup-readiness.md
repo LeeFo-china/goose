@@ -150,6 +150,16 @@ display:
 | blocker files | `12` |
 | `schedule_project_construction_transition` blocker references | `0` |
 
+2026-06-12 after removing expense approval-chain table runtime dependencies:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `39` |
+| blocker files | `8` |
+| `expense_request_approval_chains` blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -229,8 +239,9 @@ because the system is still in the compatibility window:
 - project construction scheduling no longer calls
   `schedule_project_construction_transition`; the RPC is covered by a drop
   migration with rollback notes;
-- expense approval-chain APIs and UI are not yet fully replaced by workflow
-  tasks/actions;
+- expense request runtime no longer reads or writes
+  `expense_request_approval_chains`; workflow tasks own actionable approver
+  routing, while `expense_request_approvals` remains as the audit log;
 - generated database types still reflect the not-yet-dropped DB objects;
 - backfill scripts still read legacy fields until historical data migration is
   applied and accepted.

@@ -21,7 +21,6 @@ import {
   normalizeScope,
   resolveAvatarRelation,
   resolveEvidenceImagesRelation,
-  resolveApprovalChainRelations,
   dedupeApprovalRecords,
   type AuthContext,
   type ApproveExpenseRequestInput,
@@ -38,8 +37,6 @@ import {
   type SubmitExpenseRequestInput,
   type UpdateExpenseRequestInput,
   type ExpenseApprovalCandidateEmployee,
-  type ExpenseApprovalChainPayload,
-  type ExpenseApprovalChainRecord,
   type ExpenseProjectCandidateRow,
   type ExpenseRequestRecord,
   type ExpenseRequestVisibilityFilter,
@@ -67,55 +64,20 @@ export async function listExpenseRequests(this: any,
     params: ExpenseRequestListQueryType,
   ) {
     const tenantId = this.requireTenantId(authContext);
-    const processPermission = this.getProcessPermissionForQuery(params);
-    const visibility = processPermission
-      ? await this.getVisibilityForPermission(authContext, processPermission)
-      : await accessPolicyService.getVisibleExpenseFilters(
-        authContext,
-        "expense_request.read",
-      );
+    const visibility = await accessPolicyService.getVisibleExpenseFilters(
+      authContext,
+      "expense_request.read",
+    );
     const result = await expenseRequestRepository.list(
-      processPermission
-        ? {
-          ...params,
-          page: 1,
-          pageSize: 10000,
-        }
-        : params,
+      params,
       visibility,
       tenantId,
     );
-
-    if (!processPermission) {
-      const list = result.list.map((item) => this.serializeExpenseRequest(item));
-      return {
-        ...result,
-        list: await attachExpenseWorkflowStates(list, tenantId),
-      };
-    }
-
-    const rows = result.list.filter((item) => {
-      const currentNode = this.getCurrentApprovalNode(item);
-      if (!currentNode) {
-        return true;
-      }
-
-      return currentNode.assignee_id === authContext.employeeId;
-    });
-    const from = (params.page - 1) * params.pageSize;
-    const list = rows.slice(from, from + params.pageSize);
+    const list = result.list.map((item) => this.serializeExpenseRequest(item));
 
     return {
-      list: await attachExpenseWorkflowStates(
-        list.map((item) => this.serializeExpenseRequest(item)),
-        tenantId,
-      ),
-      pagination: {
-        page: params.page,
-        pageSize: params.pageSize,
-        total: rows.length,
-        totalPages: rows.length ? Math.ceil(rows.length / params.pageSize) : 0,
-      },
+      ...result,
+      list: await attachExpenseWorkflowStates(list, tenantId),
     };
   }
 
