@@ -927,11 +927,11 @@
 - [ ] `supabase migration list` shows Local/Remote aligned before cleanup.
 - [ ] Orange team confirms mini-program no longer depends on old `status_actions/current_step` controls.
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
-- [ ] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
+- [x] `bun --cwd apps/api run workflow:cleanup-readiness` exits 0.
 
 ### Steps
 
-- [ ] **Step 6.1: Create cleanup migration**
+- [x] **Step 6.1: Create cleanup migration**
 
   Migration must drop these known legacy objects after final inventory verification:
 
@@ -1020,7 +1020,7 @@
 - [ ] Legacy tables are absent in staging.
 - [ ] Legacy RPC is absent in staging.
 - [ ] Generated database types no longer expose dropped objects.
-- [ ] API/admin checks pass.
+- [x] API checks pass locally; admin smoke remains part of staging gate.
 - [ ] Commit:
 
   ```bash
