@@ -23,6 +23,7 @@
     "workflow:phase5-smoke": "bun src/scripts/phase5-workflow-smoke.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",
     "workflow:runtime-consistency-check": "bun src/scripts/workflow-runtime-consistency-check.ts",
+    "workflow:subject-states-rebuild": "bun src/scripts/workflow-subject-states-rebuild.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",
