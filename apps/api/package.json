@@ -20,6 +20,7 @@
     "project-log-comments:cos:reconcile": "bun src/scripts/project-log-comment-cos-reconcile.ts",
     "project-acceptance:images:backfill": "bun src/scripts/project-acceptance-images-backfill.ts",
     "customer:perf-smoke": "bun src/scripts/customer-performance-smoke.ts",
+    "workflow:phase5-smoke": "bun src/scripts/phase5-workflow-smoke.ts",
     "construction-stage:check": "bun src/scripts/construction-stage-consistency-check.ts",
     "employee:tenant-department:check": "bun src/scripts/employee-tenant-department-consistency-check.ts",
     "property-location:coverage": "bun src/scripts/property-location-coverage-check.ts",

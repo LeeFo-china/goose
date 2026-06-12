@@ -776,11 +776,18 @@
   API smoke:
 
   ```bash
-  curl -sS "$GOOES_API_BASE_URL/customer/bootstrap" -H "authorization: Bearer $CUSTOMER_TOKEN"
-  curl -sS "$GOOES_API_BASE_URL/task-center" -H "authorization: Bearer $TOKEN"
+  GOOES_API_BASE_URL="$GOOES_API_BASE_URL" \
+  PHASE5_SMOKE_EMPLOYEE_TOKEN="$TOKEN" \
+  PHASE5_SMOKE_CUSTOMER_TOKEN="$CUSTOMER_TOKEN" \
+  PHASE5_SMOKE_CUSTOMER_PROJECT_ID="$CUSTOMER_PROJECT_ID" \
+  PHASE5_SMOKE_PROJECT_ID="$PROJECT_ID" \
+  bun --cwd apps/api run workflow:phase5-smoke
   ```
 
-  Expected: responses include workflow state/task data and remain paginated where list data is returned.
+  Expected: `/workflow-tasks`, `/task-center/todos`, `/customer/bootstrap`,
+  optional customer project detail bootstrap, and optional project workflow
+  state return expected workflow data and remain paginated where list data is
+  returned.
 
   2026-06-12 verification:
 
@@ -790,6 +797,8 @@
   - `pnpm --dir apps/admin check`: passed.
   - `git diff --check`: passed.
   - Playwright login-page smoke against existing `http://127.0.0.1:3010`: passed.
+  - Added `bun --cwd apps/api run workflow:phase5-smoke` to make staging/API
+    smoke repeatable once tokens and ids are available.
 
   Runtime API smoke remains pending because this workspace does not have
   staging tenant ids or authenticated admin/mini-program tokens. See
