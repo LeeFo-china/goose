@@ -241,12 +241,30 @@ function databaseUrl(env: EnvLike = process.env): string | null {
   return env.SUPABASE_DB_DIRECT_URL || env.SUPABASE_DB_URL || null;
 }
 
-async function loadManualGateEvidence(
+export async function loadManualGateEvidence(
   evidenceFile: string,
 ): Promise<{ ok: boolean; detail: string }> {
   const path = resolve(findRepoRoot(), evidenceFile);
-  const raw = await readFile(path, "utf8");
-  const parsed = JSON.parse(raw) as ManualGateEvidence;
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch {
+    return {
+      ok: false,
+      detail: `evidence_file=${evidenceFile}; missing evidence file`,
+    };
+  }
+
+  let parsed: ManualGateEvidence;
+  try {
+    parsed = JSON.parse(raw) as ManualGateEvidence;
+  } catch {
+    return {
+      ok: false,
+      detail: `evidence_file=${evidenceFile}; invalid JSON`,
+    };
+  }
+
   const validation = validateManualGateEvidence(parsed);
   const problems = [
     ...validation.missing.map((field) => `missing=${field}`),

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   arePendingMigrationsExpected,
   buildSupabaseDryRunArgs,
   collectManualGateEvidenceReferenceIssues,
   hasAllManualGates,
+  loadManualGateEvidence,
   parsePreflightArgs,
   parseSupabaseDryRunMigrations,
   validateManualGateEvidence,
@@ -160,5 +164,31 @@ describe("validateManualGateEvidence", () => {
     })).toEqual([
       "phase_acceptance.phase4_reconciliation_evidence: missing local evidence path docs/state_machine_migrate/audit/missing-backfill.md",
     ]);
+  });
+});
+
+describe("loadManualGateEvidence", () => {
+  test("reports a missing evidence file as a failed manual gate", async () => {
+    expect(await loadManualGateEvidence(
+      "docs/state_machine_migrate/audit/missing-manual-gates.json",
+    )).toEqual({
+      ok: false,
+      detail:
+        "evidence_file=docs/state_machine_migrate/audit/missing-manual-gates.json; missing evidence file",
+    });
+  });
+
+  test("reports invalid JSON as a failed manual gate", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-manual-gates-"));
+    const path = join(dir, "manual-gates.json");
+    try {
+      await writeFile(path, "{ invalid", "utf8");
+      expect(await loadManualGateEvidence(path)).toEqual({
+        ok: false,
+        detail: `evidence_file=${path}; invalid JSON`,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

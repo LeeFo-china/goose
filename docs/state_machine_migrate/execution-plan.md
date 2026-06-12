@@ -1034,7 +1034,9 @@
   `confirmed_by`, `confirmed_at`, and `minimum_version`; admin smoke must
   include `actor` and `smoke_at`. Any evidence value that points under
   `docs/state_machine_migrate/` must reference an existing file; external
-  release notes or tickets may use URLs.
+  release notes or tickets may use URLs. A missing or malformed evidence file
+  is reported as a failed manual gate and must be fixed before destructive
+  apply.
 
 ### Steps
 

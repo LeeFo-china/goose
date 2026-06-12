@@ -5,8 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   buildSupabaseDryRunArgs,
+  loadManualGateEvidence as loadManualGateEvidenceFile,
   parseSupabaseDryRunMigrations,
-  validateManualGateEvidence,
 } from "./workflow-destructive-cleanup-preflight";
 import {
   runWorkflowDestructiveCleanupVerify,
@@ -246,19 +246,7 @@ async function loadManualGateEvidence(
     return { ok: false, detail: "missing --evidence-file" };
   }
 
-  const path = resolve(findRepoRoot(), evidenceFile);
-  const raw = await readFile(path, "utf8");
-  const validation = validateManualGateEvidence(JSON.parse(raw));
-  const problems = [
-    ...validation.missing.map((field) => `missing=${field}`),
-    ...validation.invalid.map((issue) => `invalid=${issue}`),
-  ];
-  return {
-    ok: validation.ok,
-    detail: validation.ok
-      ? `evidence_file=${evidenceFile}`
-      : `evidence_file=${evidenceFile}; ${problems.join(", ")}`,
-  };
+  return loadManualGateEvidenceFile(evidenceFile);
 }
 
 async function checkGeneratedDatabaseTypes(): Promise<
