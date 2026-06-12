@@ -160,14 +160,23 @@ export function H5LeadsPanel({
 
   const content = (
     <>
-      <div className="flex flex-col gap-3 border-t px-4 py-4">
+      <div className={embedded
+        ? "flex shrink-0 flex-col gap-3 border-b bg-card px-4 py-3"
+        : "flex flex-col gap-3 border-t px-4 py-4"}
+      >
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          <div>
-            <CardTitle>H5 营销线索</CardTitle>
-            <CardDescription>
-              筛选条件作用于下方线索表格，当前共 {pagination.total} 条记录。
-            </CardDescription>
-          </div>
+          {embedded ? (
+            <div className="text-sm text-muted-foreground">
+              按活动页、处理状态、关键词和提交日期筛选线索。
+            </div>
+          ) : (
+            <div>
+              <CardTitle>H5 营销线索</CardTitle>
+              <CardDescription>
+                筛选条件作用于下方线索表格，当前共 {pagination.total} 条记录。
+              </CardDescription>
+            </div>
+          )}
           <Badge variant="outline">
             {loading ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}
             第 {pagination.page || 1} / {Math.max(pagination.totalPages || 0, 1)} 页
@@ -237,7 +246,7 @@ export function H5LeadsPanel({
           </Button>
         </div>
       </div>
-      <div className="relative flex flex-col gap-4">
+      <div className={embedded ? "relative flex min-h-0 flex-1 flex-col" : "relative flex flex-col gap-4"}>
         {loading ? (
           <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-[1px]">
             <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
@@ -251,16 +260,21 @@ export function H5LeadsPanel({
             <StatusAlert>{error}</StatusAlert>
           </div>
         ) : (
-          <H5MarketingLeadsTable
-            leads={leads}
-            onLeadUpdated={() => {
-              void loadLeads({ silent: true });
-            }}
-          />
+          <div className={embedded ? "min-h-0 flex-1 overflow-auto" : ""}>
+            <H5MarketingLeadsTable
+              leads={leads}
+              onLeadUpdated={() => {
+                void loadLeads({ silent: true });
+              }}
+            />
+          </div>
         )}
-        <div className="flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between">
+        <div className={embedded
+          ? "shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3 md:flex-row md:items-center md:justify-between"
+          : "flex flex-col gap-3 px-4 pb-4 md:flex-row md:items-center md:justify-between"}
+        >
           <div className="text-sm text-muted-foreground">
-            每页 {pagination.pageSize} 条，共 {pagination.total} 条
+            当前显示 {leads.length} 条，共 {pagination.total} 条
           </div>
           <div className="flex gap-2">
             <Button
