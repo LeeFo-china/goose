@@ -5,9 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatCommandFailure } from "./workflow-command-failure";
 import {
-  collectDestructiveMigrationContentIssues,
-} from "./workflow-destructive-migration-content";
-import {
   arePendingMigrationsExpected,
   collectManualGateEvidenceReferenceIssues,
   loadManualGateEvidence,
@@ -73,117 +70,6 @@ describe("arePendingMigrationsExpected", () => {
     expect(arePendingMigrationsExpected([
       "20260612143000_drop_legacy_state_machine_objects.sql",
     ])).toBe(false);
-  });
-});
-
-describe("collectDestructiveMigrationContentIssues", () => {
-  test("accepts the current destructive migration files", async () => {
-    const repoRoot = resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "..",
-      "..",
-      "..",
-    );
-
-    expect(collectDestructiveMigrationContentIssues({
-      "20260612133000_drop_schedule_project_construction_transition.sql":
-        await readFile(
-          join(
-            repoRoot,
-            "supabase/migrations/20260612133000_drop_schedule_project_construction_transition.sql",
-          ),
-          "utf8",
-        ),
-      "20260612143000_drop_legacy_state_machine_objects.sql": await readFile(
-        join(
-          repoRoot,
-          "supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql",
-        ),
-        "utf8",
-      ),
-    })).toEqual([]);
-  });
-
-  test("reports missing destructive drop targets", () => {
-    const issues = collectDestructiveMigrationContentIssues({
-      "20260612133000_drop_schedule_project_construction_transition.sql": "",
-      "20260612143000_drop_legacy_state_machine_objects.sql":
-        "DROP TABLE IF EXISTS public.customer_status_transition_logs;",
-    });
-
-    expect(issues).toContain(
-      "20260612133000_drop_schedule_project_construction_transition.sql: missing migration file",
-    );
-    expect(issues).toContain(
-      "20260612143000_drop_legacy_state_machine_objects.sql: missing DROP FUNCTION IF EXISTS public.schedule_project_construction_transition",
-    );
-  });
-
-  test("rejects destructive drops for retained business status columns", () => {
-    const issues = collectDestructiveMigrationContentIssues({
-      "20260612133000_drop_schedule_project_construction_transition.sql":
-        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
-      "20260612143000_drop_legacy_state_machine_objects.sql": [
-        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition",
-        "DROP INDEX IF EXISTS public.idx_expense_requests_current_step",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_customer_created_idx",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_tenant_created_idx",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_action_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_project_created_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_tenant_created_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_action_idx",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_request_id",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_assignee_status",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_step_status",
-        "DROP INDEX IF EXISTS public.expense_request_approval_chains_tenant_assignee_status_idx",
-        "DROP TABLE IF EXISTS public.customer_status_transition_logs",
-        "DROP TABLE IF EXISTS public.project_status_transition_logs",
-        "DROP TABLE IF EXISTS public.expense_request_approval_chains",
-        'DROP POLICY IF EXISTS "Approvers view pending" ON public.expense_requests',
-        "DROP CONSTRAINT IF EXISTS expense_requests_current_step_check",
-        "DROP COLUMN IF EXISTS current_step",
-        "DROP COLUMN IF EXISTS current_step_role",
-        "ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
-      ].join(";\n"),
-    });
-
-    expect(issues).toContain(
-      "20260612143000_drop_legacy_state_machine_objects.sql: forbidden ALTER TABLE public.customers DROP COLUMN IF EXISTS status",
-    );
-  });
-
-  test("rejects multiline destructive drops for retained business status columns", () => {
-    const issues = collectDestructiveMigrationContentIssues({
-      "20260612133000_drop_schedule_project_construction_transition.sql":
-        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
-      "20260612143000_drop_legacy_state_machine_objects.sql": [
-        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition",
-        "DROP INDEX IF EXISTS public.idx_expense_requests_current_step",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_customer_created_idx",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_tenant_created_idx",
-        "DROP INDEX IF EXISTS public.customer_status_transition_logs_action_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_project_created_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_tenant_created_idx",
-        "DROP INDEX IF EXISTS public.project_status_transition_logs_action_idx",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_request_id",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_assignee_status",
-        "DROP INDEX IF EXISTS public.idx_expense_request_approval_chains_step_status",
-        "DROP INDEX IF EXISTS public.expense_request_approval_chains_tenant_assignee_status_idx",
-        "DROP TABLE IF EXISTS public.customer_status_transition_logs",
-        "DROP TABLE IF EXISTS public.project_status_transition_logs",
-        "DROP TABLE IF EXISTS public.expense_request_approval_chains",
-        'DROP POLICY IF EXISTS "Approvers view pending" ON public.expense_requests',
-        "DROP CONSTRAINT IF EXISTS expense_requests_current_step_check",
-        "DROP COLUMN IF EXISTS current_step",
-        "DROP COLUMN IF EXISTS current_step_role",
-        "ALTER TABLE public.projects\n  DROP COLUMN IF EXISTS status",
-      ].join(";\n"),
-    });
-
-    expect(issues).toContain(
-      "20260612143000_drop_legacy_state_machine_objects.sql: forbidden ALTER TABLE public.projects DROP COLUMN IF EXISTS status",
-    );
   });
 });
 

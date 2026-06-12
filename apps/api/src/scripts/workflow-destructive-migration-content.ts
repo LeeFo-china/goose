@@ -61,7 +61,7 @@ export function collectDestructiveMigrationContentIssues(
     }
 
     for (const snippet of requiredSnippets) {
-      if (!content.includes(snippet)) {
+      if (!hasSqlSnippet(content, snippet)) {
         issues.push(`${fileName}: missing ${snippet}`);
       }
     }
@@ -82,6 +82,15 @@ export function collectDestructiveMigrationContentIssues(
 
 function normalizeSqlSnippet(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function hasSqlSnippet(content: string, snippet: string): boolean {
+  const normalizedContent = normalizeSqlSnippet(content);
+  const normalizedSnippet = normalizeSqlSnippet(snippet);
+  const index = normalizedContent.indexOf(normalizedSnippet);
+  if (index < 0) return false;
+  const nextChar = normalizedContent.charAt(index + normalizedSnippet.length);
+  return !nextChar || !/[a-z0-9_]/.test(nextChar);
 }
 
 export async function checkDestructiveMigrationContent(
