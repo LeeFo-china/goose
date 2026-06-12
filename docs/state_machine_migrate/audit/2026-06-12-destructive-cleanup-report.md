@@ -116,4 +116,5 @@ bun run workflow:final-completion-audit \
 ```
 
 Expected: `no_pending_migrations`, `cleanup_readiness`,
-`destructive_cleanup_verify`, and `manual_gate_evidence` are all `ok: true`.
+`destructive_cleanup_verify`, `generated_database_types_clean`, and
+`manual_gate_evidence` are all `ok: true`.

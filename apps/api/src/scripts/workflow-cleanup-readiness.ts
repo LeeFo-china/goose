@@ -132,6 +132,7 @@ function isAllowedReferencePath(path: string): boolean {
   if (path === "apps/api/src/scripts/workflow-cleanup-readiness.ts") return true;
   if (path === "apps/api/src/scripts/workflow-destructive-cleanup-preflight.ts") return true;
   if (path === "apps/api/src/scripts/workflow-destructive-cleanup-verify.ts") return true;
+  if (path === "apps/api/src/scripts/workflow-final-completion-audit.ts") return true;
   return false;
 }
 

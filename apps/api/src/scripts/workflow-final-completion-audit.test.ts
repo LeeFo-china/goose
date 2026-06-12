@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildFinalAuditReport,
+  findLegacyGeneratedTypePatterns,
   parseFinalAuditArgs,
   resolveFinalAuditDatabaseUrl,
 } from "./workflow-final-completion-audit";
@@ -40,6 +41,8 @@ describe("buildFinalAuditReport", () => {
       cleanupReady: true,
       cleanupBlockerCount: 0,
       destructiveCleanupOk: true,
+      generatedTypesClean: true,
+      generatedTypesDetail: "legacy generated types absent",
       manualGateEvidenceOk: true,
       manualGateEvidenceDetail: "evidence_file=manual-gates.json",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
@@ -52,6 +55,11 @@ describe("buildFinalAuditReport", () => {
           name: "destructive_cleanup_verify",
           ok: true,
           detail: "legacy objects absent and workflow runtime consistent",
+        },
+        {
+          name: "generated_database_types_clean",
+          ok: true,
+          detail: "legacy generated types absent",
         },
         {
           name: "manual_gate_evidence",
@@ -70,6 +78,8 @@ describe("buildFinalAuditReport", () => {
       cleanupReady: false,
       cleanupBlockerCount: 2,
       destructiveCleanupOk: false,
+      generatedTypesClean: false,
+      generatedTypesDetail: "legacy generated type patterns=current_step:",
       manualGateEvidenceOk: false,
       manualGateEvidenceDetail: "missing --evidence-file",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
@@ -88,11 +98,37 @@ describe("buildFinalAuditReport", () => {
           detail: "legacy objects remain or workflow runtime is inconsistent",
         },
         {
+          name: "generated_database_types_clean",
+          ok: false,
+          detail: "legacy generated type patterns=current_step:",
+        },
+        {
           name: "manual_gate_evidence",
           ok: false,
           detail: "missing --evidence-file",
         },
       ],
     });
+  });
+});
+
+describe("findLegacyGeneratedTypePatterns", () => {
+  test("finds old state-machine generated type patterns", () => {
+    expect(findLegacyGeneratedTypePatterns([
+      "customer_status_transition_logs: {",
+      "current_step: string",
+      "schedule_project_construction_transition: {",
+    ].join("\n"))).toEqual([
+      "customer_status_transition_logs",
+      "schedule_project_construction_transition",
+      "current_step:",
+    ]);
+  });
+
+  test("passes clean generated type content", () => {
+    expect(findLegacyGeneratedTypePatterns([
+      "workflow_subject_states: {",
+      "workflow_tasks: {",
+    ].join("\n"))).toEqual([]);
   });
 });

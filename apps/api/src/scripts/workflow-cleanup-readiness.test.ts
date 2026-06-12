@@ -24,6 +24,7 @@ describe("classifyCleanupReference", () => {
       "apps/api/src/types/database.ts",
       "apps/api/src/scripts/workflow-cleanup-readiness.test.ts",
       "apps/api/src/scripts/workflow-cleanup-readiness.ts",
+      "apps/api/src/scripts/workflow-final-completion-audit.ts",
       "docs/state_machine_migrate/execution-plan.md",
       "supabase/migrations/20260521143000_create_customer_status_transition_logs.sql",
     ];
@@ -35,7 +36,14 @@ describe("classifyCleanupReference", () => {
         pattern: "customer_status_transition_logs",
         text: "customer_status_transition_logs",
       }).kind
-    )).toEqual(["allowed", "allowed", "allowed", "allowed", "allowed"]);
+    )).toEqual([
+      "allowed",
+      "allowed",
+      "allowed",
+      "allowed",
+      "allowed",
+      "allowed",
+    ]);
   });
 });
 
