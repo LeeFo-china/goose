@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { formatCommandFailure } from "./workflow-command-failure";
 import {
   buildSupabaseDryRunArgs,
-  formatCommandFailure,
   loadManualGateEvidence as loadManualGateEvidenceFile,
   parseSupabaseDryRunMigrations,
 } from "./workflow-destructive-cleanup-preflight";

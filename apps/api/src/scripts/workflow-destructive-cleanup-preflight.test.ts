@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { formatCommandFailure } from "./workflow-command-failure";
 import {
   arePendingMigrationsExpected,
   buildSupabaseDryRunArgs,
   collectManualGateEvidenceReferenceIssues,
-  formatCommandFailure,
   hasAllManualGates,
   loadManualGateEvidence,
   parsePreflightArgs,
@@ -77,6 +77,21 @@ describe("formatCommandFailure", () => {
     expect(detail).toHaveLength(503);
     expect(detail.endsWith("...")).toBe(true);
     expect(detail).not.toContain("\n");
+  });
+
+  test("prefers the real error line over bundled source excerpts", () => {
+    const error = Object.assign(new Error("command failed"), {
+      stderr: [
+        '165 | ${Qh(D.cause," ")}',
+        "166 | }`:D.stack).join(`",
+        "SyntaxError: JSON Parse error: Unable to parse JSON string",
+        "      at ~effect/Effect/successCont (/$bunfs/root/supabase:170:7794)",
+      ].join("\n"),
+    });
+
+    expect(formatCommandFailure(error)).toBe(
+      "SyntaxError: JSON Parse error: Unable to parse JSON string",
+    );
   });
 });
 
