@@ -306,11 +306,12 @@
 - Create: `apps/api/src/services/workflow-subjects.ts`
 - Create: `apps/api/src/services/workflow-tasks.ts`
 - Create: `apps/api/src/repositories/workflow-tasks.ts`
+- Modify: `apps/api/src/schema/workflow-subjects.ts`
 - Modify: `docs/state_machine_migrate/miniprogram-integration.md`
 
 ### Steps
 
-- [ ] **Step 2.1: Add schemas**
+- [x] **Step 2.1: Add schemas**
 
   Extend `apps/api/src/schema/workflow-subjects.ts` with:
 
@@ -332,7 +333,7 @@
   });
   ```
 
-- [ ] **Step 2.2: Add subject API controller**
+- [x] **Step 2.2: Add subject API controller**
 
   Create controller endpoints:
 
@@ -341,7 +342,7 @@
 
   Controller must only parse auth context, params, query, call service, and return `ResponseHandler.success`.
 
-- [ ] **Step 2.3: Add task API controller**
+- [x] **Step 2.3: Add task API controller**
 
   Create endpoints:
 
@@ -350,7 +351,7 @@
 
   `GET /workflow-tasks` must use pagination and must not return unbounded task lists.
 
-- [ ] **Step 2.4: Update mini-program integration doc**
+- [x] **Step 2.4: Update mini-program integration doc**
 
   Update `docs/state_machine_migrate/miniprogram-integration.md` with:
 
@@ -359,7 +360,7 @@
   - Old-to-new field mapping.
   - Compatibility release order.
 
-- [ ] **Step 2.5: Verification**
+- [x] **Step 2.5: Verification**
 
   Run:
 
@@ -371,12 +372,15 @@
 
   Expected: all commands exit 0.
 
+  2026-06-12 status: `bun run api:typecheck`, `bun run api:build`, and
+  `git diff --check` passed after adding the controllers/services/repository.
+
 ### Phase 2 Acceptance
 
-- [ ] New workflow subject state endpoint returns one subject's current state.
-- [ ] Timeline endpoint returns paginated workflow logs.
-- [ ] Task list endpoint is paginated with max `pageSize <= 100`.
-- [ ] Mini-program integration doc includes examples that orange team can implement against.
+- [x] New workflow subject state endpoint returns one subject's current state.
+- [x] Timeline endpoint returns paginated workflow logs.
+- [x] Task list endpoint is paginated with max `pageSize <= 100`.
+- [x] Mini-program integration doc includes examples that orange team can implement against.
 - [ ] Commit:
 
   ```bash

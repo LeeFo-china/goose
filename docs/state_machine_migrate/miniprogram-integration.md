@@ -205,3 +205,4 @@ Content-Type: application/json
 | 日期 | 阶段 | 后端变更 | 小程序动作 |
 | --- | --- | --- | --- |
 | 2026-06-12 | Phase 0/Plan | 输出执行计划和初始对接契约 | 评估页面改造范围 |
+| 2026-06-12 | Phase 2/API | 新增 `/workflow-subjects/:subjectType/:subjectId/state`、`/workflow-subjects/:subjectType/:subjectId/timeline`、`/workflow-tasks`、`/workflow-tasks/:id/complete` 后端实现；待办列表已分页并按当前员工/角色过滤 | 按本文契约接入 `workflow_state.actions` 和 workflow task complete |

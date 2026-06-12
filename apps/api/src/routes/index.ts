@@ -65,6 +65,8 @@ import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
 import PictureLibraryController from "@/controllers/picture-library";
 import VisitorPictureLibraryController from "@/controllers/visitor-picture-library";
 import WorkflowController from "@/controllers/workflows";
+import WorkflowSubjectsController from "@/controllers/workflow-subjects";
+import WorkflowTasksController from "@/controllers/workflow-tasks";
 
 const fullCrudRoutes = {
   list: true,
@@ -129,6 +131,8 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);
   VisitorPictureLibraryController.registerExtraRoutes(app);
+  WorkflowSubjectsController.registerExtraRoutes(app);
+  WorkflowTasksController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);
