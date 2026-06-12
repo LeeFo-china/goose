@@ -79,6 +79,39 @@ describe("collectDestructiveMigrationContentIssues", () => {
     );
   });
 
+  test("does not treat prefixed SQL text as the required drop", () => {
+    const issues = collectDestructiveMigrationContentIssues({
+      [scheduleMigrationFile]:
+        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
+      [migrationFile]: [
+        ...requiredLegacyCleanupDrops.filter((snippet) =>
+          snippet !== "DROP TABLE IF EXISTS public.project_status_transition_logs"
+        ),
+        "xDROP TABLE IF EXISTS public.project_status_transition_logs",
+      ].join(";\n"),
+    });
+
+    expect(issues).toContain(
+      `${migrationFile}: missing DROP TABLE IF EXISTS public.project_status_transition_logs`,
+    );
+  });
+
+  test("accepts a later valid drop after an invalid prefixed match", () => {
+    const issues = collectDestructiveMigrationContentIssues({
+      [scheduleMigrationFile]:
+        "DROP FUNCTION IF EXISTS public.schedule_project_construction_transition;",
+      [migrationFile]: [
+        ...requiredLegacyCleanupDrops,
+        "xDROP TABLE IF EXISTS public.project_status_transition_logs",
+        "DROP TABLE IF EXISTS public.project_status_transition_logs",
+      ].join(";\n"),
+    });
+
+    expect(issues).not.toContain(
+      `${migrationFile}: missing DROP TABLE IF EXISTS public.project_status_transition_logs`,
+    );
+  });
+
   test("does not treat commented required drops as present", () => {
     const issues = collectDestructiveMigrationContentIssues({
       [scheduleMigrationFile]:

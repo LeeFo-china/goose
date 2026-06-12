@@ -93,10 +93,20 @@ function stripSqlComments(value: string): string {
 function hasSqlSnippet(content: string, snippet: string): boolean {
   const normalizedContent = normalizeSqlSnippet(content);
   const normalizedSnippet = normalizeSqlSnippet(snippet);
-  const index = normalizedContent.indexOf(normalizedSnippet);
-  if (index < 0) return false;
-  const nextChar = normalizedContent.charAt(index + normalizedSnippet.length);
-  return !nextChar || !/[a-z0-9_]/.test(nextChar);
+  let index = normalizedContent.indexOf(normalizedSnippet);
+  while (index >= 0) {
+    const previousChar = normalizedContent.charAt(index - 1);
+    const nextChar = normalizedContent.charAt(index + normalizedSnippet.length);
+    if (!isSqlIdentifierChar(previousChar) && !isSqlIdentifierChar(nextChar)) {
+      return true;
+    }
+    index = normalizedContent.indexOf(normalizedSnippet, index + 1);
+  }
+  return false;
+}
+
+function isSqlIdentifierChar(value: string): boolean {
+  return /[a-z0-9_]/.test(value);
 }
 
 export async function checkDestructiveMigrationContent(
