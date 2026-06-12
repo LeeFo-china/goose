@@ -167,6 +167,22 @@ describe("validateManualGateEvidence", () => {
     });
   });
 
+  test("rejects unparseable confirmation timestamps", () => {
+    const result = validateManualGateEvidence({
+      mini_program: {
+        confirmed_at: "after mini-program release",
+      },
+      admin_smoke: {
+        smoke_at: "after admin smoke",
+      },
+    });
+
+    expect(result.invalid).toEqual([
+      "mini_program.confirmed_at: must be a parseable date-time",
+      "admin_smoke.smoke_at: must be a parseable date-time",
+    ]);
+  });
+
   test("reports missing local evidence file references", () => {
     expect(collectManualGateEvidenceReferenceIssues({
       phase_acceptance: {

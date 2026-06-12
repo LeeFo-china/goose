@@ -139,6 +139,8 @@ export function validateManualGateEvidence(
   }
   if (!isNonEmptyString(evidence.mini_program?.confirmed_at)) {
     missing.push("mini_program.confirmed_at");
+  } else if (!isParseableDateTime(evidence.mini_program.confirmed_at)) {
+    invalid.push("mini_program.confirmed_at: must be a parseable date-time");
   }
   if (!isNonEmptyString(evidence.mini_program?.minimum_version)) {
     missing.push("mini_program.minimum_version");
@@ -152,6 +154,8 @@ export function validateManualGateEvidence(
   }
   if (!isNonEmptyString(evidence.admin_smoke?.smoke_at)) {
     missing.push("admin_smoke.smoke_at");
+  } else if (!isParseableDateTime(evidence.admin_smoke.smoke_at)) {
+    invalid.push("admin_smoke.smoke_at: must be a parseable date-time");
   }
   if (!isNonEmptyString(evidence.admin_smoke?.actor)) {
     missing.push("admin_smoke.actor");
@@ -370,6 +374,10 @@ async function buildPreflightReport(
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isParseableDateTime(value: string): boolean {
+  return Number.isFinite(Date.parse(value));
 }
 
 function manualGateEvidenceReferences(

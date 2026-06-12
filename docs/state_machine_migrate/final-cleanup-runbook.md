@@ -18,6 +18,9 @@ field with real evidence:
 | `admin_smoke` | authenticated admin smoke actor, smoke time, and evidence link |
 | `backup_window` | backup id, restore window, and backup/restore evidence |
 
+`mini_program.confirmed_at` and `admin_smoke.smoke_at` must be parseable
+date-time strings, preferably ISO 8601 values with timezone offsets.
+
 Evidence values must be traceable: use either an `http(s)` URL or a
 `docs/state_machine_migrate/` path. Local doc paths must reference existing
 files; free-form notes are rejected by `workflow:destructive-cleanup-preflight`.
