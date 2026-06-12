@@ -179,7 +179,7 @@ async function loadPendingMigrationFiles(): Promise<string[]> {
   }
 }
 
-async function checkSupabaseMigrationListAlignment(): Promise<
+async function checkMigrationHistoryAlignment(): Promise<
   { ok: boolean; detail: string }
 > {
   const databaseUrl = resolveFinalAuditDatabaseUrl();
@@ -262,7 +262,7 @@ export async function buildFinalCompletionAuditReport(
   ] =
     await Promise.all([
       loadPendingMigrationFiles(),
-      checkSupabaseMigrationListAlignment(),
+      checkMigrationHistoryAlignment(),
       runCleanupReadinessScan(),
       loadManualGateEvidence(evidenceFile),
       checkGeneratedDatabaseTypes(),
@@ -289,9 +289,7 @@ export async function buildFinalCompletionAuditReport(
     generatedTypesClean: generatedTypes.ok,
     generatedTypesDetail: generatedTypes.detail,
     manualGateEvidenceOk: manualGateEvidence.ok,
-    manualGateEvidenceDetail: databaseUrl
-      ? manualGateEvidence.detail
-      : `${manualGateEvidence.detail}; missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL`,
+    manualGateEvidenceDetail: manualGateEvidence.detail,
     finalCommitDocumented: finalCommit.ok,
     finalCommitDetail: finalCommit.detail,
   });
