@@ -5,6 +5,7 @@ describe("buildWorkflowMigrationStatusReport", () => {
   test("groups passed checks and failed checks with next actions", () => {
     expect(buildWorkflowMigrationStatusReport({
       ok: false,
+      mode: "final",
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         {
@@ -40,6 +41,7 @@ describe("buildWorkflowMigrationStatusReport", () => {
       ],
     })).toEqual({
       ok: false,
+      mode: "final",
       generated_at: "2026-06-12T00:00:00.000Z",
       completed_checks: ["cleanup_readiness"],
       blockers: [
@@ -86,6 +88,7 @@ describe("buildWorkflowMigrationStatusReport", () => {
   test("summarizes technical-only audit without final commit blocker", () => {
     expect(buildWorkflowMigrationStatusReport({
       ok: true,
+      mode: "technical_only",
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         {
@@ -106,6 +109,7 @@ describe("buildWorkflowMigrationStatusReport", () => {
       ],
     })).toEqual({
       ok: true,
+      mode: "technical_only",
       generated_at: "2026-06-12T00:00:00.000Z",
       completed_checks: [
         "database_url_configured",

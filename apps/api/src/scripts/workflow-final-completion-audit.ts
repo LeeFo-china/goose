@@ -39,6 +39,8 @@ type FinalAuditOptions = {
   includeFinalCommitCheck?: boolean;
 };
 
+export type FinalAuditMode = "final" | "technical_only";
+
 export type FinalAuditCheck = {
   name: string;
   ok: boolean;
@@ -47,6 +49,7 @@ export type FinalAuditCheck = {
 
 export type FinalAuditReport = {
   ok: boolean;
+  mode: FinalAuditMode;
   generated_at: string;
   checks: FinalAuditCheck[];
 };
@@ -98,6 +101,7 @@ export function buildFinalAuditReport(
   generatedAt = new Date().toISOString(),
   options: FinalAuditOptions = {},
 ): FinalAuditReport {
+  const includeFinalCommitCheck = options.includeFinalCommitCheck !== false;
   const checks: FinalAuditCheck[] = [
     {
       name: "database_url_configured",
@@ -141,7 +145,7 @@ export function buildFinalAuditReport(
     },
   ];
 
-  if (options.includeFinalCommitCheck !== false) {
+  if (includeFinalCommitCheck) {
     checks.push({
       name: "final_breaking_commit_documented",
       ok: input.finalCommitDocumented,
@@ -151,6 +155,7 @@ export function buildFinalAuditReport(
 
   return {
     ok: checks.every((check) => check.ok),
+    mode: includeFinalCommitCheck ? "final" : "technical_only",
     generated_at: generatedAt,
     checks,
   };

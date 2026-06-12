@@ -120,8 +120,9 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-comp
 Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 `legacy_expense_columns_absent`, `legacy_indexes_absent`,
 `legacy_policies_absent`, and `workflow_runtime_consistency` are all
-`ok: true`. The technical-only status summary must have an empty `blockers`
-list, and the technical-only final audit must report all technical and manual
+`ok: true`. The technical-only status summary must report
+`mode: "technical_only"` and an empty `blockers` list, and the technical-only
+final audit must report `mode: "technical_only"` with all technical/manual
 gates as `ok: true` before the final breaking cleanup commit.
 
 10. Commit the regenerated database types, cleanup report updates, and

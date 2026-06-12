@@ -14,6 +14,7 @@ export type WorkflowMigrationStatusItem = {
 
 export type WorkflowMigrationStatusReport = {
   ok: boolean;
+  mode: FinalAuditReport["mode"];
   generated_at: string;
   completed_checks: string[];
   blockers: WorkflowMigrationStatusItem[];
@@ -63,6 +64,7 @@ export function buildWorkflowMigrationStatusReport(
 ): WorkflowMigrationStatusReport {
   return {
     ok: audit.ok,
+    mode: audit.mode,
     generated_at: audit.generated_at,
     completed_checks: audit.checks
       .filter((check) => check.ok)

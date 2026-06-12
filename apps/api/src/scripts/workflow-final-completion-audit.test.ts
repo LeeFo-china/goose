@@ -72,6 +72,7 @@ describe("buildFinalAuditReport", () => {
         "latest_commit=refactor(workflow)!: 删除旧状态机数据库对象",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
       ok: true,
+      mode: "final",
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         {
@@ -137,6 +138,7 @@ describe("buildFinalAuditReport", () => {
         "latest commit does not document breaking workflow DB cleanup: feat(workflow): 普通提交",
     }, "2026-06-12T00:00:00.000Z")).toEqual({
       ok: false,
+      mode: "final",
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         {
@@ -213,6 +215,7 @@ describe("buildFinalAuditReport", () => {
     });
 
     expect(report.ok).toBe(true);
+    expect(report.mode).toBe("technical_only");
     expect(report.checks.map((check) => check.name)).not.toContain(
       "final_breaking_commit_documented",
     );

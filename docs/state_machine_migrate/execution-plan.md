@@ -1174,10 +1174,11 @@
 
   Expected: every legacy absence check is `ok: true`, and
   `workflow_runtime_consistency` reports `total_issues=0`.
-  `workflow:final-completion-audit --technical-only` must report all
-  technical and manual gates as `ok: true` before the final cleanup commit.
-  `workflow:migration-status --technical-only` must report an empty
-  `blockers` list at the same point.
+  `workflow:final-completion-audit --technical-only` must report
+  `mode: "technical_only"` and all technical/manual gates as `ok: true`
+  before the final cleanup commit. `workflow:migration-status --technical-only`
+  must report `mode: "technical_only"` and an empty `blockers` list at the
+  same point.
   The full `workflow:final-completion-audit` is intentionally run after the
   final breaking cleanup commit, because it verifies the latest commit
   message.

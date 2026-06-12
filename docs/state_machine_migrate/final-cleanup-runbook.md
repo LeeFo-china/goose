@@ -135,10 +135,11 @@ Expected after apply:
   `legacy_policies_absent` are `ok: true`.
 - `workflow_runtime_consistency` reports `total_issues=0`.
 - Generated database types no longer expose dropped legacy objects.
-- `workflow:final-completion-audit --technical-only` reports all technical
-  and manual checks as `ok: true`, while intentionally omitting the latest
-  commit-message check.
-- `workflow:migration-status --technical-only` has an empty `blockers` list.
+- `workflow:final-completion-audit --technical-only` reports
+  `mode: "technical_only"` and all technical/manual checks as `ok: true`,
+  while intentionally omitting the latest commit-message check.
+- `workflow:migration-status --technical-only` reports
+  `mode: "technical_only"` and has an empty `blockers` list.
 - API and admin checks pass before the final commit.
 
 Do not expect `workflow:final-completion-audit` without `--technical-only` to
@@ -180,6 +181,7 @@ Expected:
   destructive object list.
 - `workflow:final-completion-audit` reports `final_breaking_commit_documented`
   as `ok: true`.
+- `workflow:final-completion-audit` reports `mode: "final"`.
 - `workflow:final-completion-audit` is `ok: true`.
 
 ## Rollback
