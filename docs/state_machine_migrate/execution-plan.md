@@ -999,9 +999,9 @@
 
 - [ ] Phase 0-5 acceptance all checked.
 - [ ] Production backup completed and restore window recorded.
-- [ ] `workflow:migration-status` or `workflow:final-completion-audit` shows
-  local and remote migration history aligned through the last non-destructive
-  migration before cleanup.
+- [ ] `workflow:migration-status` shows local and remote migration history
+  aligned through the last non-destructive migration before cleanup, with only
+  the destructive cleanup pair pending.
 - [ ] Orange team confirms mini-program no longer depends on old `status_actions/current_step` controls.
 - [ ] Admin smoke confirms no old status endpoints are required for normal workflows.
 - [x] `cd apps/api && bun run workflow:cleanup-readiness` exits 0.

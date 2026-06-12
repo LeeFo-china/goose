@@ -28,6 +28,7 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+cd ../..
 ```
 
 Expected before apply:
@@ -53,6 +54,7 @@ Expected before apply:
 Apply only after the pre-apply checks above pass:
 
 ```bash
+cd /Users/leefo/Public/work/gooes
 supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
 
