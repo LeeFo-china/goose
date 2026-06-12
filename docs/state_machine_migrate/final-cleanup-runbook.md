@@ -116,6 +116,9 @@ supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/t
 cd apps/api
 bun run workflow:manual-gates-check \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
+  --technical-only \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 cd ../..
 bun run api:check
 pnpm --dir apps/admin check
@@ -129,11 +132,14 @@ Expected after apply:
   `legacy_policies_absent` are `ok: true`.
 - `workflow_runtime_consistency` reports `total_issues=0`.
 - Generated database types no longer expose dropped legacy objects.
+- `workflow:final-completion-audit --technical-only` reports all technical
+  and manual checks as `ok: true`, while intentionally omitting the latest
+  commit-message check.
 - API and admin checks pass before the final commit.
 
-Do not expect `workflow:final-completion-audit` to be `ok: true` before the
-final commit. The audit intentionally checks that the latest commit documents
-the breaking workflow database cleanup.
+Do not expect `workflow:final-completion-audit` without `--technical-only` to
+be `ok: true` before the final commit. The full audit intentionally checks
+that the latest commit documents the breaking workflow database cleanup.
 
 ## Final Commit
 

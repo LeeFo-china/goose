@@ -1144,6 +1144,9 @@
   supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
+    --technical-only \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   bun run workflow:cleanup-readiness
   cd ../..
   bun run api:typecheck
@@ -1168,8 +1171,11 @@
 
   Expected: every legacy absence check is `ok: true`, and
   `workflow_runtime_consistency` reports `total_issues=0`.
-  `workflow:final-completion-audit` is intentionally run after the final
-  breaking cleanup commit, because it verifies the latest commit message.
+  `workflow:final-completion-audit --technical-only` must report all
+  technical and manual gates as `ok: true` before the final cleanup commit.
+  The full `workflow:final-completion-audit` is intentionally run after the
+  final breaking cleanup commit, because it verifies the latest commit
+  message.
 
 ### Phase 6 Acceptance
 

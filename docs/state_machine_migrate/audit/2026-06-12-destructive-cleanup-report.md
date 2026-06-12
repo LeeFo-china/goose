@@ -109,12 +109,16 @@ consistency, and legacy-object inventory.
 ```bash
 cd apps/api
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
+  --technical-only \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
 Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 `legacy_expense_columns_absent`, `legacy_indexes_absent`,
 `legacy_policies_absent`, and `workflow_runtime_consistency` are all
-`ok: true`.
+`ok: true`. The technical-only final audit must also report all technical and
+manual gates as `ok: true` before the final breaking cleanup commit.
 
 10. Commit the regenerated database types, cleanup report updates, and
     destructive cleanup migration with a breaking cleanup subject:

@@ -35,6 +35,10 @@ export type FinalAuditInput = {
   finalCommitDetail: string;
 };
 
+type FinalAuditOptions = {
+  includeFinalCommitCheck?: boolean;
+};
+
 export type FinalAuditCheck = {
   name: string;
   ok: boolean;
@@ -67,8 +71,11 @@ export function resolveFinalAuditDatabaseUrl(
   return env.SUPABASE_DB_DIRECT_URL || env.SUPABASE_DB_URL || null;
 }
 
-export function parseFinalAuditArgs(argv: string[]): { evidenceFile: string | null } {
+export function parseFinalAuditArgs(
+  argv: string[],
+): { evidenceFile: string | null; technicalOnly: boolean } {
   let evidenceFile: string | null = null;
+  let technicalOnly = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--evidence-file") {
@@ -76,15 +83,20 @@ export function parseFinalAuditArgs(argv: string[]): { evidenceFile: string | nu
       index += 1;
       continue;
     }
+    if (arg === "--technical-only") {
+      technicalOnly = true;
+      continue;
+    }
     if (arg === "--") continue;
     throw new Error(`未知参数: ${arg}`);
   }
-  return { evidenceFile };
+  return { evidenceFile, technicalOnly };
 }
 
 export function buildFinalAuditReport(
   input: FinalAuditInput,
   generatedAt = new Date().toISOString(),
+  options: FinalAuditOptions = {},
 ): FinalAuditReport {
   const checks: FinalAuditCheck[] = [
     {
@@ -127,12 +139,15 @@ export function buildFinalAuditReport(
       ok: input.manualGateEvidenceOk,
       detail: input.manualGateEvidenceDetail,
     },
-    {
+  ];
+
+  if (options.includeFinalCommitCheck !== false) {
+    checks.push({
       name: "final_breaking_commit_documented",
       ok: input.finalCommitDocumented,
       detail: input.finalCommitDetail,
-    },
-  ];
+    });
+  }
 
   return {
     ok: checks.every((check) => check.ok),
@@ -259,7 +274,9 @@ async function checkFinalBreakingCommit(): Promise<
 
 export async function buildFinalCompletionAuditReport(
   evidenceFile: string | null,
+  options: FinalAuditOptions = {},
 ): Promise<FinalAuditReport> {
+  const includeFinalCommitCheck = options.includeFinalCommitCheck !== false;
   const [
     pendingMigrations,
     migrationList,
@@ -276,7 +293,12 @@ export async function buildFinalCompletionAuditReport(
       checkDestructiveMigrationContent(findRepoRoot()),
       loadManualGateEvidence(evidenceFile),
       checkGeneratedDatabaseTypes(),
-      checkFinalBreakingCommit(),
+      includeFinalCommitCheck
+        ? checkFinalBreakingCommit()
+        : Promise.resolve({
+          ok: true,
+          detail: "skipped final commit check in technical-only mode",
+        }),
     ]);
 
   const databaseUrl = resolveFinalAuditDatabaseUrl();
@@ -304,7 +326,7 @@ export async function buildFinalCompletionAuditReport(
     manualGateEvidenceDetail: manualGateEvidence.detail,
     finalCommitDocumented: finalCommit.ok,
     finalCommitDetail: finalCommit.detail,
-  });
+  }, undefined, { includeFinalCommitCheck });
 }
 
 function findRepoRoot(start = process.cwd()): string {
@@ -327,9 +349,10 @@ function summarizeDatabaseUrl(databaseUrl: string | null): {
 }
 
 async function main() {
-  const report = await buildFinalCompletionAuditReport(
-    parseFinalAuditArgs(process.argv.slice(2)).evidenceFile,
-  );
+  const args = parseFinalAuditArgs(process.argv.slice(2));
+  const report = await buildFinalCompletionAuditReport(args.evidenceFile, {
+    includeFinalCommitCheck: !args.technicalOnly,
+  });
   console.log(JSON.stringify(report, null, 2));
   if (!report.ok) process.exit(1);
 }

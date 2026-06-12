@@ -15,6 +15,18 @@ describe("parseFinalAuditArgs", () => {
       "docs/state_machine_migrate/audit/manual-gates.json",
     ])).toEqual({
       evidenceFile: "docs/state_machine_migrate/audit/manual-gates.json",
+      technicalOnly: false,
+    });
+  });
+
+  test("parses technical-only mode", () => {
+    expect(parseFinalAuditArgs([
+      "--technical-only",
+      "--evidence-file",
+      "docs/state_machine_migrate/audit/manual-gates.json",
+    ])).toEqual({
+      evidenceFile: "docs/state_machine_migrate/audit/manual-gates.json",
+      technicalOnly: true,
     });
   });
 
@@ -173,6 +185,37 @@ describe("buildFinalAuditReport", () => {
         },
       ],
     });
+  });
+
+  test("omits final commit gate in technical-only mode", () => {
+    const report = buildFinalAuditReport({
+      databaseUrlConfigured: true,
+      databaseUrlDetail: "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured",
+      pendingMigrations: [],
+      migrationListAligned: true,
+      migrationListDetail: "aligned=2",
+      cleanupReady: true,
+      cleanupBlockerCount: 0,
+      destructiveMigrationContentOk: true,
+      destructiveMigrationContentDetail: "expected destructive drop targets present",
+      destructiveCleanupOk: true,
+      destructiveCleanupDetail:
+        "legacy objects absent and workflow runtime consistent",
+      generatedTypesClean: true,
+      generatedTypesDetail: "legacy generated types absent",
+      manualGateEvidenceOk: true,
+      manualGateEvidenceDetail: "evidence_file=manual-gates.json",
+      finalCommitDocumented: false,
+      finalCommitDetail:
+        "latest commit does not document breaking workflow DB cleanup",
+    }, "2026-06-12T00:00:00.000Z", {
+      includeFinalCommitCheck: false,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.checks.map((check) => check.name)).not.toContain(
+      "final_breaking_commit_documented",
+    );
   });
 });
 
