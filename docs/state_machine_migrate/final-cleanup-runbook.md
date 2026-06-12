@@ -116,11 +116,9 @@ supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/t
 cd apps/api
 bun run workflow:manual-gates-check \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
-  --technical-only \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status:technical \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
-  --technical-only \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:technical-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 cd ../..
 bun run api:check
@@ -135,10 +133,10 @@ Expected after apply:
   `legacy_policies_absent` are `ok: true`.
 - `workflow_runtime_consistency` reports `total_issues=0`.
 - Generated database types no longer expose dropped legacy objects.
-- `workflow:final-completion-audit --technical-only` reports
+- `workflow:technical-completion-audit` reports
   `mode: "technical_only"` and all technical/manual checks as `ok: true`,
   while intentionally omitting the latest commit-message check.
-- `workflow:migration-status --technical-only` reports
+- `workflow:migration-status:technical` reports
   `mode: "technical_only"` and has an empty `blockers` list.
 - API and admin checks pass before the final commit.
 

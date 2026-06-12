@@ -109,11 +109,9 @@ consistency, and legacy-object inventory.
 ```bash
 cd apps/api
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
-bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
-  --technical-only \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status:technical \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
-bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
-  --technical-only \
+bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:technical-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
