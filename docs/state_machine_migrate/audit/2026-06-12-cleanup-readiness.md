@@ -180,10 +180,12 @@ display:
 | blocker references | `0` |
 | blocker files | `0` |
 
-## Pattern Counts
+## Historical Pattern Counts
 
-The scanner counts both blocking production references and allowed historical
-references in docs, migrations, generated types, and tests.
+This table records the early local scan shape. It intentionally counts both
+blocking production references and allowed historical references in docs,
+migrations, generated types, and tests. The latest readiness result is
+`ready: true` with zero blocker references.
 
 | pattern | count |
 | --- | ---: |
@@ -198,9 +200,9 @@ references in docs, migrations, generated types, and tests.
 | `current_step_role` | 16 |
 | `status-actions` | 15 |
 
-## First Blocker Files
+## Initial First Blocker Files
 
-The first blocker files from the local scan:
+The first blocker files from the initial local scan were:
 
 | file | cleanup implication |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前系统已经具备新的 workflow 基础设施，包括流程定义、版本快照、节点/连线、运行实例、运行节点、待办任务和流转日志。与此同时，客户、项目、费用审批仍保留旧状态机写路径和旧读模型：
+方案制定时，系统已经具备新的 workflow 基础设施，包括流程定义、版本快照、节点/连线、运行实例、运行节点、待办任务和流转日志。与此同时，客户、项目、费用审批仍保留旧状态机写路径和旧读模型：
 
 - 客户状态接口仍使用 `CustomerStatusActionConfig`、`resolveCustomerStatusTransition`、`customer_status_transition_logs`。
 - 项目状态接口仍使用 `ProjectStatusActionConfig`、`resolveProjectStatusTransition`、`project_status_transition_logs`，排期开工还依赖 `schedule_project_construction_transition` RPC。
@@ -10,6 +10,39 @@
 - 任务中心、后台详情 bootstrap、小程序自助端接口仍读取旧状态字段或旧动作列表。
 
 目标不是再做一层兼容，而是最终让系统只以 workflow runtime 作为状态流转事实来源，并清除旧状态机的表、列、RPC、索引、领域配置和 API 写路径。
+
+## 当前执行状态
+
+截至 2026-06-12，本方案已经按
+`docs/state_machine_migrate/execution-plan.md` 分阶段执行到 Phase 6
+本地准备状态：
+
+- 客户/项目旧 `status-actions`、`status-transition`、
+  `status-transitions` API 路由已移除，后台正常流程改用
+  workflow subject state、workflow timeline 和 workflow task complete。
+- 任务中心、费用列表、费用详情、客户/项目相关 bootstrap 已切到
+  `workflow_tasks` / `workflow_subject_states` 读路径。
+- 费用申请不再读写旧 `expense_request_approval_chains`，也不再读写
+  `expense_requests.current_step/current_step_role`；直接费用
+  `submit/approve/reject/cancel/pay` 接口作为业务快捷入口保留，但内部
+  使用 workflow task/subject state 推进流程。
+- 回填脚本不再读取 `expense_requests.current_step`；费用 pending 节点由
+  `expense_request_approvals` 审计记录推导。
+- 本地 `workflow:cleanup-readiness` 已达到 `ready: true`、`0` 个 blocker。
+- 破坏性清理 migration 已准备：
+  `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`。
+
+仍未在本工作区完成的外部门禁：
+
+- `supabase migration list` 因 `SUPABASE_DB_PASSWORD` 认证失败，尚不能确认
+  Local/Remote 对齐。
+- 破坏性 migration 尚未在目标 Supabase 环境 apply，`apps/api/src/types/database.ts`
+  也必须等目标环境 apply 后再重新生成。
+- 小程序最低版本和 staging/admin/mini-program smoke 仍需外部验收确认。
+
+注意：`customers.status`、`projects.status`、`expense_requests.status`
+目前保留为业务状态字段。workflow runtime 已经负责可操作节点状态，
+但删除这些业务状态列需要单独的数据产品决策和读模型验收。
 
 ## 目标
 
@@ -62,7 +95,7 @@
 
 ### 旧状态机范围
 
-已在代码和 migration 中发现的旧系统范围：
+基线审计时在代码和 migration 中发现的旧系统范围：
 
 | 域 | 旧入口 | 旧存储/配置 | 迁移目标 |
 | --- | --- | --- | --- |
@@ -307,8 +340,10 @@ WHERE pronamespace = 'public'::regnamespace
 
 费用回填：
 
-- 按 `expense_requests.status/current_step` 映射到费用 workflow 当前节点。
-- 将 `expense_request_approval_chains` 转为历史 node runs 和 pending tasks。
+- 按 `expense_requests.status` 和 `expense_request_approvals` 审计记录推导
+  费用 workflow 当前节点；pending 状态下，最新轮次已有经理通过时进入
+  `finance_review`，否则进入 `manager_review`。
+- 旧 `expense_request_approval_chains` 不再作为运行时或回填输入。
 - `manager_review`、`finance_review`、`payment` 分别对应 approval/payment 节点。
 - 保留审批人、动作人、原因、时间到 `workflow_transition_logs.context.legacy`。
 
@@ -328,18 +363,18 @@ GROUP BY c.tenant_id;
 ```
 
 ```sql
--- pending 费用审批链应都有对应 workflow task
+-- pending 费用申请应都有对应 workflow task
 SELECT count(*) AS missing_task_count
-FROM public.expense_request_approval_chains chain
+FROM public.expense_requests requests
 LEFT JOIN public.workflow_instances wi
-  ON wi.tenant_id = chain.tenant_id
+  ON wi.tenant_id = requests.tenant_id
  AND wi.subject_type = 'expense_request'
- AND wi.subject_id = chain.expense_request_id::text
+ AND wi.subject_id = requests.id::text
 LEFT JOIN public.workflow_tasks task
-  ON task.tenant_id = chain.tenant_id
+  ON task.tenant_id = requests.tenant_id
  AND task.instance_id = wi.id
  AND task.status = 'pending'
-WHERE chain.status IN ('pending', 'current')
+WHERE requests.status IN ('pending', 'approved')
   AND task.id IS NULL;
 ```
 
@@ -500,8 +535,9 @@ supabase migration list
 5. 回填历史 workflow 实例、节点、任务和日志。
 6. 切换后台、小程序、任务中心读路径。
 7. 运行一个发布周期，只读保留旧表，观察告警。
-8. 执行破坏性清理 migration。
-9. 删除旧代码并重新生成数据库类型。
+8. 准备破坏性清理 migration。当前已完成：
+   `20260612143000_drop_legacy_state_machine_objects.sql`。
+9. 在目标环境完成 migration apply 后重新生成数据库类型。
 10. 完成 smoke、migration list、数据对账和小程序合同测试。
 
 ## 关键风险
