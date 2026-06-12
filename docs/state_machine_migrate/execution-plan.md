@@ -1030,7 +1030,9 @@
   The evidence file must include Phase 4 backfill/reconciliation evidence,
   Phase 5 authenticated API smoke evidence, mini-program workflow API contract
   upgrade evidence, mini-program rollout confirmation, admin smoke evidence,
-  and backup/restore-window evidence. Any evidence value that points under
+  and backup/restore-window evidence. Mini-program confirmation must include
+  `confirmed_by`, `confirmed_at`, and `minimum_version`; admin smoke must
+  include `actor` and `smoke_at`. Any evidence value that points under
   `docs/state_machine_migrate/` must reference an existing file; external
   release notes or tickets may use URLs.
 

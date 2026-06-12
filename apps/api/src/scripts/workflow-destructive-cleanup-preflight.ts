@@ -180,6 +180,12 @@ export function validateManualGateEvidence(
   if (evidence.mini_program?.confirmed !== true) {
     missing.push("mini_program.confirmed");
   }
+  if (!isNonEmptyString(evidence.mini_program?.confirmed_by)) {
+    missing.push("mini_program.confirmed_by");
+  }
+  if (!isNonEmptyString(evidence.mini_program?.confirmed_at)) {
+    missing.push("mini_program.confirmed_at");
+  }
   if (!isNonEmptyString(evidence.mini_program?.minimum_version)) {
     missing.push("mini_program.minimum_version");
   }
@@ -189,6 +195,12 @@ export function validateManualGateEvidence(
 
   if (evidence.admin_smoke?.confirmed !== true) {
     missing.push("admin_smoke.confirmed");
+  }
+  if (!isNonEmptyString(evidence.admin_smoke?.smoke_at)) {
+    missing.push("admin_smoke.smoke_at");
+  }
+  if (!isNonEmptyString(evidence.admin_smoke?.actor)) {
+    missing.push("admin_smoke.actor");
   }
   if (!isNonEmptyString(evidence.admin_smoke?.evidence)) {
     missing.push("admin_smoke.evidence");
