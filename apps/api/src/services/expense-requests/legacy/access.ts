@@ -136,19 +136,7 @@ export async function assertCanOperateExpenseRequest(this: any,
     }
   }
 
-export function getProcessPermissionForQuery(this: any, params: ExpenseRequestListQueryType) {
-    if (params.status === "pending" && params.current_step === "manager_review") {
-      return "expense_request.approve_manager" as const;
-    }
-
-    if (params.status === "pending" && params.current_step === "finance_review") {
-      return "expense_request.approve_finance" as const;
-    }
-
-    if (params.status === "approved" && params.current_step === "payment") {
-      return "expense_request.pay" as const;
-    }
-
+export function getProcessPermissionForQuery(this: any, _params: ExpenseRequestListQueryType) {
     return null;
   }
 

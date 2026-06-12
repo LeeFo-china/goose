@@ -89,6 +89,16 @@ display:
 | blocker files | `22` |
 | `expense-requests/todo` blocker references | `0` |
 
+2026-06-12 after removing legacy `current_step` list filtering:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `98` |
+| blocker files | `20` |
+| `current_step` list filter references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -152,6 +162,8 @@ because the system is still in the compatibility window:
   using workflow tasks and only batch-load expense summary fields by id;
 - the old `/expense-requests/todo` endpoint, query schema, and service method
   have been removed; task-center and clients should use workflow task surfaces;
+- `/expense-requests` list/stats no longer accept or apply legacy
+  `current_step` filters; workflow task endpoints own actionable node filters;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

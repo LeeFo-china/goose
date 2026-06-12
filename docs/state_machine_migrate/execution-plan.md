@@ -795,6 +795,10 @@
   and its service method have been removed. The cleanup readiness scanner now
   treats this endpoint pattern as a blocker so it cannot silently reappear.
 
+  2026-06-12 progress: `/expense-requests` list/stats query handling no longer
+  exposes or applies legacy `current_step` filters. Clients that need node-level
+  actionable work should use `/workflow-tasks` with `subject_type` filters.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

@@ -18,7 +18,6 @@ export async function list(this: any,
     project_id,
     status,
     mode,
-    current_step,
     keyword,
     created_from,
     created_to,
@@ -50,10 +49,6 @@ export async function list(this: any,
 
   if (mode) {
     query = query.eq("mode", mode);
-  }
-
-  if (current_step) {
-    query = query.eq("current_step", current_step);
   }
 
   if (created_from) {
@@ -121,7 +116,6 @@ export async function listStatsRows(this: any,
     project_id,
     status,
     mode,
-    current_step,
     keyword,
     created_from,
     created_to,
@@ -136,7 +130,6 @@ export async function listStatsRows(this: any,
       project_id,
       mode,
       status,
-      current_step,
       total_amount,
       created_at
     `);
@@ -150,7 +143,6 @@ export async function listStatsRows(this: any,
   if (project_id) query = query.eq("project_id", project_id);
   if (status) query = query.eq("status", status);
   if (mode) query = query.eq("mode", mode);
-  if (current_step) query = query.eq("current_step", current_step);
   if (created_from) query = query.gte("created_at", created_from);
   if (created_to) query = query.lte("created_at", created_to);
   if (keyword) {
@@ -171,7 +163,6 @@ export async function listStatsRows(this: any,
     project_id: string | null;
     mode: string;
     status: string;
-    current_step: string;
     total_amount: number | string | null;
     created_at: string | null;
   }>;
