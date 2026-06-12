@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   arePendingMigrationsExpected,
   buildSupabaseDryRunArgs,
+  collectManualGateEvidenceReferenceIssues,
   hasAllManualGates,
   parsePreflightArgs,
   parseSupabaseDryRunMigrations,
@@ -81,10 +82,10 @@ describe("validateManualGateEvidence", () => {
       phase_acceptance: {
         phase4_backfill_confirmed: true,
         phase4_reconciliation_evidence:
-          "docs/state_machine_migrate/audit/staging-backfill.md",
+          "docs/state_machine_migrate/audit/2026-06-12-backfill-report.md",
         phase5_api_smoke_confirmed: true,
         phase5_api_smoke_evidence:
-          "docs/state_machine_migrate/audit/phase5-smoke.md",
+          "docs/state_machine_migrate/audit/2026-06-12-phase5-verification.md",
       },
       api_contract: {
         workflow_state_actions_confirmed: true,
@@ -96,19 +97,20 @@ describe("validateManualGateEvidence", () => {
       mini_program: {
         confirmed: true,
         minimum_version: "2.8.0",
-        evidence: "Orange release note URL",
+        evidence: "https://example.com/orange-release-note",
       },
       admin_smoke: {
         confirmed: true,
-        evidence: "docs/state_machine_migrate/audit/admin-smoke.md",
+        evidence: "docs/state_machine_migrate/audit/2026-06-12-phase5-verification.md",
       },
       backup_window: {
         confirmed: true,
         backup_id: "backup-20260612",
         restore_window: "2026-06-12 22:00-23:00 Asia/Shanghai",
-        evidence: "Supabase PITR checkpoint",
+        evidence:
+          "docs/state_machine_migrate/audit/2026-06-12-destructive-cleanup-report.md#rollback",
       },
-    })).toEqual({ ok: true, missing: [] });
+    })).toEqual({ ok: true, missing: [], invalid: [] });
   });
 
   test("reports missing manual gate evidence fields", () => {
@@ -134,6 +136,21 @@ describe("validateManualGateEvidence", () => {
         "backup_window.restore_window",
         "backup_window.evidence",
       ],
+      invalid: [],
     });
+  });
+
+  test("reports missing local evidence file references", () => {
+    expect(collectManualGateEvidenceReferenceIssues({
+      phase_acceptance: {
+        phase4_reconciliation_evidence:
+          "docs/state_machine_migrate/audit/missing-backfill.md",
+      },
+      mini_program: {
+        evidence: "https://example.com/release",
+      },
+    })).toEqual([
+      "phase_acceptance.phase4_reconciliation_evidence: missing local evidence path docs/state_machine_migrate/audit/missing-backfill.md",
+    ]);
   });
 });

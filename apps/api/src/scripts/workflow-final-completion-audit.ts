@@ -216,11 +216,15 @@ async function loadManualGateEvidence(
   const path = resolve(findRepoRoot(), evidenceFile);
   const raw = await readFile(path, "utf8");
   const validation = validateManualGateEvidence(JSON.parse(raw));
+  const problems = [
+    ...validation.missing.map((field) => `missing=${field}`),
+    ...validation.invalid.map((issue) => `invalid=${issue}`),
+  ];
   return {
     ok: validation.ok,
     detail: validation.ok
       ? `evidence_file=${evidenceFile}`
-      : `evidence_file=${evidenceFile}; missing=${validation.missing.join(", ")}`,
+      : `evidence_file=${evidenceFile}; ${problems.join(", ")}`,
   };
 }
 

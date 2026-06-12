@@ -148,8 +148,9 @@ export function buildSupabaseDryRunArgs(
 
 export function validateManualGateEvidence(
   evidence: ManualGateEvidence,
-): { ok: boolean; missing: string[] } {
+): { ok: boolean; missing: string[]; invalid: string[] } {
   const missing: string[] = [];
+  const invalid = collectManualGateEvidenceReferenceIssues(evidence);
   if (evidence.phase_acceptance?.phase4_backfill_confirmed !== true) {
     missing.push("phase_acceptance.phase4_backfill_confirmed");
   }
@@ -206,7 +207,22 @@ export function validateManualGateEvidence(
     missing.push("backup_window.evidence");
   }
 
-  return { ok: missing.length === 0, missing };
+  return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
+}
+
+export function collectManualGateEvidenceReferenceIssues(
+  evidence: ManualGateEvidence,
+  repoRoot = findRepoRoot(),
+): string[] {
+  const issues: string[] = [];
+  for (const [field, value] of manualGateEvidenceReferences(evidence)) {
+    if (!isNonEmptyString(value)) continue;
+    const path = normalizeLocalEvidencePath(value);
+    if (path && !existsSync(resolve(repoRoot, path))) {
+      issues.push(`${field}: missing local evidence path ${path}`);
+    }
+  }
+  return issues;
 }
 
 function databaseUrl(env: EnvLike = process.env): string | null {
@@ -220,11 +236,15 @@ async function loadManualGateEvidence(
   const raw = await readFile(path, "utf8");
   const parsed = JSON.parse(raw) as ManualGateEvidence;
   const validation = validateManualGateEvidence(parsed);
+  const problems = [
+    ...validation.missing.map((field) => `missing=${field}`),
+    ...validation.invalid.map((issue) => `invalid=${issue}`),
+  ];
   return {
     ok: validation.ok,
     detail: validation.ok
       ? `evidence_file=${evidenceFile}`
-      : `evidence_file=${evidenceFile}; missing=${validation.missing.join(", ")}`,
+      : `evidence_file=${evidenceFile}; ${problems.join(", ")}`,
   };
 }
 
@@ -363,6 +383,33 @@ async function buildPreflightReport(
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function manualGateEvidenceReferences(
+  evidence: ManualGateEvidence,
+): Array<[string, unknown]> {
+  return [
+    [
+      "phase_acceptance.phase4_reconciliation_evidence",
+      evidence.phase_acceptance?.phase4_reconciliation_evidence,
+    ],
+    [
+      "phase_acceptance.phase5_api_smoke_evidence",
+      evidence.phase_acceptance?.phase5_api_smoke_evidence,
+    ],
+    ["api_contract.evidence", evidence.api_contract?.evidence],
+    ["mini_program.evidence", evidence.mini_program?.evidence],
+    ["admin_smoke.evidence", evidence.admin_smoke?.evidence],
+    ["backup_window.evidence", evidence.backup_window?.evidence],
+  ];
+}
+
+function normalizeLocalEvidencePath(value: string): string | null {
+  const trimmed = value.trim();
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return null;
+  const [path] = trimmed.split("#");
+  if (!path?.startsWith("docs/state_machine_migrate/")) return null;
+  return path;
 }
 
 function findRepoRoot(start = process.cwd()): string {
