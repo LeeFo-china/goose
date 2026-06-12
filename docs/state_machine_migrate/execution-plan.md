@@ -720,6 +720,13 @@
   `pay`, so mini-program task completion updates both workflow runtime and
   expense request status/current step during the compatibility window.
 
+  `/workflow-tasks/:id/complete` also bridges `project` workflow tasks into the
+  existing project status service for the linear construction flow and explicit
+  `pause_project`/`mark_invalid`/`resume_project` actions. Required business
+  fields, such as `signed_amount`, `start_date`, and
+  `construction_manager_employee_id`, are still validated by the project status
+  service.
+
 - [x] **Step 5.2: Customer self-service includes workflow_state**
 
   Add `workflow_state` to mini-program bootstrap/detail payloads that currently expose project/customer status.

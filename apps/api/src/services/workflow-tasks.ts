@@ -12,6 +12,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
+import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 
@@ -57,6 +58,19 @@ class WorkflowTaskService {
     };
     if (task.instance.subject_type === "expense_request") {
       const bridged = await workflowTaskExpenseBridge.complete({
+        authContext,
+        task: {
+          node_key: task.node_key,
+          instance: { subject_id: task.instance.subject_id },
+        },
+        action: input.action,
+        reason: input.reason ?? null,
+        output,
+      });
+      if (bridged) return bridged;
+    }
+    if (task.instance.subject_type === "project") {
+      const bridged = await workflowTaskProjectBridge.complete({
         authContext,
         task: {
           node_key: task.node_key,
