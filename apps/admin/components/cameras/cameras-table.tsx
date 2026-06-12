@@ -100,10 +100,10 @@ const columns: ColumnDef<CameraRecord>[] = [
     cell: ({ row }) => (
       <div className="flex flex-wrap gap-1">
         <Badge variant={row.original.can_view ? "success" : "secondary"}>
-          {row.original.can_view ? "可查看" : "隐藏"}
+          {row.original.can_view ? "客户可见" : "客户隐藏"}
         </Badge>
-        <Badge variant={row.original.can_control ? "warning" : "outline"}>
-          {row.original.can_control ? "可控制" : "不可控"}
+        <Badge variant="outline">
+          {row.original.can_control ? "云台控制" : "不可控制"}
         </Badge>
       </div>
     ),

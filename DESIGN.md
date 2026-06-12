@@ -172,6 +172,25 @@ Depth is mostly conveyed through borders, tonal layering, sticky headers, and sm
 - **Border:** warm low-contrast border is the default grouping tool.
 - **Internal Padding:** 20px for cards and dialog sections; 12px for compact nested operational rows.
 
+### Grouped Tabs
+- **Placement:** grouped tabs for peer work areas should sit directly on the
+  parent card edge, usually in the card header row. Do not wrap them in a
+  separate pill, segmented-control shell, tinted panel, or nested card.
+- **Active State:** use text weight plus a 2px bottom border in `primary` or
+  Gooes yellow. Avoid full filled backgrounds for active tabs unless the tab
+  controls a compact form field rather than a page/workspace area.
+- **Inactive State:** inactive tabs use muted text on the card background with
+  no border box. They should read as navigation, not as secondary buttons.
+- **Spacing:** keep tab labels at 14px, medium weight, with 20px horizontal
+  gap between peer tabs. The tab row may share the same line as compact summary
+  metadata, but should not force an extra container around that metadata.
+- **Responsive:** on small screens, let the tab row scroll horizontally if
+  labels cannot fit. Do not shrink text below 14px, stack tab labels into
+  multiple button rows, or let badges overlap the tab row.
+- **Use Cases:** use this style for same-level workspace switches such as
+  `项目摄像头 / 设备接入`. Reserve heavier segmented controls for dense filters,
+  binary modes, or toolbars where the control itself is the task.
+
 ### List Pages
 
 List pages are the default pattern for customers, projects, employees, expenses,
@@ -214,6 +233,9 @@ is the reference implementation.
 - Prefer a flat surface: border plus white `bg-card`; avoid decorative shadows.
 - The card should fill the available page height when the list is the primary
   task. Use a vertical flex layout with `min-h-0` so the table region can scroll.
+- Fixed-height list pages should constrain the page root to the available
+  viewport height and hide page-level overflow. The browser/document should not
+  gain a vertical scrollbar for ordinary list browsing.
 - Keep the card header, table area, and footer visually separated by borders and
   tonal layering rather than stacked shadows.
 - The list footer stays fixed at the bottom of the card. Pagination controls and
@@ -231,6 +253,9 @@ is the reference implementation.
 
 #### Data Table
 - The table is the main content area and should occupy remaining card height.
+- Vertical scrolling belongs inside the table region, not on the page. Keep the
+  filter toolbar and pagination footer fixed within the card while table rows
+  scroll between them.
 - Use horizontal overflow for wide datasets instead of compressing columns until
   text becomes unreadable.
 - A sticky table header is preferred inside fixed-height list cards.
