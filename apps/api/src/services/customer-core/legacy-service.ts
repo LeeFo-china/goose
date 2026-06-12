@@ -1,6 +1,5 @@
 import type {
   CustomerStatusTransitionInput,
-  CustomerStatusTransitionListQuery,
 } from "@/schema/customer";
 import type { AuthContext } from "@/services/authorization";
 import { customerStatusService } from "@/services/customer-status";
@@ -72,14 +71,6 @@ class CustomerCoreService {
     customerId: string;
   }) {
     return customerStatusService.listCustomerStatusActions(input);
-  }
-
-  listCustomerStatusTransitions(input: {
-    authContext: AuthContext;
-    customerId: string;
-    query: CustomerStatusTransitionListQuery;
-  }) {
-    return customerStatusService.listCustomerStatusTransitions(input);
   }
 
   getCustomerDetail(input: Parameters<typeof getCustomerDetail>[0]) {

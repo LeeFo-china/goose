@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { customerCoreRepository } from "@/repositories/customer-core";
-import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
 import { projectRepository } from "@/repositories/projects";
 import { projectStatusTransitionRepository } from "@/repositories/project-status-transitions";
 import type {
@@ -429,35 +428,17 @@ class ProjectStatusService {
       payload: { status: "signed" },
     });
 
-    const workflowRuntimeMetadata =
-      await customerWorkflowRuntimeService.syncStatusTransition({
-        authContext: input.authContext,
-        tenantId: input.tenantId,
-        customerId,
-        fromStatus,
-        toStatus: "signed",
-        action: "mark_signed",
-        source: "project_status",
-        extraContext: {
-          project_id: input.project.id,
-          project_action: "sign_contract",
-        },
-      });
-
-    await customerStatusTransitionRepository.create({
+    await customerWorkflowRuntimeService.syncStatusTransition({
+      authContext: input.authContext,
       tenantId: input.tenantId,
       customerId,
       fromStatus,
       toStatus: "signed",
       action: "mark_signed",
-      operatorEmployeeId: input.authContext.employeeId ?? null,
-      operatorAuthUserId: input.authContext.authUserId,
-      reason: null,
-      metadata: {
-        source: "project_status",
+      source: "project_status",
+      extraContext: {
         project_id: input.project.id,
         project_action: "sign_contract",
-        workflow_runtime: workflowRuntimeMetadata,
       },
     });
   }

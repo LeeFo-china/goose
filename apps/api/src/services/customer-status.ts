@@ -1,11 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import { customerCoreRepository } from "@/repositories/customer-core";
 import { customerPropertyRepository } from "@/repositories/customer-properties";
-import { customerStatusTransitionRepository } from "@/repositories/customer-status-transitions";
 import { projectRepository } from "@/repositories/projects";
 import type {
   CustomerStatusTransitionInput,
-  CustomerStatusTransitionListQuery,
 } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
@@ -197,22 +195,6 @@ class CustomerStatusService {
       });
     }
 
-    await customerStatusTransitionRepository.create({
-      tenantId,
-      customerId: input.customerId,
-      fromStatus: transition.fromStatus,
-      toStatus: transition.toStatus,
-      action: input.payload.action,
-      operatorEmployeeId: input.authContext.employeeId ?? null,
-      operatorAuthUserId: input.authContext.authUserId,
-      reason,
-      metadata: {
-        ...input.payload.metadata,
-        ...designProjectMetadata,
-        workflow_runtime: workflowRuntimeMetadata,
-      },
-    });
-
     return customer;
   }
 
@@ -260,74 +242,6 @@ class CustomerStatusService {
       actions: listCustomerStatusActions({
         fromStatus,
       }),
-    };
-  }
-
-  async listCustomerStatusTransitions(input: {
-    authContext: AuthContext;
-    customerId: string;
-    query: CustomerStatusTransitionListQuery;
-  }) {
-    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const customer = await customerCoreRepository.findById({
-      customerId: input.customerId,
-      tenantId,
-    });
-    if (!customer) {
-      throw Errors.badRequest("客户不存在");
-    }
-
-    const canAccess = await accessPolicyService.canAccessCustomer(
-      input.authContext,
-      customer,
-      "customer.read",
-    );
-    if (!canAccess) {
-      throw Errors.forbidden();
-    }
-
-    const result = await customerStatusTransitionRepository.listByCustomer({
-      customerId: input.customerId,
-      tenantId,
-      page: input.query.page,
-      pageSize: input.query.pageSize,
-    });
-
-    return {
-      rows: result.rows,
-      pagination: {
-        page: input.query.page,
-        pageSize: input.query.pageSize,
-        total: result.total,
-        totalPages: result.total > 0
-          ? Math.ceil(result.total / input.query.pageSize)
-          : 0,
-      },
-    };
-  }
-
-  async listCustomerStatusTransitionsForCustomer(input: {
-    tenantId: string;
-    customerId: string;
-    query: CustomerStatusTransitionListQuery;
-  }) {
-    const result = await customerStatusTransitionRepository.listByCustomer({
-      customerId: input.customerId,
-      tenantId: input.tenantId,
-      page: input.query.page,
-      pageSize: input.query.pageSize,
-    });
-
-    return {
-      rows: result.rows,
-      pagination: {
-        page: input.query.page,
-        pageSize: input.query.pageSize,
-        total: result.total,
-        totalPages: result.total > 0
-          ? Math.ceil(result.total / input.query.pageSize)
-          : 0,
-      },
     };
   }
 

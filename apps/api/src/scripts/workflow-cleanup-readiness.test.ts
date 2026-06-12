@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildCleanupReadinessReport,
   classifyCleanupReference,
@@ -98,5 +99,30 @@ describe("buildCleanupReadinessReport", () => {
     expect(report.blockers[0]?.path).toBe(
       "apps/api/src/repositories/customer-status-transitions.ts",
     );
+  });
+});
+
+describe("customer status transition log cleanup", () => {
+  test("customer status services no longer depend on legacy transition logs", () => {
+    const legacyRepositoryPath = "src/repositories/customer-status-transitions.ts";
+    const sourcePaths = [
+      legacyRepositoryPath,
+      "src/services/customer-status.ts",
+      "src/services/project-status.ts",
+    ];
+    const existingSources = sourcePaths
+      .filter((path) => existsSync(path))
+      .map((path) => ({
+        path: `apps/api/${path}`,
+        content: readFileSync(path, "utf8"),
+      }));
+
+    const references = scanCleanupReferences(existingSources).filter((reference) =>
+      reference.path.includes("customer-status") ||
+      reference.text.includes("customerStatusTransitionRepository")
+    );
+
+    expect(existsSync(legacyRepositoryPath)).toBe(false);
+    expect(references).toEqual([]);
   });
 });

@@ -811,6 +811,11 @@
   the compatibility window, submit still reuses any existing stored chain until
   the remaining internal approval-chain runtime mapping is removed.
 
+  2026-06-12 progress: customer status changes no longer write
+  `customer_status_transition_logs`, and the old customer transition-log
+  repository has been removed. Customer status changes still update the
+  customer business status and sync workflow runtime/subject state.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
