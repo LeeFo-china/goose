@@ -8,6 +8,11 @@ describe("buildWorkflowMigrationStatusReport", () => {
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         {
+          name: "database_url_configured",
+          ok: false,
+          detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
+        },
+        {
           name: "cleanup_readiness",
           ok: true,
           detail: "blockers=0",
@@ -33,6 +38,13 @@ describe("buildWorkflowMigrationStatusReport", () => {
       generated_at: "2026-06-12T00:00:00.000Z",
       completed_checks: ["cleanup_readiness"],
       blockers: [
+        {
+          phase: "Phase 6",
+          check: "database_url_configured",
+          detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
+          next_action:
+            "Configure SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL for the explicit destructive cleanup target.",
+        },
         {
           phase: "Phase 4/5/External Gates",
           check: "manual_gate_evidence",

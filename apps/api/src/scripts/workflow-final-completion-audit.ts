@@ -15,6 +15,8 @@ import {
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 
 export type FinalAuditInput = {
+  databaseUrlConfigured: boolean;
+  databaseUrlDetail: string;
   pendingMigrations: readonly string[];
   migrationListAligned: boolean;
   migrationListDetail: string;
@@ -82,6 +84,11 @@ export function buildFinalAuditReport(
   generatedAt = new Date().toISOString(),
 ): FinalAuditReport {
   const checks: FinalAuditCheck[] = [
+    {
+      name: "database_url_configured",
+      ok: input.databaseUrlConfigured,
+      detail: input.databaseUrlDetail,
+    },
     {
       name: "no_pending_migrations",
       ok: input.pendingMigrations.length === 0,
@@ -263,11 +270,14 @@ export async function buildFinalCompletionAuditReport(
     ]);
 
   const databaseUrl = resolveFinalAuditDatabaseUrl();
+  const databaseUrlCheck = summarizeDatabaseUrl(databaseUrl);
   const destructiveCleanup = databaseUrl
     ? await runWorkflowDestructiveCleanupVerify(databaseUrl)
     : null;
 
   return buildFinalAuditReport({
+    databaseUrlConfigured: databaseUrlCheck.ok,
+    databaseUrlDetail: databaseUrlCheck.detail,
     pendingMigrations,
     migrationListAligned: migrationList.ok,
     migrationListDetail: migrationList.detail,
@@ -295,6 +305,15 @@ function findRepoRoot(start = process.cwd()): string {
     if (parent === current) return resolve(start);
     current = parent;
   }
+}
+
+function summarizeDatabaseUrl(databaseUrl: string | null): {
+  ok: boolean;
+  detail: string;
+} {
+  return databaseUrl
+    ? { ok: true, detail: "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured" }
+    : { ok: false, detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL" };
 }
 
 async function main() {

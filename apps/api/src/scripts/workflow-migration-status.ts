@@ -20,6 +20,10 @@ export type WorkflowMigrationStatusReport = {
 };
 
 const CHECK_GUIDANCE: Record<string, { phase: string; next_action: string }> = {
+  database_url_configured: {
+    phase: "Phase 6",
+    next_action: "Configure SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL for the explicit destructive cleanup target.",
+  },
   no_pending_migrations: {
     phase: "Phase 6",
     next_action: "Apply the destructive cleanup migration pair after manual gates pass.",

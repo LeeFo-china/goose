@@ -39,6 +39,8 @@ describe("resolveFinalAuditDatabaseUrl", () => {
 describe("buildFinalAuditReport", () => {
   test("passes when all final technical and manual gates pass", () => {
     expect(buildFinalAuditReport({
+      databaseUrlConfigured: true,
+      databaseUrlDetail: "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured",
       pendingMigrations: [],
       migrationListAligned: true,
       migrationListDetail: "aligned=2",
@@ -58,6 +60,11 @@ describe("buildFinalAuditReport", () => {
       ok: true,
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
+        {
+          name: "database_url_configured",
+          ok: true,
+          detail: "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured",
+        },
         { name: "no_pending_migrations", ok: true, detail: "none" },
         { name: "migration_list_aligned", ok: true, detail: "aligned=2" },
         { name: "cleanup_readiness", ok: true, detail: "blockers=0" },
@@ -87,6 +94,8 @@ describe("buildFinalAuditReport", () => {
 
   test("fails when migrations, cleanup, destructive, or manual gates are incomplete", () => {
     expect(buildFinalAuditReport({
+      databaseUrlConfigured: false,
+      databaseUrlDetail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
       pendingMigrations: [
         "20260612143000_drop_legacy_state_machine_objects.sql",
       ],
@@ -108,6 +117,11 @@ describe("buildFinalAuditReport", () => {
       ok: false,
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
+        {
+          name: "database_url_configured",
+          ok: false,
+          detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
+        },
         {
           name: "no_pending_migrations",
           ok: false,
