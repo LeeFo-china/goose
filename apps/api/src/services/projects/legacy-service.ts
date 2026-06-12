@@ -69,7 +69,6 @@ import {
     transitionProjectStatusForTenant,
     listProjectStatusActionsForTenant,
     listProjectConstructionStagesForTenant,
-    listProjectStatusTransitionsForTenant,
     deleteProject,
     deleteProjectForTenant,
     assertProjectRelationsInTenant,
@@ -161,7 +160,6 @@ class ProjectService {
     transitionProjectStatusForTenant = transitionProjectStatusForTenant;
     listProjectStatusActionsForTenant = listProjectStatusActionsForTenant;
     listProjectConstructionStagesForTenant = listProjectConstructionStagesForTenant;
-    listProjectStatusTransitionsForTenant = listProjectStatusTransitionsForTenant;
     deleteProject = deleteProject;
     deleteProjectForTenant = deleteProjectForTenant;
     private assertProjectRelationsInTenant = assertProjectRelationsInTenant;

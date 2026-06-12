@@ -2,10 +2,12 @@ import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { customerCoreRepository } from "@/repositories/customer-core";
 import { projectRepository } from "@/repositories/projects";
-import { projectStatusTransitionRepository } from "@/repositories/project-status-transitions";
+import {
+  workflowTaskRepository,
+  type WorkflowTransitionLogRow,
+} from "@/repositories/workflow-tasks";
 import type {
   ProjectStatusTransitionInput,
-  ProjectStatusTransitionListQuery,
   UpdateProjectInput,
 } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
@@ -14,6 +16,7 @@ import { constructionStageStatusService } from "@/services/construction-stage-st
 import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
 import { projectMemberService } from "@/services/project-members";
 import { projectWorkflowRuntimeService } from "@/services/project-workflow-runtime";
+import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   inferProjectStatusAction,
@@ -27,6 +30,32 @@ import {
 } from "@gooes/domain";
 
 const PROJECT_START_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+type ProjectPauseWorkflowLog = Pick<
+  WorkflowTransitionLogRow,
+  "action" | "target_node_key" | "context"
+>;
+
+export function resolvePausedFromStatusFromWorkflowLogs(
+  logs: ProjectPauseWorkflowLog[],
+): ProjectStatus | null {
+  for (const log of logs) {
+    if (log.action !== "pause_project" || log.target_node_key !== "on_hold") {
+      continue;
+    }
+
+    const pausedFromStatus = log.context.paused_from_status;
+    if (
+      typeof pausedFromStatus === "string" &&
+      isProjectStatus(pausedFromStatus) &&
+      pausedFromStatus !== "on_hold"
+    ) {
+      return pausedFromStatus;
+    }
+  }
+
+  return null;
+}
 
 type TransitionProjectStatusInput = {
   authContext: AuthContext;
@@ -218,7 +247,7 @@ class ProjectStatusService {
       );
     }
 
-    const workflowRuntimeMetadata = await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
+    await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
         authContext: input.authContext,
         tenantId,
         projectId: input.projectId,
@@ -232,21 +261,6 @@ class ProjectStatusService {
             : {}),
         },
       });
-
-    await projectStatusTransitionRepository.create({
-      tenantId,
-      projectId: input.projectId,
-      fromStatus: transition.fromStatus,
-      toStatus: transition.toStatus,
-      action: input.payload.action,
-      operatorEmployeeId: input.authContext.employeeId ?? null,
-      operatorAuthUserId: input.authContext.authUserId,
-      reason,
-      metadata: {
-        ...metadata,
-        workflow_runtime: workflowRuntimeMetadata,
-      },
-    });
 
     if (input.payload.action === "sign_contract") {
       await this.syncCustomerSignedStatus({
@@ -296,44 +310,6 @@ class ProjectStatusService {
         pausedFromStatus,
       }),
       ...workflowState,
-    };
-  }
-
-  async listProjectStatusTransitions(input: {
-    authContext: AuthContext;
-    projectId: string;
-    query: ProjectStatusTransitionListQuery;
-  }) {
-    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const hasAccess = await accessPolicyService.canAccessProject(
-      input.authContext,
-      input.projectId,
-      "project.read",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
-    const result = await projectStatusTransitionRepository.listByProject({
-      projectId: input.projectId,
-      tenantId,
-      page: input.query.page,
-      pageSize: input.query.pageSize,
-      includeCount: false,
-    });
-
-    return {
-      rows: result.rows,
-      pagination: {
-        page: input.query.page,
-        pageSize: input.query.pageSize,
-        total: result.total ?? result.rows.length,
-        totalPages: result.total != null && result.total > 0
-          ? Math.ceil(result.total / input.query.pageSize)
-          : result.rows.length > 0
-            ? input.query.page
-            : 0,
-      },
     };
   }
 
@@ -444,37 +420,43 @@ class ProjectStatusService {
   }
 
   private async getOptionalPausedFromStatus(projectId: string, tenantId: string) {
-    const latestPause = await projectStatusTransitionRepository.findLatestPause(
+    const logs = await this.listProjectWorkflowTransitionLogs(projectId, tenantId);
+    return resolvePausedFromStatusFromWorkflowLogs(logs);
+  }
+
+  private async getPausedFromStatus(projectId: string, tenantId: string) {
+    const pausedFromStatus = await this.getOptionalPausedFromStatus(
       projectId,
       tenantId,
     );
-    const pausedFromStatus = latestPause?.metadata?.paused_from_status;
-    if (
-      typeof pausedFromStatus !== "string" ||
-      !isProjectStatus(pausedFromStatus) ||
-      pausedFromStatus === "on_hold"
-    ) {
-      return null;
+    if (!pausedFromStatus) {
+      throw Errors.badRequest("缺少项目暂停前状态，无法恢复");
     }
 
     return pausedFromStatus;
   }
 
-  private async getPausedFromStatus(projectId: string, tenantId: string) {
-    const latestPause = await projectStatusTransitionRepository.findLatestPause(
-      projectId,
+  private async listProjectWorkflowTransitionLogs(
+    projectId: string,
+    tenantId: string,
+  ) {
+    const state = await workflowSubjectStateService.getSubjectState({
       tenantId,
-    );
-    const pausedFromStatus = latestPause?.metadata?.paused_from_status;
-    if (
-      typeof pausedFromStatus !== "string" ||
-      !isProjectStatus(pausedFromStatus) ||
-      pausedFromStatus === "on_hold"
-    ) {
-      throw Errors.badRequest("缺少项目暂停前状态，无法恢复");
+      subjectType: "project",
+      subjectId: projectId,
+    });
+    if (!state?.instance_id) {
+      return [];
     }
 
-    return pausedFromStatus;
+    const result = await workflowTaskRepository.listTransitionLogs({
+      tenantId,
+      instanceId: state.instance_id,
+      page: 1,
+      pageSize: 100,
+    });
+
+    return result.list;
   }
 }
 export const projectStatusService = new ProjectStatusService();

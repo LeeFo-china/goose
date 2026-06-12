@@ -130,6 +130,16 @@ display:
 | blocker files | `15` |
 | customer status transition log blocker references | `0` |
 
+2026-06-12 after removing project legacy transition log reads/writes:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `70` |
+| blocker files | `13` |
+| project status transition log blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -203,6 +213,9 @@ because the system is still in the compatibility window:
   rows directly;
 - customer status changes no longer write `customer_status_transition_logs`;
   workflow runtime/subject state is the remaining status timeline source;
+- project status changes no longer write/read `project_status_transition_logs`;
+  `resume_project` uses workflow transition log context to find the paused
+  source status;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

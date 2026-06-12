@@ -126,3 +126,27 @@ describe("customer status transition log cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("project status transition log cleanup", () => {
+  test("project status services no longer depend on legacy transition logs", () => {
+    const legacyRepositoryPath = "src/repositories/project-status-transitions.ts";
+    const sourcePaths = [
+      legacyRepositoryPath,
+      "src/services/project-status.ts",
+    ];
+    const existingSources = sourcePaths
+      .filter((path) => existsSync(path))
+      .map((path) => ({
+        path: `apps/api/${path}`,
+        content: readFileSync(path, "utf8"),
+      }));
+
+    const references = scanCleanupReferences(existingSources).filter((reference) =>
+      reference.path.includes("project-status") ||
+      reference.text.includes("projectStatusTransitionRepository")
+    );
+
+    expect(existsSync(legacyRepositoryPath)).toBe(false);
+    expect(references).toEqual([]);
+  });
+});

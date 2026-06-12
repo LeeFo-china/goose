@@ -816,6 +816,12 @@
   repository has been removed. Customer status changes still update the
   customer business status and sync workflow runtime/subject state.
 
+  2026-06-12 progress: project status changes no longer write/read
+  `project_status_transition_logs`, and the old project transition-log
+  repository has been removed. `resume_project` now resolves the paused source
+  status from the latest workflow transition log context for the project
+  instance.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

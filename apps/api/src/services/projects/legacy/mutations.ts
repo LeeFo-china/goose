@@ -28,7 +28,6 @@ import {
     type ProjectMemberCandidateQueryType,
     type ProjectPrimaryAssignee,
     type ProjectStatusTransitionInput,
-    type ProjectStatusTransitionListQuery,
     type UpdateProjectInput,
 } from "./shared";
 
@@ -249,14 +248,6 @@ async function canAccessKnownProjectByOptionalPermission(projectService: any, in
     }
 
     return false;
-}
-
-export async function listProjectStatusTransitionsForTenant(this: any, input: {
-    authContext: AuthContext;
-    projectId: string;
-    query: ProjectStatusTransitionListQuery;
-}) {
-    return projectStatusService.listProjectStatusTransitions(input);
 }
 
 export async function deleteProject(this: any, id: string, tenantId: string) {
