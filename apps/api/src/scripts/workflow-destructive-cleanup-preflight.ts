@@ -146,6 +146,16 @@ export function buildSupabaseDryRunArgs(
   return ["db", "push", "--dry-run"];
 }
 
+export function formatCommandFailure(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown error";
+  const detail = [
+    readErrorField(error, "stderr"),
+    readErrorField(error, "stdout"),
+    error.message,
+  ].find((value) => value.length > 0);
+  return detail ?? error.name;
+}
+
 export function validateManualGateEvidence(
   evidence: ManualGateEvidence,
 ): { ok: boolean; missing: string[]; invalid: string[] } {
@@ -222,6 +232,11 @@ export function validateManualGateEvidence(
   return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
 }
 
+function readErrorField(error: Error, field: "stderr" | "stdout"): string {
+  const value = (error as Error & Record<typeof field, unknown>)[field];
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function collectManualGateEvidenceReferenceIssues(
   evidence: ManualGateEvidence,
   repoRoot = findRepoRoot(),
@@ -279,18 +294,22 @@ export async function loadManualGateEvidence(
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
-  const { stdout, stderr } = await execFileAsync(
-    "supabase",
-    buildSupabaseDryRunArgs(),
-    {
-      cwd: findRepoRoot(),
-      env: process.env,
-      timeout: 60_000,
-      maxBuffer: 1024 * 1024,
-    },
-  );
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "supabase",
+      buildSupabaseDryRunArgs(),
+      {
+        cwd: findRepoRoot(),
+        env: process.env,
+        timeout: 60_000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
 
-  return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+    return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+  } catch (error) {
+    return [`supabase db push --dry-run failed: ${formatCommandFailure(error)}`];
+  }
 }
 
 async function loadLegacyInventory(url: string): Promise<LegacyInventoryRow> {

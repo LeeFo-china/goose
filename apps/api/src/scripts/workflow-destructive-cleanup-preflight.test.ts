@@ -6,6 +6,7 @@ import {
   arePendingMigrationsExpected,
   buildSupabaseDryRunArgs,
   collectManualGateEvidenceReferenceIssues,
+  formatCommandFailure,
   hasAllManualGates,
   loadManualGateEvidence,
   parsePreflightArgs,
@@ -43,6 +44,28 @@ describe("buildSupabaseDryRunArgs", () => {
 
   test("falls back to linked project dry-run when no database url exists", () => {
     expect(buildSupabaseDryRunArgs({})).toEqual(["db", "push", "--dry-run"]);
+  });
+});
+
+describe("formatCommandFailure", () => {
+  test("uses stderr before stdout or error message", () => {
+    const error = Object.assign(new Error("command failed"), {
+      stdout: "stdout detail",
+      stderr: "stderr detail",
+    });
+
+    expect(formatCommandFailure(error)).toBe("stderr detail");
+  });
+
+  test("falls back to stdout and then message", () => {
+    expect(formatCommandFailure(Object.assign(new Error("command failed"), {
+      stdout: "stdout detail",
+      stderr: "",
+    }))).toBe("stdout detail");
+
+    expect(formatCommandFailure(new Error("command failed"))).toBe(
+      "command failed",
+    );
   });
 });
 

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   buildSupabaseDryRunArgs,
+  formatCommandFailure,
   loadManualGateEvidence as loadManualGateEvidenceFile,
   parseSupabaseDryRunMigrations,
 } from "./workflow-destructive-cleanup-preflight";
@@ -198,18 +199,22 @@ export function summarizeDestructiveCleanupVerifyReport(
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
-  const { stdout, stderr } = await execFileAsync(
-    "supabase",
-    buildSupabaseDryRunArgs(),
-    {
-      cwd: findRepoRoot(),
-      env: process.env,
-      timeout: 60_000,
-      maxBuffer: 1024 * 1024,
-    },
-  );
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "supabase",
+      buildSupabaseDryRunArgs(),
+      {
+        cwd: findRepoRoot(),
+        env: process.env,
+        timeout: 60_000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
 
-  return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+    return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+  } catch (error) {
+    return [`supabase db push --dry-run failed: ${formatCommandFailure(error)}`];
+  }
 }
 
 async function checkSupabaseMigrationListAlignment(): Promise<
@@ -223,20 +228,27 @@ async function checkSupabaseMigrationListAlignment(): Promise<
     };
   }
 
-  const { stdout, stderr } = await execFileAsync(
-    "supabase",
-    ["migration", "list", "--db-url", databaseUrl],
-    {
-      cwd: findRepoRoot(),
-      env: process.env,
-      timeout: 60_000,
-      maxBuffer: 1024 * 1024,
-    },
-  );
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "supabase",
+      ["migration", "list", "--db-url", databaseUrl],
+      {
+        cwd: findRepoRoot(),
+        env: process.env,
+        timeout: 60_000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
 
-  return summarizeMigrationListAlignment(
-    parseSupabaseMigrationListRows(`${stdout}\n${stderr}`),
-  );
+    return summarizeMigrationListAlignment(
+      parseSupabaseMigrationListRows(`${stdout}\n${stderr}`),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      detail: `supabase migration list failed: ${formatCommandFailure(error)}`,
+    };
+  }
 }
 
 async function loadManualGateEvidence(

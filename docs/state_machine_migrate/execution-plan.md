@@ -1282,4 +1282,6 @@ Expected after destructive apply: no pending migrations, cleanup readiness
 passes, local and remote migration history are aligned, legacy database
 objects are absent, generated database types no longer expose dropped objects,
 workflow runtime is consistent, manual gate evidence is complete, and the
-latest commit documents the breaking workflow database cleanup.
+latest commit documents the breaking workflow database cleanup. Supabase CLI
+or remote connection failures are reported as failed audit checks and must be
+resolved before treating the final audit as evidence.
