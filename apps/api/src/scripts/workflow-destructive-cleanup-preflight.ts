@@ -79,6 +79,7 @@ const EXPECTED_DESTRUCTIVE_MIGRATIONS = [
   "20260612133000_drop_schedule_project_construction_transition.sql",
   "20260612143000_drop_legacy_state_machine_objects.sql",
 ] as const;
+const COMMAND_FAILURE_DETAIL_MAX_LENGTH = 500;
 const LEGACY_SCHEDULE_RPC_SIGNATURE =
   "schedule_project_construction_transition(uuid,uuid,text,text,text,uuid,uuid,uuid,text,jsonb)";
 
@@ -153,7 +154,7 @@ export function formatCommandFailure(error: unknown): string {
     readErrorField(error, "stdout"),
     error.message,
   ].find((value) => value.length > 0);
-  return detail ?? error.name;
+  return truncateCommandFailureDetail(detail ?? error.name);
 }
 
 export function validateManualGateEvidence(
@@ -235,6 +236,14 @@ export function validateManualGateEvidence(
 function readErrorField(error: Error, field: "stderr" | "stdout"): string {
   const value = (error as Error & Record<typeof field, unknown>)[field];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function truncateCommandFailureDetail(detail: string): string {
+  const normalized = detail.replace(/\s+/g, " ").trim();
+  if (normalized.length <= COMMAND_FAILURE_DETAIL_MAX_LENGTH) {
+    return normalized;
+  }
+  return `${normalized.slice(0, COMMAND_FAILURE_DETAIL_MAX_LENGTH)}...`;
 }
 
 export function collectManualGateEvidenceReferenceIssues(

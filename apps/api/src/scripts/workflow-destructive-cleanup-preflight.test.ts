@@ -67,6 +67,17 @@ describe("formatCommandFailure", () => {
       "command failed",
     );
   });
+
+  test("normalizes and truncates long command output", () => {
+    const error = Object.assign(new Error("command failed"), {
+      stderr: `${"a".repeat(520)}\n${"b".repeat(20)}`,
+    });
+
+    const detail = formatCommandFailure(error);
+    expect(detail).toHaveLength(503);
+    expect(detail.endsWith("...")).toBe(true);
+    expect(detail).not.toContain("\n");
+  });
 });
 
 describe("arePendingMigrationsExpected", () => {

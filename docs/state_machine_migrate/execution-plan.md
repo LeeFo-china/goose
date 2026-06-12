@@ -1270,6 +1270,11 @@ bun run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
+The final destructive cleanup operation should follow
+`docs/state_machine_migrate/final-cleanup-runbook.md` so apply output,
+post-apply verification, type regeneration, and rollback evidence are recorded
+in one place.
+
 For an operator-friendly summary of remaining blockers, run:
 
 ```bash

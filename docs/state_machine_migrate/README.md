@@ -53,6 +53,8 @@
   `cd apps/api && bun run workflow:destructive-cleanup-verify`。该命令只读
   检查旧表、旧 RPC、旧列、旧索引、旧 policy 是否已经不存在，并再次运行
   workflow runtime 一致性检查；它应只在 destructive migration apply 后通过。
+- 最终执行步骤和证据记录模板见
+  `docs/state_machine_migrate/final-cleanup-runbook.md`。
 
 仍未在本工作区完成的外部门禁：
 
