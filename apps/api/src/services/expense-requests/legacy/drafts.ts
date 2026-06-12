@@ -1,3 +1,4 @@
+import { expenseWorkflowRuntimeService } from "@/services/expense-workflow-runtime";
 import {
   Errors,
   expenseRequestRepository,
@@ -276,5 +277,16 @@ export async function submitExpenseRequest(this: any,
       comment: input.comment ?? null,
     });
 
-    return this.getLatestExpenseRequest(updated.id, tenantId);
+    const latest = await this.getLatestExpenseRequest(updated.id, tenantId);
+    await expenseWorkflowRuntimeService.syncSubmit({
+      authContext,
+      tenantId,
+      expenseRequestId: id,
+      expenseRequest: latest,
+      action,
+      operatorId,
+      comment: input.comment ?? null,
+    });
+
+    return latest;
   }

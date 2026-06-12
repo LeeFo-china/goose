@@ -200,6 +200,26 @@ class WorkflowTaskRepository {
     return (data ?? []) as WorkflowTaskRow[];
   }
 
+  async assignPendingTask(input: {
+    tenantId: string;
+    instanceId: string;
+    nodeKey: string;
+    assigneeEmployeeId: string | null;
+  }): Promise<void> {
+    const { error } = await workflowTable("workflow_tasks")
+      .update({
+        assignee_employee_id: input.assigneeEmployeeId,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("instance_id", input.instanceId)
+      .eq("node_key", input.nodeKey)
+      .eq("status", "pending");
+
+    if (error) {
+      throw Errors.dbError("更新流程待办负责人失败", error);
+    }
+  }
+
   async listTransitionLogs(input: WorkflowTransitionLogListInput) {
     const page = input.page ?? 1;
     const pageSize = Math.min(input.pageSize ?? 20, 100);

@@ -37,9 +37,10 @@ class WorkflowTemplateService {
         return this.buildCustomerMainTemplate(input.name);
       case "construction_main":
         return this.buildConstructionMainTemplate(input.name);
+      case "expense_approval":
+        return this.buildExpenseApprovalTemplate(input.name);
       case "sales_main":
       case "procedure_standard":
-      case "expense_approval":
         return this.buildUnavailableTemplate(input.template_key);
     }
   }
@@ -196,6 +197,49 @@ class WorkflowTemplateService {
     };
   }
 
+  private buildExpenseApprovalTemplate(name?: string): WorkflowTemplateDefinition {
+    return {
+      workflow_key: "expense_approval",
+      name: name?.trim() || "费用审批流程",
+      description: "费用申请从主管审批、财务审批到登记打款的标准流程模板。",
+      category: "approval",
+      graph: {
+        nodes: [
+          this.node("start", "start", null, "开始", "费用申请提交审批。", 80, 180, 10, []),
+          this.node("manager_review", "approval", "expense_approval", "主管审批", "对应费用当前步骤：主管审批。", 300, 180, 20, ["expense_request.approve_manager"]),
+          this.node("finance_review", "approval", "expense_approval", "财务审批", "对应费用当前步骤：财务审批。", 520, 180, 30, ["expense_request.approve_finance"]),
+          this.node("payment", "approval", "expense_approval", "登记打款", "对应费用当前步骤：待打款。", 740, 180, 40, ["expense_request.pay"]),
+          this.node("rejected", "end", null, "已驳回", "费用审批驳回后流程结束。", 520, 380, 50, []),
+          this.node("done", "end", null, "已完成", "费用完成打款后流程结束。", 960, 180, 60, []),
+        ],
+        edges: [
+          this.edge("start", "manager_review", "提交申请", 10),
+          this.edge("manager_review", "rejected", "主管驳回", 10, {
+            operator: "eq",
+            field: "decision",
+            value: "rejected",
+          }),
+          this.edge("manager_review", "finance_review", "主管通过", 20, {
+            operator: "eq",
+            field: "decision",
+            value: "approved",
+          }),
+          this.edge("finance_review", "rejected", "财务驳回", 10, {
+            operator: "eq",
+            field: "decision",
+            value: "rejected",
+          }),
+          this.edge("finance_review", "payment", "财务通过", 20, {
+            operator: "eq",
+            field: "decision",
+            value: "approved",
+          }),
+          this.edge("payment", "done", "完成打款", 10),
+        ],
+      },
+    };
+  }
+
   private node(
     nodeKey: string,
     nodeType: WorkflowGraphSaveInput["nodes"][number]["node_type"],
@@ -205,6 +249,7 @@ class WorkflowTemplateService {
     x: number,
     y: number,
     sortOrder: number,
+    requiredPermissions: string[] = ["project.update"],
   ): WorkflowGraphSaveInput["nodes"][number] {
     return {
       node_key: nodeKey,
@@ -216,7 +261,7 @@ class WorkflowTemplateService {
       config: {
         required_permissions: nodeType === "start" || nodeType === "end"
           ? []
-          : ["project.update"],
+          : requiredPermissions,
       },
       sort_order: sortOrder,
     };

@@ -490,6 +490,16 @@
   still use the legacy approval-chain path until an explicit workflow runtime
   mapping for approval nodes is implemented.
 
+  2026-06-12 progress: `expense_approval` template is now available, old
+  expense `submit/approve/reject/cancel/pay` paths sync workflow runtime after
+  legacy writes, and `cancel_workflow_instance` was added as migration-managed
+  RPC. Legacy approval-chain writes remain as compatibility source of truth
+  until target migration apply, backfill, and staging smoke pass.
+
+  2026-06-12 verification note: local static verification passed, but
+  `supabase migration list` still cannot verify remote alignment because
+  `SUPABASE_DB_PASSWORD` fails authentication for the target project.
+
 - [ ] **Step 3.4: Verification**
 
   Run:

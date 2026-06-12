@@ -308,6 +308,15 @@ export type WorkflowRuntimeCompleteNodeInput = {
   actorEmployeeId?: string | null;
 };
 
+export type WorkflowRuntimeCancelInput = {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+  reason?: string | null;
+  context: JsonObject;
+  actorEmployeeId?: string | null;
+};
+
 export type WorkflowRuntimeStartResult =
   | {
       ok: true;
@@ -343,4 +352,17 @@ export type WorkflowRuntimeCompleteNodeResult =
         | "invalid_output"
         | "no_matching_edge";
       currentNodeKey?: string | null;
+    };
+
+export type WorkflowRuntimeCancelResult =
+  | {
+      ok: true;
+      instance: WorkflowInstanceRow;
+    }
+  | {
+      ok: false;
+      reason:
+        | "instance_not_found"
+        | "instance_not_running"
+        | "invalid_context";
     };

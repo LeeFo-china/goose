@@ -20,6 +20,7 @@ import {
   publishDefinition,
 } from "./workflows/versions";
 import {
+  cancelRuntimeInstance,
   completeRuntimeNode,
   getRuntimeInstanceById,
   listCompletedRuntimeProcedureNodes,
@@ -50,6 +51,7 @@ class WorkflowRepository {
   listCompletedRuntimeProcedureNodes = listCompletedRuntimeProcedureNodes;
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;
+  cancelRuntimeInstance = cancelRuntimeInstance;
 }
 
 export const workflowRepository = new WorkflowRepository();

@@ -14,7 +14,8 @@ export type WorkflowRpcName =
   | "replace_workflow_draft_graph"
   | "publish_workflow_definition"
   | "start_workflow_instance"
-  | "complete_workflow_instance_node";
+  | "complete_workflow_instance_node"
+  | "cancel_workflow_instance";
 
 export type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;

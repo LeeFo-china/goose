@@ -1,3 +1,4 @@
+import { expenseWorkflowRuntimeService } from "@/services/expense-workflow-runtime";
 import {
   Errors,
   expenseRequestRepository,
@@ -229,7 +230,20 @@ export async function approveExpenseRequest(this: any,
       comment: input.comment ?? null,
     });
 
-    return this.getLatestExpenseRequest(updated.id, tenantId);
+    const latest = await this.getLatestExpenseRequest(updated.id, tenantId);
+    await expenseWorkflowRuntimeService.syncApproval({
+      authContext,
+      tenantId,
+      expenseRequestId: id,
+      expenseRequest: latest,
+      nodeKey: existing.current_step as "manager_review" | "finance_review",
+      action: "approve",
+      actorEmployeeId: approverId,
+      decision: "approved",
+      comment: input.comment ?? null,
+    });
+
+    return latest;
   }
 
 export async function rejectExpenseRequest(this: any, 
@@ -390,7 +404,21 @@ export async function rejectExpenseRequest(this: any,
       comment: input.comment ?? rejectedReason,
     });
 
-    return this.getLatestExpenseRequest(updated.id, tenantId);
+    const latest = await this.getLatestExpenseRequest(updated.id, tenantId);
+    await expenseWorkflowRuntimeService.syncApproval({
+      authContext,
+      tenantId,
+      expenseRequestId: id,
+      expenseRequest: latest,
+      nodeKey: existing.current_step as "manager_review" | "finance_review",
+      action: "reject",
+      actorEmployeeId: approverId,
+      decision: "rejected",
+      comment: input.comment ?? rejectedReason,
+      reason: rejectedReason,
+    });
+
+    return latest;
   }
 
 export async function cancelExpenseRequest(this: any, 
@@ -455,5 +483,15 @@ export async function cancelExpenseRequest(this: any,
       comment: input.comment ?? null,
     });
 
-    return this.getLatestExpenseRequest(updated.id, tenantId);
+    const latest = await this.getLatestExpenseRequest(updated.id, tenantId);
+    await expenseWorkflowRuntimeService.syncCancel({
+      authContext,
+      tenantId,
+      expenseRequestId: id,
+      expenseRequest: latest,
+      actorEmployeeId: input.operator_id,
+      comment: input.comment ?? null,
+    });
+
+    return latest;
   }

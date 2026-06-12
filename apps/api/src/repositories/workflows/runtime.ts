@@ -4,6 +4,8 @@ import { WORKFLOW_INSTANCE_SELECT } from "./shared";
 import type {
   WorkflowInstanceRow,
   WorkflowInstanceNodeRow,
+  WorkflowRuntimeCancelInput,
+  WorkflowRuntimeCancelResult,
   WorkflowRuntimeCompleteNodeInput,
   WorkflowRuntimeCompleteNodeResult,
   WorkflowRuntimeInstanceListInput,
@@ -17,6 +19,8 @@ type WorkflowRuntimeStartFailure =
   Extract<WorkflowRuntimeStartResult, { ok: false }>;
 type WorkflowRuntimeCompleteNodeFailure =
   Extract<WorkflowRuntimeCompleteNodeResult, { ok: false }>;
+type WorkflowRuntimeCancelFailure =
+  Extract<WorkflowRuntimeCancelResult, { ok: false }>;
 
 export async function listRuntimeInstances(
   input: WorkflowRuntimeInstanceListInput,
@@ -154,6 +158,25 @@ export async function completeRuntimeNode(
   return normalizeCompleteResult(data);
 }
 
+export async function cancelRuntimeInstance(
+  input: WorkflowRuntimeCancelInput,
+): Promise<WorkflowRuntimeCancelResult> {
+  const { data, error } = await workflowRpc("cancel_workflow_instance", {
+    p_tenant_id: input.tenantId,
+    p_definition_id: input.definitionId,
+    p_instance_id: input.instanceId,
+    p_reason: input.reason ?? null,
+    p_context: input.context,
+    p_actor_employee_id: input.actorEmployeeId ?? null,
+  });
+
+  if (error) {
+    throw Errors.dbError("取消流程实例失败", error);
+  }
+
+  return normalizeCancelResult(data);
+}
+
 function normalizeStartResult(data: unknown): WorkflowRuntimeStartResult {
   if (!isRecord(data)) {
     throw Errors.badRequest("启动流程实例失败");
@@ -211,6 +234,28 @@ function normalizeCompleteResult(data: unknown): WorkflowRuntimeCompleteNodeResu
     completedNode: data.completed_node,
     nextNode: isRecord(data.next_node) ? data.next_node : null,
     task: isRecord(data.task) ? data.task as WorkflowTaskRow : null,
+  };
+}
+
+function normalizeCancelResult(data: unknown): WorkflowRuntimeCancelResult {
+  if (!isRecord(data)) {
+    throw Errors.badRequest("取消流程实例失败");
+  }
+
+  if (data.ok === false && typeof data.reason === "string") {
+    return {
+      ok: false,
+      reason: data.reason as WorkflowRuntimeCancelFailure["reason"],
+    };
+  }
+
+  if (data.ok !== true || !isRecord(data.instance)) {
+    throw Errors.badRequest("取消流程实例失败");
+  }
+
+  return {
+    ok: true,
+    instance: data.instance as WorkflowInstanceRow,
   };
 }
 
