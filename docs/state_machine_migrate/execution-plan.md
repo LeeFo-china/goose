@@ -215,7 +215,7 @@
   COMMENT ON TABLE public.workflow_subject_states IS 'Workflow subject current state projection for list/detail/mobile reads';
   ```
 
-- [ ] **Step 1.2: Regenerate database types**
+- [x] **Step 1.2: Regenerate database types**
 
   Run:
 
@@ -225,11 +225,13 @@
 
   Expected: `apps/api/src/types/database.ts` includes `workflow_subject_states`.
 
-  2026-06-12 status: remote generation succeeded but did not include
-  `workflow_subject_states` because the new local migration has not been
-  applied to the target project. Local generation failed because Docker daemon
-  is unavailable. Do not check this step until the migration is applied and
-  `apps/api/src/types/database.ts` contains `workflow_subject_states`.
+  2026-06-12 update: target project `fclnkyatvfvmzgzdqlba` has applied
+  `20260612110000_create_workflow_subject_states.sql`,
+  `20260612123000_add_workflow_task_permission_projection.sql`, and
+  `20260612124500_add_cancel_workflow_instance_rpc.sql`. Remote type generation
+  succeeded and `apps/api/src/types/database.ts` now includes
+  `workflow_subject_states`, `workflow_tasks.assignee_permission_code`, and
+  `cancel_workflow_instance`.
 
 - [x] **Step 1.3: Add repository**
 
@@ -281,13 +283,14 @@
   - `bun run api:typecheck`: passed.
   - `bun run api:build`: passed.
   - `git diff --check`: passed.
-  - `supabase migration list`: failed because `SUPABASE_DB_PASSWORD` is not configured for the remote database.
+  - `supabase migration list`: passed through `20260612124500`; destructive
+    cleanup migrations `20260612133000` and `20260612143000` remain pending.
 
 ### Phase 1 Acceptance
 
-- [ ] `workflow_subject_states` migration exists and contains no destructive statements.
-- [ ] Subject state can be upserted by `tenant_id + subject_type + subject_id`.
-- [ ] API typecheck and build pass.
+- [x] `workflow_subject_states` migration exists and contains no destructive statements.
+- [x] Subject state can be upserted by `tenant_id + subject_type + subject_id`.
+- [x] API typecheck and build pass.
 - [ ] Commit:
 
   ```bash
@@ -381,9 +384,9 @@
   and `/workflow-tasks` checks employee, role, or permission assignment before
   exposing a task.
 
-  2026-06-12 verification note: local static verification passed, but
-  `supabase migration list` still cannot verify remote alignment because
-  `SUPABASE_DB_PASSWORD` fails authentication for the target project.
+  2026-06-12 update: target migration status is now verified through
+  `20260612124500`; destructive cleanup migrations remain intentionally
+  unapplied.
 
 ### Phase 2 Acceptance
 
@@ -496,9 +499,9 @@
   RPC. Legacy approval-chain writes remain as compatibility source of truth
   until target migration apply, backfill, and staging smoke pass.
 
-  2026-06-12 verification note: local static verification passed, but
-  `supabase migration list` still cannot verify remote alignment because
-  `SUPABASE_DB_PASSWORD` fails authentication for the target project.
+  2026-06-12 update: target migration status is now verified through
+  `20260612124500`; destructive cleanup migrations remain intentionally
+  unapplied.
 
 - [ ] **Step 3.4: Verification**
 
@@ -666,9 +669,8 @@
   ```
 
   Staging dry-run/apply is still pending because the available environment does
-  not include a confirmed staging `TENANT_ID`, and earlier remote migration
-  checks failed with `SUPABASE_DB_PASSWORD` authentication errors for project
-  `fclnkyatvfvmzgzdqlba`.
+  not include a confirmed staging `TENANT_ID`. Remote migration status now
+  succeeds for project `fclnkyatvfvmzgzdqlba` through `20260612124500`.
 
 ### Phase 4 Acceptance
 

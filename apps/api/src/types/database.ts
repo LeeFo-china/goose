@@ -3753,8 +3753,11 @@ export type Database = {
           id: string
           name: string | null
           phone: string
+          project_id: string | null
           source: string
+          source_context: Json
           status: string
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
@@ -3773,8 +3776,11 @@ export type Database = {
           id?: string
           name?: string | null
           phone: string
+          project_id?: string | null
           source?: string
+          source_context?: Json
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -3793,8 +3799,11 @@ export type Database = {
           id?: string
           name?: string | null
           phone?: string
+          project_id?: string | null
           source?: string
+          source_context?: Json
           status?: string
+          tenant_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3815,6 +3824,20 @@ export type Database = {
           {
             foreignKeyName: "platform_leads_assigned_tenant_id_fkey"
             columns: ["assigned_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_leads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_leads_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
@@ -7073,6 +7096,35 @@ export type Database = {
         }
         Relationships: []
       }
+      visitor_project_follows: {
+        Row: {
+          created_at: string
+          project_id: string
+          verified_phone: string
+          visitor_id: string
+        }
+        Insert: {
+          created_at?: string
+          project_id: string
+          verified_phone: string
+          visitor_id: string
+        }
+        Update: {
+          created_at?: string
+          project_id?: string
+          verified_phone?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visitor_project_follows_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wechat_rebind_requests: {
         Row: {
           applicant_name: string | null
@@ -7158,6 +7210,705 @@ export type Database = {
           },
           {
             foreignKeyName: "wechat_rebind_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_definitions: {
+        Row: {
+          active_version_id: string | null
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          workflow_key: string
+        }
+        Insert: {
+          active_version_id?: string | null
+          category: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          workflow_key: string
+        }
+        Update: {
+          active_version_id?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          workflow_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_definitions_active_version_id_fkey"
+            columns: ["active_version_id", "id"]
+            isOneToOne: false
+            referencedRelation: "workflow_versions"
+            referencedColumns: ["id", "definition_id"]
+          },
+          {
+            foreignKeyName: "workflow_definitions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_definitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_definitions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_edges: {
+        Row: {
+          condition: Json
+          created_at: string
+          definition_id: string
+          id: string
+          label: string | null
+          priority: number
+          source_node_id: string
+          target_node_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          condition?: Json
+          created_at?: string
+          definition_id: string
+          id?: string
+          label?: string | null
+          priority?: number
+          source_node_id: string
+          target_node_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          condition?: Json
+          created_at?: string
+          definition_id?: string
+          id?: string
+          label?: string | null
+          priority?: number
+          source_node_id?: string
+          target_node_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_edges_definition_tenant_fkey"
+            columns: ["definition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_edges_source_node_definition_fkey"
+            columns: ["source_node_id", "definition_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_nodes"
+            referencedColumns: ["id", "definition_id"]
+          },
+          {
+            foreignKeyName: "workflow_edges_target_node_definition_fkey"
+            columns: ["target_node_id", "definition_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_nodes"
+            referencedColumns: ["id", "definition_id"]
+          },
+          {
+            foreignKeyName: "workflow_edges_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_instance_nodes: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          definition_id: string
+          id: string
+          input: Json
+          instance_id: string
+          node_id: string
+          node_key: string
+          node_snapshot: Json
+          node_type: string
+          output: Json
+          started_at: string
+          started_by: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          definition_id: string
+          id?: string
+          input?: Json
+          instance_id: string
+          node_id: string
+          node_key: string
+          node_snapshot: Json
+          node_type: string
+          output?: Json
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          definition_id?: string
+          id?: string
+          input?: Json
+          instance_id?: string
+          node_id?: string
+          node_key?: string
+          node_snapshot?: Json
+          node_type?: string
+          output?: Json
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_instance_nodes_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instance_nodes_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instance_nodes_started_by_fkey"
+            columns: ["started_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instance_nodes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_instances: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          context: Json
+          created_at: string
+          current_node_id: string | null
+          current_node_key: string | null
+          current_node_snapshot: Json | null
+          definition_id: string
+          id: string
+          started_at: string
+          started_by: string | null
+          status: string
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          context?: Json
+          created_at?: string
+          current_node_id?: string | null
+          current_node_key?: string | null
+          current_node_snapshot?: Json | null
+          definition_id: string
+          id?: string
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          context?: Json
+          created_at?: string
+          current_node_id?: string | null
+          current_node_key?: string | null
+          current_node_snapshot?: Json | null
+          definition_id?: string
+          id?: string
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          subject_id?: string
+          subject_type?: string
+          tenant_id?: string
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_instances_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instances_definition_tenant_fkey"
+            columns: ["definition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_instances_started_by_fkey"
+            columns: ["started_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_instances_version_definition_fkey"
+            columns: ["version_id", "definition_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_versions"
+            referencedColumns: ["id", "definition_id"]
+          },
+        ]
+      }
+      workflow_nodes: {
+        Row: {
+          business_kind: string | null
+          config: Json
+          created_at: string
+          definition_id: string
+          description: string | null
+          id: string
+          node_key: string
+          node_type: string
+          position: Json
+          sort_order: number
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          business_kind?: string | null
+          config?: Json
+          created_at?: string
+          definition_id: string
+          description?: string | null
+          id?: string
+          node_key: string
+          node_type: string
+          position?: Json
+          sort_order?: number
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          business_kind?: string | null
+          config?: Json
+          created_at?: string
+          definition_id?: string
+          description?: string | null
+          id?: string
+          node_key?: string
+          node_type?: string
+          position?: Json
+          sort_order?: number
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_nodes_definition_tenant_fkey"
+            columns: ["definition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_nodes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_subject_states: {
+        Row: {
+          created_at: string
+          current_business_kind: string | null
+          current_node_key: string | null
+          current_node_title: string | null
+          definition_id: string | null
+          id: string
+          instance_id: string | null
+          instance_status: string | null
+          pending_task_count: number
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_business_kind?: string | null
+          current_node_key?: string | null
+          current_node_title?: string | null
+          definition_id?: string | null
+          id?: string
+          instance_id?: string | null
+          instance_status?: string | null
+          pending_task_count?: number
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_business_kind?: string | null
+          current_node_key?: string | null
+          current_node_title?: string | null
+          definition_id?: string | null
+          id?: string
+          instance_id?: string | null
+          instance_status?: string | null
+          pending_task_count?: number
+          subject_id?: string
+          subject_type?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_subject_states_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_subject_states_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_subject_states_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_tasks: {
+        Row: {
+          assignee_employee_id: string | null
+          assignee_permission_code: string | null
+          assignee_role_code: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          definition_id: string
+          due_at: string | null
+          id: string
+          instance_id: string
+          instance_node_id: string | null
+          node_id: string
+          node_key: string
+          node_type: string
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          assignee_employee_id?: string | null
+          assignee_permission_code?: string | null
+          assignee_role_code?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          definition_id: string
+          due_at?: string | null
+          id?: string
+          instance_id: string
+          instance_node_id?: string | null
+          node_id: string
+          node_key: string
+          node_type: string
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          assignee_employee_id?: string | null
+          assignee_permission_code?: string | null
+          assignee_role_code?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          definition_id?: string
+          due_at?: string | null
+          id?: string
+          instance_id?: string
+          instance_node_id?: string | null
+          node_id?: string
+          node_key?: string
+          node_type?: string
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_tasks_assignee_employee_id_fkey"
+            columns: ["assignee_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_instance_node_id_fkey"
+            columns: ["instance_node_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instance_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_tasks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_transition_logs: {
+        Row: {
+          action: string
+          actor_employee_id: string | null
+          context: Json
+          created_at: string
+          definition_id: string
+          edge_id: string | null
+          id: string
+          instance_id: string
+          source_node_id: string | null
+          source_node_key: string | null
+          target_node_id: string | null
+          target_node_key: string | null
+          tenant_id: string
+          version_id: string
+        }
+        Insert: {
+          action: string
+          actor_employee_id?: string | null
+          context?: Json
+          created_at?: string
+          definition_id: string
+          edge_id?: string | null
+          id?: string
+          instance_id: string
+          source_node_id?: string | null
+          source_node_key?: string | null
+          target_node_id?: string | null
+          target_node_key?: string | null
+          tenant_id: string
+          version_id: string
+        }
+        Update: {
+          action?: string
+          actor_employee_id?: string | null
+          context?: Json
+          created_at?: string
+          definition_id?: string
+          edge_id?: string | null
+          id?: string
+          instance_id?: string
+          source_node_id?: string | null
+          source_node_key?: string | null
+          target_node_id?: string | null
+          target_node_key?: string | null
+          tenant_id?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_transition_logs_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_transition_logs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_transition_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_versions: {
+        Row: {
+          created_at: string
+          definition_id: string
+          id: string
+          published_at: string
+          published_by: string | null
+          snapshot: Json
+          status: string
+          tenant_id: string
+          validation_result: Json
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          definition_id: string
+          id?: string
+          published_at?: string
+          published_by?: string | null
+          snapshot: Json
+          status?: string
+          tenant_id: string
+          validation_result?: Json
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string
+          id?: string
+          published_at?: string
+          published_by?: string | null
+          snapshot?: Json
+          status?: string
+          tenant_id?: string
+          validation_result?: Json
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_versions_definition_tenant_fkey"
+            columns: ["definition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_definitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "workflow_versions_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_versions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -7303,6 +8054,17 @@ export type Database = {
         Args: { p_auth_user_id: string; p_phone: string; p_share_token: string }
         Returns: Json
       }
+      cancel_workflow_instance: {
+        Args: {
+          p_actor_employee_id: string
+          p_context: Json
+          p_definition_id: string
+          p_instance_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       claim_next_social_video_transcription:
         | {
             Args: never
@@ -7402,6 +8164,18 @@ export type Database = {
               isSetofReturn: true
             }
           }
+      complete_workflow_instance_node: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_definition_id: string
+          p_instance_id: string
+          p_node_key: string
+          p_output: Json
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_project_log_fast: {
         Args: {
           p_content: string
@@ -7482,6 +8256,19 @@ export type Database = {
           date: string
           node_name: string
           stage_code: string
+        }[]
+      }
+      get_visitor_picture_asset_navigation: {
+        Args: {
+          p_asset_id: string
+          p_category_id: string
+          p_direction: string
+          p_limit: number
+        }
+        Returns: {
+          asset: Json
+          context: Json
+          nav_position: string
         }[]
       }
       list_customer_home_projects: {
@@ -7577,6 +8364,13 @@ export type Database = {
           wechat_openid_masked: string
         }[]
       }
+      list_visitor_picture_assets: {
+        Args: { p_category_id: string; p_page: number; p_page_size: number }
+        Returns: {
+          asset: Json
+          total_count: number
+        }[]
+      }
       list_wechat_login_memberships: {
         Args: { p_user_id: string }
         Returns: {
@@ -7608,9 +8402,58 @@ export type Database = {
           user_id: string
         }[]
       }
+      picture_asset_set_favorite: {
+        Args: { p_asset_id: string; p_favorited: boolean; p_visitor_id: string }
+        Returns: {
+          asset_id: string
+          favorite_count: number
+          favorited: boolean
+        }[]
+      }
+      picture_asset_set_like: {
+        Args: { p_asset_id: string; p_liked: boolean; p_visitor_id: string }
+        Returns: {
+          asset_id: string
+          like_count: number
+          liked: boolean
+        }[]
+      }
+      publish_workflow_definition:
+        | {
+            Args: {
+              p_definition_id: string
+              p_published_by: string
+              p_snapshot: Json
+              p_tenant_id: string
+              p_updated_by: string
+              p_validation_result: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_definition_id: string
+              p_expected_updated_at: string
+              p_published_by: string
+              p_snapshot: Json
+              p_tenant_id: string
+              p_updated_by: string
+              p_validation_result: Json
+            }
+            Returns: Json
+          }
       recalculate_project_referral: {
         Args: { p_project_id: string }
         Returns: undefined
+      }
+      replace_workflow_draft_graph: {
+        Args: {
+          p_definition_id: string
+          p_edges: Json
+          p_nodes: Json
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       resolve_wechat_login_state_by_openid: {
         Args: { p_openid: string }
@@ -7682,6 +8525,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      start_workflow_instance: {
+        Args: {
+          p_context: Json
+          p_definition_id: string
+          p_started_by: string
+          p_subject_id: string
+          p_subject_type: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       sync_user_oauth_identity: {
         Args: {
           p_openid: string
@@ -7739,6 +8593,10 @@ export type Database = {
           oauth_matched: boolean
           user_profile: Json
         }[]
+      }
+      workflow_edge_condition_matches: {
+        Args: { p_condition: Json; p_output: Json }
+        Returns: boolean
       }
     }
     Enums: {

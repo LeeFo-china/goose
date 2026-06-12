@@ -59,9 +59,8 @@ argument parsing, remote read path, and report writing without mutating data.
 ## Pending Staging Verification
 
 No staging dry-run/apply was executed in this workspace because a confirmed
-staging tenant id is not available, and earlier remote migration status checks
-failed with `SUPABASE_DB_PASSWORD` authentication errors for project
-`fclnkyatvfvmzgzdqlba`.
+staging tenant id is not available. Remote migration status now succeeds for
+project `fclnkyatvfvmzgzdqlba` through `20260612124500`.
 
 Before marking Phase 4 accepted:
 

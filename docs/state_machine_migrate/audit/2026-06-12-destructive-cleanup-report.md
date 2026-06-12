@@ -44,9 +44,9 @@ rollback.
 
 ## Pending Target Verification
 
-Target apply was not executed in this workspace because Supabase migration
-status previously failed with `SUPABASE_DB_PASSWORD` authentication errors.
-Before applying to production:
+Target destructive apply was not executed in this workspace. Remote migration
+status now succeeds through `20260612124500`; the remaining pending migrations
+are the destructive cleanup pair. Before applying to production:
 
 1. Confirm Local/Remote migration alignment with `supabase migration list`.
 2. Confirm mini-program minimum supported version no longer reads legacy fields.

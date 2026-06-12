@@ -15,7 +15,7 @@
 
 截至 2026-06-12，本方案已经按
 `docs/state_machine_migrate/execution-plan.md` 分阶段执行到 Phase 6
-本地准备状态：
+远端预清理状态：
 
 - 客户/项目旧 `status-actions`、`status-transition`、
   `status-transitions` API 路由已移除，后台正常流程改用
@@ -29,15 +29,26 @@
 - 回填脚本不再读取 `expense_requests.current_step`；费用 pending 节点由
   `expense_request_approvals` 审计记录推导。
 - 本地 `workflow:cleanup-readiness` 已达到 `ready: true`、`0` 个 blocker。
+- 目标 Supabase project `fclnkyatvfvmzgzdqlba` 已应用到
+  `20260612124500_add_cancel_workflow_instance_rpc.sql`；`supabase migration list`
+  可正常连接并确认状态。
+- 目标库已补齐 `workflow_subject_states` projection：先 dry-run 发现
+  `1` 条 customer、`20` 条 project projection 缺失，随后
+  `workflow:subject-states-rebuild --apply` upsert `21` 条，远端
+  `workflow:runtime-consistency-check` 已通过 `total_issues: 0`。
+- `apps/api/src/types/database.ts` 已从目标 project 重新生成，包含
+  `workflow_subject_states`、`workflow_tasks.assignee_permission_code` 和
+  `cancel_workflow_instance`。
 - 破坏性清理 migration 已准备：
   `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`。
 
 仍未在本工作区完成的外部门禁：
 
-- `supabase migration list` 因 `SUPABASE_DB_PASSWORD` 认证失败，尚不能确认
-  Local/Remote 对齐。
-- 破坏性 migration 尚未在目标 Supabase 环境 apply，`apps/api/src/types/database.ts`
-  也必须等目标环境 apply 后再重新生成。
+- 破坏性 migration 尚未在目标 Supabase 环境 apply；当前仅剩
+  `20260612133000_drop_schedule_project_construction_transition.sql` 和
+  `20260612143000_drop_legacy_state_machine_objects.sql` 未上远端。
+- 破坏性清理后还需再次重新生成 `apps/api/src/types/database.ts`，届时旧表、
+  旧 RPC、旧列应从类型中消失。
 - 小程序最低版本和 staging/admin/mini-program smoke 仍需外部验收确认。
 
 注意：`customers.status`、`projects.status`、`expense_requests.status`

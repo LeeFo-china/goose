@@ -80,12 +80,12 @@ These checks are still required before Phase 5 can be fully accepted:
 | Mini-program task/detail smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms `/workflow-tasks`, `/customer/bootstrap`, and customer self-service project detail include workflow data and remain paginated |
 | Task center smoke | `bun --cwd apps/api run workflow:phase5-smoke` confirms task center todos stay paginated |
 | Orange handoff | mini-program team confirms the updated `workflow_state.actions` / `output_fields` contract is implemented or scheduled before Phase 6 |
-| Remote migration status | `supabase migration list` succeeds and Local/Remote are aligned before destructive cleanup |
+| Remote migration status | `supabase migration list` succeeds and only the intentional destructive cleanup migrations remain pending before final cleanup |
 
 ## Current Blockers
 
 - No staging tenant id and no authenticated API tokens are available in this
   workspace for customer/project/admin/mini-program smoke.
-- `SUPABASE_DB_PASSWORD` authentication has failed for project
-  `fclnkyatvfvmzgzdqlba` in earlier migration status checks, so remote
-  migration alignment is still unverified.
+- Remote migration status now succeeds for project `fclnkyatvfvmzgzdqlba`.
+  The target project is aligned through `20260612124500`; the two remaining
+  pending migrations are the intentional destructive cleanup migrations.
