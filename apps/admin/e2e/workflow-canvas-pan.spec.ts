@@ -19,6 +19,11 @@ type WorkflowGraph = {
   }>;
 };
 
+type TransformPoint = {
+  x: number;
+  y: number;
+};
+
 declare global {
   interface Window {
     __workflowEdgeMutationCount: number;
@@ -118,6 +123,75 @@ function parseZoomText(text: string | null) {
   return zoom;
 }
 
+function parseCssTranslate(transform: string): TransformPoint {
+  if (transform === "none") return { x: 0, y: 0 };
+  const matrix = transform.match(/^matrix\(([^)]+)\)$/);
+  if (matrix) {
+    const parts = matrix[1].split(",").map((part) => Number(part.trim()));
+    expect(parts.length).toBe(6);
+    return { x: parts[4], y: parts[5] };
+  }
+  const translate = transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+  expect(translate).not.toBeNull();
+  return {
+    x: Number(translate![1]),
+    y: Number(translate![2]),
+  };
+}
+
+async function getViewportTranslate(page: Page) {
+  const viewport = page.locator("[data-workflow-canvas='true'] .react-flow__viewport");
+  return parseCssTranslate(await viewport.evaluate((element) =>
+    window.getComputedStyle(element).transform,
+  ));
+}
+
+async function getNodeTranslate(page: Page, nodeKey: string) {
+  return page.locator(`[data-workflow-node-key='${nodeKey}']`).evaluate((element) => {
+    const wrapper = element.closest(".react-flow__node");
+    if (!(wrapper instanceof HTMLElement)) {
+      throw new Error("React Flow node wrapper not found");
+    }
+    const transform = wrapper.style.transform || window.getComputedStyle(wrapper).transform;
+    const translate = transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+    if (!translate) {
+      throw new Error(`Unexpected node transform: ${transform}`);
+    }
+    return {
+      x: Number(translate[1]),
+      y: Number(translate[2]),
+    };
+  });
+}
+
+async function dropWorkflowPresetAt(page: Page, presetKey: string, point: TransformPoint) {
+  await page.evaluate(({ presetKey: key, point: dropPoint }) => {
+    const target = document.elementFromPoint(dropPoint.x, dropPoint.y);
+    if (!target) throw new Error("Drop target not found");
+
+    const dataTransfer = new DataTransfer();
+    dataTransfer.effectAllowed = "copy";
+    dataTransfer.dropEffect = "copy";
+    dataTransfer.setData("application/x-gooes-workflow-node-preset", key);
+    dataTransfer.setData("text/plain", key);
+
+    target.dispatchEvent(new DragEvent("dragover", {
+      bubbles: true,
+      cancelable: true,
+      clientX: dropPoint.x,
+      clientY: dropPoint.y,
+      dataTransfer,
+    }));
+    target.dispatchEvent(new DragEvent("drop", {
+      bubbles: true,
+      cancelable: true,
+      clientX: dropPoint.x,
+      clientY: dropPoint.y,
+      dataTransfer,
+    }));
+  }, { presetKey, point });
+}
+
 test("React Flow 画布可以拖拽平移", async ({ page }) => {
   await loginAsTenantAdmin(page);
   const workflowId = await createTemporaryWorkflow(page);
@@ -156,6 +230,59 @@ test("React Flow 画布可以拖拽平移", async ({ page }) => {
       window.getComputedStyle(element).transform,
     );
     expect(afterTransform).not.toBe(beforeTransform);
+  } finally {
+    await archiveWorkflow(page, workflowId);
+  }
+});
+
+test("节点预设可以拖放到画布左侧负坐标区域", async ({ page }) => {
+  await loginAsTenantAdmin(page);
+  const workflowId = await createTemporaryWorkflow(page);
+
+  try {
+    await seedWideWorkflowGraph(page, workflowId);
+    await page.goto(`/workflows/${workflowId}`, { waitUntil: "load" });
+
+    const pane = page.locator("[data-workflow-canvas='true'] .react-flow__pane");
+    await expect(pane).toBeVisible();
+    const box = await pane.boundingBox();
+    expect(box).not.toBeNull();
+
+    const panStart = {
+      x: box!.x + box!.width * 0.28,
+      y: box!.y + box!.height * 0.72,
+    };
+    const hit = await page.evaluate(({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return {
+        workflowCanvas: Boolean(element?.closest("[data-workflow-canvas='true']")),
+        workflowNode: Boolean(element?.closest("[data-workflow-node='true']")),
+      };
+    }, panStart);
+    expect(hit.workflowCanvas).toBe(true);
+    expect(hit.workflowNode).toBe(false);
+
+    await page.mouse.move(panStart.x, panStart.y);
+    await page.mouse.down();
+    await page.mouse.move(panStart.x + 360, panStart.y, { steps: 10 });
+    await page.mouse.up();
+
+    const viewportTranslate = await getViewportTranslate(page);
+    expect(viewportTranslate.x).toBeGreaterThan(250);
+
+    const dropPoint = {
+      x: box!.x + 72,
+      y: box!.y + box!.height * 0.5,
+    };
+    const expectedFlowX = dropPoint.x - box!.x - viewportTranslate.x;
+    expect(expectedFlowX).toBeLessThan(0);
+
+    await dropWorkflowPresetAt(page, "workflow_step", dropPoint);
+
+    const newNode = page.locator("[data-workflow-node-key='workflow_step_13']");
+    await expect(newNode).toBeVisible();
+    const newNodePosition = await getNodeTranslate(page, "workflow_step_13");
+    expect(newNodePosition.x).toBeLessThan(0);
   } finally {
     await archiveWorkflow(page, workflowId);
   }

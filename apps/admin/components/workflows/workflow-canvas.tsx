@@ -49,11 +49,6 @@ const edgeTypes = {
   workflowEdge: WorkflowFlowEdge,
 };
 
-const nodeExtent: [[number, number], [number, number]] = [
-  [0, 0],
-  [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
-];
-
 const workflowFlowAriaLabels = {
   "controls.ariaLabel": "画布操作",
   "controls.zoomIn.ariaLabel": "放大画布",
@@ -260,8 +255,8 @@ function WorkflowCanvasInner({
           y: event.clientY,
         });
         onDropNodePreset(presetKey, {
-          x: Math.max(0, position.x),
-          y: Math.max(0, position.y),
+          x: position.x,
+          y: position.y,
         });
       }}
     >
@@ -300,7 +295,6 @@ function WorkflowCanvasInner({
         fitView={false}
         maxZoom={WORKFLOW_FLOW_MAX_ZOOM}
         minZoom={WORKFLOW_FLOW_MIN_ZOOM}
-        nodeExtent={nodeExtent}
         nodes={flowNodes}
         nodesDraggable={disabled ? false : undefined}
         nodesConnectable={disabled ? false : undefined}
