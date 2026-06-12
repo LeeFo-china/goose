@@ -82,8 +82,17 @@ Apply only after the pre-apply checks above pass:
 
 ```bash
 cd /Users/leefo/Public/work/gooes
+set -a
+source /Users/leefo/Public/work/gooes/.env.local
+set +a
+test -n "$SUPABASE_DB_DIRECT_URL"
 supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
+
+Use the direct database URL for `supabase db push`; do not use the pooled URL
+for migration apply. The `test -n` command only verifies that the variable is
+present and must not be replaced with a command that prints the connection
+string.
 
 Record:
 

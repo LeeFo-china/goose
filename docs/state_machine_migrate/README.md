@@ -43,7 +43,11 @@
 - 破坏性清理 migration 已准备：
   `supabase/migrations/20260612143000_drop_legacy_state_machine_objects.sql`。
 - 已新增破坏性清理 preflight：
-  `cd apps/api && bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight`。
+  ```bash
+  cd apps/api
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
+  ```
   人工证据文件可先用
   `cd apps/api && bun run workflow:manual-gates-check --evidence-file docs/state_machine_migrate/audit/manual-gates.json`
   独立校验；该命令不需要数据库连接。

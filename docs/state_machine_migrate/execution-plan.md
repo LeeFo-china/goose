@@ -1020,11 +1020,12 @@
 
   ```bash
   cd apps/api
-  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight
+  bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
+    --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
-  Without a manual gate evidence file, the command must fail if any external
-  gate is missing. Current target run passes the automated checks
+  Without a valid manual gate evidence file, the command must fail if any
+  external gate is missing. Current target run passes the automated checks
   (`pending_migrations_are_destructive_pair`,
   `destructive_migration_content`, `cleanup_readiness`,
   `workflow_runtime_consistency`, and `legacy_objects_still_targeted`) and
@@ -1136,6 +1137,10 @@
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-preflight \
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   cd ../..
+  set -a
+  source /Users/leefo/Public/work/gooes/.env.local
+  set +a
+  test -n "$SUPABASE_DB_DIRECT_URL"
   supabase db push --db-url "$SUPABASE_DB_DIRECT_URL"
   cd apps/api
   bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructive-cleanup-verify
