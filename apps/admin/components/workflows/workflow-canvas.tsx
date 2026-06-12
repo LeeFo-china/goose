@@ -2,6 +2,7 @@
 
 import {
   Background,
+  BackgroundVariant,
   ConnectionMode,
   ControlButton,
   Controls,
@@ -333,7 +334,12 @@ function WorkflowCanvasInner({
             <LayoutDashboard className="size-4" />
           </ControlButton>
         </Controls>
-        <Background color="hsl(var(--border) / 0.65)" gap={32} />
+        <Background
+          color="hsl(var(--foreground) / 0.24)"
+          gap={32}
+          size={3}
+          variant={BackgroundVariant.Dots}
+        />
       </ReactFlow>
     </div>
   );
