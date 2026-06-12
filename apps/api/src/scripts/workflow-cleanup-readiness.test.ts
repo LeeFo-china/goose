@@ -207,3 +207,22 @@ describe("expense current step runtime cleanup", () => {
     expect(references).toEqual([]);
   });
 });
+
+describe("workflow runtime backfill current step cleanup", () => {
+  test("backfill scripts no longer read legacy expense current_step", () => {
+    const sourcePaths = [
+      "src/scripts/workflow-runtime-backfill/data.ts",
+      "src/scripts/workflow-runtime-backfill/runner.ts",
+      "src/scripts/workflow-runtime-backfill/types.ts",
+      "src/scripts/workflow-runtime-backfill/plan.ts",
+    ];
+    const references = scanCleanupReferences(sourcePaths.map((sourcePath) => ({
+      path: `apps/api/${sourcePath}`,
+      content: readFileSync(sourcePath, "utf8"),
+    }))).filter((reference) =>
+      reference.pattern === "current_step"
+    );
+
+    expect(references).toEqual([]);
+  });
+});

@@ -848,6 +848,13 @@
   inspect the old column. Cleanup readiness now leaves only the historical
   `workflow-runtime-backfill` script references to `current_step`.
 
+  2026-06-12 progress: `workflow-runtime-backfill` no longer reads
+  `expense_requests.current_step`. Expense backfill derives the pending
+  `manager_review` / `finance_review` node from `expense_request_approvals`
+  audit rows, while terminal status mapping still comes from
+  `expense_requests.status`. `workflow:cleanup-readiness` now reports
+  `ready: true` with zero blocker references.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

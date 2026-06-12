@@ -171,6 +171,15 @@ display:
 | `current_step` runtime blocker references | `0` |
 | remaining `current_step` blockers | `workflow-runtime-backfill` scripts only |
 
+2026-06-12 after removing workflow backfill `current_step` reads:
+
+| check | result |
+| --- | --- |
+| exit code | `0` |
+| ready | `true` |
+| blocker references | `0` |
+| blocker files | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -257,8 +266,12 @@ because the system is still in the compatibility window:
   workflow task bridge passes task node context, and direct legacy endpoints
   resolve the current node from `workflow_subject_states`;
 - generated database types still reflect the not-yet-dropped DB objects;
-- backfill scripts still read legacy `current_step` until historical data
-  migration is applied and accepted.
+- backfill scripts no longer read legacy `current_step`; expense pending node
+  backfill is derived from `expense_request_approvals` audit rows.
+
+The local cleanup readiness gate now passes. Phase 6 still requires the
+destructive database cleanup migration and the external mini-program rollout
+gate before applying drops to a shared environment.
 
 Before creating the destructive cleanup migration, this command must report
 `ready: true` or all remaining references must be explicitly reclassified as

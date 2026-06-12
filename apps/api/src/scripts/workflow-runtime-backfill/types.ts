@@ -24,7 +24,7 @@ export type LegacySubjectRow = {
   tenant_id: string;
   subject_type: BackfillSubjectType;
   status: string | null;
-  current_step: string | null;
+  legacy_step: string | null;
   actor_employee_id: string | null;
   assignee_employee_id: string | null;
   context: Record<string, unknown>;

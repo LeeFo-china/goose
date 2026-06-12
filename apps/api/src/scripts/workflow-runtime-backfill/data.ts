@@ -19,6 +19,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+type ExpenseApprovalAuditRow = {
+  step: string | null;
+  action: string | null;
+  approval_round: number | null;
+  created_at: string | null;
+};
+
+function getLatestApprovalRound(approvals: ExpenseApprovalAuditRow[]) {
+  return approvals.reduce((max, item) => {
+    const round = Number(item.approval_round ?? 1);
+    return Number.isFinite(round) && round > max ? round : max;
+  }, 1);
+}
+
+function resolveExpenseWorkflowStep(row: {
+  status: string | null;
+  approvals?: ExpenseApprovalAuditRow[] | null;
+}) {
+  if (row.status === "draft") return "draft";
+  if (row.status === "approved") return "payment";
+  if (row.status === "paid") return "done";
+  if (row.status === "rejected") return "draft";
+  if (row.status === "cancelled") return "cancelled";
+  if (row.status !== "pending") return null;
+
+  const approvals = Array.isArray(row.approvals) ? row.approvals : [];
+  const latestRound = getLatestApprovalRound(approvals);
+  const hasManagerApproval = approvals.some((item) =>
+    Number(item.approval_round ?? 1) === latestRound &&
+    item.step === "manager_review" &&
+    item.action === "approve"
+  );
+
+  return hasManagerApproval ? "finance_review" : "manager_review";
+}
+
 async function listPagedRows<T>(
   tableName: string,
   select: string,
@@ -68,7 +104,7 @@ async function listCustomerSubjects(tenantId: string) {
     tenant_id: row.tenant_id,
     subject_type: "customer",
     status: row.status,
-    current_step: null,
+    legacy_step: null,
     actor_employee_id: row.owner_id,
     assignee_employee_id: row.owner_id,
     created_at: row.created_at,
@@ -92,7 +128,7 @@ async function listProjectSubjects(tenantId: string) {
     tenant_id: row.tenant_id,
     subject_type: "project",
     status: row.status,
-    current_step: null,
+    legacy_step: null,
     actor_employee_id: null,
     assignee_employee_id: null,
     created_at: row.created_at,
@@ -108,11 +144,16 @@ async function listExpenseSubjects(tenantId: string) {
     employee_id: string | null;
     project_id: string | null;
     status: string | null;
-    current_step: string | null;
     assignee_id: string | null;
     total_amount: number | null;
     created_at: string | null;
     updated_at: string | null;
+    approvals?: Array<{
+      step: string | null;
+      action: string | null;
+      approval_round: number | null;
+      created_at: string | null;
+    }> | null;
   }>(
     "expense_requests",
     [
@@ -121,11 +162,11 @@ async function listExpenseSubjects(tenantId: string) {
       "employee_id",
       "project_id",
       "status",
-      "current_step",
       "assignee_id",
       "total_amount",
       "created_at",
       "updated_at",
+      "approvals:expense_request_approvals(step,action,approval_round,created_at)",
     ].join(","),
     tenantId,
   );
@@ -135,7 +176,7 @@ async function listExpenseSubjects(tenantId: string) {
     tenant_id: row.tenant_id,
     subject_type: "expense_request",
     status: row.status,
-    current_step: row.current_step,
+    legacy_step: resolveExpenseWorkflowStep(row),
     actor_employee_id: row.employee_id,
     assignee_employee_id: row.assignee_id,
     created_at: row.created_at,
@@ -236,7 +277,7 @@ function buildInstanceContext(row: LegacySubjectRow) {
     legacy_subject_type: row.subject_type,
     legacy_subject_id: row.id,
     legacy_status: row.status,
-    legacy_step: row.current_step,
+    legacy_step: row.legacy_step,
     legacy_created_at: row.created_at,
     legacy_updated_at: row.updated_at,
     ...(isRecord(row.context) ? row.context : {}),
