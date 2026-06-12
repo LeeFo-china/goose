@@ -8,7 +8,10 @@ import {
   parseSupabaseDryRunMigrations,
   validateManualGateEvidence,
 } from "./workflow-destructive-cleanup-preflight";
-import { runWorkflowDestructiveCleanupVerify } from "./workflow-destructive-cleanup-verify";
+import {
+  runWorkflowDestructiveCleanupVerify,
+  type WorkflowDestructiveCleanupVerifyReport,
+} from "./workflow-destructive-cleanup-verify";
 import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 
 export type FinalAuditInput = {
@@ -18,6 +21,7 @@ export type FinalAuditInput = {
   cleanupReady: boolean;
   cleanupBlockerCount: number;
   destructiveCleanupOk: boolean;
+  destructiveCleanupDetail: string;
   generatedTypesClean: boolean;
   generatedTypesDetail: string;
   manualGateEvidenceOk: boolean;
@@ -97,9 +101,7 @@ export function buildFinalAuditReport(
     {
       name: "destructive_cleanup_verify",
       ok: input.destructiveCleanupOk,
-      detail: input.destructiveCleanupOk
-        ? "legacy objects absent and workflow runtime consistent"
-        : "legacy objects remain or workflow runtime is inconsistent",
+      detail: input.destructiveCleanupDetail,
     },
     {
       name: "generated_database_types_clean",
@@ -179,6 +181,20 @@ export function isBreakingCleanupCommitMessage(message: string): boolean {
   const hasCleanupTarget =
     /旧状态机数据库|旧状态机|删表|删列|删除旧|drop|cleanup/i.test(message);
   return hasBreakingMarker && hasWorkflowScope && hasCleanupTarget;
+}
+
+export function summarizeDestructiveCleanupVerifyReport(
+  report: WorkflowDestructiveCleanupVerifyReport | null,
+): string {
+  if (!report) {
+    return "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL";
+  }
+
+  const relevantChecks = report.checks.filter((check) => !check.ok);
+  const checks = relevantChecks.length > 0 ? relevantChecks : report.checks;
+  return checks
+    .map((check) => `${check.name}: ${check.detail}`)
+    .join("; ");
 }
 
 async function runSupabaseDryRun(): Promise<string[]> {
@@ -314,6 +330,8 @@ export async function buildFinalCompletionAuditReport(
     cleanupReady: cleanupReadiness.ready,
     cleanupBlockerCount: cleanupReadiness.blockers.length,
     destructiveCleanupOk: destructiveCleanup?.ok ?? false,
+    destructiveCleanupDetail:
+      summarizeDestructiveCleanupVerifyReport(destructiveCleanup),
     generatedTypesClean: generatedTypes.ok,
     generatedTypesDetail: generatedTypes.detail,
     manualGateEvidenceOk: manualGateEvidence.ok,

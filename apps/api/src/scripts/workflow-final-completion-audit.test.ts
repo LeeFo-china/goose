@@ -7,6 +7,7 @@ import {
   parseSupabaseMigrationListRows,
   resolveFinalAuditDatabaseUrl,
   summarizeMigrationListAlignment,
+  summarizeDestructiveCleanupVerifyReport,
 } from "./workflow-final-completion-audit";
 
 describe("parseFinalAuditArgs", () => {
@@ -46,6 +47,8 @@ describe("buildFinalAuditReport", () => {
       cleanupReady: true,
       cleanupBlockerCount: 0,
       destructiveCleanupOk: true,
+      destructiveCleanupDetail:
+        "legacy objects absent and workflow runtime consistent",
       generatedTypesClean: true,
       generatedTypesDetail: "legacy generated types absent",
       manualGateEvidenceOk: true,
@@ -94,6 +97,8 @@ describe("buildFinalAuditReport", () => {
       cleanupReady: false,
       cleanupBlockerCount: 2,
       destructiveCleanupOk: false,
+      destructiveCleanupDetail:
+        "legacy_tables_absent: present=customer_status_transition_logs",
       generatedTypesClean: false,
       generatedTypesDetail: "legacy generated type patterns=current_step:",
       manualGateEvidenceOk: false,
@@ -119,7 +124,8 @@ describe("buildFinalAuditReport", () => {
         {
           name: "destructive_cleanup_verify",
           ok: false,
-          detail: "legacy objects remain or workflow runtime is inconsistent",
+          detail:
+            "legacy_tables_absent: present=customer_status_transition_logs",
         },
         {
           name: "generated_database_types_clean",
@@ -139,6 +145,57 @@ describe("buildFinalAuditReport", () => {
         },
       ],
     });
+  });
+});
+
+describe("summarizeDestructiveCleanupVerifyReport", () => {
+  test("reports missing database url when no destructive cleanup report exists", () => {
+    expect(summarizeDestructiveCleanupVerifyReport(null)).toBe(
+      "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
+    );
+  });
+
+  test("summarizes only failed destructive cleanup checks", () => {
+    expect(summarizeDestructiveCleanupVerifyReport({
+      ok: false,
+      generated_at: "2026-06-12T00:00:00.000Z",
+      checks: [
+        {
+          name: "legacy_tables_absent",
+          ok: false,
+          detail: "present=customer_status_transition_logs",
+        },
+        {
+          name: "workflow_runtime_consistency",
+          ok: true,
+          detail: "total_issues=0",
+        },
+      ],
+    })).toBe(
+      "legacy_tables_absent: present=customer_status_transition_logs",
+    );
+  });
+
+  test("summarizes all checks when destructive cleanup verification passes", () => {
+    expect(summarizeDestructiveCleanupVerifyReport({
+      ok: true,
+      generated_at: "2026-06-12T00:00:00.000Z",
+      checks: [
+        {
+          name: "legacy_tables_absent",
+          ok: true,
+          detail: "absent=customer_status_transition_logs",
+        },
+        {
+          name: "workflow_runtime_consistency",
+          ok: true,
+          detail: "total_issues=0",
+        },
+      ],
+    })).toBe([
+      "legacy_tables_absent: absent=customer_status_transition_logs",
+      "workflow_runtime_consistency: total_issues=0",
+    ].join("; "));
   });
 });
 
