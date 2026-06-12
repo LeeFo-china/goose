@@ -432,6 +432,14 @@
   }
   ```
 
+  2026-06-12 progress: customer status transitions already call
+  `customerWorkflowRuntimeService` and now refresh `workflow_subject_states`
+  when runtime metadata contains `definition_id` and `instance_id`. Old
+  `POST /customers/:id/status-transition` and
+  `GET /customers/:id/status-actions` responses include `workflow_state`.
+  This step is not complete until the old customer write path no longer uses
+  the domain status transition config as the source of truth.
+
 - [ ] **Step 3.2: Project adapter**
 
   Replace project status transition writes with workflow runtime. The `schedule_construction` branch must still update project business facts:
@@ -441,6 +449,12 @@
   - workflow node output fields `start_date` and `construction_manager_employee_id`
 
   Do not call `schedule_project_construction_transition` after this step.
+
+  2026-06-12 progress: old project status action and transition responses now
+  include `workflow_state`, and old project transitions refresh the subject
+  projection. Project writes still use the legacy status path, including
+  `schedule_project_construction_transition`, because `construction_main`
+  workflow template/runtime mapping is not available yet.
 
 - [ ] **Step 3.3: Expense adapter**
 
@@ -453,6 +467,11 @@
   - `pay` -> complete payment task.
 
   During this phase, keep old `status/current_step/approval_chain` fields as compatibility projections only.
+
+  2026-06-12 progress: old expense detail and write responses
+  (`submit/approve/reject/cancel/pay`) include `workflow_state`. Expense writes
+  still use the legacy approval-chain path until an explicit workflow runtime
+  mapping for approval nodes is implemented.
 
 - [ ] **Step 3.4: Verification**
 

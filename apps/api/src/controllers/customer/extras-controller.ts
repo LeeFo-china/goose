@@ -22,6 +22,7 @@ import {
 } from "@/services/customer-phone-privacy";
 import { customerSourceService } from "@/services/customer-sources";
 import { customerStatusService } from "@/services/customer-status";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import {
@@ -64,14 +65,21 @@ class CustomerExtrasController extends CustomerBaseController {
       payload: result.data,
     });
 
-    return ResponseHandler.success(
-      await this.buildCustomerDetailResponse(customer, {
-        phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
-          authContext,
-        ),
-        tenantId: authContext.tenantId,
-      }),
-    );
+    const detail = await this.buildCustomerDetailResponse(customer, {
+      phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
+        authContext,
+      ),
+      tenantId: authContext.tenantId,
+    });
+    const workflowState = await workflowSubjectsService.getState(authContext, {
+      subjectType: "customer",
+      subjectId: idVerify.data.id,
+    });
+
+    return ResponseHandler.success({
+      ...detail,
+      ...workflowState,
+    });
   }
 
   @Get("/customers/:id/status-actions")

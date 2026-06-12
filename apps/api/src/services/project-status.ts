@@ -14,6 +14,8 @@ import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
 import { projectMemberService } from "@/services/project-members";
+import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   inferProjectStatusAction,
   isProjectStatus,
@@ -172,7 +174,7 @@ class ProjectStatusService {
     };
 
     if (input.payload.action === "schedule_construction") {
-      return projectRepository.scheduleConstructionTransition({
+      const project = await projectRepository.scheduleConstructionTransition({
         projectId: input.projectId,
         tenantId,
         expectedStatus: fromStatus,
@@ -186,6 +188,8 @@ class ProjectStatusService {
         reason,
         metadata,
       });
+      await this.syncProjectSubjectState(tenantId, input.projectId);
+      return project;
     }
 
     const project = await projectRepository.updateIfStatus({
@@ -225,6 +229,8 @@ class ProjectStatusService {
       });
     }
 
+    await this.syncProjectSubjectState(tenantId, input.projectId);
+
     return project;
   }
 
@@ -252,6 +258,11 @@ class ProjectStatusService {
       ? await this.getOptionalPausedFromStatus(input.projectId, tenantId)
       : null;
 
+    const workflowState = await workflowSubjectsService.getState(input.authContext, {
+      subjectType: "project",
+      subjectId: input.projectId,
+    });
+
     return {
       current_status: fromStatus,
       paused_from_status: pausedFromStatus,
@@ -259,6 +270,7 @@ class ProjectStatusService {
         fromStatus,
         pausedFromStatus,
       }),
+      ...workflowState,
     };
   }
 
@@ -439,6 +451,14 @@ class ProjectStatusService {
     }
 
     return pausedFromStatus;
+  }
+
+  private async syncProjectSubjectState(tenantId: string, projectId: string) {
+    await workflowSubjectStateService.syncFromRuntimeInstance({
+      tenantId,
+      subjectType: "project",
+      subjectId: projectId,
+    });
   }
 
   private async getPausedFromStatus(projectId: string, tenantId: string) {

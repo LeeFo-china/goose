@@ -10,6 +10,8 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
+import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   CustomerStatusActionConfig,
   inferCustomerStatusAction,
@@ -185,6 +187,15 @@ class CustomerStatusService {
         reason,
         extraContext: designProjectMetadata,
       });
+    if (workflowRuntimeMetadata.instance_id && workflowRuntimeMetadata.definition_id) {
+      await workflowSubjectStateService.syncFromRuntimeInstance({
+        tenantId,
+        subjectType: "customer",
+        subjectId: input.customerId,
+        definitionId: workflowRuntimeMetadata.definition_id,
+        instanceId: workflowRuntimeMetadata.instance_id,
+      });
+    }
 
     await customerStatusTransitionRepository.create({
       tenantId,
@@ -228,11 +239,17 @@ class CustomerStatusService {
     }
 
     const fromStatus = this.getRequiredCurrentStatus(customer.status);
+    const workflowState = await workflowSubjectsService.getState(input.authContext, {
+      subjectType: "customer",
+      subjectId: input.customerId,
+    });
+
     return {
       current_status: fromStatus,
       actions: listCustomerStatusActions({
         fromStatus,
       }),
+      ...workflowState,
     };
   }
 

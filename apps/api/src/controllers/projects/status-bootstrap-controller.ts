@@ -8,6 +8,7 @@ import {
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { employeeProjectDetailBootstrapService } from "@/services/employee-project-detail-bootstrap";
 import { projectSer } from "@/services/projects";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { Delete, Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { ProjectBaseController } from "./shared";
@@ -40,8 +41,15 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
       projectId: idVerify.data.id,
       payload: result.data,
     });
+    const workflowState = await workflowSubjectsService.getState(authContext, {
+      subjectType: "project",
+      subjectId: idVerify.data.id,
+    });
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success({
+      ...data,
+      ...workflowState,
+    });
   }
 
   @Get("/projects/:id/status-actions")

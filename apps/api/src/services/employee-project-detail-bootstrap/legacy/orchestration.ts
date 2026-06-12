@@ -200,6 +200,7 @@ export function emptyStatusActions(this: any, project: Record<string, unknown>):
     current_status: typeof project.status === "string" ? project.status : "designing",
     paused_from_status: null,
     actions: [],
+    workflow_state: null,
   } as StatusActionsResult;
 }
 
@@ -216,5 +217,6 @@ export function buildStatusActionsFromProject(this: any, project: Record<string,
       fromStatus: currentStatus,
       pausedFromStatus: null,
     }),
+    workflow_state: null,
   } as StatusActionsResult;
 }

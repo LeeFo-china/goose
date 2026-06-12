@@ -14,7 +14,9 @@ import {
   SubmitExpenseRequestSchema,
   UpdateExpenseRequestSchema,
 } from "@/schema/expense-requests";
+import type { AuthContext } from "@/services/authorization";
 import { expenseRequestService } from "@/services/expense-requests";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -52,7 +54,9 @@ class ExpenseRequestsController extends TenantBaseController<
       authContext,
       idVerify.data.id,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
   };
 
   @Get("/expense-requests/approval-template")
@@ -170,7 +174,9 @@ class ExpenseRequestsController extends TenantBaseController<
       result.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
   }
 
   @Post("/expense-requests/:id/approve")
@@ -188,7 +194,9 @@ class ExpenseRequestsController extends TenantBaseController<
       result.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
   }
 
   @Post("/expense-requests/:id/reject")
@@ -206,7 +214,9 @@ class ExpenseRequestsController extends TenantBaseController<
       result.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
   }
 
   @Post("/expense-requests/:id/cancel")
@@ -224,7 +234,9 @@ class ExpenseRequestsController extends TenantBaseController<
       result.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
   }
 
   @Post("/expense-requests/:id/pay")
@@ -242,7 +254,28 @@ class ExpenseRequestsController extends TenantBaseController<
       result.data,
     );
 
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(
+      await this.withWorkflowState(authContext, idVerify.data.id, data),
+    );
+  }
+
+  private async withWorkflowState(
+    authContext: AuthContext,
+    expenseRequestId: string,
+    data: unknown,
+  ) {
+    const workflowState = await workflowSubjectsService.getState(authContext, {
+      subjectType: "expense_request",
+      subjectId: expenseRequestId,
+    });
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return data;
+    }
+
+    return {
+      ...(data as Record<string, unknown>),
+      ...workflowState,
+    };
   }
 }
 
