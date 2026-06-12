@@ -1083,6 +1083,13 @@
   - each pending task belongs to a running instance;
   - subject state current node matches instance current node.
 
+  2026-06-12 progress: `status-machine-consistency-check.ts` has been removed
+  and replaced by `workflow-runtime-consistency-check.ts`. The new script uses
+  read-only aggregate SQL over `workflow_instances`, `workflow_instance_nodes`,
+  `workflow_tasks`, and `workflow_subject_states`, and fails with non-zero exit
+  when any runtime consistency issue is found. API package script
+  `workflow:runtime-consistency-check` points to the replacement.
+
 - [ ] **Step 7.5: Verification**
 
   Run:
