@@ -69,6 +69,16 @@ display:
 | blocker files | `24` |
 | expense admin blocker references | `0` |
 
+2026-06-12 after removing task-center legacy expense todo projection:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `114` |
+| blocker files | `23` |
+| task-center blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -128,6 +138,8 @@ because the system is still in the compatibility window:
 - admin expense pages no longer send `current_step` filters or render
   `approval_chain`; expense detail uses `workflow_state` for current workflow
   status;
+- task-center expense todos no longer query legacy `current_step`; they keep
+  using workflow tasks and only batch-load expense summary fields by id;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

@@ -33,7 +33,6 @@ export type ExpenseRequestTodoSource = {
   request_no: string | null;
   title: string | null;
   status: string;
-  current_step: string;
   employee_id: string;
   assignee_id: string | null;
   created_at: string | null;
@@ -222,45 +221,6 @@ class TaskCenterRepository {
     return (data || []) as Array<{ id: string; project_id: string }>;
   }
 
-  async listExpenseRequestTodos(tenantId?: string | null) {
-    let query = SupabaseDB.getAdminClient()
-      .from("expense_requests")
-      .select(`
-        id,
-        request_no,
-        title,
-        status,
-        current_step,
-        employee_id,
-        assignee_id,
-        created_at,
-        updated_at,
-        rejected_at,
-        rejected_reason,
-        employee:employees!expense_requests_employee_id_fkey(
-          id,
-          name
-        ),
-        project:projects(
-          id,
-          name
-        )
-      `)
-      .in("status", ["draft", "rejected", "pending", "approved"]);
-
-    if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
-    }
-
-    const { data, error } = await query.order("created_at", { ascending: false });
-
-    if (error) {
-      throw Errors.dbError("查询费用申请待处理失败", error);
-    }
-
-    return (data || []) as unknown as ExpenseRequestTodoSource[];
-  }
-
   async listExpenseRequestsByIds(input: {
     tenantId: string;
     expenseRequestIds: string[];
@@ -276,7 +236,6 @@ class TaskCenterRepository {
         request_no,
         title,
         status,
-        current_step,
         employee_id,
         assignee_id,
         created_at,

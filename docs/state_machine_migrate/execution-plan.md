@@ -787,6 +787,10 @@
   reports zero blockers under `apps/admin/components/expenses` and
   `apps/admin/app/(console)/expenses`.
 
+  2026-06-12 progress: task-center expense todos now only use workflow tasks
+  plus expense summary lookup by id; the old repository projection that
+  queried `current_step` for expense todos has been removed.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
