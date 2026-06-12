@@ -543,7 +543,8 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
 
 `manual-gates.json` 里的 evidence 字段必须可追溯：使用 `http(s)` URL，
 或使用 `docs/state_machine_migrate/` 下已存在的文件路径。自由文本说明会被
-`workflow:destructive-cleanup-preflight` 判定为无效证据。
+`workflow:manual-gates-check` 和 `workflow:destructive-cleanup-preflight`
+判定为无效证据。
 
 对 workflow task 高频查询执行 `EXPLAIN ANALYZE`，至少覆盖：
 

@@ -27,7 +27,8 @@ record completed checks and cannot be future timestamps.
 
 Evidence values must be traceable: use either an `http(s)` URL or a
 `docs/state_machine_migrate/` path. Local doc paths must reference existing
-files; free-form notes are rejected by `workflow:destructive-cleanup-preflight`.
+files; free-form notes are rejected by `workflow:manual-gates-check` and
+`workflow:destructive-cleanup-preflight`.
 The evidence file can be validated without a database connection:
 
 ```bash
