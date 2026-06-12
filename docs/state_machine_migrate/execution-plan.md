@@ -941,6 +941,28 @@
   ready for the final destructive migration after the remaining human/smoke
   gates are satisfied.
 
+  2026-06-12 progress: added an explicit destructive cleanup preflight:
+
+  ```bash
+  cd apps/api
+  bun run workflow:destructive-cleanup-preflight
+  ```
+
+  Without manual confirmation flags, the command must fail if any external gate
+  is missing. Current target run passes the automated checks
+  (`pending_migrations_are_destructive_pair`, `cleanup_readiness`,
+  `workflow_runtime_consistency`, and `legacy_objects_still_targeted`) and
+  fails only `manual_gates`.
+
+  Final destructive apply requires all three confirmations:
+
+  ```bash
+  bun run workflow:destructive-cleanup-preflight \
+    --confirm-mini-program \
+    --confirm-admin-smoke \
+    --confirm-backup-window
+  ```
+
 ### Steps
 
 - [x] **Step 6.1: Create cleanup migration**
@@ -1009,6 +1031,12 @@
   Run:
 
   ```bash
+  cd apps/api
+  bun run workflow:destructive-cleanup-preflight \
+    --confirm-mini-program \
+    --confirm-admin-smoke \
+    --confirm-backup-window
+  cd ../..
   supabase migration list
   bun --cwd apps/api run workflow:cleanup-readiness
   bun run api:typecheck

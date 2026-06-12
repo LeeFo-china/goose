@@ -130,6 +130,7 @@ function isAllowedReferencePath(path: string): boolean {
   if (path.endsWith(".test.ts") || path.endsWith(".test.tsx")) return true;
   if (path === "apps/api/src/types/database.ts") return true;
   if (path === "apps/api/src/scripts/workflow-cleanup-readiness.ts") return true;
+  if (path === "apps/api/src/scripts/workflow-destructive-cleanup-preflight.ts") return true;
   return false;
 }
 

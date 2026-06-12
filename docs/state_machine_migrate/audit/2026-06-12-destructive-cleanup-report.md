@@ -45,6 +45,7 @@ business status fields; workflow runtime now owns actionable node state.
 | `supabase db push --dry-run` | would push only the two destructive cleanup migrations |
 | `workflow:runtime-consistency-check` | `ok: true`, `total_issues: 0` |
 | `workflow:cleanup-readiness` | `ready: true`, `blockers: 0` |
+| `workflow:destructive-cleanup-preflight` without manual flags | automated checks pass; fails only `manual_gates` |
 
 Legacy objects still present before destructive cleanup:
 
@@ -82,9 +83,19 @@ are the destructive cleanup pair. Before applying to production:
 1. Confirm mini-program minimum supported version no longer reads legacy fields.
 2. Attach authenticated admin and mini-program smoke evidence.
 3. Confirm backup and restore window for the target environment.
-4. Apply the destructive migration pair to staging first.
-5. Regenerate `apps/api/src/types/database.ts` from the target project.
-6. Run:
+4. Run:
+
+```bash
+cd apps/api
+bun run workflow:destructive-cleanup-preflight \
+  --confirm-mini-program \
+  --confirm-admin-smoke \
+  --confirm-backup-window
+```
+
+5. Apply the destructive migration pair to staging first.
+6. Regenerate `apps/api/src/types/database.ts` from the target project.
+7. Run:
 
 ```sql
 SELECT to_regclass('public.customer_status_transition_logs') AS customer_logs,

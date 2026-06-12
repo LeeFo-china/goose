@@ -36,7 +36,7 @@ export function buildWorkflowRuntimeConsistencyReport(
   };
 }
 
-async function runWorkflowRuntimeConsistencyCheck(databaseUrl: string) {
+export async function runWorkflowRuntimeConsistencyCheck(databaseUrl: string) {
   const db = new Bun.SQL(databaseUrl);
   try {
     const checks: WorkflowRuntimeConsistencyCheckRow[] = [];
