@@ -239,6 +239,29 @@ Content-Type: application/json
 }
 ```
 
+## 费用申请 API 调整
+
+费用申请创建、更新、提交请求不再传旧审批链字段：
+
+- `POST /expense-requests`
+- `PATCH /expense-requests/:id`
+- `POST /expense-requests/:id/submit`
+
+小程序不要再提交 `approval_chain`。审批、驳回、打款按钮应来自
+`workflow_state.actions` 或 `/workflow-tasks`，并通过
+`POST /workflow-tasks/:taskId/complete` 完成。迁移窗口内后端仍可能返回
+旧 `approval_chain` 作为历史详情兼容字段，但新版本端上不能依赖它生成
+可操作按钮。
+
+提交费用申请时，请只传提交人和备注：
+
+```json
+{
+  "operator_id": "uuid",
+  "comment": "提交说明"
+}
+```
+
 ## 旧字段兼容策略
 
 迁移期后端仍返回旧字段，但小程序新版本必须按下面顺序读取：
@@ -297,3 +320,4 @@ Content-Type: application/json
 | 2026-06-12 | Phase 5/Project task complete bridge | `/workflow-tasks/:id/complete` 对 `project` 的施工主流程节点会调用项目状态服务，保持项目业务字段和 workflow runtime 同步 | 项目签约仍需传 `signed_amount`，排期开工仍需传 `start_date` 和 `construction_manager_employee_id` |
 | 2026-06-12 | Phase 5/Customer task complete bridge | `/workflow-tasks/:id/complete` 对 `customer` 的跟进、到店、作废节点会调用客户状态服务，保持客户业务状态和 workflow runtime 同步 | 客户签约仍通过项目签约联动，不直接开放客户 `mark_signed` |
 | 2026-06-12 | Phase 5/Action metadata | `workflow_state.actions` 和 `/workflow-tasks` 列表开始返回 `business_domain`、`business_action`、`node_key`、`node_type`、`output_fields`；审批节点会同时返回通过/驳回两个动作 | 端上可以按 `output_fields` 渲染表单，并把 `key` 作为 task complete 的 `action` |
+| 2026-06-12 | Phase 5/Expense API input cleanup | 费用申请创建、更新、提交 schema 不再接收 `approval_chain`，后端不再从 mutation 入参写旧审批链表 | 新版本小程序停止提交 `approval_chain`；审批/驳回/打款统一从 workflow task action 发起 |

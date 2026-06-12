@@ -109,6 +109,17 @@ display:
 | blocker files | `18` |
 | customer/project status endpoint controller references | `0` |
 
+2026-06-12 after removing legacy expense `approval_chain` mutation input:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `81` |
+| blocker files | `17` |
+| expense schema `approval_chain` blocker references | `0` |
+| expense drafts `approval_chain` blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -177,6 +188,9 @@ because the system is still in the compatibility window:
 - old customer/project `status-actions`, `status-transition`, and
   `status-transitions` controller routes have been removed; customer detail
   activity no longer embeds old status action/timeline payloads;
+- expense request create/update/submit request schemas no longer expose
+  `approval_chain`, and mutation inputs no longer write old approval-chain
+  rows directly;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

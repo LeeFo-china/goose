@@ -78,23 +78,6 @@ export async function createExpenseRequest(this: any, authContext: AuthContext, 
       items,
     );
 
-    if (input.approval_chain && input.approval_chain.length > 0) {
-      await expenseRequestRepository.replaceApprovalChain(
-        created.id,
-        await this.buildApprovalChainPayload(
-          created.id,
-          input.employee_id,
-          input.approval_chain,
-          "pending",
-          tenantId,
-        ),
-        tenantId,
-      );
-      return this.serializeExpenseRequest(
-        await expenseRequestRepository.findById(created.id, tenantId),
-      );
-    }
-
     return this.serializeExpenseRequest(created);
   }
 
@@ -128,10 +111,6 @@ export async function updateExpenseRequest(this: any,
       throw Errors.badRequest("当前状态不允许修改费用申请");
     }
 
-    if (input.approval_chain && !["draft", "rejected"].includes(existing.status)) {
-      throw Errors.badRequest("当前状态不允许修改审批流程");
-    }
-
     if (input.project_id !== undefined) {
       await this.assertCanLinkProject(authContext, input.project_id);
     }
@@ -159,23 +138,6 @@ export async function updateExpenseRequest(this: any,
       input.items ? items : undefined,
       tenantId,
     );
-
-    if (input.approval_chain) {
-      await expenseRequestRepository.replaceApprovalChain(
-        id,
-        await this.buildApprovalChainPayload(
-          id,
-          existing.employee_id,
-          input.approval_chain,
-          "pending",
-          tenantId,
-        ),
-        tenantId,
-      );
-      return this.serializeExpenseRequest(
-        await expenseRequestRepository.findById(id, tenantId),
-      );
-    }
 
     return this.serializeExpenseRequest(updated);
   }
@@ -231,13 +193,12 @@ export async function submitExpenseRequest(this: any,
     const approvalRound = existing.status === "rejected"
       ? this.getApprovalRound(existing) + 1
       : this.getApprovalRound(existing);
-    const requestedApprovalChain = input.approval_chain ??
-      (this.getApprovalChain(existing).length > 0
-        ? this.getApprovalChain(existing).map((item: ExpenseApprovalChainRecord) => ({
-          step: item.step as ApprovalChainStep,
-          assignee_id: item.assignee_id,
-        }))
-        : undefined);
+    const requestedApprovalChain = this.getApprovalChain(existing).length > 0
+      ? this.getApprovalChain(existing).map((item: ExpenseApprovalChainRecord) => ({
+        step: item.step as ApprovalChainStep,
+        assignee_id: item.assignee_id,
+      }))
+      : undefined;
 
     if (!requestedApprovalChain || requestedApprovalChain.length === 0) {
       throw Errors.badRequest("请先选择审批流程");

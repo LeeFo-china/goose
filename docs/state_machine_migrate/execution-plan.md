@@ -805,6 +805,12 @@
   `/workflow-subjects/:subjectType/:subjectId/timeline`, and
   `/workflow-tasks/:id/complete`.
 
+  2026-06-12 progress: expense request create/update/submit schemas no
+  longer expose legacy `approval_chain` request fields, and the service no
+  longer writes `expense_request_approval_chains` from mutation input. During
+  the compatibility window, submit still reuses any existing stored chain until
+  the remaining internal approval-chain runtime mapping is removed.
+
 - [ ] **Step 5.4: Verification**
 
   Run:

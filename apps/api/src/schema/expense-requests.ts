@@ -114,7 +114,6 @@ export const CreateExpenseRequestSchema = z.object({
   title: z.string().trim().max(200, "申请标题过长").nullable().optional(),
   items: z.array(ExpenseRequestItemSchema).max(100, "费用明细不能超过 100 条")
     .default([]),
-  approval_chain: z.array(ExpenseApprovalChainItemSchema).optional(),
 });
 
 export const UpdateExpenseRequestSchema = z.object({
@@ -123,13 +122,11 @@ export const UpdateExpenseRequestSchema = z.object({
   title: z.string().trim().max(200, "申请标题过长").nullable().optional(),
   items: z.array(ExpenseRequestItemSchema).max(100, "费用明细不能超过 100 条")
     .optional(),
-  approval_chain: z.array(ExpenseApprovalChainItemSchema).optional(),
 });
 
 export const SubmitExpenseRequestSchema = z.object({
   operator_id: z.uuid("无效的提交员工 ID").optional(),
   comment: z.string().trim().max(500, "提交说明过长").nullable().optional(),
-  approval_chain: z.array(ExpenseApprovalChainItemSchema).optional(),
 });
 
 export const ApproveExpenseRequestSchema = z.object({
