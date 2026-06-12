@@ -3,8 +3,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CamerasLoading() {
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 gap-3">
           <Skeleton className="size-10 shrink-0" />
           <div className="flex min-w-0 flex-col gap-2">
@@ -21,8 +21,8 @@ export default function CamerasLoading() {
         <Skeleton className="h-9 w-28" />
       </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/20 p-3">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex gap-2 overflow-x-auto">
               <Skeleton className="h-9 w-28" />
@@ -35,8 +35,8 @@ export default function CamerasLoading() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col p-0">
-          <div className="border-b bg-card px-4 py-3">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="shrink-0 border-b bg-card px-4 py-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-2">
                 <Skeleton className="h-4 w-24" />
@@ -50,23 +50,25 @@ export default function CamerasLoading() {
             </div>
           </div>
 
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="border-b">
-              <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex min-w-0 flex-col gap-2">
-                  <Skeleton className="h-4 w-56 max-w-full" />
-                  <Skeleton className="h-3 w-80 max-w-full" />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="border-b">
+                <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <Skeleton className="h-4 w-56 max-w-full" />
+                    <Skeleton className="h-3 w-80 max-w-full" />
+                  </div>
+                  <Skeleton className="h-6 w-52" />
                 </div>
-                <Skeleton className="h-6 w-52" />
+                <div className="flex flex-col gap-2 p-4">
+                  <Skeleton className="h-10" />
+                  <Skeleton className="h-10" />
+                </div>
               </div>
-              <div className="flex flex-col gap-2 p-4">
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
 
-          <div className="flex flex-col gap-3 bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="shrink-0 flex flex-col gap-3 bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
             <Skeleton className="h-4 w-40" />
             <div className="flex gap-2">
               <Skeleton className="h-9 w-20" />

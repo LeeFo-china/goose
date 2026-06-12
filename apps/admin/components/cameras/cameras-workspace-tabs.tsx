@@ -17,9 +17,9 @@ export function CamerasWorkspaceTabs({
   const [tab, setTab] = useState("cameras");
 
   return (
-    <Tabs value={tab} onValueChange={setTab}>
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-card px-4 py-0">
+    <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-0 bg-transparent p-0 md:w-auto">
               <TabsTrigger
@@ -42,11 +42,11 @@ export function CamerasWorkspaceTabs({
             ) : null}
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <TabsContent value="cameras" className="m-0 data-[state=inactive]:hidden">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <TabsContent value="cameras" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
             {cameras}
           </TabsContent>
-          <TabsContent value="devices" className="m-0 data-[state=inactive]:hidden">
+          <TabsContent value="devices" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
             {devices}
           </TabsContent>
         </CardContent>

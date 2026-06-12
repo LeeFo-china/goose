@@ -36,8 +36,8 @@ export function TenantDeviceAssetsPanel({
   const onlineCount = assets.filter((asset) => asset.status === "online").length;
 
   return (
-    <div className="flex flex-col">
-      <div className="flex flex-col justify-between gap-3 border-b bg-card px-4 py-3 md:flex-row md:items-center">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 flex flex-col justify-between gap-3 border-b bg-card px-4 py-3 md:flex-row md:items-center">
         <div className="min-w-0">
           <h2 className="text-sm font-medium">设备资产池</h2>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -58,11 +58,11 @@ export function TenantDeviceAssetsPanel({
         </div>
       </div>
       {error ? (
-        <div className="p-4">
+        <div className="shrink-0 p-4">
           <StatusAlert tone="warning">{error}</StatusAlert>
         </div>
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <Table className="min-w-[920px] border-t">
           <TableHeader className="bg-muted/60">
             <TableRow>

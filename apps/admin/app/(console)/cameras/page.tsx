@@ -208,8 +208,8 @@ export default async function CamerasPage({
   );
 
   return (
-    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col gap-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
             <Camera className="size-5" />
@@ -238,8 +238,16 @@ export default async function CamerasPage({
         {headerAction}
       </div>
 
-      {projectError ? <StatusAlert>{projectError}</StatusAlert> : null}
-      {cameraProjectError ? <StatusAlert>{cameraProjectError}</StatusAlert> : null}
+      {projectError ? (
+        <div className="shrink-0">
+          <StatusAlert>{projectError}</StatusAlert>
+        </div>
+      ) : null}
+      {cameraProjectError ? (
+        <div className="shrink-0">
+          <StatusAlert>{cameraProjectError}</StatusAlert>
+        </div>
+      ) : null}
       {!selectedProjectId && !projectError ? (
         <Empty>
           <EmptyHeader>
@@ -277,7 +285,7 @@ export default async function CamerasPage({
           ) : null}
           cameras={(
             <>
-              <div className="border-b bg-card px-4 py-3">
+              <div className="shrink-0 border-b bg-card px-4 py-3">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
                     <div className="text-sm font-medium">项目摄像头</div>
@@ -345,8 +353,8 @@ export default async function CamerasPage({
                   ) : null}
                 </div>
               </div>
-              <div className="flex flex-col">
-                <div className="divide-y">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 divide-y overflow-auto">
                   {cameraProjectGroups.map((group) => (
                     <section key={group.project.id} className="bg-card">
                       <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
@@ -387,7 +395,7 @@ export default async function CamerasPage({
                 </div>
 
                 {showCameraPagination ? (
-                  <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                  <div className="shrink-0 flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
                     <div className="text-sm text-muted-foreground">
                       每页 {cameraProjectPagination.pageSize} 个项目，共 {cameraProjectPagination.total} 个
                     </div>
