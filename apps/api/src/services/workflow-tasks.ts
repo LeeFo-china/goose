@@ -21,6 +21,7 @@ class WorkflowTaskService {
       tenantId,
       employeeId: authContext.employeeId,
       roleCodes: authContext.roleCodes,
+      permissionCodes: authContext.permissions.map((permission) => permission.code),
       page: query.page,
       pageSize: query.pageSize,
       status: query.status,
@@ -103,6 +104,7 @@ class WorkflowTaskService {
     task: {
       assignee_employee_id: string | null;
       assignee_role_code: string | null;
+      assignee_permission_code: string | null;
     },
   ) {
     if (
@@ -112,10 +114,17 @@ class WorkflowTaskService {
       return true;
     }
 
-    return Boolean(
-      task.assignee_role_code &&
-      authContext.roleCodes.includes(task.assignee_role_code),
-    );
+    if (task.assignee_permission_code) {
+      return authContext.permissions.some((permission) =>
+        permission.code === task.assignee_permission_code
+      );
+    }
+
+    if (task.assignee_role_code) {
+      return authContext.roleCodes.includes(task.assignee_role_code);
+    }
+
+    return !task.assignee_employee_id;
   }
 
   private throwRuntimeCompleteError(

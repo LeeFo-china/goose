@@ -375,6 +375,16 @@
   2026-06-12 status: `bun run api:typecheck`, `bun run api:build`, and
   `git diff --check` passed after adding the controllers/services/repository.
 
+  2026-06-12 progress: workflow tasks now project
+  `node.config.required_permissions[0]` into
+  `workflow_tasks.assignee_permission_code` through migration-managed trigger,
+  and `/workflow-tasks` checks employee, role, or permission assignment before
+  exposing a task.
+
+  2026-06-12 verification note: local static verification passed, but
+  `supabase migration list` still cannot verify remote alignment because
+  `SUPABASE_DB_PASSWORD` fails authentication for the target project.
+
 ### Phase 2 Acceptance
 
 - [x] New workflow subject state endpoint returns one subject's current state.

@@ -31,6 +31,7 @@ class WorkflowSubjectsService {
       tenantId,
       employeeId: authContext.employeeId,
       roleCodes: authContext.roleCodes,
+      permissionCodes: authContext.permissions.map((permission) => permission.code),
       status: "pending",
       subjectType: params.subjectType,
       subjectId: params.subjectId.trim(),

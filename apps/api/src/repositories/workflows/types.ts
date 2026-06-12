@@ -261,6 +261,7 @@ export type WorkflowTaskRow = {
   status: WorkflowTaskStatus;
   assignee_employee_id: string | null;
   assignee_role_code: string | null;
+  assignee_permission_code: string | null;
   due_at: string | null;
   completed_by: string | null;
   completed_at: string | null;

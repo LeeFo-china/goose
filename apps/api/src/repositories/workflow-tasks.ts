@@ -45,6 +45,7 @@ type WorkflowTaskListInput = {
   tenantId: string;
   employeeId?: string | null;
   roleCodes?: string[];
+  permissionCodes?: string[];
   page?: number;
   pageSize?: number;
   status?: WorkflowTaskStatus;
@@ -83,6 +84,7 @@ const WORKFLOW_TASK_SELECT = [
   "status",
   "assignee_employee_id",
   "assignee_role_code",
+  "assignee_permission_code",
   "due_at",
   "completed_by",
   "completed_at",
@@ -113,6 +115,7 @@ const WORKFLOW_TRANSITION_LOG_SELECT = [
 ].join(", ");
 
 const SAFE_ROLE_CODE_PATTERN = /^[a-zA-Z0-9_.:-]+$/;
+const SAFE_PERMISSION_CODE_PATTERN = /^[a-zA-Z0-9_.:-]+$/;
 
 class WorkflowTaskRepository {
   async listAccessibleTasks(
@@ -237,6 +240,17 @@ class WorkflowTaskRepository {
     if (roleCodes.length > 0) {
       filters.push(`assignee_role_code.in.(${roleCodes.join(",")})`);
     }
+
+    const permissionCodes = Array.from(new Set(input.permissionCodes ?? []))
+      .filter((permissionCode) =>
+        SAFE_PERMISSION_CODE_PATTERN.test(permissionCode)
+      );
+    if (permissionCodes.length > 0) {
+      filters.push(`assignee_permission_code.in.(${permissionCodes.join(",")})`);
+    }
+    filters.push(
+      "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
+    );
 
     return filters.length > 0 ? filters.join(",") : null;
   }

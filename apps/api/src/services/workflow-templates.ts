@@ -69,7 +69,7 @@ class WorkflowTemplateService {
             title: "电话跟进",
             description: "对应客户状态：跟进中。",
             position: { x: 300, y: 180 },
-            config: { required_permissions: [] },
+            config: { required_permissions: ["customer.update"] },
             sort_order: 20,
           },
           {
@@ -79,7 +79,7 @@ class WorkflowTemplateService {
             title: "到店接待",
             description: "对应客户状态：已到店。",
             position: { x: 520, y: 180 },
-            config: { required_permissions: [] },
+            config: { required_permissions: ["customer.update"] },
             sort_order: 30,
           },
           {
@@ -89,7 +89,7 @@ class WorkflowTemplateService {
             title: "方案设计",
             description: "对应客户状态：设计中。",
             position: { x: 740, y: 180 },
-            config: { required_permissions: [] },
+            config: { required_permissions: ["customer.update"] },
             sort_order: 40,
           },
           {
@@ -99,7 +99,7 @@ class WorkflowTemplateService {
             title: "签约",
             description: "对应客户状态：已签约。",
             position: { x: 960, y: 180 },
-            config: { required_permissions: [] },
+            config: { required_permissions: ["customer.update"] },
             sort_order: 50,
           },
           {
@@ -213,7 +213,11 @@ class WorkflowTemplateService {
       title,
       description,
       position: { x, y },
-      config: { required_permissions: [] },
+      config: {
+        required_permissions: nodeType === "start" || nodeType === "end"
+          ? []
+          : ["project.update"],
+      },
       sort_order: sortOrder,
     };
   }

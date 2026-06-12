@@ -95,6 +95,7 @@ export const WORKFLOW_TASK_SELECT = [
   "status",
   "assignee_employee_id",
   "assignee_role_code",
+  "assignee_permission_code",
   "due_at",
   "completed_by",
   "completed_at",
