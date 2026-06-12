@@ -117,6 +117,7 @@ bun run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
-Expected: `no_pending_migrations`, `cleanup_readiness`,
-`destructive_cleanup_verify`, `generated_database_types_clean`, and
-`manual_gate_evidence` are all `ok: true`.
+Expected: `no_pending_migrations`, `migration_list_aligned`,
+`cleanup_readiness`, `destructive_cleanup_verify`,
+`generated_database_types_clean`, and `manual_gate_evidence` are all
+`ok: true`.

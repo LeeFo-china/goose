@@ -3,7 +3,9 @@ import {
   buildFinalAuditReport,
   findLegacyGeneratedTypePatterns,
   parseFinalAuditArgs,
+  parseSupabaseMigrationListRows,
   resolveFinalAuditDatabaseUrl,
+  summarizeMigrationListAlignment,
 } from "./workflow-final-completion-audit";
 
 describe("parseFinalAuditArgs", () => {
@@ -38,6 +40,8 @@ describe("buildFinalAuditReport", () => {
   test("passes when all final technical and manual gates pass", () => {
     expect(buildFinalAuditReport({
       pendingMigrations: [],
+      migrationListAligned: true,
+      migrationListDetail: "aligned=2",
       cleanupReady: true,
       cleanupBlockerCount: 0,
       destructiveCleanupOk: true,
@@ -50,6 +54,7 @@ describe("buildFinalAuditReport", () => {
       generated_at: "2026-06-12T00:00:00.000Z",
       checks: [
         { name: "no_pending_migrations", ok: true, detail: "none" },
+        { name: "migration_list_aligned", ok: true, detail: "aligned=2" },
         { name: "cleanup_readiness", ok: true, detail: "blockers=0" },
         {
           name: "destructive_cleanup_verify",
@@ -75,6 +80,8 @@ describe("buildFinalAuditReport", () => {
       pendingMigrations: [
         "20260612143000_drop_legacy_state_machine_objects.sql",
       ],
+      migrationListAligned: false,
+      migrationListDetail: "mismatches=20260612143000->missing",
       cleanupReady: false,
       cleanupBlockerCount: 2,
       destructiveCleanupOk: false,
@@ -90,6 +97,11 @@ describe("buildFinalAuditReport", () => {
           name: "no_pending_migrations",
           ok: false,
           detail: "20260612143000_drop_legacy_state_machine_objects.sql",
+        },
+        {
+          name: "migration_list_aligned",
+          ok: false,
+          detail: "mismatches=20260612143000->missing",
         },
         { name: "cleanup_readiness", ok: false, detail: "blockers=2" },
         {
@@ -108,6 +120,41 @@ describe("buildFinalAuditReport", () => {
           detail: "missing --evidence-file",
         },
       ],
+    });
+  });
+});
+
+describe("parseSupabaseMigrationListRows", () => {
+  test("parses local and remote migration versions from table output", () => {
+    const rows = parseSupabaseMigrationListRows([
+      "   Local          | Remote         | Time (UTC)",
+      "  ----------------|----------------|---------------------",
+      "   20260612124500 | 20260612124500 | 2026-06-12 12:45:00",
+      "   20260612143000 |                | 2026-06-12 14:30:00",
+    ].join("\n"));
+
+    expect(rows).toEqual([
+      { local: "20260612124500", remote: "20260612124500" },
+      { local: "20260612143000", remote: null },
+    ]);
+  });
+});
+
+describe("summarizeMigrationListAlignment", () => {
+  test("passes when all local and remote versions match", () => {
+    expect(summarizeMigrationListAlignment([
+      { local: "20260612124500", remote: "20260612124500" },
+      { local: "20260612143000", remote: "20260612143000" },
+    ])).toEqual({ ok: true, detail: "aligned=2" });
+  });
+
+  test("fails when any local or remote version is missing", () => {
+    expect(summarizeMigrationListAlignment([
+      { local: "20260612124500", remote: "20260612124500" },
+      { local: "20260612143000", remote: null },
+    ])).toEqual({
+      ok: false,
+      detail: "mismatches=20260612143000->missing",
     });
   });
 });

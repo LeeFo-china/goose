@@ -13,6 +13,8 @@ import { runCleanupReadinessScan } from "./workflow-cleanup-readiness";
 
 export type FinalAuditInput = {
   pendingMigrations: readonly string[];
+  migrationListAligned: boolean;
+  migrationListDetail: string;
   cleanupReady: boolean;
   cleanupBlockerCount: number;
   destructiveCleanupOk: boolean;
@@ -47,6 +49,7 @@ const LEGACY_GENERATED_TYPE_PATTERNS = [
   "current_step_role:",
   "current_step_role?:",
 ] as const;
+const MIGRATION_VERSION_PATTERN = /^\d{14}$/;
 
 export function resolveFinalAuditDatabaseUrl(
   env: EnvLike = process.env,
@@ -78,6 +81,11 @@ export function buildFinalAuditReport(
       name: "no_pending_migrations",
       ok: input.pendingMigrations.length === 0,
       detail: input.pendingMigrations.join(", ") || "none",
+    },
+    {
+      name: "migration_list_aligned",
+      ok: input.migrationListAligned,
+      detail: input.migrationListDetail,
     },
     {
       name: "cleanup_readiness",
@@ -116,6 +124,46 @@ export function findLegacyGeneratedTypePatterns(content: string): string[] {
   );
 }
 
+export function parseSupabaseMigrationListRows(output: string): Array<{
+  local: string | null;
+  remote: string | null;
+}> {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.split("|").map((part) => part.trim()))
+    .filter((parts) => parts.length >= 2)
+    .map((parts) => {
+      const local = parts[0] ?? "";
+      const remote = parts[1] ?? "";
+      return {
+        local: MIGRATION_VERSION_PATTERN.test(local) ? local : null,
+        remote: MIGRATION_VERSION_PATTERN.test(remote) ? remote : null,
+      };
+    })
+    .filter((row) => row.local !== null || row.remote !== null);
+}
+
+export function summarizeMigrationListAlignment(
+  rows: Array<{ local: string | null; remote: string | null }>,
+): { ok: boolean; detail: string } {
+  const mismatches = rows.filter((row) =>
+    !row.local || !row.remote || row.local !== row.remote
+  );
+  if (mismatches.length === 0 && rows.length > 0) {
+    return { ok: true, detail: `aligned=${rows.length}` };
+  }
+  if (rows.length === 0) {
+    return { ok: false, detail: "no migration rows parsed" };
+  }
+
+  return {
+    ok: false,
+    detail: `mismatches=${mismatches.map((row) =>
+      `${row.local ?? "missing"}->${row.remote ?? "missing"}`
+    ).join(", ")}`,
+  };
+}
+
 async function runSupabaseDryRun(): Promise<string[]> {
   const { stdout, stderr } = await execFileAsync(
     "supabase",
@@ -129,6 +177,33 @@ async function runSupabaseDryRun(): Promise<string[]> {
   );
 
   return parseSupabaseDryRunMigrations(`${stdout}\n${stderr}`);
+}
+
+async function checkSupabaseMigrationListAlignment(): Promise<
+  { ok: boolean; detail: string }
+> {
+  const databaseUrl = resolveFinalAuditDatabaseUrl();
+  if (!databaseUrl) {
+    return {
+      ok: false,
+      detail: "missing SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL",
+    };
+  }
+
+  const { stdout, stderr } = await execFileAsync(
+    "supabase",
+    ["migration", "list", "--db-url", databaseUrl],
+    {
+      cwd: findRepoRoot(),
+      env: process.env,
+      timeout: 60_000,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+
+  return summarizeMigrationListAlignment(
+    parseSupabaseMigrationListRows(`${stdout}\n${stderr}`),
+  );
 }
 
 async function loadManualGateEvidence(
@@ -166,12 +241,14 @@ async function checkGeneratedDatabaseTypes(): Promise<
 async function buildReport(evidenceFile: string | null): Promise<FinalAuditReport> {
   const [
     pendingMigrations,
+    migrationList,
     cleanupReadiness,
     manualGateEvidence,
     generatedTypes,
   ] =
     await Promise.all([
       runSupabaseDryRun(),
+      checkSupabaseMigrationListAlignment(),
       runCleanupReadinessScan(),
       loadManualGateEvidence(evidenceFile),
       checkGeneratedDatabaseTypes(),
@@ -184,6 +261,8 @@ async function buildReport(evidenceFile: string | null): Promise<FinalAuditRepor
 
   return buildFinalAuditReport({
     pendingMigrations,
+    migrationListAligned: migrationList.ok,
+    migrationListDetail: migrationList.detail,
     cleanupReady: cleanupReadiness.ready,
     cleanupBlockerCount: cleanupReadiness.blockers.length,
     destructiveCleanupOk: destructiveCleanup?.ok ?? false,
