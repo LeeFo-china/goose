@@ -35,8 +35,9 @@ class WorkflowTemplateService {
     switch (input.template_key) {
       case "customer_main":
         return this.buildCustomerMainTemplate(input.name);
-      case "sales_main":
       case "construction_main":
+        return this.buildConstructionMainTemplate(input.name);
+      case "sales_main":
       case "procedure_standard":
       case "expense_approval":
         return this.buildUnavailableTemplate(input.template_key);
@@ -123,6 +124,100 @@ class WorkflowTemplateService {
     };
   }
 
+  private buildConstructionMainTemplate(name?: string): WorkflowTemplateDefinition {
+    const nodes: WorkflowGraphSaveInput["nodes"] = [
+      this.node("start", "start", null, "开始", "项目进入施工主流程。", 80, 220, 10),
+      this.node("designing", "business", "design", "设计中", "对应项目状态：设计中。", 280, 220, 20),
+      this.node("proposal_confirmed", "business", "design", "方案已确认", "对应项目状态：方案已确认。", 500, 220, 30),
+      this.node("signed", "business", "contract", "项目签约", "对应项目状态：已签约。", 720, 220, 40),
+      this.node("design_finalized", "business", "design", "设计定稿", "对应项目状态：设计定稿。", 940, 220, 50),
+      this.node("pending_start", "business", "construction_start", "排期开工", "对应项目状态：待开工。", 1160, 220, 60),
+      this.node("started", "business", "construction_start", "确认开工", "对应项目状态：已开工。", 1380, 220, 70),
+      this.node("constructing", "construction_stage", "procedure_template", "施工中", "对应项目状态：施工中。", 1600, 220, 80),
+      this.node("acceptance", "business", "final_acceptance", "竣工验收", "对应项目状态：竣工验收。", 1820, 220, 90),
+      this.node("on_hold", "business", null, "项目暂停", "对应项目状态：已暂停。", 940, 460, 100),
+      this.node("invalid", "end", null, "作废", "项目作废后流程结束。", 1380, 460, 110),
+      this.node("end", "end", null, "结束", "项目施工主流程结束。", 2040, 220, 120),
+    ];
+    const pauseableNodeKeys = [
+      "designing",
+      "proposal_confirmed",
+      "signed",
+      "design_finalized",
+      "pending_start",
+      "started",
+      "constructing",
+      "acceptance",
+    ];
+
+    return {
+      workflow_key: "construction_main",
+      name: name?.trim() || "项目施工主流程",
+      description: "项目从设计、签约、排期开工、施工到竣工验收的标准主流程模板。",
+      category: "construction",
+      graph: {
+        nodes,
+        edges: [
+          this.edge("start", "designing", "进入设计", 10),
+          this.edge("designing", "proposal_confirmed", "方案确认", 100),
+          this.edge("proposal_confirmed", "signed", "签约", 100),
+          this.edge("signed", "design_finalized", "设计定稿", 100),
+          this.edge("design_finalized", "pending_start", "排期开工", 100),
+          this.edge("pending_start", "started", "确认开工", 100),
+          this.edge("started", "constructing", "正式进场", 100),
+          this.edge("constructing", "acceptance", "竣工验收", 100),
+          this.edge("acceptance", "end", "完成", 100),
+          ...pauseableNodeKeys.flatMap((nodeKey) => [
+            this.edge(nodeKey, "on_hold", "暂停项目", 10, {
+              operator: "eq",
+              field: "project_status_action",
+              value: "pause_project",
+            }),
+            this.edge(nodeKey, "invalid", "作废项目", 20, {
+              operator: "eq",
+              field: "project_status_action",
+              value: "mark_invalid",
+            }),
+          ]),
+          ...pauseableNodeKeys.map((nodeKey) =>
+            this.edge("on_hold", nodeKey, "恢复项目", 10, {
+              operator: "eq",
+              field: "paused_from_status",
+              value: nodeKey,
+            })
+          ),
+          this.edge("on_hold", "invalid", "作废项目", 20, {
+            operator: "eq",
+            field: "project_status_action",
+            value: "mark_invalid",
+          }),
+        ],
+      },
+    };
+  }
+
+  private node(
+    nodeKey: string,
+    nodeType: WorkflowGraphSaveInput["nodes"][number]["node_type"],
+    businessKind: WorkflowGraphSaveInput["nodes"][number]["business_kind"],
+    title: string,
+    description: string,
+    x: number,
+    y: number,
+    sortOrder: number,
+  ): WorkflowGraphSaveInput["nodes"][number] {
+    return {
+      node_key: nodeKey,
+      node_type: nodeType,
+      business_kind: businessKind,
+      title,
+      description,
+      position: { x, y },
+      config: { required_permissions: [] },
+      sort_order: sortOrder,
+    };
+  }
+
   private buildUnavailableTemplate(templateKey: WorkflowTemplateCreateInput["template_key"]): never {
     throw Errors.badRequest(`流程模板尚未开放: ${templateKey}`);
   }
@@ -132,12 +227,15 @@ class WorkflowTemplateService {
     targetNodeKey: string,
     label: string,
     priority: number,
+    condition: WorkflowGraphSaveInput["edges"][number]["condition"] = {
+      operator: "always",
+    },
   ) {
     return {
       source_node_key: sourceNodeKey,
       target_node_key: targetNodeKey,
       label,
-      condition: { operator: "always" as const },
+      condition,
       priority,
     };
   }

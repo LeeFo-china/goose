@@ -14,7 +14,7 @@ import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
 import { projectMemberService } from "@/services/project-members";
-import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { projectWorkflowRuntimeService } from "@/services/project-workflow-runtime";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   inferProjectStatusAction,
@@ -180,15 +180,25 @@ class ProjectStatusService {
         expectedStatus: fromStatus,
         toStatus: transition.toStatus,
         startDate: String(patch.start_date),
-        constructionManagerEmployeeId: String(
-          input.payload.construction_manager_employee_id,
-        ).trim(),
+        constructionManagerEmployeeId: String(input.payload.construction_manager_employee_id).trim(),
         operatorEmployeeId: input.authContext.employeeId ?? null,
         operatorAuthUserId: input.authContext.authUserId,
         reason,
         metadata,
       });
-      await this.syncProjectSubjectState(tenantId, input.projectId);
+      await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
+        authContext: input.authContext,
+        tenantId,
+        projectId: input.projectId,
+        fromStatus: transition.fromStatus,
+        toStatus: transition.toStatus,
+        action: input.payload.action,
+        reason,
+        extraContext: {
+          start_date: String(patch.start_date),
+          construction_manager_employee_id: String(input.payload.construction_manager_employee_id).trim(),
+        },
+      });
       return project;
     }
 
@@ -209,6 +219,21 @@ class ProjectStatusService {
       );
     }
 
+    const workflowRuntimeMetadata = await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
+        authContext: input.authContext,
+        tenantId,
+        projectId: input.projectId,
+        fromStatus: transition.fromStatus,
+        toStatus: transition.toStatus,
+        action: input.payload.action,
+        reason,
+        extraContext: {
+          ...(input.payload.action === "sign_contract"
+            ? { signed_amount: nextSignedAmount }
+            : {}),
+        },
+      });
+
     await projectStatusTransitionRepository.create({
       tenantId,
       projectId: input.projectId,
@@ -218,7 +243,10 @@ class ProjectStatusService {
       operatorEmployeeId: input.authContext.employeeId ?? null,
       operatorAuthUserId: input.authContext.authUserId,
       reason,
-      metadata,
+      metadata: {
+        ...metadata,
+        workflow_runtime: workflowRuntimeMetadata,
+      },
     });
 
     if (input.payload.action === "sign_contract") {
@@ -228,8 +256,6 @@ class ProjectStatusService {
         authContext: input.authContext,
       });
     }
-
-    await this.syncProjectSubjectState(tenantId, input.projectId);
 
     return project;
   }
@@ -453,14 +479,6 @@ class ProjectStatusService {
     return pausedFromStatus;
   }
 
-  private async syncProjectSubjectState(tenantId: string, projectId: string) {
-    await workflowSubjectStateService.syncFromRuntimeInstance({
-      tenantId,
-      subjectType: "project",
-      subjectId: projectId,
-    });
-  }
-
   private async getPausedFromStatus(projectId: string, tenantId: string) {
     const latestPause = await projectStatusTransitionRepository.findLatestPause(
       projectId,
@@ -478,5 +496,4 @@ class ProjectStatusService {
     return pausedFromStatus;
   }
 }
-
 export const projectStatusService = new ProjectStatusService();

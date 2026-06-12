@@ -456,6 +456,13 @@
   `schedule_project_construction_transition`, because `construction_main`
   workflow template/runtime mapping is not available yet.
 
+  2026-06-12 progress: `construction_main` template is now available for
+  workflow definition creation, and old project status transitions attempt to
+  sync the corresponding runtime instance/task after legacy business writes.
+  Legacy writes and `schedule_project_construction_transition` are still the
+  compatibility source of truth until existing project data is backfilled and
+  staging smoke confirms runtime-only writes.
+
 - [ ] **Step 3.3: Expense adapter**
 
   Route:
