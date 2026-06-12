@@ -36,6 +36,9 @@ Expected before apply:
 - The scripts read `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` and compare
   local migration files with `supabase_migrations.schema_migrations`; do not
   print or paste the database URL into reports.
+- `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` must be present. The final
+  cleanup scripts do not fall back to a linked Supabase project because the
+  destructive target must be explicit.
 - Pending migrations are exactly:
   - `20260612133000_drop_schedule_project_construction_transition.sql`
   - `20260612143000_drop_legacy_state_machine_objects.sql`

@@ -1030,6 +1030,10 @@
     --evidence-file docs/state_machine_migrate/audit/manual-gates.json
   ```
 
+  `SUPABASE_DB_DIRECT_URL` or `SUPABASE_DB_URL` must be present for this
+  preflight. The script no longer falls back to a linked Supabase project; a
+  destructive cleanup target must be explicit before any gate can pass.
+
   The evidence file must include Phase 4 backfill/reconciliation evidence,
   Phase 5 authenticated API smoke evidence, mini-program workflow API contract
   upgrade evidence, mini-program rollout confirmation, admin smoke evidence,

@@ -534,7 +534,8 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-
 
 必须确认 local/remote migration history 对齐。该脚本会读取
 `SUPABASE_DB_DIRECT_URL` 或 `SUPABASE_DB_URL`，不要在文档或提交信息中输出
-数据库连接串。
+数据库连接串。最终清理脚本不会回退到 linked Supabase project；缺少显式
+目标库 URL 时必须先补齐环境变量再继续。
 
 对 workflow task 高频查询执行 `EXPLAIN ANALYZE`，至少覆盖：
 
