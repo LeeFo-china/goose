@@ -5,7 +5,6 @@ import { ArrowRight, History, Loader2 } from "lucide-react";
 import {
   isCustomerStatus,
   isCustomerStatusAction,
-  resolveCustomerStatusTransition,
 } from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +22,7 @@ import {
   type WorkflowSubjectTimelineItem,
   type WorkflowSubjectTimelineResponse,
 } from "@/components/workflows/workflow-subject-state-panel";
+import { resolveCustomerWorkflowActionTransition } from "@/components/workflows/workflow-business-actions";
 
 type CustomerPanelActionItem = CustomerStatusActionItem & {
   workflow_action_key?: string;
@@ -346,7 +346,7 @@ function mapCustomerWorkflowAction(
     return null;
   }
 
-  const transition = resolveCustomerStatusTransition({
+  const transition = resolveCustomerWorkflowActionTransition({
     action: action.business_action,
     fromStatus: currentStatus,
   });

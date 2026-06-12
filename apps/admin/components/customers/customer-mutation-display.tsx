@@ -1,9 +1,10 @@
 "use client";
 
-import { CustomerStatusActionConfig, CustomerStatusConfig, isCustomerStatus } from "@gooes/domain";
+import { CustomerStatusConfig, isCustomerStatus } from "@gooes/domain";
 import { FormSelect } from "@/components/admin/form-select";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeVariant, CustomerRecord, CustomerSourceRecord, Owner, PropertySummary } from "@/components/customers/customer-mutation-types";
+import { CustomerWorkflowActionConfig } from "@/components/workflows/workflow-business-actions";
 
 export function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -123,8 +124,8 @@ export function customerStatusBadgeVariant(status: string | null | undefined) {
 }
 
 export function customerActionLabel(action: string) {
-  return action in CustomerStatusActionConfig
-    ? CustomerStatusActionConfig[action as keyof typeof CustomerStatusActionConfig].label
+  return action in CustomerWorkflowActionConfig
+    ? CustomerWorkflowActionConfig[action as keyof typeof CustomerWorkflowActionConfig].label
     : action;
 }
 

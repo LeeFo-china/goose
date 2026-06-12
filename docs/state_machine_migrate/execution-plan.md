@@ -1056,12 +1056,15 @@
 
   Expected before deletion: no production imports except files being removed in this phase.
 
-  2026-06-12 progress: API workflow adapters no longer import
-  `CustomerStatusActionConfig`, `ProjectStatusActionConfig`, or the old domain
-  transition resolver/list/infer helpers. Customer/project business action
-  metadata now uses `apps/api/src/services/workflow-business-actions.ts`.
-  Admin/domain imports are still pending before the shared domain exports can
-  be deleted.
+  2026-06-12 progress: API workflow adapters and admin customer/project status
+  panels no longer import `CustomerStatusActionConfig`,
+  `ProjectStatusActionConfig`, or the old domain transition resolver/list/infer
+  helpers. Customer/project business action metadata now uses local workflow
+  action helpers under `apps/api/src/services/workflow-business-actions.ts` and
+  `apps/admin/components/workflows/workflow-business-actions.ts`. The shared
+  domain package no longer exports the legacy transition configs or resolver
+  helpers; it only keeps the status/action value unions that are still used as
+  workflow business action identifiers.
 
 - [ ] **Step 7.2: Remove old transition repositories**
 

@@ -4,7 +4,6 @@ import { useEffect, useState, useTransition } from "react";
 import {
   isProjectStatus,
   isProjectStatusAction,
-  resolveProjectStatusTransition,
 } from "@gooes/domain";
 import type {
   EmployeeOption,
@@ -26,6 +25,7 @@ import type {
   WorkflowSubjectTimelineItem,
   WorkflowSubjectTimelineResponse,
 } from "@/components/workflows/workflow-subject-state-panel";
+import { resolveProjectWorkflowActionTransition } from "@/components/workflows/workflow-business-actions";
 import { requestBackendJson } from "@/lib/backend-client";
 
 type ProjectPanelActionItem = ProjectStatusActionItem & {
@@ -336,7 +336,7 @@ function mapProjectWorkflowAction(
     return null;
   }
 
-  const transition = resolveProjectStatusTransition({
+  const transition = resolveProjectWorkflowActionTransition({
     action: action.business_action,
     fromStatus: currentStatus,
     pausedFromStatus: isProjectStatus(pausedFromStatus) ? pausedFromStatus : null,

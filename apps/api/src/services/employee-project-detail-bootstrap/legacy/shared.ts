@@ -5,9 +5,11 @@ import type { AuthContext, EffectivePermission } from "@/services/authorization"
 import { projectLogService } from "@/services/project-logs";
 import { projectSer } from "@/services/projects";
 import {
+  listProjectWorkflowActions as listProjectStatusActions,
+} from "@/services/workflow-business-actions";
+import {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   isProjectStatus,
-  listProjectStatusActions,
   type ProjectLogStageCode,
 } from "@gooes/domain";
 

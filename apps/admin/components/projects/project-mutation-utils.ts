@@ -1,9 +1,9 @@
 import {
   CustomerStatusConfig,
   isCustomerStatus,
-  ProjectStatusActionConfig,
   ProjectStatusConfig,
 } from "@gooes/domain";
+import { ProjectWorkflowActionConfig } from "@/components/workflows/workflow-business-actions";
 import type {
   CustomerRelation,
   Option,
@@ -126,8 +126,8 @@ export function projectDisplayStatusBadgeVariant(project: ProjectRecord) {
 }
 
 export function projectActionLabel(action: string) {
-  return action in ProjectStatusActionConfig
-    ? ProjectStatusActionConfig[action as keyof typeof ProjectStatusActionConfig].label
+  return action in ProjectWorkflowActionConfig
+    ? ProjectWorkflowActionConfig[action as keyof typeof ProjectWorkflowActionConfig].label
     : action;
 }
 

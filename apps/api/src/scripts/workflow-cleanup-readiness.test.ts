@@ -233,6 +233,10 @@ describe("domain state action config cleanup", () => {
       "src/services/customer-status.ts",
       "src/services/project-status.ts",
       "src/services/workflow-task-action-metadata.ts",
+      "../admin/components/customers/customer-status-panel.tsx",
+      "../admin/components/customers/customer-mutation-display.tsx",
+      "../admin/components/projects/project-status-panel-state.ts",
+      "../admin/components/projects/project-mutation-utils.ts",
     ];
     const legacySymbols = [
       "CustomerStatusActionConfig",
@@ -252,7 +256,39 @@ describe("domain state action config cleanup", () => {
       return legacySymbols
         .filter((symbol) => domainImports.includes(symbol))
         .map((symbol) => ({
-          path: `apps/api/${sourcePath}`,
+          path: sourcePath.startsWith("../admin/")
+            ? `apps/${sourcePath.slice(3)}`
+            : `apps/api/${sourcePath}`,
+          symbol,
+        }));
+    });
+
+    expect(references).toEqual([]);
+  });
+
+  test("shared domain no longer declares legacy status transition config exports", () => {
+    const sourcePaths = [
+      "../../packages/domain/src/customer.ts",
+      "../../packages/domain/src/project.ts",
+    ];
+    const legacySymbols = [
+      "CustomerStatusActionConfig",
+      "ProjectStatusActionConfig",
+      "resolveCustomerStatusTransition",
+      "resolveProjectStatusTransition",
+      "listCustomerStatusActions",
+      "listProjectStatusActions",
+      "inferCustomerStatusAction",
+      "inferProjectStatusAction",
+      "CustomerStatusActionConfigItem",
+      "ProjectStatusActionConfigItem",
+    ];
+    const references = sourcePaths.flatMap((sourcePath) => {
+      const content = readFileSync(sourcePath, "utf8");
+      return legacySymbols
+        .filter((symbol) => content.includes(symbol))
+        .map((symbol) => ({
+          path: sourcePath.replace("../../", ""),
           symbol,
         }));
     });
