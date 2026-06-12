@@ -181,6 +181,22 @@ describe("validateManualGateEvidence", () => {
     ]);
   });
 
+  test("rejects free-form evidence text without a traceable reference", () => {
+    expect(collectManualGateEvidenceReferenceIssues({
+      api_contract: {
+        evidence: "confirmed in chat",
+      },
+      admin_smoke: {
+        evidence: "docs/state_machine_migrate/audit/2026-06-12-phase5-verification.md#runtime-smoke",
+      },
+      mini_program: {
+        evidence: "https://example.com/orange-release-note",
+      },
+    })).toEqual([
+      "api_contract.evidence: evidence must be an http(s) URL or docs/state_machine_migrate/ path",
+    ]);
+  });
+
   test("keeps manual-gates.example.json aligned with required fields", async () => {
     const examplePath = resolve(
       dirname(fileURLToPath(import.meta.url)),

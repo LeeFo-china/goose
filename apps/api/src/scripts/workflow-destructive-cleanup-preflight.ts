@@ -184,6 +184,12 @@ export function collectManualGateEvidenceReferenceIssues(
   for (const [field, value] of manualGateEvidenceReferences(evidence)) {
     if (!isNonEmptyString(value)) continue;
     const path = normalizeLocalEvidencePath(value);
+    if (!path && !isRemoteEvidenceUrl(value)) {
+      issues.push(
+        `${field}: evidence must be an http(s) URL or docs/state_machine_migrate/ path`,
+      );
+      continue;
+    }
     if (path && !existsSync(resolve(repoRoot, path))) {
       issues.push(`${field}: missing local evidence path ${path}`);
     }
@@ -391,6 +397,10 @@ function normalizeLocalEvidencePath(value: string): string | null {
   const [path] = trimmed.split("#");
   if (!path?.startsWith("docs/state_machine_migrate/")) return null;
   return path;
+}
+
+function isRemoteEvidenceUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value.trim());
 }
 
 function findRepoRoot(start = process.cwd()): string {
