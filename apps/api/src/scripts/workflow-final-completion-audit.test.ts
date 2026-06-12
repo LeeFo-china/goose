@@ -4,9 +4,7 @@ import {
   findLegacyGeneratedTypePatterns,
   isBreakingCleanupCommitMessage,
   parseFinalAuditArgs,
-  parseSupabaseMigrationListRows,
   resolveFinalAuditDatabaseUrl,
-  summarizeMigrationListAlignment,
   summarizeDestructiveCleanupVerifyReport,
 } from "./workflow-final-completion-audit";
 
@@ -218,41 +216,6 @@ describe("isBreakingCleanupCommitMessage", () => {
     expect(isBreakingCleanupCommitMessage(
       "feat(workflow): 校验人工证据本地路径",
     )).toBe(false);
-  });
-});
-
-describe("parseSupabaseMigrationListRows", () => {
-  test("parses local and remote migration versions from table output", () => {
-    const rows = parseSupabaseMigrationListRows([
-      "   Local          | Remote         | Time (UTC)",
-      "  ----------------|----------------|---------------------",
-      "   20260612124500 | 20260612124500 | 2026-06-12 12:45:00",
-      "   20260612143000 |                | 2026-06-12 14:30:00",
-    ].join("\n"));
-
-    expect(rows).toEqual([
-      { local: "20260612124500", remote: "20260612124500" },
-      { local: "20260612143000", remote: null },
-    ]);
-  });
-});
-
-describe("summarizeMigrationListAlignment", () => {
-  test("passes when all local and remote versions match", () => {
-    expect(summarizeMigrationListAlignment([
-      { local: "20260612124500", remote: "20260612124500" },
-      { local: "20260612143000", remote: "20260612143000" },
-    ])).toEqual({ ok: true, detail: "aligned=2" });
-  });
-
-  test("fails when any local or remote version is missing", () => {
-    expect(summarizeMigrationListAlignment([
-      { local: "20260612124500", remote: "20260612124500" },
-      { local: "20260612143000", remote: null },
-    ])).toEqual({
-      ok: false,
-      detail: "mismatches=20260612143000->missing",
-    });
   });
 });
 

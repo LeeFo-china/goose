@@ -57,7 +57,6 @@ const LEGACY_GENERATED_TYPE_PATTERNS = [
   "current_step_role:",
   "current_step_role?:",
 ] as const;
-const MIGRATION_VERSION_PATTERN = /^\d{14}$/;
 
 export function resolveFinalAuditDatabaseUrl(
   env: EnvLike = process.env,
@@ -133,46 +132,6 @@ export function findLegacyGeneratedTypePatterns(content: string): string[] {
   return LEGACY_GENERATED_TYPE_PATTERNS.filter((pattern) =>
     content.includes(pattern)
   );
-}
-
-export function parseSupabaseMigrationListRows(output: string): Array<{
-  local: string | null;
-  remote: string | null;
-}> {
-  return output
-    .split(/\r?\n/)
-    .map((line) => line.split("|").map((part) => part.trim()))
-    .filter((parts) => parts.length >= 2)
-    .map((parts) => {
-      const local = parts[0] ?? "";
-      const remote = parts[1] ?? "";
-      return {
-        local: MIGRATION_VERSION_PATTERN.test(local) ? local : null,
-        remote: MIGRATION_VERSION_PATTERN.test(remote) ? remote : null,
-      };
-    })
-    .filter((row) => row.local !== null || row.remote !== null);
-}
-
-export function summarizeMigrationListAlignment(
-  rows: Array<{ local: string | null; remote: string | null }>,
-): { ok: boolean; detail: string } {
-  const mismatches = rows.filter((row) =>
-    !row.local || !row.remote || row.local !== row.remote
-  );
-  if (mismatches.length === 0 && rows.length > 0) {
-    return { ok: true, detail: `aligned=${rows.length}` };
-  }
-  if (rows.length === 0) {
-    return { ok: false, detail: "no migration rows parsed" };
-  }
-
-  return {
-    ok: false,
-    detail: `mismatches=${mismatches.map((row) =>
-      `${row.local ?? "missing"}->${row.remote ?? "missing"}`
-    ).join(", ")}`,
-  };
 }
 
 export function isBreakingCleanupCommitMessage(message: string): boolean {
