@@ -727,6 +727,12 @@
   `construction_manager_employee_id`, are still validated by the project status
   service.
 
+  `/workflow-tasks/:id/complete` now bridges supported `customer` workflow
+  tasks into the customer status service for `mark_arrived`, `start_design`,
+  and explicit `mark_invalid`. Customer signing remains driven by project
+  contract signing because the legacy customer `mark_signed` action is
+  intentionally internal-only.
+
 - [x] **Step 5.2: Customer self-service includes workflow_state**
 
   Add `workflow_state` to mini-program bootstrap/detail payloads that currently expose project/customer status.

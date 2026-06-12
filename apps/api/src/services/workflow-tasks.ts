@@ -11,6 +11,7 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
@@ -68,6 +69,18 @@ class WorkflowTaskService {
         output,
       });
       if (bridged) return bridged;
+    }
+    if (task.instance.subject_type === "customer") {
+      return workflowTaskCustomerBridge.complete({
+        authContext,
+        task: {
+          node_key: task.node_key,
+          instance: { subject_id: task.instance.subject_id },
+        },
+        action: input.action,
+        reason: input.reason ?? null,
+        output,
+      });
     }
     if (task.instance.subject_type === "project") {
       const bridged = await workflowTaskProjectBridge.complete({
