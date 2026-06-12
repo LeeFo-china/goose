@@ -782,12 +782,26 @@
 
   Expected: responses include workflow state/task data and remain paginated where list data is returned.
 
+  2026-06-12 verification:
+
+  - `cd apps/api && bun test src/services/workflow-task-action-metadata.test.ts src/services/workflow-task-customer-bridge.test.ts src/services/workflow-task-project-bridge.test.ts src/services/workflow-task-expense-bridge.test.ts`: passed, 9 tests / 15 expects.
+  - `bun run api:typecheck`: passed.
+  - `bun run api:build`: passed.
+  - `pnpm --dir apps/admin check`: passed.
+  - `git diff --check`: passed.
+  - Playwright login-page smoke against existing `http://127.0.0.1:3010`: passed.
+
+  Runtime API smoke remains pending because this workspace does not have
+  staging tenant ids or authenticated admin/mini-program tokens. See
+  `docs/state_machine_migrate/audit/2026-06-12-phase5-verification.md`.
+
 ### Phase 5 Acceptance
 
-- [ ] Task center uses workflow tasks.
-- [ ] Mini-program bootstrap/detail responses include `workflow_state`.
-- [ ] Admin panels can operate from workflow actions.
+- [x] Task center uses workflow tasks.
+- [x] Mini-program bootstrap/detail responses include `workflow_state`.
+- [x] Admin panels can operate from workflow actions.
 - [ ] Orange team receives updated mini-program doc.
+- [ ] Staging/admin/mini-program smoke evidence is attached.
 - [ ] Commit:
 
   ```bash
