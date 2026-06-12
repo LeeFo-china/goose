@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { formatCommandFailure } from "./workflow-command-failure";
 import {
   arePendingMigrationsExpected,
@@ -178,6 +179,46 @@ describe("validateManualGateEvidence", () => {
     })).toEqual([
       "phase_acceptance.phase4_reconciliation_evidence: missing local evidence path docs/state_machine_migrate/audit/missing-backfill.md",
     ]);
+  });
+
+  test("keeps manual-gates.example.json aligned with required fields", async () => {
+    const examplePath = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "..",
+      "..",
+      "docs/state_machine_migrate/audit/manual-gates.example.json",
+    );
+    const example = JSON.parse(await readFile(examplePath, "utf8"));
+
+    expect(validateManualGateEvidence(example)).toEqual({
+      ok: false,
+      missing: [
+        "phase_acceptance.phase4_backfill_confirmed",
+        "phase_acceptance.phase4_reconciliation_evidence",
+        "phase_acceptance.phase5_api_smoke_confirmed",
+        "phase_acceptance.phase5_api_smoke_evidence",
+        "api_contract.workflow_state_actions_confirmed",
+        "api_contract.workflow_task_complete_confirmed",
+        "api_contract.legacy_fields_not_required_confirmed",
+        "api_contract.evidence",
+        "mini_program.confirmed",
+        "mini_program.confirmed_by",
+        "mini_program.confirmed_at",
+        "mini_program.minimum_version",
+        "mini_program.evidence",
+        "admin_smoke.confirmed",
+        "admin_smoke.smoke_at",
+        "admin_smoke.actor",
+        "admin_smoke.evidence",
+        "backup_window.confirmed",
+        "backup_window.backup_id",
+        "backup_window.restore_window",
+        "backup_window.evidence",
+      ],
+      invalid: [],
+    });
   });
 });
 
