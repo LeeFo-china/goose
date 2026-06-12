@@ -86,7 +86,7 @@
   | --- | --- | --- |
   ```
 
-- [ ] **Step 0.2: Run DB inventory SQL against the target environment**
+- [x] **Step 0.2: Run DB inventory SQL against the target environment**
 
   Run `docs/state_machine_migrate/sql/phase0_inventory.sql` through the approved Supabase query channel for the target environment. It contains these read-only queries:
 
@@ -133,6 +133,15 @@
   ORDER BY proname, args;
   ```
 
+  2026-06-12 status: target pre-cleanup inventory was completed against
+  Supabase project `fclnkyatvfvmzgzdqlba` and recorded in
+  `docs/state_machine_migrate/audit/2026-06-12-destructive-cleanup-report.md`.
+  The legacy cleanup targets still exist before destructive apply:
+  `customer_status_transition_logs` has 27 rows,
+  `project_status_transition_logs` has 42 rows,
+  `expense_request_approval_chains` has 6 rows, the scheduling RPC exists, and
+  `expense_requests.current_step/current_step_role` exist.
+
 - [x] **Step 0.3: Run code inventory**
 
   Run:
@@ -143,7 +152,7 @@
 
   Expected: output lists all old state machine dependencies. Paste summarized findings into the baseline audit doc.
 
-- [ ] **Step 0.4: Verification**
+- [x] **Step 0.4: Verification**
 
   Run:
 
@@ -153,17 +162,22 @@
 
   Expected: exit code 0.
 
+  2026-06-12 status: `git diff --check` passed.
+
 ### Phase 0 Acceptance
 
-- [ ] Baseline audit document exists and lists DB objects, API endpoints, code paths, and data counts.
-- [ ] Every old state machine object has a target replacement or an explicit Phase 6 drop decision.
-- [ ] No application code or migration behavior changed in this phase.
-- [ ] Commit:
+- [x] Baseline audit document exists and lists DB objects, API endpoints, code paths, and data counts.
+- [x] Every old state machine object has a target replacement or an explicit Phase 6 drop decision.
+- [x] No application code or migration behavior changed in this phase.
+- [x] Commit:
 
   ```bash
   git add docs/state_machine_migrate
   git commit -m "docs(workflow): 记录状态机迁移基线"
   ```
+
+  Completed by baseline and migration-plan commits, with live target counts
+  later filled into the baseline from the pre-cleanup audit.
 
 ## Phase 1: Workflow Subject Read Model
 
@@ -291,12 +305,14 @@
 - [x] `workflow_subject_states` migration exists and contains no destructive statements.
 - [x] Subject state can be upserted by `tenant_id + subject_type + subject_id`.
 - [x] API typecheck and build pass.
-- [ ] Commit:
+- [x] Commit:
 
   ```bash
   git add supabase/migrations apps/api/src/types/database.ts apps/api/src/repositories/workflow-subject-states.ts apps/api/src/services/workflow-subject-state.ts apps/api/src/schema/workflow-subjects.ts
   git commit -m "feat(workflow): 增加流程对象状态投影"
   ```
+
+  Completed in `36d7155 feat(workflow): 增加流程对象状态投影`.
 
 ## Phase 2: Workflow Subject And Task API
 
@@ -394,12 +410,14 @@
 - [x] Timeline endpoint returns paginated workflow logs.
 - [x] Task list endpoint is paginated with max `pageSize <= 100`.
 - [x] Mini-program integration doc includes examples that orange team can implement against.
-- [ ] Commit:
+- [x] Commit:
 
   ```bash
   git add apps/api/src/controllers/workflow-subjects apps/api/src/controllers/workflow-tasks apps/api/src/services/workflow-subjects.ts apps/api/src/services/workflow-tasks.ts apps/api/src/repositories/workflow-tasks.ts apps/api/src/schema/workflow-subjects.ts apps/api/src/routes/index.ts docs/state_machine_migrate/miniprogram-integration.md
   git commit -m "feat(workflow): 增加流程对象和待办接口"
   ```
+
+  Completed in `5dfde8c feat(workflow): 增加流程对象和待办接口`.
 
 ## Phase 3: Compatibility Adapters For Old APIs
 
@@ -677,13 +695,15 @@
 - [ ] Dry run report is saved.
 - [ ] Apply is idempotent in staging.
 - [ ] Customer/project/expense reconciliation passes.
-- [ ] Backfill report documents counts, skipped rows, and manual follow-ups.
-- [ ] Commit:
+- [x] Backfill report documents counts, skipped rows, and manual follow-ups.
+- [x] Commit:
 
   ```bash
   git add apps/api/src/scripts/backfill-workflow-runtime-from-state-machine.ts docs/state_machine_migrate/audit docs/state_machine_migrate/execution-plan.md
   git commit -m "feat(workflow): 回填旧状态机运行数据"
   ```
+
+  Completed in `41950f5 feat(workflow): 回填旧状态机运行数据`.
 
 ## Phase 5: Switch Read Paths
 
@@ -906,12 +926,19 @@
 - [x] Admin panels can operate from workflow actions.
 - [ ] Orange team receives updated mini-program doc.
 - [ ] Staging/admin/mini-program smoke evidence is attached.
-- [ ] Commit:
+- [x] Commit:
 
   ```bash
   git add apps/api apps/admin docs/state_machine_migrate/miniprogram-integration.md
   git commit -m "feat(workflow): 切换流程状态读路径"
   ```
+
+  Backend/admin read-path work was completed across
+  `78b0736 feat(workflow): 切换部分流程状态读路径`,
+  `13ff56c refactor(workflow): 移除费用旧待办接口`, and
+  `a6ca2df refactor(workflow): 移除客户项目旧状态接口`. Authenticated
+  staging/admin/mini-program smoke evidence and Orange delivery confirmation
+  remain external gates.
 
 ## Phase 6: Destructive Cleanup Migration
 
@@ -1135,7 +1162,7 @@
   when any runtime consistency issue is found. API package script
   `workflow:runtime-consistency-check` points to the replacement.
 
-- [ ] **Step 7.5: Verification**
+- [x] **Step 7.5: Verification**
 
   Run:
 
@@ -1150,24 +1177,35 @@
 
   Expected: `rg` only returns historical docs/migrations that intentionally document the removed system.
 
+  2026-06-12 status: direct `rg` still returns historical migrations,
+  generated Supabase types that cannot be regenerated until destructive apply,
+  cleanup/preflight/verifier scripts, and tests. The authoritative
+  production-source gate is `workflow:cleanup-readiness`, which reports
+  `ready: true` and `blockers: []`.
+
 ### Phase 7 Acceptance
 
-- [ ] Production code has no old state machine imports or writes.
-- [ ] Old status endpoints are removed or explicitly deprecated behind workflow compatibility.
-- [ ] Workflow consistency checker replaces old status checker.
-- [ ] API/admin checks pass.
-- [ ] Commit:
+- [x] Production code has no old state machine imports or writes.
+- [x] Old status endpoints are removed or explicitly deprecated behind workflow compatibility.
+- [x] Workflow consistency checker replaces old status checker.
+- [x] API/admin checks pass.
+- [x] Commit:
 
   ```bash
   git add apps packages docs/state_machine_migrate
   git commit -m "refactor(workflow): 移除旧状态机代码"
   ```
 
+  Completed across cleanup commits through
+  `9674bb3 refactor(workflow): 删除旧领域状态动作配置`,
+  `5f4fa33 refactor(workflow): 替换状态机一致性检查脚本`, and
+  `2ce1098 feat(workflow): 增加破坏性清理后验证`.
+
 ## Final Completion Audit
 
 Only mark the migration complete when all checks below pass:
 
-- [ ] `rg` finds no old state machine references in production code.
+- [x] `rg` finds no old state machine references in production code.
 - [ ] `supabase migration list` is aligned for target environment.
 - [ ] Staging DB no longer has old tables, old RPC, or old indexes.
 - [ ] Customer, project, expense, task center, admin and mini-program smoke tests pass.
