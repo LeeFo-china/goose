@@ -156,6 +156,8 @@ async function loadLegacyCleanupInventory(
             from pg_proc
             where pronamespace = $$public$$::regnamespace
               and proname = function_name
+              and replace(format($$%s(%s)$$, proname, oidvectortypes(proargtypes)), $$ $$, $$$$)
+                = object_name
           ) as present
         from legacy;
       `,

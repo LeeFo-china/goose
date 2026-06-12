@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   arePendingMigrationsExpected,
+  buildSupabaseDryRunArgs,
   hasAllManualGates,
   parsePreflightArgs,
   parseSupabaseDryRunMigrations,
@@ -18,6 +19,25 @@ describe("parseSupabaseDryRunMigrations", () => {
       "20260612133000_drop_schedule_project_construction_transition.sql",
       "20260612143000_drop_legacy_state_machine_objects.sql",
     ]);
+  });
+});
+
+describe("buildSupabaseDryRunArgs", () => {
+  test("uses an explicit database url when available", () => {
+    expect(buildSupabaseDryRunArgs({
+      SUPABASE_DB_DIRECT_URL: "postgres://direct",
+      SUPABASE_DB_URL: "postgres://pooled",
+    })).toEqual([
+      "db",
+      "push",
+      "--dry-run",
+      "--db-url",
+      "postgres://direct",
+    ]);
+  });
+
+  test("falls back to linked project dry-run when no database url exists", () => {
+    expect(buildSupabaseDryRunArgs({})).toEqual(["db", "push", "--dry-run"]);
   });
 });
 

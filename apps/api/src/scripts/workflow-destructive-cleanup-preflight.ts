@@ -67,6 +67,8 @@ const EXPECTED_DESTRUCTIVE_MIGRATIONS = [
   "20260612133000_drop_schedule_project_construction_transition.sql",
   "20260612143000_drop_legacy_state_machine_objects.sql",
 ] as const;
+const LEGACY_SCHEDULE_RPC_SIGNATURE =
+  "schedule_project_construction_transition(uuid,uuid,text,text,text,uuid,uuid,uuid,text,jsonb)";
 
 export function parsePreflightArgs(argv: string[]): PreflightOptions {
   const manualGates = new Set<ManualGate>();
@@ -120,6 +122,16 @@ export function hasAllManualGates(options: PreflightOptions): boolean {
     options.manualGates.has("admin_smoke_attached") &&
     options.manualGates.has("backup_window_confirmed")
   );
+}
+
+export function buildSupabaseDryRunArgs(
+  env: EnvLike = process.env,
+): string[] {
+  const url = databaseUrl(env);
+  if (url) {
+    return ["db", "push", "--dry-run", "--db-url", url];
+  }
+  return ["db", "push", "--dry-run"];
 }
 
 export function validateManualGateEvidence(
@@ -181,7 +193,7 @@ async function loadManualGateEvidence(
 async function runSupabaseDryRun(): Promise<string[]> {
   const { stdout, stderr } = await execFileAsync(
     "supabase",
-    ["db", "push", "--dry-run"],
+    buildSupabaseDryRunArgs(),
     {
       cwd: findRepoRoot(),
       env: process.env,
@@ -202,10 +214,12 @@ async function loadLegacyInventory(url: string): Promise<LegacyInventoryRow> {
         to_regclass($$public.project_status_transition_logs$$)::text as project_logs,
         to_regclass($$public.expense_request_approval_chains$$)::text as expense_chains,
         (
-          select proname
+          select replace(format($$%s(%s)$$, proname, oidvectortypes(proargtypes)), $$ $$, $$$$)
           from pg_proc
           where pronamespace = $$public$$::regnamespace
             and proname = $$schedule_project_construction_transition$$
+            and replace(format($$%s(%s)$$, proname, oidvectortypes(proargtypes)), $$ $$, $$$$)
+              = ${LEGACY_SCHEDULE_RPC_SIGNATURE}
           limit 1
         ) as schedule_rpc,
         exists (
