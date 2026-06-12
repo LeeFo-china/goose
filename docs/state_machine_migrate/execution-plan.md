@@ -1297,6 +1297,8 @@ The final technical gate is repeatable with:
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
@@ -1310,6 +1312,8 @@ For an operator-friendly summary of remaining blockers, run:
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```

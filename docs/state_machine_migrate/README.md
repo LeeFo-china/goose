@@ -532,6 +532,8 @@ pnpm --dir apps/admin check
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:migration-status \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```

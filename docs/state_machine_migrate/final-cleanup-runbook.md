@@ -101,6 +101,8 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:destructiv
 cd ../..
 supabase gen types typescript --project-id fclnkyatvfvmzgzdqlba > apps/api/src/types/database.ts
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 cd ../..

@@ -120,6 +120,8 @@ Expected: `legacy_tables_absent`, `legacy_rpc_absent`,
 
 ```bash
 cd apps/api
+bun run workflow:manual-gates-check \
+  --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 bun run workflow:final-completion-audit \
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
