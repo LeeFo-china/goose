@@ -1,9 +1,7 @@
 import {
   EXPENSE_MODE_VALUES,
-  EXPENSE_REQUEST_STEP_VALUES,
   EXPENSE_STATUS_VALUES,
   ExpenseModeConfig,
-  ExpenseRequestStepConfig,
   ExpenseStatusConfig,
 } from "@gooes/domain";
 import { type ExpenseRecord } from "@/components/expenses/expense-mutations";
@@ -28,7 +26,6 @@ export type InitialExpenseData = ExpenseListData & {
 export type ExpenseFiltersState = {
   status: string;
   mode: string;
-  currentStep: string;
   keyword: string;
   createdFrom: string;
   createdTo: string;
@@ -49,14 +46,6 @@ export const modeOptions = [
   ...EXPENSE_MODE_VALUES.map((value) => [
     value,
     ExpenseModeConfig[value].label,
-  ] as const),
-] as const;
-
-export const stepOptions = [
-  ["", "全部节点"],
-  ...EXPENSE_REQUEST_STEP_VALUES.map((value) => [
-    value,
-    ExpenseRequestStepConfig[value].label,
   ] as const),
 ] as const;
 
@@ -91,7 +80,6 @@ export async function fetchExpenses(filters: ExpenseFiltersState, page: number) 
 
   if (filters.status) query.set("status", filters.status);
   if (filters.mode) query.set("mode", filters.mode);
-  if (filters.currentStep) query.set("current_step", filters.currentStep);
   if (filters.keyword.trim()) query.set("keyword", filters.keyword.trim());
   if (filters.createdFrom) query.set("created_from", dateStartToIso(filters.createdFrom));
   if (filters.createdTo) query.set("created_to", dateEndToIso(filters.createdTo));
@@ -116,7 +104,6 @@ export function emptyExpenseFilters(): ExpenseFiltersState {
   return {
     status: "",
     mode: "",
-    currentStep: "",
     keyword: "",
     createdFrom: "",
     createdTo: "",

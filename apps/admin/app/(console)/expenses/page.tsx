@@ -21,7 +21,6 @@ type ExpensePageSearchParams = {
   page?: string;
   status?: string;
   mode?: string;
-  current_step?: string;
   keyword?: string;
   created_from?: string;
   created_to?: string;
@@ -59,7 +58,6 @@ async function getExpenses(params: ExpensePageSearchParams) {
   const page = normalizePage(params.page);
   const status = params.status?.trim() || "";
   const mode = params.mode?.trim() || "";
-  const currentStep = params.current_step?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const createdFrom = params.created_from?.trim() || "";
   const createdTo = params.created_to?.trim() || "";
@@ -69,7 +67,6 @@ async function getExpenses(params: ExpensePageSearchParams) {
   });
   if (status) query.set("status", status);
   if (mode) query.set("mode", mode);
-  if (currentStep) query.set("current_step", currentStep);
   if (keyword) query.set("keyword", keyword);
   if (createdFrom) query.set("created_from", dateStartToIso(createdFrom));
   if (createdTo) query.set("created_to", dateEndToIso(createdTo));
@@ -109,7 +106,6 @@ export default async function ExpensesPage({
   const params = await searchParams;
   const status = params.status?.trim() || "";
   const mode = params.mode?.trim() || "";
-  const currentStep = params.current_step?.trim() || "";
   const keyword = params.keyword?.trim() || "";
   const createdFrom = params.created_from?.trim() || "";
   const createdTo = params.created_to?.trim() || "";
@@ -140,7 +136,6 @@ export default async function ExpensesPage({
         initialFilters={{
           status,
           mode,
-          currentStep,
           keyword,
           createdFrom,
           createdTo,

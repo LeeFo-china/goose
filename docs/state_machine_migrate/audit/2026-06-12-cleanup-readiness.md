@@ -58,6 +58,17 @@ admin expense list node display to workflow projection:
 | blocker files | `28` |
 | expense admin blocker references | `9` |
 
+2026-06-12 after removing admin expense legacy node filtering and approval-chain
+display:
+
+| check | result |
+| --- | --- |
+| exit code | `1` |
+| ready | `false` |
+| blocker references | `117` |
+| blocker files | `24` |
+| expense admin blocker references | `0` |
+
 ## Pattern Counts
 
 The scanner counts both blocking production references and allowed historical
@@ -114,6 +125,9 @@ because the system is still in the compatibility window:
   expense list current-node display/payment count read the workflow projection;
 - admin expense approve/reject/pay actions now complete workflow tasks instead
   of directly calling the old expense action endpoints;
+- admin expense pages no longer send `current_step` filters or render
+  `approval_chain`; expense detail uses `workflow_state` for current workflow
+  status;
 - expense approval-chain APIs and UI are not yet fully replaced by workflow
   tasks/actions;
 - generated database types still reflect the not-yet-dropped DB objects;

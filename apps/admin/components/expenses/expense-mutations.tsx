@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DetailDialog } from "@/components/expenses/expense-detail-dialog";
 import { PayDialog } from "@/components/expenses/expense-pay-dialog";
-import type { ApprovalChainRecord, ApprovalRecord, ExpenseItem, ExpenseRecord, ExpenseWorkflowAction } from "@/components/expenses/expense-mutation-types";
+import type { ApprovalRecord, ExpenseItem, ExpenseRecord, ExpenseWorkflowAction } from "@/components/expenses/expense-mutation-types";
 import { requestExpense } from "@/components/expenses/expense-mutation-shared";
 
-export type { ApprovalChainRecord, ApprovalRecord, ExpenseItem, ExpenseRecord } from "@/components/expenses/expense-mutation-types";
+export type { ApprovalRecord, ExpenseItem, ExpenseRecord } from "@/components/expenses/expense-mutation-types";
 
 export function ExpenseRowActions({
   expense,

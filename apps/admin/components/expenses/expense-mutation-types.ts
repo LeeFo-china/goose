@@ -35,21 +35,6 @@ export type ApprovalRecord = {
   approver?: Person | Person[] | null;
 };
 
-export type ApprovalChainRecord = {
-  id: string;
-  step: string;
-  step_name: string;
-  sort_order: number;
-  assignee_id: string;
-  assignee_name_snapshot: string | null;
-  required_permission: string;
-  status: string;
-  acted_by: string | null;
-  acted_at: string | null;
-  comment: string | null;
-  assignee?: Person | Person[] | null;
-};
-
 export type SettlementRecord = {
   id: string;
   payee_name?: string | null;
@@ -103,7 +88,6 @@ export type ExpenseRecord = {
   title: string | null;
   total_amount: number;
   status: string;
-  current_step: string;
   submitted_at: string | null;
   approved_at: string | null;
   rejected_at: string | null;
@@ -119,7 +103,6 @@ export type ExpenseRecord = {
   items?: ExpenseItem[];
   approvals?: ApprovalRecord[];
   settlement?: SettlementRecord | SettlementRecord[] | null;
-  approval_chain?: ApprovalChainRecord[];
   workflow_state?: ExpenseWorkflowState | null;
 };
 

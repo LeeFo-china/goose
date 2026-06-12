@@ -12,7 +12,6 @@ import {
   formatMoney,
   modeOptions,
   statusOptions,
-  stepOptions,
   type ExpenseFiltersState,
   type Pagination,
 } from "@/components/expenses/expenses-panel-data";
@@ -131,7 +130,7 @@ export function ExpenseListHeader({
       ) : null}
       className="shrink-0 border-b bg-muted/20 p-3"
       filters={
-        <div className="grid gap-3 xl:grid-cols-[140px_140px_160px_1fr_150px_150px_auto]">
+        <div className="grid gap-3 xl:grid-cols-[140px_140px_1fr_150px_150px_auto]">
           <FormSelect
             id="expense-status-filter"
             value={filters.status || "__all"}
@@ -149,15 +148,6 @@ export function ExpenseListHeader({
               label,
             }))}
             onChange={(value) => onFilterChange({ mode: value === "__all" ? "" : value })}
-          />
-          <FormSelect
-            id="expense-current-step-filter"
-            value={filters.currentStep || "__all"}
-            options={stepOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => onFilterChange({ currentStep: value === "__all" ? "" : value })}
           />
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

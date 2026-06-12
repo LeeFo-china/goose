@@ -9,12 +9,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { ExpenseRecord } from "@/components/expenses/expense-mutation-types";
 import {
   formatApprovalAction,
-  formatApprovalStep,
   formatDateTime,
   formatExpenseCategory,
   formatMoney,
   formatSettlementMethod,
-  getApprovalChainStatusMeta,
   getEvidenceImagePreviewSrc,
   modeLabel,
   personName,
@@ -30,6 +28,7 @@ export function DetailDialog({
   onClose: () => void;
 }) {
   const settlement = relationOne(expense.settlement);
+  const workflowState = expense.workflow_state;
   const settlementEvidenceImages = settlement?.evidence_images || [];
   const settlementAttachments = settlementEvidenceImages.map((image, index) => {
     const previewSrc = getEvidenceImagePreviewSrc(image);
@@ -101,35 +100,29 @@ export function DetailDialog({
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-semibold">审批链</h3>
-            <div className="grid gap-2 md:grid-cols-2">
-              {(expense.approval_chain || []).map((node) => {
-                const statusMeta = getApprovalChainStatusMeta(node.status);
-
-                return (
-                  <div key={node.id} className="rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium">
-                        {node.step_name || formatApprovalStep(node.step)}
-                      </div>
-                      <Badge variant={statusMeta.variant}>
-                        {statusMeta.label}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {personName(node.assignee)} · {formatDateTime(node.acted_at)}
-                    </div>
-                    {node.comment ? (
-                      <div className="mt-2 text-sm text-muted-foreground">{node.comment}</div>
-                    ) : null}
-                  </div>
-                );
-              })}
-              {(expense.approval_chain || []).length === 0 ? (
-                <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                  暂无审批链
+            <h3 className="mb-3 text-sm font-semibold">流程状态</h3>
+            <div className="rounded-md border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-medium">
+                  {workflowState?.current_node_title ||
+                    workflowState?.current_node_key ||
+                    "未接入流程"}
                 </div>
-              ) : null}
+                <Badge variant={workflowState?.instance_status === "failed" ? "danger" : "outline"}>
+                  {workflowState?.instance_status || "未启动"}
+                </Badge>
+              </div>
+              <div className="mt-2 grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
+                <div>
+                  待办数：{workflowState?.pending_task_count ?? 0}
+                </div>
+                <div>
+                  当前节点：{workflowState?.current_node_key || "-"}
+                </div>
+                <div>
+                  更新时间：{formatDateTime(workflowState?.updated_at)}
+                </div>
+              </div>
             </div>
           </section>
 

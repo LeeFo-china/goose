@@ -2,11 +2,9 @@ import { z } from "zod";
 import {
   EXPENSE_APPROVAL_ACTION_VALUES,
   EXPENSE_MODE_VALUES,
-  EXPENSE_REQUEST_STEP_VALUES,
   EXPENSE_SETTLEMENT_METHOD_VALUES,
   ExpenseApprovalActionConfig,
   ExpenseModeConfig,
-  ExpenseRequestStepConfig,
   ExpenseSettlementMethodConfig,
 } from "@gooes/domain";
 import type {
@@ -54,31 +52,12 @@ export const modeLabel: Record<string, string> = Object.fromEntries(
   ]),
 );
 
-export const requestStepLabel: Record<string, string> = Object.fromEntries(
-  EXPENSE_REQUEST_STEP_VALUES.map((value) => [
-    value,
-    ExpenseRequestStepConfig[value].label,
-  ]),
-);
-
 export const actionLabel: Record<string, string> = Object.fromEntries(
   EXPENSE_APPROVAL_ACTION_VALUES.map((value) => [
     value,
     ExpenseApprovalActionConfig[value].label,
   ]),
 );
-
-export const approvalChainStatusMeta: Record<string, {
-  label: string;
-  variant: "success" | "warning" | "outline" | "danger";
-}> = {
-  approved: { label: "已通过", variant: "success" },
-  current: { label: "当前处理", variant: "warning" },
-  pending: { label: "待处理", variant: "outline" },
-  rejected: { label: "已驳回", variant: "danger" },
-  cancelled: { label: "已作废", variant: "outline" },
-  skipped: { label: "已跳过", variant: "outline" },
-};
 
 export const expenseCategoryFallbackLabel: Record<string, string> = {
   material: "材料费",
@@ -154,18 +133,6 @@ export function formatExpenseCategory(item: ExpenseItem) {
 export function formatApprovalAction(value: string | null | undefined) {
   if (!value) return "审批记录";
   return actionLabel[value] || value;
-}
-
-export function formatApprovalStep(value: string | null | undefined) {
-  if (!value) return "审批节点";
-  return requestStepLabel[value] || value;
-}
-
-export function getApprovalChainStatusMeta(value: string | null | undefined) {
-  return approvalChainStatusMeta[value || ""] || {
-    label: value || "未知状态",
-    variant: "outline" as const,
-  };
 }
 
 export function getPayloadMessage(payload: unknown, fallback: string) {

@@ -780,6 +780,13 @@
   remains on the existing expense API until workflow action metadata supports
   cancellation.
 
+  2026-06-12 progress: admin expense pages no longer send `current_step`
+  filters, no longer render legacy `approval_chain`, and no longer keep those
+  legacy fields in admin expense types. Expense detail now displays the
+  `workflow_state` projection for the current workflow node. Cleanup readiness
+  reports zero blockers under `apps/admin/components/expenses` and
+  `apps/admin/app/(console)/expenses`.
+
 - [ ] **Step 5.4: Verification**
 
   Run:
