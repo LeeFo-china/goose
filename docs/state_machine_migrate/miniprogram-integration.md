@@ -2,26 +2,30 @@
 
 ## 目的
 
-状态机迁移期间，小程序不能再把按钮和页面状态强绑定到旧字段：
+状态机迁移后，小程序不能再把项目按钮和页面推进状态强绑定到旧字段：
 
 - `status`
 - `status_label`
 - `status_actions`
 - `current_step`
 
-后端会先保留旧字段作为兼容 fallback，但新版本小程序应该优先读取 `workflow_state` 和 workflow task/action。
+项目详情的旧 `status_actions` 兼容出口已经移除。新版本小程序必须读取
+`workflow_state` 和 workflow task/action；项目推进、收款闸门、工序施工日志都
+必须通过 `/workflow-tasks/:taskId/complete` 完成。
 
 ## 发布顺序
 
-1. 后端新增 workflow subject/task API，但不删除旧接口。
-2. 后端在旧接口响应中补充 `workflow_state`。
-3. 小程序发布新版本，优先使用 `workflow_state.actions` 渲染按钮。
-4. 后端切换读路径，旧字段只作为展示 fallback。
-5. 确认线上最低小程序版本都不依赖旧状态机后，后端执行删表删列 migration。
+1. 小程序先完成项目详情、工地详情、任务中心的 workflow action 接入。
+2. 小程序发布新版本，项目推进按钮只来自 `workflow_state.actions` 或
+   `/workflow-tasks`。
+3. 联调确认水电工序后的中期收款节点不会被跳过。
+4. Orange/小程序侧提供发布版本、联调记录和验收人，写入
+   `docs/state_machine_migrate/audit/manual-gates.json`。
+5. 后端再执行旧状态机数据库对象的破坏性清理 migration。
 
 ## 通用字段
 
-后端会在客户、项目、费用审批相关响应中逐步补充：
+后端在客户、项目、费用审批相关响应中使用：
 
 ```json
 {
@@ -109,6 +113,84 @@
 [小程序收款节点对接说明](./miniprogram-payment-collection-node-integration.md)。
 
 ## 新接口
+
+### 项目详情 workflow-only 数据源
+
+项目详情仍调用：
+
+```http
+GET /projects/:id/employee-detail-bootstrap
+Authorization: Bearer <token>
+```
+
+但响应里不再提供 `status_actions`。项目页、工地页和任务中心必须从：
+
+```ts
+payload.workflow_state?.actions ?? []
+```
+
+读取当前员工可执行动作。
+
+项目详情关键响应字段：
+
+```json
+{
+  "project": {},
+  "permissions": {},
+  "members": [],
+  "workflow_state": {
+    "subject_type": "project",
+    "subject_id": "project-id",
+    "instance_id": "workflow-instance-id",
+    "instance_status": "running",
+    "current_node_key": "middle_payment",
+    "current_node_title": "中期进度款",
+    "current_business_kind": "payment_collection",
+    "pending_task_count": 1,
+    "actions": [
+      {
+        "key": "complete",
+        "label": "中期进度款",
+        "task_id": "workflow-task-id",
+        "node_key": "middle_payment",
+        "node_type": "confirmation",
+        "business_domain": "payment_collection",
+        "business_action": "confirm_payment",
+        "requires_reason": false,
+        "disabled": false,
+        "output_fields": [
+          {
+            "name": "payment_status",
+            "label": "中期进度款",
+            "type": "payment_collection",
+            "required": true,
+            "payment_type": "stage_2",
+            "payment_label": "中期进度款",
+            "requirement_mode": "any_confirmed"
+          }
+        ]
+      }
+    ]
+  },
+  "construction_stages": {},
+  "log_entry": {},
+  "next_action": null,
+  "logs": {}
+}
+```
+
+小程序端禁止再调用或依赖：
+
+| 旧内容 | 新内容 |
+| --- | --- |
+| `payload.status_actions` | `payload.workflow_state.actions` |
+| `GET /projects/:id/status-transitions` | `GET /workflow-subjects/project/:id/timeline?page=1&pageSize=20` |
+| `PATCH /projects/:id` 传 `status` | `POST /workflow-tasks/:taskId/complete` |
+| `ProjectStatusActionItem` 白名单按钮 | 后端返回的 workflow action |
+| workflow action 转旧项目状态 action | 直接渲染 workflow action |
+
+如果端上仍调用旧项目状态动作，后端不会再保证兼容；项目 `PATCH` 带 `status`
+会返回业务错误：`项目状态必须通过 workflow 节点推进`。
 
 ### 查询对象流程状态
 
@@ -272,20 +354,128 @@ Content-Type: application/json
 
 ## 旧字段兼容策略
 
-迁移期后端仍返回旧字段，但小程序新版本必须按下面顺序读取：
+项目推进没有旧字段兼容策略。小程序新版本必须按下面顺序读取：
 
 1. 有 `workflow_state.actions`：按 workflow action 渲染按钮。
-2. 无 `workflow_state` 但有旧 `status_actions`：临时 fallback。
-3. 两者都没有：只展示状态，不展示推进按钮。
+2. 没有 `workflow_state` 或 `workflow_state.actions` 为空：只展示状态，不展示项目推进按钮。
+3. 端上不得 fallback 到 `status_actions`、`ProjectStatusActionItem`、
+   `/projects/:id/status-transitions` 或 `PATCH /projects/:id { status }`。
 
 旧字段用途：
 
 | 旧字段 | 迁移期用途 | 最终状态 |
 | --- | --- | --- |
-| `status` | 展示 fallback | 删除或改为 workflow 投影 |
-| `status_label` | 展示 fallback | 删除或改为 workflow 投影 |
-| `status_actions` | 旧版本按钮 fallback | 删除 |
-| `current_step` | 费用审批 fallback | 删除 |
+| `status` | 只读展示兜底，不控制项目推进按钮 | 后续改为 workflow 投影或删除 |
+| `status_label` | 只读展示兜底，不控制项目推进按钮 | 后续改为 workflow 投影或删除 |
+| `status_actions` | 项目详情不再返回 | 删除 |
+| `current_step` | 费用审批旧字段，不用于项目推进 | 删除 |
+
+## 小程序项目页改造清单
+
+只读核查 `/Users/leefo/Public/work/orange` 后，项目侧需要重点改这些文件。
+gooes 侧不能修改 orange 源码，以下由小程序团队处理：
+
+| 文件 | 当前问题 | 改造要求 |
+| --- | --- | --- |
+| `src/services/projects/methods/employee.ts` | 仍把 `workflow_state.actions` 映射成 `ProjectStatusActionItem`，并保留 `/projects/:id/status-transitions` | 删除旧映射和旧接口；返回原始 `workflow_state.actions` |
+| `src/services/projects/types/status.ts` | 仍定义 `ProjectStatusActionItem` 和 `status_actions` | 新增/改用 `WorkflowSubjectAction`、`WorkflowOutputField` 类型；项目详情类型移除 `status_actions` 依赖 |
+| `src/packageProjects/pages/detail/hooks/useProjectDetailBootstrap.ts` | 仍读取 `payload.status_actions` | 改为读取 `payload.workflow_state.actions` |
+| `src/packageProjects/pages/detail/hooks/useProjectStatusActions.ts` | 仍按旧项目状态动作加载和转换 | 删除或改造成 `useProjectWorkflowActions` |
+| `src/packageProjects/pages/detail/utils/status.ts` | 仍维护 `PROJECT_WORKFLOW_ACTIONS` 和 workflow -> old status action 映射 | 删除映射；按钮直接使用后端 action metadata |
+| `src/packageProjects/pages/detail/hooks/useProjectStatusViewModel.ts` | UI 仍围绕 timeline/compact/more status action 分组 | 改成按 `business_domain`、`node_type`、`output_fields` 渲染 workflow 操作 |
+| `src/packageProjects/pages/detail/sections/ProjectStatusFlowPanel.tsx` | 仍使用旧 status action option | 改为展示 workflow 当前节点和 actions |
+| `src/packageProjects/pages/detail/hooks/useProjectDetailRefreshCoordinator.ts` | 仍刷新 `loadProjectStatusActions` | 完成 workflow task 后刷新详情或 workflow state |
+| `src/packageProjects/pages/detail/hooks/useProjectDetailWriteRefresh.ts` | 写操作后仍刷新旧 status actions | 改为刷新 `employee-detail-bootstrap` 或 `/workflow-subjects/project/:id/state` |
+| `src/packageProjects/pages/detail/index.tsx` | 仍装配 `useProjectStatusActions` | 改为装配 workflow actions hook |
+
+## 项目 workflow action 渲染规则
+
+小程序不要再按旧项目状态动作白名单决定是否显示按钮。推荐规则：
+
+1. 读取 `workflow_state.actions`。
+2. 过滤 `disabled !== true` 且存在 `task_id` 的 action。
+3. 按 `output_fields` 决定弹窗/表单：
+   - `payment_collection`：显示收款确认入口。
+   - `project_log`：显示施工日志表单，先创建日志。
+   - `number`：数字输入，例如 `signed_amount`。
+   - `date`：日期选择，例如 `start_date`。
+   - `employee`：员工选择，例如 `construction_manager_employee_id`。
+   - 空 `output_fields`：可直接确认完成。
+4. 提交时使用 `action.key` 作为 body 的 `action`，不要使用旧
+   `ProjectStatusTransitionAction`。
+
+通用提交：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {}
+}
+```
+
+提交成功后必须刷新项目详情或 workflow state，以服务端返回为准，不要本地推断
+下一个节点。
+
+## 工序节点施工日志
+
+当 action 的 `output_fields` 包含：
+
+```json
+{
+  "name": "project_log_id",
+  "type": "project_log",
+  "required": true,
+  "stage_code": "masonry",
+  "min_image_count": 1
+}
+```
+
+小程序必须：
+
+1. 按 `stage_code` 展示施工日志表单。
+2. 满足 `min_image_count` 后调用 `POST /project-logs` 创建日志。
+3. 取创建结果 `data.id`。
+4. 调用 `POST /workflow-tasks/:taskId/complete`：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "project_log_id": "created-project-log-id"
+  }
+}
+```
+
+施工日志创建失败时，不允许调用 workflow complete。
+
+## 收款节点
+
+当 action 满足：
+
+```json
+{
+  "business_domain": "payment_collection",
+  "business_action": "confirm_payment"
+}
+```
+
+小程序必须展示收款节点操作，不得跳过。提交：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "payment_status": "success"
+  }
+}
+```
+
+后端会检查项目下对应 `payment_type` 是否已有 confirmed 收款。未满足时返回
+`409` 和错误码 `WORKFLOW_PAYMENT_COLLECTION_BLOCKED`，端上保持节点未完成并展示
+后端 message。
 
 ## 页面改造清单
 
@@ -307,9 +497,11 @@ Content-Type: application/json
 1. 客户从新线索进入跟进。
 2. 客户到店、进入设计、签约。
 3. 项目签约、排期开工、暂停、恢复、发起验收。
-4. 费用申请提交、经理审批、财务审批、驳回、取消、付款。
-5. 首页待办分页加载。
-6. 老版本 fallback：没有 `workflow_state` 时仍能用旧字段只读展示。
+4. 工序节点要求施工日志时，先创建施工日志，再完成 workflow task。
+5. 水电工序完成后进入中期收款节点；未确认收款时不能推进，确认后进入下一工序。
+6. 费用申请提交、经理审批、财务审批、驳回、取消、付款。
+7. 首页待办分页加载。
+8. 没有 `workflow_state.actions` 时不展示项目推进按钮，也不 fallback 到旧状态动作。
 
 Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验收证据
 填入 `docs/state_machine_migrate/audit/manual-gates.json` 的
@@ -331,6 +523,9 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 
 后端每完成一个阶段，需要在这里补充：
 
+说明：下表保留迁移过程中的历史兼容阶段。项目侧当前以 2026-06-13
+`Project status action compatibility removed` 之后的 workflow-only 合约为准。
+
 | 日期 | 阶段 | 后端变更 | 小程序动作 |
 | --- | --- | --- | --- |
 | 2026-06-12 | Phase 0/Plan | 输出执行计划和初始对接契约 | 评估页面改造范围 |
@@ -348,3 +543,4 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 | 2026-06-12 | Phase 6/Cleanup migration ready | 后端已准备 `20260612143000_drop_legacy_state_machine_objects.sql`，会删除旧状态流转日志表、费用旧审批链表、排期开工旧 RPC、费用旧节点列 `current_step/current_step_role` | 目标环境应用该 migration 前，小程序线上最低版本必须不再读取 `current_step`、`approval_chain`、旧状态按钮或旧状态流转接口 |
 | 2026-06-13 | Procedure construction log contract | 工序节点 action metadata 支持 `type = project_log`，并通过 `stage_code`、`min_image_count` 指示小程序先创建施工日志再完成 workflow task；施工日志 HTTP 路径统一使用 `/project-logs` | 项目详情、工地详情、首页待办、任务中心按 `project_log` 字段渲染施工日志表单；所有施工日志接口切到 `/project-logs` |
 | 2026-06-13 | Project workflow native actions | 项目 workflow action 不再下发 `business_domain = project_status` 的旧项目状态动作；项目业务节点使用 `workflow_project`，收款节点使用 `payment_collection` | 小程序项目按钮不能再按旧 `ProjectStatusAction` 白名单过滤，需要识别 `workflow_project` 和 `payment_collection` |
+| 2026-06-13 | Project status action compatibility removed | 项目详情 bootstrap 不再返回 `status_actions`；项目 PATCH 带 `status` 会被拒绝；项目推进只能通过 `/workflow-tasks/:taskId/complete` | 删除 orange 项目详情里的 `status_actions`、`ProjectStatusActionItem`、`/projects/:id/status-transitions` 依赖 |
