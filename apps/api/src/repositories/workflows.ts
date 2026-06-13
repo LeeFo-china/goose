@@ -25,6 +25,7 @@ import {
   getRuntimeInstanceById,
   listCompletedRuntimeProcedureNodes,
   listRuntimeInstances,
+  rebuildRuntimeInstance,
   startRuntimeInstance,
 } from "./workflows/runtime";
 
@@ -52,6 +53,7 @@ class WorkflowRepository {
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;
   cancelRuntimeInstance = cancelRuntimeInstance;
+  rebuildRuntimeInstance = rebuildRuntimeInstance;
 }
 
 export const workflowRepository = new WorkflowRepository();

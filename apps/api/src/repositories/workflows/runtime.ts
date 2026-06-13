@@ -10,6 +10,8 @@ import type {
   WorkflowRuntimeCompleteNodeResult,
   WorkflowRuntimeInstanceListInput,
   WorkflowRuntimeInstanceListResult,
+  WorkflowRuntimeRebuildInput,
+  WorkflowRuntimeRebuildResult,
   WorkflowRuntimeStartInput,
   WorkflowRuntimeStartResult,
   WorkflowTaskRow,
@@ -21,6 +23,8 @@ type WorkflowRuntimeCompleteNodeFailure =
   Extract<WorkflowRuntimeCompleteNodeResult, { ok: false }>;
 type WorkflowRuntimeCancelFailure =
   Extract<WorkflowRuntimeCancelResult, { ok: false }>;
+type WorkflowRuntimeRebuildFailure =
+  Extract<WorkflowRuntimeRebuildResult, { ok: false }>;
 
 export async function listRuntimeInstances(
   input: WorkflowRuntimeInstanceListInput,
@@ -177,6 +181,29 @@ export async function cancelRuntimeInstance(
   return normalizeCancelResult(data);
 }
 
+export async function rebuildRuntimeInstance(
+  input: WorkflowRuntimeRebuildInput,
+): Promise<WorkflowRuntimeRebuildResult> {
+  const { data, error } = await workflowRpc("rebuild_workflow_subject_runtime", {
+    p_tenant_id: input.tenantId,
+    p_definition_id: input.definitionId,
+    p_subject_type: input.subjectType,
+    p_subject_id: input.subjectId,
+    p_reason: input.reason,
+    p_context: input.context,
+    p_actor_employee_id: input.actorEmployeeId ?? null,
+    p_project_status: input.projectStatus ?? null,
+    p_delete_completed_instances: input.deleteCompletedInstances ?? false,
+    p_dry_run: input.dryRun ?? false,
+  });
+
+  if (error) {
+    throw Errors.dbError("重建流程实例失败", error);
+  }
+
+  return normalizeRebuildResult(data);
+}
+
 function normalizeStartResult(data: unknown): WorkflowRuntimeStartResult {
   if (!isRecord(data)) {
     throw Errors.badRequest("启动流程实例失败");
@@ -237,6 +264,35 @@ function normalizeCompleteResult(data: unknown): WorkflowRuntimeCompleteNodeResu
   };
 }
 
+function normalizeRebuildResult(data: unknown): WorkflowRuntimeRebuildResult {
+  if (!isRecord(data)) {
+    throw Errors.badRequest("重建流程实例失败");
+  }
+
+  if (data.ok === false && typeof data.reason === "string") {
+    return {
+      ok: false,
+      reason: data.reason as WorkflowRuntimeRebuildFailure["reason"],
+    };
+  }
+
+  if (data.ok !== true) {
+    throw Errors.badRequest("重建流程实例失败");
+  }
+
+  return {
+    ok: true,
+    dryRun: data.dry_run === true,
+    instance: isRecord(data.instance) ? data.instance as WorkflowInstanceRow : null,
+    currentNode: isRecord(data.current_node) ? data.current_node : null,
+    task: isRecord(data.task) ? data.task as WorkflowTaskRow : null,
+    subjectState: isRecord(data.subject_state) ? data.subject_state : null,
+    canceledInstanceCount: getNumber(data.canceled_instance_count),
+    deletedInstanceCount: getNumber(data.deleted_instance_count),
+    existingInstanceCount: getNumber(data.existing_instance_count),
+  };
+}
+
 function normalizeCancelResult(data: unknown): WorkflowRuntimeCancelResult {
   if (!isRecord(data)) {
     throw Errors.badRequest("取消流程实例失败");
@@ -257,6 +313,10 @@ function normalizeCancelResult(data: unknown): WorkflowRuntimeCancelResult {
     ok: true,
     instance: data.instance as WorkflowInstanceRow,
   };
+}
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

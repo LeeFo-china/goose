@@ -310,3 +310,15 @@ export type WorkflowRuntimeCompleteNodeResult = {
   nextNode: Record<string, unknown> | null;
   task: WorkflowRuntimeTask | null;
 };
+
+export type WorkflowRuntimeRebuildResult = {
+  ok: true;
+  dryRun: boolean;
+  instance: WorkflowRuntimeInstance | null;
+  currentNode: Record<string, unknown> | null;
+  task: WorkflowRuntimeTask | null;
+  subjectState: Record<string, unknown> | null;
+  existingInstanceCount: number;
+  canceledInstanceCount: number;
+  deletedInstanceCount: number;
+};

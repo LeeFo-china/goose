@@ -1,5 +1,6 @@
 import {
   PAYMENT_TYPE_VALUES,
+  PROJECT_STATUS_VALUES,
   WORKFLOW_BUSINESS_KIND_VALUES,
   WORKFLOW_CATEGORY_VALUES,
   WORKFLOW_DEFINITION_STATUS_VALUES,
@@ -275,6 +276,18 @@ export const WorkflowRuntimeCompleteNodeSchema = z.object({
   output: z.object({}, { error: "节点输出必须是对象" }).catchall(z.unknown()).default({}),
 });
 
+export const WorkflowRuntimeRebuildSchema = z.object({
+  subject_type: WorkflowSubjectTypeSchema.default("manual"),
+  subject_id: textField("流程对象 ID 不能为空").min(1, "流程对象 ID 不能为空").max(200, "流程对象 ID 过长"),
+  reason: textField("重建原因不能为空").min(1, "重建原因不能为空").max(500, "重建原因过长"),
+  context: z.object({}, { error: "上下文必须是对象" }).catchall(z.unknown()).default({}),
+  project_status: z.enum(PROJECT_STATUS_VALUES, {
+    message: "无效的项目状态",
+  }).nullable().optional(),
+  delete_completed_instances: z.boolean({ error: "历史实例删除标记格式无效" }).default(false),
+  dry_run: z.boolean({ error: "预检标记格式无效" }).default(false),
+});
+
 export type WorkflowListQuery = z.infer<typeof WorkflowListQuerySchema>;
 export type WorkflowDefinitionCreateInput = z.infer<typeof WorkflowDefinitionCreateSchema>;
 export type WorkflowDefinitionUpdateInput = z.infer<typeof WorkflowDefinitionUpdateSchema>;
@@ -284,3 +297,4 @@ export type WorkflowSimulationInput = z.infer<typeof WorkflowSimulationSchema>;
 export type WorkflowRuntimeInstanceListQuery = z.infer<typeof WorkflowRuntimeInstanceListQuerySchema>;
 export type WorkflowRuntimeInstanceStartInput = z.infer<typeof WorkflowRuntimeInstanceStartSchema>;
 export type WorkflowRuntimeCompleteNodeInput = z.infer<typeof WorkflowRuntimeCompleteNodeSchema>;
+export type WorkflowRuntimeRebuildInput = z.infer<typeof WorkflowRuntimeRebuildSchema>;

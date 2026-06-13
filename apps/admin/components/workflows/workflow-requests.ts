@@ -13,6 +13,7 @@ import type {
   WorkflowRuntimeCompleteNodeResult,
   WorkflowRuntimeInstanceListData,
   WorkflowRuntimeInstanceListQuery,
+  WorkflowRuntimeRebuildResult,
   WorkflowRuntimeStartResult,
   WorkflowTemplateCreateInput,
 } from "./workflow-types";
@@ -192,6 +193,28 @@ export async function completeWorkflowRuntimeNode(
       method: "POST",
       body: JSON.stringify(input),
       fallbackMessage: "完成流程节点失败",
+    },
+  );
+}
+
+export async function rebuildWorkflowRuntimeInstance(
+  id: string,
+  input: {
+    subject_type?: string;
+    subject_id: string;
+    reason: string;
+    context?: Record<string, unknown>;
+    project_status?: string | null;
+    delete_completed_instances?: boolean;
+    dry_run?: boolean;
+  },
+) {
+  return requestBackendJson<WorkflowRuntimeRebuildResult>(
+    `/workflows/${encodeURIComponent(id)}/runtime/rebuild`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      fallbackMessage: "重建流程实例失败",
     },
   );
 }

@@ -317,6 +317,19 @@ export type WorkflowRuntimeCancelInput = {
   actorEmployeeId?: string | null;
 };
 
+export type WorkflowRuntimeRebuildInput = {
+  tenantId: string;
+  definitionId: string;
+  subjectType: WorkflowSubjectType;
+  subjectId: string;
+  reason: string;
+  context: JsonObject;
+  actorEmployeeId?: string | null;
+  projectStatus?: string | null;
+  deleteCompletedInstances?: boolean;
+  dryRun?: boolean;
+};
+
 export type WorkflowRuntimeStartResult =
   | {
       ok: true;
@@ -365,4 +378,25 @@ export type WorkflowRuntimeCancelResult =
         | "instance_not_found"
         | "instance_not_running"
         | "invalid_context";
+    };
+
+export type WorkflowRuntimeRebuildResult =
+  | {
+      ok: true;
+      dryRun: boolean;
+      instance: WorkflowInstanceRow | null;
+      currentNode: JsonObject | null;
+      task: WorkflowTaskRow | null;
+      subjectState: JsonObject | null;
+      canceledInstanceCount: number;
+      deletedInstanceCount: number;
+      existingInstanceCount: number;
+    }
+  | {
+      ok: false;
+      reason:
+        | "active_version_not_found"
+        | "graph_invalid"
+        | "invalid_context"
+        | "project_not_found";
     };

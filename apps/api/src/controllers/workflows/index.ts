@@ -10,6 +10,7 @@ import {
   WorkflowRuntimeCompleteNodeSchema,
   WorkflowRuntimeInstanceIdParamsSchema,
   WorkflowRuntimeInstanceListQuerySchema,
+  WorkflowRuntimeRebuildSchema,
   WorkflowRuntimeInstanceStartSchema,
   WorkflowTemplateCreateSchema,
 } from "@/schema/workflows";
@@ -205,6 +206,23 @@ class WorkflowController extends TenantBaseController<
       authContext,
       paramsResult.data.id,
       paramsResult.data.instanceId,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/workflows/:id/runtime/rebuild")
+  async rebuildRuntimeInstance(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = WorkflowDefinitionIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = WorkflowRuntimeRebuildSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await workflowService.rebuildRuntimeInstance(
+      authContext,
+      paramsResult.data.id,
       bodyResult.data,
     );
     return ResponseHandler.success(data);

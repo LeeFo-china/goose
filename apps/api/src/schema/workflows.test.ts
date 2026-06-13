@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { WorkflowGraphSaveSchema } from "./workflows";
+import {
+  WorkflowGraphSaveSchema,
+  WorkflowRuntimeRebuildSchema,
+} from "./workflows";
 
 describe("WorkflowGraphSaveSchema", () => {
   test("accepts admin payment collection node config", () => {
@@ -30,5 +33,34 @@ describe("WorkflowGraphSaveSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("WorkflowRuntimeRebuildSchema", () => {
+  test("requires an operator reason and accepts project status correction", () => {
+    expect(WorkflowRuntimeRebuildSchema.safeParse({
+      subject_id: "project-1",
+      reason: "",
+      project_status: "started",
+    }).success).toBe(false);
+
+    const result = WorkflowRuntimeRebuildSchema.safeParse({
+      subject_id: "project-1",
+      reason: "流程图发布后按当前版本重建",
+      project_status: "started",
+      delete_completed_instances: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).toEqual({
+      subject_type: "manual",
+      subject_id: "project-1",
+      reason: "流程图发布后按当前版本重建",
+      project_status: "started",
+      delete_completed_instances: true,
+      context: {},
+      dry_run: false,
+    });
   });
 });
