@@ -13,7 +13,12 @@ export type WorkflowSubjectAction = {
   task_id: string;
   node_key: string;
   node_type: string;
-  business_domain: "customer_status" | "project_status" | "expense_request" | null;
+  business_domain:
+    | "customer_status"
+    | "workflow_project"
+    | "payment_collection"
+    | "expense_request"
+    | null;
   business_action: string | null;
   requires_reason: boolean;
   disabled: boolean;
@@ -22,6 +27,13 @@ export type WorkflowSubjectAction = {
     label: string;
     type: string;
     required: boolean;
+    stage_code?: string;
+    min_image_count?: number;
+    payment_type?: string;
+    payment_label?: string;
+    requirement_mode?: string;
+    required_percentage?: number;
+    min_amount?: number;
   }>;
 };
 

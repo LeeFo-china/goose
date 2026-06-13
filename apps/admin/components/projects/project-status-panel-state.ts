@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import {
   isProjectStatus,
   isProjectStatusAction,
+  type ProjectStatusAction,
 } from "@gooes/domain";
 import type {
   EmployeeOption,
@@ -28,9 +29,15 @@ import type {
 import { resolveProjectWorkflowActionTransition } from "@/components/workflows/workflow-business-actions";
 import { requestBackendJson } from "@/lib/backend-client";
 
-type ProjectPanelActionItem = ProjectStatusActionItem & {
-  workflow_action_key?: string;
-  workflow_task_id?: string;
+const PROJECT_WORKFLOW_EFFECT_BY_NODE_KEY: Partial<Record<string, ProjectStatusAction>> = {
+  designing: "confirm_proposal",
+  proposal_confirmed: "sign_contract",
+  signed: "finalize_design",
+  design_finalized: "schedule_construction",
+  pending_start: "start_project",
+  started: "start_construction",
+  constructing: "start_acceptance",
+  on_hold: "resume_project",
 };
 
 export function useProjectStatusPanel(
@@ -45,7 +52,7 @@ export function useProjectStatusPanel(
   const [transitionsLoaded, setTransitionsLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const [selectedAction, setSelectedAction] = useState<ProjectPanelActionItem | null>(null);
+  const [selectedAction, setSelectedAction] = useState<ProjectStatusActionItem | null>(null);
   const [workflowState, setWorkflowState] = useState<WorkflowSubjectState | null>(null);
   const [reason, setReason] = useState("");
   const [signedAmount, setSignedAmount] = useState("");
@@ -172,7 +179,7 @@ export function useProjectStatusPanel(
     resetActionDialog();
   }
 
-  function openActionDialog(action: ProjectPanelActionItem) {
+  function openActionDialog(action: ProjectStatusActionItem) {
     setError("");
     if (
       action.action === "sign_contract" &&
@@ -244,6 +251,9 @@ export function useProjectStatusPanel(
             selectedAction.action === "schedule_construction"
               ? constructionManagerEmployeeId
               : undefined,
+          payment_status: selectedAction.workflow_business_domain === "payment_collection"
+            ? "success"
+            : undefined,
         };
         if (selectedAction.workflow_task_id) {
           await requestProject({
@@ -274,7 +284,7 @@ export function useProjectStatusPanel(
         typeof project.paused_from_status === "string" ? project.paused_from_status : null,
       )
     )
-    .filter((action): action is ProjectPanelActionItem => Boolean(action));
+    .filter((action): action is ProjectStatusActionItem => Boolean(action));
   const actions = workflowActions;
   const blockedActions = blockedProjectActions(currentStatus).filter((item) =>
     !isProjectStatusActionVisible(actions, item.action)
@@ -326,30 +336,57 @@ function mapProjectWorkflowAction(
   action: WorkflowSubjectAction,
   currentStatus: string | null | undefined,
   pausedFromStatus: string | null,
-): ProjectPanelActionItem | null {
-  if (
-    action.business_domain !== "project_status" ||
-    !action.business_action ||
-    !isProjectStatusAction(action.business_action) ||
-    !isProjectStatus(currentStatus)
-  ) {
+): ProjectStatusActionItem | null {
+  if (action.disabled || !action.task_id) {
+    return null;
+  }
+
+  if (action.business_domain === "payment_collection") {
+    return {
+      action: "confirm_payment",
+      label: action.label,
+      from_status: isProjectStatus(currentStatus) ? currentStatus : "constructing",
+      to_status: "收款确认",
+      requires_reason: action.requires_reason,
+      workflow_action_key: action.key,
+      workflow_task_id: action.task_id,
+      workflow_business_domain: action.business_domain,
+      workflow_node_key: action.node_key,
+      workflow_node_type: action.node_type,
+      workflow_output_fields: action.output_fields,
+    };
+  }
+
+  if (action.business_domain !== "workflow_project" || !isProjectStatus(currentStatus)) {
+    return null;
+  }
+
+  const projectAction = PROJECT_WORKFLOW_EFFECT_BY_NODE_KEY[action.node_key] ??
+    (action.business_action && isProjectStatusAction(action.business_action)
+      ? action.business_action
+      : null);
+  if (!projectAction) {
     return null;
   }
 
   const transition = resolveProjectWorkflowActionTransition({
-    action: action.business_action,
+    action: projectAction,
     fromStatus: currentStatus,
     pausedFromStatus: isProjectStatus(pausedFromStatus) ? pausedFromStatus : null,
   });
-  if (!transition && action.business_action !== "resume_project") return null;
+  if (!transition && projectAction !== "resume_project") return null;
 
   return {
-    action: action.business_action,
+    action: projectAction,
     label: action.label,
     from_status: transition?.fromStatus ?? currentStatus,
     to_status: transition?.toStatus ?? "恢复后状态",
     requires_reason: action.requires_reason,
     workflow_action_key: action.key,
     workflow_task_id: action.task_id,
+    workflow_business_domain: action.business_domain,
+    workflow_node_key: action.node_key,
+    workflow_node_type: action.node_type,
+    workflow_output_fields: action.output_fields,
   };
 }

@@ -113,6 +113,22 @@ export type ProjectStatusActionItem = {
   from_status: string;
   to_status: string;
   requires_reason?: boolean;
+  workflow_action_key?: string;
+  workflow_task_id?: string;
+  workflow_business_domain?: string | null;
+  workflow_node_key?: string;
+  workflow_node_type?: string;
+  workflow_output_fields?: Array<{
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+    payment_type?: string;
+    payment_label?: string;
+    requirement_mode?: string;
+    required_percentage?: number;
+    min_amount?: number;
+  }>;
 };
 
 export type ProjectStatusActionsResponse = {

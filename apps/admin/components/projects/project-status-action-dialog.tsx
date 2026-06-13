@@ -71,15 +71,20 @@ export function ProjectStatusActionDialog({
   closeActionDialog,
   submitAction,
 }: ProjectStatusActionDialogProps) {
+  const isPaymentCollection =
+    selectedAction?.workflow_business_domain === "payment_collection";
+
   return (
     <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && closeActionDialog()}>
       <DialogContent className="max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>{selectedAction?.label || "状态变更"}</DialogTitle>
+          <DialogTitle>{selectedAction?.label || "流程操作"}</DialogTitle>
           <DialogDescription>
-            {selectedAction
+            {isPaymentCollection
+              ? "确认后将校验对应收款是否已入账，满足条件后推进 workflow。"
+              : selectedAction
               ? `${projectStatusLabel(selectedAction.from_status)} -> ${projectStatusLabel(selectedAction.to_status)}`
-              : "确认执行该状态动作。"}
+              : "确认执行该 workflow 操作。"}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
