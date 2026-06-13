@@ -35,8 +35,8 @@ describe("buildWorkflowTaskActions", () => {
     })[0]).toMatchObject({
       key: "complete",
       label: "项目签约",
-      business_domain: "project_status",
-      business_action: "sign_contract",
+      business_domain: "workflow_project",
+      business_action: "proposal_confirmed",
       requires_reason: false,
       output_fields: [
         {
@@ -64,6 +64,42 @@ describe("buildWorkflowTaskActions", () => {
         label: "工程负责人",
         type: "employee",
         required: true,
+      },
+    ]);
+  });
+
+  test("describes payment collection gate actions", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "middle_payment",
+      nodeType: "confirmation",
+      taskTitle: "中期进度款",
+      currentNodeSnapshot: {
+        node_key: "middle_payment",
+        business_kind: "payment_collection",
+        config: {
+          payment_type: "stage_2",
+          requirement_mode: "any_confirmed",
+        },
+      },
+    })).toEqual([
+      {
+        key: "complete",
+        label: "中期进度款",
+        business_domain: "payment_collection",
+        business_action: "confirm_payment",
+        requires_reason: false,
+        output_fields: [
+          {
+            name: "payment_status",
+            label: "中期进度款",
+            type: "payment_collection",
+            required: true,
+            payment_type: "stage_2",
+            payment_label: "中期进度款",
+            requirement_mode: "any_confirmed",
+          },
+        ],
       },
     ]);
   });
@@ -119,6 +155,41 @@ describe("buildWorkflowTaskActions", () => {
       "paid_at",
       "evidence_images",
       "remark",
+    ]);
+  });
+
+  test("describes procedure node construction log requirements", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "procedure",
+      nodeKey: "plumbing",
+      nodeType: "procedure",
+      taskTitle: "水电施工",
+      currentNodeSnapshot: {
+        node_key: "plumbing",
+        config: {
+          stage_key: "plumbing_electrical",
+          require_log: true,
+          min_image_count: 2,
+        },
+      },
+    })).toEqual([
+      {
+        key: "complete",
+        label: "水电施工",
+        business_domain: null,
+        business_action: null,
+        requires_reason: false,
+        output_fields: [
+          {
+            name: "project_log_id",
+            label: "施工日志",
+            type: "project_log",
+            required: true,
+            stage_code: "plumbing_electrical",
+            min_image_count: 2,
+          },
+        ],
+      },
     ]);
   });
 });

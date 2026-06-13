@@ -2,14 +2,22 @@ import { Errors } from "@/errors/error-factory";
 import { ProjectStatusTransitionSchema } from "@/schema/projects";
 import type { AuthContext } from "@/services/authorization";
 import { projectSer } from "@/services/projects";
-import { resolveProjectWorkflowTaskBusinessAction } from "@/services/workflow-task-action-metadata";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
-import type { ProjectStatusAction } from "@gooes/domain";
+
+type ProjectWorkflowSideEffectAction =
+  | "confirm_proposal"
+  | "sign_contract"
+  | "finalize_design"
+  | "schedule_construction"
+  | "start_project"
+  | "start_construction"
+  | "start_acceptance"
+  | "resume_project";
 
 type ProjectWorkflowTaskOperation = {
-  action: ProjectStatusAction;
+  action: ProjectWorkflowSideEffectAction;
   payload: {
-    action: ProjectStatusAction;
+    action: ProjectWorkflowSideEffectAction;
     reason?: string;
     signed_amount?: unknown;
     start_date?: unknown;
@@ -42,13 +50,23 @@ function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+const PROJECT_NODE_EFFECTS: Partial<Record<string, ProjectWorkflowSideEffectAction>> = {
+  designing: "confirm_proposal",
+  proposal_confirmed: "sign_contract",
+  signed: "finalize_design",
+  design_finalized: "schedule_construction",
+  pending_start: "start_project",
+  started: "start_construction",
+  constructing: "start_acceptance",
+  on_hold: "resume_project",
+};
+
 export function resolveProjectWorkflowTaskOperation(
   input: ResolveProjectWorkflowTaskOperationInput,
 ): ProjectWorkflowTaskOperation | null {
-  const action = resolveProjectWorkflowTaskBusinessAction({
-    nodeKey: input.nodeKey,
-    action: input.action,
-  });
+  if (input.action.trim() !== "complete") return null;
+
+  const action = PROJECT_NODE_EFFECTS[input.nodeKey];
   if (!action) return null;
 
   return {

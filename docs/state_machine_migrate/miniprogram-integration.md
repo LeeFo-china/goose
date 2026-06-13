@@ -41,8 +41,8 @@
         "task_id": "uuid",
         "node_key": "proposal_confirmed",
         "node_type": "task",
-        "business_domain": "project_status",
-        "business_action": "sign_contract",
+        "business_domain": "workflow_project",
+        "business_action": "proposal_confirmed",
         "requires_reason": false,
         "disabled": false,
         "output_fields": [
@@ -82,8 +82,8 @@
 | `task_id` | 待办 ID |
 | `node_key` | 当前 workflow 节点编码 |
 | `node_type` | 当前 workflow 节点类型 |
-| `business_domain` | 兼容业务域：`customer_status`、`project_status`、`expense_request`，通用流程为 `null` |
-| `business_action` | 对应旧业务动作，例如 `sign_contract`、`approve`、`pay`，通用流程为 `null` |
+| `business_domain` | 业务域：`customer_status`、`workflow_project`、`payment_collection`、`expense_request`，通用流程为 `null` |
+| `business_action` | 当前动作语义。项目 workflow 节点使用 `node_key`，收款节点使用 `confirm_payment`，费用节点使用 `approve`、`reject`、`pay` |
 | `requires_reason` | 是否必须填写顶层 `reason` |
 | `output_fields` | 需要放入 `output` 的字段描述 |
 | `disabled` | 是否禁用 |
@@ -98,7 +98,15 @@
 | `datetime` | 日期时间选择 |
 | `employee` | 员工选择 |
 | `image_list` | 图片上传数组 |
+| `payment_collection` | 收款节点确认，端上提交 `output.payment_status = "success"` |
+| `project_log` | 工序施工日志创建/选择，创建成功后向 `output.project_log_id` 写入日志 ID |
 | `settlement_method` | 结算方式选择 |
+
+工序节点施工日志的专门对接要求见
+[小程序工序节点施工日志对接说明](./miniprogram-procedure-construction-log-integration.md)。
+
+收款节点的专门对接要求见
+[小程序收款节点对接说明](./miniprogram-payment-collection-node-integration.md)。
 
 ## 新接口
 
@@ -131,8 +139,8 @@ Authorization: Bearer <token>
           "task_id": "uuid",
           "node_key": "design_finalized",
           "node_type": "task",
-          "business_domain": "project_status",
-          "business_action": "schedule_construction",
+          "business_domain": "workflow_project",
+          "business_action": "design_finalized",
           "requires_reason": false,
           "disabled": false,
           "output_fields": [
@@ -338,3 +346,5 @@ Phase 6 破坏性清理前，Orange/小程序侧必须把下面的 API 契约验
 | 2026-06-12 | Phase 5/Action metadata | `workflow_state.actions` 和 `/workflow-tasks` 列表开始返回 `business_domain`、`business_action`、`node_key`、`node_type`、`output_fields`；审批节点会同时返回通过/驳回两个动作 | 端上可以按 `output_fields` 渲染表单，并把 `key` 作为 task complete 的 `action` |
 | 2026-06-12 | Phase 5/Expense API input cleanup | 费用申请创建、更新、提交 schema 不再接收 `approval_chain`，后端不再从 mutation 入参写旧审批链表 | 新版本小程序停止提交 `approval_chain`；审批/驳回/打款统一从 workflow task action 发起 |
 | 2026-06-12 | Phase 6/Cleanup migration ready | 后端已准备 `20260612143000_drop_legacy_state_machine_objects.sql`，会删除旧状态流转日志表、费用旧审批链表、排期开工旧 RPC、费用旧节点列 `current_step/current_step_role` | 目标环境应用该 migration 前，小程序线上最低版本必须不再读取 `current_step`、`approval_chain`、旧状态按钮或旧状态流转接口 |
+| 2026-06-13 | Procedure construction log contract | 工序节点 action metadata 支持 `type = project_log`，并通过 `stage_code`、`min_image_count` 指示小程序先创建施工日志再完成 workflow task；施工日志 HTTP 路径统一使用 `/project-logs` | 项目详情、工地详情、首页待办、任务中心按 `project_log` 字段渲染施工日志表单；所有施工日志接口切到 `/project-logs` |
+| 2026-06-13 | Project workflow native actions | 项目 workflow action 不再下发 `business_domain = project_status` 的旧项目状态动作；项目业务节点使用 `workflow_project`，收款节点使用 `payment_collection` | 小程序项目按钮不能再按旧 `ProjectStatusAction` 白名单过滤，需要识别 `workflow_project` 和 `payment_collection` |

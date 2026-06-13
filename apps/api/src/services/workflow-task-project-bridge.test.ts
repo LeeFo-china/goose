@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { resolveProjectWorkflowTaskOperation } from "./workflow-task-project-bridge";
 
 describe("resolveProjectWorkflowTaskOperation", () => {
-  test("maps linear construction workflow nodes to project status actions", () => {
+  test("maps workflow-native project nodes to internal project effects", () => {
     expect(resolveProjectWorkflowTaskOperation({
       nodeKey: "proposal_confirmed",
       action: "complete",
@@ -31,15 +31,22 @@ describe("resolveProjectWorkflowTaskOperation", () => {
     });
   });
 
-  test("maps explicit pause and invalid actions from the current node", () => {
+  test("does not accept legacy explicit project status actions", () => {
     expect(resolveProjectWorkflowTaskOperation({
       nodeKey: "constructing",
       action: "pause_project",
       reason: "材料待补",
       output: {},
+    })).toBeNull();
+
+    expect(resolveProjectWorkflowTaskOperation({
+      nodeKey: "on_hold",
+      action: "complete",
+      reason: null,
+      output: {},
     })).toEqual({
-      action: "pause_project",
-      payload: { action: "pause_project", reason: "材料待补" },
+      action: "resume_project",
+      payload: { action: "resume_project" },
     });
   });
 });

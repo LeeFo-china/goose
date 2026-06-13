@@ -1,13 +1,14 @@
 import {
   CustomerWorkflowActionConfig,
-  ProjectWorkflowActionConfig,
 } from "@/services/workflow-business-actions";
 import {
   ExpenseApprovalActionConfig,
+  PaymentTypeConfig,
+  PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
   type CustomerStatusAction,
   type ExpenseApprovalAction,
-  type ProjectStatus,
-  type ProjectStatusAction,
+  type PaymentType,
+  type ProjectConstructionStageCode,
   type WorkflowSubjectType,
 } from "@gooes/domain";
 
@@ -18,12 +19,19 @@ export type WorkflowTaskOutputFieldType =
   | "datetime"
   | "employee"
   | "image_list"
+  | "payment_collection"
+  | "project_log"
   | "settlement_method";
 
 export type WorkflowTaskActionMetadata = {
   key: string;
   label: string;
-  business_domain: "customer_status" | "project_status" | "expense_request" | null;
+  business_domain:
+    | "customer_status"
+    | "workflow_project"
+    | "payment_collection"
+    | "expense_request"
+    | null;
   business_action: string | null;
   requires_reason: boolean;
   output_fields: Array<{
@@ -31,13 +39,22 @@ export type WorkflowTaskActionMetadata = {
     label: string;
     type: WorkflowTaskOutputFieldType;
     required: boolean;
+    stage_code?: ProjectConstructionStageCode;
+    min_image_count?: number;
+    payment_type?: WorkflowPaymentCollectionType;
+    payment_label?: string;
+    requirement_mode?: "any_confirmed" | "signed_amount_percentage";
+    required_percentage?: number;
+    min_amount?: number;
   }>;
 };
 
 type BuildWorkflowTaskActionsInput = {
   subjectType: WorkflowSubjectType;
   nodeKey: string;
+  nodeType?: string | null;
   taskTitle: string;
+  currentNodeSnapshot?: unknown;
 };
 
 export const CUSTOMER_LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStatusAction>> = {
@@ -45,35 +62,30 @@ export const CUSTOMER_LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStat
   arrived: "start_design",
 };
 
-export const PROJECT_LINEAR_ACTION_BY_NODE: Record<string, ProjectStatusAction> = {
-  designing: "confirm_proposal",
-  proposal_confirmed: "sign_contract",
-  signed: "finalize_design",
-  design_finalized: "schedule_construction",
-  pending_start: "start_project",
-  started: "start_construction",
-  constructing: "start_acceptance",
-  on_hold: "resume_project",
-};
-
 const CUSTOMER_EXPLICIT_ACTIONS = new Set<CustomerStatusAction>(["mark_invalid"]);
-const PROJECT_EXPLICIT_ACTIONS = new Set<ProjectStatusAction>([
-  "pause_project",
-  "mark_invalid",
-  "resume_project",
+
+const WORKFLOW_PROJECT_ACTION_NODE_KEYS = new Set([
+  "designing",
+  "proposal_confirmed",
+  "signed",
+  "design_finalized",
+  "pending_start",
+  "started",
+  "constructing",
+  "on_hold",
+  "acceptance",
 ]);
 
-const PROJECT_NODE_STATUS_BY_NODE: Partial<Record<string, ProjectStatus>> = {
-  designing: "designing",
-  proposal_confirmed: "proposal_confirmed",
-  signed: "signed",
-  design_finalized: "design_finalized",
-  pending_start: "pending_start",
-  started: "started",
-  constructing: "constructing",
-  on_hold: "on_hold",
-  acceptance: "acceptance",
-};
+const WORKFLOW_PAYMENT_COLLECTION_TYPES = [
+  "deposit",
+  "stage_1",
+  "stage_2",
+  "stage_3",
+  "add_on",
+] as const satisfies ReadonlyArray<PaymentType>;
+
+type WorkflowPaymentCollectionType =
+  (typeof WORKFLOW_PAYMENT_COLLECTION_TYPES)[number];
 
 export function resolveCustomerWorkflowTaskBusinessAction(input: {
   nodeKey: string;
@@ -84,24 +96,23 @@ export function resolveCustomerWorkflowTaskBusinessAction(input: {
     : CUSTOMER_LINEAR_ACTION_BY_NODE[input.nodeKey] ?? null;
 }
 
-export function resolveProjectWorkflowTaskBusinessAction(input: {
-  nodeKey: string;
-  action: string;
-}): ProjectStatusAction | null {
-  return isProjectExplicitAction(input.action)
-    ? input.action
-    : PROJECT_LINEAR_ACTION_BY_NODE[input.nodeKey] ?? null;
-}
-
 export function buildWorkflowTaskActions(
   input: BuildWorkflowTaskActionsInput,
 ): WorkflowTaskActionMetadata[] {
+  if (isPaymentCollectionNode(input)) {
+    return buildPaymentCollectionActions(input);
+  }
+
+  if (input.nodeType === "procedure") {
+    return buildProcedureActions(input);
+  }
+
   if (input.subjectType === "customer") {
     return buildCustomerActions(input.nodeKey);
   }
 
   if (input.subjectType === "project") {
-    return buildProjectActions(input.nodeKey);
+    return buildProjectActions(input);
   }
 
   if (input.subjectType === "expense_request") {
@@ -116,6 +127,82 @@ export function buildWorkflowTaskActions(
       business_action: null,
       requires_reason: false,
       output_fields: [],
+    },
+  ];
+}
+
+function buildPaymentCollectionActions(
+  input: BuildWorkflowTaskActionsInput,
+): WorkflowTaskActionMetadata[] {
+  const config = getCurrentNodeConfig(input);
+  const paymentType = getPaymentCollectionType(config.payment_type);
+  const paymentLabel = PaymentTypeConfig[paymentType].label;
+  const requirementMode = getPaymentRequirementMode(config.requirement_mode);
+  const requiredPercentage = getPositiveNumber(config.required_percentage);
+  const minAmount = getPositiveNumber(config.min_amount);
+
+  return [
+    {
+      key: "complete",
+      label: input.taskTitle || paymentLabel,
+      business_domain: "payment_collection",
+      business_action: "confirm_payment",
+      requires_reason: false,
+      output_fields: [
+        {
+          name: "payment_status",
+          label: paymentLabel,
+          type: "payment_collection",
+          required: true,
+          payment_type: paymentType,
+          payment_label: paymentLabel,
+          requirement_mode: requirementMode,
+          ...(requiredPercentage !== null
+            ? { required_percentage: requiredPercentage }
+            : {}),
+          ...(minAmount !== null ? { min_amount: minAmount } : {}),
+        },
+      ],
+    },
+  ];
+}
+
+function buildProcedureActions(
+  input: BuildWorkflowTaskActionsInput,
+): WorkflowTaskActionMetadata[] {
+  const config = getCurrentNodeConfig(input);
+  const stageCode = getProcedureStageCode(config.stage_key);
+  const minImageCount = getMinImageCount(config.min_image_count);
+  const outputFields: WorkflowTaskActionMetadata["output_fields"] = [];
+
+  if (config.require_log === true) {
+    outputFields.push({
+      name: "project_log_id",
+      label: "施工日志",
+      type: "project_log",
+      required: true,
+      ...(stageCode ? { stage_code: stageCode } : {}),
+      ...(minImageCount > 0 ? { min_image_count: minImageCount } : {}),
+    });
+  } else if (minImageCount > 0) {
+    outputFields.push({
+      name: "images",
+      label: "施工图片",
+      type: "image_list",
+      required: true,
+      ...(stageCode ? { stage_code: stageCode } : {}),
+      min_image_count: minImageCount,
+    });
+  }
+
+  return [
+    {
+      key: "complete",
+      label: input.taskTitle,
+      business_domain: null,
+      business_action: null,
+      requires_reason: false,
+      output_fields: outputFields,
     },
   ];
 }
@@ -141,31 +228,23 @@ function buildCustomerActions(nodeKey: string): WorkflowTaskActionMetadata[] {
   });
 }
 
-function buildProjectActions(nodeKey: string): WorkflowTaskActionMetadata[] {
-  const actions: ProjectStatusAction[] = [];
-  const linearAction = PROJECT_LINEAR_ACTION_BY_NODE[nodeKey];
-  if (linearAction) actions.push(linearAction);
-
-  const currentStatus = PROJECT_NODE_STATUS_BY_NODE[nodeKey];
-  if (currentStatus) {
-    for (const action of PROJECT_EXPLICIT_ACTIONS) {
-      if (ProjectWorkflowActionConfig[action].from.includes(currentStatus)) {
-        actions.push(action);
-      }
-    }
+function buildProjectActions(
+  input: BuildWorkflowTaskActionsInput,
+): WorkflowTaskActionMetadata[] {
+  if (!WORKFLOW_PROJECT_ACTION_NODE_KEYS.has(input.nodeKey)) {
+    return [];
   }
 
-  return unique(actions).map((action) => {
-    const config = ProjectWorkflowActionConfig[action];
-    return {
-      key: action === linearAction ? "complete" : action,
-      label: config.label,
-      business_domain: "project_status",
-      business_action: action,
-      requires_reason: Boolean(config.requiresReason),
-      output_fields: getProjectOutputFields(action),
-    };
-  });
+  return [
+    {
+      key: "complete",
+      label: input.taskTitle,
+      business_domain: "workflow_project",
+      business_action: input.nodeKey,
+      requires_reason: false,
+      output_fields: getProjectOutputFields(input.nodeKey),
+    },
+  ];
 }
 
 function buildExpenseActions(nodeKey: string): WorkflowTaskActionMetadata[] {
@@ -214,15 +293,15 @@ function buildExpenseAction(
 }
 
 function getProjectOutputFields(
-  action: ProjectStatusAction,
+  nodeKey: string,
 ): WorkflowTaskActionMetadata["output_fields"] {
-  if (action === "sign_contract") {
+  if (nodeKey === "proposal_confirmed") {
     return [
       { name: "signed_amount", label: "签约金额", type: "number", required: true },
     ];
   }
 
-  if (action === "schedule_construction") {
+  if (nodeKey === "design_finalized") {
     return [
       { name: "start_date", label: "开工日期", type: "date", required: true },
       {
@@ -241,10 +320,73 @@ function isCustomerExplicitAction(value: string): value is CustomerStatusAction 
   return CUSTOMER_EXPLICIT_ACTIONS.has(value as CustomerStatusAction);
 }
 
-function isProjectExplicitAction(value: string): value is ProjectStatusAction {
-  return PROJECT_EXPLICIT_ACTIONS.has(value as ProjectStatusAction);
-}
-
 function unique<T>(items: T[]): T[] {
   return Array.from(new Set(items));
+}
+
+function isPaymentCollectionNode(input: BuildWorkflowTaskActionsInput) {
+  const snapshot = asRecord(input.currentNodeSnapshot);
+  if (!snapshot) return false;
+  if (snapshot.node_key !== input.nodeKey) return false;
+  return snapshot.business_kind === "payment_collection";
+}
+
+function getCurrentNodeConfig(
+  input: BuildWorkflowTaskActionsInput,
+): Record<string, unknown> {
+  const snapshot = asRecord(input.currentNodeSnapshot);
+  if (!snapshot) return {};
+
+  const snapshotNodeKey = snapshot.node_key;
+  if (typeof snapshotNodeKey === "string" && snapshotNodeKey !== input.nodeKey) {
+    return {};
+  }
+
+  return asRecord(snapshot.config) ?? {};
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function getProcedureStageCode(
+  value: unknown,
+): ProjectConstructionStageCode | undefined {
+  return typeof value === "string" &&
+      PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.includes(
+        value as ProjectConstructionStageCode,
+      )
+    ? value as ProjectConstructionStageCode
+    : undefined;
+}
+
+function getMinImageCount(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function getPaymentCollectionType(value: unknown): WorkflowPaymentCollectionType {
+  return typeof value === "string" &&
+      WORKFLOW_PAYMENT_COLLECTION_TYPES.includes(
+        value as WorkflowPaymentCollectionType,
+      )
+    ? value as WorkflowPaymentCollectionType
+    : "deposit";
+}
+
+function getPaymentRequirementMode(
+  value: unknown,
+): "any_confirmed" | "signed_amount_percentage" {
+  return value === "signed_amount_percentage"
+    ? "signed_amount_percentage"
+    : "any_confirmed";
+}
+
+function getPositiveNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 }

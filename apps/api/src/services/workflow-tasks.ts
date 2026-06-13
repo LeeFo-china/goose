@@ -41,7 +41,9 @@ class WorkflowTaskService {
           ? buildWorkflowTaskActions({
             subjectType: task.instance.subject_type,
             nodeKey: task.node_key,
+            nodeType: task.node_type,
             taskTitle: task.title,
+            currentNodeSnapshot: task.instance.current_node_snapshot,
           }).map((action) => ({
             ...action,
             task_id: task.id,
