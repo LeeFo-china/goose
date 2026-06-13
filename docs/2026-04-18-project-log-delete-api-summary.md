@@ -18,9 +18,9 @@
 建议提供两个接口：
 
 1. 删除日志
-   - `DELETE /project_logs/:id`
+   - `DELETE /project-logs/:id`
 2. 删除日志中的部分图片
-   - `PATCH /project_logs/:id/images`
+   - `PATCH /project-logs/:id/images`
 
 不建议把“删除日志”和“删除图片”混成一个接口。
 
@@ -37,7 +37,7 @@
 ### 路径
 
 ```http
-DELETE /project_logs/:id
+DELETE /project-logs/:id
 ```
 
 ### 鉴权
@@ -85,7 +85,7 @@ DELETE /project_logs/:id
 ### 路径
 
 ```http
-PATCH /project_logs/:id/images
+PATCH /project-logs/:id/images
 ```
 
 ### 鉴权
@@ -184,10 +184,10 @@ PATCH /project_logs/:id/images
 ### 场景一：删除整条日志
 
 1. 弹确认框
-2. 调 `DELETE /project_logs/:id`
+2. 调 `DELETE /project-logs/:id`
 3. 成功后刷新：
-   - `/project_logs/projects`
-   - `/project_logs/projects/calendar`
+   - `/project-logs/projects`
+   - `/project-logs/projects/calendar`
 
 ### 场景二：编辑页删除单张图片
 
@@ -227,8 +227,8 @@ type UpdateProjectLogImagesResponse = {
 
 建议按下面顺序实现：
 
-1. `DELETE /project_logs/:id`
-2. `PATCH /project_logs/:id/images`
-3. 如果后续有完整编辑页，再补通用 `PATCH /project_logs/:id`
+1. `DELETE /project-logs/:id`
+2. `PATCH /project-logs/:id/images`
+3. 如果后续有完整编辑页，再补通用 `PATCH /project-logs/:id`
 
 这样可以先覆盖最常见的“删日志”和“删图”需求，再决定是否要做完整编辑能力。

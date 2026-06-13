@@ -1,10 +1,10 @@
 # 项目日志列表接口对接文档
 
-本文档用于说明 `GET /project_logs/projects` 接口的请求参数、返回结构和前端对接方式，便于项目日志列表页联调。
+本文档用于说明 `GET /project-logs/projects` 接口的请求参数、返回结构和前端对接方式，便于项目日志列表页联调。
 
 ## 接口基本信息
 
-- **接口路径**: `GET /project_logs/projects`
+- **接口路径**: `GET /project-logs/projects`
 - **功能描述**: 按项目 ID 查询项目日志列表，支持分页
 - **鉴权要求**: 需要按项目现有鉴权方式携带 `Authorization: Bearer <token>`
 
@@ -15,7 +15,7 @@
 ### 请求示例
 
 ```http
-GET /project_logs/projects?project_id=c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2&page=1&pageSize=20
+GET /project-logs/projects?project_id=c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2&page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
@@ -201,7 +201,7 @@ type ProjectLogListResponse = {
 ### 请求示例
 
 ```ts
-const res = await request.get<ProjectLogListResponse>("/project_logs/projects", {
+const res = await request.get<ProjectLogListResponse>("/project-logs/projects", {
   project_id: currentProjectId,
   page: 1,
   pageSize: 20,

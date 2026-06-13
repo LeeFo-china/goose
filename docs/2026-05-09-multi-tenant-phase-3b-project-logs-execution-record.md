@@ -30,7 +30,7 @@
 - 覆盖通用 `GET /project-logs`，按当前租户和可见项目过滤。
 - 覆盖通用 `GET /project-logs/:id`，按当前租户读取并校验项目权限。
 - 覆盖通用 `PATCH/PUT /project-logs/:id`，按当前租户更新，切换项目时重新继承目标项目租户。
-- `GET /project_logs/projects` 额外按当前租户过滤日志。
+- `GET /project-logs/projects` 额外按当前租户过滤日志。
 - 任务中心“补写施工日志”查询今日日志时按当前租户过滤。
 
 ### 客户侧接口

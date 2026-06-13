@@ -13,8 +13,8 @@ Admin 端无需新增请求参数。施工日志接口会根据当前登录员�
 - `POST /project-logs`
 - `PATCH /project-logs/:id`
 - `PUT /project-logs/:id`
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 - `GET /project_log_comments`
 - `POST /project_log_comments`
 

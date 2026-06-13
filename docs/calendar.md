@@ -16,14 +16,14 @@
 
 ## 接口建议
 
-- 路径：`GET /project_logs/projects/calendar`
+- 路径：`GET /project-logs/projects/calendar`
 - 鉴权：沿用现有 `Authorization: Bearer <token>`
 - 查询参数：
   - `project_id: string`，必填，合法 UUID
 
 ### 为什么单独做接口
 
-现有 `GET /project_logs/projects` 是分页日志列表接口，不适合直接拿来做日历：
+现有 `GET /project-logs/projects` 是分页日志列表接口，不适合直接拿来做日历：
 
 - 前端一次只拿到一页
 - 日历需要知道所有有日志的日期
@@ -235,7 +235,7 @@ on public.project_logs(project_id, created_at desc);
 
 ### 路由
 
-- 新增路由：`GET /project_logs/projects/calendar`
+- 新增路由：`GET /project-logs/projects/calendar`
 
 ### 参数校验
 
@@ -276,7 +276,7 @@ export const ProjectLogCalendarQuerySchema = z.object({
 
 ## 权限建议
 
-权限策略应与现有 `GET /project_logs/projects` 保持一致。
+权限策略应与现有 `GET /project-logs/projects` 保持一致。
 
 如果当前系统只有登录鉴权，没有项目级权限控制，那么这个接口先保持一致，不要单独发明一套权限逻辑。
 
@@ -316,7 +316,7 @@ const dateMap = new Map(
 
 推荐落地方案：
 
-1. 新增 `GET /project_logs/projects/calendar`
+1. 新增 `GET /project-logs/projects/calendar`
 2. 新增 `ProjectLogCalendarQuerySchema`
 3. 在 Supabase 中新增 `get_project_log_calendar` RPC
 4. 统一使用 `Asia/Shanghai` 作为业务切天时区

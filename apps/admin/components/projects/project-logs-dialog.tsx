@@ -108,7 +108,7 @@ export function ProjectLogsPanel({
     setError("");
 
     requestBackend<ProjectLogsData>(
-      `/project_logs/projects?project_id=${project.id}&page=1&pageSize=10`,
+      `/project-logs/projects?project_id=${project.id}&page=1&pageSize=10`,
     )
       .then((logData) => {
         if (cancelled) return;

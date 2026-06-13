@@ -14,12 +14,12 @@
 
 本次核查的后台接口：
 
-- `GET /project_logs`
-- `GET /project_logs/:id`
-- `POST /project_logs`
-- `PATCH /project_logs/:id`
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs`
+- `GET /project-logs/:id`
+- `POST /project-logs`
+- `PATCH /project-logs/:id`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 
 公开项目日志展示不在该 controller 中处理，当前仍由 `projects` 的公开接口按 `visibility_status` 和项目公开状态控制。
 

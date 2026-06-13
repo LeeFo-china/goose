@@ -5,9 +5,9 @@
 当前相关接口：
 
 - 图片上传：`POST /uploads/images`
-- 创建日志：`POST /project_logs`
-- 日志列表：`GET /project_logs/projects`
-- 日历打点：`GET /project_logs/projects/calendar`
+- 创建日志：`POST /project-logs`
+- 日志列表：`GET /project-logs/projects`
+- 日历打点：`GET /project-logs/projects/calendar`
 
 ---
 
@@ -19,10 +19,10 @@
 2. 用户选择 1~9 张图片
 3. 先调用 `POST /uploads/images`
 4. 从返回值中取 `path`
-5. 再调用 `POST /project_logs`
+5. 再调用 `POST /project-logs`
 6. 创建成功后刷新：
-   - `/project_logs/projects`
-   - `/project_logs/projects/calendar`
+   - `/project-logs/projects`
+   - `/project-logs/projects/calendar`
 
 ---
 
@@ -105,7 +105,7 @@ type UploadImagesResponse = {
 ### 路径
 
 ```http
-POST /project_logs
+POST /project-logs
 ```
 
 ### 鉴权
@@ -249,7 +249,7 @@ const imagePaths = uploadRes.data.list.map((item) => item.path);
 ### 第二步：创建日志
 
 ```ts
-await request.post("/project_logs", {
+await request.post("/project-logs", {
   project_id,
   node_name,
   content,
@@ -261,12 +261,12 @@ await request.post("/project_logs", {
 
 ```ts
 await Promise.all([
-  request.get("/project_logs/projects", {
+  request.get("/project-logs/projects", {
     project_id,
     page: 1,
     pageSize: 20,
   }),
-  request.get("/project_logs/projects/calendar", {
+  request.get("/project-logs/projects/calendar", {
     project_id,
   }),
 ]);

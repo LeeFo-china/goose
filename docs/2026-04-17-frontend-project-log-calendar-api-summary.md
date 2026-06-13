@@ -1,10 +1,10 @@
 # 项目日志日历接口对接文档
 
-本文档用于说明 `GET /project_logs/projects/calendar` 接口的请求参数、返回结构和前端对接方式，便于项目详情页中的日志日历联调。
+本文档用于说明 `GET /project-logs/projects/calendar` 接口的请求参数、返回结构和前端对接方式，便于项目详情页中的日志日历联调。
 
 ## 接口基本信息
 
-- **接口路径**: `GET /project_logs/projects/calendar`
+- **接口路径**: `GET /project-logs/projects/calendar`
 - **功能描述**: 按项目 ID 获取项目日志的日历索引数据，返回哪些日期有日志、每天日志条数和当天展示标签
 - **鉴权要求**: 需要按项目现有鉴权方式携带 `Authorization: Bearer <token>`
 
@@ -15,7 +15,7 @@
 ### 请求示例
 
 ```http
-GET /project_logs/projects/calendar?project_id=c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2
+GET /project-logs/projects/calendar?project_id=c310d1a5-d6b0-4f46-9c7e-5f0ff6eb70e2
 Authorization: Bearer <token>
 ```
 
@@ -149,7 +149,7 @@ type ProjectLogCalendarResponse = {
 
 ```ts
 const res = await request.get<ProjectLogCalendarResponse>(
-  "/project_logs/projects/calendar",
+  "/project-logs/projects/calendar",
   {
     project_id: currentProjectId,
   },
@@ -174,8 +174,8 @@ const dayInfo = dateMap.get("2026-03-12");
 
 ### 与日志详情接口的职责拆分
 
-- `/project_logs/projects/calendar`：负责日历打点
-- `/project_logs/projects`：负责日志详情列表
+- `/project-logs/projects/calendar`：负责日历打点
+- `/project-logs/projects`：负责日志详情列表
 
 建议交互方式：
 
@@ -196,7 +196,7 @@ const dayInfo = dateMap.get("2026-03-12");
 - `PROJECT_ID`：项目 ID
 
 ```bash
-curl -X GET "$BASE_URL/project_logs/projects/calendar?project_id=$PROJECT_ID" \
+curl -X GET "$BASE_URL/project-logs/projects/calendar?project_id=$PROJECT_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -204,7 +204,7 @@ curl -X GET "$BASE_URL/project_logs/projects/calendar?project_id=$PROJECT_ID" \
 
 ```ts
 const res = await fetch(
-  `${BASE_URL}/project_logs/projects/calendar?project_id=${projectId}`,
+  `${BASE_URL}/project-logs/projects/calendar?project_id=${projectId}`,
   {
     method: "GET",
     headers: {

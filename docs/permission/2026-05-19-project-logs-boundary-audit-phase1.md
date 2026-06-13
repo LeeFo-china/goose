@@ -8,12 +8,12 @@
 
 覆盖接口：
 
-- `GET /project_logs`
-- `GET /project_logs/:id`
-- `POST /project_logs`
-- `PATCH /project_logs/:id`
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs`
+- `GET /project-logs/:id`
+- `POST /project-logs`
+- `PATCH /project-logs/:id`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 
 ## 已落地文件
 

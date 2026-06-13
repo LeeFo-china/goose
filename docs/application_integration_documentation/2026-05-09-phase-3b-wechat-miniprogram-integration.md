@@ -20,7 +20,7 @@
 
 ### 员工端
 
-- `GET /project_logs/projects?project_id=...` 只返回当前租户项目日志。
+- `GET /project-logs/projects?project_id=...` 只返回当前租户项目日志。
 - `POST /project-logs` 不需要传 `tenant_id`，后端自动继承项目租户。
 - `GET /project_log_comments?log_id=...` 只返回该日志所属租户评论。
 - `POST /project_log_comments` 评论自动继承日志租户。

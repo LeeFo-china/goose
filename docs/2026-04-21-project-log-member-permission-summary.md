@@ -112,13 +112,13 @@ GET /projects/:id/log-permission
    - `designer_id`
    - `supervisor_id`
 
-2. `POST /project_logs`
+2. `POST /project-logs`
    必须在后端强校验当前员工是否属于该项目成员
 
 也就是说：
 
 - 前端可以先拦一层
-- 但最终能不能创建施工日志，必须由后端 `POST /project_logs` 决定
+- 但最终能不能创建施工日志，必须由后端 `POST /project-logs` 决定
 
 ## 后端校验规则建议
 
@@ -199,7 +199,7 @@ employeeId === designer_id || employeeId === supervisor_id
 预期：
 
 - 可以进入写施工跟进页面
-- `POST /project_logs` 成功
+- `POST /project-logs` 成功
 
 ### case 2：项目监理写施工跟进
 
@@ -211,7 +211,7 @@ employeeId === designer_id || employeeId === supervisor_id
 预期：
 
 - 可以进入写施工跟进页面
-- `POST /project_logs` 成功
+- `POST /project-logs` 成功
 
 ### case 3：无关员工尝试写施工跟进
 
@@ -222,7 +222,7 @@ employeeId === designer_id || employeeId === supervisor_id
 预期：
 
 - 前端进入前提示并拒绝
-- 即使绕过前端直接调 `POST /project_logs`
+- 即使绕过前端直接调 `POST /project-logs`
 - 后端也返回 `403`
 
 ## 一句话结论
@@ -239,7 +239,7 @@ employeeId === designer_id || employeeId === supervisor_id
 1. 明确项目成员口径
 2. 给项目详情补 `can_write_log`
    或新增 `GET /projects/:id/log-permission`
-3. 在 `POST /project_logs` 做最终强校验
+3. 在 `POST /project-logs` 做最终强校验
 
 ## 当前后端状态
 
@@ -251,13 +251,13 @@ employeeId === designer_id || employeeId === supervisor_id
    - 返回 `designer_id`
    - 返回 `supervisor_id`
    - 新增返回 `can_write_log`
-2. `POST /project_logs`
+2. `POST /project-logs`
    - 已做后端强校验
    - 非项目成员会被 `403` 拦截
    - `employee_id` 由后端按当前登录员工自动写入
-3. `GET /project_logs/projects`
+3. `GET /project-logs/projects`
    - 已接入 `project.read`
-4. `GET /project_logs/projects/calendar`
+4. `GET /project-logs/projects/calendar`
    - 已接入 `project.read`
 
 ## 当前项目成员口径
@@ -302,7 +302,7 @@ employeeId === designer_id || employeeId === supervisor_id
 
 作为是否允许进入“写施工跟进”页的最终展示口径。
 
-### 2. `POST /project_logs`
+### 2. `POST /project-logs`
 
 当前请求体不再要求前端传：
 
@@ -327,7 +327,7 @@ employeeId === designer_id || employeeId === supervisor_id
 }
 ```
 
-### 3. `GET /project_logs/projects`
+### 3. `GET /project-logs/projects`
 
 当前已按 `project.read` 做后端校验。
 
@@ -335,7 +335,7 @@ employeeId === designer_id || employeeId === supervisor_id
 
 - 只有能看该项目的员工，才能看该项目日志列表
 
-### 4. `GET /project_logs/projects/calendar`
+### 4. `GET /project-logs/projects/calendar`
 
 当前也已按 `project.read` 做后端校验。
 
@@ -459,5 +459,5 @@ employeeId === designer_id || employeeId === supervisor_id
 这条规则现在已经由后端做稳了：
 
 - 项目详情可直接返回 `can_write_log`
-- 非项目成员即使绕过前端，也不能成功 `POST /project_logs`
+- 非项目成员即使绕过前端，也不能成功 `POST /project-logs`
 - 非项目成员只要有 `project.read`，仍然可以看日志、看评论、按日期筛选并回复评论

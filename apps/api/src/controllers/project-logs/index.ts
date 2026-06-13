@@ -156,7 +156,7 @@ class ProjectLogController extends TenantBaseController<
     );
   };
 
-  @Get("/project_logs/projects")
+  @Get("/project-logs/projects")
   async getByProjectId(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
     const verify = ProjectLogQuerySchema.safeParse(request.query);
@@ -177,7 +177,7 @@ class ProjectLogController extends TenantBaseController<
     });
   }
 
-  @Get("/project_logs/projects/calendar")
+  @Get("/project-logs/projects/calendar")
   async getCalendar(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
     const verify = ProjectLogCalendarQuerySchema.safeParse(request.query);

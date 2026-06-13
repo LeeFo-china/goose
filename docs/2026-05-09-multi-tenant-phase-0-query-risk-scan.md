@@ -33,7 +33,7 @@ apps/api/src
 | 区域 | 风险 | 建议 |
 | --- | --- | --- |
 | `apps/api/src/controllers/customer/index.ts` | 客户接口大量直接查 `customers` | 阶段 2 优先重构 |
-| `apps/api/src/controllers/projects/index.ts` | 项目列表、详情、统计直接查 `projects/project_logs/customers/employees` | 阶段 2 优先重构 |
+| `apps/api/src/controllers/projects/index.ts` | 项目列表、详情、统计直接查 `projects/project-logs/customers/employees` | 阶段 2 优先重构 |
 | `apps/api/src/controllers/wechat/index.ts` | 小程序登录匹配客户/员工 | 阶段 2 必须加入租户选择态和平台访客态 |
 | `apps/api/src/controllers/customer-self-service/index.ts` | 客户侧项目/日志查询 | 阶段 2-3 加客户租户上下文 |
 | `apps/api/src/services/customer-project-log-shares.ts` | 分享链路跨项目、客户、日志 | 阶段 3-4 处理 |

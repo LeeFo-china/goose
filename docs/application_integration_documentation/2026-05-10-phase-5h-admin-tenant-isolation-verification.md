@@ -27,7 +27,7 @@ bun run verify:tenant:phase5h
 | 组织 | `GET /departments` / `GET /posts` / `GET /roles` |
 | 费用 | `GET /expense-requests` |
 | 工序验收 | `GET /project-acceptances` |
-| 施工日志 | `GET /project_logs/projects` |
+| 施工日志 | `GET /project-logs/projects` |
 | 摄像头 | `GET /project-cameras/projects` |
 | 营销页 | `GET /marketing-pages` |
 | H5 线索 | `GET /marketing-leads` |

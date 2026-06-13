@@ -42,8 +42,8 @@
 | 模块 | 接口 | 失败后 UI |
 | --- | --- | --- |
 | 项目成员 | `GET /projects/:projectId/members` | 抽屉底部成员区域降级为空或显示“成员信息暂不可用” |
-| 施工日志 | `GET /project_logs/projects?project_id=:projectId` | 日志区域显示“施工日志暂时无法加载”，保留重试入口 |
-| 日志日历 | `GET /project_logs/projects/calendar?project_id=:projectId` | 顶部模块异常提示，日历入口可置灰或打开后显示空状态 |
+| 施工日志 | `GET /project-logs/projects?project_id=:projectId` | 日志区域显示“施工日志暂时无法加载”，保留重试入口 |
+| 日志日历 | `GET /project-logs/projects/calendar?project_id=:projectId` | 顶部模块异常提示，日历入口可置灰或打开后显示空状态 |
 | 日志评论 | `GET /project_log_comments?log_id=:logId` | 对应日志评论区提示“评论暂未完整加载”，不影响其他日志 |
 | 项目监控 | `GET /projects/:projectId/cameras` | 监控卡片显示“监控列表加载失败”，保留重试入口 |
 | 状态动作 | `GET /projects/:projectId/status-actions` | 状态按钮隐藏或禁用，不影响详情浏览 |
@@ -108,8 +108,8 @@ await Promise.allSettled([
 需要覆盖以下接口：
 
 - `GET /projects/:projectId/members`
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 - `GET /project_log_comments`
 - `GET /projects/:projectId/cameras`
 - `GET /projects/:projectId/status-actions`
@@ -189,7 +189,7 @@ await Promise.allSettled([
 
 要求：
 
-1. `GET /project_logs/projects` 成功后，按当前页日志逐条请求 `GET /project_log_comments?log_id=:logId`。
+1. `GET /project-logs/projects` 成功后，按当前页日志逐条请求 `GET /project_log_comments?log_id=:logId`。
 2. 任一 `log_id` 评论失败，不得清空其他日志评论。
 3. 任一 `log_id` 评论失败，不得影响日志列表展示。
 4. 评论失败时，顶部模块异常包含“日志评论”。
@@ -216,8 +216,8 @@ await Promise.allSettled([
 
 重试只重新请求：
 
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 - 当前页日志对应的评论接口
 
 不要重新触发整页权限校验，除非用户下拉刷新整个页面。

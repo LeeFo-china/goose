@@ -3,11 +3,11 @@
 本文档用于给前端直接对接项目日志相关能力，当前可用接口包括：
 
 - 图片上传：`POST /uploads/images`
-- 创建日志：`POST /project_logs`
-- 删除日志：`DELETE /project_logs/:id`
-- 更新日志图片：`PATCH /project_logs/:id/images`
-- 日志列表：`GET /project_logs/projects`
-- 日历打点：`GET /project_logs/projects/calendar`
+- 创建日志：`POST /project-logs`
+- 删除日志：`DELETE /project-logs/:id`
+- 更新日志图片：`PATCH /project-logs/:id/images`
+- 日志列表：`GET /project-logs/projects`
+- 日历打点：`GET /project-logs/projects/calendar`
 
 ---
 
@@ -18,19 +18,19 @@
 1. 用户选择图片
 2. 调用 `POST /uploads/images`
 3. 从返回结果中取 `path`
-4. 调用 `POST /project_logs`
+4. 调用 `POST /project-logs`
 5. 创建成功后刷新：
-   - `GET /project_logs/projects`
-   - `GET /project_logs/projects/calendar`
+   - `GET /project-logs/projects`
+   - `GET /project-logs/projects/calendar`
 
 删除相关场景：
 
 1. 删除单张图片时，前端保留剩余图片路径数组
-2. 调用 `PATCH /project_logs/:id/images`
-3. 删除整条日志时，调用 `DELETE /project_logs/:id`
+2. 调用 `PATCH /project-logs/:id/images`
+3. 删除整条日志时，调用 `DELETE /project-logs/:id`
 4. 成功后刷新：
-   - `GET /project_logs/projects`
-   - `GET /project_logs/projects/calendar`
+   - `GET /project-logs/projects`
+   - `GET /project-logs/projects/calendar`
 
 ---
 
@@ -91,7 +91,7 @@ Content-Type: multipart/form-data
 ### 请求
 
 ```http
-POST /project_logs
+POST /project-logs
 Authorization: Bearer <token>
 Content-Type: application/json
 ```
@@ -157,7 +157,7 @@ Content-Type: application/json
 ### 请求
 
 ```http
-GET /project_logs/projects?project_id=<project_id>&page=1&pageSize=20
+GET /project-logs/projects?project_id=<project_id>&page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
@@ -175,7 +175,7 @@ Authorization: Bearer <token>
 ### 请求
 
 ```http
-DELETE /project_logs/:id
+DELETE /project-logs/:id
 Authorization: Bearer <token>
 ```
 
@@ -202,7 +202,7 @@ Authorization: Bearer <token>
 ### 请求
 
 ```http
-PATCH /project_logs/:id/images
+PATCH /project-logs/:id/images
 Authorization: Bearer <token>
 Content-Type: application/json
 ```
@@ -246,7 +246,7 @@ Content-Type: application/json
 ### 请求
 
 ```http
-GET /project_logs/projects/calendar?project_id=<project_id>
+GET /project-logs/projects/calendar?project_id=<project_id>
 Authorization: Bearer <token>
 ```
 
@@ -270,7 +270,7 @@ const uploadRes = await request.upload("/uploads/images", {
 
 const imagePaths = uploadRes.data.list.map((item) => item.path);
 
-await request.post("/project_logs", {
+await request.post("/project-logs", {
   project_id: projectId,
   node_name,
   content,
@@ -278,12 +278,12 @@ await request.post("/project_logs", {
 });
 
 await Promise.all([
-  request.get("/project_logs/projects", {
+  request.get("/project-logs/projects", {
     project_id: projectId,
     page: 1,
     pageSize: 20,
   }),
-  request.get("/project_logs/projects/calendar", {
+  request.get("/project-logs/projects/calendar", {
     project_id: projectId,
   }),
 ]);
@@ -296,17 +296,17 @@ const nextImages = formImages
   .filter((item) => item.path !== removedPath)
   .map((item) => item.path);
 
-await request.patch(`/project_logs/${logId}/images`, {
+await request.patch(`/project-logs/${logId}/images`, {
   images: nextImages,
 });
 
 await Promise.all([
-  request.get("/project_logs/projects", {
+  request.get("/project-logs/projects", {
     project_id: projectId,
     page: 1,
     pageSize: 20,
   }),
-  request.get("/project_logs/projects/calendar", {
+  request.get("/project-logs/projects/calendar", {
     project_id: projectId,
   }),
 ]);
@@ -315,15 +315,15 @@ await Promise.all([
 ### 删除整条日志
 
 ```ts
-await request.delete(`/project_logs/${logId}`);
+await request.delete(`/project-logs/${logId}`);
 
 await Promise.all([
-  request.get("/project_logs/projects", {
+  request.get("/project-logs/projects", {
     project_id: projectId,
     page: 1,
     pageSize: 20,
   }),
-  request.get("/project_logs/projects/calendar", {
+  request.get("/project-logs/projects/calendar", {
     project_id: projectId,
   }),
 ]);

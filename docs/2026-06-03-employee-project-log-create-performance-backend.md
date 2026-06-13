@@ -176,8 +176,8 @@ debug 请求返回摘要：
 
 | 接口 | 状态 | 耗时 | 结论 |
 | --- | --- | ---: | --- |
-| `GET /project_logs/projects?project_id=:id&page=1&pageSize=10` | `200` | `6.759s` | 偏慢 |
-| `GET /project_logs/projects/calendar?project_id=:id` | `200` | `6.890s` | 偏慢 |
+| `GET /project-logs/projects?project_id=:id&page=1&pageSize=10` | `200` | `6.759s` | 偏慢 |
+| `GET /project-logs/projects/calendar?project_id=:id` | `200` | `6.890s` | 偏慢 |
 | `GET /projects/:id/construction-stages` | `200` | `11.555s` | 明显偏慢 |
 | 三接口并发总耗时 | - | `11.568s` | 主要被施工阶段接口拖慢 |
 
@@ -189,8 +189,8 @@ debug 请求返回摘要：
 
 后端后续关注接口：
 
-- `GET /project_logs/projects`
-- `GET /project_logs/projects/calendar`
+- `GET /project-logs/projects`
+- `GET /project-logs/projects/calendar`
 - `GET /projects/:id/construction-stages`
 
 以上刷新接口已在后端按阶段完成本轮治理，结果见下节。
@@ -200,8 +200,8 @@ debug 请求返回摘要：
 执行顺序：
 
 1. `GET /projects/:id/construction-stages`
-2. `GET /project_logs/projects/calendar`
-3. `GET /project_logs/projects`
+2. `GET /project-logs/projects/calendar`
+3. `GET /project-logs/projects`
 4. 文档汇总
 
 ### 阶段 1：施工阶段接口
@@ -244,7 +244,7 @@ debug 请求返回摘要：
 
 | 接口 | 轮次 | 状态 | 耗时 | 响应 |
 | --- | ---: | --- | ---: | --- |
-| `GET /project_logs/projects/calendar` | 1 | `200` | `3817.1ms` | `2` 条，`290B` |
+| `GET /project-logs/projects/calendar` | 1 | `200` | `3817.1ms` | `2` 条，`290B` |
 | 同上 | 2-6 | `200` | 平均 `2.1ms`，最大 `4.9ms` | `2` 条，`290B` |
 
 结论：小程序侧记录的 `6.890s` 慢点已降至冷请求约 `3.8s`、热请求毫秒级。
@@ -267,7 +267,7 @@ debug 请求返回摘要：
 
 | 接口 | 轮次 | 状态 | 耗时 | 响应 |
 | --- | ---: | --- | ---: | --- |
-| `GET /project_logs/projects?page=1&pageSize=20` | 1 | `200` | `3716.2ms` | `5` 条，`3685B` |
+| `GET /project-logs/projects?page=1&pageSize=20` | 1 | `200` | `3716.2ms` | `5` 条，`3685B` |
 | 同上 | 2-6 | `200` | 平均 `2.2ms`，最大 `3.9ms` | `5` 条，`3685B` |
 
 字段核对：
@@ -313,7 +313,7 @@ API file size check passed. threshold=500, exemptions=0
 小程序三次复测后新增问题：
 
 - 带 `images` 创建施工日志时，`POST /project-logs` 创建响应包含图片 URL。
-- 随后 `GET /project_logs/projects` 同一日志返回 `images: []`。
+- 随后 `GET /project-logs/projects` 同一日志返回 `images: []`。
 - 小程序已做本地 pending 图片保护，但页面重开或其他用户查看仍依赖后端列表接口正确返回图片。
 
 后端定位：
@@ -351,7 +351,7 @@ API file size check passed. threshold=500, exemptions=0
 1. 历史小程序测试日志：
    - 日志 ID：`207030d1-dd10-474e-98d8-f94e4c691bee`
    - 数据库：`jsonb_typeof(images)=array`，图片数 `1`
-   - `GET /project_logs/projects`：找到该日志，`images.length=1`
+   - `GET /project-logs/projects`：找到该日志，`images.length=1`
    - 返回图片为 `https://...` 可访问 URL
 
 2. 新建临时带图日志：
