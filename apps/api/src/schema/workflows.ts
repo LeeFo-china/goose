@@ -157,6 +157,9 @@ const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
 });
 
 const PaymentCollectionNodeConfigSchema = BaseNodeConfigSchema.extend({
+  finance_type: z.enum(["payment_collection"], {
+    message: "无效的财务节点类型",
+  }).optional(),
   payment_type: z.enum(WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES, {
     message: "请选择有效的收款类型",
   }).default("deposit"),
