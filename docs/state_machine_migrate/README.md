@@ -68,7 +68,9 @@
   `docs/state_machine_migrate/miniprogram-integration.md`；基于 orange 仓库只读核查后的最新文件落点和剩余事项见
   `docs/state_machine_migrate/orange-workflow-handoff.md`；施工阶段
   `current_stage` 专项对接见
-  `docs/state_machine_migrate/orange-construction-current-stage-handoff.md`。
+  `docs/state_machine_migrate/orange-construction-current-stage-handoff.md`；工序完成后进入阶段验收的
+  小程序专项对接见
+  `docs/state_machine_migrate/miniprogram-procedure-stage-acceptance-integration.md`。
 
 仍未在本工作区完成的外部门禁：
 
