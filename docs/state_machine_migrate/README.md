@@ -64,6 +64,11 @@
   并再次运行 workflow runtime 一致性检查；它应只在 destructive migration apply 后通过。
 - 最终执行步骤和证据记录模板见
   `docs/state_machine_migrate/final-cleanup-runbook.md`。
+- 小程序对接主文档见
+  `docs/state_machine_migrate/miniprogram-integration.md`；基于 orange 仓库只读核查后的最新文件落点和剩余事项见
+  `docs/state_machine_migrate/orange-workflow-handoff.md`；施工阶段
+  `current_stage` 专项对接见
+  `docs/state_machine_migrate/orange-construction-current-stage-handoff.md`。
 
 仍未在本工作区完成的外部门禁：
 

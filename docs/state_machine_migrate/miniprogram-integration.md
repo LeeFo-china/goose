@@ -112,6 +112,12 @@
 收款节点的专门对接要求见
 [小程序收款节点对接说明](./miniprogram-payment-collection-node-integration.md)。
 
+基于 orange 仓库只读核查后的最新落点和剩余事项见
+[Orange Workflow 对接文档](./orange-workflow-handoff.md)。
+
+orange 针对施工阶段 `current_stage` 的专项核查和对接规则见
+[Orange 施工阶段 current_stage 对接文档](./orange-construction-current-stage-handoff.md)。
+
 ## 新接口
 
 ### 项目详情 workflow-only 数据源
@@ -370,23 +376,24 @@ Content-Type: application/json
 | `status_actions` | 项目详情不再返回 | 删除 |
 | `current_step` | 费用审批旧字段，不用于项目推进 | 删除 |
 
-## 小程序项目页改造清单
+## Orange 项目页只读复核
 
-只读核查 `/Users/leefo/Public/work/orange` 后，项目侧需要重点改这些文件。
-gooes 侧不能修改 orange 源码，以下由小程序团队处理：
+只读核查 `/Users/leefo/Public/work/orange` 后，orange 当前项目详情已经具备
+workflow action 接入雏形。gooes 侧不能修改 orange 源码，以下由小程序团队
+继续确认或处理：
 
-| 文件 | 当前问题 | 改造要求 |
+| 文件 | 当前状态 | 后续要求 |
 | --- | --- | --- |
-| `src/services/projects/methods/employee.ts` | 仍把 `workflow_state.actions` 映射成 `ProjectStatusActionItem`，并保留 `/projects/:id/status-transitions` | 删除旧映射和旧接口；返回原始 `workflow_state.actions` |
-| `src/services/projects/types/status.ts` | 仍定义 `ProjectStatusActionItem` 和 `status_actions` | 新增/改用 `WorkflowSubjectAction`、`WorkflowOutputField` 类型；项目详情类型移除 `status_actions` 依赖 |
-| `src/packageProjects/pages/detail/hooks/useProjectDetailBootstrap.ts` | 仍读取 `payload.status_actions` | 改为读取 `payload.workflow_state.actions` |
-| `src/packageProjects/pages/detail/hooks/useProjectStatusActions.ts` | 仍按旧项目状态动作加载和转换 | 删除或改造成 `useProjectWorkflowActions` |
-| `src/packageProjects/pages/detail/utils/status.ts` | 仍维护 `PROJECT_WORKFLOW_ACTIONS` 和 workflow -> old status action 映射 | 删除映射；按钮直接使用后端 action metadata |
-| `src/packageProjects/pages/detail/hooks/useProjectStatusViewModel.ts` | UI 仍围绕 timeline/compact/more status action 分组 | 改成按 `business_domain`、`node_type`、`output_fields` 渲染 workflow 操作 |
-| `src/packageProjects/pages/detail/sections/ProjectStatusFlowPanel.tsx` | 仍使用旧 status action option | 改为展示 workflow 当前节点和 actions |
-| `src/packageProjects/pages/detail/hooks/useProjectDetailRefreshCoordinator.ts` | 仍刷新 `loadProjectStatusActions` | 完成 workflow task 后刷新详情或 workflow state |
-| `src/packageProjects/pages/detail/hooks/useProjectDetailWriteRefresh.ts` | 写操作后仍刷新旧 status actions | 改为刷新 `employee-detail-bootstrap` 或 `/workflow-subjects/project/:id/state` |
-| `src/packageProjects/pages/detail/index.tsx` | 仍装配 `useProjectStatusActions` | 改为装配 workflow actions hook |
+| `src/services/workflow_task.ts` | 已封装 workflow task/state/timeline/complete | 保持所有推进动作走 `WorkflowTaskService.complete` |
+| `src/services/projects/methods/employee.ts` | 已从 bootstrap 响应透传 `workflow_state` | 不再恢复 `status_actions` 作为按钮数据源 |
+| `src/packageProjects/pages/detail/hooks/useProjectDetailBootstrap.ts` | 已读取 `payload.workflow_state.actions` | 保持无 actions 时只读展示，不 fallback 到旧状态动作 |
+| `src/packageProjects/pages/detail/hooks/useProjectWorkflowActions.ts` | 已通过 subject state 刷新 workflow actions | 异常时只清空动作并提示，不调用旧接口 |
+| `src/packageProjects/pages/detail/hooks/useProjectWorkflowActionSubmit.ts` | 已提交普通项目动作和收款动作到 workflow task complete | 收款阻塞 `WORKFLOW_PAYMENT_COLLECTION_BLOCKED` 要展示后端 message |
+| `src/packageProjects/pages/logEdit/hooks/useProjectLogEditController.ts` | 已在创建施工日志后 complete workflow task | complete 失败时避免重复创建日志，提示用户重试当前 task |
+| `src/services/task_center.ts` | 已用 `/workflow-tasks` 分页映射待办 | 确认项目收款、项目流程、施工日志都能从待办进入可处理页面 |
+| `src/packageTasks/pages/index/index.tsx` | “项目”tab 当前值为 `project_log` | 建议覆盖 `project_log`、`project_payment`、`project_workflow`，或拆成更清晰的项目类 tab |
+| `src/services/customer.ts` | 仍存在 `/customers/:id/status-transitions` 读取路径 | 若只是历史 timeline fallback，确认不生成按钮；最终切到 workflow timeline |
+| `src/packageProjects/pages/detail/README.md` | 仍引用已不存在的旧 hook 名 | 更新为当前 `useProjectWorkflowActions` / `useProjectWorkflowActionSubmit` |
 
 ## 项目 workflow action 渲染规则
 
