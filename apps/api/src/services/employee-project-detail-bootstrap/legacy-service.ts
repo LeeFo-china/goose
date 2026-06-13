@@ -1,8 +1,7 @@
 import {
   getBootstrap,
   loadProjectLogs,
-  emptyStatusActions,
-  buildStatusActionsFromProject,
+  buildWorkflowBlockingReason,
 } from "./legacy/orchestration";
 import {
   buildLogsFromBundle,
@@ -60,8 +59,7 @@ class EmployeeProjectDetailBootstrapService {
   private measure = measure;
   private withTimeout = withTimeout;
   private toPartialError = toPartialError;
-  private emptyStatusActions = emptyStatusActions;
-  private buildStatusActionsFromProject = buildStatusActionsFromProject;
+  private buildWorkflowBlockingReason = buildWorkflowBlockingReason;
   private buildPermissions = buildPermissions;
   private buildPermissionsFromKnownData = buildPermissionsFromKnownData;
   private toPublicPermissions = toPublicPermissions;

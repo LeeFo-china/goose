@@ -79,7 +79,7 @@ class ProjectStatusBootstrapController extends ProjectBaseController {
       ),
       permissions: data.permissions,
       members,
-      status_actions: data.status_actions,
+      workflow_state: data.workflow_state,
       construction_stages: data.construction_stages,
       log_entry: data.log_entry,
       next_action: data.next_action,

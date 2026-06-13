@@ -1,4 +1,8 @@
-import { isProjectStatus, listProjectStatusActions, projectLogService, projectSer } from "./shared";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
+import {
+  projectLogService,
+  projectSer,
+} from "./shared";
 import type {
   AuthContext,
   BootstrapPermissions,
@@ -12,7 +16,8 @@ import type {
   ProjectLogEntrySummary,
   ProjectLogListResult,
   ProjectMembersResult,
-  StatusActionsResult,
+  ProjectWorkflowState,
+  ProjectWorkflowBlockingState,
 } from "./shared";
 
 export type EmployeeProjectDetailBootstrapResult = {
@@ -21,7 +26,7 @@ export type EmployeeProjectDetailBootstrapResult = {
   >["project"];
   permissions: BootstrapPermissions;
   members: ProjectMembersResult;
-  status_actions: StatusActionsResult;
+  workflow_state: ProjectWorkflowState;
   construction_stages: ConstructionStagesResult;
   log_entry: ProjectLogEntrySummary;
   next_action: ProjectDetailNextAction | null;
@@ -105,34 +110,32 @@ export async function getBootstrap(this: any, input: {
     this.toPublicPermissions(basePermissions),
     constructionStages,
   );
-  const rawStatusActions = await this.measure(
-    "status_actions_ms",
-    timings,
-    () => Promise.resolve(this.buildStatusActionsFromProject(project)),
+  const workflowStateResult = await workflowSubjectsService.getState(
+    input.authContext,
+    {
+      subjectType: "project",
+      subjectId: typeof project.id === "string" ? project.id : input.projectId,
+    },
   );
-  const statusActions = permissions.can_update_project
-    ? rawStatusActions
-    : {
-      ...rawStatusActions,
-      actions: [],
-    };
+  const workflowState = workflowStateResult.workflow_state;
+  const workflowBlockingReason = this.buildWorkflowBlockingReason(workflowState);
   const nextAction = this.buildNextAction({
-    statusActions,
     constructionStages,
+    workflowBlockingReason,
   });
 
   return {
     project,
     permissions,
     members,
-    status_actions: statusActions,
+    workflow_state: workflowState,
     construction_stages: constructionStages,
     log_entry: this.buildProjectLogEntry({
       project,
       permissions,
       constructionStages,
-      statusActions,
       nextAction,
+      workflowBlockingReason,
     }),
     next_action: nextAction,
     logs,
@@ -143,6 +146,24 @@ export async function getBootstrap(this: any, input: {
     partial_errors: partialErrors,
     timings,
   };
+}
+
+export function buildWorkflowBlockingReason(
+  this: any,
+  state: ProjectWorkflowBlockingState,
+): string | null {
+  if (
+    state?.instance_status !== "running" ||
+    state.current_business_kind !== "payment_collection"
+  ) {
+    return null;
+  }
+
+  const title = typeof state.current_node_title === "string" &&
+      state.current_node_title.trim()
+    ? state.current_node_title.trim()
+    : "收款节点";
+  return `请先完成${title}`;
 }
 
 export async function loadProjectLogs(this: any, 
@@ -193,30 +214,4 @@ export async function loadProjectLogs(this: any,
     timings,
     "logs_ms",
   );
-}
-
-export function emptyStatusActions(this: any, project: Record<string, unknown>): StatusActionsResult {
-  return {
-    current_status: typeof project.status === "string" ? project.status : "designing",
-    paused_from_status: null,
-    actions: [],
-    workflow_state: null,
-  } as StatusActionsResult;
-}
-
-export function buildStatusActionsFromProject(this: any, project: Record<string, unknown>): StatusActionsResult {
-  const rawStatus = typeof project.status === "string" ? project.status : null;
-  const currentStatus = isProjectStatus(rawStatus)
-    ? rawStatus
-    : "designing";
-
-  return {
-    current_status: currentStatus,
-    paused_from_status: null,
-    actions: listProjectStatusActions({
-      fromStatus: currentStatus,
-      pausedFromStatus: null,
-    }),
-    workflow_state: null,
-  } as StatusActionsResult;
 }

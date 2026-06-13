@@ -5,9 +5,6 @@ import type { AuthContext, EffectivePermission } from "@/services/authorization"
 import { projectLogService } from "@/services/project-logs";
 import { projectSer } from "@/services/projects";
 import {
-  listProjectWorkflowActions as listProjectStatusActions,
-} from "@/services/workflow-business-actions";
-import {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   isProjectStatus,
   type ProjectLogStageCode,
@@ -24,7 +21,6 @@ export type BootstrapTimingStep =
   | "project_ms"
   | "permissions_ms"
   | "members_ms"
-  | "status_actions_ms"
   | "construction_stages_ms"
   | "logs_ms"
   | "calendar_ms";
@@ -34,9 +30,18 @@ export type EmployeeProjectDetailBootstrapTimings =
 
 export const OPTIONAL_MODULE_TIMEOUT_MS = 2_500;
 
-export type StatusActionsResult = Awaited<
-  ReturnType<typeof projectSer.listProjectStatusActionsForTenant>
->;
+export type ProjectWorkflowState = {
+  subject_type: string;
+  subject_id: string;
+  instance_id?: string | null;
+  instance_status?: string | null;
+  current_node_key?: string | null;
+  current_node_title?: string | null;
+  current_business_kind?: string | null;
+  pending_task_count?: number | null;
+  actions: Array<Record<string, unknown>>;
+} | null;
+
 export type ConstructionStagesResult = ProjectConstructionStagesResult;
 export type ProjectLogListResult = Awaited<
   ReturnType<typeof projectLogService.listProjectLogsByProject>
@@ -79,7 +84,7 @@ export type ProjectLogEntrySummary = {
   } | null;
   blocked_reason: string | null;
   next_action: {
-    kind: "acceptance" | "status" | "refresh";
+    kind: "acceptance" | "refresh";
     label: string;
     stage_code?: string | null;
     acceptance_id?: string | null;
@@ -87,8 +92,14 @@ export type ProjectLogEntrySummary = {
   } | null;
 };
 
+export type ProjectWorkflowBlockingState = {
+  instance_status?: string | null;
+  current_business_kind?: string | null;
+  current_node_title?: string | null;
+} | null;
+
 export type ProjectDetailNextAction =
-  | {
+  {
     kind: "acceptance";
     source: "project_acceptance";
     title: string;
@@ -102,20 +113,6 @@ export type ProjectDetailNextAction =
     label: string;
     enabled: boolean;
     reason: string | null;
-  }
-  | {
-    kind: "status";
-    source: "project_status";
-    title: string;
-    description: string;
-    action_label: string;
-    action: string;
-    to_status: string | null;
-    type: string;
-    label: string;
-    enabled: boolean;
-    reason: string | null;
-    from_status: string | null;
   };
 
 export type { EmployeeProjectDetailBootstrapQuery };
@@ -124,6 +121,5 @@ export { accessPolicyService, projectLogService, projectSer };
 export {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   isProjectStatus,
-  listProjectStatusActions,
 };
 export type { ProjectLogStageCode };

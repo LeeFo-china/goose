@@ -29,7 +29,6 @@ export function createEmptyTimings(this: any, ): EmployeeProjectDetailBootstrapT
     project_ms: 0,
     permissions_ms: 0,
     members_ms: 0,
-    status_actions_ms: 0,
     construction_stages_ms: 0,
     logs_ms: 0,
     calendar_ms: 0,

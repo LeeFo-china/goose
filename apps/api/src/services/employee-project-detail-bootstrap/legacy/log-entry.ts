@@ -6,7 +6,6 @@ import type {
   ProjectLogCommentSummaryMap,
   ProjectLogEntrySummary,
   ProjectLogListResult,
-  StatusActionsResult,
   projectSer,
 } from "./shared";
 
@@ -57,9 +56,18 @@ export function buildProjectLogEntry(this: any, input: {
   project: Record<string, unknown>;
   permissions: BootstrapPermissions;
   constructionStages: ConstructionStagesResult | null;
-  statusActions: StatusActionsResult;
   nextAction: ProjectDetailNextAction | null;
+  workflowBlockingReason?: string | null;
 }): ProjectLogEntrySummary {
+  if (input.workflowBlockingReason) {
+    return {
+      can_create: false,
+      writable_stage: null,
+      blocked_reason: input.workflowBlockingReason,
+      next_action: this.buildProjectLogEntryNextAction(input),
+    };
+  }
+
   const stages = input.constructionStages?.stages ?? [];
   const writableStages = stages.filter((stage) =>
     stage.can_create_log === true &&
@@ -96,7 +104,12 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
   project: Record<string, unknown>;
   permissions: BootstrapPermissions;
   constructionStages: ConstructionStagesResult | null;
+  workflowBlockingReason?: string | null;
 }) {
+  if (input.workflowBlockingReason) {
+    return input.workflowBlockingReason;
+  }
+
   if (!input.permissions.scopes.project_log_create) {
     return "当前员工无施工日志创建权限";
   }
@@ -139,9 +152,17 @@ export function buildProjectLogEntryBlockedReason(this: any, input: {
 
 export function buildProjectLogEntryNextAction(this: any, input: {
   constructionStages: ConstructionStagesResult | null;
-  statusActions: StatusActionsResult;
   nextAction: ProjectDetailNextAction | null;
+  workflowBlockingReason?: string | null;
 }): ProjectLogEntrySummary["next_action"] {
+  if (input.workflowBlockingReason) {
+    return {
+      kind: "refresh",
+      label: input.workflowBlockingReason,
+      action: "refresh",
+    };
+  }
+
   const acceptanceStage = this.selectNextAcceptanceActionStage(
     input.constructionStages,
   );
@@ -153,23 +174,6 @@ export function buildProjectLogEntryNextAction(this: any, input: {
       stage_code: acceptanceStage.stage_code,
       acceptance_id: acceptanceStage.acceptance_id ?? null,
       action: acceptanceStage.acceptance_action.type,
-    };
-  }
-
-  const statusAction = input.statusActions.actions[0];
-  if (statusAction) {
-    return {
-      kind: "status",
-      label: statusAction.label,
-      action: statusAction.action,
-    };
-  }
-
-  if (input.nextAction?.kind === "status") {
-    return {
-      kind: "status",
-      label: input.nextAction.action_label || input.nextAction.label,
-      action: input.nextAction.action ?? input.nextAction.type ?? null,
     };
   }
 

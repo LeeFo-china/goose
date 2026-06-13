@@ -1,13 +1,16 @@
 import type {
   ConstructionStagesResult,
   ProjectDetailNextAction,
-  StatusActionsResult,
 } from "./shared";
 
 export function buildNextAction(this: any, input: {
-  statusActions: StatusActionsResult;
   constructionStages: ConstructionStagesResult | null;
+  workflowBlockingReason?: string | null;
 }): ProjectDetailNextAction | null {
+  if (input.workflowBlockingReason) {
+    return null;
+  }
+
   const acceptanceStage = this.selectNextAcceptanceActionStage(
     input.constructionStages,
   );
@@ -43,24 +46,6 @@ export function buildNextAction(this: any, input: {
       label: actionLabel,
       enabled: acceptanceStage.acceptance_action.enabled,
       reason: acceptanceStage.acceptance_action.reason,
-    };
-  }
-
-  const statusAction = input.statusActions.actions[0];
-  if (statusAction) {
-    return {
-      kind: "status",
-      source: "project_status",
-      title: "项目下一步",
-      description: "按项目状态流转继续推进。",
-      action_label: statusAction.label,
-      action: statusAction.action,
-      to_status: statusAction.to_status ?? null,
-      type: statusAction.action,
-      label: statusAction.label,
-      enabled: true,
-      reason: null,
-      from_status: statusAction.from_status ?? null,
     };
   }
 
