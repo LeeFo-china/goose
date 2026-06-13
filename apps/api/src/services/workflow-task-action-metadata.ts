@@ -71,6 +71,7 @@ const WORKFLOW_PROJECT_ACTION_NODE_KEYS = new Set([
   "design_finalized",
   "pending_start",
   "started",
+  "construction_start",
   "constructing",
   "on_hold",
   "acceptance",

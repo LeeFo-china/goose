@@ -30,6 +30,19 @@ describe("buildWorkflowTaskActions", () => {
   test("describes project required output fields", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "project",
+      nodeKey: "construction_start",
+      taskTitle: "开工",
+    })[0]).toMatchObject({
+      key: "complete",
+      label: "开工",
+      business_domain: "workflow_project",
+      business_action: "construction_start",
+      requires_reason: false,
+      output_fields: [],
+    });
+
+    expect(buildWorkflowTaskActions({
+      subjectType: "project",
       nodeKey: "proposal_confirmed",
       taskTitle: "项目签约",
     })[0]).toMatchObject({

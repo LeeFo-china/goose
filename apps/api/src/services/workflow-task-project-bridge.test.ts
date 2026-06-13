@@ -29,6 +29,16 @@ describe("resolveProjectWorkflowTaskOperation", () => {
         construction_manager_employee_id: "employee-1",
       },
     });
+
+    expect(resolveProjectWorkflowTaskOperation({
+      nodeKey: "construction_start",
+      action: "complete",
+      reason: null,
+      output: {},
+    })).toEqual({
+      action: "start_construction",
+      payload: { action: "start_construction" },
+    });
   });
 
   test("does not accept legacy explicit project status actions", () => {

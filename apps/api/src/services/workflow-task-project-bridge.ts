@@ -58,6 +58,7 @@ const PROJECT_NODE_EFFECTS: Partial<Record<string, ProjectWorkflowSideEffectActi
   design_finalized: "schedule_construction",
   pending_start: "start_project",
   started: "start_construction",
+  construction_start: "start_construction",
   constructing: "start_acceptance",
   on_hold: "resume_project",
 };
