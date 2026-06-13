@@ -6,10 +6,7 @@ import {
   workflowTaskRepository,
   type WorkflowTransitionLogRow,
 } from "@/repositories/workflow-tasks";
-import type {
-  ProjectStatusTransitionInput,
-  UpdateProjectInput,
-} from "@/schema/projects";
+import type { UpdateProjectInput } from "@/schema/projects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
@@ -17,10 +14,7 @@ import { customerWorkflowRuntimeService } from "@/services/customer-workflow-run
 import { projectMemberService } from "@/services/project-members";
 import { projectWorkflowRuntimeService } from "@/services/project-workflow-runtime";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
-import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
-  inferProjectWorkflowAction,
-  listProjectWorkflowActions,
   ProjectWorkflowActionConfig,
   resolveProjectWorkflowActionTransition,
 } from "@/services/workflow-business-actions";
@@ -28,6 +22,7 @@ import {
   isProjectStatus,
   type CustomerStatus,
   type ProjectStatus,
+  type ProjectStatusAction,
 } from "@gooes/domain";
 
 const PROJECT_START_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,10 +53,19 @@ export function resolvePausedFromStatusFromWorkflowLogs(
   return null;
 }
 
-type TransitionProjectStatusInput = {
+export type ProjectWorkflowEffectInput = {
+  action: ProjectStatusAction;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+  signed_amount?: number | null;
+  start_date?: string | null;
+  construction_manager_employee_id?: string | null;
+};
+
+type ApplyProjectWorkflowEffectInput = {
   authContext: AuthContext;
   projectId: string;
-  payload: ProjectStatusTransitionInput;
+  payload: ProjectWorkflowEffectInput;
   patch?: UpdateProjectInput;
   existing?: Record<string, unknown> | null;
 };
@@ -102,7 +106,7 @@ class ProjectStatusService {
     }
   }
 
-  async transitionProjectStatus(input: TransitionProjectStatusInput) {
+  async applyWorkflowEffect(input: ApplyProjectWorkflowEffectInput) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     const hasAccess = await accessPolicyService.canAccessProject(
       input.authContext,
@@ -221,7 +225,7 @@ class ProjectStatusService {
           code: ErrorCodes.INVALID_CONSTRUCTION_MANAGER,
         },
       });
-      await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
+      await projectWorkflowRuntimeService.applyWorkflowEffectAndSubjectState({
         authContext: input.authContext,
         tenantId,
         projectId: input.projectId,
@@ -254,7 +258,7 @@ class ProjectStatusService {
       );
     }
 
-    await projectWorkflowRuntimeService.syncStatusTransitionAndSubjectState({
+    await projectWorkflowRuntimeService.applyWorkflowEffectAndSubjectState({
         authContext: input.authContext,
         tenantId,
         projectId: input.projectId,
@@ -278,78 +282,6 @@ class ProjectStatusService {
     }
 
     return project;
-  }
-
-  async listProjectStatusActions(input: {
-    authContext: AuthContext;
-    projectId: string;
-  }) {
-    const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const hasAccess = await accessPolicyService.canAccessProject(
-      input.authContext,
-      input.projectId,
-      "project.read",
-    );
-    if (!hasAccess) {
-      throw Errors.forbidden();
-    }
-
-    const project = await projectRepository.findById(input.projectId, tenantId);
-    if (!project) {
-      throw Errors.badRequest("项目不存在");
-    }
-
-    const fromStatus = this.getRequiredCurrentStatus(project.status);
-    const pausedFromStatus = fromStatus === "on_hold"
-      ? await this.getOptionalPausedFromStatus(input.projectId, tenantId)
-      : null;
-
-    const workflowState = await workflowSubjectsService.getState(input.authContext, {
-      subjectType: "project",
-      subjectId: input.projectId,
-    });
-
-    return {
-      current_status: fromStatus,
-      paused_from_status: pausedFromStatus,
-      actions: listProjectWorkflowActions({
-        fromStatus,
-        pausedFromStatus,
-      }),
-      ...workflowState,
-    };
-  }
-
-  buildTransitionPayloadFromStatus(input: {
-    existing: Record<string, unknown>;
-    nextStatus: unknown;
-    reason?: string | null;
-    metadata?: Record<string, unknown>;
-    signedAmount?: number | null;
-  }): ProjectStatusTransitionInput | null {
-    if (typeof input.nextStatus !== "string" || !isProjectStatus(input.nextStatus)) {
-      throw Errors.badRequest("项目状态不能为空");
-    }
-
-    const fromStatus = this.getRequiredCurrentStatus(input.existing.status);
-    if (fromStatus === input.nextStatus) {
-      return null;
-    }
-
-    const action = inferProjectWorkflowAction({
-      fromStatus,
-      toStatus: input.nextStatus,
-    });
-    if (!action) {
-      throw Errors.badRequest("当前项目状态不允许直接变更为目标状态");
-    }
-
-    return {
-      action,
-      reason: input.reason ?? null,
-      metadata: input.metadata ?? {},
-      signed_amount: input.signedAmount ?? undefined,
-    };
   }
 
   private getRequiredCurrentStatus(value: unknown): ProjectStatus {
@@ -418,7 +350,7 @@ class ProjectStatusService {
       fromStatus,
       toStatus: "signed",
       action: "mark_signed",
-      source: "project_status",
+      source: "project_workflow_effect",
       extraContext: {
         project_id: input.project.id,
         project_action: "sign_contract",

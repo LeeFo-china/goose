@@ -27,7 +27,7 @@ import {
     type ProjectListResult,
     type ProjectMemberCandidateQueryType,
     type ProjectPrimaryAssignee,
-    type ProjectStatusTransitionInput,
+    type ProjectWorkflowEffectInput,
     type UpdateProjectInput,
 } from "./shared";
 
@@ -107,31 +107,18 @@ export async function updateProjectForTenant(this: any, input: {
         throw Errors.badRequest("项目不存在");
     }
 
-    const hasStatusChange = Object.prototype.hasOwnProperty.call(
+    if (Object.prototype.hasOwnProperty.call(
         input.payload,
         "status",
+    )) {
+        throw Errors.badRequest("项目状态必须通过 workflow 节点推进");
+    }
+
+    const project = await this.updateProject(
+        input.projectId,
+        input.payload,
+        tenantId,
     );
-    const transitionPayload = hasStatusChange
-        ? projectStatusService.buildTransitionPayloadFromStatus({
-            existing,
-            nextStatus: input.payload.status,
-            signedAmount: input.payload.signed_amount ?? null,
-        })
-        : null;
-
-    const project = transitionPayload
-        ? await projectStatusService.transitionProjectStatus({
-            authContext: input.authContext,
-            projectId: input.projectId,
-            payload: transitionPayload,
-            patch: input.payload,
-            existing,
-        })
-        : await this.updateProject(
-            input.projectId,
-            input.payload,
-            tenantId,
-        );
     this.invalidatePublicProjectsCache();
     this.invalidatePublicProjectCache(input.projectId);
     this.invalidatePublicProjectMembersCache(input.projectId);
@@ -139,23 +126,16 @@ export async function updateProjectForTenant(this: any, input: {
     return project;
 }
 
-export async function transitionProjectStatusForTenant(this: any, input: {
+export async function applyProjectWorkflowEffectForTenant(this: any, input: {
     authContext: AuthContext;
     projectId: string;
-    payload: ProjectStatusTransitionInput;
+    payload: ProjectWorkflowEffectInput;
 }) {
-    const project = await projectStatusService.transitionProjectStatus(input);
+    const project = await projectStatusService.applyWorkflowEffect(input);
     this.invalidatePublicProjectsCache();
     this.invalidatePublicProjectCache(input.projectId);
     this.invalidatePublicProjectMembersCache(input.projectId);
     return project;
-}
-
-export async function listProjectStatusActionsForTenant(this: any, input: {
-    authContext: AuthContext;
-    projectId: string;
-}) {
-    return projectStatusService.listProjectStatusActions(input);
 }
 
 export async function listProjectConstructionStagesForTenant(this: any, input: {

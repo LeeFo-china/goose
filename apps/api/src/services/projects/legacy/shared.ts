@@ -1,7 +1,5 @@
 import {
     type CreateProjectInput,
-    type ProjectStatusTransitionInput,
-    type ProjectStatusTransitionListQuery,
     type ProjectListQuery,
     type UpdateProjectInput,
 } from "@/schema/projects";
@@ -25,7 +23,10 @@ import {
     type ProjectPrimaryAssignee,
     projectMemberService,
 } from "@/services/project-members";
-import { projectStatusService } from "@/services/project-status";
+import {
+    projectStatusService,
+    type ProjectWorkflowEffectInput,
+} from "@/services/project-status";
 import type { DepartmentCode, ProjectMemberRoleCode } from "@gooes/domain";
 
 export const PUBLIC_PROJECTS_CACHE_TTL_MS = 5 * 60_000;
@@ -100,8 +101,7 @@ export {
 export type {
     AuthContext,
     CreateProjectInput,
-    ProjectStatusTransitionInput,
-    ProjectStatusTransitionListQuery,
+    ProjectWorkflowEffectInput,
     ProjectListQuery,
     UpdateProjectInput,
     ProjectCreateSelectCustomerQueryType,

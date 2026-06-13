@@ -3,7 +3,6 @@ import { z } from "zod";
 import { PaginationQuerySchema } from "./request";
 import {
   PROJECT_MEMBER_ROLE_CODE_VALUES,
-  PROJECT_STATUS_ACTION_VALUES,
   PROJECT_STATUS_VALUES,
   PROJECT_REFERRAL_RATE_BPS_MAX,
   PROJECT_REFERRAL_RATE_BPS_MIN,
@@ -122,28 +121,6 @@ export const CreateProjectSchema = ProjectBaseSchema.omit({
  */
 export const UpdateProjectSchema = CreateProjectSchema.partial();
 
-export const ProjectStatusTransitionSchema = z.object({
-  action: z.enum(PROJECT_STATUS_ACTION_VALUES, {
-    message: "无效的项目状态动作",
-  }),
-  reason: z.string().trim().max(500, "原因不能超过 500 个字符").nullable().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
-  signed_amount: z.coerce
-    .number("签约金额必须是数字")
-    .min(0, "签约金额不能为负数")
-    .nullable()
-    .optional(),
-  start_date: z.string()
-    .trim()
-    .min(1, "开工日期不能为空")
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "开工日期格式必须为 YYYY-MM-DD")
-    .nullable()
-    .optional(),
-  construction_manager_employee_id: z.uuid("请选择有效的工程负责人").nullable().optional(),
-});
-
-export const ProjectStatusTransitionListQuerySchema = PaginationQuerySchema;
-
 export const EmployeeProjectDetailBootstrapQuerySchema = z.object({
   log_page_size: z.coerce
     .number("日志条数必须是数字")
@@ -160,10 +137,6 @@ export const EmployeeProjectDetailBootstrapQuerySchema = z.object({
 export type ProjectType = z.infer<typeof ProjectBaseSchema>;
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
-export type ProjectStatusTransitionInput = z.infer<typeof ProjectStatusTransitionSchema>;
-export type ProjectStatusTransitionListQuery = z.infer<
-  typeof ProjectStatusTransitionListQuerySchema
->;
 export type EmployeeProjectDetailBootstrapQuery = z.infer<
   typeof EmployeeProjectDetailBootstrapQuerySchema
 >;

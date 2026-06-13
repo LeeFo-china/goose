@@ -29,8 +29,6 @@ import {
     type ProjectMemberCandidateQueryType,
     type ProjectPrimaryAssignee,
     type ProjectSelectResult,
-    type ProjectStatusTransitionInput,
-    type ProjectStatusTransitionListQuery,
     type UpdateProjectInput,
 } from "./shared";
 

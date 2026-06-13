@@ -66,8 +66,7 @@ import {
     createProject,
     updateProject,
     updateProjectForTenant,
-    transitionProjectStatusForTenant,
-    listProjectStatusActionsForTenant,
+    applyProjectWorkflowEffectForTenant,
     listProjectConstructionStagesForTenant,
     deleteProject,
     deleteProjectForTenant,
@@ -157,8 +156,7 @@ class ProjectService {
     createProject = createProject;
     updateProject = updateProject;
     updateProjectForTenant = updateProjectForTenant;
-    transitionProjectStatusForTenant = transitionProjectStatusForTenant;
-    listProjectStatusActionsForTenant = listProjectStatusActionsForTenant;
+    applyProjectWorkflowEffectForTenant = applyProjectWorkflowEffectForTenant;
     listProjectConstructionStagesForTenant = listProjectConstructionStagesForTenant;
     deleteProject = deleteProject;
     deleteProjectForTenant = deleteProjectForTenant;

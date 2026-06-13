@@ -27,8 +27,6 @@ import {
     type ProjectListResult,
     type ProjectMemberCandidateQueryType,
     type ProjectPrimaryAssignee,
-    type ProjectStatusTransitionInput,
-    type ProjectStatusTransitionListQuery,
     type UpdateProjectInput,
 } from "./shared";
 import { attachProjectDisplayStatuses } from "./display-status";

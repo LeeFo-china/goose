@@ -171,12 +171,12 @@ class WorkflowTemplateService {
           ...pauseableNodeKeys.flatMap((nodeKey) => [
             this.edge(nodeKey, "on_hold", "暂停项目", 10, {
               operator: "eq",
-              field: "project_status_action",
+              field: "project_workflow_action",
               value: "pause_project",
             }),
             this.edge(nodeKey, "invalid", "作废项目", 20, {
               operator: "eq",
-              field: "project_status_action",
+              field: "project_workflow_action",
               value: "mark_invalid",
             }),
           ]),
@@ -189,7 +189,7 @@ class WorkflowTemplateService {
           ),
           this.edge("on_hold", "invalid", "作废项目", 20, {
             operator: "eq",
-            field: "project_status_action",
+            field: "project_workflow_action",
             value: "mark_invalid",
           }),
         ],

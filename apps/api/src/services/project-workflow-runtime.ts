@@ -23,7 +23,7 @@ export type ProjectWorkflowRuntimeMetadata = {
   error_message?: string;
 };
 
-type SyncProjectStatusTransitionInput = {
+type ApplyProjectWorkflowEffectInput = {
   authContext: AuthContext;
   tenantId: string;
   projectId: string;
@@ -36,11 +36,11 @@ type SyncProjectStatusTransitionInput = {
 };
 
 class ProjectWorkflowRuntimeService {
-  async syncStatusTransition(
-    input: SyncProjectStatusTransitionInput,
+  async applyWorkflowEffect(
+    input: ApplyProjectWorkflowEffectInput,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
     try {
-      return await this.syncStatusTransitionUnsafe(input);
+      return await this.applyWorkflowEffectUnsafe(input);
     } catch (error) {
       return {
         status: "failed",
@@ -50,10 +50,10 @@ class ProjectWorkflowRuntimeService {
     }
   }
 
-  async syncStatusTransitionAndSubjectState(
-    input: SyncProjectStatusTransitionInput,
+  async applyWorkflowEffectAndSubjectState(
+    input: ApplyProjectWorkflowEffectInput,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
-    const metadata = await this.syncStatusTransition(input);
+    const metadata = await this.applyWorkflowEffect(input);
     await workflowSubjectStateService.syncFromRuntimeInstance({
       tenantId: input.tenantId,
       subjectType: "project",
@@ -63,8 +63,8 @@ class ProjectWorkflowRuntimeService {
     return metadata;
   }
 
-  private async syncStatusTransitionUnsafe(
-    input: SyncProjectStatusTransitionInput,
+  private async applyWorkflowEffectUnsafe(
+    input: ApplyProjectWorkflowEffectInput,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
     const definition = await this.findActiveProjectWorkflow(input.tenantId);
     if (!definition) {
@@ -117,7 +117,7 @@ class ProjectWorkflowRuntimeService {
   }
 
   private async startProjectWorkflow(
-    input: SyncProjectStatusTransitionInput,
+    input: ApplyProjectWorkflowEffectInput,
     definition: WorkflowDefinitionRow,
   ): Promise<ProjectWorkflowRuntimeMetadata> {
     const result = await workflowRepository.startRuntimeInstance({
@@ -148,7 +148,7 @@ class ProjectWorkflowRuntimeService {
   }
 
   private async advanceProjectWorkflow(
-    input: SyncProjectStatusTransitionInput,
+    input: ApplyProjectWorkflowEffectInput,
     definition: WorkflowDefinitionRow,
     instance: WorkflowInstanceRow,
     nodeKey: ProjectStatus,
@@ -213,7 +213,7 @@ class ProjectWorkflowRuntimeService {
   }
 
   private async findRunningProjectInstance(
-    input: Pick<SyncProjectStatusTransitionInput, "tenantId" | "projectId">,
+    input: Pick<ApplyProjectWorkflowEffectInput, "tenantId" | "projectId">,
     definitionId: string,
   ): Promise<WorkflowInstanceRow | null> {
     const result = await workflowRepository.listRuntimeInstances({
@@ -230,7 +230,7 @@ class ProjectWorkflowRuntimeService {
   }
 
   private getNodeKeyForAction(
-    input: Pick<SyncProjectStatusTransitionInput, "action" | "fromStatus">,
+    input: Pick<ApplyProjectWorkflowEffectInput, "action" | "fromStatus">,
   ): ProjectStatus | null {
     switch (input.action) {
       case "confirm_proposal":
@@ -256,12 +256,12 @@ class ProjectWorkflowRuntimeService {
   }
 
   private buildRuntimeContext(
-    input: SyncProjectStatusTransitionInput,
+    input: ApplyProjectWorkflowEffectInput,
   ): JsonObject {
     return {
-      source: input.source ?? "project_status",
+      source: input.source ?? "workflow_effect",
       project_id: input.projectId,
-      project_status_action: input.action,
+      project_workflow_action: input.action,
       from_status: input.fromStatus,
       to_status: input.toStatus,
       paused_from_status: input.action === "resume_project"

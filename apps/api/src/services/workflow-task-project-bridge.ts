@@ -1,8 +1,9 @@
+import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
-import { ProjectStatusTransitionSchema } from "@/schema/projects";
 import type { AuthContext } from "@/services/authorization";
 import { projectSer } from "@/services/projects";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
+import { PROJECT_STATUS_ACTION_VALUES } from "@gooes/domain";
 
 type ProjectWorkflowSideEffectAction =
   | "confirm_proposal"
@@ -61,6 +62,26 @@ const PROJECT_NODE_EFFECTS: Partial<Record<string, ProjectWorkflowSideEffectActi
   on_hold: "resume_project",
 };
 
+const ProjectWorkflowEffectSchema = z.object({
+  action: z.enum(PROJECT_STATUS_ACTION_VALUES, {
+    message: "无效的项目 workflow 动作",
+  }),
+  reason: z.string().trim().max(500, "原因不能超过 500 个字符").nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  signed_amount: z.coerce
+    .number("签约金额必须是数字")
+    .min(0, "签约金额不能为负数")
+    .nullable()
+    .optional(),
+  start_date: z.string()
+    .trim()
+    .min(1, "开工日期不能为空")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "开工日期格式必须为 YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  construction_manager_employee_id: z.uuid("请选择有效的工程负责人").nullable().optional(),
+});
+
 export function resolveProjectWorkflowTaskOperation(
   input: ResolveProjectWorkflowTaskOperationInput,
 ): ProjectWorkflowTaskOperation | null {
@@ -91,7 +112,7 @@ class WorkflowTaskProjectBridge {
     });
     if (!operation) return null;
 
-    const parsed = ProjectStatusTransitionSchema.safeParse({
+    const parsed = ProjectWorkflowEffectSchema.safeParse({
       ...operation.payload,
       metadata: {
         source: "workflow_task",
@@ -101,7 +122,7 @@ class WorkflowTaskProjectBridge {
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 
     const projectId = input.task.instance.subject_id;
-    const project = await projectSer.transitionProjectStatusForTenant({
+    const project = await projectSer.applyProjectWorkflowEffectForTenant({
       authContext: input.authContext,
       projectId,
       payload: parsed.data,
