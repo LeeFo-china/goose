@@ -81,12 +81,6 @@ export function WechatRebindClientShell({
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
-          <div>
-            <div className="text-sm font-medium">换绑申请列表</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              仅审核用户主动提交的换绑申请，不提供管理员强制解绑。
-            </div>
-          </div>
           <WechatRebindFilters
             status={status}
             pending={pending}

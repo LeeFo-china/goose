@@ -119,7 +119,6 @@ test.describe("admin smoke", () => {
     await gotoAdminPage(page, "/wechat-rebind-requests");
 
     await expect(page.getByRole("heading", { name: "微信换绑审核" })).toBeVisible();
-    await expect(page.getByText("换绑申请列表")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "申请人" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "目标身份" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
