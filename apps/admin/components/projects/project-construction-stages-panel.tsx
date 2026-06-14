@@ -65,6 +65,29 @@ type ConstructionStagesPayload = {
   stages: ConstructionStageItem[];
 };
 
+type WorkflowProgressGate = {
+  type: "payment_collection";
+  payment_type: string;
+  payment_label: string;
+  blocked_stage_code: string | null;
+  blocked_stage_label: string | null;
+};
+
+type WorkflowProgressPayload = {
+  source: "workflow_runtime" | "missing_runtime" | "unavailable";
+  current_node_key: string | null;
+  current_node_title: string | null;
+  current_node_type: string | null;
+  current_business_kind: string | null;
+  current_stage_code: string | null;
+  current_gate: WorkflowProgressGate | null;
+};
+
+type ProjectDetailBootstrapPayload = {
+  workflow_progress?: WorkflowProgressPayload | null;
+  construction_stages?: ConstructionStagesPayload | null;
+};
+
 async function requestBackend<T>(path: string) {
   return requestBackendJson<T>(path, {
     fallbackMessage: "请求失败",
@@ -102,6 +125,33 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
+function workflowProgressTitle(progress: WorkflowProgressPayload | null) {
+  if (!progress) return "";
+  if (progress.source === "missing_runtime") return "流程同步中";
+  if (progress.source === "unavailable") return "流程进度加载失败";
+  return progress.current_gate?.payment_label ||
+    progress.current_node_title ||
+    progress.current_node_key ||
+    "";
+}
+
+function workflowProgressBadge(progress: WorkflowProgressPayload | null) {
+  if (!progress) return null;
+  if (progress.source === "missing_runtime") {
+    return { label: "流程同步中", variant: "secondary" as const };
+  }
+  if (progress.source === "unavailable") {
+    return { label: "流程不可用", variant: "warning" as const };
+  }
+  if (progress.current_gate?.type === "payment_collection") {
+    return { label: "收款节点", variant: "warning" as const };
+  }
+  if (progress.current_node_type === "procedure") {
+    return { label: "工序节点", variant: "default" as const };
+  }
+  return { label: "流程运行中", variant: "secondary" as const };
+}
+
 function ConstructionStageSkeleton({ compact }: { compact: boolean }) {
   return (
     <Card>
@@ -135,19 +185,23 @@ export function ProjectConstructionStagesPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<ConstructionStagesPayload | null>(null);
+  const [workflowProgress, setWorkflowProgress] =
+    useState<WorkflowProgressPayload | null>(null);
 
   async function loadStages() {
     if (!projectId) return;
     setLoading(true);
     setError("");
     try {
-      const payload = await requestBackend<ConstructionStagesPayload>(
-        `/projects/${projectId}/construction-stages`,
+      const payload = await requestBackend<ProjectDetailBootstrapPayload>(
+        `/projects/${projectId}/employee-detail-bootstrap?log_page_size=1&include_calendar=false&include_referral_summary=false&include_cameras_summary=false`,
       );
-      setData(payload);
+      setData(payload.construction_stages ?? null);
+      setWorkflowProgress(payload.workflow_progress ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "施工阶段加载失败");
       setData(null);
+      setWorkflowProgress(null);
     } finally {
       setLoading(false);
     }
@@ -161,8 +215,13 @@ export function ProjectConstructionStagesPanel({
 
   const stages = useMemo(() => data?.stages || [], [data?.stages]);
   const visibleStages = compact ? stages.slice(0, 6) : stages;
-  const currentLabel = data?.next_stage?.stage_label ||
+  const progressTitle = workflowProgressTitle(workflowProgress);
+  const progressBadge = workflowProgressBadge(workflowProgress);
+  const currentLabel = progressTitle ||
     (data?.required_completed ? "施工阶段已完成" : "等待前置阶段");
+  const currentStageCode = workflowProgress?.source === "workflow_runtime"
+    ? workflowProgress.current_stage_code
+    : null;
 
   if (loading && !data) {
     return <ConstructionStageSkeleton compact={compact} />;
@@ -184,7 +243,9 @@ export function ProjectConstructionStagesPanel({
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {data?.required_completed ? (
+            {progressBadge ? (
+              <Badge variant={progressBadge.variant}>{progressBadge.label}</Badge>
+            ) : data?.required_completed ? (
               <Badge variant="success">可进入竣工验收</Badge>
             ) : (
               <Badge variant="secondary">施工推进中</Badge>
@@ -218,7 +279,7 @@ export function ProjectConstructionStagesPanel({
               key={stage.stage_code}
               className={cn(
                 "flex min-h-28 flex-col gap-3 rounded-md border bg-background p-3",
-                stage.stage_code === data?.current_stage && "border-primary",
+                stage.stage_code === currentStageCode && "border-primary",
               )}
             >
               <div className="flex items-start justify-between gap-3">

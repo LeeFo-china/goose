@@ -73,9 +73,7 @@ function propertyLabel(value: ProjectRecord["property"]) {
 
 function projectStatusMeta(project: ProjectRecord) {
   const displayStatus = project.display_status || project.status || "";
-  const displayLabel = project.status === "constructing" && project.current_stage_label
-    ? project.current_stage_label
-    : project.display_status_label || project.status_label;
+  const displayLabel = project.display_status_label || project.status_label;
   const meta = statusMeta[displayStatus] || statusMeta[project.status || ""] || {
     label: displayStatus || "未知",
     variant: "outline" as const,
