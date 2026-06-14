@@ -12,6 +12,7 @@ import {
   createAuthUserVisitorResponse,
   createVisitorSessionResponse,
   getCachedVisitorOnlyAuthUser,
+  getRequiredAuthContext,
   prewarmEmployeeAuthContext,
   prewarmVisitorHomeData,
   resolveMembershipVisitorState,
@@ -80,6 +81,7 @@ export class WeChatController extends BaseController {
   private createVisitorSessionResponse = createVisitorSessionResponse;
   private clearVisitorOnlyAuthUserCache = clearVisitorOnlyAuthUserCache;
   private getCachedVisitorOnlyAuthUser = getCachedVisitorOnlyAuthUser;
+  private getRequiredAuthContext = getRequiredAuthContext;
   private signWechatAuthToken = signWechatAuthToken;
   private setCachedVisitorOnlyAuthUser = setCachedVisitorOnlyAuthUser;
   private resolveMembershipVisitorState = resolveMembershipVisitorState;

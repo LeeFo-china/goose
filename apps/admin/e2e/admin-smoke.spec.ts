@@ -124,6 +124,7 @@ test.describe("admin smoke", () => {
     await expect(page.getByRole("columnheader", { name: "目标身份" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "操作" })).toBeVisible();
+    await expect(page.getByText("服务器内部错误")).toHaveCount(0);
   });
 
   test("角色权限配置页可打开", async ({ page }) => {
