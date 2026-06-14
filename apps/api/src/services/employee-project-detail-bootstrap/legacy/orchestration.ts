@@ -1,5 +1,9 @@
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
+  buildUnavailableProjectWorkflowProgress,
+  projectWorkflowProgressService,
+} from "@/services/project-workflow-progress";
+import {
   projectLogService,
   projectSer,
 } from "./shared";
@@ -17,6 +21,7 @@ import type {
   ProjectLogListResult,
   ProjectMembersResult,
   ProjectWorkflowState,
+  WorkflowProgressResult,
   ProjectWorkflowBlockingState,
 } from "./shared";
 
@@ -27,6 +32,7 @@ export type EmployeeProjectDetailBootstrapResult = {
   permissions: BootstrapPermissions;
   members: ProjectMembersResult;
   workflow_state: ProjectWorkflowState;
+  workflow_progress: WorkflowProgressResult;
   construction_stages: ConstructionStagesResult;
   log_entry: ProjectLogEntrySummary;
   next_action: ProjectDetailNextAction | null;
@@ -71,6 +77,24 @@ export async function getBootstrap(this: any, input: {
       rawMembers: bundle.members,
     })
   );
+  const projectId = typeof project.id === "string" ? project.id : input.projectId;
+  const tenantId = typeof project.tenant_id === "string"
+    ? project.tenant_id
+    : input.authContext.tenantId;
+  const workflowProgress = await this.loadOptional(
+    "workflow_progress",
+    () => tenantId
+      ? projectWorkflowProgressService.getProjectProgress({
+        tenantId,
+        projectId,
+        authContext: input.authContext,
+      })
+      : Promise.resolve(buildUnavailableProjectWorkflowProgress()),
+    buildUnavailableProjectWorkflowProgress(),
+    partialErrors,
+    timings,
+    "workflow_progress_ms",
+  );
 
   const [constructionStages, logs, calendar] =
     await Promise.all([
@@ -86,6 +110,7 @@ export async function getBootstrap(this: any, input: {
             basePermissions.internal_can_create_acceptance &&
             basePermissions.can_access_project_acceptance,
           canManageAcceptance: basePermissions.internal_can_manage_acceptance,
+          workflowProgress,
         })
       ),
       this.measure("logs_ms", timings, () =>
@@ -129,6 +154,7 @@ export async function getBootstrap(this: any, input: {
     permissions,
     members,
     workflow_state: workflowState,
+    workflow_progress: workflowProgress,
     construction_stages: constructionStages,
     log_entry: this.buildProjectLogEntry({
       project,

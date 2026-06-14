@@ -10,7 +10,10 @@ import {
 } from "./legacy/lists";
 import { Errors } from "@/errors/error-factory";
 import { customerConstructionStagesRepository } from "@/repositories/customer-construction-stages";
-import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
+import {
+  projectWorkflowProgressService,
+  type ProjectWorkflowProgress,
+} from "@/services/project-workflow-progress";
 
 const CUSTOMER_CONSTRUCTION_STAGES_CACHE_TTL_MS = 10_000;
 const MAX_CUSTOMER_CONSTRUCTION_STAGES_CACHE_SIZE = 2_000;
@@ -75,6 +78,7 @@ class ConstructionStageStatusService {
     tenantId: string;
     customerId: string;
     projectId: string;
+    workflowProgress?: ProjectWorkflowProgress | null;
   }) {
     const cacheKey = [
       "customer_rpc",
@@ -91,10 +95,12 @@ class ConstructionStageStatusService {
 
     const request = Promise.all([
       customerConstructionStagesRepository.getBootstrap(input),
-      projectWorkflowProgressService.getProjectProgress({
-        tenantId: input.tenantId,
-        projectId: input.projectId,
-      }),
+      input.workflowProgress
+        ? Promise.resolve(input.workflowProgress)
+        : projectWorkflowProgressService.getProjectProgress({
+          tenantId: input.tenantId,
+          projectId: input.projectId,
+        }),
     ])
       .then(async ([row, workflowProgress]) => {
         if (!row) throw Errors.notFound("项目不存在");

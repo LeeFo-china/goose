@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { buildProjectWorkflowProgressProjection } from "./project-workflow-progress";
+import {
+  buildUnavailableProjectWorkflowProgress,
+  buildProjectWorkflowProgressProjection,
+  toCustomerProjectWorkflowProgress,
+} from "./project-workflow-progress";
 
 const graph = {
   nodes: [
@@ -144,6 +148,63 @@ describe("buildProjectWorkflowProgressProjection", () => {
     }).warnings).toContainEqual({
       code: "STALE_SUBJECT_STATE",
       message: "workflow_subject_states 与 workflow_instances 当前节点不一致",
+    });
+  });
+
+  test("builds an unavailable progress object without guessing stage state", () => {
+    expect(buildUnavailableProjectWorkflowProgress()).toMatchObject({
+      source: "unavailable",
+      current_node_key: null,
+      current_stage_code: null,
+      current_gate: null,
+      pending_task_count: 0,
+      actions: [],
+      warnings: [],
+    });
+  });
+
+  test("serializes customer workflow progress without employee action metadata", () => {
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期进度款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_snapshot: graph.nodes[1],
+      },
+      graph,
+      pendingActions: [{
+        task_id: "task-1",
+        type: "complete",
+        label: "确认收款",
+        assignee_employee_id: "employee-1",
+      }],
+    });
+
+    expect(toCustomerProjectWorkflowProgress(progress)).toEqual({
+      source: "workflow_runtime",
+      instance_id: "instance-1",
+      instance_status: "running",
+      current_node_key: "payment_stage_2",
+      current_node_title: "中期进度款",
+      current_node_type: "confirmation",
+      current_business_kind: "payment_collection",
+      current_stage_code: null,
+      current_gate: {
+        type: "payment_collection",
+        payment_type: "stage_2",
+        payment_label: "中期进度款",
+        blocked_stage_code: "tiling",
+        blocked_stage_label: "瓦工",
+      },
+      pending_task_count: 1,
     });
   });
 });

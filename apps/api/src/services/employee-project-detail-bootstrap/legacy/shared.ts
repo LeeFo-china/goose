@@ -1,5 +1,6 @@
 import type { EmployeeProjectDetailBootstrapQuery } from "@/schema/projects";
 import type { ProjectConstructionStagesResult } from "@/services/construction-stage-status/legacy/lists";
+import type { ProjectWorkflowProgress } from "@/services/project-workflow-progress";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext, EffectivePermission } from "@/services/authorization";
 import { projectLogService } from "@/services/project-logs";
@@ -21,6 +22,7 @@ export type BootstrapTimingStep =
   | "project_ms"
   | "permissions_ms"
   | "members_ms"
+  | "workflow_progress_ms"
   | "construction_stages_ms"
   | "logs_ms"
   | "calendar_ms";
@@ -42,6 +44,7 @@ export type ProjectWorkflowState = {
   actions: Array<Record<string, unknown>>;
 } | null;
 
+export type WorkflowProgressResult = ProjectWorkflowProgress;
 export type ConstructionStagesResult = ProjectConstructionStagesResult;
 export type ProjectLogListResult = Awaited<
   ReturnType<typeof projectLogService.listProjectLogsByProject>

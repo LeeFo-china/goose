@@ -30,7 +30,10 @@ import {
     type UpdateProjectInput,
 } from "./shared";
 import { attachProjectDisplayStatuses } from "./display-status";
-import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
+import {
+    projectWorkflowProgressService,
+    type ProjectWorkflowProgress,
+} from "@/services/project-workflow-progress";
 
 export async function getProjectDetail(this: any, input: {
     authContext: AuthContext;
@@ -422,18 +425,19 @@ export async function buildProjectConstructionStagesForBootstrapData(this: any, 
     canReadAcceptance: boolean;
     canCreateAcceptance: boolean;
     canManageAcceptance: boolean;
+    workflowProgress?: ProjectWorkflowProgress | null;
 }) {
     const projectId = typeof input.project.id === "string" ? input.project.id : "";
     const tenantId = typeof input.project.tenant_id === "string"
         ? input.project.tenant_id
         : input.authContext.tenantId;
-    const workflowProgress = tenantId && projectId
+    const workflowProgress = input.workflowProgress ?? (tenantId && projectId
         ? await projectWorkflowProgressService.getProjectProgress({
             tenantId,
             projectId,
             authContext: input.authContext,
         })
-        : null;
+        : null);
 
     return constructionStageStatusService.buildProjectConstructionStagesFromRows({
         authContext: input.authContext,

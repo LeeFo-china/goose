@@ -18,6 +18,7 @@ export const customerProjectDetailTimingStepKeys = [
   "project_detail_ms",
   "logs_ms",
   "acceptances_ms",
+  "workflow_progress_ms",
   "construction_stages_ms",
   "campaign_summary_ms",
   "appointment_reward_ms",

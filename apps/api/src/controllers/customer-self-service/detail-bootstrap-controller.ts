@@ -10,6 +10,7 @@ import { customerProjectDetailLogsService } from "@/services/customer-project-de
 import { customerServiceConfigService } from "@/services/customer-service-config";
 import { customerSelfServiceService } from "@/services/customer-self-service";
 import { projectAcceptanceService } from "@/services/project-acceptances";
+import { toCustomerProjectWorkflowProgress } from "@/services/project-workflow-progress";
 import {
   createCustomerProjectDetailTimingSteps,
   logCustomerProjectDetailTiming,
@@ -17,6 +18,7 @@ import {
 } from "@/utils/customer-project-detail-timing";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import { loadCustomerProjectWorkflowProgress } from "./detail-bootstrap-workflow-progress";
 import { CustomerSelfServiceProjectBaseController } from "./project-base";
 import { CustomerProjectDetailBootstrapQuerySchema } from "./shared";
 
@@ -218,22 +220,35 @@ class CustomerProjectDetailBootstrapController
         return null;
       })
       : Promise.resolve(undefined);
+    const workflowProgressPromise = loadCustomerProjectWorkflowProgress({
+      projectId: project.id,
+      tenantId: projectTenantId,
+      steps,
+      withOptionalModuleTimeout: this.withOptionalModuleTimeout.bind(this),
+      addPartialError,
+    });
     const stagesPromise = queryResult.data.include_stages
       ? this.withOptionalModuleTimeout(
         "construction_stages",
         measureCustomerProjectDetailStep(
           steps,
           "construction_stages_ms",
-          () => projectTenantId
-            ? constructionStageStatusService.listCustomerProjectConstructionStages({
-              projectId: project.id,
-              tenantId: projectTenantId,
-              customerId: customer!.id,
-            })
-            : constructionStageStatusService.listProjectConstructionStagesForProject({
-              projectId: project.id,
-              tenantId: projectTenantId,
-            }),
+          async () => {
+            const workflowProgress = await workflowProgressPromise;
+            return projectTenantId
+              ? constructionStageStatusService.listCustomerProjectConstructionStages({
+                projectId: project.id,
+                tenantId: projectTenantId,
+                customerId: customer!.id,
+                workflowProgress,
+              })
+              : constructionStageStatusService.listProjectConstructionStagesForProject({
+                projectId: project.id,
+                tenantId: projectTenantId,
+                workflowProgress,
+                sourceMode: "workflow_runtime",
+              });
+          },
         ),
         DETAIL_CONSTRUCTION_STAGES_TIMEOUT_MS,
       ).catch((error) => {
@@ -271,6 +286,7 @@ class CustomerProjectDetailBootstrapController
       customerService,
       logs,
       acceptances,
+      workflowProgress,
       constructionStages,
       campaignSummary,
       appointmentRewardCampaign,
@@ -279,6 +295,7 @@ class CustomerProjectDetailBootstrapController
       customerServicePromise,
       logsPromise,
       acceptancesPromise,
+      workflowProgressPromise,
       stagesPromise,
       campaignSummaryPromise,
       appointmentRewardPromise,
@@ -291,6 +308,7 @@ class CustomerProjectDetailBootstrapController
         project: projectPayload,
         customer_service: customerService,
         logs,
+        workflow_progress: toCustomerProjectWorkflowProgress(workflowProgress),
         ...(acceptances !== undefined ? { acceptances } : {}),
         ...(constructionStages !== undefined
           ? { construction_stages: constructionStages }
