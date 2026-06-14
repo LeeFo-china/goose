@@ -10,6 +10,7 @@ import {
 } from "./legacy/lists";
 import { Errors } from "@/errors/error-factory";
 import { customerConstructionStagesRepository } from "@/repositories/customer-construction-stages";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 
 const CUSTOMER_CONSTRUCTION_STAGES_CACHE_TTL_MS = 10_000;
 const MAX_CUSTOMER_CONSTRUCTION_STAGES_CACHE_SIZE = 2_000;
@@ -88,14 +89,22 @@ class ConstructionStageStatusService {
     const inFlight = this.customerConstructionStagesInFlight.get(cacheKey);
     if (inFlight) return inFlight;
 
-    const request = customerConstructionStagesRepository.getBootstrap(input)
-      .then(async (row) => {
+    const request = Promise.all([
+      customerConstructionStagesRepository.getBootstrap(input),
+      projectWorkflowProgressService.getProjectProgress({
+        tenantId: input.tenantId,
+        projectId: input.projectId,
+      }),
+    ])
+      .then(async ([row, workflowProgress]) => {
         if (!row) throw Errors.notFound("项目不存在");
         const result = await buildProjectConstructionStagesFromRows({
           project: row.project,
           acceptanceRows: row.acceptance_rows,
           logRows: row.log_rows,
           latestLogRows: row.latest_log_rows,
+          workflowProgress,
+          sourceMode: "workflow_runtime",
         });
         this.setCustomerConstructionStagesCache(cacheKey, result);
         return result;

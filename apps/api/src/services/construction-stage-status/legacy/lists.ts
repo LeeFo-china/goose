@@ -19,6 +19,10 @@ import { getStageAcceptanceLabel, getStageLabel } from "./labels";
 import { buildAcceptanceWritableMap, canAccessProjectByOptionalPermission } from "./permissions";
 import { pickLatestAcceptanceRows } from "./rows";
 import { buildStageItem, type ProjectConstructionStageItem } from "./stage-item";
+import {
+  projectWorkflowProgressService,
+  type ProjectWorkflowProgress,
+} from "@/services/project-workflow-progress";
 
 export type ProjectConstructionStagesResult = {
   project_id: string;
@@ -34,6 +38,8 @@ export type ProjectConstructionStagesResult = {
   stages: ProjectConstructionStageItem[];
   all_stage_codes: typeof PROJECT_LOG_STAGE_CODE_VALUES;
 };
+
+type ConstructionStageSourceMode = "workflow_runtime" | "legacy_derived";
 
 export async function listProjectConstructionStages(input: {
   authContext: AuthContext;
@@ -77,6 +83,8 @@ export async function listProjectConstructionStagesForProject(input: {
   authContext?: AuthContext;
   canReadAcceptance?: boolean;
   canCreateAcceptance?: boolean;
+  workflowProgress?: ProjectWorkflowProgress | null;
+  sourceMode?: ConstructionStageSourceMode;
 }): Promise<ProjectConstructionStagesResult> {
   const project = await projectAcceptanceRepository.getProject(
     input.projectId,
@@ -106,6 +114,17 @@ export async function listProjectConstructionStagesForProject(input: {
       tenantId: input.tenantId,
     }),
   ]);
+  const sourceMode = input.sourceMode ?? "workflow_runtime";
+  const workflowProgress = sourceMode === "workflow_runtime"
+    ? input.workflowProgress ??
+      (input.tenantId
+        ? await projectWorkflowProgressService.getProjectProgress({
+          tenantId: input.tenantId,
+          projectId: input.projectId,
+          authContext: input.authContext,
+        })
+        : null)
+    : input.workflowProgress ?? null;
 
   return buildProjectConstructionStagesFromRows({
     project,
@@ -115,6 +134,8 @@ export async function listProjectConstructionStagesForProject(input: {
     authContext: input.authContext,
     canReadAcceptance: input.canReadAcceptance,
     canCreateAcceptance: input.canCreateAcceptance,
+    workflowProgress,
+    sourceMode,
   });
 }
 
@@ -127,8 +148,14 @@ export async function buildProjectConstructionStagesFromRows(input: {
   canReadAcceptance?: boolean;
   canCreateAcceptance?: boolean;
   canManageAcceptance?: boolean;
+  workflowProgress?: ProjectWorkflowProgress | null;
+  sourceMode?: ConstructionStageSourceMode;
 }): Promise<ProjectConstructionStagesResult> {
   const project = input.project;
+  const sourceMode = input.sourceMode ?? "workflow_runtime";
+  const workflowProgress = sourceMode === "workflow_runtime"
+    ? input.workflowProgress ?? null
+    : null;
   const acceptanceRows = pickLatestAcceptanceRows(input.acceptanceRows);
   const acceptanceMap = new Map(
     acceptanceRows.map((item) => [item.stage_code, item]),
@@ -160,9 +187,15 @@ export async function buildProjectConstructionStagesFromRows(input: {
 
   const stages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.map((stageCode) => {
     const previousStage = getPreviousProjectConstructionStage(stageCode);
-    const blockedReason = previousStage && !acceptedStages.has(previousStage)
-      ? `请先完成${getStageAcceptanceLabel(previousStage)}后再进入${getStageLabel(stageCode)}`
-      : null;
+    const blockedReason = sourceMode === "legacy_derived"
+      ? previousStage && !acceptedStages.has(previousStage)
+        ? `请先完成${getStageAcceptanceLabel(previousStage)}后再进入${getStageLabel(stageCode)}`
+        : null
+      : resolveWorkflowStageBlockedReason({
+        stageCode,
+        acceptedStages,
+        workflowProgress,
+      });
 
     return buildStageItem({
       stageCode,
@@ -184,13 +217,19 @@ export async function buildProjectConstructionStagesFromRows(input: {
   );
   const completionBlockedReason = project.status !== "acceptance"
     ? "项目进入竣工验收后才能发起竣工验收"
-    : missingRequiredStages.length > 0
-      ? `请先完成${
-        missingRequiredStages.map((item) =>
-          getStageAcceptanceLabel(item)
-        ).join("、")
-      }`
-      : null;
+    : sourceMode === "legacy_derived"
+      ? missingRequiredStages.length > 0
+        ? `请先完成${
+          missingRequiredStages.map((item) =>
+            getStageAcceptanceLabel(item)
+          ).join("、")
+        }`
+        : null
+      : resolveWorkflowStageBlockedReason({
+        stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
+        acceptedStages,
+        workflowProgress,
+      });
   const completionStage = buildStageItem({
     stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
     acceptance: input.canReadAcceptance === false
@@ -205,25 +244,103 @@ export async function buildProjectConstructionStagesFromRows(input: {
       ? acceptanceWritableMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE) ?? false
       : true,
   });
+  const allStages = [...stages, completionStage];
+  const legacyCurrentStage = stages.find((item) =>
+    item.status !== "accepted" && item.status !== "locked"
+  ) ?? null;
+  const workflowCurrentStage = resolveWorkflowCurrentStage(workflowProgress);
+  const currentStage = sourceMode === "legacy_derived"
+    ? legacyCurrentStage?.stage_code ?? null
+    : workflowCurrentStage;
+  const nextStage = sourceMode === "legacy_derived"
+    ? legacyCurrentStage
+    : resolveWorkflowNextStage(workflowProgress, allStages);
 
   return {
     project_id: project.id,
     project_status: project.status,
     required_stage_codes: PROJECT_CONSTRUCTION_STAGE_CODE_VALUES,
     required_completed: missingRequiredStages.length === 0,
-    current_stage:
-      stages.find((item) =>
-        item.status !== "accepted" && item.status !== "locked"
-      )?.stage_code ?? null,
-    next_stage:
-      stages.find((item) =>
-        item.status !== "accepted" && item.status !== "locked"
-      ) ?? null,
+    current_stage: currentStage,
+    next_stage: nextStage,
     missing_required_stages: missingRequiredStages.map((stageCode) => ({
       stage_code: stageCode,
       stage_label: getStageLabel(stageCode),
     })),
-    stages: [...stages, completionStage],
+    stages: allStages,
     all_stage_codes: PROJECT_LOG_STAGE_CODE_VALUES,
   };
+}
+
+function resolveWorkflowStageBlockedReason(input: {
+  stageCode: ProjectLogStageCode;
+  acceptedStages: Set<string>;
+  workflowProgress: ProjectWorkflowProgress | null;
+}) {
+  const progress = input.workflowProgress;
+  if (!progress || progress.source !== "workflow_runtime") {
+    return "流程运行态缺失，施工阶段暂不可推进";
+  }
+
+  if (input.acceptedStages.has(input.stageCode)) {
+    return null;
+  }
+
+  const currentStage = resolveWorkflowCurrentStage(progress);
+  if (currentStage === input.stageCode) {
+    return null;
+  }
+
+  const paymentGate = progress.current_gate;
+  const blockedStage = normalizeStageCode(paymentGate?.blocked_stage_code);
+  if (paymentGate && blockedStage === input.stageCode) {
+    return `请先完成${paymentGate.payment_label}`;
+  }
+
+  if (paymentGate && blockedStage && isStageAfter(input.stageCode, blockedStage)) {
+    return `请先完成${paymentGate.blocked_stage_label ?? getStageLabel(blockedStage)}后再进入${
+      getStageLabel(input.stageCode)
+    }`;
+  }
+
+  if (currentStage && isStageAfter(input.stageCode, currentStage)) {
+    return `请先完成${getStageLabel(currentStage)}后再进入${getStageLabel(input.stageCode)}`;
+  }
+
+  return progress.current_node_title
+    ? `当前流程在${progress.current_node_title}，暂不可推进${getStageLabel(input.stageCode)}`
+    : "当前流程未到此阶段";
+}
+
+function resolveWorkflowCurrentStage(
+  workflowProgress: ProjectWorkflowProgress | null,
+): ProjectLogStageCode | null {
+  return normalizeStageCode(workflowProgress?.current_stage_code);
+}
+
+function resolveWorkflowNextStage(
+  workflowProgress: ProjectWorkflowProgress | null,
+  stages: ProjectConstructionStageItem[],
+) {
+  if (!workflowProgress || workflowProgress.source !== "workflow_runtime") {
+    return null;
+  }
+
+  const blockedStage = normalizeStageCode(
+    workflowProgress.current_gate?.blocked_stage_code,
+  );
+  const stageCode = blockedStage ?? resolveWorkflowCurrentStage(workflowProgress);
+  if (!stageCode) return null;
+
+  return stages.find((item) => item.stage_code === stageCode) ?? null;
+}
+
+function normalizeStageCode(stageCode: string | null | undefined) {
+  return isProjectLogStageCode(stageCode) ? stageCode : null;
+}
+
+function isStageAfter(stageCode: ProjectLogStageCode, anchor: ProjectLogStageCode) {
+  const stageIndex = PROJECT_LOG_STAGE_CODE_VALUES.indexOf(stageCode);
+  const anchorIndex = PROJECT_LOG_STAGE_CODE_VALUES.indexOf(anchor);
+  return stageIndex > anchorIndex && anchorIndex >= 0;
 }
