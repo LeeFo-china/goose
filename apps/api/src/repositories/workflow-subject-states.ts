@@ -59,6 +59,7 @@ export type WorkflowRuntimeProjectionRow = {
   id: string;
   tenant_id: string;
   definition_id: string;
+  version_id: string;
   subject_type: WorkflowSubjectType;
   subject_id: string;
   status: WorkflowInstanceStatus;
@@ -86,6 +87,7 @@ const WORKFLOW_RUNTIME_PROJECTION_SELECT = [
   "id",
   "tenant_id",
   "definition_id",
+  "version_id",
   "subject_type",
   "subject_id",
   "status",
