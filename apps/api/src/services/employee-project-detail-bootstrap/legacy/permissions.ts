@@ -16,6 +16,8 @@ export async function buildPermissions(this: any, input: {
     canUpdateProject,
     canWriteProjectLogByPermission,
     canAccessAcceptance,
+    canViewProjectReferral,
+    canManageProjectReferral,
   ] = await Promise.all([
     this.canAccessProjectByPermission(
       input.authContext,
@@ -36,6 +38,16 @@ export async function buildPermissions(this: any, input: {
         "project_acceptance.manage",
       ],
     ),
+    this.canAccessProjectByOptionalPermission(
+      input.authContext,
+      input.projectId,
+      ["project_referral.read", "project_referral.manage"],
+    ),
+    this.canAccessProjectByPermission(
+      input.authContext,
+      input.projectId,
+      "project_referral.manage",
+    ),
   ]);
   const canCreateProjectLogByStage = input.constructionStages
     ? input.constructionStages.stages?.some((item) => Boolean(item.can_create_log)) ??
@@ -50,7 +62,8 @@ export async function buildPermissions(this: any, input: {
     can_create_project_log: canWriteProjectLogByPermission &&
       canCreateProjectLogByStage,
     can_access_project_acceptance: canAccessAcceptance,
-    can_manage_project_referral: canUpdateProject,
+    can_view_project_referral: canViewProjectReferral,
+    can_manage_project_referral: canManageProjectReferral,
     scopes: {
       project_update: accessPolicyService.getScope(
         input.authContext,
@@ -83,6 +96,8 @@ export async function buildPermissionsFromKnownData(this: any, input: {
     canAccessAcceptance,
     canCreateAcceptance,
     canManageAcceptance,
+    canViewProjectReferral,
+    canManageProjectReferral,
   ] = await Promise.all([
     this.canAccessKnownProjectByPermission(
       input.authContext,
@@ -121,6 +136,18 @@ export async function buildPermissionsFromKnownData(this: any, input: {
       permissionMembers,
       "project_acceptance.manage",
     ),
+    this.canAccessKnownProjectByOptionalPermission(
+      input.authContext,
+      input.project,
+      permissionMembers,
+      ["project_referral.read", "project_referral.manage"],
+    ),
+    this.canAccessKnownProjectByPermission(
+      input.authContext,
+      input.project,
+      permissionMembers,
+      "project_referral.manage",
+    ),
   ]);
 
   return {
@@ -130,7 +157,8 @@ export async function buildPermissionsFromKnownData(this: any, input: {
     can_manage_project_team: canUpdateProject,
     can_create_project_log: canWriteProjectLogByPermission,
     can_access_project_acceptance: canAccessAcceptance,
-    can_manage_project_referral: canUpdateProject,
+    can_view_project_referral: canViewProjectReferral,
+    can_manage_project_referral: canManageProjectReferral,
     scopes: {
       project_update: accessPolicyService.getScope(
         input.authContext,

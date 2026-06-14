@@ -66,6 +66,7 @@ export type BootstrapPermissions = {
   can_manage_project_team: boolean;
   can_create_project_log: boolean;
   can_access_project_acceptance: boolean;
+  can_view_project_referral: boolean;
   can_manage_project_referral: boolean;
   scopes: {
     project_update: EffectivePermission["scope"] | null;

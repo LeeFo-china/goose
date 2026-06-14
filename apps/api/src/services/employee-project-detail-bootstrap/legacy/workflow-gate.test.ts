@@ -30,6 +30,7 @@ const permissions = {
   can_manage_project_team: false,
   can_create_project_log: true,
   can_access_project_acceptance: true,
+  can_view_project_referral: false,
   can_manage_project_referral: false,
   scopes: {
     project_update: "self",

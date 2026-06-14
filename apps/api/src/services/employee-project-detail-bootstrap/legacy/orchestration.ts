@@ -166,7 +166,10 @@ export async function getBootstrap(this: any, input: {
     next_action: nextAction,
     logs,
     calendar,
-    referral_summary: input.query.include_referral_summary ? null : undefined,
+    referral_summary: input.query.include_referral_summary &&
+        permissions.can_view_project_referral
+      ? null
+      : undefined,
     cameras_summary: input.query.include_cameras_summary ? null : undefined,
     server_time: new Date().toISOString(),
     partial_errors: partialErrors,
