@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  completeWorkflowRuntimeNode,
   fetchWorkflowDefinitions,
   fetchWorkflowRuntimeInstances,
   rebuildWorkflowRuntimeInstance,
@@ -223,20 +222,10 @@ export function ProjectWorkflowRuntimePanel({
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const canComplete = Boolean(
-    workflow?.id &&
-      instance?.id &&
-      instance.status === "running" &&
-      instance.current_node_key,
-  );
   const paymentGate = useMemo(() => getWorkflowPaymentGate(instance), [instance]);
 
   const actionLabel = useMemo(() => {
     if (!instance) return "启动项目流程";
-    if (instance.status === "running" && instance.current_node_key === "start") {
-      return "进入下一节点";
-    }
-    if (instance.status === "running") return "完成当前节点";
     return "重新加载";
   }, [instance]);
 
@@ -304,26 +293,6 @@ export function ProjectWorkflowRuntimePanel({
         loadRuntime();
       } catch (err) {
         setError(err instanceof Error ? err.message : "启动项目流程失败");
-      }
-    });
-  }
-
-  function completeCurrentNode() {
-    if (!workflow || !instance?.id || !instance.current_node_key) return;
-    startTransition(async () => {
-      try {
-        setError("");
-        await completeWorkflowRuntimeNode(workflow.id, instance.id, {
-          node_key: instance.current_node_key || "",
-          action: "complete",
-          output: {
-            project_id: project.id,
-            project_status: project.status,
-          },
-        });
-        loadRuntime();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "推进项目流程失败");
       }
     });
   }
@@ -451,15 +420,7 @@ export function ProjectWorkflowRuntimePanel({
                   {actionLabel}
                 </Button>
               ) : instance.status === "running" ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={pending || !canComplete}
-                  onClick={completeCurrentNode}
-                >
-                  {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                  {actionLabel}
-                </Button>
+                <Badge variant="outline">请通过项目下一步或任务中心处理待办</Badge>
               ) : (
                 <Button type="button" size="sm" variant="outline" disabled={pending} onClick={loadRuntime}>
                   {actionLabel}
