@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2, Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -196,24 +196,6 @@ export function RolePermissionsEditor({
 
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <CardHeader className="shrink-0 border-b bg-muted/20 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-              <KeyRound className="size-4" />
-            </div>
-            <div>
-              <CardTitle className="text-base">权限点配置</CardTitle>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {role.name}，已选择 {selectedCount} 个权限点
-              </div>
-            </div>
-          </div>
-          <Badge variant="outline">
-            {selectedCount}/{permissions.length} 已选
-          </Badge>
-        </div>
-      </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
         <div className="flex h-full min-h-0 flex-col">
           <div className="shrink-0 border-b bg-background p-3">
@@ -258,7 +240,8 @@ export function RolePermissionsEditor({
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>
-                当前显示 {visiblePermissions.length} 项，其中已选 {visibleSelectedCount} 项
+                当前显示 {visiblePermissions.length} 项，其中已选 {visibleSelectedCount} 项；
+                总已选 {selectedCount}/{permissions.length} 项
               </span>
               <div className="flex flex-wrap gap-2">
                 <Button
