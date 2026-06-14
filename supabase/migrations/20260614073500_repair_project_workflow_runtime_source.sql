@@ -5,7 +5,8 @@
 --
 -- Scope:
 -- - Repairs only projects whose business evidence maps unambiguously to a
---   workflow runtime node.
+--   workflow runtime node and whose tenant has an active construction workflow
+--   definition.
 -- - Leaves project 634ff402-ff84-4541-aa7c-3cdcd4fd5460 untouched because it
 --   has all stage acceptances confirmed but no payment records; payment gates
 --   cannot be skipped or synthesized without business confirmation.
@@ -76,9 +77,10 @@ BEGIN
     LIMIT 1;
 
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Active construction workflow definition not found for project % tenant %',
+      RAISE NOTICE 'Active construction workflow definition not found, skip workflow repair: project %, tenant %',
         v_repair.project_id,
         v_project.tenant_id;
+      CONTINUE;
     END IF;
 
     FOR v_running_instance IN
