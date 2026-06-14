@@ -115,19 +115,22 @@ test.describe("admin smoke", () => {
     await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
   });
 
-  test("角色权限配置弹窗可打开", async ({ page }) => {
+  test("角色权限配置页可打开", async ({ page }) => {
     await gotoAdminPage(page, "/roles");
 
     await expect(page.getByRole("heading", { name: "角色管理" })).toBeVisible();
     await expect(page.getByText("角色列表")).toBeVisible();
 
-    const permissionButton = page.getByRole("button", { name: "权限" }).first();
-    if (await permissionButton.count()) {
-      await expect(permissionButton).toBeVisible();
-      await permissionButton.click();
-      const dialog = page.getByRole("dialog").filter({ hasText: "配置角色权限" });
-      await expect(dialog).toBeVisible();
-      await expect(dialog.getByRole("button", { name: "保存权限" })).toBeVisible();
+    const permissionLink = page.getByRole("table").getByRole("link", {
+      name: "权限",
+      exact: true,
+    }).first();
+    if (await permissionLink.count()) {
+      await expect(permissionLink).toBeVisible();
+      await permissionLink.click();
+      await expect(page).toHaveURL(/\/roles\/[^/?]+\/permissions$/);
+      await expect(page.getByRole("heading", { name: "配置角色权限" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "保存权限" })).toBeVisible();
     } else {
       await expect(page.getByText("还没有创建角色")).toBeVisible();
     }

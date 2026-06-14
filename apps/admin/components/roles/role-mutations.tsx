@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Edit3, KeyRound, Loader2, Plus, Shield } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -22,8 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  accessScopeOptions,
-  normalizeAccessScope,
   normalizeRoleStatus,
   requestRoleJson,
   roleStatusOptions,
@@ -31,7 +30,6 @@ import {
   type RoleRecord,
   type RoleStatus,
 } from "@/components/roles/role-mutation-shared";
-import { RolePermissionsDialog } from "@/components/roles/role-permissions-dialog";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 export type { RoleRecord } from "@/components/roles/role-mutation-shared";
@@ -192,18 +190,14 @@ export function CreateRoleButton() {
 
 export function RoleRowActions({ role }: { role: RoleRecord }) {
   const [editOpen, setEditOpen] = useState(false);
-  const [permissionsOpen, setPermissionsOpen] = useState(false);
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => setPermissionsOpen(true)}
-      >
-        <KeyRound />
-        权限
+      <Button asChild variant="outline" size="sm">
+        <Link href={`/roles/${role.id}/permissions`}>
+          <KeyRound />
+          权限
+        </Link>
       </Button>
       <Button
         type="button"
@@ -219,11 +213,6 @@ export function RoleRowActions({ role }: { role: RoleRecord }) {
         role={role}
         open={editOpen}
         onOpenChange={setEditOpen}
-      />
-      <RolePermissionsDialog
-        role={role}
-        open={permissionsOpen}
-        onOpenChange={setPermissionsOpen}
       />
     </div>
   );
