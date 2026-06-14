@@ -16,6 +16,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
 import { isProjectLogStageCode } from "@gooes/domain";
@@ -108,6 +109,25 @@ class ProjectLogService {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     if (!input.authContext.employeeId) {
       throw Errors.forbidden();
+    }
+    const project = await measureProjectLogCreateStep(
+      timings,
+      "guard_ms",
+      () => this.getRequiredProject({ projectId: input.payload.project_id, tenantId }),
+    );
+    projectStatusService.assertCanCreateProjectLog(project);
+    const stageCode = isProjectLogStageCode(input.payload.stage_code) ? input.payload.stage_code : null;
+    if (stageCode) {
+      await measureProjectLogCreateStep(
+        timings,
+        "workflow_guard_ms",
+        () => assertProjectWorkflowStageMutationAllowed({
+          tenantId,
+          projectId: project.id,
+          stageCode,
+          mutation: "create_project_log",
+        }),
+      );
     }
 
     const row = await measureProjectLogCreateStep(

@@ -31,6 +31,7 @@ import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
@@ -216,6 +217,23 @@ export async function customerConfirmAcceptance(this: any,
       currentStatus: row.status,
       action: "customer_confirm",
     });
+    if (isProjectLogStageCode(row.stage_code)) {
+      const tenantId = row.tenant_id ?? scope?.tenantId ?? null;
+      if (!tenantId) {
+        throw Errors.business(
+          409,
+          "流程运行态不可用，不能确认验收",
+          ErrorCodes.WORKFLOW_PROGRESS_CONFLICT,
+          { acceptance_id: row.id, project_id: row.project_id },
+        );
+      }
+      await assertProjectWorkflowStageMutationAllowed({
+        tenantId,
+        projectId: row.project_id,
+        stageCode: row.stage_code,
+        mutation: "customer_confirm_acceptance",
+      });
+    }
 
     const now = new Date().toISOString();
     const nextRow = await projectAcceptanceRepository.updateAcceptance(row.id, {

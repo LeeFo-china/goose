@@ -31,6 +31,7 @@ import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
@@ -224,6 +225,12 @@ export async function createAcceptance(this: any,
       await this.assertCanCreateFinalAcceptanceForProject(project);
     } else {
       projectStatusService.assertCanCreateProjectAcceptance(project);
+      await assertProjectWorkflowStageMutationAllowed({
+        tenantId,
+        projectId: project.id,
+        stageCode: input.stage_code,
+        mutation: "create_stage_acceptance",
+      });
       await constructionStageStatusService.assertCanCreateAcceptance({
         project,
         stageCode: input.stage_code,
