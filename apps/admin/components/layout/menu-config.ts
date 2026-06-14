@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   TerminalSquare,
   Users,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -74,6 +75,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     items: [
       { href: "/dashboard", label: "概览", icon: LayoutDashboard },
       { href: "/customers", label: "客户", icon: Users },
+      {
+        href: "/wechat-rebind-requests",
+        label: "微信换绑",
+        icon: RefreshCw,
+        permission: "customer.update",
+      },
       { href: "/customer-service", label: "客服问题", icon: MessageSquareWarning },
       { href: "/projects", label: "项目", icon: BriefcaseBusiness },
       {

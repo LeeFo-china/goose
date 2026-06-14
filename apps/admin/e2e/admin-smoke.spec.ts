@@ -115,6 +115,17 @@ test.describe("admin smoke", () => {
     await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
   });
 
+  test("微信换绑审核页可打开", async ({ page }) => {
+    await gotoAdminPage(page, "/wechat-rebind-requests");
+
+    await expect(page.getByRole("heading", { name: "微信换绑审核" })).toBeVisible();
+    await expect(page.getByText("换绑申请列表")).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "申请人" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "目标身份" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "操作" })).toBeVisible();
+  });
+
   test("角色权限配置页可打开", async ({ page }) => {
     await gotoAdminPage(page, "/roles");
 
