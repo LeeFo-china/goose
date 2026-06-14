@@ -18,6 +18,7 @@ function workflowProgress(
     current_business_kind: "procedure_template",
     current_stage_code: "plumbing_electrical",
     current_gate: null,
+    timeline_nodes: [],
     pending_task_count: 1,
     actions: [],
     warnings: [],

@@ -60,6 +60,7 @@ function workflowProgress(
     current_business_kind: "procedure_template",
     current_stage_code: "plumbing_electrical",
     current_gate: null,
+    timeline_nodes: [],
     pending_task_count: 1,
     actions: [],
     warnings: [],
@@ -98,6 +99,7 @@ describe("buildProjectConstructionStagesFromRows", () => {
 
     expect(result.current_stage).not.toBe("tiling");
     expect(result.current_stage).toBeNull();
+    expect(result.next_stage).toBeNull();
     expect(tiling?.status).toBe("locked");
     expect(tiling?.blocked_reason).toContain("中期进度款");
   });

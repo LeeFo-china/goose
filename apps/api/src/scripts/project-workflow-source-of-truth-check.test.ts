@@ -100,4 +100,22 @@ describe("buildProjectWorkflowSourceReport", () => {
       issues: [],
     });
   });
+
+  test("does not treat a payment gate as the next construction stage", () => {
+    const report = buildProjectWorkflowSourceReport({
+      ...knownMismatchSnapshot,
+      workflowCurrentNodeKey: "payment_stage_2",
+      workflowCurrentNodeTitle: "中期进度款",
+      constructionStagesCurrentStage: null,
+      completedRuntimeProcedureStageCodes: ["demolition", "plumbing_electrical"],
+      confirmedPaymentTypes: [],
+    }, "2026-06-14T00:00:00.000Z");
+
+    expect(report).toMatchObject({
+      ok: true,
+      workflow_current_node_key: "payment_stage_2",
+      construction_stages_current_stage: null,
+      issues: [],
+    });
+  });
 });

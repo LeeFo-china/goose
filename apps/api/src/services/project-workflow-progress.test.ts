@@ -103,6 +103,29 @@ describe("buildProjectWorkflowProgressProjection", () => {
         blocked_stage_label: "瓦工",
       },
     });
+    expect(progress.timeline_nodes).toEqual([
+      {
+        node_key: "procedure_plumbing_electrical",
+        node_title: "水电",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        status: "pending",
+      },
+      {
+        node_key: "payment_stage_2",
+        node_title: "中期进度款",
+        node_type: "confirmation",
+        business_kind: "payment_collection",
+        status: "current",
+      },
+      {
+        node_key: "procedure_tiling",
+        node_title: "瓦工",
+        node_type: "procedure",
+        business_kind: "procedure_template",
+        status: "pending",
+      },
+    ]);
   });
 
   test("returns missing_runtime without guessing when runtime is absent", () => {
@@ -121,6 +144,7 @@ describe("buildProjectWorkflowProgressProjection", () => {
       current_business_kind: null,
       current_stage_code: null,
       current_gate: null,
+      timeline_nodes: [],
       pending_task_count: 0,
       actions: [],
       warnings: [],
@@ -151,12 +175,44 @@ describe("buildProjectWorkflowProgressProjection", () => {
     });
   });
 
+  test("marks completed runtime nodes as done in workflow timeline", () => {
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期进度款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_snapshot: graph.nodes[1],
+      },
+      graph,
+      completedNodeKeys: ["procedure_plumbing_electrical"],
+      pendingActions: [],
+    });
+
+    expect(progress.timeline_nodes.map((node) => ({
+      node_key: node.node_key,
+      status: node.status,
+    }))).toEqual([
+      { node_key: "procedure_plumbing_electrical", status: "done" },
+      { node_key: "payment_stage_2", status: "current" },
+      { node_key: "procedure_tiling", status: "pending" },
+    ]);
+  });
+
   test("builds an unavailable progress object without guessing stage state", () => {
     expect(buildUnavailableProjectWorkflowProgress()).toMatchObject({
       source: "unavailable",
       current_node_key: null,
       current_stage_code: null,
       current_gate: null,
+      timeline_nodes: [],
       pending_task_count: 0,
       actions: [],
       warnings: [],
@@ -204,6 +260,29 @@ describe("buildProjectWorkflowProgressProjection", () => {
         blocked_stage_code: "tiling",
         blocked_stage_label: "瓦工",
       },
+      timeline_nodes: [
+        {
+          node_key: "procedure_plumbing_electrical",
+          node_title: "水电",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          status: "pending",
+        },
+        {
+          node_key: "payment_stage_2",
+          node_title: "中期进度款",
+          node_type: "confirmation",
+          business_kind: "payment_collection",
+          status: "current",
+        },
+        {
+          node_key: "procedure_tiling",
+          node_title: "瓦工",
+          node_type: "procedure",
+          business_kind: "procedure_template",
+          status: "pending",
+        },
+      ],
       pending_task_count: 1,
     });
   });

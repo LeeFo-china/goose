@@ -4,7 +4,6 @@ import {
   buildProjectWorkflowSourceBatchReport,
   buildProjectWorkflowSourceReport,
   readString,
-  resolveLegacyConstructionStagesCurrentStage,
   resolveProjectWorkflowSourceCheckConfig,
   resolveRuntimeStageCode,
   type ProjectWorkflowSourceCheckConfig,
@@ -126,14 +125,16 @@ async function loadProjectWorkflowSourceSnapshot(
       instance ? loadWorkflowGraph(supabase, instance.definition_id) : null,
     ]);
 
+  const workflowCurrentNodeKey = instance?.current_node_key ??
+    state?.current_node_key ?? null;
+
   return {
     projectId,
-    workflowCurrentNodeKey: instance?.current_node_key ??
-      state?.current_node_key ?? null,
+    workflowCurrentNodeKey,
     workflowCurrentNodeTitle: readString(instance?.current_node_snapshot?.title) ??
       state?.current_node_title ?? null,
     constructionStagesCurrentStage:
-      resolveLegacyConstructionStagesCurrentStage(acceptedStages),
+      resolveRuntimeStageCode(workflowCurrentNodeKey, instance?.current_node_snapshot),
     acceptedStageCodes: acceptedStages,
     completedRuntimeProcedureStageCodes: completedStages,
     confirmedPaymentTypes: confirmedPayments,

@@ -22,6 +22,14 @@ export type ProjectWorkflowProgressWarning = {
   message: string;
 };
 
+export type WorkflowTimelineNode = {
+  node_key: string;
+  node_title: string;
+  node_type: string | null;
+  business_kind: WorkflowBusinessKind | string | null;
+  status: "done" | "current" | "pending" | "blocked";
+};
+
 export type ProjectWorkflowProgress = {
   source: WorkflowProgressSource;
   instance_id: string | null;
@@ -32,6 +40,7 @@ export type ProjectWorkflowProgress = {
   current_business_kind: WorkflowBusinessKind | string | null;
   current_stage_code: string | null;
   current_gate: ProjectWorkflowProgressGate | null;
+  timeline_nodes: WorkflowTimelineNode[];
   pending_task_count: number;
   actions: Array<Record<string, unknown>>;
   warnings: ProjectWorkflowProgressWarning[];
@@ -81,6 +90,7 @@ type BuildProjectWorkflowProgressProjectionInput = {
   subjectState: SubjectStateInput | null;
   runtimeInstance: RuntimeInstanceInput | null;
   graph: WorkflowProgressGraph | null;
+  completedNodeKeys?: string[];
   pendingActions: Array<Record<string, unknown>>;
 };
 
@@ -135,6 +145,11 @@ export function buildProjectWorkflowProgressProjection(
     current_gate: currentBusinessKind === "payment_collection"
       ? buildPaymentGate(currentNode, input.graph)
       : null,
+    timeline_nodes: buildWorkflowTimelineNodes({
+      graph: input.graph,
+      currentNodeKey,
+      completedNodeKeys: input.completedNodeKeys ?? [],
+    }),
     pending_task_count: input.subjectState?.pending_task_count ??
       input.pendingActions.length,
     actions: input.pendingActions,
@@ -176,7 +191,7 @@ class ProjectWorkflowProgressService {
       });
     }
 
-    const [graph, pendingTasks] = await Promise.all([
+    const [graph, pendingTasks, runtimeNodes] = await Promise.all([
       workflowRepository.getGraph({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
@@ -184,6 +199,11 @@ class ProjectWorkflowProgressService {
       }),
       workflowTaskRepository.listPendingByInstance({
         tenantId: input.tenantId,
+        instanceId: runtimeInstance.id,
+      }),
+      workflowRepository.listRuntimeInstanceNodes({
+        tenantId: input.tenantId,
+        definitionId: runtimeInstance.definition_id,
         instanceId: runtimeInstance.id,
       }),
     ]);
@@ -197,6 +217,9 @@ class ProjectWorkflowProgressService {
           edges: graph.edges,
         }
         : null,
+      completedNodeKeys: runtimeNodes
+        .filter((node) => node.status === "completed")
+        .map((node) => node.node_key),
       pendingActions: pendingTasks.flatMap((task) =>
         buildWorkflowTaskActions({
           subjectType: "project",
@@ -229,6 +252,7 @@ function missingRuntimeProgress(
     current_business_kind: null,
     current_stage_code: null,
     current_gate: null,
+    timeline_nodes: [],
     pending_task_count: 0,
     actions,
     warnings: [],
@@ -246,6 +270,7 @@ export function buildUnavailableProjectWorkflowProgress(): ProjectWorkflowProgre
     current_business_kind: null,
     current_stage_code: null,
     current_gate: null,
+    timeline_nodes: [],
     pending_task_count: 0,
     actions: [],
     warnings: [],
@@ -265,8 +290,32 @@ export function toCustomerProjectWorkflowProgress(
     current_business_kind: progress.current_business_kind,
     current_stage_code: progress.current_stage_code,
     current_gate: progress.current_gate,
+    timeline_nodes: progress.timeline_nodes,
     pending_task_count: progress.pending_task_count,
   };
+}
+
+export function buildWorkflowTimelineNodes(input: {
+  graph: WorkflowProgressGraph | null;
+  currentNodeKey: string | null;
+  completedNodeKeys?: string[];
+}): WorkflowTimelineNode[] {
+  if (!input.graph) return [];
+
+  const completedNodeKeys = new Set(input.completedNodeKeys ?? []);
+  return orderWorkflowTimelineGraphNodes(input.graph)
+    .filter((node) => node.node_type !== "start" && node.node_type !== "end")
+    .map((node) => ({
+      node_key: node.node_key,
+      node_title: node.title,
+      node_type: node.node_type,
+      business_kind: node.business_kind,
+      status: resolveTimelineNodeStatus({
+        nodeKey: node.node_key,
+        currentNodeKey: input.currentNodeKey,
+        completedNodeKeys,
+      }),
+    }));
 }
 
 function resolveCurrentNode(
@@ -312,6 +361,67 @@ function buildPaymentGate(
       ? STAGE_LABELS[blockedStageCode] ?? blockedStageCode
       : null,
   };
+}
+
+function orderWorkflowTimelineGraphNodes(
+  graph: WorkflowProgressGraph,
+): WorkflowProgressGraphNode[] {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const incomingIds = new Set(graph.edges.map((edge) => edge.target_node_id));
+  const outgoingEdges = new Map<string, WorkflowProgressGraphEdge[]>();
+
+  for (const edge of graph.edges) {
+    const edges = outgoingEdges.get(edge.source_node_id) ?? [];
+    edges.push(edge);
+    outgoingEdges.set(edge.source_node_id, edges);
+  }
+
+  const explicitStartNodes = graph.nodes.filter((node) => node.node_type === "start");
+  const inferredStartNodes = graph.nodes.filter((node) => !incomingIds.has(node.id));
+  const startNodes = explicitStartNodes.length > 0
+    ? explicitStartNodes
+    : inferredStartNodes.length > 0
+      ? inferredStartNodes
+      : graph.nodes;
+  const ordered: WorkflowProgressGraphNode[] = [];
+  const visitedNodeIds = new Set<string>();
+
+  const visit = (node: WorkflowProgressGraphNode) => {
+    if (visitedNodeIds.has(node.id)) return;
+    visitedNodeIds.add(node.id);
+    ordered.push(node);
+
+    for (const edge of outgoingEdges.get(node.id) ?? []) {
+      const targetNode = nodeById.get(edge.target_node_id);
+      if (targetNode) visit(targetNode);
+    }
+  };
+
+  for (const node of startNodes) {
+    visit(node);
+  }
+
+  if (explicitStartNodes.length === 0 && inferredStartNodes.length === 0) {
+    for (const node of graph.nodes) {
+      visit(node);
+    }
+  }
+
+  return ordered;
+}
+
+function resolveTimelineNodeStatus(input: {
+  nodeKey: string;
+  currentNodeKey: string | null;
+  completedNodeKeys: Set<string>;
+}): WorkflowTimelineNode["status"] {
+  if (input.currentNodeKey && input.nodeKey === input.currentNodeKey) {
+    return "current";
+  }
+  if (input.completedNodeKeys.has(input.nodeKey)) {
+    return "done";
+  }
+  return "pending";
 }
 
 function buildWarnings(

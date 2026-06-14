@@ -181,6 +181,7 @@ class WorkflowSubjectStateRepository {
       .eq("tenant_id", input.tenantId)
       .eq("subject_type", input.subjectType)
       .eq("subject_id", input.subjectId)
+      .eq("status", "running")
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();

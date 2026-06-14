@@ -326,10 +326,11 @@ function resolveWorkflowNextStage(
     return null;
   }
 
-  const blockedStage = normalizeStageCode(
-    workflowProgress.current_gate?.blocked_stage_code,
-  );
-  const stageCode = blockedStage ?? resolveWorkflowCurrentStage(workflowProgress);
+  if (workflowProgress.current_gate) {
+    return null;
+  }
+
+  const stageCode = resolveWorkflowCurrentStage(workflowProgress);
   if (!stageCode) return null;
 
   return stages.find((item) => item.stage_code === stageCode) ?? null;

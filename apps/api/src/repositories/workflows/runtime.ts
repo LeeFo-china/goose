@@ -123,6 +123,45 @@ export async function listCompletedRuntimeProcedureNodes(input: {
   return (data ?? []) as WorkflowInstanceNodeRow[];
 }
 
+export async function listRuntimeInstanceNodes(input: {
+  tenantId: string;
+  definitionId: string;
+  instanceId: string;
+}): Promise<WorkflowInstanceNodeRow[]> {
+  const { data, error } = await workflowTable("workflow_instance_nodes")
+    .select([
+      "id",
+      "tenant_id",
+      "instance_id",
+      "definition_id",
+      "version_id",
+      "node_id",
+      "node_key",
+      "node_type",
+      "node_snapshot",
+      "status",
+      "input",
+      "output",
+      "started_by",
+      "completed_by",
+      "started_at",
+      "completed_at",
+      "created_at",
+      "updated_at",
+    ].join(", "))
+    .eq("tenant_id", input.tenantId)
+    .eq("definition_id", input.definitionId)
+    .eq("instance_id", input.instanceId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+
+  if (error) {
+    throw Errors.dbError("查询流程实例节点失败", error);
+  }
+
+  return (data ?? []) as WorkflowInstanceNodeRow[];
+}
+
 export async function startRuntimeInstance(
   input: WorkflowRuntimeStartInput,
 ): Promise<WorkflowRuntimeStartResult> {

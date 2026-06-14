@@ -24,6 +24,7 @@ import {
   completeRuntimeNode,
   getRuntimeInstanceById,
   listCompletedRuntimeProcedureNodes,
+  listRuntimeInstanceNodes,
   listRuntimeInstances,
   rebuildRuntimeInstance,
   startRuntimeInstance,
@@ -50,6 +51,7 @@ class WorkflowRepository {
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
   listCompletedRuntimeProcedureNodes = listCompletedRuntimeProcedureNodes;
+  listRuntimeInstanceNodes = listRuntimeInstanceNodes;
   startRuntimeInstance = startRuntimeInstance;
   completeRuntimeNode = completeRuntimeNode;
   cancelRuntimeInstance = cancelRuntimeInstance;

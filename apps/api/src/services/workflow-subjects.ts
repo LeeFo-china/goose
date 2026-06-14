@@ -11,7 +11,11 @@ import {
   buildWorkflowTaskActions,
   type WorkflowTaskActionMetadata,
 } from "@/services/workflow-task-action-metadata";
+import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
+import { workflowRepository } from "@/repositories/workflows";
+import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
 
 class WorkflowSubjectsService {
   async getState(
@@ -27,21 +31,30 @@ class WorkflowSubjectsService {
 
     if (!state?.instance_id) {
       return {
-        workflow_state: this.serializeState(state, []),
+        workflow_state: this.serializeState(state, [], []),
       };
     }
 
-    const tasks = await workflowTaskRepository.listAccessibleTasks({
-      tenantId,
-      employeeId: authContext.employeeId,
-      roleCodes: authContext.roleCodes,
-      permissionCodes: authContext.permissions.map((permission) => permission.code),
-      status: "pending",
-      subjectType: params.subjectType,
-      subjectId: params.subjectId.trim(),
-      page: 1,
-      pageSize: 100,
-    });
+    const [tasks, timelineNodes] = await Promise.all([
+      workflowTaskRepository.listAccessibleTasks({
+        tenantId,
+        employeeId: authContext.employeeId,
+        roleCodes: authContext.roleCodes,
+        permissionCodes: authContext.permissions.map((permission) =>
+          permission.code
+        ),
+        status: "pending",
+        subjectType: params.subjectType,
+        subjectId: params.subjectId.trim(),
+        page: 1,
+        pageSize: 100,
+      }),
+      this.loadProjectTimelineNodes({
+        tenantId,
+        subjectType: params.subjectType,
+        subjectId: params.subjectId.trim(),
+      }),
+    ]);
 
     return {
       workflow_state: this.serializeState(
@@ -61,6 +74,7 @@ class WorkflowSubjectsService {
             disabled: false,
           }))
         ),
+        timelineNodes,
       ),
     };
   }
@@ -105,6 +119,7 @@ class WorkflowSubjectsService {
       node_type: string;
       disabled: boolean;
     }>,
+    timelineNodes: WorkflowTimelineNode[],
   ) {
     if (!state) {
       return null;
@@ -120,7 +135,51 @@ class WorkflowSubjectsService {
       current_business_kind: state.current_business_kind,
       pending_task_count: state.pending_task_count,
       actions,
+      timeline_nodes: timelineNodes,
     };
+  }
+
+  private async loadProjectTimelineNodes(input: {
+    tenantId: string;
+    subjectType: string;
+    subjectId: string;
+  }): Promise<WorkflowTimelineNode[]> {
+    if (input.subjectType !== "project") return [];
+
+    const runtimeInstance = await workflowSubjectStateRepository
+      .findLatestRuntimeInstance({
+        tenantId: input.tenantId,
+        subjectType: "project",
+        subjectId: input.subjectId,
+      });
+
+    if (!runtimeInstance) return [];
+
+    const [graph, runtimeNodes] = await Promise.all([
+      workflowRepository.getGraph({
+        tenantId: input.tenantId,
+        definitionId: runtimeInstance.definition_id,
+        versionId: runtimeInstance.version_id,
+      }),
+      workflowRepository.listRuntimeInstanceNodes({
+        tenantId: input.tenantId,
+        definitionId: runtimeInstance.definition_id,
+        instanceId: runtimeInstance.id,
+      }),
+    ]);
+
+    return buildWorkflowTimelineNodes({
+      graph: graph
+        ? {
+          nodes: graph.nodes,
+          edges: graph.edges,
+        }
+        : null,
+      currentNodeKey: runtimeInstance.current_node_key,
+      completedNodeKeys: runtimeNodes
+        .filter((node) => node.status === "completed")
+        .map((node) => node.node_key),
+    });
   }
 
   private assertTenantId(authContext: AuthContext): string {
