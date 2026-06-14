@@ -25,6 +25,8 @@ export type PermissionRecord = {
   code: string;
   name: string | null;
   module: string;
+  resource: string;
+  action: string;
   description: string | null;
   access_scope?: AccessScope | string;
 };
@@ -61,4 +63,3 @@ export function normalizeAccessScope(value: AccessScope | string | undefined) {
 export async function requestRoleJson<T>(path: string, init?: RequestInit) {
   return requestBackendJson<T>(path, init);
 }
-
