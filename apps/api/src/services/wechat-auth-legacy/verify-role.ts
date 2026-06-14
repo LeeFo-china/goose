@@ -295,10 +295,8 @@ export async function createWechatRebindRequest(this: any, request: FastifyReque
     throw Errors.fromZod(bodyResult.error);
   }
 
-  const data = await wechatRebindRequestService.create(
-    request.user?.sub,
-    bodyResult.data,
-  );
+  const authUserId = await this.getAuthUserIdForRoleVerification(request);
+  const data = await wechatRebindRequestService.create(authUserId, bodyResult.data);
   return ResponseHandler.success(data, "换绑申请已提交，请等待工作人员审核");
 }
 

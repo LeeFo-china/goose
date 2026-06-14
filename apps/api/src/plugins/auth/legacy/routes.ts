@@ -197,6 +197,10 @@ export function isVisitorSessionRoute(method: string, url: string) {
     return true;
   }
 
+  if (method === "POST" && url === "/auth/wechat-rebind-requests") {
+    return true;
+  }
+
   if (
     (method === "GET" || method === "HEAD")
     && (url === "/front/projects" || url.startsWith("/front/projects/"))
