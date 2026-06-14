@@ -81,19 +81,23 @@ export async function getBootstrap(this: any, input: {
   const tenantId = typeof project.tenant_id === "string"
     ? project.tenant_id
     : input.authContext.tenantId;
-  const workflowProgress = await this.loadOptional(
-    "workflow_progress",
-    () => tenantId
-      ? projectWorkflowProgressService.getProjectProgress({
-        tenantId,
-        projectId,
-        authContext: input.authContext,
-      })
-      : Promise.resolve(buildUnavailableProjectWorkflowProgress()),
-    buildUnavailableProjectWorkflowProgress(),
-    partialErrors,
-    timings,
+  const workflowProgress = await this.measure(
     "workflow_progress_ms",
+    timings,
+    async () => {
+      try {
+        return tenantId
+          ? await projectWorkflowProgressService.getProjectProgress({
+            tenantId,
+            projectId,
+            authContext: input.authContext,
+          })
+          : buildUnavailableProjectWorkflowProgress();
+      } catch (error) {
+        partialErrors.push(this.toPartialError("workflow_progress", error));
+        return buildUnavailableProjectWorkflowProgress();
+      }
+    },
   );
 
   const [constructionStages, logs, calendar] =
