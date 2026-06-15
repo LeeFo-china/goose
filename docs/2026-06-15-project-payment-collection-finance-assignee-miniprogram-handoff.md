@@ -25,8 +25,8 @@ GET /projects/:projectId/employee-detail-bootstrap
 GET /workflow-subjects/project/:projectId/state
 ```
 
-当当前登录员工是指定财务员工，且当前项目已有满足节点规则的 confirmed 收款记录时，
-`workflow_state.actions` 会包含可执行收款 action：
+当当前登录员工是指定财务员工时，`workflow_state.actions` 会包含可执行收款
+action。指定财务点击确认收款，即表示确认该收款门禁并推进 workflow：
 
 ```json
 {
@@ -52,37 +52,6 @@ GET /workflow-subjects/project/:projectId/state
 }
 ```
 
-当当前登录员工是指定财务员工，但还没有满足节点规则的 confirmed 收款记录时，
-后端会返回 disabled action 和稳定阻断原因：
-
-```json
-{
-  "key": "complete",
-  "label": "中期进度款",
-  "task_id": "workflow-task-id",
-  "node_key": "payment_stage_2",
-  "node_type": "confirmation",
-  "business_domain": "payment_collection",
-  "business_action": "confirm_payment",
-  "disabled": true,
-  "disabled_reason": "请先确认中期进度款已入账后再进入瓦工",
-  "blocked_reason": "请先确认中期进度款已入账后再进入瓦工",
-  "output_fields": [
-    {
-      "name": "payment_status",
-      "label": "中期进度款",
-      "type": "payment_collection",
-      "required": true,
-      "payment_type": "stage_2",
-      "payment_label": "中期进度款",
-      "requirement_mode": "any_confirmed"
-    }
-  ]
-}
-```
-
-小程序不得渲染可提交按钮或 chip，应展示 `disabled_reason` / `blocked_reason`。
-
 当当前登录员工不是指定财务员工时，仍然可以看到 workflow timeline 当前节点是
 `payment_stage_2 / 中期进度款`，但后端不会返回可执行的“确认收款” action。
 为了让小程序展示“正在等待财务 xxx 审核”，当前 timeline node 会返回处理人字段：
@@ -103,9 +72,8 @@ GET /workflow-subjects/project/:projectId/state
 }
 ```
 
-当当前登录员工就是指定财务员工时，后端返回的 action 也会携带同样字段。
-若 `disabled = true`，小程序展示阻断原因；若 `disabled = false`，小程序可以据此
-显示“待你确认收款”。
+当当前登录员工就是指定财务员工时，后端返回的 action 也会携带同样字段，
+并保持 `disabled = false`。小程序可以据此显示“待你确认收款”。
 
 ### 任务中心
 
@@ -122,10 +90,8 @@ GET /workflow-tasks?page=1&pageSize=20
 - 未指定员工、但命中 `assignee_role_code`：返回任务。
 - 已指定其他员工：即使当前员工有权限码或角色，也不返回任务。
 
-任务返回后，`actions[]` 仍会按收款事实判断是否可执行：
-
-- 缺少对应 `payment_type + confirmed` 收款记录：`disabled = true`。
-- 已有满足节点规则的 confirmed 收款记录：`disabled = false`。
+任务返回后，`payment_collection` action 不再按是否已有 confirmed 收款记录
+标记 disabled。可执行性只由后端 assignee 过滤和 task 状态控制。
 
 ### 完成收款任务
 
@@ -155,30 +121,12 @@ POST /workflow-tasks/:taskId/complete
 - task 存在且 `status = pending`。
 - 当前员工有权处理该 task。
 - 当前 runtime node 仍是该 task 对应节点。
-- 当前项目存在满足节点配置的 confirmed 收款记录。
+- `payment_status = "success"` 表示指定财务确认该收款门禁通过。
 
-中期进度款典型校验条件：
-
-```text
-payments.project_id = 当前项目
-payments.type = "stage_2"
-payments.status = "confirmed"
-```
-
-未满足时返回：
-
-```http
-409
-```
-
-```json
-{
-  "code": "WORKFLOW_PAYMENT_COLLECTION_BLOCKED",
-  "message": "中期进度款尚未确认入账"
-}
-```
-
-小程序展示后端 `message`，保持当前节点不变，不做本地推进。
+后端不再要求 complete 前已经存在
+`payments.type = "stage_2" && payments.status = "confirmed"` 的收款记录。
+如果后续需要完整财务入账审计，应由财务系统或后端 action 成功后的写入逻辑
+补齐，不作为该 workflow gate 的前置条件。
 
 ## 小程序需要检查的文件
 
@@ -266,11 +214,8 @@ if (!projectId || !project || !canManageProject) return;
   `workflowAction`，允许提交。
 - 项目旧状态动作、排期开工、签约等仍按原项目管理权限判断。
 
-换句话说：`payment_collection` 的可执行性以
-`workflow_state.actions[]` 中对应 action 的 `disabled` 为准：
-
-- `disabled = true`：只展示阻断原因，不提交 complete。
-- `disabled = false`：允许提交 complete。
+换句话说：只要后端返回 `payment_collection` action，且 `disabled = false`，
+小程序就允许提交 complete。
 
 ## 不需要小程序做的事
 
@@ -297,8 +242,8 @@ payment_stage_2 / 中期进度款
 - 任务中心显示项目收款任务。
 - 点击任务进入项目详情。
 - 项目详情 timeline 当前节点显示“中期进度款”。
-- 未入账时，项目详情展示阻断原因，不显示可点击“确认收款”按钮。
-- 入账后，项目详情显示“确认收款”按钮。
+- 项目详情显示“确认收款”按钮。
+- 点击后 complete 成功，workflow 推进到下一节点。
 
 ### 非指定员工登录
 
@@ -306,16 +251,8 @@ payment_stage_2 / 中期进度款
 - 项目详情不显示“确认收款”按钮。
 - 任务中心不出现该收款 task。
 
-### 未确认入账时点击确认
+### 点击确认收款
 
-- `POST /workflow-tasks/:taskId/complete` 返回
-  `WORKFLOW_PAYMENT_COLLECTION_BLOCKED`。
-- 小程序展示后端 `message`。
-- workflow 仍停留在“中期进度款”。
-
-### 已确认入账后点击确认
-
-- 后端已有 `stage_2 + confirmed` 收款记录。
 - 指定财务员工点击“确认收款”。
 - complete 成功。
 - 小程序刷新项目详情和任务中心。
@@ -328,10 +265,8 @@ gooes 已完成：
 - `workflow_tasks.assignee_employee_id` 投影指定财务员工。
 - `/workflow-tasks` 按 assignee 过滤。
 - `workflow_state.actions` 复用 `/workflow-tasks` 的可见任务。
-- `payment_collection` action 下发前按 confirmed 收款事实标记
-  `disabled` / `disabled_reason`，避免未入账时形成可点击 409 循环。
-- complete 时继续校验 confirmed 收款记录，不满足返回
-  `WORKFLOW_PAYMENT_COLLECTION_BLOCKED`。
+- 指定财务可见的 `payment_collection` action 保持可执行。
+- `payment_collection` success complete 不再要求已有 confirmed 收款记录。
 - migration `20260615090000_project_payment_task_finance_assignee.sql` 已应用到远端。
 
 注意：如果 admin 工作流节点里的 `finance_reviewer_employee_id` 是占位 UUID

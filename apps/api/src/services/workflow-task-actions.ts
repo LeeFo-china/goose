@@ -1,7 +1,6 @@
 import type {
   WorkflowTaskWithInstanceRow,
 } from "@/repositories/workflow-tasks";
-import { getPaymentCollectionCompletionBlock } from "@/services/workflow-runtime-guards";
 import {
   buildWorkflowTaskActions,
   type WorkflowTaskActionMetadata,
@@ -53,39 +52,9 @@ export async function buildWorkflowTaskActionsForTask(input: {
     ...buildWorkflowTaskAssigneeMetadata(input.task),
   };
 
-  if (
-    input.subjectType !== "project" ||
-    !input.task.instance?.subject_id ||
-    !actions.some((action) => action.business_domain === "payment_collection")
-  ) {
-    return actions.map((action) => ({
-      ...action,
-      ...basePayload,
-      disabled: false,
-    }));
-  }
-
-  const block = await getPaymentCollectionCompletionBlock({
-    nodeSnapshot: input.task.instance.current_node_snapshot,
-    projectId: input.task.instance.subject_id,
-  });
-
-  return actions.map((action) => {
-    if (action.business_domain !== "payment_collection" || !block.blocked) {
-      return {
-        ...action,
-        ...basePayload,
-        disabled: false,
-      };
-    }
-
-    const blockMessage = block.message || "请先确认收款后再推进流程";
-    return {
-      ...action,
-      ...basePayload,
-      disabled: true,
-      disabled_reason: blockMessage,
-      blocked_reason: blockMessage,
-    };
-  });
+  return actions.map((action) => ({
+    ...action,
+    ...basePayload,
+    disabled: false,
+  }));
 }

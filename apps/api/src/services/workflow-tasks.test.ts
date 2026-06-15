@@ -58,22 +58,10 @@ const listAccessibleTasks = mock(async () => ({
   },
 }));
 
-const summarizeConfirmedProjectPayments = mock(async () => ({
-  count: 0,
-  totalAmount: 0,
-}));
-
 mock.module("@/repositories/workflow-tasks", () => ({
   workflowTaskRepository: {
     findById,
     listAccessibleTasks,
-  },
-}));
-
-mock.module("@/repositories/payments", () => ({
-  paymentRepository: {
-    findProjectSignedAmount: mock(async () => 100000),
-    summarizeConfirmedProjectPayments,
   },
 }));
 
@@ -85,18 +73,6 @@ mock.module("@/repositories/workflows", () => ({
 
 mock.module("@/services/workflow-runtime-guards", () => ({
   assertRuntimeNodeCompletionAllowed: mock(async () => undefined),
-  getPaymentCollectionCompletionBlock: mock(async () => ({
-    blocked: true,
-    message: "请先确认中期进度款已入账后再进入瓦工",
-    payment_type: "stage_2",
-    confirmed_payment_count: 0,
-    confirmed_amount: 0,
-    requirement_mode: "any_confirmed",
-    required_percentage: null,
-    required_amount: null,
-    signed_amount: null,
-    legacy_min_amount: null,
-  })),
 }));
 
 mock.module("@/services/workflow-subject-state", () => ({
@@ -106,7 +82,7 @@ mock.module("@/services/workflow-subject-state", () => ({
 }));
 
 describe("workflowTaskService", () => {
-  test("disables payment collection action when confirmed payment is missing", async () => {
+  test("keeps payment collection action executable for assigned finance", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
 
     const tasks = await workflowTaskService.listTasks(
@@ -136,10 +112,10 @@ describe("workflowTaskService", () => {
 
     expect(tasks.list[0]?.actions[0]).toMatchObject({
       business_domain: "payment_collection",
-      disabled: true,
-      disabled_reason: "请先确认中期进度款已入账后再进入瓦工",
-      blocked_reason: "请先确认中期进度款已入账后再进入瓦工",
+      business_action: "confirm_payment",
+      disabled: false,
     });
+    expect(tasks.list[0]?.actions[0]).not.toHaveProperty("blocked_reason");
   });
 
   test("denies permission holders when a task is assigned to a specific employee", async () => {
