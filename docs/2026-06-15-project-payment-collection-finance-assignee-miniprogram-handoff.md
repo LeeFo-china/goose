@@ -53,6 +53,26 @@ GET /workflow-subjects/project/:projectId/state
 
 当当前登录员工不是指定财务员工时，仍然可以看到 workflow timeline 当前节点是
 `payment_stage_2 / 中期进度款`，但后端不会返回可执行的“确认收款” action。
+为了让小程序展示“正在等待财务 xxx 审核”，当前 timeline node 会返回处理人字段：
+
+```json
+{
+  "node_key": "payment_stage_2",
+  "node_title": "中期进度款",
+  "business_kind": "payment_collection",
+  "status": "current",
+  "assignee_employee_id": "finance-employee-id",
+  "assignee_employee_name": "张三",
+  "assignee_employee": {
+    "id": "finance-employee-id",
+    "name": "张三",
+    "avatar": null
+  }
+}
+```
+
+当当前登录员工就是指定财务员工时，后端返回的可执行 action 也会携带同样字段。
+小程序可以据此显示“待你确认收款”。
 
 ### 任务中心
 
@@ -178,6 +198,7 @@ WorkflowTaskService.complete(option.workflowTaskId, {
 
 - `option.workflowTaskId` 来自后端 `action.task_id`。
 - `option.workflowAction` 来自后端 `action.key`。
+- `assignee_employee_name` 来自后端 action 或当前 timeline node，不做本地推导。
 
 ### 4. 不在前端判断财务身份
 

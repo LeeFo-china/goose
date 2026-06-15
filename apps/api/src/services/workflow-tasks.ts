@@ -17,6 +17,7 @@ import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-brid
 import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 
 class WorkflowTaskService {
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
@@ -49,6 +50,7 @@ class WorkflowTaskService {
             task_id: task.id,
             node_key: task.node_key,
             node_type: task.node_type,
+            ...buildWorkflowTaskAssigneeMetadata(task),
             disabled: false,
           }))
           : [],

@@ -128,6 +128,49 @@ describe("buildProjectWorkflowProgressProjection", () => {
     ]);
   });
 
+  test("adds payment task assignee to the current payment timeline node", () => {
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_title: "中期进度款",
+        current_business_kind: "payment_collection",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "payment_stage_2",
+        current_node_snapshot: graph.nodes[1],
+      },
+      graph,
+      pendingActions: [{
+        task_id: "task-1",
+        node_key: "payment_stage_2",
+        assignee_employee_id: "finance-1",
+        assignee_employee_name: "张三",
+        assignee_employee: {
+          id: "finance-1",
+          name: "张三",
+          avatar: null,
+        },
+      }],
+    });
+
+    expect(progress.timeline_nodes.find((node) =>
+      node.node_key === "payment_stage_2"
+    )).toMatchObject({
+      assignee_employee_id: "finance-1",
+      assignee_employee_name: "张三",
+      assignee_employee: {
+        id: "finance-1",
+        name: "张三",
+        avatar: null,
+      },
+    });
+  });
+
   test("returns missing_runtime without guessing when runtime is absent", () => {
     expect(buildProjectWorkflowProgressProjection({
       subjectState: null,

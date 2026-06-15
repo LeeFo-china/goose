@@ -16,6 +16,7 @@ import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
+import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 
 class WorkflowSubjectsService {
   async getState(
@@ -71,6 +72,7 @@ class WorkflowSubjectsService {
             task_id: task.id,
             node_key: task.node_key,
             node_type: task.node_type,
+            ...buildWorkflowTaskAssigneeMetadata(task),
             disabled: false,
           }))
         ),
@@ -155,7 +157,7 @@ class WorkflowSubjectsService {
 
     if (!runtimeInstance) return [];
 
-    const [graph, runtimeNodes] = await Promise.all([
+    const [graph, runtimeNodes, pendingTasks] = await Promise.all([
       workflowRepository.getGraph({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
@@ -164,6 +166,10 @@ class WorkflowSubjectsService {
       workflowRepository.listRuntimeInstanceNodes({
         tenantId: input.tenantId,
         definitionId: runtimeInstance.definition_id,
+        instanceId: runtimeInstance.id,
+      }),
+      workflowTaskRepository.listPendingByInstance({
+        tenantId: input.tenantId,
         instanceId: runtimeInstance.id,
       }),
     ]);
@@ -179,6 +185,10 @@ class WorkflowSubjectsService {
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
+      assignees: pendingTasks.map((task) => ({
+        node_key: task.node_key,
+        ...buildWorkflowTaskAssigneeMetadata(task),
+      })),
     });
   }
 

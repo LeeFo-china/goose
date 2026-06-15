@@ -22,6 +22,11 @@ type WorkflowTaskInstanceSummary = Pick<
 
 export type WorkflowTaskWithInstanceRow = WorkflowTaskRow & {
   instance: WorkflowTaskInstanceSummary | null;
+  assignee_employee?: {
+    id: string;
+    name: string | null;
+    avatar: string | null;
+  } | null;
 };
 
 export type WorkflowTransitionLogRow = {
@@ -85,6 +90,7 @@ const WORKFLOW_TASK_SELECT = [
   "assignee_employee_id",
   "assignee_role_code",
   "assignee_permission_code",
+  "assignee_employee:employees!workflow_tasks_assignee_employee_id_fkey(id, name, avatar)",
   "due_at",
   "completed_by",
   "completed_at",

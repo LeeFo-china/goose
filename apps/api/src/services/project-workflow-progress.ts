@@ -1,5 +1,10 @@
 import type { AuthContext } from "@/services/authorization";
 import { buildWorkflowTaskActions } from "@/services/workflow-task-action-metadata";
+import {
+  buildWorkflowTaskAssigneeMetadata,
+  buildWorkflowTaskAssigneeMetadataFromRecord,
+  type WorkflowAssigneeEmployee,
+} from "@/services/workflow-task-assignee";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
 
 type JsonObject = Record<string, unknown>;
@@ -28,6 +33,9 @@ export type WorkflowTimelineNode = {
   node_type: string | null;
   business_kind: WorkflowBusinessKind | string | null;
   status: "done" | "current" | "pending" | "blocked";
+  assignee_employee_id?: string;
+  assignee_employee_name?: string | null;
+  assignee_employee?: WorkflowAssigneeEmployee;
 };
 
 export type ProjectWorkflowProgress = {
@@ -149,6 +157,12 @@ export function buildProjectWorkflowProgressProjection(
       graph: input.graph,
       currentNodeKey,
       completedNodeKeys: input.completedNodeKeys ?? [],
+      assignees: input.pendingActions
+        .map((action) => ({
+          node_key: readString(action.node_key) ?? "",
+          ...buildWorkflowTaskAssigneeMetadataFromRecord(action),
+        }))
+        .filter((assignee) => assignee.node_key && assignee.assignee_employee_id),
     }),
     pending_task_count: input.subjectState?.pending_task_count ??
       input.pendingActions.length,
@@ -232,6 +246,7 @@ class ProjectWorkflowProgressService {
           task_id: task.id,
           node_key: task.node_key,
           node_type: task.node_type,
+          ...buildWorkflowTaskAssigneeMetadata(task),
           disabled: false,
         }))
       ),
@@ -299,23 +314,46 @@ export function buildWorkflowTimelineNodes(input: {
   graph: WorkflowProgressGraph | null;
   currentNodeKey: string | null;
   completedNodeKeys?: string[];
+  assignees?: Array<{
+    node_key: string;
+    assignee_employee_id?: string;
+    assignee_employee_name?: string | null;
+    assignee_employee?: WorkflowAssigneeEmployee;
+  }>;
 }): WorkflowTimelineNode[] {
   if (!input.graph) return [];
 
   const completedNodeKeys = new Set(input.completedNodeKeys ?? []);
+  const assigneesByNodeKey = new Map(
+    (input.assignees ?? [])
+      .filter((assignee) => assignee.node_key && assignee.assignee_employee_id)
+      .map((assignee) => [assignee.node_key, assignee]),
+  );
   return orderWorkflowTimelineGraphNodes(input.graph)
     .filter((node) => node.node_type !== "start" && node.node_type !== "end")
-    .map((node) => ({
-      node_key: node.node_key,
-      node_title: node.title,
-      node_type: node.node_type,
-      business_kind: node.business_kind,
-      status: resolveTimelineNodeStatus({
-        nodeKey: node.node_key,
-        currentNodeKey: input.currentNodeKey,
-        completedNodeKeys,
-      }),
-    }));
+    .map((node) => {
+      const assignee = assigneesByNodeKey.get(node.node_key);
+      return {
+        node_key: node.node_key,
+        node_title: node.title,
+        node_type: node.node_type,
+        business_kind: node.business_kind,
+        status: resolveTimelineNodeStatus({
+          nodeKey: node.node_key,
+          currentNodeKey: input.currentNodeKey,
+          completedNodeKeys,
+        }),
+        ...(assignee
+          ? {
+            assignee_employee_id: assignee.assignee_employee_id,
+            assignee_employee_name: assignee.assignee_employee_name ?? null,
+            ...(assignee.assignee_employee
+              ? { assignee_employee: assignee.assignee_employee }
+              : {}),
+          }
+          : {}),
+      };
+    });
 }
 
 function resolveCurrentNode(
