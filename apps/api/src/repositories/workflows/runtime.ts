@@ -82,6 +82,28 @@ export async function getRuntimeInstanceById(input: {
   return data as WorkflowInstanceRow | null;
 }
 
+export async function findLatestRunningRuntimeInstance(input: {
+  tenantId: string;
+  subjectType: string;
+  subjectId: string;
+}): Promise<WorkflowInstanceRow | null> {
+  const { data, error } = await workflowTable("workflow_instances")
+    .select(WORKFLOW_INSTANCE_SELECT)
+    .eq("tenant_id", input.tenantId)
+    .eq("subject_type", input.subjectType)
+    .eq("subject_id", input.subjectId)
+    .eq("status", "running")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询流程运行实例失败", error);
+  }
+
+  return data as WorkflowInstanceRow | null;
+}
+
 export async function listCompletedRuntimeProcedureNodes(input: {
   tenantId: string;
   definitionId: string;

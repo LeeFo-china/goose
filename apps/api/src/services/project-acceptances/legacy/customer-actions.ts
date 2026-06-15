@@ -32,6 +32,7 @@ import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
+import { projectAcceptanceWorkflowRuntimeService } from "@/services/project-acceptance-workflow-runtime";
 import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
@@ -50,6 +51,7 @@ import {
   PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
   PROJECT_ACCEPTANCE_STAGE_LABELS,
   PROJECT_LOG_STAGE_CONFIG,
+  isProjectConstructionStageCode,
   isProjectLogStageCode,
   type ProjectAcceptanceAction,
   type ProjectAcceptanceStatus,
@@ -251,6 +253,40 @@ export async function customerConfirmAcceptance(this: any,
       operatorId: customer.id,
       comment: input.comment,
     });
+
+    if (isProjectConstructionStageCode(row.stage_code)) {
+      const tenantId = nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null;
+      if (!tenantId) {
+        throw Errors.business(
+          409,
+          "流程运行态不可用，不能推进验收流程",
+          ErrorCodes.WORKFLOW_PROGRESS_CONFLICT,
+          { acceptance_id: nextRow.id, project_id: nextRow.project_id },
+        );
+      }
+      const runtimeMetadata = await projectAcceptanceWorkflowRuntimeService
+        .syncCustomerConfirmAcceptance({
+          tenantId,
+          projectId: nextRow.project_id,
+          acceptanceId: nextRow.id,
+          stageCode: row.stage_code,
+          customerId: customer.id,
+          comment: input.comment,
+        });
+      if (runtimeMetadata.status !== "advanced") {
+        throw Errors.business(
+          409,
+          "验收已确认，但流程运行态推进失败",
+          ErrorCodes.WORKFLOW_PROGRESS_CONFLICT,
+          {
+            acceptance_id: nextRow.id,
+            project_id: nextRow.project_id,
+            stage_code: row.stage_code,
+            workflow_runtime: runtimeMetadata,
+          },
+        );
+      }
+    }
 
     this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
     return this.buildDetail(nextRow);

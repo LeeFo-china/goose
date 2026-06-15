@@ -22,6 +22,7 @@ import {
 import {
   cancelRuntimeInstance,
   completeRuntimeNode,
+  findLatestRunningRuntimeInstance,
   getRuntimeInstanceById,
   listCompletedRuntimeProcedureNodes,
   listRuntimeInstanceNodes,
@@ -50,6 +51,7 @@ class WorkflowRepository {
   updateActiveVersion = updateActiveVersion;
   listRuntimeInstances = listRuntimeInstances;
   getRuntimeInstanceById = getRuntimeInstanceById;
+  findLatestRunningRuntimeInstance = findLatestRunningRuntimeInstance;
   listCompletedRuntimeProcedureNodes = listCompletedRuntimeProcedureNodes;
   listRuntimeInstanceNodes = listRuntimeInstanceNodes;
   startRuntimeInstance = startRuntimeInstance;
