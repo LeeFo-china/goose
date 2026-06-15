@@ -224,7 +224,6 @@ class CustomerProjectDetailBootstrapController
       projectId: project.id,
       tenantId: projectTenantId,
       steps,
-      withOptionalModuleTimeout: this.withOptionalModuleTimeout.bind(this),
       addPartialError,
     });
     const stagesPromise = queryResult.data.include_stages

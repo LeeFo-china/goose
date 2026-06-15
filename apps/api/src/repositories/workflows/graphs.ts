@@ -46,27 +46,27 @@ export async function getDraftGraph(
 export async function getGraph(
   input: WorkflowGraphQueryInput,
 ): Promise<WorkflowGraphResult | null> {
+  if (input.versionId) {
+    const [definition, version] = await Promise.all([
+      getDefinitionById(input.definitionId, input.tenantId),
+      getVersionById(input.versionId, input.definitionId, input.tenantId),
+    ]);
+
+    if (!definition || !version) return null;
+
+    return {
+      definition,
+      version,
+      nodes: getSnapshotNodes(version.snapshot),
+      edges: getSnapshotEdges(version.snapshot),
+    };
+  }
+
   const definition = await getDefinitionById(input.definitionId, input.tenantId);
   if (!definition) return null;
 
-  if (!input.versionId) {
-    const graph = await loadDraftGraph(input.definitionId, input.tenantId);
-    return { definition, version: null, nodes: graph.nodes, edges: graph.edges };
-  }
-
-  const version = await getVersionById(
-    input.versionId,
-    input.definitionId,
-    input.tenantId,
-  );
-  if (!version) return null;
-
-  return {
-    definition,
-    version,
-    nodes: getSnapshotNodes(version.snapshot),
-    edges: getSnapshotEdges(version.snapshot),
-  };
+  const graph = await loadDraftGraph(input.definitionId, input.tenantId);
+  return { definition, version: null, nodes: graph.nodes, edges: graph.edges };
 }
 
 export async function replaceDraftGraph(
