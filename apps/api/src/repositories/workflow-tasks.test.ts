@@ -1,0 +1,55 @@
+import { describe, expect, mock, test } from "bun:test";
+
+const orCalls: string[] = [];
+
+class WorkflowTasksQuery {
+  select() {
+    return this;
+  }
+
+  eq() {
+    return this;
+  }
+
+  or(filter: string) {
+    orCalls.push(filter);
+    return this;
+  }
+
+  order() {
+    return this;
+  }
+
+  async range() {
+    return { data: [], error: null, count: 0 };
+  }
+}
+
+mock.module("@/utils/supabase", () => ({
+  SupabaseDB: {
+    getAdminClient: () => ({
+      from: () => new WorkflowTasksQuery(),
+    }),
+  },
+}));
+
+describe("workflowTaskRepository", () => {
+  test("does not match employee-assigned tasks through role or permission filters", async () => {
+    orCalls.length = 0;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      roleCodes: ["finance"],
+      permissionCodes: ["project_payment.confirm"],
+    });
+
+    expect(orCalls[0]).toBe([
+      "assignee_employee_id.eq.employee-1",
+      "and(assignee_employee_id.is.null,assignee_role_code.in.(finance))",
+      "and(assignee_employee_id.is.null,assignee_permission_code.in.(project_payment.confirm))",
+      "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
+    ].join(","));
+  });
+});

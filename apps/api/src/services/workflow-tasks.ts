@@ -172,11 +172,8 @@ class WorkflowTaskService {
       assignee_permission_code: string | null;
     },
   ) {
-    if (
-      task.assignee_employee_id &&
-      task.assignee_employee_id === authContext.employeeId
-    ) {
-      return true;
+    if (task.assignee_employee_id) {
+      return task.assignee_employee_id === authContext.employeeId;
     }
 
     if (task.assignee_permission_code) {

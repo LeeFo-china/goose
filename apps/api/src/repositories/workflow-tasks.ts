@@ -258,7 +258,9 @@ class WorkflowTaskRepository {
     const roleCodes = Array.from(new Set(input.roleCodes ?? []))
       .filter((roleCode) => SAFE_ROLE_CODE_PATTERN.test(roleCode));
     if (roleCodes.length > 0) {
-      filters.push(`assignee_role_code.in.(${roleCodes.join(",")})`);
+      filters.push(
+        `and(assignee_employee_id.is.null,assignee_role_code.in.(${roleCodes.join(",")}))`,
+      );
     }
 
     const permissionCodes = Array.from(new Set(input.permissionCodes ?? []))
@@ -266,7 +268,9 @@ class WorkflowTaskRepository {
         SAFE_PERMISSION_CODE_PATTERN.test(permissionCode)
       );
     if (permissionCodes.length > 0) {
-      filters.push(`assignee_permission_code.in.(${permissionCodes.join(",")})`);
+      filters.push(
+        `and(assignee_employee_id.is.null,assignee_permission_code.in.(${permissionCodes.join(",")}))`,
+      );
     }
     filters.push(
       "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
