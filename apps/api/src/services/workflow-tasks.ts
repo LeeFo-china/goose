@@ -11,13 +11,12 @@ import type {
 } from "@/schema/workflow-subjects";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { buildWorkflowTaskActions } from "@/services/workflow-task-action-metadata";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
-import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
+import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 
 class WorkflowTaskService {
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
@@ -36,25 +35,16 @@ class WorkflowTaskService {
 
     return {
       ...tasks,
-      list: tasks.list.map((task) => ({
+      list: await Promise.all(tasks.list.map(async (task) => ({
         ...task,
         actions: task.instance
-          ? buildWorkflowTaskActions({
+          ? await buildWorkflowTaskActionsForTask({
+            tenantId,
             subjectType: task.instance.subject_type,
-            nodeKey: task.node_key,
-            nodeType: task.node_type,
-            taskTitle: task.title,
-            currentNodeSnapshot: task.instance.current_node_snapshot,
-          }).map((action) => ({
-            ...action,
-            task_id: task.id,
-            node_key: task.node_key,
-            node_type: task.node_type,
-            ...buildWorkflowTaskAssigneeMetadata(task),
-            disabled: false,
-          }))
+            task,
+          })
           : [],
-      })),
+      }))),
     };
   }
 

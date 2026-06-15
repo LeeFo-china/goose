@@ -190,7 +190,7 @@ class WorkflowTaskRepository {
   async listPendingByInstance(input: {
     tenantId: string;
     instanceId: string;
-  }): Promise<WorkflowTaskRow[]> {
+  }): Promise<WorkflowTaskWithInstanceRow[]> {
     const { data, error } = await workflowTable("workflow_tasks")
       .select(WORKFLOW_TASK_SELECT)
       .eq("tenant_id", input.tenantId)
@@ -203,7 +203,7 @@ class WorkflowTaskRepository {
       throw Errors.dbError("查询流程实例待办失败", error);
     }
 
-    return (data ?? []) as WorkflowTaskRow[];
+    return (data ?? []) as WorkflowTaskWithInstanceRow[];
   }
 
   async assignPendingTask(input: {

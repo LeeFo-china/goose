@@ -25,7 +25,8 @@ GET /projects/:projectId/employee-detail-bootstrap
 GET /workflow-subjects/project/:projectId/state
 ```
 
-当当前登录员工是指定财务员工时，`workflow_state.actions` 会包含收款 action：
+当当前登录员工是指定财务员工，且当前项目已有满足节点规则的 confirmed 收款记录时，
+`workflow_state.actions` 会包含可执行收款 action：
 
 ```json
 {
@@ -51,6 +52,37 @@ GET /workflow-subjects/project/:projectId/state
 }
 ```
 
+当当前登录员工是指定财务员工，但还没有满足节点规则的 confirmed 收款记录时，
+后端会返回 disabled action 和稳定阻断原因：
+
+```json
+{
+  "key": "complete",
+  "label": "中期进度款",
+  "task_id": "workflow-task-id",
+  "node_key": "payment_stage_2",
+  "node_type": "confirmation",
+  "business_domain": "payment_collection",
+  "business_action": "confirm_payment",
+  "disabled": true,
+  "disabled_reason": "请先确认中期进度款已入账后再进入瓦工",
+  "blocked_reason": "请先确认中期进度款已入账后再进入瓦工",
+  "output_fields": [
+    {
+      "name": "payment_status",
+      "label": "中期进度款",
+      "type": "payment_collection",
+      "required": true,
+      "payment_type": "stage_2",
+      "payment_label": "中期进度款",
+      "requirement_mode": "any_confirmed"
+    }
+  ]
+}
+```
+
+小程序不得渲染可提交按钮或 chip，应展示 `disabled_reason` / `blocked_reason`。
+
 当当前登录员工不是指定财务员工时，仍然可以看到 workflow timeline 当前节点是
 `payment_stage_2 / 中期进度款`，但后端不会返回可执行的“确认收款” action。
 为了让小程序展示“正在等待财务 xxx 审核”，当前 timeline node 会返回处理人字段：
@@ -71,8 +103,9 @@ GET /workflow-subjects/project/:projectId/state
 }
 ```
 
-当当前登录员工就是指定财务员工时，后端返回的可执行 action 也会携带同样字段。
-小程序可以据此显示“待你确认收款”。
+当当前登录员工就是指定财务员工时，后端返回的 action 也会携带同样字段。
+若 `disabled = true`，小程序展示阻断原因；若 `disabled = false`，小程序可以据此
+显示“待你确认收款”。
 
 ### 任务中心
 
@@ -88,6 +121,11 @@ GET /workflow-tasks?page=1&pageSize=20
 - 未指定员工、但命中 `assignee_permission_code`：返回任务。
 - 未指定员工、但命中 `assignee_role_code`：返回任务。
 - 已指定其他员工：即使当前员工有权限码或角色，也不返回任务。
+
+任务返回后，`actions[]` 仍会按收款事实判断是否可执行：
+
+- 缺少对应 `payment_type + confirmed` 收款记录：`disabled = true`。
+- 已有满足节点规则的 confirmed 收款记录：`disabled = false`。
 
 ### 完成收款任务
 
@@ -229,7 +267,10 @@ if (!projectId || !project || !canManageProject) return;
 - 项目旧状态动作、排期开工、签约等仍按原项目管理权限判断。
 
 换句话说：`payment_collection` 的可执行性以
-`workflow_state.actions` 是否返回为准。
+`workflow_state.actions[]` 中对应 action 的 `disabled` 为准：
+
+- `disabled = true`：只展示阻断原因，不提交 complete。
+- `disabled = false`：允许提交 complete。
 
 ## 不需要小程序做的事
 
@@ -256,7 +297,8 @@ payment_stage_2 / 中期进度款
 - 任务中心显示项目收款任务。
 - 点击任务进入项目详情。
 - 项目详情 timeline 当前节点显示“中期进度款”。
-- 项目详情显示“确认收款”按钮。
+- 未入账时，项目详情展示阻断原因，不显示可点击“确认收款”按钮。
+- 入账后，项目详情显示“确认收款”按钮。
 
 ### 非指定员工登录
 
@@ -286,6 +328,8 @@ gooes 已完成：
 - `workflow_tasks.assignee_employee_id` 投影指定财务员工。
 - `/workflow-tasks` 按 assignee 过滤。
 - `workflow_state.actions` 复用 `/workflow-tasks` 的可见任务。
+- `payment_collection` action 下发前按 confirmed 收款事实标记
+  `disabled` / `disabled_reason`，避免未入账时形成可点击 409 循环。
 - complete 时继续校验 confirmed 收款记录，不满足返回
   `WORKFLOW_PAYMENT_COLLECTION_BLOCKED`。
 - migration `20260615090000_project_payment_task_finance_assignee.sql` 已应用到远端。

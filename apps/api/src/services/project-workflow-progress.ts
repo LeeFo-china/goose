@@ -1,7 +1,6 @@
 import type { AuthContext } from "@/services/authorization";
-import { buildWorkflowTaskActions } from "@/services/workflow-task-action-metadata";
+import { buildWorkflowTaskActionPayloads } from "@/services/workflow-task-actions";
 import {
-  buildWorkflowTaskAssigneeMetadata,
   buildWorkflowTaskAssigneeMetadataFromRecord,
   type WorkflowAssigneeEmployee,
 } from "@/services/workflow-task-assignee";
@@ -20,6 +19,7 @@ export type ProjectWorkflowProgressGate = {
   payment_label: string;
   blocked_stage_code: string | null;
   blocked_stage_label: string | null;
+  blocked_reason?: string;
 };
 
 export type ProjectWorkflowProgressWarning = {
@@ -138,6 +138,14 @@ export function buildProjectWorkflowProgressProjection(
   const warnings = buildWarnings(input.subjectState, input.runtimeInstance);
   const currentBusinessKind = currentNode.business_kind ??
     input.subjectState?.current_business_kind ?? null;
+  const currentGateBlockedReason = currentNodeKey
+    ? input.pendingActions
+      .filter((action) => readString(action.node_key) === currentNodeKey)
+      .map((action) =>
+        readString(action.blocked_reason) ?? readString(action.disabled_reason)
+      )
+      .find((reason): reason is string => Boolean(reason))
+    : undefined;
 
   return {
     source: "workflow_runtime",
@@ -151,7 +159,7 @@ export function buildProjectWorkflowProgressProjection(
       ? readString(currentNode.config.stage_key)
       : null,
     current_gate: currentBusinessKind === "payment_collection"
-      ? buildPaymentGate(currentNode, input.graph)
+      ? buildPaymentGate(currentNode, input.graph, currentGateBlockedReason)
       : null,
     timeline_nodes: buildWorkflowTimelineNodes({
       graph: input.graph,
@@ -222,6 +230,11 @@ class ProjectWorkflowProgressService {
         instanceId: runtimeInstance.id,
       }),
     ]);
+    const pendingActions = await buildWorkflowTaskActionPayloads({
+      tenantId: input.tenantId,
+      subjectType: "project",
+      tasks: pendingTasks,
+    });
 
     return buildProjectWorkflowProgressProjection({
       subjectState,
@@ -235,22 +248,7 @@ class ProjectWorkflowProgressService {
       completedNodeKeys: runtimeNodes
         .filter((node) => node.status === "completed")
         .map((node) => node.node_key),
-      pendingActions: pendingTasks.flatMap((task) =>
-        buildWorkflowTaskActions({
-          subjectType: "project",
-          nodeKey: task.node_key,
-          nodeType: task.node_type,
-          taskTitle: task.title,
-          currentNodeSnapshot: runtimeInstance.current_node_snapshot,
-        }).map((action) => ({
-          ...action,
-          task_id: task.id,
-          node_key: task.node_key,
-          node_type: task.node_type,
-          ...buildWorkflowTaskAssigneeMetadata(task),
-          disabled: false,
-        }))
-      ),
+      pendingActions,
     });
   }
 }
@@ -381,6 +379,7 @@ function resolveCurrentNode(
 function buildPaymentGate(
   currentNode: WorkflowProgressGraphNode,
   graph: WorkflowProgressGraph | null,
+  blockedReason?: string,
 ): ProjectWorkflowProgressGate {
   const paymentType = readString(currentNode.config.payment_type) ?? "deposit";
   const nextNode = graph?.edges
@@ -399,6 +398,7 @@ function buildPaymentGate(
     blocked_stage_label: blockedStageCode
       ? STAGE_LABELS[blockedStageCode] ?? blockedStageCode
       : null,
+    ...(blockedReason ? { blocked_reason: blockedReason } : {}),
   };
 }
 

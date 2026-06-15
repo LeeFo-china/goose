@@ -8,7 +8,6 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
-  buildWorkflowTaskActions,
   type WorkflowTaskActionMetadata,
 } from "@/services/workflow-task-action-metadata";
 import { buildWorkflowTimelineNodes } from "@/services/project-workflow-progress";
@@ -16,6 +15,7 @@ import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectStateRepository } from "@/repositories/workflow-subject-states";
 import { workflowRepository } from "@/repositories/workflows";
 import type { WorkflowTimelineNode } from "@/services/project-workflow-progress";
+import { buildWorkflowTaskActionPayloads } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 
 class WorkflowSubjectsService {
@@ -60,22 +60,11 @@ class WorkflowSubjectsService {
     return {
       workflow_state: this.serializeState(
         state,
-        tasks.list.flatMap((task) =>
-          buildWorkflowTaskActions({
-            subjectType: params.subjectType,
-            nodeKey: task.node_key,
-            nodeType: task.node_type,
-            taskTitle: task.title,
-            currentNodeSnapshot: task.instance?.current_node_snapshot,
-          }).map((action) => ({
-            ...action,
-            task_id: task.id,
-            node_key: task.node_key,
-            node_type: task.node_type,
-            ...buildWorkflowTaskAssigneeMetadata(task),
-            disabled: false,
-          }))
-        ),
+        await buildWorkflowTaskActionPayloads({
+          tenantId,
+          subjectType: params.subjectType,
+          tasks: tasks.list,
+        }),
         timelineNodes,
       ),
     };

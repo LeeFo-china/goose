@@ -170,46 +170,30 @@ async function assertPaymentCollectionRequirements(input: {
     return;
   }
 
-  const paymentType = getPaymentCollectionType(input.node.config.payment_type);
-  const requirement = await getPaymentCollectionRequirement({
-    config: input.node.config,
+  const block = await getPaymentCollectionCompletionBlock({
+    nodeSnapshot: input.node,
     projectId: input.projectId,
   });
-  const summary = await paymentRepository.summarizeConfirmedProjectPayments({
-    projectId: input.projectId,
-    type: paymentType,
-  });
-  const amountSatisfied = requirement.requiredAmount === null ||
-    summary.totalAmount >= requirement.requiredAmount;
 
-  if (!requirement.issue && summary.count > 0 && amountSatisfied) {
+  if (!block.blocked) {
     return;
   }
 
-  const fallbackMessage = requirement.issue ||
-    (requirement.requiredAmount === null
-    ? "请先确认收款后再推进流程"
-    : `已入账金额不足，当前已入账 ${summary.totalAmount} 元，要求至少 ${requirement.requiredAmount} 元`);
-  const message = typeof input.node.config.block_message === "string" &&
-      input.node.config.block_message.trim()
-    ? input.node.config.block_message.trim()
-    : fallbackMessage;
-
   throw Errors.business(
     409,
-    message,
+    block.message || "请先确认收款后再推进流程",
     ErrorCodes.WORKFLOW_PAYMENT_COLLECTION_BLOCKED,
     {
       node_key: input.node.node_key,
       project_id: input.projectId,
-      payment_type: paymentType,
-      confirmed_payment_count: summary.count,
-      confirmed_amount: summary.totalAmount,
-      requirement_mode: requirement.mode,
-      required_percentage: requirement.requiredPercentage,
-      required_amount: requirement.requiredAmount,
-      signed_amount: requirement.signedAmount,
-      legacy_min_amount: requirement.legacyMinAmount,
+      payment_type: block.payment_type,
+      confirmed_payment_count: block.confirmed_payment_count,
+      confirmed_amount: block.confirmed_amount,
+      requirement_mode: block.requirement_mode,
+      required_percentage: block.required_percentage,
+      required_amount: block.required_amount,
+      signed_amount: block.signed_amount,
+      legacy_min_amount: block.legacy_min_amount,
     },
   );
 }
@@ -242,6 +226,62 @@ type PaymentCollectionRequirement = {
   legacyMinAmount: number | null;
   issue: string | null;
 };
+
+export type PaymentCollectionCompletionBlock = {
+  blocked: boolean;
+  message: string | null;
+  payment_type: string;
+  confirmed_payment_count: number;
+  confirmed_amount: number;
+  requirement_mode: PaymentCollectionRequirement["mode"];
+  required_percentage: number | null;
+  required_amount: number | null;
+  signed_amount: number | null;
+  legacy_min_amount: number | null;
+};
+
+export async function getPaymentCollectionCompletionBlock(input: {
+  nodeSnapshot: unknown;
+  projectId: string;
+}): Promise<PaymentCollectionCompletionBlock> {
+  const node = asRecord(input.nodeSnapshot);
+  const config = asRecord(node?.config) ?? {};
+  const paymentType = getPaymentCollectionType(config.payment_type);
+  const requirement = await getPaymentCollectionRequirement({
+    config,
+    projectId: input.projectId,
+  });
+  const summary = await paymentRepository.summarizeConfirmedProjectPayments({
+    projectId: input.projectId,
+    type: paymentType,
+  });
+  const amountSatisfied = requirement.requiredAmount === null ||
+    summary.totalAmount >= requirement.requiredAmount;
+  const blocked = Boolean(requirement.issue) ||
+    summary.count === 0 ||
+    !amountSatisfied;
+  const fallbackMessage = requirement.issue ||
+    (requirement.requiredAmount === null
+    ? "请先确认收款后再推进流程"
+    : `已入账金额不足，当前已入账 ${summary.totalAmount} 元，要求至少 ${requirement.requiredAmount} 元`);
+  const customMessage = typeof config.block_message === "string" &&
+      config.block_message.trim()
+    ? config.block_message.trim()
+    : null;
+
+  return {
+    blocked,
+    message: blocked ? customMessage || fallbackMessage : null,
+    payment_type: paymentType,
+    confirmed_payment_count: summary.count,
+    confirmed_amount: summary.totalAmount,
+    requirement_mode: requirement.mode,
+    required_percentage: requirement.requiredPercentage,
+    required_amount: requirement.requiredAmount,
+    signed_amount: requirement.signedAmount,
+    legacy_min_amount: requirement.legacyMinAmount,
+  };
+}
 
 async function getPaymentCollectionRequirement(input: {
   config: JsonObject;
@@ -309,6 +349,12 @@ async function getPaymentCollectionRequirement(input: {
     legacyMinAmount,
     issue: null,
   };
+}
+
+function asRecord(value: unknown): JsonObject | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : null;
 }
 
 function getPaymentCollectionRequirementMode(value: unknown) {
