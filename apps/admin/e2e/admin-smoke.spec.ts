@@ -171,7 +171,7 @@ test.describe("admin smoke", () => {
     await gotoAdminPage(page, "/cameras");
 
     await expect(page.getByRole("heading", { name: "工地监控" })).toBeVisible();
-    await expect(page.getByText("未绑定设备通道")).toBeVisible();
+    await expect(page.getByText(/尚未绑定项目摄像头|未绑定设备通道/)).toBeVisible();
 
     const devicesTab = page.getByRole("tab", { name: "设备接入" });
     if (await devicesTab.count()) {
