@@ -9,6 +9,22 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
 class PaymentService {
+  private normalizePaymentInput<T extends CreatePaymentInput | UpdatePaymentInput>(
+    input: T,
+  ): T {
+    const normalized = { ...input } as T & {
+      paid_at?: string | null;
+      pay_date?: string | null;
+    };
+
+    if (normalized.paid_at && !normalized.pay_date) {
+      normalized.pay_date = normalized.paid_at;
+    }
+    delete normalized.paid_at;
+
+    return normalized as T;
+  }
+
   private requireProjectId(projectId: string | null | undefined) {
     if (!projectId) {
       throw Errors.badRequest("收款记录必须关联项目");
@@ -72,7 +88,7 @@ class PaymentService {
     const projectId = this.requireProjectId(input.project_id);
     await this.assertProjectAccess(authContext, projectId, "project.update");
     return paymentRepository.create({
-      ...input,
+      ...this.normalizePaymentInput(input),
       project_id: projectId,
     });
   }
@@ -98,7 +114,7 @@ class PaymentService {
       await this.assertProjectAccess(authContext, input.project_id, "project.update");
     }
 
-    return paymentRepository.update(id, input);
+    return paymentRepository.update(id, this.normalizePaymentInput(input));
   }
 }
 

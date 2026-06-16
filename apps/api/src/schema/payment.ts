@@ -34,6 +34,19 @@ export const PaymentBaseSchema = z.object({
 
   // 创建时间
   created_at: z.string().datetime("无效的时间格式").nullable().optional(),
+
+  evidence_images: z.array(z.unknown()).default([]).optional(),
+  handled_by: z.uuid("请选择有效的经办人").nullable().optional(),
+  pay_date: z.string().datetime("无效的入账时间").nullable().optional(),
+  paid_at: z.string().datetime("无效的入账时间").nullable().optional(),
+  workflow_task_id: z.uuid("无效的流程待办 ID").nullable().optional(),
+  source_type: z.string().trim().max(100, "来源类型过长").nullable().optional(),
+  source_id: z.uuid("无效的来源 ID").nullable().optional(),
+  remark: z.string().trim().max(500, "备注不能超过 500 个字符").nullable().optional(),
+  payment_channel: z.string().trim().max(50, "收款渠道过长").default("manual"),
+  provider: z.string().trim().max(50, "支付提供方过长").nullable().optional(),
+  provider_transaction_id: z.string().trim().max(100, "支付交易号过长").nullable().optional(),
+  out_trade_no: z.string().trim().max(100, "商户订单号过长").nullable().optional(),
 });
 
 /**

@@ -15,6 +15,14 @@ export type PaymentRecord = {
   evidence_images?: unknown;
   handled_by?: string | null;
   pay_date?: string | null;
+  workflow_task_id?: string | null;
+  source_type?: string | null;
+  source_id?: string | null;
+  remark?: string | null;
+  payment_channel?: string | null;
+  provider?: string | null;
+  provider_transaction_id?: string | null;
+  out_trade_no?: string | null;
   created_at: string | null;
   project?: unknown;
   handler?: unknown;
@@ -87,6 +95,20 @@ class PaymentRepository {
 
     if (error) {
       throw Errors.dbError("查询收款记录失败", error);
+    }
+
+    return (data as unknown as PaymentRecord | null) ?? null;
+  }
+
+  async findByWorkflowTaskId(workflowTaskId: string): Promise<PaymentRecord | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("payments")
+      .select(this.paymentSelect)
+      .eq("workflow_task_id", workflowTaskId)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询流程收款记录失败", error);
     }
 
     return (data as unknown as PaymentRecord | null) ?? null;
