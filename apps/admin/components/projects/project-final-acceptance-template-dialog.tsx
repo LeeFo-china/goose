@@ -10,8 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  buildAcceptanceTemplateUpdatePayload,
+  cloneAcceptanceTemplateForEdit,
+} from "@/components/acceptance-templates/acceptance-template-editor-utils";
 import type { AcceptanceTemplate, AcceptanceTemplateItem, AcceptanceTemplateSection } from "@/components/projects/project-acceptance-types";
-import { cloneTemplateForEdit, requestBackend } from "@/components/projects/project-acceptance-utils";
+import { requestBackend } from "@/components/projects/project-acceptance-utils";
 
 export function FinalAcceptanceTemplateDialog({
   open,
@@ -41,7 +45,7 @@ export function FinalAcceptanceTemplateDialog({
       setLocalError("");
       return;
     }
-    setDraft(cloneTemplateForEdit(template));
+    setDraft(cloneAcceptanceTemplateForEdit(template));
   }, [open, template]);
 
   const updateDraft = (patch: Partial<AcceptanceTemplate>) => {
@@ -96,33 +100,12 @@ export function FinalAcceptanceTemplateDialog({
         {
           method: "PATCH",
           payload: {
-            name: draft.name,
-            description: draft.description,
-            status: draft.status,
-            sections: (draft.sections || []).map((section, sectionIndex) => ({
-              id: section.id || undefined,
-              title: section.title,
-              description: section.description,
-              sort_order: sectionIndex,
-              items: section.items.map((item, itemIndex) => ({
-                id: item.id || undefined,
-                category: item.category,
-                title: item.title,
-                standard: item.standard,
-                required: item.required,
-                allow_not_applicable: item.allow_not_applicable,
-                photo_required: item.photo_required,
-                photo_min_count: item.photo_min_count,
-                photo_max_count: item.photo_max_count,
-                remark_required_on_fail: item.remark_required_on_fail,
-                sort_order: itemIndex,
-              })),
-            })),
+            ...buildAcceptanceTemplateUpdatePayload(draft),
           },
         },
       );
       onSaved(saved);
-      setDraft(cloneTemplateForEdit(saved));
+      setDraft(cloneAcceptanceTemplateForEdit(saved));
       setEditing(false);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "竣工模板保存失败");
@@ -305,7 +288,7 @@ export function FinalAcceptanceTemplateDialog({
               disabled={loading || saving}
               onClick={() => {
                 if (editing) {
-                  setDraft(cloneTemplateForEdit(template));
+                  setDraft(cloneAcceptanceTemplateForEdit(template));
                   setEditing(false);
                   setLocalError("");
                   return;

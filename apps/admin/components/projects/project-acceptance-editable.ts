@@ -1,9 +1,12 @@
 import type {
   AcceptanceImageItem,
-  AcceptanceTemplate,
   EditableState,
   ProjectAcceptance,
 } from "@/components/projects/project-acceptance-types";
+
+export {
+  cloneAcceptanceTemplateForEdit,
+} from "@/components/acceptance-templates/acceptance-template-editor-utils";
 
 export function buildEditable(acceptance: ProjectAcceptance | null): EditableState {
   const normalizeStoredImages = (
@@ -66,30 +69,4 @@ export function resetRejectedEditableItems(editable: EditableState): EditableSta
       ]),
     ),
   };
-}
-
-export function cloneTemplateForEdit(template: AcceptanceTemplate | null) {
-  if (!template) return null;
-
-  const sections = template.sections?.length
-    ? template.sections
-    : [{
-      id: null,
-      title: "验收项",
-      description: null,
-      sort_order: 0,
-      items: template.items || [],
-    }];
-
-  return {
-    ...template,
-    sections: sections.map((section, sectionIndex) => ({
-      ...section,
-      sort_order: sectionIndex,
-      items: section.items.map((item, itemIndex) => ({
-        ...item,
-        sort_order: itemIndex,
-      })),
-    })),
-  } satisfies AcceptanceTemplate;
 }
