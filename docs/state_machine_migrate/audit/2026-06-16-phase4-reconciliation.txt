@@ -1,0 +1,27 @@
+tenant_id=3eebca47-961f-4899-b976-a3d3208d326b
+generated_at=2026-06-16T11:34:43+0800
+
+customer_missing_workflow_instances
+ tenant_id | missing_count 
+-----------+---------------
+(0 rows)
+
+
+project_missing_workflow_instances
+ tenant_id | missing_count 
+-----------+---------------
+(0 rows)
+
+
+expense_missing_workflow_instances
+ tenant_id | missing_count 
+-----------+---------------
+(0 rows)
+
+
+expense_missing_pending_tasks
+ missing_task_count 
+--------------------
+                  0
+(1 row)
+

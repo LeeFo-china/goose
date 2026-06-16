@@ -1,0 +1,40 @@
+{
+  "_instructions": {
+    "usage": "Fill remaining false/empty values with real evidence before destructive cleanup.",
+    "check_command": "cd apps/api && bun run workflow:manual-gates-check --evidence-file docs/state_machine_migrate/audit/manual-gates.json",
+    "evidence_format": "Evidence values must be http(s) URLs or existing docs/state_machine_migrate/ paths.",
+    "time_format": "confirmed_at and smoke_at must be parseable date-time strings, preferably ISO 8601 with timezone, and must not be in the future.",
+    "version_format": "minimum_version must be a numeric version string such as 2.8.0."
+  },
+  "phase_acceptance": {
+    "phase4_backfill_confirmed": true,
+    "phase4_reconciliation_evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md",
+    "phase5_api_smoke_confirmed": true,
+    "phase5_api_smoke_evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md"
+  },
+  "api_contract": {
+    "workflow_state_actions_confirmed": true,
+    "workflow_task_complete_confirmed": true,
+    "legacy_fields_not_required_confirmed": true,
+    "evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md"
+  },
+  "mini_program": {
+    "confirmed": true,
+    "confirmed_by": "LeeFo",
+    "confirmed_at": "2026-06-16T10:59:28+08:00",
+    "minimum_version": "5.0.1",
+    "evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md"
+  },
+  "admin_smoke": {
+    "confirmed": true,
+    "smoke_at": "2026-06-16T11:47:04+08:00",
+    "actor": "风清扬 (d8ecc522-e6a1-49d6-b7b7-aaa0f3084826)",
+    "evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md"
+  },
+  "backup_window": {
+    "confirmed": true,
+    "backup_id": "manual-pg-dump:fclnkyatvfvmzgzdqlba:2026-06-16T11:15:28+08:00",
+    "restore_window": "2026-06-16T11:15:28+08:00 to 2026-06-16T23:59:59+08:00",
+    "evidence": "docs/state_machine_migrate/audit/backups/gooes-pre-cleanup-2026-06-16T11-15-28+0800.dump"
+  }
+}

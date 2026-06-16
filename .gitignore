@@ -18,6 +18,9 @@ apps/*/.next-e2e
 supabase/.temp
 *.tgz
 
+# local migration backup artifacts
+docs/state_machine_migrate/audit/backups/
+
 # code coverage
 coverage
 *.lcov
