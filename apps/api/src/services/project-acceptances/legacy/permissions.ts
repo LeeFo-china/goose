@@ -31,6 +31,7 @@ import { userIdentityService } from "@/services/user-identities";
 import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { projectStatusService } from "@/services/project-status";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
+import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
 import { projectSer } from "@/services/projects";
 import type {
   ProjectAcceptanceActionRow,
@@ -377,10 +378,17 @@ export async function resolveTemplate(this: any, input: CreateProjectAcceptanceI
 export async function assertCanCreateFinalAcceptanceForProject(this: any, 
     project: ProjectAcceptanceProjectRow,
   ) {
-    if (project.status !== "constructing") {
+    const workflowProgress = project.tenant_id
+      ? await projectWorkflowProgressService.getProjectProgress({
+        tenantId: project.tenant_id,
+        projectId: project.id,
+      })
+      : null;
+
+    if (!isWorkflowFinalAcceptanceCurrent(workflowProgress)) {
       throw Errors.business(
         400,
-        "项目施工中才能发起竣工验收",
+        "当前 workflow 未到竣工验收节点",
         ErrorCodes.FINAL_ACCEPTANCE_STAGE_INCOMPLETE,
       );
     }
@@ -402,6 +410,16 @@ export async function assertCanCreateFinalAcceptanceForProject(this: any,
       );
     }
   }
+
+function isWorkflowFinalAcceptanceCurrent(
+  workflowProgress: Awaited<
+    ReturnType<typeof projectWorkflowProgressService.getProjectProgress>
+  > | null,
+) {
+  return workflowProgress?.source === "workflow_runtime" &&
+    (workflowProgress.current_node_key === "final_acceptance" ||
+      workflowProgress.current_business_kind === "final_acceptance");
+}
 
 export async function resolveReviewer(this: any, 
     project: ProjectAcceptanceProjectRow,

@@ -1250,70 +1250,6 @@ export type Database = {
           },
         ]
       }
-      customer_status_transition_logs: {
-        Row: {
-          action: string
-          created_at: string
-          customer_id: string
-          from_status: string | null
-          id: string
-          metadata: Json
-          operator_auth_user_id: string | null
-          operator_employee_id: string | null
-          reason: string | null
-          tenant_id: string
-          to_status: string
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          customer_id: string
-          from_status?: string | null
-          id?: string
-          metadata?: Json
-          operator_auth_user_id?: string | null
-          operator_employee_id?: string | null
-          reason?: string | null
-          tenant_id: string
-          to_status: string
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          customer_id?: string
-          from_status?: string | null
-          id?: string
-          metadata?: Json
-          operator_auth_user_id?: string | null
-          operator_employee_id?: string | null
-          reason?: string | null
-          tenant_id?: string
-          to_status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "customer_status_transition_logs_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "customer_status_transition_logs_operator_employee_id_fkey"
-            columns: ["operator_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "customer_status_transition_logs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       customers: {
         Row: {
           avatar: string | null
@@ -1766,89 +1702,6 @@ export type Database = {
           },
         ]
       }
-      expense_request_approval_chains: {
-        Row: {
-          acted_at: string | null
-          acted_by: string | null
-          assignee_id: string
-          assignee_name_snapshot: string | null
-          comment: string | null
-          created_at: string
-          expense_request_id: string
-          id: string
-          required_permission: string
-          sort_order: number
-          status: string
-          step: string
-          step_name: string
-          tenant_id: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          acted_at?: string | null
-          acted_by?: string | null
-          assignee_id: string
-          assignee_name_snapshot?: string | null
-          comment?: string | null
-          created_at?: string
-          expense_request_id: string
-          id?: string
-          required_permission: string
-          sort_order: number
-          status?: string
-          step: string
-          step_name: string
-          tenant_id?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          acted_at?: string | null
-          acted_by?: string | null
-          assignee_id?: string
-          assignee_name_snapshot?: string | null
-          comment?: string | null
-          created_at?: string
-          expense_request_id?: string
-          id?: string
-          required_permission?: string
-          sort_order?: number
-          status?: string
-          step?: string
-          step_name?: string
-          tenant_id?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "expense_request_approval_chains_acted_by_fkey"
-            columns: ["acted_by"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expense_request_approval_chains_assignee_id_fkey"
-            columns: ["assignee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expense_request_approval_chains_expense_request_id_fkey"
-            columns: ["expense_request_id"]
-            isOneToOne: false
-            referencedRelation: "expense_requests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expense_request_approval_chains_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       expense_request_approvals: {
         Row: {
           action: string
@@ -2115,8 +1968,6 @@ export type Database = {
           category: string | null
           completed_at: string | null
           created_at: string | null
-          current_step: string
-          current_step_role: string | null
           employee_id: string
           evidence_images: Json | null
           id: string
@@ -2143,8 +1994,6 @@ export type Database = {
           category?: string | null
           completed_at?: string | null
           created_at?: string | null
-          current_step?: string
-          current_step_role?: string | null
           employee_id: string
           evidence_images?: Json | null
           id?: string
@@ -2171,8 +2020,6 @@ export type Database = {
           category?: string | null
           completed_at?: string | null
           created_at?: string | null
-          current_step?: string
-          current_step_role?: string | null
           employee_id?: string
           evidence_images?: Json | null
           id?: string
@@ -4936,70 +4783,6 @@ export type Database = {
             columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      project_status_transition_logs: {
-        Row: {
-          action: string
-          created_at: string
-          from_status: string | null
-          id: string
-          metadata: Json
-          operator_auth_user_id: string | null
-          operator_employee_id: string | null
-          project_id: string
-          reason: string | null
-          tenant_id: string
-          to_status: string
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          from_status?: string | null
-          id?: string
-          metadata?: Json
-          operator_auth_user_id?: string | null
-          operator_employee_id?: string | null
-          project_id: string
-          reason?: string | null
-          tenant_id: string
-          to_status: string
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          from_status?: string | null
-          id?: string
-          metadata?: Json
-          operator_auth_user_id?: string | null
-          operator_employee_id?: string | null
-          project_id?: string
-          reason?: string | null
-          tenant_id?: string
-          to_status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "project_status_transition_logs_operator_employee_id_fkey"
-            columns: ["operator_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_status_transition_logs_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_status_transition_logs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -8442,6 +8225,21 @@ export type Database = {
             }
             Returns: Json
           }
+      rebuild_workflow_subject_runtime: {
+        Args: {
+          p_actor_employee_id: string
+          p_context: Json
+          p_definition_id: string
+          p_delete_completed_instances?: boolean
+          p_dry_run?: boolean
+          p_project_status?: string
+          p_reason: string
+          p_subject_id: string
+          p_subject_type: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       recalculate_project_referral: {
         Args: { p_project_id: string }
         Returns: undefined
@@ -8488,42 +8286,6 @@ export type Database = {
           tenant_status: string
           user_id: string
         }[]
-      }
-      schedule_project_construction_transition: {
-        Args: {
-          p_construction_manager_employee_id: string
-          p_expected_status: string
-          p_metadata: Json
-          p_operator_auth_user_id: string
-          p_operator_employee_id: string
-          p_project_id: string
-          p_reason: string
-          p_start_date: string
-          p_tenant_id: string
-          p_to_status: string
-        }
-        Returns: {
-          address: string | null
-          budget: number | null
-          created_at: string | null
-          customer_id: string | null
-          id: string
-          name: string | null
-          property_id: string | null
-          signed_amount: number | null
-          start_date: string | null
-          status: string | null
-          style_tags: Json
-          tenant_id: string | null
-          updated_at: string
-          visibility_status: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "projects"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       start_workflow_instance: {
         Args: {
