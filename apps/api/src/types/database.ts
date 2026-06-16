@@ -2152,6 +2152,122 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_ledger_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          direction: string
+          entry_type: string
+          expense_request_id: string | null
+          expense_settlement_id: string | null
+          handled_by: string | null
+          id: string
+          metadata: Json
+          occurred_at: string
+          payment_id: string | null
+          project_id: string | null
+          source_id: string
+          source_type: string
+          summary: string | null
+          tenant_id: string
+          updated_at: string
+          workflow_task_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          direction: string
+          entry_type: string
+          expense_request_id?: string | null
+          expense_settlement_id?: string | null
+          handled_by?: string | null
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          payment_id?: string | null
+          project_id?: string | null
+          source_id: string
+          source_type: string
+          summary?: string | null
+          tenant_id: string
+          updated_at?: string
+          workflow_task_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          direction?: string
+          entry_type?: string
+          expense_request_id?: string | null
+          expense_settlement_id?: string | null
+          handled_by?: string | null
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          payment_id?: string | null
+          project_id?: string | null
+          source_id?: string
+          source_type?: string
+          summary?: string | null
+          tenant_id?: string
+          updated_at?: string
+          workflow_task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_ledger_entries_expense_request_id_fkey"
+            columns: ["expense_request_id"]
+            isOneToOne: false
+            referencedRelation: "expense_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_expense_settlement_id_fkey"
+            columns: ["expense_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "expense_request_settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_entries_workflow_task_id_fkey"
+            columns: ["workflow_task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_assets: {
         Row: {
           created_at: string
@@ -2899,10 +3015,18 @@ export type Database = {
           evidence_images: Json | null
           handled_by: string | null
           id: string
+          out_trade_no: string | null
           pay_date: string | null
+          payment_channel: string
           project_id: string | null
+          provider: string | null
+          provider_transaction_id: string | null
+          remark: string | null
+          source_id: string | null
+          source_type: string | null
           status: string | null
           type: string | null
+          workflow_task_id: string | null
         }
         Insert: {
           amount?: number | null
@@ -2910,10 +3034,18 @@ export type Database = {
           evidence_images?: Json | null
           handled_by?: string | null
           id?: string
+          out_trade_no?: string | null
           pay_date?: string | null
+          payment_channel?: string
           project_id?: string | null
+          provider?: string | null
+          provider_transaction_id?: string | null
+          remark?: string | null
+          source_id?: string | null
+          source_type?: string | null
           status?: string | null
           type?: string | null
+          workflow_task_id?: string | null
         }
         Update: {
           amount?: number | null
@@ -2921,10 +3053,18 @@ export type Database = {
           evidence_images?: Json | null
           handled_by?: string | null
           id?: string
+          out_trade_no?: string | null
           pay_date?: string | null
+          payment_channel?: string
           project_id?: string | null
+          provider?: string | null
+          provider_transaction_id?: string | null
+          remark?: string | null
+          source_id?: string | null
+          source_type?: string | null
           status?: string | null
           type?: string | null
+          workflow_task_id?: string | null
         }
         Relationships: [
           {
@@ -2939,6 +3079,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_workflow_task_id_fkey"
+            columns: ["workflow_task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -6206,6 +6353,74 @@ export type Database = {
           },
           {
             foreignKeyName: "tenant_panorama_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_payment_configs: {
+        Row: {
+          app_id: string | null
+          created_at: string
+          disabled_at: string | null
+          enabled_at: string | null
+          enabled_channels: Json
+          encrypted_config_ref: string | null
+          id: string
+          merchant_id: string | null
+          merchant_mode: string
+          provider: string
+          risk_switches: Json
+          settlement_account_summary: string | null
+          status: string
+          sub_app_id: string | null
+          sub_merchant_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          app_id?: string | null
+          created_at?: string
+          disabled_at?: string | null
+          enabled_at?: string | null
+          enabled_channels?: Json
+          encrypted_config_ref?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_mode: string
+          provider: string
+          risk_switches?: Json
+          settlement_account_summary?: string | null
+          status?: string
+          sub_app_id?: string | null
+          sub_merchant_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          app_id?: string | null
+          created_at?: string
+          disabled_at?: string | null
+          enabled_at?: string | null
+          enabled_channels?: Json
+          encrypted_config_ref?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_mode?: string
+          provider?: string
+          risk_switches?: Json
+          settlement_account_summary?: string | null
+          status?: string
+          sub_app_id?: string | null
+          sub_merchant_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_payment_configs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
