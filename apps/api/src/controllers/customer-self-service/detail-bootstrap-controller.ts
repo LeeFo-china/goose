@@ -227,14 +227,13 @@ class CustomerProjectDetailBootstrapController
       addPartialError,
     });
     const stagesPromise = queryResult.data.include_stages
-      ? this.withOptionalModuleTimeout(
-        "construction_stages",
-        measureCustomerProjectDetailStep(
-          steps,
-          "construction_stages_ms",
-          async () => {
-            const workflowProgress = await workflowProgressPromise;
-            return projectTenantId
+      ? workflowProgressPromise.then((workflowProgress) =>
+        this.withOptionalModuleTimeout(
+          "construction_stages",
+          measureCustomerProjectDetailStep(
+            steps,
+            "construction_stages_ms",
+            () => projectTenantId
               ? constructionStageStatusService.listCustomerProjectConstructionStages({
                 projectId: project.id,
                 tenantId: projectTenantId,
@@ -246,10 +245,10 @@ class CustomerProjectDetailBootstrapController
                 tenantId: projectTenantId,
                 workflowProgress,
                 sourceMode: "workflow_runtime",
-              });
-          },
-        ),
-        DETAIL_CONSTRUCTION_STAGES_TIMEOUT_MS,
+              }),
+          ),
+          DETAIL_CONSTRUCTION_STAGES_TIMEOUT_MS,
+        )
       ).catch((error) => {
         addPartialError("construction_stages", error);
         return null;
