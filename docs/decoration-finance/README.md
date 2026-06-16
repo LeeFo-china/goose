@@ -9,7 +9,7 @@
 - [2026-06-16-prd.md](./2026-06-16-prd.md)：装修公司财务系统 PRD，包含 workflow、Admin、小程序、权限和微信支付配置原则。
 - [implementation-plan.md](./implementation-plan.md)：第一阶段实施计划，聚焦人工确认收款、workflow 推进、财务台账、Admin 和小程序交接。
 - `admin-integration.md`：后续 Admin 菜单、页面、权限与交互对接。
-- `miniprogram-handoff.md`：后续小程序任务中心和财务确认收款对接。
+- [miniprogram-handoff.md](./miniprogram-handoff.md)：小程序任务中心和财务确认收款对接。
 - `payment-provider-wechat-pay.md`：后续微信支付商户配置、回调、幂等和 workflow 自动推进设计。
 - [data-model-and-migrations.md](./data-model-and-migrations.md)：第一阶段数据模型、migration、台账、权限和微信支付配置空壳。
 - `rollout-and-acceptance.md`：后续灰度发布、验收记录和回滚方案。
