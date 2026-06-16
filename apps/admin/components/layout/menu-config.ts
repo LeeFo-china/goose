@@ -96,7 +96,6 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: ClipboardCheck,
         permission: "employee.permission_manage",
       },
-      { href: "/expenses", label: "费用审批", icon: CircleDollarSign },
       { href: "/marketing", label: "营销活动", icon: Megaphone },
       {
         href: "/social-video",
@@ -107,6 +106,29 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       { href: "/cameras", label: "工地监控", icon: Camera },
       { href: "/usage", label: "用量统计", icon: BarChart3 },
       { href: "/billing", label: "计费账户", icon: CircleDollarSign },
+    ],
+  },
+  {
+    label: "财务",
+    items: [
+      {
+        href: "/finance",
+        label: "财务总览",
+        icon: CircleDollarSign,
+        permission: "finance.dashboard.view",
+      },
+      {
+        href: "/finance/ledger",
+        label: "财务台账",
+        icon: ScrollText,
+        permission: "finance.ledger.view",
+      },
+      {
+        href: "/expenses",
+        label: "费用审批",
+        icon: CircleDollarSign,
+        permission: "finance.expense.review",
+      },
     ],
   },
   {

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { PaymentTypeConfig } from "@gooes/domain";
-import { CheckCircle2, Loader2, WalletCards } from "lucide-react";
+import { CheckCircle2, WalletCards } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
-  createProjectPayment,
   fetchProjectPayments,
   type ProjectPaymentRecord,
 } from "@/components/projects/project-payment-requests";
@@ -13,9 +12,6 @@ import type { ProjectRecord } from "@/components/projects/project-mutation-types
 import { formatMoney } from "@/components/projects/project-mutation-utils";
 import type { WorkflowRuntimeInstance } from "@/components/workflows/workflow-types";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 type PaymentCollectionType = "deposit" | "stage_1" | "stage_2" | "stage_3" | "add_on";
 
@@ -80,17 +76,14 @@ export function getWorkflowPaymentGate(
 }
 
 export function ProjectWorkflowPaymentGate({
-  disabled,
   gate,
   project,
-  onChanged,
 }: {
   disabled?: boolean;
   gate: WorkflowPaymentGate;
   project: ProjectRecord;
   onChanged: () => void;
 }) {
-  const [amount, setAmount] = useState("");
   const [summary, setSummary] = useState<PaymentSummary | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -103,11 +96,6 @@ export function ProjectWorkflowPaymentGate({
       summary.count > 0 &&
       (requiredAmount === null || summary.totalAmount >= requiredAmount)
     : false;
-  const suggestedAmount = useMemo(() => {
-    if (!requiredAmount) return "";
-    const remainingAmount = requiredAmount - (summary?.totalAmount || 0);
-    return remainingAmount > 0 ? String(remainingAmount) : "";
-  }, [requiredAmount, summary?.totalAmount]);
 
   function loadSummary() {
     startTransition(async () => {
@@ -125,40 +113,6 @@ export function ProjectWorkflowPaymentGate({
     });
   }
 
-  function confirmPayment() {
-    const normalizedAmount = Number(amount || suggestedAmount || 0);
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      setError("请输入有效的入账金额");
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        setError("");
-        await createProjectPayment({
-          project_id: project.id,
-          amount: normalizedAmount,
-          type: gate.paymentType,
-          status: "confirmed",
-        });
-        setAmount("");
-        const data = await fetchProjectPayments({
-          projectId: project.id,
-          type: gate.paymentType,
-          status: "confirmed",
-        });
-        setSummary(summarizePayments(data.list));
-        onChanged();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "确认收款失败");
-      }
-    });
-  }
-
-  useEffect(() => {
-    setAmount(suggestedAmount);
-  }, [suggestedAmount]);
-
   useEffect(() => {
     loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,8 +128,8 @@ export function ProjectWorkflowPaymentGate({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-sm font-semibold">当前节点需要确认收款</div>
-              <Badge variant={satisfied ? "success" : "warning"}>
-                {satisfied ? "已入账" : "待入账"}
+              <Badge variant={satisfied ? "success" : pending ? "secondary" : "warning"}>
+                {satisfied ? "已入账" : pending ? "刷新中" : "待入账"}
               </Badge>
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
@@ -212,33 +166,9 @@ export function ProjectWorkflowPaymentGate({
         </div>
       ) : null}
       {!satisfied ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <div className="grid gap-2">
-            <Label htmlFor={`payment-gate-amount-${gate.nodeKey}`}>入账金额</Label>
-            <Input
-              id={`payment-gate-amount-${gate.nodeKey}`}
-              type="number"
-              min={0.01}
-              step={0.01}
-              value={amount}
-              disabled={disabled || pending}
-              placeholder="请输入金额"
-              onChange={(event) => setAmount(event.target.value)}
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || pending || missingSignedAmount}
-            onClick={confirmPayment}
-          >
-            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-            确认已入账
-          </Button>
+        <div className="mt-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          请在待办中心确认收款，确认后流程会自动推进。
         </div>
-      ) : null}
-      {!satisfied ? (
-        <div className="mt-3 text-xs text-muted-foreground">{gate.blockMessage}</div>
       ) : null}
     </section>
   );
