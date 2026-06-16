@@ -3,7 +3,8 @@
 - date: 2026-06-16
 - target Supabase project: `fclnkyatvfvmzgzdqlba`
 - evidence file: `docs/state_machine_migrate/audit/manual-gates.json`
-- status: destructive cleanup applied; technical verification passed
+- final cleanup commit: `d96ae34 refactor(workflow)!: 删除旧状态机数据库对象`
+- status: destructive cleanup applied; final audit passed
 
 ## Context
 
@@ -131,15 +132,26 @@ Result: failed only on `final_breaking_commit_documented`, as expected before
 creating the final cleanup commit. All database, runtime, type, and manual gate
 checks passed.
 
-## Required Final Step
+## Final Cleanup Commit
 
-Create the final commit with a breaking cleanup subject:
+The final cleanup commit was created with the required breaking cleanup
+subject:
 
 ```bash
 git commit -m "refactor(workflow)!: 删除旧状态机数据库对象"
 ```
 
-After that commit, rerun:
+Result:
+
+| item | value |
+| --- | --- |
+| commit | `d96ae34` |
+| subject | `refactor(workflow)!: 删除旧状态机数据库对象` |
+| final cleanup marker | breaking-change subject with workflow cleanup context |
+
+## Final Audit After Breaking Commit
+
+After commit `d96ae34`, the manual gate and final audit commands were rerun:
 
 ```bash
 cd apps/api
@@ -149,4 +161,77 @@ bun --env-file=/Users/leefo/Public/work/gooes/.env.local run workflow:final-comp
   --evidence-file docs/state_machine_migrate/audit/manual-gates.json
 ```
 
-Expected: final audit `ok: true`, `mode: final`.
+Manual gate output:
+
+```json
+{
+  "ok": true,
+  "generated_at": "2026-06-16T05:19:11.768Z",
+  "checks": [
+    {
+      "name": "manual_gate_evidence",
+      "ok": true,
+      "detail": "evidence_file=docs/state_machine_migrate/audit/manual-gates.json"
+    }
+  ]
+}
+```
+
+Final audit output:
+
+```json
+{
+  "ok": true,
+  "mode": "final",
+  "generated_at": "2026-06-16T05:19:14.791Z",
+  "checks": [
+    {
+      "name": "database_url_configured",
+      "ok": true,
+      "detail": "SUPABASE_DB_DIRECT_URL or SUPABASE_DB_URL configured"
+    },
+    {
+      "name": "no_pending_migrations",
+      "ok": true,
+      "detail": "none"
+    },
+    {
+      "name": "migration_list_aligned",
+      "ok": true,
+      "detail": "aligned=235"
+    },
+    {
+      "name": "cleanup_readiness",
+      "ok": true,
+      "detail": "blockers=0"
+    },
+    {
+      "name": "destructive_migration_content",
+      "ok": true,
+      "detail": "expected destructive drop targets present"
+    },
+    {
+      "name": "destructive_cleanup_verify",
+      "ok": true,
+      "detail": "legacy_tables_absent: absent=customer_status_transition_logs, project_status_transition_logs, expense_request_approval_chains; legacy_rpc_absent: absent=schedule_project_construction_transition(uuid,uuid,text,text,text,uuid,uuid,uuid,text,jsonb); legacy_expense_columns_absent: absent=current_step, current_step_role; legacy_indexes_absent: absent=idx_expense_requests_current_step, customer_status_transition_logs_customer_created_idx, customer_status_transition_logs_tenant_created_idx, customer_status_transition_logs_action_idx, project_status_transition_logs_project_created_idx, project_status_transition_logs_tenant_created_idx, project_status_transition_logs_action_idx, idx_expense_request_approval_chains_request_id, idx_expense_request_approval_chains_assignee_status, idx_expense_request_approval_chains_step_status, expense_request_approval_chains_tenant_assignee_status_idx; legacy_policies_absent: absent=expense_requests.Approvers view pending; workflow_runtime_consistency: total_issues=0"
+    },
+    {
+      "name": "generated_database_types_clean",
+      "ok": true,
+      "detail": "legacy generated types absent"
+    },
+    {
+      "name": "manual_gate_evidence",
+      "ok": true,
+      "detail": "evidence_file=docs/state_machine_migrate/audit/manual-gates.json"
+    },
+    {
+      "name": "final_breaking_commit_documented",
+      "ok": true,
+      "detail": "latest_commit=refactor(workflow)!: 删除旧状态机数据库对象"
+    }
+  ]
+}
+```
+
+Conclusion: final audit passed with `ok: true` and `mode: "final"`.

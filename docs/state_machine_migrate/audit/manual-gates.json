@@ -35,6 +35,6 @@
     "confirmed": true,
     "backup_id": "manual-pg-dump:fclnkyatvfvmzgzdqlba:2026-06-16T11:15:28+08:00",
     "restore_window": "2026-06-16T11:15:28+08:00 to 2026-06-16T23:59:59+08:00",
-    "evidence": "docs/state_machine_migrate/audit/backups/gooes-pre-cleanup-2026-06-16T11-15-28+0800.dump"
+    "evidence": "docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md"
   }
 }

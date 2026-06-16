@@ -258,7 +258,8 @@ Existing evidence already available:
 | backup created at | 2026-06-16T11:15:28+08:00 |
 | restore window | 2026-06-16T11:15:28+08:00 to 2026-06-16T23:59:59+08:00 |
 | restore owner | LeeFo |
-| evidence link/path | `docs/state_machine_migrate/audit/backups/gooes-pre-cleanup-2026-06-16T11-15-28+0800.dump` |
+| evidence link/path | `docs/state_machine_migrate/audit/2026-06-14-manual-gates-evidence.md` |
+| backup artifact path | `docs/state_machine_migrate/audit/backups/gooes-pre-cleanup-2026-06-16T11-15-28+0800.dump` |
 
 Backup command:
 
@@ -288,7 +289,11 @@ Acceptance criteria:
 
 Gate status: confirmed by LeeFo on 2026-06-16. Supabase scheduled backups are
 not available on the Free Plan, so the backup evidence uses a manual
-custom-format PostgreSQL dump of the target project's `public` schema.
+custom-format PostgreSQL dump of the target project's `public` schema. The
+dump artifact itself is intentionally not used as the `manual-gates.json`
+evidence target because it is not suitable for source control; the committed
+evidence is this markdown record, including backup id, artifact path, file size,
+and `pg_restore --list` verification result.
 
 ## Preflight Record
 
