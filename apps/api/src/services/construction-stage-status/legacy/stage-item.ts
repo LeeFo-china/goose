@@ -17,6 +17,7 @@ export function buildStageItem(input: {
   blockedReason: string | null;
   projectStatus?: string | null;
   canCreateAcceptanceByPermission: boolean;
+  canCreateCompletionAcceptanceByWorkflow?: boolean;
   canHandleExistingAcceptance: boolean;
 }) {
   const acceptance = input.acceptance ?? null;
@@ -48,10 +49,12 @@ export function buildStageItem(input: {
     status !== "accepted" &&
     status !== "pending_acceptance" &&
     (isCompletion
-      ? input.projectStatus === "acceptance"
+      ? input.projectStatus === "acceptance" ||
+        input.canCreateCompletionAcceptanceByWorkflow === true
       : isRequired && isAcceptanceWritableStatus);
   const acceptanceAction = buildAcceptanceAction({
     acceptance,
+    isCompletion,
     canCreateAcceptance,
     blockedReason: input.blockedReason,
     canCreateAcceptanceByPermission: input.canCreateAcceptanceByPermission,
@@ -97,6 +100,7 @@ export type ProjectConstructionStageItem = ReturnType<typeof buildStageItem>;
 
 function buildAcceptanceAction(input: {
   acceptance: ProjectAcceptanceRow | null;
+  isCompletion: boolean;
   canCreateAcceptance: boolean;
   blockedReason: string | null;
   canCreateAcceptanceByPermission: boolean;
@@ -134,7 +138,7 @@ function buildAcceptanceAction(input: {
   if (input.canCreateAcceptance) {
     return {
       type: "create" as const,
-      label: "发起验收",
+      label: input.isCompletion ? "发起竣工验收" : "发起验收",
       enabled: true,
       reason: null,
     };

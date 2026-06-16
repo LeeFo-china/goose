@@ -215,21 +215,22 @@ export async function buildProjectConstructionStagesFromRows(input: {
   const missingRequiredStages = PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter(
     (stageCode) => !acceptedStages.has(stageCode),
   );
-  const completionBlockedReason = project.status !== "acceptance"
-    ? "项目进入竣工验收后才能发起竣工验收"
-    : sourceMode === "legacy_derived"
-      ? missingRequiredStages.length > 0
+  const isWorkflowFinalAcceptanceCurrent =
+    isFinalAcceptanceWorkflowNode(workflowProgress);
+  const completionBlockedReason = sourceMode === "legacy_derived"
+    ? project.status !== "acceptance"
+      ? "项目进入竣工验收后才能发起竣工验收"
+      : missingRequiredStages.length > 0
         ? `请先完成${
           missingRequiredStages.map((item) =>
             getStageAcceptanceLabel(item)
           ).join("、")
         }`
         : null
-      : resolveWorkflowStageBlockedReason({
-        stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
-        acceptedStages,
-        workflowProgress,
-      });
+    : resolveWorkflowCompletionBlockedReason({
+      missingRequiredStages,
+      workflowProgress,
+    });
   const completionStage = buildStageItem({
     stageCode: PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE,
     acceptance: input.canReadAcceptance === false
@@ -240,6 +241,8 @@ export async function buildProjectConstructionStagesFromRows(input: {
     blockedReason: completionBlockedReason,
     projectStatus: project.status,
     canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
+    canCreateCompletionAcceptanceByWorkflow: isWorkflowFinalAcceptanceCurrent &&
+      missingRequiredStages.length === 0,
     canHandleExistingAcceptance: acceptanceWritableMap
       ? acceptanceWritableMap.get(PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE) ?? false
       : true,
@@ -310,6 +313,40 @@ function resolveWorkflowStageBlockedReason(input: {
   return progress.current_node_title
     ? `当前流程在${progress.current_node_title}，暂不可推进${getStageLabel(input.stageCode)}`
     : "当前流程未到此阶段";
+}
+
+function resolveWorkflowCompletionBlockedReason(input: {
+  missingRequiredStages: ProjectLogStageCode[];
+  workflowProgress: ProjectWorkflowProgress | null;
+}) {
+  const progress = input.workflowProgress;
+  if (!progress || progress.source !== "workflow_runtime") {
+    return "流程运行态缺失，施工阶段暂不可推进";
+  }
+
+  if (input.missingRequiredStages.length > 0) {
+    return `请先完成${
+      input.missingRequiredStages.map((item) =>
+        getStageAcceptanceLabel(item)
+      ).join("、")
+    }`;
+  }
+
+  if (isFinalAcceptanceWorkflowNode(progress)) {
+    return null;
+  }
+
+  return progress.current_node_title
+    ? `当前流程在${progress.current_node_title}，暂不可推进竣工验收`
+    : "当前流程未到竣工验收";
+}
+
+function isFinalAcceptanceWorkflowNode(
+  workflowProgress: ProjectWorkflowProgress | null,
+) {
+  return workflowProgress?.source === "workflow_runtime" &&
+    (workflowProgress.current_node_key === "final_acceptance" ||
+      workflowProgress.current_business_kind === "final_acceptance");
 }
 
 function resolveWorkflowCurrentStage(

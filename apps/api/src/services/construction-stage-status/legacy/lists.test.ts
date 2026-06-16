@@ -138,4 +138,45 @@ describe("buildProjectConstructionStagesFromRows", () => {
     expect(result.current_stage).toBe("plumbing_electrical");
     expect(result.next_stage?.stage_code).toBe("plumbing_electrical");
   });
+
+  test("allows final acceptance when workflow runtime is at final_acceptance", async () => {
+    const result = await buildProjectConstructionStagesFromRows({
+      project,
+      acceptanceRows: [
+        confirmedAcceptance("demolition"),
+        confirmedAcceptance("plumbing_electrical"),
+        confirmedAcceptance("tiling"),
+        confirmedAcceptance("woodwork"),
+        confirmedAcceptance("painting"),
+        confirmedAcceptance("installation"),
+      ],
+      logRows: [],
+      latestLogRows: [],
+      canReadAcceptance: true,
+      canCreateAcceptance: true,
+      workflowProgress: workflowProgress({
+        current_node_key: "final_acceptance",
+        current_node_title: "竣工验收",
+        current_node_type: "business",
+        current_business_kind: "final_acceptance",
+        current_stage_code: null,
+        current_gate: null,
+      }),
+      sourceMode: "workflow_runtime",
+    });
+
+    const completion = result.stages.find((item) =>
+      item.stage_code === "completion"
+    );
+
+    expect(result.required_completed).toBe(true);
+    expect(completion?.blocked_reason).toBeNull();
+    expect(completion?.can_create_acceptance).toBe(true);
+    expect(completion?.acceptance_action).toEqual({
+      type: "create",
+      label: "发起竣工验收",
+      enabled: true,
+      reason: null,
+    });
+  });
 });
