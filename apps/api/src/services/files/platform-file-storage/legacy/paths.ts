@@ -30,6 +30,9 @@ export function buildLegacyObjectPath(this: any, input: {
     project_acceptance: input.projectId?.trim()
       ? `${input.projectId.trim()}/acceptance`
       : "project-acceptance",
+    project_payment: input.projectId?.trim()
+      ? `${input.projectId.trim()}/payment`
+      : "project-payment",
     picture_library: "picture-library",
     picture_comment: "picture-comment",
   };

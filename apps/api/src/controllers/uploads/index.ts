@@ -16,13 +16,14 @@ import { z } from "zod";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const H5_MARKETING_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set([
+const IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/heic",
   "image/heif",
-]);
+] as const;
+const ALLOWED_MIME_TYPES = new Set<string>(IMAGE_MIME_TYPES);
 const DIRECT_UPLOAD_SCENES = [
   "project_log",
   "project_log_comment",
@@ -35,25 +36,20 @@ const DIRECT_UPLOAD_SCENES = [
   "customer_douyin_screenshot",
   "h5_marketing_page",
   "project_acceptance",
+  "project_payment",
   "picture_library",
   "picture_comment",
 ] as const;
+const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
-const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>([
-  "project_log",
-  "project_acceptance",
-]);
+const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>(["project_log", "project_acceptance", "project_payment"]);
 const PUBLIC_STORED_FILE_SCENES = new Set([
   "h5_marketing_page",
   "panorama_tiles",
   "picture_library",
   "picture_comment",
 ]);
-const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
-  "h5_marketing_page",
-  "picture_library",
-  "picture_comment",
-]);
+const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment"]);
 
 const DirectUploadInitSchema = z.object({
   scene: z.enum(DIRECT_UPLOAD_SCENES, {
@@ -61,13 +57,7 @@ const DirectUploadInitSchema = z.object({
   }),
   project_id: z.string().uuid("无效的项目ID").optional(),
   filename: z.string().trim().max(200, "文件名过长").optional(),
-  mimetype: z.enum([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif",
-  ], {
+  mimetype: z.enum(IMAGE_MIME_TYPES, {
     message: "仅支持 jpg、png、webp、heic、heif 图片",
   }),
   size_bytes: z.number().int().positive("图片大小无效"),
@@ -345,6 +335,22 @@ class UploadController extends BaseController {
     }
 
     const authContext = await authorizationService.getRequiredAuthContext(user.sub);
+    if (scene === "project_payment") {
+      if (!actorContext.employeeId) {
+        throw Errors.forbidden();
+      }
+
+      const canConfirmProjectPayment = await accessPolicyService.canAccessProject(
+        authContext,
+        projectId,
+        FINANCE_PAYMENT_CONFIRM_PERMISSION,
+      );
+      if (!canConfirmProjectPayment) {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+
     if (scene === "project_acceptance" && actorContext.customerId) {
       const project = await customerSelfServiceService.findOwnedProject({
         projectId,

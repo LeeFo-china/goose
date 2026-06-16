@@ -33,6 +33,7 @@ export type PlatformUploadScene =
   | "customer_douyin_screenshot"
   | "h5_marketing_page"
   | "project_acceptance"
+  | "project_payment"
   | "picture_library"
   | "picture_comment";
 
