@@ -65,6 +65,9 @@ export type WorkflowRuntimeProjectionRow = {
   status: WorkflowInstanceStatus;
   current_node_key: string | null;
   current_node_snapshot: Record<string, unknown> | null;
+  started_at: string;
+  created_at: string;
+  updated_at: string;
 };
 
 const WORKFLOW_SUBJECT_STATE_SELECT = [
@@ -93,6 +96,9 @@ const WORKFLOW_RUNTIME_PROJECTION_SELECT = [
   "status",
   "current_node_key",
   "current_node_snapshot",
+  "started_at",
+  "created_at",
+  "updated_at",
 ].join(", ");
 
 function table(name: string) {
@@ -182,7 +188,10 @@ class WorkflowSubjectStateRepository {
       .eq("subject_type", input.subjectType)
       .eq("subject_id", input.subjectId)
       .eq("status", "running")
+      .order("started_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
 

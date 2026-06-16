@@ -91,6 +91,8 @@ async function summarizeSubjectStates(
         instance.status,
         instance.current_node_key,
         instance.current_node_snapshot,
+        instance.started_at,
+        instance.created_at,
         instance.updated_at
       from public.workflow_instances instance
       where instance.subject_type in ('customer', 'project', 'expense_request')
@@ -101,7 +103,10 @@ async function summarizeSubjectStates(
         instance.subject_type,
         instance.subject_id,
         case when instance.status = 'running' then 0 else 1 end,
-        instance.updated_at desc
+        instance.started_at desc,
+        instance.created_at desc,
+        instance.updated_at desc,
+        instance.id desc
     ),
     pending_task_counts as (
       select tenant_id, instance_id, count(*)::int as pending_task_count
@@ -154,6 +159,8 @@ async function rebuildSubjectStates(
         instance.status,
         instance.current_node_key,
         instance.current_node_snapshot,
+        instance.started_at,
+        instance.created_at,
         instance.updated_at
       from public.workflow_instances instance
       where instance.subject_type in ('customer', 'project', 'expense_request')
@@ -164,7 +171,10 @@ async function rebuildSubjectStates(
         instance.subject_type,
         instance.subject_id,
         case when instance.status = 'running' then 0 else 1 end,
-        instance.updated_at desc
+        instance.started_at desc,
+        instance.created_at desc,
+        instance.updated_at desc,
+        instance.id desc
     ),
     pending_task_counts as (
       select tenant_id, instance_id, count(*)::int as pending_task_count

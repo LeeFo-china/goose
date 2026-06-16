@@ -127,6 +127,21 @@ export async function runWorkflowRuntimeConsistencyCheck(databaseUrl: string) {
     });
 
     checks.push({
+      check_name: "project_multiple_running_instances",
+      issue_count: await readIssueCount(db<CountRow[]>`
+        select count(*)::int as issue_count
+        from (
+          select instance.tenant_id, instance.subject_type, instance.subject_id
+          from public.workflow_instances instance
+          where instance.status = 'running'
+            and instance.subject_type = 'project'
+          group by instance.tenant_id, instance.subject_type, instance.subject_id
+          having count(*) > 1
+        ) duplicate_running_subjects;
+      `),
+    });
+
+    checks.push({
       check_name: "running_instance_missing_current_node",
       issue_count: await readIssueCount(db<CountRow[]>`
         select count(*)::int as issue_count

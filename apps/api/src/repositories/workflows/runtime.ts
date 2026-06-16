@@ -93,7 +93,10 @@ export async function findLatestRunningRuntimeInstance(input: {
     .eq("subject_type", input.subjectType)
     .eq("subject_id", input.subjectId)
     .eq("status", "running")
+    .order("started_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
 

@@ -47,6 +47,7 @@ class WorkflowSubjectsService {
         status: "pending",
         subjectType: params.subjectType,
         subjectId: params.subjectId.trim(),
+        instanceId: state.instance_id,
         page: 1,
         pageSize: 100,
       }),

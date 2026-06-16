@@ -74,7 +74,10 @@ class WorkflowSubjectStateService {
     input: WorkflowSubjectStateInput,
   ): Promise<WorkflowSubjectStateRow | null> {
     const existing = await workflowSubjectStateRepository.find(input);
-    if (existing) {
+    const latestRuntimeInstance = await workflowSubjectStateRepository
+      .findLatestRuntimeInstance(input);
+
+    if (existing && this.matchesRuntimeProjection(existing, latestRuntimeInstance)) {
       return existing;
     }
 
@@ -105,6 +108,22 @@ class WorkflowSubjectStateService {
       subjectType: input.subjectType,
       subjectId: input.subjectId,
     });
+  }
+
+  private matchesRuntimeProjection(
+    state: WorkflowSubjectStateRow,
+    instance: WorkflowRuntimeProjectionRow | null,
+  ): boolean {
+    if (!instance) {
+      return state.instance_id === null &&
+        state.instance_status === null &&
+        state.current_node_key === null;
+    }
+
+    return state.definition_id === instance.definition_id &&
+      state.instance_id === instance.id &&
+      state.instance_status === instance.status &&
+      state.current_node_key === instance.current_node_key;
   }
 
   private getNodeSnapshot(

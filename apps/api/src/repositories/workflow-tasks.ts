@@ -56,6 +56,7 @@ type WorkflowTaskListInput = {
   status?: WorkflowTaskStatus;
   subjectType?: WorkflowSubjectType;
   subjectId?: string;
+  instanceId?: string;
 };
 
 type WorkflowTaskListResult = {
@@ -148,6 +149,9 @@ class WorkflowTaskRepository {
     }
     if (input.subjectId) {
       request = request.eq("instance.subject_id", input.subjectId);
+    }
+    if (input.instanceId) {
+      request = request.eq("instance_id", input.instanceId);
     }
 
     const { data, error, count } = await request
