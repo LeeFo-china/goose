@@ -82,7 +82,7 @@ set +a
 supabase migration list
 ```
 
-结果：
+初次验收结果：
 
 - Local 和 Remote 对齐。
 - `20260616170000` 在 Local 和 Remote 均存在：
@@ -90,6 +90,18 @@ supabase migration list
 ```text
 20260616170000 | 20260616170000 | 2026-06-16 17:00:00
 ```
+
+复验时新增并应用验收环境修复 migration：
+
+```text
+20260616193000 | 20260616193000 | 2026-06-16 19:30:00
+```
+
+该 migration 做了三件事：
+
+- 将 `finance.*` 绑定到 `system_admin` 和 `finance_base`。
+- 将项目 `payment_collection` 待办默认投影到 `finance.payment.confirm`。
+- 清理 dev/e2e 无效项目 workflow runtime，并把收款 smoke 待办迁移到真实 smoke 项目。
 
 ## 4. 服务 Smoke 环境
 
@@ -257,34 +269,208 @@ finance.view -> role_count 0
 - 当前远端数据没有任何角色绑定 `finance.*` 权限。
 - Admin 财务菜单和接口权限已经收口，但需要给租户财务角色分配权限后才能真实使用。
 
+### 5.4 验收环境修复和复验
+
+新增 migration：
+
+```text
+supabase/migrations/20260616193000_fix_decoration_finance_acceptance_runtime.sql
+```
+
+应用前 dry-run：
+
+```text
+Would push these migrations:
+ • 20260616193000_fix_decoration_finance_acceptance_runtime.sql
+```
+
+应用后检查：
+
+```text
+20260616193000 | 20260616193000 | 2026-06-16 19:30:00
+```
+
+权限绑定复验：
+
+```text
+finance.dashboard.view -> finance_base, system_admin
+finance.expense.pay -> finance_base, system_admin
+finance.expense.review -> finance_base, system_admin
+finance.ledger.view -> finance_base, system_admin
+finance.payment.confirm -> finance_base, system_admin
+finance.payment.create -> finance_base, system_admin
+finance.view -> finance_base, system_admin
+```
+
+无效项目 workflow runtime 复验：
+
+```text
+invalid_project_workflow_count -> 0
+```
+
+复验待办：
+
+```text
+task_id: a5a0f473-467c-4b2c-84a8-218ceb7cf5b1
+subject_id: 00000000-0000-4000-8000-202606160006
+project_exists: true
+assignee_permission_code: finance.payment.confirm
+business_kind: payment_collection
+```
+
+使用财务角色员工登录后台：
+
+```text
+employee: 小龙女 / 18800005001
+role: finance_base
+permissions include:
+- finance.payment.confirm
+- finance.ledger.view
+```
+
+完成收款请求：
+
+```http
+POST /workflow-tasks/a5a0f473-467c-4b2c-84a8-218ceb7cf5b1/complete
+```
+
+请求体摘要：
+
+```json
+{
+  "action": "complete",
+  "reason": null,
+  "output": {
+    "payment_status": "success",
+    "amount": 1234.56,
+    "paid_at": "2026-06-16T12:30:00.000Z",
+    "evidence_images": ["smoke://decoration-finance/payment-evidence.jpg"],
+    "remark": "Task 6 smoke verification after finance permission fix"
+  }
+}
+```
+
+响应摘要：
+
+```json
+{
+  "message": "success",
+  "payment": {
+    "id": "7232ab97-cb8f-432d-b077-2303c07eb67c",
+    "project_id": "00000000-0000-4000-8000-202606160006",
+    "amount": 1234.56,
+    "type": "stage_1",
+    "status": "confirmed",
+    "workflow_task_id": "a5a0f473-467c-4b2c-84a8-218ceb7cf5b1",
+    "payment_channel": "manual"
+  },
+  "result": {
+    "ok": true,
+    "bridged": true,
+    "operation": "confirm_payment"
+  },
+  "workflow_state": {
+    "current_node_key": "tile_work",
+    "current_business_kind": "procedure_template",
+    "pending_task_count": 1
+  }
+}
+```
+
+完成前后计数：
+
+```text
+before: payments 0, ledger_entries 0
+after:  payments 1, ledger_entries 1
+```
+
+台账接口复验：
+
+```http
+GET /finance/ledger?page=1&pageSize=20&project_id=00000000-0000-4000-8000-202606160006
+```
+
+响应摘要：
+
+```json
+{
+  "total": 1,
+  "rows": [
+    {
+      "direction": "in",
+      "entry_type": "project_payment",
+      "amount": 1234.56,
+      "source_type": "workflow_task",
+      "source_id": "a5a0f473-467c-4b2c-84a8-218ceb7cf5b1",
+      "workflow_task_id": "a5a0f473-467c-4b2c-84a8-218ceb7cf5b1",
+      "payment_id": "7232ab97-cb8f-432d-b077-2303c07eb67c"
+    }
+  ]
+}
+```
+
+重复提交同一 task：
+
+```json
+{
+  "success": false,
+  "message": "流程待办已处理",
+  "code": "WORKFLOW_TASK_NOT_PENDING"
+}
+```
+
+重复提交后计数仍为：
+
+```text
+payments 1, ledger_entries 1
+```
+
+结论：
+
+- 财务员工可以看到并完成 `payment_collection` 待办。
+- 完成动作会先创建 `confirmed` payment，再写入 `finance_ledger_entries`，再推进 workflow。
+- workflow 已从 `payment_stage_1` 推进到 `tile_work`。
+- 重复提交不会重复创建 payment 或 ledger；当前 API 语义是“已处理任务返回业务错误”，不是再次返回同一成功结果。
+
 ## 6. 验收结论
 
-已通过：
+最终已通过：
 
 - Focused API tests。
+- `finance-ledger.test.ts` 单独运行。
 - API typecheck/build/file-size。
 - Admin file-size/typecheck。
 - Supabase migration Local/Remote 对齐。
 - 收款 action metadata 契约可通过 API 返回。
 - 收款失败场景没有留下 payment 或 ledger 脏数据。
+- `finance_base` 财务员工可以访问财务待办和财务台账。
+- 收款闭环 smoke 通过：创建 confirmed payment、写 ledger、workflow 推进到下一节点。
+- 重复提交同一已完成 task 不重复入账。
 
-未通过完整人工闭环：
+注意事项：
 
-- 现有唯一 pending 收款任务引用不存在的项目，导致 payment 外键失败。
-- 远端角色未绑定 `finance.*` 权限，真实财务员工无法访问 `/finance/ledger`，也无法按权限配置处理 `finance.payment.confirm`。
+- 本次 smoke 使用 dev/e2e 验收数据修复 migration 创建的隐藏项目：
+  `00000000-0000-4000-8000-202606160006`。
+- 重复提交当前返回 `WORKFLOW_TASK_NOT_PENDING`。数据层幂等成立；如果产品希望接口层重复提交也返回原 payment，需要后续单独调整 complete API 语义。
+- 初次把 `finance-ledger.test.ts` 与 `workflow-task-payment-bridge.test.ts` 放在同一 Bun 进程执行时，因前者模块被后者 mock 污染导致失败；分进程运行均通过。
 
-## 7. 后续处理建议
+## 7. 复验命令
 
-建议下一步单独执行“财务验收环境修复”：
+```bash
+cd apps/api
+bun test src/services/workflow-task-action-metadata.test.ts src/services/workflow-task-payment-bridge.test.ts src/services/workflow-tasks.test.ts
+bun test src/services/finance-ledger.test.ts
+```
 
-1. 通过 migration 或明确的初始化脚本，将 `finance.*` 权限绑定到租户 `finance_base` 或约定的财务角色。
-2. 清理或重建引用不存在项目的 workflow task 测试数据。
-3. 使用真实存在的项目重新生成 pending `payment_collection` task。
-4. 重新执行完整 smoke：
-   - 提交金额和凭证。
-   - 确认 created payment 为 `confirmed`。
-   - 确认 ledger 有 `project_payment / in`。
-   - 确认 workflow task completed 并推进到下一节点。
-   - 重复提交同一 taskId，确认 payment 和 ledger 不重复。
+```bash
+bun run api:check
+```
+
+```bash
+set -a
+source /Users/leefo/Public/work/gooes/.env.local
+set +a
+supabase migration list
+```
 
 本次未修改 `/Users/leefo/Public/work/orange`。
