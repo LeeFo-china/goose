@@ -7,6 +7,10 @@ const completeRuntimeNode = mock(async () => ({
   nextNode: null,
   task: null,
 }));
+const completePaymentBridge = mock(async (): Promise<unknown> => null);
+const completeProjectBridge = mock(async () => null);
+const completeExpenseBridge = mock(async () => null);
+const completeCustomerBridge = mock(async () => null);
 
 const paymentTask = {
   id: "task-1",
@@ -22,7 +26,7 @@ const paymentTask = {
   status: "pending",
   assignee_employee_id: "finance-employee-1",
   assignee_role_code: null,
-  assignee_permission_code: "project_payment.confirm",
+  assignee_permission_code: "finance.payment.confirm",
   assignee_employee: null,
   due_at: null,
   completed_by: null,
@@ -71,6 +75,17 @@ mock.module("@/repositories/workflows", () => ({
   },
 }));
 
+mock.module("@/services/access-policy", () => ({
+  accessPolicyService: {
+    assertTenantId: mock((authContext: { tenantId?: string | null }) => {
+      if (!authContext.tenantId) {
+        throw new Error("missing tenant");
+      }
+      return authContext.tenantId;
+    }),
+  },
+}));
+
 mock.module("@/services/workflow-runtime-guards", () => ({
   assertRuntimeNodeCompletionAllowed: mock(async () => undefined),
 }));
@@ -78,6 +93,30 @@ mock.module("@/services/workflow-runtime-guards", () => ({
 mock.module("@/services/workflow-subject-state", () => ({
   workflowSubjectStateService: {
     syncFromRuntimeInstance: mock(async () => null),
+  },
+}));
+
+mock.module("@/services/workflow-task-project-bridge", () => ({
+  workflowTaskProjectBridge: {
+    complete: completeProjectBridge,
+  },
+}));
+
+mock.module("@/services/workflow-task-expense-bridge", () => ({
+  workflowTaskExpenseBridge: {
+    complete: completeExpenseBridge,
+  },
+}));
+
+mock.module("@/services/workflow-task-customer-bridge", () => ({
+  workflowTaskCustomerBridge: {
+    complete: completeCustomerBridge,
+  },
+}));
+
+mock.module("@/services/workflow-task-payment-bridge", () => ({
+  workflowTaskPaymentBridge: {
+    complete: completePaymentBridge,
   },
 }));
 
@@ -142,7 +181,7 @@ describe("workflowTaskService", () => {
           avatar: null,
           roleCodes: [],
           roles: [],
-          permissions: [{ code: "project_payment.confirm", scope: "all" }],
+          permissions: [{ code: "finance.payment.confirm", scope: "all" }],
         },
         "task-1",
         { action: "complete", reason: null, output: {} },
@@ -152,6 +191,85 @@ describe("workflowTaskService", () => {
       code: "FORBIDDEN",
     });
 
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+  });
+
+  test("routes project payment collection completion through payment bridge", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    completePaymentBridge.mockImplementation(async () => ({
+      result: {
+        ok: true,
+        bridged: true,
+        operation: "confirm_payment",
+      },
+      payment: { id: "payment-1" },
+      workflow_state: null,
+    }));
+
+    const result = await workflowTaskService.completeTask(
+      {
+        authUserId: "auth-1",
+        employeeId: "finance-employee-1",
+        tenantId: "tenant-1",
+        tenantName: null,
+        tenantSlug: null,
+        tenantStatus: "active",
+        isPlatformAdmin: false,
+        employeeName: "财务",
+        employeeStatus: "active",
+        departmentId: null,
+        tenantDepartmentId: null,
+        departmentCode: "FINANCE",
+        departmentName: "财务部",
+        postId: null,
+        postName: null,
+        avatar: null,
+        roleCodes: [],
+        roles: [],
+        permissions: [{ code: "finance.payment.confirm", scope: "all" }],
+      },
+      "task-1",
+      {
+        action: "complete",
+        reason: null,
+        output: {
+          amount: 10000,
+          evidence_images: [{ url: "https://example.com/payment.jpg" }],
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      result: {
+        ok: true,
+        bridged: true,
+        operation: "confirm_payment",
+      },
+      payment: { id: "payment-1" },
+    });
+    expect(completePaymentBridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authContext: expect.objectContaining({
+          employeeId: "finance-employee-1",
+        }),
+        task: expect.objectContaining({
+          id: "task-1",
+          tenant_id: "tenant-1",
+          definition_id: "definition-1",
+          instance_id: "instance-1",
+          node_key: "payment_stage_2",
+          instance: expect.objectContaining({
+            subject_id: "project-1",
+            current_node_snapshot: paymentTask.instance.current_node_snapshot,
+          }),
+        }),
+        action: "complete",
+        output: expect.objectContaining({
+          amount: 10000,
+          evidence_images: [{ url: "https://example.com/payment.jpg" }],
+        }),
+      }),
+    );
     expect(completeRuntimeNode).not.toHaveBeenCalled();
   });
 });

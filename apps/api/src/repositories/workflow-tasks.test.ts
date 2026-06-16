@@ -45,13 +45,13 @@ describe("workflowTaskRepository", () => {
       tenantId: "tenant-1",
       employeeId: "employee-1",
       roleCodes: ["finance"],
-      permissionCodes: ["project_payment.confirm"],
+      permissionCodes: ["finance.payment.confirm"],
     });
 
     expect(orCalls[0]).toBe([
       "assignee_employee_id.eq.employee-1",
       "and(assignee_employee_id.is.null,assignee_role_code.in.(finance))",
-      "and(assignee_employee_id.is.null,assignee_permission_code.in.(project_payment.confirm))",
+      "and(assignee_employee_id.is.null,assignee_permission_code.in.(finance.payment.confirm))",
       "and(assignee_employee_id.is.null,assignee_role_code.is.null,assignee_permission_code.is.null)",
     ].join(","));
   });

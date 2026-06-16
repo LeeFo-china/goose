@@ -163,6 +163,38 @@ function buildPaymentCollectionActions(
             : {}),
           ...(minAmount !== null ? { min_amount: minAmount } : {}),
         },
+        {
+          name: "amount",
+          label: "入账金额",
+          type: "number",
+          required: true,
+          payment_type: paymentType,
+          payment_label: paymentLabel,
+          requirement_mode: requirementMode,
+          ...(requiredPercentage !== null
+            ? { required_percentage: requiredPercentage }
+            : {}),
+          ...(minAmount !== null ? { min_amount: minAmount } : {}),
+        },
+        {
+          name: "paid_at",
+          label: "入账时间",
+          type: "datetime",
+          required: false,
+        },
+        {
+          name: "evidence_images",
+          label: "收款凭证",
+          type: "image_list",
+          required: true,
+          min_image_count: 1,
+        },
+        {
+          name: "remark",
+          label: "收款备注",
+          type: "string",
+          required: false,
+        },
       ],
     },
   ];

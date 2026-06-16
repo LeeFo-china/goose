@@ -82,7 +82,7 @@ describe("buildWorkflowTaskActions", () => {
   });
 
   test("describes payment collection gate actions", () => {
-    expect(buildWorkflowTaskActions({
+    const action = buildWorkflowTaskActions({
       subjectType: "project",
       nodeKey: "middle_payment",
       nodeType: "confirmation",
@@ -95,26 +95,57 @@ describe("buildWorkflowTaskActions", () => {
           requirement_mode: "any_confirmed",
         },
       },
-    })).toEqual([
-      {
-        key: "complete",
-        label: "中期进度款",
-        business_domain: "payment_collection",
-        business_action: "confirm_payment",
-        requires_reason: false,
-        output_fields: [
-          {
-            name: "payment_status",
-            label: "中期进度款",
-            type: "payment_collection",
-            required: true,
-            payment_type: "stage_2",
-            payment_label: "中期进度款",
-            requirement_mode: "any_confirmed",
-          },
-        ],
-      },
-    ]);
+    })[0];
+
+    expect(action).toMatchObject({
+      key: "complete",
+      label: "中期进度款",
+      business_domain: "payment_collection",
+      business_action: "confirm_payment",
+      requires_reason: false,
+    });
+
+    expect(action?.output_fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "payment_status",
+          label: "中期进度款",
+          type: "payment_collection",
+          required: true,
+          payment_type: "stage_2",
+          payment_label: "中期进度款",
+          requirement_mode: "any_confirmed",
+        }),
+        expect.objectContaining({
+          name: "amount",
+          label: "入账金额",
+          type: "number",
+          required: true,
+          payment_type: "stage_2",
+          payment_label: "中期进度款",
+          requirement_mode: "any_confirmed",
+        }),
+        expect.objectContaining({
+          name: "paid_at",
+          label: "入账时间",
+          type: "datetime",
+          required: false,
+        }),
+        expect.objectContaining({
+          name: "evidence_images",
+          label: "收款凭证",
+          type: "image_list",
+          required: true,
+          min_image_count: 1,
+        }),
+        expect.objectContaining({
+          name: "remark",
+          label: "收款备注",
+          type: "string",
+          required: false,
+        }),
+      ]),
+    );
   });
 
   test("describes expense approval and payment actions", () => {
