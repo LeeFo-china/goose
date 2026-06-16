@@ -20,8 +20,15 @@ import {
   type EmployeeDepartmentOption,
   type EmployeePostOption,
 } from "@/components/employees/employee-mutations";
+import { EmployeeIdCopyButton } from "@/components/employees/employee-id-copy-button";
+import { getEmployeeIdentityMeta } from "@/components/employees/employee-identity-utils";
 import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type EmployeeRecord = {
   id: string;
@@ -176,6 +183,38 @@ function EmployeeRolesCell({ roles }: { roles?: EmployeeRoleSummary[] }) {
   );
 }
 
+function EmployeeIdentityText({
+  id,
+  name,
+}: {
+  id: string;
+  name: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="truncate font-semibold">
+          {name}
+        </div>
+        <div className="max-w-[160px] truncate text-xs tabular-nums text-muted-foreground">
+          {id}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-[320px]">
+        <div className="flex flex-col gap-1">
+          <div className="break-all font-semibold">{name}</div>
+          <div className="break-all font-mono text-xs tabular-nums opacity-90">
+            {id}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function EmployeesTable({
   employees,
   departments,
@@ -201,29 +240,37 @@ export function EmployeesTable({
     {
       id: "employee",
       header: "员工",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
-            {row.original.avatar ? (
-              <img
-                src={row.original.avatar}
-                alt={`${row.original.name || "员工"}头像`}
-                className="size-full object-cover"
-              />
-            ) : (
-              <UserRound className="size-4" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate font-semibold">
-              {row.original.name || "未命名员工"}
+      cell: ({ row }) => {
+        const identity = getEmployeeIdentityMeta(row.original);
+
+        return (
+          <div className="group/employee-cell flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-accent-foreground">
+              {row.original.avatar ? (
+                <img
+                  src={row.original.avatar}
+                  alt={`${identity.name}头像`}
+                  className="size-full object-cover"
+                />
+              ) : (
+                <UserRound className="size-4" />
+              )}
             </div>
-            <div className="max-w-[160px] truncate text-xs tabular-nums text-muted-foreground">
-              {row.original.id}
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1">
+                <EmployeeIdentityText
+                  id={identity.id}
+                  name={identity.name}
+                />
+                <EmployeeIdCopyButton
+                  employeeId={identity.id}
+                  employeeName={identity.name}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       id: "phone",
