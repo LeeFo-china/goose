@@ -25,6 +25,7 @@ import {
   type ProjectMemberRoleCode,
 } from "@gooes/domain";
 import { CustomerSelfServiceBaseController } from "./shared";
+import { deriveCustomerProjectTeam } from "./customer-project-team";
 
 type CustomerProjectLogCommentAuthor = {
   id: string;
@@ -465,26 +466,25 @@ export abstract class CustomerSelfServiceProjectBaseController
       ...(item.is_virtual ? { is_virtual: true } : {}),
     };
   }
-
   protected async serializeCustomerProjectDetailItem(row: CustomerProjectListItem) {
     const projectId = typeof row.id === "string" ? row.id : "";
     const base = this.serializeCustomerProjectListItem(row);
     if (!projectId) {
-      return {
-        ...base,
-        members: [] as ReturnType<typeof this.serializeCustomerProjectMember>[],
-      };
+      return { ...base, supervisor: null, members: [] as ReturnType<typeof this.serializeCustomerProjectMember>[] };
     }
 
     const members = await projectMemberService.listProjectMembers(projectId);
+    const serializedMembers = members.map((item) => this.serializeCustomerProjectMember(item as CustomerProjectMemberSummary));
+    const team = deriveCustomerProjectTeam({
+      designer: base.designer,
+      members: serializedMembers,
+    });
     return {
       ...base,
-      members: members.map((item) =>
-        this.serializeCustomerProjectMember(item as CustomerProjectMemberSummary)
-      ),
+      ...team,
+      members: serializedMembers,
     };
   }
-
   protected async getOwnedProject(projectId: string, customerId: string, tenantId?: string | null) {
     const project = await customerSelfServiceService.findOwnedProject({
       projectId,

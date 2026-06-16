@@ -185,7 +185,7 @@ class CustomerProjectDetailBootstrapController
     const projectPromise = measureCustomerProjectDetailStep(
       steps,
       "serialize_ms",
-      async () => this.serializeCustomerProjectListItem(project),
+      async () => this.serializeCustomerProjectDetailItem(project),
     );
     const customerServicePromise = this.withOptionalModuleTimeout(
       "customer_service",
