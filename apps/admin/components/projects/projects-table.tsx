@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/admin/data-table";
+import { IdentityIdCopyButton } from "@/components/admin/identity-id-copy-button";
+import { getIdentityCopyMeta } from "@/components/admin/identity-copy-utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -95,26 +97,35 @@ function ProjectIdentityCell({
   customer: string;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        type="button"
-        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="w-[10em] truncate font-semibold">
-          {name}
-        </div>
-        <div className="w-[10em] truncate text-xs text-muted-foreground">
-          {customer}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent align="start" className="max-w-[280px]">
-        <div className="flex flex-col gap-1">
-          <div className="break-all font-semibold">{name}</div>
-          <div className="break-all text-xs opacity-90">客户：{customer}</div>
-          <div className="break-all text-xs tabular-nums opacity-90">项目 ID：{id}</div>
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <div className="group/project-cell flex min-w-0 items-center gap-1">
+      <Tooltip>
+        <TooltipTrigger
+          type="button"
+          className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="w-[10em] truncate font-semibold">
+            {name}
+          </div>
+          <div className="w-[10em] truncate text-xs text-muted-foreground">
+            {customer}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent align="start" className="max-w-[280px]">
+          <div className="flex flex-col gap-1">
+            <div className="break-all font-semibold">{name}</div>
+            <div className="break-all text-xs opacity-90">客户：{customer}</div>
+            <div className="break-all font-mono text-xs tabular-nums opacity-90">项目 ID：{id}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+      <IdentityIdCopyButton
+        id={id}
+        name={name}
+        fallbackName="未命名项目"
+        idLabel="项目ID"
+        className="group-hover/project-cell:opacity-100 group-focus-within/project-cell:opacity-100"
+      />
+    </div>
   );
 }
 
@@ -129,15 +140,23 @@ export function ProjectsTable({
     {
       id: "project",
       header: "项目",
-      cell: ({ row }) => (
-        <ProjectIdentityCell
-          id={row.original.id}
-          name={row.original.name || "未命名项目"}
-          customer={customerName(row.original.customer)}
-        />
-      ),
+      cell: ({ row }) => {
+        const identity = getIdentityCopyMeta({
+          id: row.original.id,
+          name: row.original.name,
+          fallbackName: "未命名项目",
+        });
+
+        return (
+          <ProjectIdentityCell
+            id={identity.id}
+            name={identity.name}
+            customer={customerName(row.original.customer)}
+          />
+        );
+      },
       meta: {
-        cellClassName: "w-[190px]",
+        cellClassName: "w-[220px]",
       },
     },
     {

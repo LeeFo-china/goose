@@ -1,3 +1,5 @@
+import { getIdentityCopyMeta } from "../admin/identity-copy-utils";
+
 export function getEmployeeIdentityMeta({
   id,
   name,
@@ -5,10 +7,9 @@ export function getEmployeeIdentityMeta({
   id: string;
   name: string | null | undefined;
 }) {
-  const trimmedName = name?.trim();
-
-  return {
+  return getIdentityCopyMeta({
     id,
-    name: trimmedName || "未命名员工",
-  };
+    name,
+    fallbackName: "未命名员工",
+  });
 }

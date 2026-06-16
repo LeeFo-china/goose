@@ -20,6 +20,8 @@ import {
   CustomerRowActions,
   type CustomerRecord,
 } from "@/components/customers/customer-mutations";
+import { IdentityIdCopyButton } from "@/components/admin/identity-id-copy-button";
+import { getIdentityCopyMeta } from "@/components/admin/identity-copy-utils";
 
 const statusMeta: Record<string, {
   label: string;
@@ -147,25 +149,34 @@ function CustomerIdentityCell({
   name: string;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        type="button"
-        className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="w-[5em] truncate font-semibold">
-          {name}
-        </div>
-        <div className="w-[5em] truncate text-xs tabular-nums text-muted-foreground">
-          {id}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent align="start" className="max-w-[280px]">
-        <div className="flex flex-col gap-1">
-          <div className="break-all font-semibold">{name}</div>
-          <div className="break-all text-xs tabular-nums opacity-90">{id}</div>
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <div className="group/customer-cell flex min-w-0 items-center gap-1">
+      <Tooltip>
+        <TooltipTrigger
+          type="button"
+          className="min-w-0 cursor-default border-0 bg-transparent p-0 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="w-[5em] truncate font-semibold">
+            {name}
+          </div>
+          <div className="w-[5em] truncate text-xs tabular-nums text-muted-foreground">
+            {id}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent align="start" className="max-w-[280px]">
+          <div className="flex flex-col gap-1">
+            <div className="break-all font-semibold">{name}</div>
+            <div className="break-all font-mono text-xs tabular-nums opacity-90">{id}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+      <IdentityIdCopyButton
+        id={id}
+        name={name}
+        fallbackName="未命名客户"
+        idLabel="客户ID"
+        className="group-hover/customer-cell:opacity-100 group-focus-within/customer-cell:opacity-100"
+      />
+    </div>
   );
 }
 
@@ -174,14 +185,18 @@ const columns: ColumnDef<CustomerRecord>[] = [
     accessorKey: "name",
     header: "客户",
     cell: ({ row }) => {
-      const name = row.original.name || "未命名客户";
+      const identity = getIdentityCopyMeta({
+        id: row.original.id,
+        name: row.original.name,
+        fallbackName: "未命名客户",
+      });
 
       return (
-        <CustomerIdentityCell id={row.original.id} name={name} />
+        <CustomerIdentityCell id={identity.id} name={identity.name} />
       );
     },
     meta: {
-      cellClassName: "w-[5em] max-w-[5em]",
+      cellClassName: "w-[120px] max-w-[120px]",
     },
   },
   {
