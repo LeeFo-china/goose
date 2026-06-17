@@ -138,7 +138,7 @@ export async function backfillWorkflowRuntimeFromStateMachine(
   const bindings = await loadWorkflowBindings(options.tenantId);
   const allResults: BackfillResult[] = [];
 
-  for (const subjectType of Object.keys(SUBJECT_WORKFLOW_KEY) as BackfillSubjectType[]) {
+  for (const subjectType of resolveBackfillSubjectTypes(options)) {
     const results = await backfillSubjectType({
       tenantId: options.tenantId,
       subjectType,
@@ -161,4 +161,14 @@ export async function backfillWorkflowRuntimeFromStateMachine(
     summary: summarizeResults(allResults),
     outputPath,
   };
+}
+
+export function resolveBackfillSubjectTypes(
+  options: Pick<CliOptions, "subjectType">,
+): BackfillSubjectType[] {
+  if (options.subjectType) {
+    return [options.subjectType];
+  }
+
+  return Object.keys(SUBJECT_WORKFLOW_KEY) as BackfillSubjectType[];
 }

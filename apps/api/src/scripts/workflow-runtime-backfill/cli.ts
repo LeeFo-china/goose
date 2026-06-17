@@ -1,5 +1,19 @@
 import { dirname, join, resolve } from "node:path";
-import type { CliOptions } from "./types";
+import type { BackfillSubjectType, CliOptions } from "./types";
+
+const BACKFILL_SUBJECT_TYPES = [
+  "customer",
+  "project",
+  "expense_request",
+] as const satisfies readonly BackfillSubjectType[];
+
+function parseSubjectType(value: string): BackfillSubjectType {
+  if (BACKFILL_SUBJECT_TYPES.includes(value as BackfillSubjectType)) {
+    return value as BackfillSubjectType;
+  }
+
+  throw new Error(`无效的 subject type: ${value}`);
+}
 
 function projectRoot() {
   return resolve(dirname(import.meta.path), "../../../../..");
@@ -44,6 +58,12 @@ export function parseBackfillArgs(argv: string[]): CliOptions {
 
     if (arg === "--report") {
       options.reportPath = argv[index + 1] || options.reportPath;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--subject-type") {
+      options.subjectType = parseSubjectType(argv[index + 1] || "");
       index += 1;
     }
   }

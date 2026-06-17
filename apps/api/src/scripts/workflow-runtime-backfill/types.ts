@@ -1,9 +1,12 @@
 import type { BackfillSubjectType } from "./plan";
 
+export type { BackfillSubjectType };
+
 export type CliOptions = {
   tenantId: string;
   apply: boolean;
   reportPath: string;
+  subjectType?: BackfillSubjectType;
 };
 
 export type WorkflowDefinitionRow = {
