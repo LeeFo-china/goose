@@ -81,7 +81,7 @@ export function ProjectStatusActionDialog({
           <DialogTitle>{selectedAction?.label || "流程操作"}</DialogTitle>
           <DialogDescription>
             {isPaymentCollection
-              ? "确认后将校验对应收款是否已入账，满足条件后推进 workflow。"
+              ? "确认后仅校验是否已有已确认入账记录；不会在此录入金额或凭证，满足条件后推进 workflow。"
               : selectedAction
               ? `${projectStatusLabel(selectedAction.from_status)} -> ${projectStatusLabel(selectedAction.to_status)}`
               : "确认执行该 workflow 操作。"}
