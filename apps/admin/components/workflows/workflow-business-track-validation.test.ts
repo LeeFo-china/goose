@@ -104,6 +104,37 @@ describe("findWorkflowBusinessTrackIssues construction track", () => {
       edges: linearEdges(nodes),
     }).map((issue) => issue.message)).toEqual([]);
   });
+
+  test("rejects duplicate construction procedure stages on the mainline", () => {
+    const nodes = [
+      node("start", "start"),
+      node("started", "construction_stage", "construction_start", {
+        required_permissions: [],
+        stage_type: "construction_start",
+      }),
+      procedureNode("procedure_demolition", "demolition"),
+      procedureNode("extra_demolition", "demolition"),
+      procedureNode("procedure_plumbing_electrical", "plumbing_electrical"),
+      procedureNode("procedure_tiling", "tiling"),
+      procedureNode("procedure_woodwork", "woodwork"),
+      procedureNode("procedure_painting", "painting"),
+      procedureNode("procedure_installation", "installation"),
+      node("final_acceptance", "construction_stage", "final_acceptance", {
+        required_permissions: [],
+        stage_type: "final_acceptance",
+      }),
+      node("handover", "confirmation", "final_acceptance"),
+      node("end", "end"),
+    ];
+
+    expect(findWorkflowBusinessTrackIssues({
+      definition: definition("construction_main", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    }).map((issue) => issue.message)).toEqual([
+      "施工流程主状态节点重复: 拆改(procedure_demolition、extra_demolition)",
+    ]);
+  });
 });
 
 function definition(

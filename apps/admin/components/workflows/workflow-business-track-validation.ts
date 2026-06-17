@@ -260,6 +260,30 @@ function validateConstructionTrack(
           ),
       },
       {
+        label: "拆改",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_demolition",
+      },
+      {
+        label: "水电",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_plumbing_electrical",
+      },
+      {
+        label: "瓦工",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_tiling",
+      },
+      {
+        label: "木工",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_woodwork",
+      },
+      {
+        label: "油工",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_painting",
+      },
+      {
+        label: "安装",
+        matches: (node) => getConstructionTrackNodeKey(node) === "procedure_installation",
+      },
+      {
         label: "竣工验收",
         matches: (node) =>
           node.node_key === "final_acceptance" ||
