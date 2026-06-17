@@ -923,6 +923,8 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
   `docs/state_machine_migrate/2026-06-17-decoration-workflow-confirmation-request.md`。
 - 装修 workflow 专用门禁状态见
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
+- 人工恢复决策必须显式回填 `followup_required`；选择继续旧验收自然结束时，
+  该值应为 `true`，不能作为“无后续动作关闭 PRD”的证据。
 
 ### 当前验收矩阵
 

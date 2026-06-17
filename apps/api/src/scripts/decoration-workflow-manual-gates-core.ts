@@ -70,7 +70,8 @@ export async function buildDecorationWorkflowManualGateCheckReport(
   const closeout = summarizeCloseoutRules(loaded.evidence, {
     canRunLegacyApply: legacyApply.ok,
     canClosePrdWithoutFollowup:
-      readOnly.ok && legacyApply.ok && manualRestore.ok && orange.ok,
+      readOnly.ok && legacyApply.ok && manualRestore.ok && orange.ok &&
+      manualRestoreHasNoFollowup(loaded.evidence),
   });
   const checks = [readOnly, legacyApply, manualRestore, orange, closeout];
 
@@ -190,6 +191,13 @@ function validateManualRestoreGate(
       `${prefix}.selected_option: must be one of allowed_decision_options`,
     );
   }
+
+  const followupRequired = get(evidence, `${prefix}.followup_required`);
+  if (followupRequired === undefined) {
+    problems.missing.push(`${prefix}.followup_required`);
+  } else if (typeof followupRequired !== "boolean") {
+    problems.invalid.push(`${prefix}.followup_required: must be a boolean`);
+  }
 }
 
 function validateOrangeGate(
@@ -287,8 +295,14 @@ function summarizeManualRestoreDecision(evidence: Evidence): Check {
   return {
     name: "manual_restore_decision",
     ok: true,
-    detail: `selected_option=${String(get(evidence, `${prefix}.selected_option`))}`,
+    detail: `selected_option=${String(get(evidence, `${prefix}.selected_option`))}; followup_required=${String(get(evidence, `${prefix}.followup_required`))}`,
   };
+}
+
+function manualRestoreHasNoFollowup(evidence: Evidence): boolean {
+  const prefix = "legacy_instance_apply_gates.manual_restore_project";
+  return get(evidence, `${prefix}.decision_confirmed`) === true &&
+    get(evidence, `${prefix}.followup_required`) === false;
 }
 
 function summarizeOrangeE2eAcceptance(evidence: Evidence): Check {

@@ -94,6 +94,7 @@
         "confirm_project_exception_closure_plan"
       ],
       "selected_option": "",
+      "followup_required": true,
       "notes": "This object must not be rebuilt to the construction start node and must not be handled by the invalid-customer cancel script."
     }
   },

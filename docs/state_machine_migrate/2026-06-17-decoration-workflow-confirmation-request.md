@@ -109,6 +109,15 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 项目 634ff402-ff84-4541-aa7c-3cdcd4fd5460 的处理策略选择第 <1/2/3> 项。补充说明：<原因或恢复点>。
 ```
 
+门禁回填要求：
+
+- 如果选择第 1 项“继续兼容执行旧验收节点”，
+  `legacy_instance_apply_gates.manual_restore_project.followup_required`
+  必须保持 `true`，不能把
+  `closeout_rules.can_close_prd_without_followup` 改为 `true`。
+- 只有在恢复脚本或异常关闭方案已经执行完毕、且没有后续跟踪项时，
+  才能把 `followup_required` 改为 `false`。
+
 ## 需要 orange 回填的联调结果
 
 小程序团队完成真实联调后，请回填：

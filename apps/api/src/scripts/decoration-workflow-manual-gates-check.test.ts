@@ -121,7 +121,7 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
             name: "manual_restore_decision",
             ok: true,
             detail:
-              "selected_option=continue_legacy_acceptance_until_completed",
+              "selected_option=confirm_project_exception_closure_plan; followup_required=false",
           },
           {
             name: "orange_e2e_acceptance",
@@ -163,6 +163,41 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
         ok: false,
         detail:
           `evidence_file=${path}; missing=legacy_instance_apply_gates.project_signing_rebuild.evidence, invalid=orange_e2e_acceptance_gate.confirmed_at: must not be in the future`,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps closeout blocked when manual restore decision still needs follow-up", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
+    const path = join(dir, "decoration-gates.json");
+    try {
+      const evidence = buildCompleteEvidence();
+      evidence.legacy_instance_apply_gates.manual_restore_project.selected_option =
+        "continue_legacy_acceptance_until_completed";
+      evidence.legacy_instance_apply_gates.manual_restore_project.followup_required = true;
+      evidence.closeout_rules.can_close_prd_without_followup = true;
+
+      await writeFile(path, JSON.stringify(evidence), "utf8");
+
+      const report = await buildDecorationWorkflowManualGateCheckReport(
+        path,
+        generatedAt,
+      );
+
+      expect(report.ok).toBe(false);
+      expect(report.checks).toContainEqual({
+        name: "manual_restore_decision",
+        ok: true,
+        detail:
+          "selected_option=continue_legacy_acceptance_until_completed; followup_required=true",
+      });
+      expect(report.checks).toContainEqual({
+        name: "closeout_rules_consistent",
+        ok: false,
+        detail:
+          "can_run_legacy_apply=true; can_close_prd_without_followup=true",
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -240,7 +275,8 @@ function buildCompleteEvidence() {
           "define_new_construction_restore_point_and_script",
           "confirm_project_exception_closure_plan",
         ],
-        selected_option: "continue_legacy_acceptance_until_completed",
+        selected_option: "confirm_project_exception_closure_plan",
+        followup_required: false,
       },
     },
     orange_e2e_acceptance_gate: {
