@@ -56,6 +56,12 @@ export const WORKFLOW_CATEGORY_VALUES = [
 
 export type WorkflowCategory = (typeof WORKFLOW_CATEGORY_VALUES)[number];
 
+export type WorkflowDefinitionBusinessTrack =
+  | 'customer_design'
+  | 'project_signing'
+  | 'construction'
+  | 'generic';
+
 export const WORKFLOW_NODE_TYPE_VALUES = [
   'start',
   'end',
@@ -127,6 +133,26 @@ export const WorkflowNodeTypeConfig: Record<WorkflowNodeType, { label: string }>
   automation: { label: '自动动作' },
   subflow: { label: '子流程' },
 };
+
+export function getWorkflowDefinitionBusinessTrack(
+  workflowKey: string,
+): WorkflowDefinitionBusinessTrack {
+  const normalized = workflowKey.trim().toLowerCase();
+  if (isWorkflowKeyDerivedFrom(normalized, 'customer_main')) {
+    return 'customer_design';
+  }
+  if (isWorkflowKeyDerivedFrom(normalized, 'project_signing')) {
+    return 'project_signing';
+  }
+  if (isWorkflowKeyDerivedFrom(normalized, 'construction_main')) {
+    return 'construction';
+  }
+  return 'generic';
+}
+
+function isWorkflowKeyDerivedFrom(workflowKey: string, templateKey: string) {
+  return workflowKey === templateKey || workflowKey.startsWith(`${templateKey}_`);
+}
 
 export const WorkflowDefinitionStatusConfig: Record<
   WorkflowDefinitionStatus,

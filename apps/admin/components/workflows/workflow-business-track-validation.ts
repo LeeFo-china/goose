@@ -1,3 +1,4 @@
+import { getWorkflowDefinitionBusinessTrack } from "@gooes/domain";
 import type { WorkflowValidationIssue } from "@/components/workflows/workflow-designer-types";
 import {
   findNodeIndex,
@@ -67,14 +68,14 @@ export function findWorkflowBusinessTrackIssues(graph: {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }): WorkflowValidationIssue[] {
-  switch (graph.definition.workflow_key) {
-    case "customer_main":
+  switch (getWorkflowDefinitionBusinessTrack(graph.definition.workflow_key)) {
+    case "customer_design":
       return validateCustomerDesignTrack(graph.nodes, graph.edges);
     case "project_signing":
       return validateProjectSigningTrack(graph.nodes, graph.edges);
-    case "construction_main":
+    case "construction":
       return validateConstructionTrack(graph.nodes, graph.edges);
-    default:
+    case "generic":
       return [];
   }
 }

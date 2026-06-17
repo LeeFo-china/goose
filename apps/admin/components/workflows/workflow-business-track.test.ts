@@ -8,6 +8,12 @@ import {
 } from "./workflow-business-track";
 
 describe("workflow business track options", () => {
+  test("recognizes custom keys derived from decoration workflow template keys", () => {
+    expect(getWorkflowTrack({ workflow_key: "customer_main_custom" })).toBe("customer_design");
+    expect(getWorkflowTrack({ workflow_key: "project_signing_custom" })).toBe("project_signing");
+    expect(getWorkflowTrack({ workflow_key: "construction_main_custom" })).toBe("construction");
+  });
+
   test("filters customer design workflow to customer capabilities", () => {
     const track = getWorkflowTrack({ workflow_key: "customer_main" });
 

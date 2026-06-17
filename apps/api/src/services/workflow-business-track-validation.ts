@@ -1,3 +1,6 @@
+import {
+  getWorkflowDefinitionBusinessTrack,
+} from "@gooes/domain";
 import type {
   WorkflowDefinitionRow,
   WorkflowEdgeRow,
@@ -62,14 +65,14 @@ const CUSTOMER_STAGE_BUSINESS_KINDS = new Set([
 export function findBusinessTrackIssues(
   input: WorkflowBusinessTrackValidationInput,
 ) {
-  switch (input.definition.workflow_key) {
-    case "customer_main":
+  switch (getWorkflowDefinitionBusinessTrack(input.definition.workflow_key)) {
+    case "customer_design":
       return validateCustomerDesignTrack(input.nodes, input.edges);
     case "project_signing":
       return validateProjectSigningTrack(input.nodes, input.edges);
-    case "construction_main":
+    case "construction":
       return validateConstructionTrack(input.nodes, input.edges);
-    default:
+    case "generic":
       return [];
   }
 }

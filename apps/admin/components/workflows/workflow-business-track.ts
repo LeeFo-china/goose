@@ -1,4 +1,8 @@
 import {
+  getWorkflowDefinitionBusinessTrack,
+  type WorkflowDefinitionBusinessTrack,
+} from "@gooes/domain";
+import {
   WORKFLOW_BUSINESS_FLOW_OPTIONS,
 } from "@/components/workflows/workflow-business-flow-options";
 import {
@@ -17,11 +21,7 @@ export {
   findWorkflowBusinessTrackIssues,
 } from "@/components/workflows/workflow-business-track-validation";
 
-export type WorkflowBusinessTrack =
-  | "customer_design"
-  | "project_signing"
-  | "construction"
-  | "generic";
+export type WorkflowBusinessTrack = WorkflowDefinitionBusinessTrack;
 
 const STRICT_TRACK_PRESET_KEYS = new Set([
   "start",
@@ -56,16 +56,7 @@ const PROJECT_SIGNING_BUSINESS_KINDS = new Set([
 export function getWorkflowTrack(
   definition: Pick<WorkflowDefinition, "workflow_key">,
 ): WorkflowBusinessTrack {
-  switch (definition.workflow_key) {
-    case "customer_main":
-      return "customer_design";
-    case "project_signing":
-      return "project_signing";
-    case "construction_main":
-      return "construction";
-    default:
-      return "generic";
-  }
+  return getWorkflowDefinitionBusinessTrack(definition.workflow_key);
 }
 
 export function getWorkflowCapabilityOptionsForTrack(

@@ -15,6 +15,26 @@ import { findBusinessTrackIssues } from "./workflow-business-track-validation";
 const NOW = "2026-06-17T00:00:00.000Z";
 
 describe("findBusinessTrackIssues exception actions", () => {
+  test("applies project signing rules to custom keys derived from the template key", () => {
+    const nodes = [
+      node("start", "start"),
+      node("signed", "business", "contract"),
+      node("designing", "business", "design"),
+      node("proposal_confirmed", "business", "design"),
+      node("design_finalized", "business", "design"),
+      node("pending_start", "business", "construction_start"),
+      node("end", "end"),
+    ];
+
+    expect(findBusinessTrackIssues({
+      definition: definition("project_signing_custom", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    })).toEqual([
+      "项目签约流程必须按标准顺序推进: start -> designing -> proposal_confirmed -> signed -> design_finalized -> pending_start -> end",
+    ]);
+  });
+
   test("rejects customer exception actions as mainline nodes", () => {
     const nodes = [
       node("start", "start"),

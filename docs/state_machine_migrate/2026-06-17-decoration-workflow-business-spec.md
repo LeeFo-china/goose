@@ -936,11 +936,11 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 收款节点必须有合法类型和确认人/权限 | `workflow-payment-collection-node-validation.test.ts` 覆盖缺失/非法 `payment_type`、缺少财务审核人和 `finance.*` 权限 | 已完成 |
 | 施工财务门禁可按租户自定义插入 | `workflow-publish-graph.test.ts` 覆盖无固定收款节点、使用自定义收款 node_key | 已完成 |
 | 工序日志/图片门禁后端兜底 | `workflow-runtime-guards.test.ts` 覆盖缺日志、缺图片拦截和满足要求放行 | 已完成 |
-| 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序 | 已完成 |
+| 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序，`workflow-business-track-validation.test.ts` 覆盖模板派生自定义 key | 已完成 |
 | 发布时禁止重复主状态语义 | `workflow-publish-graph.test.ts` 覆盖不同 `node_key` 但同一签约/开工主状态语义重复 | 已完成 |
 | 发布时禁止跨轨道节点混入 | `workflow-publish-graph.test.ts` 覆盖项目签约/施工混入客户节点、客户流程插财务节点 | 已完成 |
 | 异常动作不作为主线节点 | `workflow-business-track-validation.test.ts` 覆盖 `mark_dormant`、`pause_project` 等异常动作节点名 | 已完成 |
-| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key | 已完成 |
+| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key；`workflow-business-track.test.ts` 覆盖模板派生自定义 key 识别 | 已完成 |
 | Admin 施工节点与 API 保存/发布校验一致 | `workflow-node-capabilities.test.ts`、`WorkflowGraphSaveSchema` 和 API/Admin 轨道校验测试覆盖 `stage_type` 与 `construction_start -> started` 归一 | 已完成 |
 | 暂停/作废不作为标准主线节点 | 发布校验和 Admin 轨道过滤隐藏异常节点 | 已完成 |
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
