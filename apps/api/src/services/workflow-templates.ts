@@ -31,6 +31,10 @@ class WorkflowTemplateService {
     return workflowService.publishDefinition(authContext, definition.id);
   }
 
+  getTemplateForTest(input: WorkflowTemplateCreateInput): WorkflowTemplateDefinition {
+    return this.getTemplate(input);
+  }
+
   private getTemplate(input: WorkflowTemplateCreateInput): WorkflowTemplateDefinition {
     switch (input.template_key) {
       case "customer_main":
@@ -64,14 +68,24 @@ class WorkflowTemplateService {
             sort_order: 10,
           },
           {
+            node_key: "potential",
+            node_type: "business",
+            business_kind: "customer_lead",
+            title: "潜在客户",
+            description: "对应客户状态：潜在客户。",
+            position: { x: 300, y: 180 },
+            config: { required_permissions: ["customer.update"] },
+            sort_order: 20,
+          },
+          {
             node_key: "following",
             node_type: "business",
             business_kind: "phone_follow_up",
             title: "电话跟进",
             description: "对应客户状态：跟进中。",
-            position: { x: 300, y: 180 },
+            position: { x: 520, y: 180 },
             config: { required_permissions: ["customer.update"] },
-            sort_order: 20,
+            sort_order: 30,
           },
           {
             node_key: "arrived",
@@ -79,9 +93,9 @@ class WorkflowTemplateService {
             business_kind: "store_visit",
             title: "到店接待",
             description: "对应客户状态：已到店。",
-            position: { x: 520, y: 180 },
+            position: { x: 740, y: 180 },
             config: { required_permissions: ["customer.update"] },
-            sort_order: 30,
+            sort_order: 40,
           },
           {
             node_key: "designing",
@@ -89,9 +103,9 @@ class WorkflowTemplateService {
             business_kind: "design",
             title: "方案设计",
             description: "对应客户状态：设计中。",
-            position: { x: 740, y: 180 },
+            position: { x: 960, y: 180 },
             config: { required_permissions: ["customer.update"] },
-            sort_order: 40,
+            sort_order: 50,
           },
           {
             node_key: "signed",
@@ -99,9 +113,9 @@ class WorkflowTemplateService {
             business_kind: "contract",
             title: "签约",
             description: "对应客户状态：已签约。",
-            position: { x: 960, y: 180 },
+            position: { x: 1180, y: 180 },
             config: { required_permissions: ["customer.update"] },
-            sort_order: 50,
+            sort_order: 60,
           },
           {
             node_key: "end",
@@ -109,17 +123,18 @@ class WorkflowTemplateService {
             business_kind: null,
             title: "结束",
             description: "客户主流程完成。",
-            position: { x: 1180, y: 180 },
+            position: { x: 1400, y: 180 },
             config: { required_permissions: [] },
-            sort_order: 60,
+            sort_order: 70,
           },
         ],
         edges: [
-          this.edge("start", "following", "开始跟进", 10),
-          this.edge("following", "arrived", "标记到店", 20),
-          this.edge("arrived", "designing", "开始设计", 30),
-          this.edge("designing", "signed", "客户签约", 40),
-          this.edge("signed", "end", "流程完成", 50),
+          this.edge("start", "potential", "登记客户", 10),
+          this.edge("potential", "following", "开始跟进", 20),
+          this.edge("following", "arrived", "标记到店", 30),
+          this.edge("arrived", "designing", "开始设计", 40),
+          this.edge("designing", "signed", "客户签约", 50),
+          this.edge("signed", "end", "流程完成", 60),
         ],
       },
     };
