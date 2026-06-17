@@ -227,4 +227,47 @@ describe("workflowTaskPaymentBridge", () => {
     );
     expect(callOrder).toEqual(["ledger", "workflow"]);
   });
+
+  test("completes workflow task from existing confirmed payment without manual output", async () => {
+    findByWorkflowTaskId.mockImplementation(async () => ({
+      ...confirmedPayment,
+      payment_channel: "wechat_pay",
+    }));
+    const workflowTaskPaymentBridge = createBridge();
+
+    const result = await workflowTaskPaymentBridge.complete({
+      authContext,
+      task: bridgeTask,
+      action: "complete",
+      output: {},
+    });
+
+    expect(result).toMatchObject({
+      result: {
+        ok: true,
+        bridged: true,
+        operation: "confirm_payment",
+      },
+      payment: expect.objectContaining({
+        id: "payment-1",
+        payment_channel: "wechat_pay",
+      }),
+    });
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(createProjectPaymentLedger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_id: "payment-1",
+        amount: 10000,
+        metadata: expect.objectContaining({
+          payment_channel: "wechat_pay",
+        }),
+      }),
+    );
+    expect(completeRuntimeNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: {},
+      }),
+    );
+    expect(callOrder).toEqual(["ledger", "workflow"]);
+  });
 });

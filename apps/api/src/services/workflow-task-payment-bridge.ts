@@ -87,27 +87,9 @@ export class WorkflowTaskPaymentBridge {
       return null;
     }
 
-    const parsed = PaymentCollectionOutputSchema.safeParse(input.output);
-    if (!parsed.success) {
-      throw Errors.fromZod(parsed.error);
-    }
-
     const existing = await this.dependencies.paymentRepository
       .findByWorkflowTaskId(input.task.id);
-    const payment = existing ?? await this.dependencies.paymentRepository.create({
-      project_id: input.task.instance.subject_id,
-      amount: parsed.data.amount,
-      type: getPaymentType(snapshot),
-      status: "confirmed",
-      evidence_images: parsed.data.evidence_images,
-      handled_by: input.authContext.employeeId,
-      pay_date: parsed.data.paid_at ?? new Date().toISOString(),
-      workflow_task_id: input.task.id,
-      source_type: "workflow_task",
-      source_id: input.task.id,
-      remark: parsed.data.remark ?? null,
-      payment_channel: "manual",
-    });
+    const payment = existing ?? await this.createManualPayment(input, snapshot);
 
     await this.dependencies.financeLedgerService.createProjectPaymentLedger(
       this.buildLedgerInput(input, payment),
@@ -163,6 +145,31 @@ export class WorkflowTaskPaymentBridge {
         workflow_node_key: input.task.node_key,
       },
     };
+  }
+
+  private async createManualPayment(
+    input: PaymentWorkflowTaskBridgeInput,
+    snapshot: Record<string, unknown>,
+  ) {
+    const parsed = PaymentCollectionOutputSchema.safeParse(input.output);
+    if (!parsed.success) {
+      throw Errors.fromZod(parsed.error);
+    }
+
+    return this.dependencies.paymentRepository.create({
+      project_id: input.task.instance.subject_id,
+      amount: parsed.data.amount,
+      type: getPaymentType(snapshot),
+      status: "confirmed",
+      evidence_images: parsed.data.evidence_images,
+      handled_by: input.authContext.employeeId,
+      pay_date: parsed.data.paid_at ?? new Date().toISOString(),
+      workflow_task_id: input.task.id,
+      source_type: "workflow_task",
+      source_id: input.task.id,
+      remark: parsed.data.remark ?? null,
+      payment_channel: "manual",
+    });
   }
 
   private throwRuntimeCompleteError(result: RuntimeCompleteResultForBridge) {

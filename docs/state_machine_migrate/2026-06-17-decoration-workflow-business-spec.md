@@ -949,7 +949,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖 | 本仓库已完成，orange 需按文档联调 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
-| 微信支付后续兼容 | workflow 只绑定 `payment_collection` 语义，不绑定支付渠道 | 设计已完成 |
+| 微信支付后续兼容 | workflow 只绑定 `payment_collection` 语义，不绑定支付渠道；`workflow-task-payment-bridge.test.ts` 覆盖已有 `workflow_task_id` 入账记录时无需人工金额/凭证 output 即可推进 | 设计已完成 |
 | 旧实例不被 migration 改写 | migration 内容测试确认不 `delete/update workflow_instances/tasks` | 已完成 |
 | 旧实例识别与分类 | `decoration-workflow-business-audit.ts` 和 `decoration-workflow-legacy-instance-review.ts` | 已完成 |
 | 旧实例处置命令生成 | `decoration-workflow-legacy-instance-review.ts` 输出 `action_commands`，Runbook 直接复用 | 已完成 |
