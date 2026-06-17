@@ -963,7 +963,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 
 当前不能标记为“无需后续动作”的部分：
 
-- 截至 2026-06-17 23:02，`running_instances_on_legacy_snapshots = 10`
+- 截至 2026-06-17 23:37，`running_instances_on_legacy_snapshots = 10`
   仍存在，其中 1 条可受控重建、2 条可受控取消、1 条需人工恢复点。
 - orange 真实联调验收需由小程序团队在 orange 仓库完成，本仓库仅提供 API、文档和对接约束；
   验收结果应回填到

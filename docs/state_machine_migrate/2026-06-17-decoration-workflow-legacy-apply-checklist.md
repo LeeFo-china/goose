@@ -20,7 +20,7 @@
 
 ## 当前复核状态
 
-截至 2026-06-17 23:02，只读复核结果：
+截至 2026-06-17 23:37，只读复核结果：
 
 - `needs_migration = false`
 - `needs_instance_review = true`
@@ -32,7 +32,7 @@
 
 最新证据：
 
-- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2302.md`
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2337.md`
 
 ## Apply 前必跑
 

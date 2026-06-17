@@ -12,7 +12,7 @@
     ]
   },
   "latest_read_only_review": {
-    "reviewed_at": "2026-06-17T23:02:39+08:00",
+    "reviewed_at": "2026-06-17T23:37:00+08:00",
     "commands": [
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-business-audit.ts --sample-limit 100",
       "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instance-review.ts --sample-limit 100"
@@ -24,7 +24,7 @@
     "rebuild_candidate": 1,
     "manual_restore_required": 3,
     "unknown_review_required": 0,
-    "evidence": "docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2302.md"
+    "evidence": "docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2337.md"
   },
   "legacy_instance_apply_gates": {
     "project_signing_rebuild": {
