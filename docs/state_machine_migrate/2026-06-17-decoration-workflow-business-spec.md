@@ -877,7 +877,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel
 
 本轮只执行只读审计和 dry-run，未执行任何 `--apply` 写入命令。
 
-最新只读复核证据：
+本轮只读复核证据：
 
 - `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2224.md`
 
