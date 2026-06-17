@@ -1,0 +1,140 @@
+{
+  "_instructions": {
+    "usage": "This file records manual gates for the decoration workflow rollout. It is separate from audit/manual-gates.json, which is only for legacy state-machine destructive cleanup.",
+    "no_apply_rule": "Do not run any --apply command until the matching confirmed flag is true and confirmed_by, confirmed_at, and evidence are filled.",
+    "evidence_format": "Evidence values should be http(s) URLs or existing docs/state_machine_migrate/ paths.",
+    "time_format": "confirmed_at values must be parseable date-time strings, preferably ISO 8601 with timezone, and must not be in the future.",
+    "source_docs": [
+      "docs/state_machine_migrate/2026-06-17-decoration-workflow-business-spec.md",
+      "docs/state_machine_migrate/2026-06-17-decoration-workflow-legacy-apply-checklist.md",
+      "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+      "docs/state_machine_migrate/2026-06-17-decoration-workflow-confirmation-request.md"
+    ]
+  },
+  "latest_read_only_review": {
+    "reviewed_at": "2026-06-17T21:52:03+08:00",
+    "commands": [
+      "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-business-audit.ts --sample-limit 100",
+      "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instance-review.ts --sample-limit 100"
+    ],
+    "needs_migration": false,
+    "needs_instance_review": true,
+    "running_instances_on_legacy_snapshots": 10,
+    "compatible_runtime": 6,
+    "rebuild_candidate": 1,
+    "manual_restore_required": 3,
+    "unknown_review_required": 0,
+    "evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-business-spec.md"
+  },
+  "legacy_instance_apply_gates": {
+    "project_signing_rebuild": {
+      "confirmed": false,
+      "confirmed_by": "",
+      "confirmed_at": "",
+      "evidence": "",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "subject_type": "project",
+      "project_id": "1a8589fb-8f3f-4900-a759-6d15438ffcc2",
+      "legacy_instance_id": "b58acf8e-4f18-4b40-b5c7-919600e5e636",
+      "from_workflow_key": "construction_main",
+      "from_node_key": "designing",
+      "target_workflow_key": "project_signing",
+      "target_node_key": "designing",
+      "latest_dry_run_ok": true,
+      "confirmation_text": "确认允许将项目 1a8589fb-8f3f-4900-a759-6d15438ffcc2 的旧 construction_main running 实例取消，并重建到 project_signing designing 节点。",
+      "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing",
+      "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-rebuild.ts --apply --confirm-rebuild 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --subject-type project --subject-id 1a8589fb-8f3f-4900-a759-6d15438ffcc2 --workflow-key project_signing"
+    },
+    "invalid_customer_cancellations": {
+      "confirmed": false,
+      "confirmed_by": "",
+      "confirmed_at": "",
+      "evidence": "",
+      "items": [
+        {
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "customer_id": "aa55b76c-a6a1-498a-9e36-fde8b974a248",
+          "legacy_instance_id": "41f7772d-c472-41e6-a913-c6e641be3dd2",
+          "workflow_key": "customer_main",
+          "node_key": "potential",
+          "customer_status": "invalid",
+          "latest_dry_run_ok": true,
+          "confirmation_text": "确认客户 aa55b76c-a6a1-498a-9e36-fde8b974a248 保持 invalid 状态，并取消旧 running workflow 实例 41f7772d-c472-41e6-a913-c6e641be3dd2。",
+          "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 41f7772d-c472-41e6-a913-c6e641be3dd2",
+          "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --apply --confirm-cancel 41f7772d-c472-41e6-a913-c6e641be3dd2 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 41f7772d-c472-41e6-a913-c6e641be3dd2"
+        },
+        {
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "customer_id": "2cc20642-03d9-4bc6-a68a-f7236ab8e3ea",
+          "legacy_instance_id": "1a6dc44b-19b9-4516-8d3f-9e2f4125b842",
+          "workflow_key": "customer_main",
+          "node_key": "potential",
+          "customer_status": "invalid",
+          "latest_dry_run_ok": true,
+          "confirmation_text": "确认客户 2cc20642-03d9-4bc6-a68a-f7236ab8e3ea 保持 invalid 状态，并取消旧 running workflow 实例 1a6dc44b-19b9-4516-8d3f-9e2f4125b842。",
+          "dry_run_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 1a6dc44b-19b9-4516-8d3f-9e2f4125b842",
+          "apply_command": "bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel.ts --apply --confirm-cancel 1a6dc44b-19b9-4516-8d3f-9e2f4125b842 --tenant-id 3eebca47-961f-4899-b976-a3d3208d326b --instance-id 1a6dc44b-19b9-4516-8d3f-9e2f4125b842"
+        }
+      ]
+    },
+    "manual_restore_project": {
+      "decision_confirmed": false,
+      "confirmed_by": "",
+      "confirmed_at": "",
+      "evidence": "",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "project_id": "634ff402-ff84-4541-aa7c-3cdcd4fd5460",
+      "legacy_instance_id": "c435b9e9-0e22-49e7-9352-446259f9b57c",
+      "workflow_key": "construction_main",
+      "node_key": "acceptance",
+      "project_status": "acceptance",
+      "allowed_decision_options": [
+        "continue_legacy_acceptance_until_completed",
+        "define_new_construction_restore_point_and_script",
+        "confirm_project_exception_closure_plan"
+      ],
+      "selected_option": "",
+      "notes": "This object must not be rebuilt to the construction start node and must not be handled by the invalid-customer cancel script."
+    }
+  },
+  "orange_e2e_acceptance_gate": {
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": "",
+    "mini_program_version_or_commit": "",
+    "tenant": "",
+    "accounts": "",
+    "evidence": "docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md",
+    "required_scenarios": [
+      {
+        "key": "customer_design_workflow",
+        "status": "pending"
+      },
+      {
+        "key": "project_signing_workflow",
+        "status": "pending"
+      },
+      {
+        "key": "payment_collection_workflow",
+        "status": "pending"
+      },
+      {
+        "key": "construction_procedure_log",
+        "status": "pending"
+      },
+      {
+        "key": "stage_acceptance_transition",
+        "status": "pending"
+      },
+      {
+        "key": "admin_finance_and_workflow_visibility",
+        "status": "pending"
+      }
+    ]
+  },
+  "closeout_rules": {
+    "can_run_legacy_apply": false,
+    "can_close_prd_without_followup": false,
+    "reason": "Legacy instance apply confirmations, manual restore decision, and orange real E2E acceptance are still pending."
+  }
+}

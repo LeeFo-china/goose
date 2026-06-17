@@ -71,6 +71,14 @@
   `docs/state_machine_migrate/orange-construction-current-stage-handoff.md`；工序完成后进入阶段验收的
   小程序专项对接见
   `docs/state_machine_migrate/miniprogram-procedure-stage-acceptance-integration.md`。
+- 装修业务 workflow PRD、旧实例写入确认清单和端到端验收记录模板见
+  `docs/state_machine_migrate/2026-06-17-decoration-workflow-business-spec.md`、
+  `docs/state_machine_migrate/2026-06-17-decoration-workflow-legacy-apply-checklist.md`、
+  `docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md`；
+  给业务负责人和小程序团队的收口确认请求见
+  `docs/state_machine_migrate/2026-06-17-decoration-workflow-confirmation-request.md`。
+- 装修业务 workflow 专用机读门禁记录见
+  `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
 
 仍未在本工作区完成的外部门禁：
 
