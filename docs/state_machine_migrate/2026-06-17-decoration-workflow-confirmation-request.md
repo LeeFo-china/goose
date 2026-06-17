@@ -134,5 +134,14 @@ docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checkli
 4. 每次 apply 后复跑审计和复核。
 5. 将结果写回旧实例处置确认清单和端到端验收清单。
 6. 同步更新装修 workflow 专用门禁状态 JSON。
+7. 运行专用门禁校验：
+
+```bash
+cd apps/api && bun run workflow:decoration-manual-gates-check -- \
+  --evidence-file docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json
+```
+
+在全部外部门禁完成前，该命令应失败并列出 pending gate；所有确认和联调证据
+回填完成后，该命令必须通过。
 
 如果任一复核结果和本确认请求不一致，停止执行，重新发起确认。

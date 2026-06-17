@@ -79,6 +79,9 @@
   `docs/state_machine_migrate/2026-06-17-decoration-workflow-confirmation-request.md`。
 - 装修业务 workflow 专用机读门禁记录见
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
+  专用校验命令：
+  `cd apps/api && bun run workflow:decoration-manual-gates-check -- --evidence-file docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
+  在旧实例写入确认、人工恢复点和 orange 真实联调未完成前，该命令应返回非 0。
 
 仍未在本工作区完成的外部门禁：
 

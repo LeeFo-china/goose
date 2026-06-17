@@ -948,3 +948,12 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
   `docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md`。
 - 旧实例写入、施工后段项目恢复策略和 orange 端到端验收的机读门禁状态应同步回填到
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
+  同步后用以下命令校验：
+
+```bash
+cd apps/api && bun run workflow:decoration-manual-gates-check -- \
+  --evidence-file docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json
+```
+
+  在这些外部门禁未完成前，该命令返回非 0 是预期行为；不能据此执行 `--apply`
+  或关闭 PRD。

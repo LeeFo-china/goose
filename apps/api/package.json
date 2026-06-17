@@ -33,6 +33,7 @@
     "workflow:decoration-legacy-review": "bun src/scripts/decoration-workflow-legacy-instance-review.ts",
     "workflow:decoration-legacy-rebuild": "bun src/scripts/decoration-workflow-legacy-rebuild.ts",
     "workflow:decoration-legacy-cancel": "bun src/scripts/decoration-workflow-legacy-cancel.ts",
+    "workflow:decoration-manual-gates-check": "bun src/scripts/decoration-workflow-manual-gates-check.ts",
     "workflow:project-source-check": "bun --env-file=.env src/scripts/project-workflow-source-of-truth-check.ts",
     "workflow:technical-completion-audit": "bun src/scripts/workflow-final-completion-audit.ts --technical-only",
     "workflow:migration-status:technical": "bun src/scripts/workflow-migration-status.ts --technical-only",
