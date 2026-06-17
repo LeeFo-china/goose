@@ -24,6 +24,11 @@
   - Map customer status `potential` to workflow node `potential`.
 - Modify: `apps/api/src/scripts/workflow-runtime-backfill/plan.test.ts`
   - Update expected potential mapping and snapshot fixture.
+- Create: `supabase/migrations/20260617173000_add_customer_potential_workflow_node.sql`
+  - Create a new published customer_main workflow version for existing active definitions that lack `potential`.
+  - Sync draft workflow nodes/edges so Admin does not republish the old graph.
+- Create: `apps/api/src/scripts/customer-workflow-potential-migration-content.test.ts`
+  - Guard the migration against losing the customer_main/potential checks and version switch.
 - Modify: `apps/api/src/services/customer-workflow-runtime.ts`
   - Add a reusable method to start customer runtime at creation time without changing customer status.
 - Modify: `apps/api/src/controllers/customer/index.ts`
@@ -283,6 +288,70 @@ Expected: PASS.
 ```bash
 git add apps/api/src/scripts/workflow-runtime-backfill/plan.ts apps/api/src/scripts/workflow-runtime-backfill/plan.test.ts
 git commit -m "fix(workflow): 修正潜在客户回填节点"
+```
+
+## Task 3.5: Existing Active Customer Workflow Migration
+
+**Files:**
+- Create: `supabase/migrations/20260617173000_add_customer_potential_workflow_node.sql`
+- Create: `apps/api/src/scripts/customer-workflow-potential-migration-content.test.ts`
+
+- [x] **Step 1: Write the failing migration content test**
+
+The test reads the migration file and asserts it:
+
+```ts
+expect(migration).toContain("definition.workflow_key = 'customer_main'");
+expect(migration).toContain("node->>'node_key' = 'potential'");
+expect(migration).toContain("node->>'node_key' = 'following'");
+expect(migration).toContain("INSERT INTO public.workflow_versions");
+expect(migration).toContain("SET active_version_id = v_new_version_id");
+expect(migration).toContain("INSERT INTO public.workflow_nodes");
+expect(migration).toContain("INSERT INTO public.workflow_edges");
+```
+
+- [x] **Step 2: Run test to verify it fails**
+
+Run:
+
+```bash
+cd apps/api
+bun test src/scripts/customer-workflow-potential-migration-content.test.ts
+```
+
+Expected before migration exists: FAIL with `ENOENT`.
+
+- [x] **Step 3: Add migration**
+
+The migration must:
+
+```text
+1. Find active workflow_definitions where workflow_key = 'customer_main'.
+2. Skip definitions whose active snapshot already has node_key = potential.
+3. Build a new snapshot with potential inserted between start and following.
+4. Insert a new workflow_versions row instead of mutating the old published version.
+5. Update workflow_definitions.active_version_id to the new version.
+6. Insert/update draft workflow_nodes and workflow_edges for Admin designer consistency.
+```
+
+- [x] **Step 4: Run test to verify it passes**
+
+Run:
+
+```bash
+cd apps/api
+bun test src/scripts/customer-workflow-potential-migration-content.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add supabase/migrations/20260617173000_add_customer_potential_workflow_node.sql \
+  apps/api/src/scripts/customer-workflow-potential-migration-content.test.ts \
+  docs/superpowers/plans/2026-06-17-customer-workflow-initialization.md
+git commit -m "fix(workflow): 迁移补齐客户潜在节点"
 ```
 
 ## Task 4: New Customer Runtime Initialization
