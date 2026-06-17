@@ -8,6 +8,14 @@ import {
 const snapshot = {
   nodes: [
     {
+      id: "node-potential",
+      node_key: "potential",
+      node_type: "business",
+      business_kind: "customer_lead",
+      title: "潜在客户",
+      config: { required_permissions: ["customer.update"] },
+    },
+    {
       id: "node-following",
       node_key: "following",
       node_type: "business",
@@ -47,7 +55,7 @@ describe("workflow runtime backfill plan", () => {
 
     expect(plan.action).toBe("create");
     if (plan.action === "create") {
-      expect(plan.nodeKey).toBe("following");
+      expect(plan.nodeKey).toBe("potential");
       expect(plan.instanceStatus).toBe("running");
     }
   });

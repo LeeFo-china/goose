@@ -48,7 +48,7 @@ type MappingResult = {
 } | null;
 
 const CUSTOMER_STATUS_NODE_MAP: Record<string, MappingResult> = {
-  potential: { nodeKey: "following", instanceStatus: "running" },
+  potential: { nodeKey: "potential", instanceStatus: "running" },
   following: { nodeKey: "following", instanceStatus: "running" },
   arrived: { nodeKey: "arrived", instanceStatus: "running" },
   designing: { nodeKey: "designing", instanceStatus: "running" },
