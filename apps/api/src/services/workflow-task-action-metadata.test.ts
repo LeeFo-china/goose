@@ -2,6 +2,34 @@ import { describe, expect, test } from "bun:test";
 import { buildWorkflowTaskActions } from "./workflow-task-action-metadata";
 
 describe("buildWorkflowTaskActions", () => {
+  test("builds start_following action for customer potential node", () => {
+    const actions = buildWorkflowTaskActions({
+      subjectType: "customer",
+      nodeKey: "potential",
+      nodeType: "business",
+      taskTitle: "潜在客户",
+    });
+
+    expect(actions).toEqual([
+      {
+        key: "complete",
+        label: "开始跟进",
+        business_domain: "customer_status",
+        business_action: "start_following",
+        requires_reason: false,
+        output_fields: [],
+      },
+      {
+        key: "mark_invalid",
+        label: "作废客户",
+        business_domain: "customer_status",
+        business_action: "mark_invalid",
+        requires_reason: true,
+        output_fields: [],
+      },
+    ]);
+  });
+
   test("describes customer workflow task actions", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "customer",

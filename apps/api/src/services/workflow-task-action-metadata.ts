@@ -58,6 +58,7 @@ type BuildWorkflowTaskActionsInput = {
 };
 
 export const CUSTOMER_LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStatusAction>> = {
+  potential: "start_following",
   following: "mark_arrived",
   arrived: "start_design",
 };
@@ -244,7 +245,7 @@ function buildCustomerActions(nodeKey: string): WorkflowTaskActionMetadata[] {
   const actions: CustomerStatusAction[] = [];
   const linearAction = CUSTOMER_LINEAR_ACTION_BY_NODE[nodeKey];
   if (linearAction) actions.push(linearAction);
-  if (["following", "arrived", "designing"].includes(nodeKey)) {
+  if (["potential", "following", "arrived", "designing"].includes(nodeKey)) {
     actions.push("mark_invalid");
   }
 
