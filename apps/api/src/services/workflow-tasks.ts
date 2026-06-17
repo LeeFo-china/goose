@@ -71,6 +71,11 @@ class WorkflowTaskService {
     if (!task.instance) {
       throw Errors.badRequest("流程实例不存在");
     }
+    if (task.instance.current_node_key !== task.node_key) {
+      throw Errors.business(409, "节点不是当前待处理节点", "WORKFLOW_NODE_NOT_CURRENT", {
+        current_node_key: task.instance.current_node_key ?? null,
+      });
+    }
 
     const output = {
       ...(input.output as JsonObject),

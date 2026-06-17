@@ -544,6 +544,9 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 - API actions：`final_acceptance`、`payment_collection`、客户 `designing -> end` 均通过 workflow task 推进。
 - API task bridge：项目签约节点强制校验 `signed_amount`，排期开工节点强制校验
   `start_date` 和 `construction_manager_employee_id`，避免前端漏传必填 output 时继续推进。
+- API task service：`POST /workflow-tasks/:taskId/complete` 会在进入客户、项目、
+  财务等业务 bridge 前先校验 `task.node_key` 是否仍等于实例当前节点，避免 stale
+  pending task 在 runtime 拒绝前先写入收款、ledger 或项目副作用。
 - 旧快照兼容：旧 `customer_main` 中残留的客户 `signed` 节点会返回 generic
   `complete` action，避免从 `designing` 推进到旧签约节点后无 actions。
 - 旧项目保护：旧 `construction_main` / `project_main` 中残留的项目签约类节点
@@ -950,6 +953,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |
 | 客户设计 workflow 不再承担签约 | 模板和发布校验禁止客户轨道包含项目签约节点 | 已完成 |
 | 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖 | 本仓库已完成，orange 需按文档联调 |
+| 只能完成当前 pending task | `workflow-tasks.test.ts` 覆盖 stale pending task 在进入业务 bridge 前返回 `WORKFLOW_NODE_NOT_CURRENT`，避免非当前节点产生业务副作用 | 已完成 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
 | Admin 项目详情不形成第二条收款入口 | `project-status-action-dialog.test.ts` 和 `project-workflow-payment-gate.test.ts` 覆盖项目状态弹窗只校验已确认入账，不录入金额或凭证，未入账时提示去待办中心确认收款 | 已完成 |

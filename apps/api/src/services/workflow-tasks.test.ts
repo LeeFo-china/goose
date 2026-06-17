@@ -58,6 +58,23 @@ const paymentTask = {
   },
 };
 
+const stalePaymentTask = {
+  ...paymentTask,
+  id: "task-stale-payment",
+  instance: {
+    ...paymentTask.instance,
+    current_node_key: "procedure_tiling",
+    current_node_snapshot: {
+      node_key: "procedure_tiling",
+      business_kind: "procedure_template",
+      title: "瓦工施工",
+      config: {
+        stage_key: "tiling",
+      },
+    },
+  },
+};
+
 const customerDesignTask = {
   ...paymentTask,
   id: "task-customer-designing",
@@ -252,6 +269,56 @@ describe("workflowTaskService", () => {
       code: "FORBIDDEN",
     });
 
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+  });
+
+  test("rejects stale pending task before running business bridges", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    findById.mockImplementationOnce(async () =>
+      stalePaymentTask as unknown as typeof paymentTask
+    );
+    completePaymentBridge.mockClear();
+    completeRuntimeNode.mockClear();
+
+    await expect(
+      workflowTaskService.completeTask(
+        {
+          authUserId: "auth-1",
+          employeeId: "finance-employee-1",
+          tenantId: "tenant-1",
+          tenantName: null,
+          tenantSlug: null,
+          tenantStatus: "active",
+          isPlatformAdmin: false,
+          employeeName: "财务",
+          employeeStatus: "active",
+          departmentId: null,
+          tenantDepartmentId: null,
+          departmentCode: "FINANCE",
+          departmentName: "财务部",
+          postId: null,
+          postName: null,
+          avatar: null,
+          roleCodes: [],
+          roles: [],
+          permissions: [{ code: "finance.payment.confirm", scope: "all" }],
+        },
+        "task-stale-payment",
+        {
+          action: "complete",
+          reason: null,
+          output: {
+            amount: 10000,
+            evidence_images: [{ url: "https://example.com/payment.jpg" }],
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_NODE_NOT_CURRENT",
+    });
+
+    expect(completePaymentBridge).not.toHaveBeenCalled();
     expect(completeRuntimeNode).not.toHaveBeenCalled();
   });
 
