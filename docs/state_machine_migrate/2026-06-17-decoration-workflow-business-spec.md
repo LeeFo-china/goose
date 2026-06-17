@@ -529,7 +529,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 - API 模板拆分：`customer_main`、`project_signing`、`construction_main`。
 - API 发布校验：按业务轨道校验主线顺序，禁止 `on_hold`、`invalid` 成为主线节点，
   并禁止项目签约、施工轨道混入客户阶段节点。
-- API 财务门禁校验：收款节点必须配置合法 `payment_type`；项目签约流程中，
+- API 财务门禁校验：收款节点必须配置合法 `payment_type`，且必须有财务审核人
+  或 `finance.*` 确认权限；项目签约流程中，
   `deposit` 必须位于方案确认之后、项目签约之前，`stage_1` 必须位于项目签约之后、
   排期开工之前。
 - API 施工发布校验：施工流程只把开工、工序、竣工验收、交房作为固定主顺序；
@@ -546,7 +547,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 - 旧项目保护：旧 `construction_main` / `project_main` 中残留的项目签约类节点
   不再直接走 project bridge；完成时返回 `WORKFLOW_INSTANCE_REBUILD_REQUIRED`，
   要求先受控重建到 `project_signing`，避免新旧实例并行推进。
-- Admin：模板入口、节点库、节点能力、业务类型和财务类型按 workflow 轨道过滤。
+- Admin：模板入口、节点库、节点能力、业务类型和财务类型按 workflow 轨道过滤；
+  本地校验补齐客户设计、项目签约、施工三条业务轨道顺序和财务门禁位置检查。
 - 审计脚本：`bun run workflow:decoration-business-audit -- --sample-limit 100`。
 - 旧实例复核脚本：`bun run workflow:decoration-legacy-review -- --sample-limit 100`。
   复核报告会按实例输出 `action_commands`，可直接复制对应 dry-run / apply 命令。
@@ -923,11 +925,12 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 三条标准模板拆分 | `workflow-templates.ts` 与 `workflow-templates.test.ts` 覆盖 `customer_main`、`project_signing`、`construction_main` | 已完成 |
 | 项目签约可插入财务门禁 | `workflow-publish-graph.test.ts` 覆盖 `project_signing` 中插入 `payment_collection` | 已完成 |
 | 项目签约财务门禁位置受控 | `workflow-publish-graph.test.ts` 覆盖收定金、开工前款允许区间和非法 payment_type | 已完成 |
-| 收款节点必须有合法类型 | `workflow-payment-collection-node-validation.test.ts` 覆盖缺失/非法 `payment_type` | 已完成 |
+| 收款节点必须有合法类型和确认人/权限 | `workflow-payment-collection-node-validation.test.ts` 覆盖缺失/非法 `payment_type`、缺少财务审核人和 `finance.*` 权限 | 已完成 |
 | 施工财务门禁可按租户自定义插入 | `workflow-publish-graph.test.ts` 覆盖无固定收款节点、使用自定义收款 node_key | 已完成 |
 | 工序日志/图片门禁后端兜底 | `workflow-runtime-guards.test.ts` 覆盖缺日志、缺图片拦截和满足要求放行 | 已完成 |
 | 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序 | 已完成 |
 | 发布时禁止跨轨道节点混入 | `workflow-publish-graph.test.ts` 覆盖项目签约/施工混入客户节点、客户流程插财务节点 | 已完成 |
+| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、施工自定义收款 node_key | 已完成 |
 | 暂停/作废不作为标准主线节点 | 发布校验和 Admin 轨道过滤隐藏异常节点 | 已完成 |
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |

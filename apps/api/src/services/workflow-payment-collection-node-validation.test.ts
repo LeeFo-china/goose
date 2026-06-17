@@ -31,13 +31,36 @@ describe("findPaymentCollectionIssues", () => {
   test("accepts valid payment collection node reviewer settings", () => {
     expect(findPaymentCollectionIssues([
       paymentNode({ payment_type: "deposit" }),
+      paymentNode({
+        node_key: "payment_stage_1",
+        payment_type: "stage_1",
+        finance_reviewer_employee_id: "employee-1",
+        required_permissions: [],
+      }),
     ])).toEqual([]);
+  });
+
+  test("requires finance reviewer or finance permission", () => {
+    expect(findPaymentCollectionIssues([
+      paymentNode({ payment_type: "deposit", required_permissions: [] }),
+      paymentNode({
+        node_key: "payment_stage_1",
+        payment_type: "stage_1",
+        finance_reviewer_employee_id: "",
+        required_permissions: ["project.update"],
+      }),
+    ])).toEqual([
+      "收款节点 payment_deposit 必须选择财务审核人或配置财务确认权限",
+      "收款节点 payment_stage_1 必须选择财务审核人或配置财务确认权限",
+    ]);
   });
 });
 
 function paymentNode(input: {
   node_key?: string;
   payment_type: unknown;
+  finance_reviewer_employee_id?: string | null;
+  required_permissions?: string[];
 }): WorkflowNodeRow {
   return {
     ...BASE_NODE,
@@ -45,8 +68,8 @@ function paymentNode(input: {
     config: {
       payment_type: input.payment_type,
       requirement_mode: "any_confirmed",
-      finance_reviewer_employee_id: null,
-      required_permissions: ["finance.payment.confirm"],
+      finance_reviewer_employee_id: input.finance_reviewer_employee_id ?? null,
+      required_permissions: input.required_permissions ?? ["finance.payment.confirm"],
     },
   };
 }

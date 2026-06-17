@@ -5,6 +5,9 @@ import {
   isWorkflowProcedureStageKey,
 } from "@/components/workflows/workflow-procedure-stages";
 import { getWorkflowEdgeConditionSignature } from "@/components/workflows/workflow-edge-conditions";
+import {
+  findWorkflowBusinessTrackIssues,
+} from "@/components/workflows/workflow-business-track";
 import type {
   WorkflowDefinitionDetail,
   WorkflowEdge,
@@ -338,6 +341,7 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
       });
     }
   });
+  issues.push(...findWorkflowBusinessTrackIssues(graph));
 
   return { valid: issues.length === 0, issues };
 }
