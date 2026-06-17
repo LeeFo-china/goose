@@ -218,6 +218,15 @@
 | 发布校验 | 跨轨道节点、非法 payment_type、暂停/作废主线发布失败 | 待填写 |
 | 项目详情 | workflow state、任务、财务台账与小程序操作后状态一致 | 待填写 |
 
+本地自动化预验收记录，不替代真实联调：
+
+| 检查项 | 本地证据 | 结论 |
+| --- | --- | --- |
+| 节点库轨道过滤 | `apps/admin/components/workflows/workflow-business-track.test.ts` 覆盖客户设计、项目签约、施工三条轨道的可选能力、业务类型和财务类型 | 已覆盖 |
+| Admin 发布前轨道校验 | `apps/admin/components/workflows/workflow-business-track-validation.test.ts` 覆盖模板派生 key、异常动作主线拦截、施工工序主状态重复 | 已覆盖 |
+| API 发布轨道校验 | `apps/api/src/services/workflow-business-track-validation.test.ts` 覆盖同一套服务端发布校验边界 | 已覆盖 |
+| 项目详情收款入口边界 | `apps/admin/components/projects/project-status-action-dialog.test.ts` 和 `project-workflow-payment-gate.test.ts` 覆盖项目状态弹窗不录入金额或凭证，只校验已确认入账 | 已覆盖 |
+
 ## 失败处理
 
 | 失败 | 处理 |

@@ -535,7 +535,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
   `deposit` 必须位于方案确认之后、项目签约之前，`stage_1` 必须位于项目签约之后、
   排期开工之前。
 - API 施工发布校验：施工流程只把开工、工序、竣工验收、交房作为固定主顺序；
-  中期收款是可插入门禁，不再要求固定 `payment_stage_2` / `payment_stage_3` node_key。
+  中期收款是可插入门禁，不再要求固定 `payment_stage_2` / `payment_stage_3` node_key；
+  拆改、水电、瓦工、木工、油工、安装等工序主状态按 `stage_key` 归一后也必须唯一。
 - API 工序运行时门禁：施工 `procedure` 节点按 `require_log` 和 `min_image_count`
   校验 complete output，缺施工日志或图片数量不足时返回
   `WORKFLOW_PROCEDURE_REQUIREMENT_BLOCKED`。
@@ -551,6 +552,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 - Admin：模板入口、节点库、节点能力、业务类型和财务类型按 workflow 轨道过滤；
   本地校验补齐客户设计、项目签约、施工三条业务轨道顺序、主状态语义唯一性和
   异常动作主线拦截、财务门禁位置检查。
+- Admin 项目详情：`payment_collection` 动作只校验是否已有 `confirmed` 入账记录，
+  不在项目状态弹窗录入金额或凭证；金额、凭证和入账仍由待办中心/财务收款路径完成。
 - Admin/API 施工阶段对接：Admin 新增确认开工节点默认使用模板标准
   `node_key = started`；后端保存 schema 接受 `config.stage_type`；发布校验和
   Admin 本地校验会把 `construction_start` 语义节点归一为标准 `started` 校验，
@@ -934,13 +937,13 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 项目签约可插入财务门禁 | `workflow-publish-graph.test.ts` 覆盖 `project_signing` 中插入 `payment_collection` | 已完成 |
 | 项目签约财务门禁位置受控 | `workflow-publish-graph.test.ts` 覆盖收定金、开工前款允许区间和非法 payment_type | 已完成 |
 | 收款节点必须有合法类型和确认人/权限 | `workflow-payment-collection-node-validation.test.ts` 覆盖缺失/非法 `payment_type`、缺少财务审核人和 `finance.*` 权限 | 已完成 |
-| 施工财务门禁可按租户自定义插入 | `workflow-publish-graph.test.ts` 覆盖无固定收款节点、使用自定义收款 node_key | 已完成 |
+| 施工财务门禁可按租户自定义插入 | `workflow-publish-graph.test.ts` 覆盖无固定收款节点、使用自定义收款 node_key；API/Admin `workflow-business-track-validation.test.ts` 覆盖插入门禁不放松工序主状态唯一性 | 已完成 |
 | 工序日志/图片门禁后端兜底 | `workflow-runtime-guards.test.ts` 覆盖缺日志、缺图片拦截和满足要求放行 | 已完成 |
-| 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序，`workflow-business-track-validation.test.ts` 覆盖模板派生自定义 key | 已完成 |
-| 发布时禁止重复主状态语义 | `workflow-publish-graph.test.ts` 覆盖不同 `node_key` 但同一签约/开工主状态语义重复 | 已完成 |
+| 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序，`workflow-business-track-validation.test.ts` 覆盖模板派生自定义 key 和施工工序重复拦截 | 已完成 |
+| 发布时禁止重复主状态语义 | `workflow-publish-graph.test.ts` 覆盖不同 `node_key` 但同一签约/开工主状态语义重复；API/Admin 轨道校验覆盖相同 `stage_key` 工序重复 | 已完成 |
 | 发布时禁止跨轨道节点混入 | `workflow-publish-graph.test.ts` 覆盖项目签约/施工混入客户节点、客户流程插财务节点 | 已完成 |
 | 异常动作不作为主线节点 | `workflow-business-track-validation.test.ts` 覆盖 `mark_dormant`、`pause_project` 等异常动作节点名 | 已完成 |
-| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key；`workflow-business-track.test.ts` 覆盖模板派生自定义 key 识别 | 已完成 |
+| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key；`workflow-business-track.test.ts` 覆盖模板派生自定义 key 识别；Admin `workflow-business-track-validation.test.ts` 覆盖施工工序主状态重复 | 已完成 |
 | Admin 施工节点与 API 保存/发布校验一致 | `workflow-node-capabilities.test.ts`、`WorkflowGraphSaveSchema` 和 API/Admin 轨道校验测试覆盖 `stage_type` 与 `construction_start -> started` 归一 | 已完成 |
 | 暂停/作废不作为标准主线节点 | 发布校验和 Admin 轨道过滤隐藏异常节点 | 已完成 |
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
@@ -949,6 +952,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 小程序按 actions 完成任务 | 文档明确 `/workflow-tasks/:taskId/complete` 和 `workflow_state.actions` 约束，API actions 测试覆盖 | 本仓库已完成，orange 需按文档联调 |
 | 项目动作必填 output 后端兜底 | `workflow-task-project-bridge.test.ts` 覆盖签约金额、开工日期、工程负责人缺失时报错 | 已完成 |
 | 财务节点确认金额和凭证 | `workflow-task-action-metadata.ts` 输出 `payment_collection` 字段，payment bridge 创建确认流水 | 已完成 |
+| Admin 项目详情不形成第二条收款入口 | `project-status-action-dialog.test.ts` 和 `project-workflow-payment-gate.test.ts` 覆盖项目状态弹窗只校验已确认入账，不录入金额或凭证，未入账时提示去待办中心确认收款 | 已完成 |
 | 微信支付后续兼容 | workflow 只绑定 `payment_collection` 语义，不绑定支付渠道；`workflow-task-payment-bridge.test.ts` 覆盖已有 `workflow_task_id` 且 `confirmed` 的入账记录无需人工金额/凭证 output 即可推进，未确认入账不能放行 | 设计已完成 |
 | 旧实例不被 migration 改写 | migration 内容测试确认不 `delete/update workflow_instances/tasks` | 已完成 |
 | 旧实例识别与分类 | `decoration-workflow-business-audit.ts` 和 `decoration-workflow-legacy-instance-review.ts` | 已完成 |
