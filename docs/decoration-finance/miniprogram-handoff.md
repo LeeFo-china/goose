@@ -2,6 +2,11 @@
 
 日期：2026-06-16
 
+最新同步：2026-06-17。gooes 已支持 `project_payment` 收款凭证直传；orange
+已在 `b611426e209bddad80cb1018bb7a97c3413c2330 fix(finance): 补齐收款联调参数`
+中补齐收款凭证上传 `projectId` 和 workflow task `status` 透传。当前剩余工作是
+按真实账号做端到端点击验收，不再要求 orange 先完成这两个必改项。
+
 ## 1. 范围
 
 本文档用于 Gooes 后端/Admin 仓库向 WeChat 小程序仓库
@@ -47,14 +52,15 @@
 - `src/services/project_payment.ts`
   - 已封装 `uploadCollectionEvidence()`，使用 direct COS 上传。
 
-当前仍存在的对接缺口：
+当前对接状态：
 
-| 缺口 | 影响 | 建议 |
+| 项 | 状态 | 说明 |
 | --- | --- | --- |
-| gooes 后端 direct upload 场景未包含 `project_payment` | 小程序上传收款凭证会在 `/uploads/cos/direct-init` 返回“当前场景暂不支持直传” | gooes 先补 `project_payment` 上传场景。 |
-| orange 上传收款凭证未传 `projectId` | 凭证对象路径不能直接绑定项目；如果后端要求项目级校验会失败 | orange 将 `uploadCollectionEvidence(filePaths, projectId)` 透传到 direct upload 的 `projectId`。 |
-| orange `WorkflowTaskService.list()` 未透传 `status` | 任务中心调用方传 `status` 时会被丢弃 | orange 在 list 参数类型和请求 query 中补 `status`。 |
-| 任务中心跳转项目详情只带 `id` | 可以处理，但不能直接打开对应收款动作，财务人员还要在项目详情里找按钮 | 可选增强：target url 带 `workflowTaskId` 和 `action=confirm_payment`，项目详情加载后自动展开对应动作。 |
+| gooes `project_payment` direct upload scene | 已完成 | `/uploads/cos/direct-init` 和 `direct-complete` 已接受 `scene=project_payment` 且要求 `project_id`。 |
+| orange 收款凭证上传 `projectId` | 已完成 | `ProjectPaymentService.uploadCollectionEvidence(filePaths, projectId)` 已透传到 direct upload。 |
+| orange `WorkflowTaskService.list()` 透传 `status` | 已完成 | 任务中心默认请求 `status=pending`，避免 completed/canceled 待办混入。 |
+| 任务中心跳转项目详情只带 `id` | 可选增强 | 当前可以处理，但不能直接打开对应收款动作；后续可在 target url 带 `workflowTaskId` 和 `action=confirm_payment`。 |
+| 真实端到端点击验收 | 待执行 | 需小程序团队按本文第 8 节路径，用真实财务账号完成一次收款闭环并回填验收记录。 |
 
 ## 3. 后端契约
 
@@ -172,7 +178,8 @@ Content-Type: application/json
 
 完成请求也应携带同一个 `scene`、`project_id`、`object_key`、`mimetype`、`size_bytes`。
 
-当前 gooes 需要先补 `project_payment` direct upload scene，否则 orange 已有上传代码会被后端拒绝。
+gooes 已支持 `project_payment` direct upload scene。小程序调用时仍必须传
+`project_id`，否则后端会拒绝收款凭证上传。
 
 ### 3.3 确认收款
 
@@ -269,7 +276,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | 缺金额或金额小于等于 0 | 400 | 保持弹窗，提示用户修正金额。 |
 | 未上传凭证 | 400 | 保持弹窗，提示至少上传 1 张凭证。 |
-| 上传场景不支持 | 400 | 提示凭证上传失败；gooes 需补 `project_payment` 场景。 |
+| 上传场景不支持或缺少 `project_id` | 400 | 保留表单，提示凭证上传失败，并记录 direct-init/direct-complete 请求参数。 |
 | 当前用户无权处理任务 | 403 | 刷新任务列表，提示无权限。 |
 | 任务已被处理 | 409 | 刷新任务列表和项目详情，提示任务状态已变化。 |
 | workflow 当前节点已变化 | 409 | 刷新任务列表和项目 workflow state。 |
@@ -281,7 +288,9 @@ Content-Type: application/json
 
 文件：`src/services/workflow_task.ts`
 
-当前 API 后端支持 `status=pending|completed|canceled`，orange service 类型和请求 query 需要补上 `status`，避免 `TaskCenterService.list({ status })` 被丢弃。
+当前 API 后端支持 `status=pending|completed|canceled`。orange 已补齐 service
+类型和请求 query 的 `status` 透传；后续回归时要确认任务中心请求仍带
+`status=pending`。
 
 建议：
 
@@ -306,7 +315,7 @@ list: (
 
 文件：`src/services/project_payment.ts`
 
-当前 `uploadCollectionEvidence(filePaths)` 使用 `scene: 'project_payment'`，但未透传项目 ID。建议改为：
+orange 已将 `uploadCollectionEvidence(filePaths)` 调整为携带项目 ID：
 
 ```ts
 uploadCollectionEvidence: async (filePaths: string[], projectId: string) =>
@@ -320,7 +329,9 @@ uploadCollectionEvidence: async (filePaths: string[], projectId: string) =>
   }),
 ```
 
-对应 `usePaymentCollectionConfirm` 需要拿到当前 `projectId`，并传给上传 service。
+对应 `usePaymentCollectionConfirm` 已拿到当前 `projectId`，并传给上传 service。
+后续回归时要确认 `direct-init` 请求体包含 `scene=project_payment` 和
+`project_id`。
 
 ### 5.3 任务中心深链
 
