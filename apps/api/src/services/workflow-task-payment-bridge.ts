@@ -89,6 +89,9 @@ export class WorkflowTaskPaymentBridge {
 
     const existing = await this.dependencies.paymentRepository
       .findByWorkflowTaskId(input.task.id);
+    if (existing && existing.status !== "confirmed") {
+      throw Errors.badRequest("收款记录尚未确认，不能推进收款节点");
+    }
     const payment = existing ?? await this.createManualPayment(input, snapshot);
 
     await this.dependencies.financeLedgerService.createProjectPaymentLedger(

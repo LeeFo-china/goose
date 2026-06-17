@@ -270,4 +270,30 @@ describe("workflowTaskPaymentBridge", () => {
     );
     expect(callOrder).toEqual(["ledger", "workflow"]);
   });
+
+  test("does not complete workflow task from existing unconfirmed payment", async () => {
+    findByWorkflowTaskId.mockImplementation(async () => ({
+      ...confirmedPayment,
+      status: "pending",
+      payment_channel: "wechat_pay",
+    }));
+    const workflowTaskPaymentBridge = createBridge();
+
+    await expect(
+      workflowTaskPaymentBridge.complete({
+        authContext,
+        task: bridgeTask,
+        action: "complete",
+        output: {},
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(createProjectPaymentLedger).not.toHaveBeenCalled();
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(callOrder).toEqual([]);
+  });
 });
