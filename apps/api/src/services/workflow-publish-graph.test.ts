@@ -307,7 +307,7 @@ describe("validateWorkflowPublishGraph business tracks", () => {
         nodes,
         edges: linearEdges(nodes),
       })
-    ).toThrow(/项目暂停、作废必须作为异常动作/);
+    ).toThrow(/施工流程异常动作不能作为主线节点/);
   });
 
   test("rejects construction workflow that contains customer stage nodes", () => {

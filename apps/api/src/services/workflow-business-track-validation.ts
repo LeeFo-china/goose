@@ -43,7 +43,15 @@ const CONSTRUCTION_TRACK = [
   "end",
 ] as const;
 
-const PROJECT_EXCEPTION_NODE_KEYS = new Set(["on_hold", "invalid"]);
+const EXCEPTION_ACTION_NODE_KEYS = new Set([
+  "on_hold",
+  "invalid",
+  "pause_project",
+  "resume_project",
+  "mark_invalid",
+  "mark_dormant",
+  "reactivate",
+]);
 const CUSTOMER_STAGE_NODE_KEYS = new Set(["potential", "following", "arrived"]);
 const CUSTOMER_STAGE_BUSINESS_KINDS = new Set([
   "customer_lead",
@@ -70,6 +78,9 @@ function validateCustomerDesignTrack(
   nodes: WorkflowNodeRow[],
   edges: WorkflowEdgeRow[],
 ) {
+  const exceptionIssues = findExceptionActionNodeIssues("客户设计流程", nodes);
+  if (exceptionIssues.length > 0) return exceptionIssues;
+
   const forbiddenNodes = nodes.filter((node) =>
     node.node_key === "signed" ||
     node.node_key === "proposal_confirmed" ||
@@ -130,7 +141,7 @@ function validateProjectSigningTrack(
   nodes: WorkflowNodeRow[],
   edges: WorkflowEdgeRow[],
 ) {
-  const exceptionIssues = findProjectExceptionNodeIssues(nodes);
+  const exceptionIssues = findExceptionActionNodeIssues("项目签约流程", nodes);
   if (exceptionIssues.length > 0) return exceptionIssues;
 
   const customerIssues = findCustomerStageNodeIssues("项目签约流程", nodes);
@@ -193,7 +204,7 @@ function validateConstructionTrack(
   nodes: WorkflowNodeRow[],
   edges: WorkflowEdgeRow[],
 ) {
-  const exceptionIssues = findProjectExceptionNodeIssues(nodes);
+  const exceptionIssues = findExceptionActionNodeIssues("施工流程", nodes);
   if (exceptionIssues.length > 0) return exceptionIssues;
 
   const customerIssues = findCustomerStageNodeIssues("施工流程", nodes);
@@ -252,16 +263,14 @@ function validateConstructionTrack(
   });
 }
 
-function findProjectExceptionNodeIssues(nodes: WorkflowNodeRow[]) {
+function findExceptionActionNodeIssues(label: string, nodes: WorkflowNodeRow[]) {
   const exceptionNodes = nodes.filter((node) =>
-    PROJECT_EXCEPTION_NODE_KEYS.has(node.node_key)
+    EXCEPTION_ACTION_NODE_KEYS.has(node.node_key)
   );
   if (exceptionNodes.length === 0) return [];
 
   return [
-    `项目暂停、作废必须作为异常动作，不允许配置为主线节点: ${
-      formatNodeKeys(exceptionNodes)
-    }`,
+    `${label}异常动作不能作为主线节点: ${formatNodeKeys(exceptionNodes)}`,
   ];
 }
 
