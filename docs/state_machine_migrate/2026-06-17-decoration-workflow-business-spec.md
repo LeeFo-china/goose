@@ -966,6 +966,9 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
   `docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md`。
 - 旧实例写入、施工后段项目恢复策略和 orange 端到端验收的机读门禁状态应同步回填到
   `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`。
+  写入项即使已业务确认，也必须在最新只读审计满足 `needs_migration = false` 且
+  `unknown_review_required = 0` 后，才能把
+  `closeout_rules.can_run_legacy_apply` 设为 `true`。
   同步后用以下命令校验：
 
 ```bash

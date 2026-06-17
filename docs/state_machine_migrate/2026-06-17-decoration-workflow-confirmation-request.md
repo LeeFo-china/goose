@@ -22,7 +22,7 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 
 ## 当前远端复核状态
 
-截至 2026-06-17 22:24：
+截至 2026-06-17 23:02：
 
 - `needs_migration = false`
 - `needs_instance_review = true`
@@ -34,7 +34,7 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 
 最新证据：
 
-- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2224.md`
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2302.md`
 
 ## 需要业务确认的写入项
 
@@ -156,5 +156,9 @@ cd apps/api && bun run workflow:decoration-manual-gates-check -- \
 
 在全部外部门禁完成前，该命令应失败并列出 pending gate；所有确认和联调证据
 回填完成后，该命令必须通过。
+
+即使写入项都已业务确认，只要最新只读审计仍显示 `needs_migration = true` 或
+`unknown_review_required > 0`，专用门禁仍必须保持
+`closeout_rules.can_run_legacy_apply = false`，不得执行 `--apply`。
 
 如果任一复核结果和本确认请求不一致，停止执行，重新发起确认。

@@ -68,7 +68,7 @@ export async function buildDecorationWorkflowManualGateCheckReport(
   const manualRestore = summarizeManualRestoreDecision(loaded.evidence);
   const orange = summarizeOrangeE2eAcceptance(loaded.evidence);
   const closeout = summarizeCloseoutRules(loaded.evidence, {
-    canRunLegacyApply: legacyApply.ok,
+    canRunLegacyApply: readOnly.ok && legacyApply.ok,
     canClosePrdWithoutFollowup:
       readOnly.ok && legacyApply.ok && manualRestore.ok && orange.ok &&
       manualRestoreHasNoFollowup(loaded.evidence),

@@ -7,7 +7,7 @@ import {
   parseDecorationWorkflowManualGateCheckArgs,
 } from "./decoration-workflow-manual-gates-check";
 
-const generatedAt = "2026-06-17T22:30:00.000+08:00";
+const generatedAt = "2026-06-17T23:30:00.000+08:00";
 
 describe("parseDecorationWorkflowManualGateCheckArgs", () => {
   test("parses decoration manual gate evidence file path", () => {
@@ -198,6 +198,46 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
         ok: false,
         detail:
           "can_run_legacy_apply=true; can_close_prd_without_followup=true",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("blocks legacy apply when the latest read-only review is not clean", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gooes-decoration-gates-"));
+    const path = join(dir, "decoration-gates.json");
+    try {
+      const evidence = buildCompleteEvidence();
+      evidence.latest_read_only_review.needs_migration = true;
+      evidence.closeout_rules.can_run_legacy_apply = true;
+      evidence.closeout_rules.can_close_prd_without_followup = false;
+
+      await writeFile(path, JSON.stringify(evidence), "utf8");
+
+      const report = await buildDecorationWorkflowManualGateCheckReport(
+        path,
+        generatedAt,
+      );
+
+      expect(report.ok).toBe(false);
+      expect(report.checks).toContainEqual({
+        name: "read_only_review_current",
+        ok: false,
+        detail:
+          "needs_migration=true; unknown_review_required=0; running_instances_on_legacy_snapshots=7",
+      });
+      expect(report.checks).toContainEqual({
+        name: "legacy_apply_confirmations",
+        ok: true,
+        detail:
+          "confirmed=project_signing_rebuild, invalid_customer_cancellations",
+      });
+      expect(report.checks).toContainEqual({
+        name: "closeout_rules_consistent",
+        ok: false,
+        detail:
+          "can_run_legacy_apply=true; can_close_prd_without_followup=false",
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
