@@ -39,6 +39,30 @@ describe("validateGraph business tracks", () => {
     );
   });
 
+  test("rejects project signing workflow with duplicate contract status semantics", () => {
+    const nodes = [
+      node("start", "start"),
+      node("designing", "business", "design"),
+      node("proposal_confirmed", "business", "design"),
+      node("contract_review_as_status", "business", "contract"),
+      node("signed", "business", "contract"),
+      node("design_finalized", "business", "design"),
+      node("pending_start", "business", "construction_start"),
+      node("end", "end"),
+    ];
+
+    const result = validateGraph({
+      definition: definition("project_signing", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.message)).toContain(
+      "项目签约流程主状态节点重复: 项目签约(contract_review_as_status、signed)",
+    );
+  });
+
   test("allows construction workflow with custom payment collection gates inserted", () => {
     const nodes = [
       node("start", "start"),
@@ -63,6 +87,38 @@ describe("validateGraph business tracks", () => {
     });
 
     expect(result.valid).toBe(true);
+  });
+
+  test("rejects construction workflow with duplicate construction start status semantics", () => {
+    const nodes = [
+      node("start", "start"),
+      node("construction_start_duplicate", "construction_stage", "construction_start", {
+        stage_type: "construction_start",
+      }),
+      node("started", "construction_stage", "construction_start", {
+        stage_type: "construction_start",
+      }),
+      procedureNode("procedure_demolition", "demolition"),
+      procedureNode("procedure_plumbing_electrical", "plumbing_electrical"),
+      procedureNode("procedure_tiling", "tiling"),
+      procedureNode("procedure_woodwork", "woodwork"),
+      procedureNode("procedure_painting", "painting"),
+      procedureNode("procedure_installation", "installation"),
+      node("final_acceptance", "construction_stage", "final_acceptance"),
+      node("handover", "confirmation", "final_acceptance"),
+      node("end", "end"),
+    ];
+
+    const result = validateGraph({
+      definition: definition("construction_main", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.message)).toContain(
+      "施工流程主状态节点重复: 确认开工(construction_start_duplicate、started)",
+    );
   });
 });
 

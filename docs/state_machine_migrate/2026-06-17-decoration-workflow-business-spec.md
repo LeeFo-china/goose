@@ -527,8 +527,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 已完成：
 
 - API 模板拆分：`customer_main`、`project_signing`、`construction_main`。
-- API 发布校验：按业务轨道校验主线顺序，禁止 `on_hold`、`invalid` 成为主线节点，
-  并禁止项目签约、施工轨道混入客户阶段节点。
+- API 发布校验：按业务轨道校验主线顺序和主状态语义唯一性，禁止
+  `on_hold`、`invalid` 成为主线节点，并禁止项目签约、施工轨道混入客户阶段节点。
 - API 财务门禁校验：收款节点必须配置合法 `payment_type`，且必须有财务审核人
   或 `finance.*` 确认权限；项目签约流程中，
   `deposit` 必须位于方案确认之后、项目签约之前，`stage_1` 必须位于项目签约之后、
@@ -548,7 +548,8 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
   不再直接走 project bridge；完成时返回 `WORKFLOW_INSTANCE_REBUILD_REQUIRED`，
   要求先受控重建到 `project_signing`，避免新旧实例并行推进。
 - Admin：模板入口、节点库、节点能力、业务类型和财务类型按 workflow 轨道过滤；
-  本地校验补齐客户设计、项目签约、施工三条业务轨道顺序和财务门禁位置检查。
+  本地校验补齐客户设计、项目签约、施工三条业务轨道顺序、主状态语义唯一性和
+  财务门禁位置检查。
 - 审计脚本：`bun run workflow:decoration-business-audit -- --sample-limit 100`。
 - 旧实例复核脚本：`bun run workflow:decoration-legacy-review -- --sample-limit 100`。
   复核报告会按实例输出 `action_commands`，可直接复制对应 dry-run / apply 命令。
@@ -929,8 +930,9 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 施工财务门禁可按租户自定义插入 | `workflow-publish-graph.test.ts` 覆盖无固定收款节点、使用自定义收款 node_key | 已完成 |
 | 工序日志/图片门禁后端兜底 | `workflow-runtime-guards.test.ts` 覆盖缺日志、缺图片拦截和满足要求放行 | 已完成 |
 | 发布时禁止破坏主顺序 | `workflow-publish-graph.ts` 按业务轨道校验主线顺序 | 已完成 |
+| 发布时禁止重复主状态语义 | `workflow-publish-graph.test.ts` 覆盖不同 `node_key` 但同一签约/开工主状态语义重复 | 已完成 |
 | 发布时禁止跨轨道节点混入 | `workflow-publish-graph.test.ts` 覆盖项目签约/施工混入客户节点、客户流程插财务节点 | 已完成 |
-| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、施工自定义收款 node_key | 已完成 |
+| Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key | 已完成 |
 | 暂停/作废不作为标准主线节点 | 发布校验和 Admin 轨道过滤隐藏异常节点 | 已完成 |
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |

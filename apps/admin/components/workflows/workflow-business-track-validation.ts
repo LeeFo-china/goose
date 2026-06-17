@@ -1,14 +1,9 @@
+import type { WorkflowValidationIssue } from "@/components/workflows/workflow-designer-types";
 import type {
-  WorkflowDefinitionRow,
-  WorkflowEdgeRow,
-  WorkflowNodeRow,
-} from "@/repositories/workflows";
-
-type WorkflowBusinessTrackValidationInput = {
-  definition: WorkflowDefinitionRow;
-  nodes: WorkflowNodeRow[];
-  edges: WorkflowEdgeRow[];
-};
+  WorkflowDefinition,
+  WorkflowEdge,
+  WorkflowNode,
+} from "@/components/workflows/workflow-types";
 
 const CUSTOMER_DESIGN_TRACK = [
   "start",
@@ -51,25 +46,27 @@ const CUSTOMER_STAGE_BUSINESS_KINDS = new Set([
   "store_visit",
 ]);
 
-export function findBusinessTrackIssues(
-  input: WorkflowBusinessTrackValidationInput,
-) {
-  switch (input.definition.workflow_key) {
+export function findWorkflowBusinessTrackIssues(graph: {
+  definition: Pick<WorkflowDefinition, "workflow_key">;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}): WorkflowValidationIssue[] {
+  switch (graph.definition.workflow_key) {
     case "customer_main":
-      return validateCustomerDesignTrack(input.nodes, input.edges);
+      return validateCustomerDesignTrack(graph.nodes, graph.edges);
     case "project_signing":
-      return validateProjectSigningTrack(input.nodes, input.edges);
+      return validateProjectSigningTrack(graph.nodes, graph.edges);
     case "construction_main":
-      return validateConstructionTrack(input.nodes, input.edges);
+      return validateConstructionTrack(graph.nodes, graph.edges);
     default:
       return [];
   }
 }
 
 function validateCustomerDesignTrack(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
-) {
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): WorkflowValidationIssue[] {
   const forbiddenNodes = nodes.filter((node) =>
     node.node_key === "signed" ||
     node.node_key === "proposal_confirmed" ||
@@ -83,7 +80,12 @@ function validateCustomerDesignTrack(
     node.node_type === "procedure"
   );
   if (forbiddenNodes.length > 0) {
-    return [`客户设计流程不能包含项目签约节点: ${formatNodeKeys(forbiddenNodes)}`];
+    return [
+      issue(
+        "business_track_forbidden_project_node",
+        `客户设计流程不能包含项目签约节点: ${formatNodeKeys(forbiddenNodes)}`,
+      ),
+    ];
   }
 
   const duplicateIssues = findDuplicateMainStatusIssues(
@@ -127,9 +129,9 @@ function validateCustomerDesignTrack(
 }
 
 function validateProjectSigningTrack(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
-) {
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): WorkflowValidationIssue[] {
   const exceptionIssues = findProjectExceptionNodeIssues(nodes);
   if (exceptionIssues.length > 0) return exceptionIssues;
 
@@ -146,7 +148,12 @@ function validateProjectSigningTrack(
     node.node_key === "handover"
   );
   if (forbiddenNodes.length > 0) {
-    return [`项目签约流程不能包含施工节点: ${formatNodeKeys(forbiddenNodes)}`];
+    return [
+      issue(
+        "business_track_forbidden_construction_node",
+        `项目签约流程不能包含施工节点: ${formatNodeKeys(forbiddenNodes)}`,
+      ),
+    ];
   }
 
   const duplicateIssues = findDuplicateMainStatusIssues(
@@ -190,9 +197,9 @@ function validateProjectSigningTrack(
 }
 
 function validateConstructionTrack(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
-) {
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): WorkflowValidationIssue[] {
   const exceptionIssues = findProjectExceptionNodeIssues(nodes);
   if (exceptionIssues.length > 0) return exceptionIssues;
 
@@ -208,7 +215,12 @@ function validateConstructionTrack(
     node.business_kind === "contract"
   );
   if (forbiddenNodes.length > 0) {
-    return [`施工流程不能包含项目签约节点: ${formatNodeKeys(forbiddenNodes)}`];
+    return [
+      issue(
+        "business_track_forbidden_project_signing_node",
+        `施工流程不能包含项目签约节点: ${formatNodeKeys(forbiddenNodes)}`,
+      ),
+    ];
   }
 
   const duplicateIssues = findDuplicateMainStatusIssues(
@@ -223,7 +235,7 @@ function validateConstructionTrack(
             node.node_type === "construction_stage" &&
             (
               node.business_kind === "construction_start" ||
-              node.config.stage_type === "construction_start"
+              getWorkflowStageType(node) === "construction_start"
             )
           ),
       },
@@ -235,7 +247,7 @@ function validateConstructionTrack(
             node.node_type === "construction_stage" &&
             (
               node.business_kind === "final_acceptance" ||
-              node.config.stage_type === "final_acceptance"
+              getWorkflowStageType(node) === "final_acceptance"
             )
           ),
       },
@@ -252,20 +264,28 @@ function validateConstructionTrack(
   });
 }
 
-function findProjectExceptionNodeIssues(nodes: WorkflowNodeRow[]) {
+function findProjectExceptionNodeIssues(
+  nodes: WorkflowNode[],
+): WorkflowValidationIssue[] {
   const exceptionNodes = nodes.filter((node) =>
     PROJECT_EXCEPTION_NODE_KEYS.has(node.node_key)
   );
   if (exceptionNodes.length === 0) return [];
 
   return [
-    `项目暂停、作废必须作为异常动作，不允许配置为主线节点: ${
-      formatNodeKeys(exceptionNodes)
-    }`,
+    issue(
+      "business_track_project_exception_node",
+      `项目暂停、作废必须作为异常动作，不允许配置为主线节点: ${
+        formatNodeKeys(exceptionNodes)
+      }`,
+    ),
   ];
 }
 
-function findCustomerStageNodeIssues(label: string, nodes: WorkflowNodeRow[]) {
+function findCustomerStageNodeIssues(
+  label: string,
+  nodes: WorkflowNode[],
+): WorkflowValidationIssue[] {
   const customerNodes = nodes.filter((node) =>
     CUSTOMER_STAGE_NODE_KEYS.has(node.node_key) ||
     (node.business_kind !== null &&
@@ -273,30 +293,38 @@ function findCustomerStageNodeIssues(label: string, nodes: WorkflowNodeRow[]) {
   );
   if (customerNodes.length === 0) return [];
 
-  return [`${label}不能包含客户节点: ${formatNodeKeys(customerNodes)}`];
+  return [
+    issue(
+      "business_track_forbidden_customer_node",
+      `${label}不能包含客户节点: ${formatNodeKeys(customerNodes)}`,
+    ),
+  ];
 }
 
 function findDuplicateMainStatusIssues(
   label: string,
-  nodes: WorkflowNodeRow[],
+  nodes: WorkflowNode[],
   statusDefinitions: Array<{
     label: string;
-    matches: (node: WorkflowNodeRow) => boolean;
+    matches: (node: WorkflowNode) => boolean;
   }>,
-) {
+): WorkflowValidationIssue[] {
   return statusDefinitions.flatMap((status) => {
     const matchedNodes = nodes.filter(status.matches);
     if (matchedNodes.length <= 1) return [];
     return [
-      `${label}主状态节点重复: ${status.label}(${formatNodeKeys(matchedNodes)})`,
+      issue(
+        "business_track_main_status_duplicate",
+        `${label}主状态节点重复: ${status.label}(${formatNodeKeys(matchedNodes)})`,
+      ),
     ];
   });
 }
 
 function findProjectSigningPaymentGateIssues(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
-) {
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): WorkflowValidationIssue[] {
   const mainlineNodes = getAlwaysMainlineNodes(nodes, edges);
   const proposalConfirmedIndex = findNodeIndex(mainlineNodes, "proposal_confirmed");
   const signedIndex = findNodeIndex(mainlineNodes, "signed");
@@ -311,13 +339,19 @@ function findProjectSigningPaymentGateIssues(
     return [];
   }
 
-  const issues: string[] = [];
+  const issues: WorkflowValidationIssue[] = [];
   mainlineNodes.forEach((node, index) => {
     if (node.business_kind !== "payment_collection") return;
 
-    const paymentType = node.config.payment_type;
+    const paymentType = "payment_type" in node.config
+      ? node.config.payment_type
+      : null;
     if (paymentType !== "deposit" && paymentType !== "stage_1") {
-      issues.push(`项目签约流程收款节点只允许定金或开工前款: ${node.node_key}`);
+      issues.push(issue(
+        "business_track_payment_gate_type",
+        `项目签约流程收款节点只允许定金或开工前款: ${node.node_key}`,
+        node.node_key,
+      ));
       return;
     }
 
@@ -325,9 +359,11 @@ function findProjectSigningPaymentGateIssues(
       paymentType === "deposit" &&
       (index <= proposalConfirmedIndex || index >= signedIndex)
     ) {
-      issues.push(
+      issues.push(issue(
+        "business_track_payment_gate_order",
         `项目签约流程收定金节点必须在方案确认之后、项目签约之前: ${node.node_key}`,
-      );
+        node.node_key,
+      ));
       return;
     }
 
@@ -335,9 +371,11 @@ function findProjectSigningPaymentGateIssues(
       paymentType === "stage_1" &&
       (index <= signedIndex || index >= pendingStartIndex)
     ) {
-      issues.push(
+      issues.push(issue(
+        "business_track_payment_gate_order",
         `项目签约流程开工前款节点必须在项目签约之后、排期开工之前: ${node.node_key}`,
-      );
+        node.node_key,
+      ));
     }
   });
 
@@ -347,16 +385,21 @@ function findProjectSigningPaymentGateIssues(
 function validateTrackOrder(input: {
   label: string;
   requiredTrack: readonly string[];
-  nodes: WorkflowNodeRow[];
-  edges: WorkflowEdgeRow[];
-}) {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}): WorkflowValidationIssue[] {
   const mainlineNodeKeys = getAlwaysMainlineNodes(input.nodes, input.edges)
     .map((node) => node.node_key);
   const missingKeys = input.requiredTrack.filter((nodeKey) =>
     !mainlineNodeKeys.includes(nodeKey)
   );
   if (missingKeys.length > 0) {
-    return [`${input.label}缺少标准节点: ${missingKeys.join("、")}`];
+    return [
+      issue(
+        "business_track_required_node_missing",
+        `${input.label}缺少标准节点: ${missingKeys.join("、")}`,
+      ),
+    ];
   }
 
   let searchFrom = 0;
@@ -364,7 +407,10 @@ function validateTrackOrder(input: {
     const nextIndex = mainlineNodeKeys.indexOf(nodeKey, searchFrom);
     if (nextIndex < 0) {
       return [
-        `${input.label}必须按标准顺序推进: ${input.requiredTrack.join(" -> ")}`,
+        issue(
+          "business_track_order_invalid",
+          `${input.label}必须按标准顺序推进: ${input.requiredTrack.join(" -> ")}`,
+        ),
       ];
     }
     searchFrom = nextIndex + 1;
@@ -374,11 +420,11 @@ function validateTrackOrder(input: {
 }
 
 function getAlwaysMainlineNodes(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
 ) {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const outgoingEdges = new Map<string, WorkflowEdgeRow[]>();
+  const outgoingEdges = new Map<string, WorkflowEdge[]>();
   for (const edge of edges) {
     if (edge.condition.operator !== "always") continue;
     outgoingEdges.set(edge.source_node_id, [
@@ -391,8 +437,8 @@ function getAlwaysMainlineNodes(
   if (!startNode) return [];
 
   const visitedNodeIds = new Set<string>();
-  const mainlineNodes: WorkflowNodeRow[] = [];
-  let currentNode: WorkflowNodeRow | undefined = startNode;
+  const mainlineNodes: WorkflowNode[] = [];
+  let currentNode: WorkflowNode | undefined = startNode;
   while (currentNode && !visitedNodeIds.has(currentNode.id)) {
     visitedNodeIds.add(currentNode.id);
     mainlineNodes.push(currentNode);
@@ -400,22 +446,40 @@ function getAlwaysMainlineNodes(
 
     const sortedEdges = [...(outgoingEdges.get(currentNode.id) ?? [])]
       .sort(compareWorkflowEdges);
-    const nextEdge: WorkflowEdgeRow | undefined = sortedEdges[0];
+    const nextEdge: WorkflowEdge | undefined = sortedEdges[0];
     currentNode = nextEdge ? nodesById.get(nextEdge.target_node_id) : undefined;
   }
 
   return mainlineNodes;
 }
 
-function compareWorkflowEdges(left: WorkflowEdgeRow, right: WorkflowEdgeRow) {
+function compareWorkflowEdges(left: WorkflowEdge, right: WorkflowEdge) {
   if (left.priority !== right.priority) return left.priority - right.priority;
   return left.id.localeCompare(right.id);
 }
 
-function findNodeIndex(nodes: WorkflowNodeRow[], nodeKey: string) {
+function findNodeIndex(nodes: WorkflowNode[], nodeKey: string) {
   return nodes.findIndex((node) => node.node_key === nodeKey);
 }
 
-function formatNodeKeys(nodes: WorkflowNodeRow[]) {
+function formatNodeKeys(nodes: WorkflowNode[]) {
   return nodes.map((node) => node.node_key).join("、");
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function getWorkflowStageType(node: WorkflowNode) {
+  return "stage_type" in node.config
+    ? readString(node.config.stage_type)
+    : null;
+}
+
+function issue(
+  code: string,
+  message: string,
+  nodeKey?: string,
+): WorkflowValidationIssue {
+  return { code, message, nodeKey };
 }

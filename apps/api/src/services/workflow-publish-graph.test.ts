@@ -223,6 +223,27 @@ describe("validateWorkflowPublishGraph business tracks", () => {
     ).toThrow(/项目签约流程必须按标准顺序推进/);
   });
 
+  test("rejects project signing workflow with duplicate contract status semantics", () => {
+    const nodes = [
+      node("start", "start"),
+      node("designing", "business", "design"),
+      node("proposal_confirmed", "business", "design"),
+      node("contract_review_as_status", "business", "contract"),
+      node("signed", "business", "contract"),
+      node("design_finalized", "business", "design"),
+      node("pending_start", "business", "construction_start"),
+      node("end", "end"),
+    ];
+
+    expect(() =>
+      validateWorkflowPublishGraph({
+        definition: definition("project_signing", "construction"),
+        nodes,
+        edges: linearEdges(nodes),
+      })
+    ).toThrow(/项目签约流程主状态节点重复/);
+  });
+
   test("rejects customer design workflow that contains payment collection gates", () => {
     const nodes = [
       node("start", "start"),
@@ -364,6 +385,31 @@ describe("validateWorkflowPublishGraph business tracks", () => {
     });
 
     expect(result.valid).toBe(true);
+  });
+
+  test("rejects construction workflow with duplicate construction start status semantics", () => {
+    const nodes = [
+      node("start", "start"),
+      node("construction_start_duplicate", "construction_stage", "construction_start", { stage_type: "construction_start" }),
+      node("started", "construction_stage", "construction_start", { stage_type: "construction_start" }),
+      procedureNode("procedure_demolition", "demolition"),
+      procedureNode("procedure_plumbing_electrical", "plumbing_electrical"),
+      procedureNode("procedure_tiling", "tiling"),
+      procedureNode("procedure_woodwork", "woodwork"),
+      procedureNode("procedure_painting", "painting"),
+      procedureNode("procedure_installation", "installation"),
+      node("final_acceptance", "construction_stage", "final_acceptance"),
+      node("handover", "confirmation", "final_acceptance"),
+      node("end", "end"),
+    ];
+
+    expect(() =>
+      validateWorkflowPublishGraph({
+        definition: definition("construction_main", "construction"),
+        nodes,
+        edges: linearEdges(nodes),
+      })
+    ).toThrow(/施工流程主状态节点重复/);
   });
 });
 
