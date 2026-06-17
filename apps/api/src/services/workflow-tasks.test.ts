@@ -10,7 +10,6 @@ const completeRuntimeNode = mock(async () => ({
 const completePaymentBridge = mock(async (): Promise<unknown> => null);
 const completeProjectBridge = mock(async () => null);
 const completeExpenseBridge = mock(async () => null);
-const completeCustomerBridge = mock(async () => null);
 const shouldRequireProjectWorkflowRebuild = mock((input: {
   workflowKey?: string | null;
   nodeKey: string;
@@ -117,6 +116,11 @@ const listAccessibleTasks = mock(async () => ({
     totalPages: 1,
   },
 }));
+const getRuntimeInstanceById = mock(async () => ({
+  status: "completed",
+  current_node_key: "designing",
+  current_node_id: "node-1",
+}));
 
 mock.module("@/repositories/workflow-tasks", () => ({
   workflowTaskRepository: {
@@ -127,6 +131,7 @@ mock.module("@/repositories/workflow-tasks", () => ({
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
+    getRuntimeInstanceById,
     completeRuntimeNode,
     getDefinitionById,
   },
@@ -140,11 +145,15 @@ mock.module("@/services/access-policy", () => ({
       }
       return authContext.tenantId;
     }),
+    getScope: mock((
+      authContext: { permissions?: Array<{ code: string; scope: string }> },
+      permissionCode: string,
+    ) =>
+      authContext.permissions?.find((permission) =>
+        permission.code === permissionCode
+      )?.scope ?? null
+    ),
   },
-}));
-
-mock.module("@/services/workflow-runtime-guards", () => ({
-  assertRuntimeNodeCompletionAllowed: mock(async () => undefined),
 }));
 
 mock.module("@/services/workflow-subject-state", () => ({
@@ -163,12 +172,6 @@ mock.module("@/services/workflow-task-project-bridge", () => ({
 mock.module("@/services/workflow-task-expense-bridge", () => ({
   workflowTaskExpenseBridge: {
     complete: completeExpenseBridge,
-  },
-}));
-
-mock.module("@/services/workflow-task-customer-bridge", () => ({
-  workflowTaskCustomerBridge: {
-    complete: completeCustomerBridge,
   },
 }));
 
@@ -336,7 +339,6 @@ describe("workflowTaskService", () => {
     findById.mockImplementationOnce(async () =>
       customerDesignTask as unknown as typeof paymentTask
     );
-    completeCustomerBridge.mockImplementationOnce(async () => null);
     completeRuntimeNode.mockClear();
 
     const result = await workflowTaskService.completeTask(

@@ -18,17 +18,6 @@ mock.module("@/repositories/finance-ledger", () => ({
   },
 }));
 
-mock.module("@/services/access-policy", () => ({
-  accessPolicyService: {
-    assertTenantContext: mock((authContext: AuthContext) => {
-      if (!authContext.tenantId) {
-        throw new Error("missing tenant");
-      }
-      return authContext.tenantId;
-    }),
-  },
-}));
-
 const baseAuthContext = {
   authUserId: "auth-1",
   employeeId: "employee-1",

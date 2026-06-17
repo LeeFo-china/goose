@@ -27,6 +27,28 @@ const PaymentCollectionOutputSchema = z.object({
 });
 
 type PaymentCollectionType = (typeof PAYMENT_COLLECTION_TYPES)[number];
+type RuntimeCompleteResultForBridge =
+  | { ok: true }
+  | Extract<WorkflowRuntimeCompleteNodeResult, { ok: false }>;
+
+type WorkflowTaskPaymentBridgeDependencies = {
+  paymentRepository: Pick<typeof paymentRepository, "findByWorkflowTaskId" | "create">;
+  financeLedgerService: {
+    createProjectPaymentLedger: (
+      input: Parameters<typeof financeLedgerService.createProjectPaymentLedger>[0],
+    ) => Promise<unknown>;
+  };
+  workflowRepository: {
+    completeRuntimeNode: (
+      input: Parameters<typeof workflowRepository.completeRuntimeNode>[0],
+    ) => Promise<RuntimeCompleteResultForBridge>;
+  };
+  workflowSubjectStateService: {
+    syncFromRuntimeInstance: (
+      input: Parameters<typeof workflowSubjectStateService.syncFromRuntimeInstance>[0],
+    ) => Promise<unknown>;
+  };
+};
 
 export type PaymentWorkflowTaskBridgeInput = {
   authContext: AuthContext;
@@ -45,7 +67,16 @@ export type PaymentWorkflowTaskBridgeInput = {
   output: Record<string, unknown>;
 };
 
-class WorkflowTaskPaymentBridge {
+export class WorkflowTaskPaymentBridge {
+  constructor(
+    private readonly dependencies: WorkflowTaskPaymentBridgeDependencies = {
+      paymentRepository,
+      financeLedgerService,
+      workflowRepository,
+      workflowSubjectStateService,
+    },
+  ) {}
+
   async complete(input: PaymentWorkflowTaskBridgeInput) {
     if (input.action.trim() !== "complete") {
       return null;
@@ -61,8 +92,9 @@ class WorkflowTaskPaymentBridge {
       throw Errors.fromZod(parsed.error);
     }
 
-    const existing = await paymentRepository.findByWorkflowTaskId(input.task.id);
-    const payment = existing ?? await paymentRepository.create({
+    const existing = await this.dependencies.paymentRepository
+      .findByWorkflowTaskId(input.task.id);
+    const payment = existing ?? await this.dependencies.paymentRepository.create({
       project_id: input.task.instance.subject_id,
       amount: parsed.data.amount,
       type: getPaymentType(snapshot),
@@ -77,11 +109,11 @@ class WorkflowTaskPaymentBridge {
       payment_channel: "manual",
     });
 
-    await financeLedgerService.createProjectPaymentLedger(
+    await this.dependencies.financeLedgerService.createProjectPaymentLedger(
       this.buildLedgerInput(input, payment),
     );
 
-    const result = await workflowRepository.completeRuntimeNode({
+    const result = await this.dependencies.workflowRepository.completeRuntimeNode({
       tenantId: input.task.tenant_id,
       definitionId: input.task.definition_id,
       instanceId: input.task.instance_id,
@@ -92,13 +124,14 @@ class WorkflowTaskPaymentBridge {
     });
     this.throwRuntimeCompleteError(result);
 
-    const workflowState = await workflowSubjectStateService.syncFromRuntimeInstance({
-      tenantId: input.task.tenant_id,
-      subjectType: "project",
-      subjectId: input.task.instance.subject_id,
-      definitionId: input.task.definition_id,
-      instanceId: input.task.instance_id,
-    });
+    const workflowState = await this.dependencies.workflowSubjectStateService
+      .syncFromRuntimeInstance({
+        tenantId: input.task.tenant_id,
+        subjectType: "project",
+        subjectId: input.task.instance.subject_id,
+        definitionId: input.task.definition_id,
+        instanceId: input.task.instance_id,
+      });
 
     return {
       result: { ok: true, bridged: true, operation: "confirm_payment" },
@@ -132,7 +165,7 @@ class WorkflowTaskPaymentBridge {
     };
   }
 
-  private throwRuntimeCompleteError(result: WorkflowRuntimeCompleteNodeResult) {
+  private throwRuntimeCompleteError(result: RuntimeCompleteResultForBridge) {
     if (result.ok) {
       return;
     }

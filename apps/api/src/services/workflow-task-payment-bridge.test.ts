@@ -1,5 +1,6 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import { WorkflowTaskPaymentBridge } from "./workflow-task-payment-bridge";
 
 const callOrder: string[] = [];
 
@@ -31,42 +32,11 @@ const createProjectPaymentLedger = mock(async () => {
   callOrder.push("ledger");
   return { id: "ledger-1" };
 });
-const completeRuntimeNode = mock(async () => {
+const completeRuntimeNode = mock(async (): Promise<{ ok: true }> => {
   callOrder.push("workflow");
-  return {
-    ok: true,
-    instance: {},
-    completedNode: {},
-    nextNode: null,
-    task: null,
-  };
+  return { ok: true };
 });
 const syncFromRuntimeInstance = mock(async () => ({ id: "state-1" }));
-
-mock.module("@/repositories/payments", () => ({
-  paymentRepository: {
-    findByWorkflowTaskId,
-    create: createPayment,
-  },
-}));
-
-mock.module("@/services/finance-ledger", () => ({
-  financeLedgerService: {
-    createProjectPaymentLedger,
-  },
-}));
-
-mock.module("@/repositories/workflows", () => ({
-  workflowRepository: {
-    completeRuntimeNode,
-  },
-}));
-
-mock.module("@/services/workflow-subject-state", () => ({
-  workflowSubjectStateService: {
-    syncFromRuntimeInstance,
-  },
-}));
 
 const authContext = {
   authUserId: "auth-1",
@@ -117,11 +87,37 @@ const output = {
   remark: "中期款已入账",
 };
 
+function createBridge() {
+  return new WorkflowTaskPaymentBridge({
+    paymentRepository: {
+      findByWorkflowTaskId,
+      create: createPayment,
+    },
+    financeLedgerService: {
+      createProjectPaymentLedger,
+    },
+    workflowRepository: {
+      completeRuntimeNode,
+    },
+    workflowSubjectStateService: {
+      syncFromRuntimeInstance,
+    },
+  });
+}
+
 describe("workflowTaskPaymentBridge", () => {
-  test("creates confirmed payment, writes ledger, then completes runtime node", async () => {
+  beforeEach(() => {
     callOrder.length = 0;
+    findByWorkflowTaskId.mockClear();
     findByWorkflowTaskId.mockImplementation(async () => null);
-    const { workflowTaskPaymentBridge } = await import("./workflow-task-payment-bridge");
+    createPayment.mockClear();
+    createProjectPaymentLedger.mockClear();
+    completeRuntimeNode.mockClear();
+    syncFromRuntimeInstance.mockClear();
+  });
+
+  test("creates confirmed payment, writes ledger, then completes runtime node", async () => {
+    const workflowTaskPaymentBridge = createBridge();
 
     const result = await workflowTaskPaymentBridge.complete({
       authContext,
@@ -183,7 +179,7 @@ describe("workflowTaskPaymentBridge", () => {
   });
 
   test("requires amount and evidence images", async () => {
-    const { workflowTaskPaymentBridge } = await import("./workflow-task-payment-bridge");
+    const workflowTaskPaymentBridge = createBridge();
 
     await expect(
       workflowTaskPaymentBridge.complete({
@@ -203,10 +199,8 @@ describe("workflowTaskPaymentBridge", () => {
   });
 
   test("reuses existing workflow payment for idempotent retry", async () => {
-    callOrder.length = 0;
-    createPayment.mockClear();
     findByWorkflowTaskId.mockImplementation(async () => confirmedPayment);
-    const { workflowTaskPaymentBridge } = await import("./workflow-task-payment-bridge");
+    const workflowTaskPaymentBridge = createBridge();
 
     const result = await workflowTaskPaymentBridge.complete({
       authContext,

@@ -73,6 +73,14 @@ mock.module("@/services/access-policy", () => ({
   accessPolicyService: {
     canAccessProject,
     canWriteProjectLog: mock(async () => false),
+    getScope: mock((
+      authContext: { permissions?: Array<{ code: string; scope: string }> },
+      permissionCode: string,
+    ) =>
+      authContext.permissions?.find((permission) =>
+        permission.code === permissionCode
+      )?.scope ?? null
+    ),
   },
 }));
 

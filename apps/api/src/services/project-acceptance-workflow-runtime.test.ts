@@ -69,11 +69,16 @@ const completeRuntimeNode = mock(async () => ({
   nextNode: nextInstance.current_node_snapshot,
   task: null,
 }));
-const assertRuntimeNodeCompletionAllowed = mock(async () => undefined);
 const syncFromRuntimeInstance = mock(async () => null);
+const getRuntimeInstanceById = mock(async () => ({
+  status: "completed",
+  current_node_key: "procedure_installation",
+  current_node_id: "node-1",
+}));
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
+    getRuntimeInstanceById,
     findDefinitionByKey,
     findDefinitionById,
     findLatestRunningRuntimeInstance,
@@ -85,10 +90,6 @@ mock.module("@/services/workflow-subject-state", () => ({
   workflowSubjectStateService: {
     syncFromRuntimeInstance,
   },
-}));
-
-mock.module("@/services/workflow-runtime-guards", () => ({
-  assertRuntimeNodeCompletionAllowed,
 }));
 
 describe("projectAcceptanceWorkflowRuntimeService", () => {
@@ -159,19 +160,10 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
         comment: "已确认",
       },
     });
-    expect(assertRuntimeNodeCompletionAllowed).toHaveBeenCalledWith({
+    expect(getRuntimeInstanceById).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       definitionId: "definition-1",
       instanceId: "instance-1",
-      nodeKey: "procedure_installation",
-      output: {
-        source: "project_acceptance_customer_confirm",
-        project_id: "project-1",
-        acceptance_id: "acceptance-1",
-        stage_code: "installation",
-        customer_id: "customer-1",
-        comment: "已确认",
-      },
     });
     expect(syncFromRuntimeInstance).toHaveBeenCalledWith({
       tenantId: "tenant-1",

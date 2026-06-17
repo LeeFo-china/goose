@@ -91,9 +91,15 @@ const completeRuntimeNode = mock(async (): Promise<CompleteRuntimeNodeFixture> =
   task: null,
 }));
 const syncFromRuntimeInstance = mock(async () => null);
+const getRuntimeInstanceById = mock(async () => ({
+  status: "completed",
+  current_node_key: "pending_start",
+  current_node_id: "node-1",
+}));
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
+    getRuntimeInstanceById,
     findDefinitionByKey,
     listRuntimeInstances,
     startRuntimeInstance,
@@ -105,10 +111,6 @@ mock.module("@/services/workflow-subject-state", () => ({
   workflowSubjectStateService: {
     syncFromRuntimeInstance,
   },
-}));
-
-mock.module("@/services/workflow-runtime-guards", () => ({
-  assertRuntimeNodeCompletionAllowed: mock(async () => {}),
 }));
 
 function buildAuthContext(): AuthContext {
@@ -150,6 +152,7 @@ beforeEach(() => {
   startRuntimeInstance.mockClear();
   completeRuntimeNode.mockClear();
   syncFromRuntimeInstance.mockClear();
+  getRuntimeInstanceById.mockClear();
 });
 
 describe("projectWorkflowRuntimeService", () => {

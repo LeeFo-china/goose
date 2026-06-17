@@ -41,6 +41,14 @@ const assertTenantContext = mock(() => "tenant-1");
 const hasPermission = mock(() => true);
 const canAssignCustomerOwnerTarget = mock(() => true);
 const canAssignCustomerOwner = mock(async () => true);
+const getScope = mock((
+  authContext: { permissions?: Array<{ code: string; scope: string }> },
+  permissionCode: string,
+) =>
+  authContext.permissions?.find((permission) =>
+    permission.code === permissionCode
+  )?.scope ?? null
+);
 
 mock.module("@/repositories/customer-owner-assignments", () => ({
   customerOwnerAssignmentRepository: {
@@ -68,6 +76,7 @@ mock.module("@/services/access-policy", () => ({
     hasPermission,
     canAssignCustomerOwnerTarget,
     canAssignCustomerOwner,
+    getScope,
   },
 }));
 
@@ -89,6 +98,7 @@ beforeEach(() => {
   hasPermission.mockClear();
   canAssignCustomerOwnerTarget.mockClear();
   canAssignCustomerOwner.mockClear();
+  getScope.mockClear();
   findLatestRunningRuntimeInstance.mockImplementation(async (): Promise<RunningWorkflowInstance | null> => ({
     id: "workflow-instance-1",
     definition_id: "workflow-definition-1",

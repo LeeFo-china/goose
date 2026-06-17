@@ -49,19 +49,20 @@ const completeRuntimeNode = mock(async () => ({
   },
   task: null,
 }));
-const assertRuntimeNodeCompletionAllowed = mock(async () => {});
+const getRuntimeInstanceById = mock(async () => ({
+  status: "completed",
+  current_node_key: "potential",
+  current_node_id: "node-1",
+}));
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
+    getRuntimeInstanceById,
     findDefinitionByKey,
     listRuntimeInstances,
     startRuntimeInstance,
     completeRuntimeNode,
   },
-}));
-
-mock.module("@/services/workflow-runtime-guards", () => ({
-  assertRuntimeNodeCompletionAllowed,
 }));
 
 function buildAuthContext(): AuthContext {
@@ -90,6 +91,7 @@ function buildAuthContext(): AuthContext {
 
 beforeEach(() => {
   findDefinitionByKey.mockClear();
+  getRuntimeInstanceById.mockClear();
   listRuntimeInstances.mockClear();
   listRuntimeInstances.mockImplementation(async () => ({
     list: [] as Array<{
@@ -106,7 +108,6 @@ beforeEach(() => {
   }));
   startRuntimeInstance.mockClear();
   completeRuntimeNode.mockClear();
-  assertRuntimeNodeCompletionAllowed.mockClear();
 });
 
 describe("customerWorkflowRuntimeService", () => {
@@ -172,19 +173,11 @@ describe("customerWorkflowRuntimeService", () => {
     });
 
     expect(startRuntimeInstance).not.toHaveBeenCalled();
-    expect(assertRuntimeNodeCompletionAllowed).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        definitionId: "definition-1",
-        instanceId: "instance-1",
-        nodeKey: "potential",
-        output: expect.objectContaining({
-          customer_status_action: "start_following",
-          from_status: "potential",
-          to_status: "following",
-        }),
-      }),
-    );
+    expect(getRuntimeInstanceById).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+    }));
     expect(completeRuntimeNode).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: "tenant-1",
       definitionId: "definition-1",
