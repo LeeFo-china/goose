@@ -218,7 +218,7 @@ docs/decoration-finance/2026-06-16-miniprogram-integration-acceptance.md
 | 风险 | 处理 |
 | --- | --- |
 | 上传场景补成租户级但不要求项目 ID | 短期可用，但凭证难以按项目追踪；建议第一版就要求 `project_id`。 |
-| 小程序仍不传 `status` | 默认后端是 `pending`，当前影响有限；但会让任务中心状态筛选不可靠，需要补。 |
+| 小程序回归时丢失 `status` 透传 | orange 已补齐；真实联调和后续回归需确认任务中心请求仍带 `status=pending`。 |
 | 财务账号缺 `finance.payment.confirm` | 后端不会返回或不允许完成 task；先在权限配置里确认角色授权。 |
 | task 已被他人处理 | 小程序按 409 刷新并提示任务状态已变化。 |
 | 微信支付后续接入 | 当前 output 和 payment/ledger 都保留 `payment_channel`、source 字段，可平滑从 manual 切到 wechat callback 驱动。 |
@@ -227,4 +227,4 @@ docs/decoration-finance/2026-06-16-miniprogram-integration-acceptance.md
 
 - gooes 可修改后端、Admin、docs。
 - `/Users/leefo/Public/work/orange` 本轮只读，不在 gooes 会话中修改。
-- orange 侧改动由小程序团队在 orange 仓库完成。
+- orange 侧 service、上传参数必改项已由小程序团队在 orange 仓库完成；后续真实联调和可选深链增强仍由小程序团队执行。
