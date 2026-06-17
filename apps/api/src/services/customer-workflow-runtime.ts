@@ -41,7 +41,71 @@ type SyncCustomerStatusTransitionInput = {
   extraContext?: Record<string, unknown>;
 };
 
+type SyncCustomerCreatedInput = {
+  authContext: AuthContext;
+  tenantId: string;
+  customerId: string;
+};
+
 class CustomerWorkflowRuntimeService {
+  async syncCustomerCreated(
+    input: SyncCustomerCreatedInput,
+  ): Promise<CustomerWorkflowRuntimeMetadata> {
+    try {
+      const definition = await this.findActiveCustomerWorkflow(input.tenantId);
+      if (!definition) {
+        return {
+          status: "skipped",
+          reason: "active_customer_workflow_not_found",
+        };
+      }
+
+      const existing = await this.findRunningCustomerInstance(input, definition.id);
+      if (existing) {
+        return {
+          status: "skipped",
+          workflow_key: definition.workflow_key,
+          definition_id: definition.id,
+          instance_id: existing.id,
+          current_node_key: existing.current_node_key,
+          reason: "running_instance_exists",
+        };
+      }
+
+      const result = await workflowRepository.startRuntimeInstance({
+        tenantId: input.tenantId,
+        definitionId: definition.id,
+        subjectType: "customer",
+        subjectId: input.customerId,
+        startedBy: input.authContext.employeeId,
+        context: this.buildCustomerCreatedContext(input),
+      });
+
+      if (!result.ok) {
+        return {
+          status: "failed",
+          workflow_key: definition.workflow_key,
+          definition_id: definition.id,
+          reason: result.reason,
+        };
+      }
+
+      return {
+        status: "started",
+        workflow_key: definition.workflow_key,
+        definition_id: definition.id,
+        instance_id: result.instance.id,
+        current_node_key: result.instance.current_node_key,
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        reason: "exception",
+        error_message: this.getErrorMessage(error),
+      };
+    }
+  }
+
   async syncStatusTransition(
     input: SyncCustomerStatusTransitionInput,
   ): Promise<CustomerWorkflowRuntimeMetadata> {
@@ -217,6 +281,15 @@ class CustomerWorkflowRuntimeService {
     });
 
     return result.list[0] ?? null;
+  }
+
+  private buildCustomerCreatedContext(input: SyncCustomerCreatedInput): JsonObject {
+    return {
+      source: "customer_create",
+      customer_id: input.customerId,
+      operator_employee_id: input.authContext.employeeId ?? null,
+      operator_auth_user_id: input.authContext.authUserId ?? null,
+    };
   }
 
   private buildRuntimeContext(input: SyncCustomerStatusTransitionInput): JsonObject {

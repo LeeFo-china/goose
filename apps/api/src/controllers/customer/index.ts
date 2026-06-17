@@ -9,6 +9,8 @@ import { customerOwnerAssignmentService } from "@/services/customer-owner-assign
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { customerPropertyService } from "@/services/customer-properties";
 import { customerSourceService } from "@/services/customer-sources";
+import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
+import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { ResponseHandler } from "@/utils/response";
 import customerExtrasController from "./extras-controller";
 import customerPropertiesController from "./properties-controller";
@@ -168,6 +170,21 @@ class CustomerController extends CustomerBaseController {
     }
 
     const customer = await customerCoreService.createCustomer(payload);
+    const workflowRuntimeMetadata =
+      await customerWorkflowRuntimeService.syncCustomerCreated({
+        authContext,
+        tenantId: authContext.tenantId,
+        customerId: customer.id,
+      });
+    if (workflowRuntimeMetadata.instance_id && workflowRuntimeMetadata.definition_id) {
+      await workflowSubjectStateService.syncFromRuntimeInstance({
+        tenantId: authContext.tenantId,
+        subjectType: "customer",
+        subjectId: customer.id,
+        definitionId: workflowRuntimeMetadata.definition_id,
+        instanceId: workflowRuntimeMetadata.instance_id,
+      });
+    }
     const primaryProperty = await customerPropertyService.upsertCustomerPrimaryProperty({
       customerId: customer.id,
       propertyPayload,
