@@ -2,6 +2,12 @@
 
 日期：2026-06-16
 
+最新同步：2026-06-17。Task A/B/C 已完成：gooes 已支持
+`project_payment` direct upload scene，orange 已在
+`b611426e209bddad80cb1018bb7a97c3413c2330 fix(finance): 补齐收款联调参数`
+中补齐收款凭证上传 `projectId` 和 workflow task `status` 透传。Task D 为可选体验增强，
+Task E 真实端到端联调仍待执行。
+
 ## 1. 目标
 
 把装修财务一期的 `payment_collection` 收款节点从“API/Admin 已可验收”推进到“小程序财务人员可真实操作”。
@@ -31,18 +37,21 @@ orange 只读检查结果：
 - 已使用 `finance.payment.confirm`。
 - 已使用 `scene: 'project_payment'` 上传收款凭证。
 
-阻塞真实联调的缺口：
+原始阻塞真实联调的缺口及当前状态：
 
-1. gooes direct upload 场景未包含 `project_payment`。
-2. orange 上传凭证未传 `projectId`。
-3. orange `WorkflowTaskService.list()` 未透传 `status`。
-4. 任务中心跳转项目详情暂未深链到具体收款动作。
+1. gooes direct upload 场景未包含 `project_payment`：已完成。
+2. orange 上传凭证未传 `projectId`：已完成。
+3. orange `WorkflowTaskService.list()` 未透传 `status`：已完成。
+4. 任务中心跳转项目详情暂未深链到具体收款动作：可选增强，不阻塞 MVP 真实联调。
 
 ## 3. 执行任务
 
 ### Task A：gooes 支持 `project_payment` 上传场景
 
 Owner：gooes
+
+状态：已完成。后端已支持 `project_payment` direct upload init/complete，
+并要求 `project_id`。
 
 目标：
 
@@ -87,6 +96,10 @@ POST /uploads/cos/direct-init
 
 Owner：orange 小程序团队
 
+状态：已完成。orange commit
+`b611426e209bddad80cb1018bb7a97c3413c2330` 已将
+`ProjectPaymentService.uploadCollectionEvidence(filePaths, projectId)` 透传到 direct upload。
+
 目标：
 
 - `ProjectPaymentService.uploadCollectionEvidence()` 接收 `projectId`。
@@ -120,6 +133,10 @@ uploadImagesToCosDirectWithCompression({
 ### Task C：orange 透传 workflow task status
 
 Owner：orange 小程序团队
+
+状态：已完成。orange commit
+`b611426e209bddad80cb1018bb7a97c3413c2330` 已补 `status?: string` 并在请求 query
+中传递 `status`；任务中心默认请求 `status=pending`。
 
 目标：
 
@@ -162,6 +179,10 @@ MVP 可以先不做此项，但验收时要确认项目详情里有清晰可见�
 ### Task E：真实联调验收
 
 Owner：gooes + orange
+
+状态：待执行。必须用真实账号完成点击链路后，回填
+`docs/decoration-finance/2026-06-16-miniprogram-integration-acceptance.md` 和
+`docs/state_machine_migrate/2026-06-17-decoration-workflow-e2e-acceptance-checklist.md`。
 
 前置：
 
