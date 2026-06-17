@@ -51,6 +51,12 @@ describe("buildDecorationWorkflowManualGateCheckReport", () => {
     expect(report.ok).toBe(false);
     expect(report.checks).toEqual([
       {
+        name: "decoration_manual_gate_evidence",
+        ok: true,
+        detail:
+          "evidence_file=docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json",
+      },
+      {
         name: "read_only_review_current",
         ok: true,
         detail:

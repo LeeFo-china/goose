@@ -73,15 +73,18 @@ export async function buildDecorationWorkflowManualGateCheckReport(
       readOnly.ok && legacyApply.ok && manualRestore.ok && orange.ok &&
       manualRestoreHasNoFollowup(loaded.evidence),
   });
-  const checks = [readOnly, legacyApply, manualRestore, orange, closeout];
-
-  if (checks.every((check) => check.ok)) {
-    checks.unshift({
+  const checks: Check[] = [
+    {
       name: "decoration_manual_gate_evidence",
       ok: true,
       detail: `evidence_file=${evidenceFile}`,
-    });
-  }
+    },
+    readOnly,
+    legacyApply,
+    manualRestore,
+    orange,
+    closeout,
+  ];
 
   return report(generatedAt, checks);
 }
