@@ -6,8 +6,11 @@ import {
   shouldShowWorkflowNodeTypeBadge,
 } from "@/components/workflows/workflow-node-labels";
 import {
+  getWorkflowNodePresetsForTrack,
+  type WorkflowBusinessTrack,
+} from "@/components/workflows/workflow-business-track";
+import {
   WorkflowNodePresetGroupLabels,
-  WorkflowNodePresets,
   type WorkflowNodePresetGroup,
 } from "@/components/workflows/workflow-node-presets";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +27,15 @@ export function WorkflowNodeLibrary({
   disabled,
   onAddNode,
   placement = "left",
+  workflowTrack = "generic",
 }: {
   disabled?: boolean;
   onAddNode: (presetKey: string) => void;
   placement?: "left" | "right";
+  workflowTrack?: WorkflowBusinessTrack;
 }) {
+  const nodePresets = getWorkflowNodePresetsForTrack(workflowTrack);
+
   return (
     <aside
       className={[
@@ -49,7 +56,8 @@ export function WorkflowNodeLibrary({
       </div>
       <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3">
         {nodePresetGroups.map((group) => {
-          const presets = WorkflowNodePresets.filter((preset) => preset.group === group);
+          const presets = nodePresets.filter((preset) => preset.group === group);
+          if (presets.length === 0) return null;
           return (
             <section key={group} className="mb-4 last:mb-0">
               <div className="mb-2 flex items-center justify-between">

@@ -89,6 +89,7 @@ class CustomerExtrasController extends CustomerBaseController {
       {
         includeProperties: true,
         phonePrivacyContext,
+        authContext,
         tenantId: authContext.tenantId,
       },
     );

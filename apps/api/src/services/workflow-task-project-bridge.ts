@@ -60,8 +60,17 @@ const PROJECT_NODE_EFFECTS: Partial<Record<string, ProjectWorkflowSideEffectActi
   started: "start_construction",
   construction_start: "start_construction",
   constructing: "start_acceptance",
+  final_acceptance: "start_acceptance",
   on_hold: "resume_project",
 };
+
+const PROJECT_SIGNING_NODE_KEYS = new Set([
+  "designing",
+  "proposal_confirmed",
+  "signed",
+  "design_finalized",
+  "pending_start",
+]);
 
 const ProjectWorkflowEffectSchema = z.object({
   action: z.enum(PROJECT_STATUS_ACTION_VALUES, {
@@ -90,6 +99,7 @@ export function resolveProjectWorkflowTaskOperation(
 
   const action = PROJECT_NODE_EFFECTS[input.nodeKey];
   if (!action) return null;
+  assertRequiredProjectWorkflowOutput({ action, output: input.output });
 
   return {
     action,
@@ -101,6 +111,40 @@ export function resolveProjectWorkflowTaskOperation(
       construction_manager_employee_id: input.output.construction_manager_employee_id,
     },
   };
+}
+
+function assertRequiredProjectWorkflowOutput(input: {
+  action: ProjectWorkflowSideEffectAction;
+  output: Record<string, unknown>;
+}) {
+  if (input.action === "sign_contract") {
+    const signedAmount = Number(input.output.signed_amount);
+    if (!Number.isFinite(signedAmount) || signedAmount <= 0) {
+      throw Errors.badRequest("项目签约时必须提供有效的 signed_amount");
+    }
+  }
+
+  if (input.action === "schedule_construction") {
+    const startDate = optionalString(input.output.start_date);
+    if (!startDate) {
+      throw Errors.badRequest("项目排期开工前必须先确定开工日期");
+    }
+
+    const constructionManagerEmployeeId = optionalString(
+      input.output.construction_manager_employee_id,
+    );
+    if (!constructionManagerEmployeeId) {
+      throw Errors.badRequest("请选择工程负责人");
+    }
+  }
+}
+
+export function shouldRequireProjectWorkflowRebuild(input: {
+  workflowKey: string | null | undefined;
+  nodeKey: string;
+}): boolean {
+  return PROJECT_SIGNING_NODE_KEYS.has(input.nodeKey) &&
+    input.workflowKey !== "project_signing";
 }
 
 class WorkflowTaskProjectBridge {

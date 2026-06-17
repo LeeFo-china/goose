@@ -11,6 +11,14 @@ const completePaymentBridge = mock(async (): Promise<unknown> => null);
 const completeProjectBridge = mock(async () => null);
 const completeExpenseBridge = mock(async () => null);
 const completeCustomerBridge = mock(async () => null);
+const shouldRequireProjectWorkflowRebuild = mock((input: {
+  workflowKey?: string | null;
+  nodeKey: string;
+}) =>
+  input.workflowKey !== "project_signing" &&
+  ["designing", "proposal_confirmed", "signed", "design_finalized", "pending_start"]
+    .includes(input.nodeKey)
+);
 
 const paymentTask = {
   id: "task-1",
@@ -51,7 +59,55 @@ const paymentTask = {
   },
 };
 
+const customerDesignTask = {
+  ...paymentTask,
+  id: "task-customer-designing",
+  node_key: "designing",
+  node_type: "business",
+  title: "方案设计",
+  assignee_employee_id: null,
+  assignee_permission_code: null,
+  instance: {
+    ...paymentTask.instance,
+    subject_type: "customer",
+    subject_id: "customer-1",
+    current_node_key: "designing",
+    current_node_snapshot: {
+      node_key: "designing",
+      business_kind: "design",
+      title: "方案设计",
+      config: {},
+    },
+  },
+};
+
+const legacyProjectDesigningTask = {
+  ...paymentTask,
+  id: "task-legacy-project-designing",
+  node_key: "designing",
+  node_type: "business",
+  title: "设计中",
+  assignee_employee_id: null,
+  assignee_permission_code: null,
+  instance: {
+    ...paymentTask.instance,
+    subject_type: "project",
+    subject_id: "project-legacy-1",
+    current_node_key: "designing",
+    current_node_snapshot: {
+      node_key: "designing",
+      business_kind: "design",
+      title: "设计中",
+      config: {},
+    },
+  },
+};
+
 const findById = mock(async () => paymentTask);
+const getDefinitionById = mock(async () => ({
+  id: "definition-1",
+  workflow_key: "project_signing",
+}));
 const listAccessibleTasks = mock(async () => ({
   list: [paymentTask],
   pagination: {
@@ -72,6 +128,7 @@ mock.module("@/repositories/workflow-tasks", () => ({
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
     completeRuntimeNode,
+    getDefinitionById,
   },
 }));
 
@@ -97,6 +154,7 @@ mock.module("@/services/workflow-subject-state", () => ({
 }));
 
 mock.module("@/services/workflow-task-project-bridge", () => ({
+  shouldRequireProjectWorkflowRebuild,
   workflowTaskProjectBridge: {
     complete: completeProjectBridge,
   },
@@ -270,6 +328,102 @@ describe("workflowTaskService", () => {
         }),
       }),
     );
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+  });
+
+  test("falls back to generic runtime completion for customer design node", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    findById.mockImplementationOnce(async () =>
+      customerDesignTask as unknown as typeof paymentTask
+    );
+    completeCustomerBridge.mockImplementationOnce(async () => null);
+    completeRuntimeNode.mockClear();
+
+    const result = await workflowTaskService.completeTask(
+      {
+        authUserId: "auth-1",
+        employeeId: "employee-1",
+        tenantId: "tenant-1",
+        tenantName: null,
+        tenantSlug: null,
+        tenantStatus: "active",
+        isPlatformAdmin: false,
+        employeeName: "设计师",
+        employeeStatus: "active",
+        departmentId: null,
+        tenantDepartmentId: null,
+        departmentCode: null,
+        departmentName: null,
+        postId: null,
+        postName: null,
+        avatar: null,
+        roleCodes: [],
+        roles: [],
+        permissions: [],
+      },
+      "task-customer-designing",
+      { action: "complete", reason: null, output: {} },
+    );
+
+    expect(result).toMatchObject({
+      result: { ok: true },
+    });
+    expect(completeRuntimeNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        definitionId: "definition-1",
+        instanceId: "instance-1",
+        nodeKey: "designing",
+        action: "complete",
+      }),
+    );
+  });
+
+  test("requires rebuild before completing legacy project signing node", async () => {
+    const { workflowTaskService } = await import("./workflow-tasks");
+    findById.mockImplementationOnce(async () =>
+      legacyProjectDesigningTask as unknown as typeof paymentTask
+    );
+    getDefinitionById.mockImplementationOnce(async () => ({
+      id: "legacy-definition-1",
+      workflow_key: "construction_main",
+    }));
+    completePaymentBridge.mockImplementationOnce(async () => null);
+    completeProjectBridge.mockClear();
+    completeRuntimeNode.mockClear();
+
+    await expect(
+      workflowTaskService.completeTask(
+        {
+          authUserId: "auth-1",
+          employeeId: "employee-1",
+          tenantId: "tenant-1",
+          tenantName: null,
+          tenantSlug: null,
+          tenantStatus: "active",
+          isPlatformAdmin: false,
+          employeeName: "设计师",
+          employeeStatus: "active",
+          departmentId: null,
+          tenantDepartmentId: null,
+          departmentCode: null,
+          departmentName: null,
+          postId: null,
+          postName: null,
+          avatar: null,
+          roleCodes: [],
+          roles: [],
+          permissions: [],
+        },
+        "task-legacy-project-designing",
+        { action: "complete", reason: null, output: {} },
+      )
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_INSTANCE_REBUILD_REQUIRED",
+    });
+
+    expect(completeProjectBridge).not.toHaveBeenCalled();
     expect(completeRuntimeNode).not.toHaveBeenCalled();
   });
 });

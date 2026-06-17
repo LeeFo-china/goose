@@ -14,7 +14,10 @@ import type { AuthContext } from "@/services/authorization";
 import { workflowTaskCustomerBridge } from "@/services/workflow-task-customer-bridge";
 import { workflowTaskExpenseBridge } from "@/services/workflow-task-expense-bridge";
 import { workflowTaskPaymentBridge } from "@/services/workflow-task-payment-bridge";
-import { workflowTaskProjectBridge } from "@/services/workflow-task-project-bridge";
+import {
+  shouldRequireProjectWorkflowRebuild,
+  workflowTaskProjectBridge,
+} from "@/services/workflow-task-project-bridge";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
@@ -87,7 +90,7 @@ class WorkflowTaskService {
       if (bridged) return bridged;
     }
     if (task.instance.subject_type === "customer") {
-      return workflowTaskCustomerBridge.complete({
+      const bridged = await workflowTaskCustomerBridge.complete({
         authContext,
         task: {
           node_key: task.node_key,
@@ -97,6 +100,7 @@ class WorkflowTaskService {
         reason: input.reason ?? null,
         output,
       });
+      if (bridged) return bridged;
     }
     if (task.instance.subject_type === "project") {
       const paymentBridged = await workflowTaskPaymentBridge.complete({
@@ -116,6 +120,26 @@ class WorkflowTaskService {
         output,
       });
       if (paymentBridged) return paymentBridged;
+
+      const definition = await workflowRepository.getDefinitionById(
+        task.definition_id,
+        tenantId,
+      );
+      if (shouldRequireProjectWorkflowRebuild({
+        workflowKey: definition?.workflow_key,
+        nodeKey: task.node_key,
+      })) {
+        throw Errors.business(
+          409,
+          "旧项目流程实例需先受控重建到项目签约流程后再推进",
+          "WORKFLOW_INSTANCE_REBUILD_REQUIRED",
+          {
+            definition_id: task.definition_id,
+            workflow_key: definition?.workflow_key ?? null,
+            node_key: task.node_key,
+          },
+        );
+      }
 
       const bridged = await workflowTaskProjectBridge.complete({
         authContext,

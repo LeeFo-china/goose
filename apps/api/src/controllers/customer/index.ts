@@ -118,6 +118,7 @@ class CustomerController extends CustomerBaseController {
           phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
             authContext,
           ),
+          authContext,
           tenantId: authContext.tenantId,
         },
       ),
@@ -196,6 +197,7 @@ class CustomerController extends CustomerBaseController {
         phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
           authContext,
         ),
+        authContext,
         tenantId: authContext.tenantId,
       }),
     );
@@ -311,6 +313,7 @@ class CustomerController extends CustomerBaseController {
         phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
           authContext,
         ),
+        authContext,
         tenantId: authContext.tenantId,
       }),
     );

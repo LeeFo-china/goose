@@ -29,6 +29,7 @@ import { createWorkflowConnectionEdge } from "@/components/workflows/workflow-co
 import {
   type WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
+import { getWorkflowTrack } from "@/components/workflows/workflow-business-track";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
 import { getWorkflowNodePreset } from "@/components/workflows/workflow-node-presets";
 import { WorkflowPropertyPanel } from "@/components/workflows/workflow-property-panel";
@@ -273,6 +274,7 @@ export function WorkflowDesignerShell({
       ? "发布当前已保存流程"
       : "本地校验通过后才能发布";
   const customerMainWorkflow = graph.definition.workflow_key === "customer_main";
+  const workflowTrack = getWorkflowTrack(graph.definition);
   const readiness = publishValidation.valid
     ? { label: "可发布", icon: CheckCircle2, badge: "success" as const }
     : { label: `${publishValidation.issues.length} 项待处理`, icon: CircleAlert, badge: "warning" as const };
@@ -377,7 +379,7 @@ export function WorkflowDesignerShell({
                 状态自动推进
               </span>
               <span className="text-muted-foreground">
-                跟进、到店、设计、签约节点会同步到客户详情。
+                跟进、到店、设计节点会同步到客户详情。
               </span>
             </div>
           </div>
@@ -404,7 +406,11 @@ export function WorkflowDesignerShell({
           </div>
           <div className="min-h-0 flex-1 bg-muted/20 lg:grid lg:grid-cols-[minmax(0,1fr)_336px]">
             <div className={mobilePanel === "library" ? "h-full min-h-0 overflow-hidden lg:hidden" : "hidden h-full min-h-0"}>
-              <WorkflowNodeLibrary disabled={pending} onAddNode={addNode} />
+              <WorkflowNodeLibrary
+                disabled={pending}
+                workflowTrack={workflowTrack}
+                onAddNode={addNode}
+              />
             </div>
             <div
               className={mobilePanel === "canvas" ? "h-full min-h-0" : "hidden h-full min-h-0 lg:block"}
@@ -452,11 +458,13 @@ export function WorkflowDesignerShell({
                     })}
                   onDeleteNode={deleteNode}
                   onChangeNode={updateNode}
+                  workflowTrack={workflowTrack}
                 />
               ) : (
                 <WorkflowNodeLibrary
                   disabled={pending}
                   placement="right"
+                  workflowTrack={workflowTrack}
                   onAddNode={addNode}
                 />
               )}

@@ -248,7 +248,7 @@ export const WorkflowGraphSaveSchema = z.object({
 });
 
 export const WorkflowTemplateCreateSchema = z.object({
-  template_key: z.enum(["customer_main", "sales_main", "construction_main", "procedure_standard", "expense_approval"], {
+  template_key: z.enum(["customer_main", "sales_main", "project_signing", "construction_main", "procedure_standard", "expense_approval"], {
     message: "无效的流程模板",
   }),
   name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),

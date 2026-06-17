@@ -330,7 +330,7 @@ export function applyWorkflowFinanceKind(input: {
 
   const config = input.financeKind === "payment_collection"
     ? {
-      required_permissions: [],
+      required_permissions: ["finance.payment.confirm"],
       finance_type: "payment_collection" as const,
       payment_type: "deposit" as const,
       requirement_mode: "any_confirmed" as const,

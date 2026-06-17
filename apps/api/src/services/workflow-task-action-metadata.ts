@@ -64,6 +64,10 @@ export const CUSTOMER_LINEAR_ACTION_BY_NODE: Partial<Record<string, CustomerStat
 };
 
 const CUSTOMER_EXPLICIT_ACTIONS = new Set<CustomerStatusAction>(["mark_invalid"]);
+const CUSTOMER_GENERIC_COMPLETE_LABEL_BY_NODE: Partial<Record<string, string>> = {
+  designing: "方案设计",
+  signed: "项目签约",
+};
 
 const WORKFLOW_PROJECT_ACTION_NODE_KEYS = new Set([
   "designing",
@@ -74,6 +78,7 @@ const WORKFLOW_PROJECT_ACTION_NODE_KEYS = new Set([
   "started",
   "construction_start",
   "constructing",
+  "final_acceptance",
   "on_hold",
   "acceptance",
 ]);
@@ -244,22 +249,35 @@ function buildProcedureActions(
 function buildCustomerActions(nodeKey: string): WorkflowTaskActionMetadata[] {
   const actions: CustomerStatusAction[] = [];
   const linearAction = CUSTOMER_LINEAR_ACTION_BY_NODE[nodeKey];
+  const genericCompleteLabel = CUSTOMER_GENERIC_COMPLETE_LABEL_BY_NODE[nodeKey];
+  const genericActions: WorkflowTaskActionMetadata[] = genericCompleteLabel
+    ? [{
+      key: "complete",
+      label: genericCompleteLabel,
+      business_domain: null,
+      business_action: null,
+      requires_reason: false,
+      output_fields: [],
+    }]
+    : [];
   if (linearAction) actions.push(linearAction);
   if (["potential", "following", "arrived", "designing"].includes(nodeKey)) {
     actions.push("mark_invalid");
   }
 
-  return unique(actions).map((action) => {
+  const statusActions: WorkflowTaskActionMetadata[] = unique(actions).map((action) => {
     const config = CustomerWorkflowActionConfig[action];
     return {
       key: action === linearAction ? "complete" : action,
       label: config.label,
-      business_domain: "customer_status",
+      business_domain: "customer_status" as const,
       business_action: action,
       requires_reason: Boolean(config.requiresReason),
       output_fields: [],
     };
   });
+
+  return [...genericActions, ...statusActions];
 }
 
 function buildProjectActions(

@@ -53,6 +53,46 @@ describe("buildWorkflowTaskActions", () => {
         output_fields: [],
       },
     ]);
+
+    expect(buildWorkflowTaskActions({
+      subjectType: "customer",
+      nodeKey: "designing",
+      taskTitle: "方案设计",
+    })).toEqual([
+      {
+        key: "complete",
+        label: "方案设计",
+        business_domain: null,
+        business_action: null,
+        requires_reason: false,
+        output_fields: [],
+      },
+      {
+        key: "mark_invalid",
+        label: "作废客户",
+        business_domain: "customer_status",
+        business_action: "mark_invalid",
+        requires_reason: true,
+        output_fields: [],
+      },
+    ]);
+  });
+
+  test("keeps legacy customer signed node completable", () => {
+    expect(buildWorkflowTaskActions({
+      subjectType: "customer",
+      nodeKey: "signed",
+      taskTitle: "项目签约",
+    })).toEqual([
+      {
+        key: "complete",
+        label: "项目签约",
+        business_domain: null,
+        business_action: null,
+        requires_reason: false,
+        output_fields: [],
+      },
+    ]);
   });
 
   test("describes project required output fields", () => {
@@ -107,6 +147,19 @@ describe("buildWorkflowTaskActions", () => {
         required: true,
       },
     ]);
+
+    expect(buildWorkflowTaskActions({
+      subjectType: "project",
+      nodeKey: "final_acceptance",
+      taskTitle: "竣工验收",
+    })[0]).toMatchObject({
+      key: "complete",
+      label: "竣工验收",
+      business_domain: "workflow_project",
+      business_action: "final_acceptance",
+      requires_reason: false,
+      output_fields: [],
+    });
   });
 
   test("describes payment collection gate actions", () => {

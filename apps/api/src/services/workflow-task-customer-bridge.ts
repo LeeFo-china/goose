@@ -66,7 +66,7 @@ class WorkflowTaskCustomerBridge {
       output: input.output,
     });
     if (!operation) {
-      throw Errors.badRequest("当前客户流程节点不能通过 workflow task 直接完成");
+      return null;
     }
 
     const parsed = CustomerStatusTransitionSchema.safeParse({

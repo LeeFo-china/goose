@@ -239,10 +239,16 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
       const financeReviewerId = "finance_reviewer_employee_id" in node.config
         ? node.config.finance_reviewer_employee_id
         : null;
-      if (!financeReviewerId) {
+      const requiredPermissions = Array.isArray(node.config.required_permissions)
+        ? node.config.required_permissions
+        : [];
+      const hasFinancePermission = requiredPermissions.some((permission) =>
+        typeof permission === "string" && permission.startsWith("finance.")
+      );
+      if (!financeReviewerId && !hasFinancePermission) {
         issues.push({
           code: "payment_collection_finance_reviewer_required",
-          message: "收款节点必须选择财务审核人",
+          message: "收款节点必须选择财务审核人或配置财务确认权限",
           nodeKey: node.node_key,
         });
       }

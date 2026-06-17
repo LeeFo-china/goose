@@ -9,6 +9,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
+import { projectWorkflowRuntimeService } from "@/services/project-workflow-runtime";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
@@ -171,10 +172,13 @@ class CustomerStatusService {
       },
     });
 
-    const designProjectMetadata = designProjectResult?.project.id
+    const designProjectId = typeof designProjectResult?.project.id === "string"
+      ? designProjectResult.project.id
+      : null;
+    const designProjectMetadata = designProjectId
       ? {
-          project_id: designProjectResult.project.id,
-          project_auto_created: designProjectResult.created,
+          project_id: designProjectId,
+          project_auto_created: designProjectResult?.created ?? false,
         }
       : {};
     const workflowRuntimeMetadata =
@@ -208,6 +212,17 @@ class CustomerStatusService {
         subjectId: input.customerId,
         definitionId: workflowRuntimeMetadata.definition_id,
         instanceId: workflowRuntimeMetadata.instance_id,
+      });
+    }
+    if (designProjectId) {
+      await projectWorkflowRuntimeService.syncProjectCreated({
+        authContext: input.authContext,
+        tenantId,
+        projectId: designProjectId,
+        source: "customer_start_design",
+        extraContext: {
+          customer_id: input.customerId,
+        },
       });
     }
 

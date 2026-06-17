@@ -194,7 +194,7 @@ export type WorkflowDefinitionCreateInput = {
 };
 
 export type WorkflowTemplateCreateInput = {
-  template_key: "customer_main";
+  template_key: "customer_main" | "project_signing" | "construction_main";
   name?: string;
 };
 

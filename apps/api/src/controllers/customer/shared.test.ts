@@ -1,0 +1,148 @@
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+
+const getPrimaryCustomerPropertySummary = mock(async () => null);
+const getCustomerPropertySummaries = mock(async () => []);
+const getLatestFollowUpMap = mock(async () => new Map());
+const getCustomerSourceSummaryMap = mock(async () => new Map());
+const getFollowUpState = mock(() => "none");
+const getState = mock(async () => ({
+  workflow_state: {
+    subject_type: "customer",
+    subject_id: "customer-1",
+    instance_id: "instance-1",
+    current_node_key: "potential",
+    actions: [
+      {
+        key: "complete",
+        task_id: "task-1",
+        node_key: "potential",
+        node_type: "business",
+        business_domain: "customer_status",
+        business_action: "start_following",
+        disabled: false,
+        requires_reason: false,
+        output_fields: [],
+      },
+    ],
+  },
+}));
+
+mock.module("@/services/customer-properties", () => ({
+  customerPropertyService: {
+    getPrimaryCustomerPropertySummary,
+    getCustomerPropertySummaries,
+    serializePropertySummary: (item: unknown) => item,
+  },
+}));
+
+mock.module("@/services/customer-follow-ups", () => ({
+  customerFollowUpService: {
+    getLatestFollowUpMap,
+  },
+}));
+
+mock.module("@/services/customer-sources", () => ({
+  customerSourceService: {
+    getCustomerSourceSummaryMap,
+  },
+}));
+
+mock.module("@/services/customer-phone-privacy", () => ({
+  customerPhonePrivacyService: {
+    maskPhone: (phone: string | null | undefined) => phone ?? null,
+    serializeCustomerPhoneFields: () => ({
+      phone: "13200001003",
+      phone_masked: "132****1003",
+      can_view_phone: true,
+      can_call_phone: true,
+      can_copy_phone: true,
+    }),
+  },
+}));
+
+mock.module("@/services/customer-core", () => ({
+  customerCoreService: {
+    getFollowUpState,
+  },
+}));
+
+mock.module("@/services/workflow-subjects", () => ({
+  workflowSubjectsService: {
+    getState,
+  },
+}));
+
+let CustomerBaseController: typeof import("./shared").CustomerBaseController;
+
+describe("CustomerBaseController.buildCustomerDetailResponse", () => {
+  beforeAll(async () => {
+    ({ CustomerBaseController } = await import("./shared"));
+  });
+
+  beforeEach(() => {
+    getPrimaryCustomerPropertySummary.mockClear();
+    getCustomerPropertySummaries.mockClear();
+    getLatestFollowUpMap.mockClear();
+    getCustomerSourceSummaryMap.mockClear();
+    getFollowUpState.mockClear();
+    getState.mockClear();
+  });
+
+  test("includes accessible customer workflow state for detail responses", async () => {
+    class TestCustomerController extends CustomerBaseController {
+      buildDetail(
+        customer: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ) {
+        return this.buildCustomerDetailResponse(customer as never, options as never);
+      }
+    }
+
+    const controller = new TestCustomerController();
+
+    const response = await controller.buildDetail(
+      {
+        id: "customer-1",
+        name: "苏有朋",
+        phone: "13200001003",
+        status: "potential",
+        owner_id: "employee-1",
+        owner: { id: "employee-1", name: "珠珠", phone: "18800001002" },
+        avatar: null,
+        douyin_screenshot_images: [],
+      },
+      {
+        tenantId: "tenant-1",
+        authContext: {
+          tenantId: "tenant-1",
+          employeeId: "employee-1",
+          roleCodes: [],
+          permissions: [{ code: "customer.update" }],
+        },
+      },
+    );
+
+    expect(getState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        employeeId: "employee-1",
+      }),
+      {
+        subjectType: "customer",
+        subjectId: "customer-1",
+      },
+    );
+    expect(response.workflow_state).toMatchObject({
+      subject_type: "customer",
+      subject_id: "customer-1",
+      current_node_key: "potential",
+      actions: [
+        expect.objectContaining({
+          task_id: "task-1",
+          key: "complete",
+          business_action: "start_following",
+        }),
+      ],
+    });
+  });
+});

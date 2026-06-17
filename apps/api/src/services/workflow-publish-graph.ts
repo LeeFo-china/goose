@@ -5,14 +5,32 @@ import type {
   WorkflowEdgeRow,
   WorkflowNodeRow,
 } from "@/repositories/workflows";
+import { findBusinessTrackIssues } from "@/services/workflow-business-track-validation";
 import { findWorkflowBranchEdgeIssues } from "@/services/workflow-branch-validation";
 import { findPaymentCollectionIssues } from "@/services/workflow-payment-collection-node-validation";
 import { findProcedureStageIssues } from "@/services/workflow-procedure-node-validation";
 
+type WorkflowPublishGraphInput = {
+  definition: WorkflowDefinitionRow;
+  nodes: WorkflowNodeRow[];
+  edges: WorkflowEdgeRow[];
+};
+
+type NormalizedWorkflowPublishGraphInput = {
+  definition: WorkflowDefinitionRow | null;
+  nodes: WorkflowNodeRow[];
+  edges: WorkflowEdgeRow[];
+};
+
 export function validateWorkflowPublishGraph(
-  nodes: WorkflowNodeRow[],
-  edges: WorkflowEdgeRow[],
+  inputOrNodes: WorkflowPublishGraphInput | WorkflowNodeRow[],
+  maybeEdges?: WorkflowEdgeRow[],
 ) {
+  const { definition, nodes, edges } = normalizePublishGraphInput(
+    inputOrNodes,
+    maybeEdges,
+  );
+
   if (nodes.length === 0) {
     throw Errors.badRequest("发布前至少需要配置一个节点");
   }
@@ -112,11 +130,37 @@ export function validateWorkflowPublishGraph(
     throw Errors.badRequest(paymentCollectionIssues.join("；"));
   }
 
+  if (definition) {
+    const businessTrackIssues = findBusinessTrackIssues({
+      definition,
+      nodes,
+      edges,
+    });
+    if (businessTrackIssues.length > 0) {
+      throw Errors.badRequest(businessTrackIssues.join("；"));
+    }
+  }
+
   return {
     valid: true,
     issues: [] as string[],
     checked_at: new Date().toISOString(),
   };
+}
+
+function normalizePublishGraphInput(
+  inputOrNodes: WorkflowPublishGraphInput | WorkflowNodeRow[],
+  maybeEdges?: WorkflowEdgeRow[],
+): NormalizedWorkflowPublishGraphInput {
+  if (Array.isArray(inputOrNodes)) {
+    return {
+      definition: null,
+      nodes: inputOrNodes,
+      edges: maybeEdges ?? [],
+    };
+  }
+
+  return inputOrNodes;
 }
 
 export function buildWorkflowSnapshot(input: {

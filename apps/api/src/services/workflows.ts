@@ -161,7 +161,11 @@ class WorkflowService {
     }
 
     const publishedAt = new Date().toISOString();
-    const validationResult = validateWorkflowPublishGraph(draftGraph.nodes, draftGraph.edges);
+    const validationResult = validateWorkflowPublishGraph({
+      definition,
+      nodes: draftGraph.nodes,
+      edges: draftGraph.edges,
+    });
     const snapshot = buildWorkflowSnapshot({
       definition,
       nodes: draftGraph.nodes,

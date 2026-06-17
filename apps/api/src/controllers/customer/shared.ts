@@ -24,6 +24,8 @@ import {
   customerCoreService,
   type CustomerCoreRow,
 } from "@/services/customer-core";
+import type { AuthContext } from "@/services/authorization";
+import { workflowSubjectsService } from "@/services/workflow-subjects";
 import {
   resolveStoredFileUrl,
   resolveStoredFileUrlList,
@@ -302,6 +304,7 @@ export abstract class CustomerBaseController extends TenantBaseController<
       primaryProperty?: CustomerPrimaryPropertySummary | null;
       includeProperties?: boolean;
       phonePrivacyContext?: CustomerPhonePrivacyContext;
+      authContext?: AuthContext;
       tenantId: string;
     },
   ) {
@@ -311,6 +314,7 @@ export abstract class CustomerBaseController extends TenantBaseController<
       properties,
       followUpMap,
       sourceSummaryMap,
+      workflowStateResult,
     ] = await Promise.all([
       options.primaryProperty !== undefined
         ? Promise.resolve(options.primaryProperty)
@@ -328,6 +332,12 @@ export abstract class CustomerBaseController extends TenantBaseController<
           customerIds: [customer.id],
         })
         : Promise.resolve(new Map<string, CustomerSourceSummary>()),
+      options.authContext
+        ? workflowSubjectsService.getState(options.authContext, {
+          subjectType: "customer",
+          subjectId: customer.id,
+        })
+        : Promise.resolve(null),
     ]);
 
     return {
@@ -343,6 +353,9 @@ export abstract class CustomerBaseController extends TenantBaseController<
       building_info: primaryProperty?.building_info ?? null,
       layout: primaryProperty?.layout ?? null,
       area: primaryProperty?.area ?? null,
+      ...(workflowStateResult
+        ? { workflow_state: workflowStateResult.workflow_state }
+        : {}),
       ...(options.includeProperties
         ? {
           properties: (properties || []).map((item) =>

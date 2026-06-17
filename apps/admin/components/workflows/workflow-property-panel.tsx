@@ -8,13 +8,19 @@ import {
   WORKFLOW_BUSINESS_FLOW_OPTIONS,
 } from "@/components/workflows/workflow-business-flow-options";
 import {
+  getWorkflowBusinessFlowOptionsForTrack,
+  getWorkflowCapabilityOptionsForTrack,
+  getWorkflowFinanceKindOptionsForTrack,
+  type WorkflowBusinessTrack,
+} from "@/components/workflows/workflow-business-track";
+import {
   getWorkflowApprovalKind,
   WORKFLOW_APPROVAL_KIND_OPTIONS,
   type WorkflowApprovalKind,
 } from "@/components/workflows/workflow-approval-node-options";
 import {
   getWorkflowFinanceKind,
-  WORKFLOW_FINANCE_KIND_OPTIONS,
+  getWorkflowFinanceKindOption,
   type WorkflowFinanceKind,
 } from "@/components/workflows/workflow-finance-node-options";
 import {
@@ -62,6 +68,7 @@ export function WorkflowPropertyPanel({
   nodes,
   usedNodeKeys,
   usedProcedureStageKeys,
+  workflowTrack = "generic",
   onDeleteNode,
   onChangeNode,
 }: {
@@ -71,6 +78,7 @@ export function WorkflowPropertyPanel({
   nodes: WorkflowNode[];
   usedNodeKeys: string[];
   usedProcedureStageKeys?: string[];
+  workflowTrack?: WorkflowBusinessTrack;
   onDeleteNode: (nodeId: string) => void;
   onChangeNode: (node: WorkflowNode) => void;
 }) {
@@ -105,6 +113,20 @@ export function WorkflowPropertyPanel({
     getWorkflowConstructionStageKind(selectedNode);
   const selectedFinanceKind = getWorkflowFinanceKind(selectedNode);
   const selectedApprovalKind = getWorkflowApprovalKind(selectedNode);
+  const capabilityOptions = includeCurrentOption(
+    getWorkflowCapabilityOptionsForTrack(workflowTrack),
+    WORKFLOW_NODE_CAPABILITY_OPTIONS.find((option) =>
+      option.value === selectedCapability
+    ),
+  );
+  const businessFlowOptions = includeCurrentOption(
+    getWorkflowBusinessFlowOptionsForTrack(workflowTrack),
+    selectedBusinessOption,
+  );
+  const financeKindOptions = includeCurrentOption(
+    getWorkflowFinanceKindOptionsForTrack(workflowTrack),
+    getWorkflowFinanceKindOption(selectedFinanceKind),
+  );
   const rollbackTargetNodes = getRollbackTargetNodes({
     currentNode: selectedNode,
     edges,
@@ -198,7 +220,7 @@ export function WorkflowPropertyPanel({
                   <SelectValue placeholder="选择节点能力" />
                 </SelectTrigger>
                 <SelectContent>
-                  {WORKFLOW_NODE_CAPABILITY_OPTIONS.map((option) => (
+                  {capabilityOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -212,7 +234,7 @@ export function WorkflowPropertyPanel({
               <Label htmlFor="workflow-node-business-kind">业务类型</Label>
               <Select
                 disabled={disabled}
-                value={selectedBusinessOption?.value ?? "customer_lead"}
+                value={selectedBusinessOption?.value ?? businessFlowOptions[0]?.value ?? "customer_lead"}
                 onValueChange={(value) =>
                   onChangeNode(
                     applyWorkflowBusinessKind({
@@ -227,7 +249,7 @@ export function WorkflowPropertyPanel({
                   <SelectValue placeholder="选择业务类型" />
                 </SelectTrigger>
                 <SelectContent>
-                  {WORKFLOW_BUSINESS_FLOW_OPTIONS.map((option) => (
+                  {businessFlowOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -285,7 +307,7 @@ export function WorkflowPropertyPanel({
                   <SelectValue placeholder="选择财务类型" />
                 </SelectTrigger>
                 <SelectContent>
-                  {WORKFLOW_FINANCE_KIND_OPTIONS.map((option) => (
+                  {financeKindOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -381,6 +403,17 @@ function PropertyPanelSection({
       <div className="space-y-3">{children}</div>
     </section>
   );
+}
+
+function includeCurrentOption<Option extends { value: string }>(
+  options: readonly Option[],
+  current: Option | null | undefined,
+): Option[] {
+  if (!current || options.some((option) => option.value === current.value)) {
+    return [...options];
+  }
+
+  return [current, ...options];
 }
 
 function getRollbackTargetNodes({
