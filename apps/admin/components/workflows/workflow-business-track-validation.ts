@@ -1,4 +1,12 @@
 import type { WorkflowValidationIssue } from "@/components/workflows/workflow-designer-types";
+import {
+  findNodeIndex,
+  formatNodeKeys,
+  getAlwaysMainlineNodes,
+  getWorkflowStageType,
+  issue,
+  readString,
+} from "@/components/workflows/workflow-business-track-validation-utils";
 import type {
   WorkflowDefinition,
   WorkflowEdge,
@@ -272,6 +280,7 @@ function validateConstructionTrack(
     requiredTrack: CONSTRUCTION_TRACK,
     nodes,
     edges,
+    getTrackNodeKey: getConstructionTrackNodeKey,
   });
 }
 
@@ -397,9 +406,12 @@ function validateTrackOrder(input: {
   requiredTrack: readonly string[];
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  getTrackNodeKey?: (node: WorkflowNode) => string;
 }): WorkflowValidationIssue[] {
+  const getTrackNodeKey = input.getTrackNodeKey ??
+    ((node: WorkflowNode) => node.node_key);
   const mainlineNodeKeys = getAlwaysMainlineNodes(input.nodes, input.edges)
-    .map((node) => node.node_key);
+    .map(getTrackNodeKey);
   const missingKeys = input.requiredTrack.filter((nodeKey) =>
     !mainlineNodeKeys.includes(nodeKey)
   );
@@ -429,67 +441,27 @@ function validateTrackOrder(input: {
   return [];
 }
 
-function getAlwaysMainlineNodes(
-  nodes: WorkflowNode[],
-  edges: WorkflowEdge[],
-) {
-  const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const outgoingEdges = new Map<string, WorkflowEdge[]>();
-  for (const edge of edges) {
-    if (edge.condition.operator !== "always") continue;
-    outgoingEdges.set(edge.source_node_id, [
-      ...(outgoingEdges.get(edge.source_node_id) ?? []),
-      edge,
-    ]);
+function getConstructionTrackNodeKey(node: WorkflowNode) {
+  if (node.node_type === "construction_stage") {
+    const stageType = getWorkflowStageType(node);
+    if (
+      node.business_kind === "construction_start" ||
+      stageType === "construction_start"
+    ) {
+      return "started";
+    }
+    if (
+      node.business_kind === "final_acceptance" ||
+      stageType === "final_acceptance"
+    ) {
+      return "final_acceptance";
+    }
   }
 
-  const startNode = nodes.find((node) => node.node_type === "start");
-  if (!startNode) return [];
-
-  const visitedNodeIds = new Set<string>();
-  const mainlineNodes: WorkflowNode[] = [];
-  let currentNode: WorkflowNode | undefined = startNode;
-  while (currentNode && !visitedNodeIds.has(currentNode.id)) {
-    visitedNodeIds.add(currentNode.id);
-    mainlineNodes.push(currentNode);
-    if (currentNode.node_type === "end") break;
-
-    const sortedEdges = [...(outgoingEdges.get(currentNode.id) ?? [])]
-      .sort(compareWorkflowEdges);
-    const nextEdge: WorkflowEdge | undefined = sortedEdges[0];
-    currentNode = nextEdge ? nodesById.get(nextEdge.target_node_id) : undefined;
+  if (node.node_type === "procedure" && "stage_key" in node.config) {
+    const stageKey = readString(node.config.stage_key);
+    return stageKey ? `procedure_${stageKey}` : node.node_key;
   }
 
-  return mainlineNodes;
-}
-
-function compareWorkflowEdges(left: WorkflowEdge, right: WorkflowEdge) {
-  if (left.priority !== right.priority) return left.priority - right.priority;
-  return left.id.localeCompare(right.id);
-}
-
-function findNodeIndex(nodes: WorkflowNode[], nodeKey: string) {
-  return nodes.findIndex((node) => node.node_key === nodeKey);
-}
-
-function formatNodeKeys(nodes: WorkflowNode[]) {
-  return nodes.map((node) => node.node_key).join("、");
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" ? value : null;
-}
-
-function getWorkflowStageType(node: WorkflowNode) {
-  return "stage_type" in node.config
-    ? readString(node.config.stage_type)
-    : null;
-}
-
-function issue(
-  code: string,
-  message: string,
-  nodeKey?: string,
-): WorkflowValidationIssue {
-  return { code, message, nodeKey };
+  return node.node_key;
 }

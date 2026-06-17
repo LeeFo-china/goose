@@ -124,6 +124,12 @@ const BaseNodeConfigSchema = z.strictObject({
   branch_node_position: WorkflowNodePositionSchema.nullable().optional(),
 }, { error: "节点配置包含不支持的字段" });
 
+const ConstructionStageNodeConfigSchema = BaseNodeConfigSchema.extend({
+  stage_type: z.enum(["construction_start", "final_acceptance"], {
+    message: "无效的施工阶段类型",
+  }).optional(),
+});
+
 const WORKFLOW_PAYMENT_COLLECTION_TYPE_VALUES = [
   "deposit",
   "stage_1",
@@ -196,6 +202,7 @@ const NotificationNodeConfigSchema = BaseNodeConfigSchema.extend({
 
 export const WorkflowNodeConfigSchema = z.union([
   BaseNodeConfigSchema,
+  ConstructionStageNodeConfigSchema,
   ApprovalNodeConfigSchema,
   ProcedureNodeConfigSchema,
   PaymentCollectionNodeConfigSchema,

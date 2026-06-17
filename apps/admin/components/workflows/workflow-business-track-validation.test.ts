@@ -56,6 +56,36 @@ describe("findWorkflowBusinessTrackIssues exception actions", () => {
   });
 });
 
+describe("findWorkflowBusinessTrackIssues construction track", () => {
+  test("accepts admin construction start semantic node key on standard mainline", () => {
+    const nodes = [
+      node("start", "start"),
+      node("construction_start", "construction_stage", "construction_start", {
+        required_permissions: [],
+        stage_type: "construction_start",
+      }),
+      procedureNode("procedure_demolition", "demolition"),
+      procedureNode("procedure_plumbing_electrical", "plumbing_electrical"),
+      procedureNode("procedure_tiling", "tiling"),
+      procedureNode("procedure_woodwork", "woodwork"),
+      procedureNode("procedure_painting", "painting"),
+      procedureNode("procedure_installation", "installation"),
+      node("final_acceptance", "construction_stage", "final_acceptance", {
+        required_permissions: [],
+        stage_type: "final_acceptance",
+      }),
+      node("handover", "confirmation", "final_acceptance"),
+      node("end", "end"),
+    ];
+
+    expect(findWorkflowBusinessTrackIssues({
+      definition: definition("construction_main", "construction"),
+      nodes,
+      edges: linearEdges(nodes),
+    }).map((issue) => issue.message)).toEqual([]);
+  });
+});
+
 function definition(
   workflowKey: string,
   category: WorkflowCategory,
@@ -80,6 +110,7 @@ function node(
   nodeKey: string,
   nodeType: WorkflowNodeType,
   businessKind: WorkflowBusinessKind | null = null,
+  config: WorkflowNode["config"] = { required_permissions: [] },
 ): WorkflowNode {
   return {
     id: nodeKey,
@@ -91,11 +122,18 @@ function node(
     title: nodeKey,
     description: null,
     position: { x: 0, y: 0 },
-    config: { required_permissions: [] },
+    config,
     sort_order: 10,
     created_at: NOW,
     updated_at: NOW,
   };
+}
+
+function procedureNode(nodeKey: string, stageKey: string) {
+  return node(nodeKey, "procedure", "procedure_template", {
+    required_permissions: [],
+    stage_key: stageKey,
+  });
 }
 
 function linearEdges(nodes: WorkflowNode[]): WorkflowEdge[] {

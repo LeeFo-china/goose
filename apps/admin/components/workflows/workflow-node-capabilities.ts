@@ -71,7 +71,7 @@ export const WORKFLOW_CONSTRUCTION_STAGE_OPTIONS = [
   {
     value: "construction_start",
     label: "开工",
-    nodeKeyBase: "construction_start",
+    nodeKeyBase: "started",
     description: "项目进入施工的阶段节点。",
   },
   {
@@ -101,7 +101,7 @@ const CAPABILITY_DEFAULTS: Record<WorkflowNodeCapability, CapabilityDefaults> = 
     description: "项目进入施工的阶段节点。",
     nodeType: "construction_stage",
     businessKind: "construction_start",
-    nodeKeyBase: "construction_start",
+    nodeKeyBase: "started",
     config: { required_permissions: [], stage_type: "construction_start" },
   },
   procedure: {

@@ -5,6 +5,29 @@ import {
 } from "./workflows";
 
 describe("WorkflowGraphSaveSchema", () => {
+  test("accepts admin construction stage node config", () => {
+    const result = WorkflowGraphSaveSchema.safeParse({
+      nodes: [
+        {
+          node_key: "construction_start",
+          node_type: "construction_stage",
+          business_kind: "construction_start",
+          title: "开工",
+          description: null,
+          position: { x: 100, y: 100 },
+          config: {
+            required_permissions: [],
+            stage_type: "construction_start",
+          },
+          sort_order: 20,
+        },
+      ],
+      edges: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   test("accepts admin payment collection node config", () => {
     const result = WorkflowGraphSaveSchema.safeParse({
       nodes: [

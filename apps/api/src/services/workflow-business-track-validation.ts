@@ -260,6 +260,7 @@ function validateConstructionTrack(
     requiredTrack: CONSTRUCTION_TRACK,
     nodes,
     edges,
+    getTrackNodeKey: getConstructionTrackNodeKey,
   });
 }
 
@@ -358,9 +359,12 @@ function validateTrackOrder(input: {
   requiredTrack: readonly string[];
   nodes: WorkflowNodeRow[];
   edges: WorkflowEdgeRow[];
+  getTrackNodeKey?: (node: WorkflowNodeRow) => string;
 }) {
+  const getTrackNodeKey = input.getTrackNodeKey ??
+    ((node: WorkflowNodeRow) => node.node_key);
   const mainlineNodeKeys = getAlwaysMainlineNodes(input.nodes, input.edges)
-    .map((node) => node.node_key);
+    .map(getTrackNodeKey);
   const missingKeys = input.requiredTrack.filter((nodeKey) =>
     !mainlineNodeKeys.includes(nodeKey)
   );
@@ -380,6 +384,31 @@ function validateTrackOrder(input: {
   }
 
   return [];
+}
+
+function getConstructionTrackNodeKey(node: WorkflowNodeRow) {
+  if (node.node_type === "construction_stage") {
+    const stageType = readString(node.config.stage_type);
+    if (
+      node.business_kind === "construction_start" ||
+      stageType === "construction_start"
+    ) {
+      return "started";
+    }
+    if (
+      node.business_kind === "final_acceptance" ||
+      stageType === "final_acceptance"
+    ) {
+      return "final_acceptance";
+    }
+  }
+
+  if (node.node_type === "procedure") {
+    const stageKey = readString(node.config.stage_key);
+    return stageKey ? `procedure_${stageKey}` : node.node_key;
+  }
+
+  return node.node_key;
 }
 
 function getAlwaysMainlineNodes(
@@ -427,4 +456,8 @@ function findNodeIndex(nodes: WorkflowNodeRow[], nodeKey: string) {
 
 function formatNodeKeys(nodes: WorkflowNodeRow[]) {
   return nodes.map((node) => node.node_key).join("、");
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value : null;
 }

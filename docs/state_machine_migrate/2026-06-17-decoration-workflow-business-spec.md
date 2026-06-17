@@ -551,6 +551,10 @@ workflow 层只关心 `payment_collection` 是否已确认，不应直接绑定�
 - Admin：模板入口、节点库、节点能力、业务类型和财务类型按 workflow 轨道过滤；
   本地校验补齐客户设计、项目签约、施工三条业务轨道顺序、主状态语义唯一性和
   异常动作主线拦截、财务门禁位置检查。
+- Admin/API 施工阶段对接：Admin 新增确认开工节点默认使用模板标准
+  `node_key = started`；后端保存 schema 接受 `config.stage_type`；发布校验和
+  Admin 本地校验会把 `construction_start` 语义节点归一为标准 `started` 校验，
+  兼容已保存草稿但不放松主线顺序。
 - 审计脚本：`bun run workflow:decoration-business-audit -- --sample-limit 100`。
 - 旧实例复核脚本：`bun run workflow:decoration-legacy-review -- --sample-limit 100`。
   复核报告会按实例输出 `action_commands`，可直接复制对应 dry-run / apply 命令。
@@ -935,6 +939,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 | 发布时禁止跨轨道节点混入 | `workflow-publish-graph.test.ts` 覆盖项目签约/施工混入客户节点、客户流程插财务节点 | 已完成 |
 | 异常动作不作为主线节点 | `workflow-business-track-validation.test.ts` 覆盖 `mark_dormant`、`pause_project` 等异常动作节点名 | 已完成 |
 | Admin 发布前本地校验业务轨道 | `workflow-designer-graph-utils.test.ts` 覆盖项目签约财务门禁位置、主状态语义重复、施工自定义收款 node_key | 已完成 |
+| Admin 施工节点与 API 保存/发布校验一致 | `workflow-node-capabilities.test.ts`、`WorkflowGraphSaveSchema` 和 API/Admin 轨道校验测试覆盖 `stage_type` 与 `construction_start -> started` 归一 | 已完成 |
 | 暂停/作废不作为标准主线节点 | 发布校验和 Admin 轨道过滤隐藏异常节点 | 已完成 |
 | 新设计项目进入项目签约 workflow | `project-workflow-runtime.ts` 与测试覆盖 `project_signing` 启动 | 已完成 |
 | 确认开工后启动施工 workflow | `project-workflow-runtime.test.ts` 覆盖签约完成后启动 `construction_main` | 已完成 |
