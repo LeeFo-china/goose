@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import { customerCoreRepository } from "@/repositories/customer-core";
 import { customerPropertyRepository } from "@/repositories/customer-properties";
 import { projectRepository } from "@/repositories/projects";
+import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import type {
   CustomerStatusTransitionInput,
 } from "@/schema/customer";
@@ -187,6 +188,19 @@ class CustomerStatusService {
         reason,
         extraContext: designProjectMetadata,
       });
+    const ownerId = typeof customer.owner_id === "string" ? customer.owner_id : null;
+    if (
+      ownerId &&
+      workflowRuntimeMetadata.instance_id &&
+      workflowRuntimeMetadata.current_node_key
+    ) {
+      await workflowTaskRepository.assignPendingTask({
+        tenantId,
+        instanceId: workflowRuntimeMetadata.instance_id,
+        nodeKey: workflowRuntimeMetadata.current_node_key,
+        assigneeEmployeeId: ownerId,
+      });
+    }
     if (workflowRuntimeMetadata.instance_id && workflowRuntimeMetadata.definition_id) {
       await workflowSubjectStateService.syncFromRuntimeInstance({
         tenantId,

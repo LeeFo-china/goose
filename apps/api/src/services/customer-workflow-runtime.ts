@@ -12,6 +12,7 @@ const CUSTOMER_WORKFLOW_KEYS = ["customer_main", "sales_main"] as const;
 const CUSTOMER_ADVANCE_NODE_BY_ACTION: Partial<
   Record<CustomerStatusAction, CustomerStatus>
 > = {
+  start_following: "potential",
   mark_arrived: "following",
   start_design: "arrived",
   mark_signed: "designing",
@@ -129,10 +130,6 @@ class CustomerWorkflowRuntimeService {
         status: "skipped",
         reason: "active_customer_workflow_not_found",
       };
-    }
-
-    if (input.action === "start_following") {
-      return this.startCustomerWorkflow(input, definition);
     }
 
     const nodeKey = CUSTOMER_ADVANCE_NODE_BY_ACTION[input.action];

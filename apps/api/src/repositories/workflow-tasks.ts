@@ -223,7 +223,9 @@ class WorkflowTaskRepository {
       .eq("tenant_id", input.tenantId)
       .eq("instance_id", input.instanceId)
       .eq("node_key", input.nodeKey)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id")
+      .limit(1);
 
     if (error) {
       throw Errors.dbError("更新流程待办负责人失败", error);

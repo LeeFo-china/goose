@@ -2,9 +2,20 @@ import { describe, expect, mock, test } from "bun:test";
 
 const orCalls: string[] = [];
 const eqCalls: Array<readonly [string, unknown]> = [];
+const selectCalls: string[] = [];
+const updateCalls: unknown[] = [];
+let lastOperation: "select" | "update" | null = null;
 
 class WorkflowTasksQuery {
-  select() {
+  select(columns = "") {
+    selectCalls.push(columns);
+    lastOperation = "select";
+    return this;
+  }
+
+  update(payload: unknown) {
+    updateCalls.push(payload);
+    lastOperation = "update";
     return this;
   }
 
@@ -25,6 +36,12 @@ class WorkflowTasksQuery {
   async range() {
     return { data: [], error: null, count: 0 };
   }
+
+  async limit() {
+    return lastOperation === "update"
+      ? { data: [{ id: "task-1" }], error: null }
+      : { data: [], error: null, count: 0 };
+  }
 }
 
 mock.module("@/utils/supabase", () => ({
@@ -39,6 +56,9 @@ describe("workflowTaskRepository", () => {
   test("does not match employee-assigned tasks through role or permission filters", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    lastOperation = null;
     const { workflowTaskRepository } = await import("./workflow-tasks");
 
     await workflowTaskRepository.listAccessibleTasks({
@@ -59,6 +79,9 @@ describe("workflowTaskRepository", () => {
   test("can restrict accessible tasks to the selected runtime instance", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    lastOperation = null;
     const { workflowTaskRepository } = await import("./workflow-tasks");
 
     await workflowTaskRepository.listAccessibleTasks({
@@ -70,5 +93,30 @@ describe("workflowTaskRepository", () => {
     });
 
     expect(eqCalls).toContainEqual(["instance_id", "instance-current"]);
+  });
+
+  test("selects an id after assigning a pending task so the update request returns", async () => {
+    orCalls.length = 0;
+    eqCalls.length = 0;
+    selectCalls.length = 0;
+    updateCalls.length = 0;
+    lastOperation = null;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    await workflowTaskRepository.assignPendingTask({
+      tenantId: "tenant-1",
+      instanceId: "instance-1",
+      nodeKey: "potential",
+      assigneeEmployeeId: "owner-1",
+    });
+
+    expect(updateCalls).toEqual([{ assignee_employee_id: "owner-1" }]);
+    expect(selectCalls).toContain("id");
+    expect(eqCalls).toEqual([
+      ["tenant_id", "tenant-1"],
+      ["instance_id", "instance-1"],
+      ["node_key", "potential"],
+      ["status", "pending"],
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 
 const findDefinitionByKey = mock(async () => ({
@@ -16,7 +16,11 @@ const findDefinitionByKey = mock(async () => ({
   updated_at: "2026-06-17T00:00:00.000Z",
 }));
 const listRuntimeInstances = mock(async () => ({
-  list: [],
+  list: [] as Array<{
+    id: string;
+    definition_id?: string;
+    current_node_key: string;
+  }>,
   pagination: {
     page: 1,
     pageSize: 1,
@@ -33,13 +37,31 @@ const startRuntimeInstance = mock(async () => ({
   currentNode: {},
   task: null,
 }));
+const completeRuntimeNode = mock(async () => ({
+  ok: true,
+  instance: {
+    id: "instance-1",
+    current_node_key: "following",
+  },
+  completedNode: {},
+  nextNode: {
+    node_key: "following",
+  },
+  task: null,
+}));
+const assertRuntimeNodeCompletionAllowed = mock(async () => {});
 
 mock.module("@/repositories/workflows", () => ({
   workflowRepository: {
     findDefinitionByKey,
     listRuntimeInstances,
     startRuntimeInstance,
+    completeRuntimeNode,
   },
+}));
+
+mock.module("@/services/workflow-runtime-guards", () => ({
+  assertRuntimeNodeCompletionAllowed,
 }));
 
 function buildAuthContext(): AuthContext {
@@ -65,6 +87,27 @@ function buildAuthContext(): AuthContext {
     permissions: [],
   };
 }
+
+beforeEach(() => {
+  findDefinitionByKey.mockClear();
+  listRuntimeInstances.mockClear();
+  listRuntimeInstances.mockImplementation(async () => ({
+    list: [] as Array<{
+      id: string;
+      definition_id?: string;
+      current_node_key: string;
+    }>,
+    pagination: {
+      page: 1,
+      pageSize: 1,
+      total: 0,
+      totalPages: 0,
+    },
+  }));
+  startRuntimeInstance.mockClear();
+  completeRuntimeNode.mockClear();
+  assertRuntimeNodeCompletionAllowed.mockClear();
+});
 
 describe("customerWorkflowRuntimeService", () => {
   test("starts customer runtime without changing status for newly created potential customer", async () => {
@@ -97,6 +140,67 @@ describe("customerWorkflowRuntimeService", () => {
       definition_id: "definition-1",
       instance_id: "instance-1",
       current_node_key: "potential",
+    });
+  });
+
+  test("advances existing potential runtime when customer starts following", async () => {
+    listRuntimeInstances.mockImplementation(async () => ({
+      list: [{
+        id: "instance-1",
+        definition_id: "definition-1",
+        current_node_key: "potential",
+      }],
+      pagination: {
+        page: 1,
+        pageSize: 1,
+        total: 1,
+        totalPages: 1,
+      },
+    }));
+
+    const { customerWorkflowRuntimeService } = await import(
+      "./customer-workflow-runtime"
+    );
+
+    const result = await customerWorkflowRuntimeService.syncStatusTransition({
+      authContext: buildAuthContext(),
+      tenantId: "tenant-1",
+      customerId: "customer-1",
+      fromStatus: "potential",
+      toStatus: "following",
+      action: "start_following",
+    });
+
+    expect(startRuntimeInstance).not.toHaveBeenCalled();
+    expect(assertRuntimeNodeCompletionAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        definitionId: "definition-1",
+        instanceId: "instance-1",
+        nodeKey: "potential",
+        output: expect.objectContaining({
+          customer_status_action: "start_following",
+          from_status: "potential",
+          to_status: "following",
+        }),
+      }),
+    );
+    expect(completeRuntimeNode).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      definitionId: "definition-1",
+      instanceId: "instance-1",
+      nodeKey: "potential",
+      action: "start_following",
+      actorEmployeeId: "employee-1",
+    }));
+    expect(result).toMatchObject({
+      status: "advanced",
+      workflow_key: "customer_main",
+      definition_id: "definition-1",
+      instance_id: "instance-1",
+      node_key: "potential",
+      current_node_key: "following",
+      next_node_key: "following",
     });
   });
 });
