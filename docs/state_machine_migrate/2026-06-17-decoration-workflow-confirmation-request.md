@@ -22,7 +22,7 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 
 ## 当前远端复核状态
 
-截至 2026-06-17 21:52：
+截至 2026-06-17 22:24：
 
 - `needs_migration = false`
 - `needs_instance_review = true`
@@ -31,6 +31,10 @@ dry-run 工具已经落地。当前不能继续自动收口的内容都需要外
 - `rebuild_candidate = 1`
 - `manual_restore_required = 3`
 - `unknown_review_required = 0`
+
+最新证据：
+
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2224.md`
 
 ## 需要业务确认的写入项
 

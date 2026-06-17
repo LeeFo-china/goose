@@ -3,6 +3,7 @@ import {
   buildDecorationWorkflowLegacyInstanceReviewReport,
   classifyDecorationWorkflowLegacyInstance,
   parseDecorationWorkflowLegacyInstanceReviewArgs,
+  resolveDecorationWorkflowLegacyInstanceReviewDatabaseUrl,
 } from "./decoration-workflow-legacy-instance-review";
 
 const baseInstance = {
@@ -201,5 +202,14 @@ describe("parseDecorationWorkflowLegacyInstanceReviewArgs", () => {
     expect(() =>
       parseDecorationWorkflowLegacyInstanceReviewArgs(["--unknown"])
     ).toThrow(/Unsupported argument/);
+  });
+});
+
+describe("resolveDecorationWorkflowLegacyInstanceReviewDatabaseUrl", () => {
+  test("prefers direct database url before pooled url", () => {
+    expect(resolveDecorationWorkflowLegacyInstanceReviewDatabaseUrl({
+      SUPABASE_DB_DIRECT_URL: "postgres://direct",
+      SUPABASE_DB_URL: "postgres://pooled",
+    })).toBe("postgres://direct");
   });
 });

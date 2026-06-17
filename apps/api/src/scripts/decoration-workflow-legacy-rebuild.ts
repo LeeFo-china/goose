@@ -3,6 +3,10 @@ import {
   type DecorationLegacyWorkflowReviewClassification,
   type DecorationWorkflowLegacyInstanceReviewInput,
 } from "./decoration-workflow-legacy-instance-review";
+import {
+  closeSqlWithTimeout,
+  resolveScriptDatabaseUrl,
+} from "./workflow-script-database";
 
 export type DecorationWorkflowLegacyRebuildMode = "dry-run" | "apply";
 export type DecorationWorkflowLegacyRebuildSubjectType =
@@ -168,7 +172,7 @@ export function parseDecorationWorkflowLegacyRebuildArgs(
 export function resolveDecorationWorkflowLegacyRebuildDatabaseUrl(
   env: EnvLike = process.env,
 ): string | null {
-  return env.SUPABASE_DB_URL || env.SUPABASE_DB_DIRECT_URL || null;
+  return resolveScriptDatabaseUrl(env);
 }
 
 export function buildDecorationWorkflowLegacyRebuildPlan(input: {
@@ -253,7 +257,7 @@ export async function runDecorationWorkflowLegacyRebuild(
       result,
     };
   } finally {
-    await db.close();
+    await closeSqlWithTimeout(db);
   }
 }
 

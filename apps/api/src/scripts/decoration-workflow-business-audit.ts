@@ -1,3 +1,8 @@
+import {
+  closeSqlWithTimeout,
+  resolveScriptDatabaseUrl,
+} from "./workflow-script-database";
+
 export type DecorationWorkflowBusinessAuditCheck = {
   check_name: string;
   issue_count: number;
@@ -79,7 +84,7 @@ export function parseDecorationWorkflowBusinessAuditArgs(
 export function resolveDecorationWorkflowBusinessAuditDatabaseUrl(
   env: EnvLike = process.env,
 ): string | null {
-  return env.SUPABASE_DB_URL || env.SUPABASE_DB_DIRECT_URL || null;
+  return resolveScriptDatabaseUrl(env);
 }
 
 export function buildDecorationWorkflowBusinessAuditReport(
@@ -128,7 +133,7 @@ export async function runDecorationWorkflowBusinessAudit(
       affectedInstances,
     });
   } finally {
-    await db.close();
+    await closeSqlWithTimeout(db);
   }
 }
 

@@ -865,9 +865,13 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-cancel
 - 写入 `workflow_transition_logs.action = cancel`。
 - 复跑旧实例复核后，`manual_restore_required` 应减少对应数量。
 
-### 2026-06-17 21:52 复核记录
+### 2026-06-17 22:24 复核记录
 
 本轮只执行只读审计和 dry-run，未执行任何 `--apply` 写入命令。
+
+最新只读复核证据：
+
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2224.md`
 
 只读审计：
 
@@ -941,7 +945,7 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 
 当前不能标记为“无需后续动作”的部分：
 
-- 截至 2026-06-17 21:52，`running_instances_on_legacy_snapshots = 10`
+- 截至 2026-06-17 22:24，`running_instances_on_legacy_snapshots = 10`
   仍存在，其中 1 条可受控重建、2 条可受控取消、1 条需人工恢复点。
 - orange 真实联调验收需由小程序团队在 orange 仓库完成，本仓库仅提供 API、文档和对接约束；
   验收结果应回填到

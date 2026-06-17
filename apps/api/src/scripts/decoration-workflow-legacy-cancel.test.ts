@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildDecorationWorkflowLegacyCancelPlan,
   parseDecorationWorkflowLegacyCancelArgs,
+  resolveDecorationWorkflowLegacyCancelDatabaseUrl,
 } from "./decoration-workflow-legacy-cancel";
 
 const closedCustomerItem = {
@@ -55,6 +56,15 @@ describe("parseDecorationWorkflowLegacyCancelArgs", () => {
         "instance-2",
       ])
     ).toThrow("--confirm-cancel 必须等于 --instance-id");
+  });
+});
+
+describe("resolveDecorationWorkflowLegacyCancelDatabaseUrl", () => {
+  test("prefers direct database url before pooled url", () => {
+    expect(resolveDecorationWorkflowLegacyCancelDatabaseUrl({
+      SUPABASE_DB_DIRECT_URL: "postgres://direct",
+      SUPABASE_DB_URL: "postgres://pooled",
+    })).toBe("postgres://direct");
   });
 });
 

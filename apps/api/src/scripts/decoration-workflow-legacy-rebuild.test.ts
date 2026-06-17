@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildDecorationWorkflowLegacyRebuildPlan,
   parseDecorationWorkflowLegacyRebuildArgs,
+  resolveDecorationWorkflowLegacyRebuildDatabaseUrl,
 } from "./decoration-workflow-legacy-rebuild";
 
 const baseItem = {
@@ -71,6 +72,15 @@ describe("parseDecorationWorkflowLegacyRebuildArgs", () => {
         "project-2",
       ])
     ).toThrow("--confirm-rebuild 必须等于 --subject-id");
+  });
+});
+
+describe("resolveDecorationWorkflowLegacyRebuildDatabaseUrl", () => {
+  test("prefers direct database url before pooled url", () => {
+    expect(resolveDecorationWorkflowLegacyRebuildDatabaseUrl({
+      SUPABASE_DB_DIRECT_URL: "postgres://direct",
+      SUPABASE_DB_URL: "postgres://pooled",
+    })).toBe("postgres://direct");
   });
 });
 

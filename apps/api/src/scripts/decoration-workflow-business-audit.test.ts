@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildDecorationWorkflowBusinessAuditReport,
   parseDecorationWorkflowBusinessAuditArgs,
+  resolveDecorationWorkflowBusinessAuditDatabaseUrl,
 } from "./decoration-workflow-business-audit";
 
 describe("parseDecorationWorkflowBusinessAuditArgs", () => {
@@ -20,6 +21,15 @@ describe("parseDecorationWorkflowBusinessAuditArgs", () => {
     expect(() =>
       parseDecorationWorkflowBusinessAuditArgs(["--sample-limit", "0"])
     ).toThrow(/sample-limit/);
+  });
+});
+
+describe("resolveDecorationWorkflowBusinessAuditDatabaseUrl", () => {
+  test("prefers direct database url before pooled url", () => {
+    expect(resolveDecorationWorkflowBusinessAuditDatabaseUrl({
+      SUPABASE_DB_DIRECT_URL: "postgres://direct",
+      SUPABASE_DB_URL: "postgres://pooled",
+    })).toBe("postgres://direct");
   });
 });
 

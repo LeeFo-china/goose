@@ -3,6 +3,10 @@ import {
   type DecorationLegacyWorkflowReviewClassification,
   type DecorationWorkflowLegacyInstanceReviewInput,
 } from "./decoration-workflow-legacy-instance-review";
+import {
+  closeSqlWithTimeout,
+  resolveScriptDatabaseUrl,
+} from "./workflow-script-database";
 
 export type DecorationWorkflowLegacyCancelMode = "dry-run" | "apply";
 
@@ -133,7 +137,7 @@ export function parseDecorationWorkflowLegacyCancelArgs(
 export function resolveDecorationWorkflowLegacyCancelDatabaseUrl(
   env: EnvLike = process.env,
 ): string | null {
-  return env.SUPABASE_DB_URL || env.SUPABASE_DB_DIRECT_URL || null;
+  return resolveScriptDatabaseUrl(env);
 }
 
 export function buildDecorationWorkflowLegacyCancelPlan(input: {
@@ -210,7 +214,7 @@ export async function runDecorationWorkflowLegacyCancel(
       result,
     };
   } finally {
-    await db.close();
+    await closeSqlWithTimeout(db);
   }
 }
 

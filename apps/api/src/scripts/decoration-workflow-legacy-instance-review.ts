@@ -1,3 +1,8 @@
+import {
+  closeSqlWithTimeout,
+  resolveScriptDatabaseUrl,
+} from "./workflow-script-database";
+
 export type DecorationLegacyWorkflowReviewClassification =
   | "compatible_runtime"
   | "rebuild_candidate"
@@ -155,7 +160,7 @@ export function parseDecorationWorkflowLegacyInstanceReviewArgs(
 export function resolveDecorationWorkflowLegacyInstanceReviewDatabaseUrl(
   env: EnvLike = process.env,
 ): string | null {
-  return env.SUPABASE_DB_URL || env.SUPABASE_DB_DIRECT_URL || null;
+  return resolveScriptDatabaseUrl(env);
 }
 
 export function classifyDecorationWorkflowLegacyInstance(
@@ -341,7 +346,7 @@ export async function runDecorationWorkflowLegacyInstanceReview(
     const items = await readLegacyInstances(db, config.sampleLimit);
     return buildDecorationWorkflowLegacyInstanceReviewReport({ items });
   } finally {
-    await db.close();
+    await closeSqlWithTimeout(db);
   }
 }
 
