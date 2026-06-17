@@ -3,9 +3,12 @@ import {
   customerOwnerAssignmentRepository,
   type AssignableCustomer,
 } from "@/repositories/customer-owner-assignments";
+import { workflowTaskRepository } from "@/repositories/workflow-tasks";
+import { workflowRepository } from "@/repositories/workflows";
 import type { BatchAssignCustomerOwnerInput } from "@/schema/customer";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 
 export type BatchAssignCustomerOwnerFailedItem = {
   customer_id: string;
@@ -143,6 +146,11 @@ class CustomerOwnerAssignmentService {
       ownerId: input.payload.owner_id,
       tenantId,
     });
+    await this.syncWorkflowTasksAfterOwnerAssignments({
+      customerIds: successCustomerIds,
+      ownerId: input.payload.owner_id,
+      tenantId,
+    });
 
     return {
       success_count: successCustomerIds.length,
@@ -153,6 +161,49 @@ class CustomerOwnerAssignmentService {
       },
       failed_items: failedItems,
     };
+  }
+
+  async syncWorkflowTasksAfterOwnerAssignment(input: {
+    customerId: string;
+    ownerId: string;
+    tenantId: string;
+  }) {
+    const instance = await workflowRepository.findLatestRunningRuntimeInstance({
+      tenantId: input.tenantId,
+      subjectType: "customer",
+      subjectId: input.customerId,
+    });
+    if (!instance?.current_node_key) {
+      return;
+    }
+
+    await workflowTaskRepository.assignPendingTask({
+      tenantId: input.tenantId,
+      instanceId: instance.id,
+      nodeKey: instance.current_node_key,
+      assigneeEmployeeId: input.ownerId,
+    });
+    await workflowSubjectStateService.syncFromRuntimeInstance({
+      tenantId: input.tenantId,
+      subjectType: "customer",
+      subjectId: input.customerId,
+      definitionId: instance.definition_id,
+      instanceId: instance.id,
+    });
+  }
+
+  private async syncWorkflowTasksAfterOwnerAssignments(input: {
+    customerIds: string[];
+    ownerId: string;
+    tenantId: string;
+  }) {
+    for (const customerId of input.customerIds) {
+      await this.syncWorkflowTasksAfterOwnerAssignment({
+        customerId,
+        ownerId: input.ownerId,
+        tenantId: input.tenantId,
+      });
+    }
   }
 
   private async canAssignCustomer(

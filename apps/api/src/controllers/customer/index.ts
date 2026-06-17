@@ -274,6 +274,13 @@ class CustomerController extends CustomerBaseController {
       customerId: idVerify.data.id,
       payload,
     });
+    if (ownerChanged && payload.owner_id) {
+      await customerOwnerAssignmentService.syncWorkflowTasksAfterOwnerAssignment({
+        customerId: customer.id,
+        ownerId: payload.owner_id,
+        tenantId: authContext.tenantId,
+      });
+    }
 
     const primaryProperty = preparedPrimaryProperty ??
       await customerPropertyService.upsertCustomerPrimaryProperty({

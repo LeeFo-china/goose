@@ -22,6 +22,7 @@ import {
   listEmployeeRoles,
   listEmployeeRoleIds,
   listEmployeeIdsByDepartmentId,
+  listTenantSystemAdminEmployeeIds,
   listVisibleProjectIds,
   findProjectTenantById,
   canAccessProjectByScope,
@@ -141,6 +142,7 @@ class PermissionRepository {
   listEmployeeRoles = listEmployeeRoles;
   private listEmployeeRoleIds = listEmployeeRoleIds;
   listEmployeeIdsByDepartmentId = listEmployeeIdsByDepartmentId;
+  listTenantSystemAdminEmployeeIds = listTenantSystemAdminEmployeeIds;
   listVisibleProjectIds = listVisibleProjectIds;
   findProjectTenantById = findProjectTenantById;
   canAccessProjectByScope = canAccessProjectByScope;

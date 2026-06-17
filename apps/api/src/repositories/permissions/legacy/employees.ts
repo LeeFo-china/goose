@@ -136,6 +136,61 @@ export async function listEmployeeIdsByDepartmentId(this: any, departmentId: str
   return ((data || []) as Array<{ id: string }>).map((item) => item.id);
 }
 
+export async function listTenantSystemAdminEmployeeIds(this: any, tenantId?: string | null) {
+  if (!tenantId) {
+    return [] as string[];
+  }
+
+  const { data: roleRows, error: roleError } = await this.adminClient
+    .from("roles")
+    .select("id")
+    .eq("code", "system_admin")
+    .eq("status", "active");
+
+  if (roleError) {
+    throw Errors.dbError("查询系统管理员角色失败", roleError);
+  }
+
+  const roleIds = ((roleRows || []) as Array<{ id: string | null }>)
+    .map((item) => item.id)
+    .filter((item): item is string => Boolean(item));
+  if (roleIds.length === 0) {
+    return [] as string[];
+  }
+
+  const { data: employeeRoleRows, error: employeeRoleError } =
+    await this.adminClient
+      .from("employee_roles")
+      .select("employee_id")
+      .in("role_id", roleIds);
+
+  if (employeeRoleError) {
+    throw Errors.dbError("查询系统管理员员工失败", employeeRoleError);
+  }
+
+  const employeeIds = ((employeeRoleRows || []) as Array<{
+    employee_id: string | null;
+  }>)
+    .map((item) => item.employee_id)
+    .filter((item): item is string => Boolean(item));
+  if (employeeIds.length === 0) {
+    return [] as string[];
+  }
+
+  const { data, error } = await this.adminClient
+    .from("employees")
+    .select("id")
+    .in("id", Array.from(new Set(employeeIds)))
+    .eq("tenant_id", tenantId)
+    .eq("status", "active");
+
+  if (error) {
+    throw Errors.dbError("查询系统管理员员工失败", error);
+  }
+
+  return ((data || []) as Array<{ id: string }>).map((item) => item.id);
+}
+
 export async function listVisibleProjectIds(this: any, params: {
   scope: "self" | "department" | "assigned" | "all";
   employeeId: string;

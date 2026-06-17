@@ -337,10 +337,20 @@ class AccessPolicyService {
         return [];
       }
 
-      return permissionRepository.listEmployeeIdsByDepartmentId(
-        authContext.tenantDepartmentId,
-        authContext.tenantId,
-      );
+      const [departmentEmployeeIds, systemAdminEmployeeIds] = await Promise.all([
+        permissionRepository.listEmployeeIdsByDepartmentId(
+          authContext.tenantDepartmentId,
+          authContext.tenantId,
+        ),
+        permissionRepository.listTenantSystemAdminEmployeeIds(
+          authContext.tenantId,
+        ),
+      ]);
+
+      return Array.from(new Set([
+        ...departmentEmployeeIds,
+        ...systemAdminEmployeeIds,
+      ]));
     }
 
     return [authContext.employeeId];
