@@ -20,7 +20,7 @@
 
 ## 当前复核状态
 
-截至 2026-06-17 22:24，只读复核结果：
+截至 2026-06-17 23:02，只读复核结果：
 
 - `needs_migration = false`
 - `needs_instance_review = true`
@@ -32,7 +32,7 @@
 
 最新证据：
 
-- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2224.md`
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-readonly-review-2302.md`
 
 ## Apply 前必跑
 
@@ -47,6 +47,13 @@ bun --env-file=.env.local apps/api/src/scripts/decoration-workflow-legacy-instan
 - `unknown_review_required = 0`
 - `rebuild_candidate` 仍只包含项目 `1a8589fb-8f3f-4900-a759-6d15438ffcc2`
 - 两个待取消客户实例仍是 `subject_status = invalid`
+- `docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json`
+  中 `closeout_rules.can_run_legacy_apply = true`，并通过下列门禁：
+
+```bash
+cd apps/api && bun run workflow:decoration-manual-gates-check -- \
+  --evidence-file docs/state_machine_migrate/audit/2026-06-17-decoration-workflow-manual-gates.json
+```
 
 ## 可确认后执行的写入项
 
